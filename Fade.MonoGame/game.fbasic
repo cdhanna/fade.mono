@@ -1,0 +1,83 @@
+
+`set fullscreen 1
+
+
+path$ = "/Users/chrishanna/Downloads/heart_jog2.png"
+
+attackPath$ = "/Users/chrishanna/Downloads/heart_attack1.png"
+
+texture 1, path$
+texture 2, attackPath$
+
+scale# = .5
+scale sprite 1 scale# scale#
+scale sprite 2 scale# scale#
+
+x = 0
+y = 200
+rate = 3
+f = 1
+v = 0
+dir = 0
+attack = 0
+
+animRate = 120
+animClock = 0
+
+do 
+
+    gosub controls
+    gosub drawAttack
+
+    sync
+loop
+
+
+controls:
+    v = 0
+    if rightKey() then v = rate : dir = 1
+    if leftKey() then v = -rate : dir = -1
+    if upKey() then attack = 1
+    
+    x = x + v
+return
+
+drawAttack:
+    sprite 1,x,y,2
+    `sprite 2 -100 -100 1
+    
+    if timer() > animClock AND attack > 0
+        inc f
+        animClock = timer() + animRate
+    endif
+    
+    if f > 7 
+        f = 0
+        attack = 0
+    endif
+    set sprite frame 1 f
+return
+
+draw:
+
+    set sprite flip 1, dir < 0, 0
+    set sprite flip 2, dir < 0, 0
+
+    sprite 1 x y 1
+    sprite 2 x y 1
+    
+    if (v = 0)
+        set sprite frame 1 8
+        set sprite frame 2 9
+    else 
+        if timer() > animClock
+            inc f
+            animClock = timer() + animRate
+        endif
+        
+        if f > 7 then f = 0
+        set sprite frame 1 f
+        set sprite frame 2 f+9
+    endif
+    
+return
