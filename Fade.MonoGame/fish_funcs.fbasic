@@ -1,0 +1,126 @@
+function getCellX(column)
+endfunction GRID_POS.x + column * CELL_SIZE
+
+function getCellY(row)
+endfunction GRID_POS.y + row * CELL_SIZE
+
+function getCellIndex(pos as vec)
+endfunction pos.x + pos.y * CELL_COLUMN_COUNT
+
+function getRandomValue()
+endfunction rnd(7)+1
+
+function updateCell(c as cell)
+    sprite c.spriteId, getCellX(c.coord.x), getCellY(c.coord.y), c.value
+endfunction
+
+function findCombos(cIndex, groupId)
+    ` find the cell to the left, 
+    leftIndex = cIndex - 1
+    rightIndex = cIndex + 1
+    topIndex = cIndex - CELL_COLUMN_COUNT
+    lowIndex = cIndex + CELL_COLUMN_COUNT
+
+    cell = CELLS(cIndex)
+
+    hasLeft = cell.coord.x > 0
+    hasRight = cell.coord.x < CELL_COLUMN_COUNT - 1
+    hasTop = cell.coord.y > 0
+    hasLow = cell.coord.y < CELL_ROW_COUNT - 1
+
+
+    if hasLeft
+        left = CELLS(leftIndex)
+        if left.comboFillMask = 0 AND left.value = cell.value
+            left.comboFillMask = 1
+            left.comboFillId = groupId
+            CELLS(leftIndex) = left
+            findCombos(leftIndex, groupId)
+        endif
+    endif
+    if hasRight
+        right = CELLS(rightIndex)
+        if right.comboFillMask = 0 AND right.value = cell.value
+            right.comboFillMask = 1
+            right.comboFillId = groupId
+
+            CELLS(rightIndex) = right
+            findCombos(rightIndex, groupId)
+        endif
+    endif
+    if hasTop
+        top = CELLS(topIndex)
+        if top.comboFillMask = 0 AND top.value = cell.value
+            top.comboFillMask = 1
+            top.comboFillId = groupId
+            CELLS(topIndex) = top
+            findCombos(topIndex, groupId)
+        endif
+    endif
+    if hasLow
+        low = CELLS(lowIndex)
+        if low.comboFillMask = 0 AND low.value = cell.value
+            low.comboFillMask = 1
+            low.comboFillId = groupId
+            CELLS(lowIndex) = low
+            findCombos(lowIndex, groupId)
+        endif
+    endif
+
+endfunction
+
+
+function doSwap(start as vec, dir as vec, doSwap)
+
+    target as vec = {
+        x = start.x + dir.x, 
+        y = start.y + dir.y
+    }
+
+    aIndex = getCellIndex(start)
+    bIndex = getCellIndex(target)
+
+    ` do a little fake animation thiny? 
+    startPosition as vec = {
+        x = getCellX(start.x),
+        y = getCellY(start.y)
+    }
+    endPosition as vec = {
+        x = getCellX(target.x),
+        y = getCellY(target.y)
+    }
+
+    ` there are 4 tweens, 
+    duration = 150
+    
+    create basic tween TWEEN_SWAP_AX, startPosition.x, endPosition.x, duration, 0
+    create basic tween TWEEN_SWAP_AY, startPosition.y, endPosition.y, duration, 0
+    create basic tween TWEEN_SWAP_BX, endPosition.x, startPosition.x, duration, 0
+    create basic tween TWEEN_SWAP_BY, endPosition.y, startPosition.y, duration, 0
+
+    create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, CELL_SIZE * 1.5, 150, 50
+    set tween type SELECTION_TWEEN_PUNCH_ID, 1
+
+    while (is tween done(TWEEN_SWAP_AX) < 1) or (is tween done(SELECTION_TWEEN_PUNCH_ID) < 1)
+
+        if (doSwap)
+            position sprite cells(aIndex).spriteId, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
+            position sprite cells(bIndex).spriteId, tweenVal(TWEEN_SWAP_BX), tweenVal(TWEEN_SWAP_BY)
+        endif
+
+        position sprite SELECTION_SPRITE, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
+        scale sprite SELECTION_SPRITE, tweenVal(SELECTION_TWEEN_PUNCH_ID), tweenVal(SELECTION_TWEEN_PUNCH_ID)
+        sync
+    endwhile
+
+
+    ` map the values of the cells to the new values 
+    if (doSwap)
+        t = cells(bIndex).value
+        cells(bIndex).value = cells(aIndex).value
+        cells(aIndex).value = t
+
+        updateCell(cells(aIndex))
+        updateCell(cells(bIndex))
+    endif
+endfunction

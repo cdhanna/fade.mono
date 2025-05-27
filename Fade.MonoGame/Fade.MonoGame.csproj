@@ -1,7 +1,7 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <OutputType>WinExe</OutputType>
-        <TargetFramework>net6.0</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net8.0</TargetFramework>
         <RollForward>Major</RollForward>
         <PublishReadyToRun>false</PublishReadyToRun>
         <TieredCompilation>false</TieredCompilation>
@@ -11,40 +11,49 @@
         <ApplicationIcon>Icon.ico</ApplicationIcon>
         
         <FadeGenerateMain>false</FadeGenerateMain>
-        <FadeVersion>0.12.13.310</FadeVersion>
+        <FadeVersion>0.0.41.1</FadeVersion>
+        
+        <MonoGamePlatform>DesktopGL</MonoGamePlatform>
     </PropertyGroup>
     <ItemGroup>
-        <None Remove="Icon.ico"/>
-        <None Remove="Icon.bmp"/>
+        <None Remove="Icon.ico" />
+        <None Remove="Icon.bmp" />
     </ItemGroup>
     <ItemGroup>
-        <EmbeddedResource Include="Icon.ico"/>
-        <EmbeddedResource Include="Icon.bmp"/>
+        <EmbeddedResource Include="Icon.ico" />
+        <EmbeddedResource Include="Icon.bmp" />
     </ItemGroup>
     <ItemGroup>
+
+        <ProjectReference Include="..\..\MonoGame\MonoGame.Framework\MonoGame.Framework.DesktopGL.csproj" />
 
         <ProjectReference Include="..\Fade.MonoGame.Game\Fade.MonoGame.Game.csproj" />
 
         <ProjectReference Include="..\Fade.MonoGame.Lib\Fade.MonoGame.Lib.csproj" />
 
-        <PackageReference Include="FadeBasic.Lang.Core" Version="$(FadeVersion)"/>
+        <PackageReference Include="FadeBasic.Lang.Core" Version="$(FadeVersion)" />
         <PackageReference Include="FadeBasic.Build" Version="$(FadeVersion)" />
+        
         <PackageReference Include="FadeBasic.Lib.Standard" Version="$(FadeVersion)" />
 
         <FadeCommand Include="FadeBasic.Lib.Standard" FullName="FadeBasic.Lib.Standard.StandardCommands" />
         <FadeCommand Include="Fade.MonoGame.Lib" FullName="Fade.MonoGame.Lib.FadeMonoGameCommands" />
         
         
-        <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.1.303"/>
-        <PackageReference Include="MonoGame.Content.Builder.Task" Version="3.8.1.303"/>
+<!--        <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.3" />-->
+        <PackageReference Include="MonoGame.Content.Builder.Task" Version="3.8.3" />
     </ItemGroup>
     <Target Name="RestoreDotnetTools" BeforeTargets="Restore">
-        <Message Text="Restoring dotnet tools" Importance="High"/>
-        <Exec Command="dotnet tool restore"/>
+        <Message Text="Restoring dotnet tools" Importance="High" />
+        <Exec Command="dotnet tool restore" />
     </Target>
     
     <ItemGroup>
-        <FadeSource Include="game.fbasic"/>
+        <FadeSource Include="fish_routines.fbasic" />
+        <FadeSource Include="fish.fbasic" />
+        <FadeSource Include="fish_types.fbasic" />
+        <FadeSource Include="fish_funcs.fbasic" />
+        <!-- <FadeSource Include="game.fbasic" /> -->
     </ItemGroup>
     
     <ItemGroup>
@@ -52,5 +61,6 @@
     </ItemGroup>
     
     <ItemGroup>
+      <ClCompile Include="Content\MySpriteEffect.fx" />
     </ItemGroup>
 </Project>

@@ -15,6 +15,12 @@ public partial class FadeMonoGameCommands
         }
     }
 
+     
+    [FadeBasicCommand("game ms")]
+    public static double GameTime()
+    {
+        return GameSystem.latestTime.TotalGameTime.TotalMilliseconds;
+    }
     
     
     [FadeBasicCommand("test")]

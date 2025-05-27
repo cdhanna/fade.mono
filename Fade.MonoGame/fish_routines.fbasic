@@ -1,0 +1,451 @@
+#constant EASING_LINEAR 0
+#constant EASING_BOUNCE 2
+
+goto routines_exit
+
+load_textures:
+    TEX_PIXEL = 0 `magic texture that always exists
+    texture free texture id(TEX_PUFFER), "Fish/Textures/Pufferfish"
+    texture free texture id(TEX_CATFISH), "Fish/Textures/Catfish"
+    texture free texture id(TEX_GOLDFISH), "Fish/Textures/Goldfish"
+    texture free texture id(TEX_ANGELFISH), "Fish/Textures/Angelfish"
+    texture free texture id(TEX_CRAB), "Fish/Textures/Crab - Dungeness"
+    texture free texture id(TEX_BASS), "Fish/Textures/Bass"
+    texture free texture id(TEX_WORM), "Fish/Textures/Worm"
+
+
+    texture free texture id(TEX_SMOKE_1), "Fish/Textures/Free Smoke Fx  Pixel 04"
+    set texture frame grid TEX_SMOKE_1, 10 8 `rows, columns
+
+    texture free texture id(TEX_SMOKE_2), "Fish/Textures/Free Smoke Fx  Pixel 06"
+    set texture frame grid TEX_SMOKE_2, 23 12 `rows, columns
+
+    global SMOKE_ANIM_COUNT = 5
+    global dim SMOKE_ANIMS(SMOKE_ANIM_COUNT) as smokeAnimInfo
+    SMOKE_ANIMS(0) = {
+        texId = TEX_SMOKE_1,
+        startFrame = 8 * 2
+        endFrame = 8 * 3
+    }
+    SMOKE_ANIMS(1) = {
+        texId = TEX_SMOKE_1,
+        startFrame = 8 * 7
+        endFrame = 8 * 8
+    }
+    SMOKE_ANIMS(2) = {
+        texId = TEX_SMOKE_2,
+        startFrame = 12 * 2
+        endFrame = 12 * 3
+    }
+    SMOKE_ANIMS(3) = {
+        texId = TEX_SMOKE_2,
+        startFrame = 12 * 4
+        endFrame = 12 * 5
+    }
+    SMOKE_ANIMS(4) = {
+        texId = TEX_SMOKE_2,
+        startFrame = 12 * 6
+        endFrame = 12 * 7
+    }
+
+    global SMOKE_COLOR_COUNT = 5
+    global dim SMOKE_COLORS(SMOKE_COLOR_COUNT)
+    SMOKE_COLORS(0) = rgb(143, 199, 255)
+    SMOKE_COLORS(1) = rgb(120, 172, 224)
+    SMOKE_COLORS(2) = rgb(143, 199, 255)
+    SMOKE_COLORS(3) = rgb(141, 198, 255)
+    SMOKE_COLORS(4) = rgb(121, 171, 222)
+
+
+return
+
+setup_grid:
+
+    global CELL_SIZE = 32
+    global CELL_ART_SIZE = 16
+    global GRID_POS as vec = {
+        x = 32, 
+        y = 32
+    }
+
+    global CELL_COLUMN_COUNT = 9
+    global CELL_ROW_COUNT = 9
+    global CELL_COUNT as int = CELL_COLUMN_COUNT * CELL_ROW_COUNT
+    global dim CELLS(CELL_COUNT) as cell
+
+    global DEBUG_COLOR_COUNT = 1000
+    global dim DEBUG_COLORS(DEBUG_COLOR_COUNT)
+    for i = 1 to DEBUG_COLOR_COUNT
+        DEBUG_COLORS(i-1) = rgb(rnd(255), rnd(255), rnd(255))
+    next
+
+    global REQUEST_COMBO_CHECK = 0
+
+    cellId = 0
+    for y = 1 to CELL_ROW_COUNT
+        for x = 1 to CELL_COLUMN_COUNT
+            CELLS(cellId) = {
+                coord = {
+                    x = x - 1, 
+                    y = y - 1    
+                }
+                value = getRandomValue()
+            }
+            reserve sprite id(CELLS(cellId).spriteId)
+            reserve sprite id(CELLS(cellId).fxSpriteId)
+            reserve tween id(CELLS(cellId).comboDownShiftTweenId)
+            reserve tween id(CELLS(cellId).comboAlphaTweenId)
+            reserve tween id(CELLS(cellId).comboAnimTweenId)
+
+            c as cell = CELLS(cellId)
+            sprite c.spriteId, getCellX(c.coord.x), getCellY(c.coord.y), c.value
+            
+            sprite c.fxSpriteId, getCellX(c.coord.y), getCellY(c.coord.y), TEX_SMOKE_1
+            hide sprite c.fxSpriteId
+
+            size sprite c.spriteId, CELL_ART_SIZE, CELL_ART_SIZE
+            inc cellId
+
+
+        next
+    next
+return
+
+setup_selection:
+    global SELECTION_POS as vec = {
+        2, 2
+    }
+
+    global SELECTION_SPRITE
+    reserve sprite id(SELECTION_SPRITE)
+
+    gosub update_selection_position
+    size sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+    order sprite SELECTION_SPRITE, -1
+    color sprite SELECTION_SPRITE, rgb(60, 90, 170, 170)
+return
+
+
+setup_swap_tweens:
+
+    global TWEEN_SWAP_AX
+    global TWEEN_SWAP_BX
+    global TWEEN_SWAP_AY
+    global TWEEN_SWAP_BY
+    
+    reserve tween id(TWEEN_SWAP_AX)
+    reserve tween id(TWEEN_SWAP_AY)
+    reserve tween id(TWEEN_SWAP_BX)
+    reserve tween id(TWEEN_SWAP_BY)
+
+    global SHAKE_TWEEN_ID
+    reserve tween id (SHAKE_TWEEN_ID)
+
+    global SELECTION_TWEEN_PUNCH_ID
+    reserve tween id (SELECTION_TWEEN_PUNCH_ID)
+
+return
+
+
+update_selection_position:
+    position sprite SELECTION_SPRITE, getCellX(SELECTION_POS.x), getCellY(SELECTION_POS.y)
+return
+
+
+handle_input:
+    
+    swapDir as vec = {
+        x = 0, 
+        y = 0
+    } 
+
+    isSwap = spaceKey()
+
+    if new rightkey() then swapDir.x = 1
+    if new leftkey() then swapDir.x = -1
+    if new upKey() then swapDir.y = -1
+    if new downKey() then swapDir.y = 1
+
+    if swapDir.x <> 0 or swapDir.y <> 0
+
+        target as vec = {
+            x = SELECTION_POS.x + swapDir.x, 
+            y = SELECTION_POS.y + swapDir.y
+        }
+        if target.x < 0 then return 
+        if target.x >= CELL_COLUMN_COUNT then return 
+        if target.y < 0 then return 
+        if target.y >= CELL_ROW_COUNT then return 
+
+        doSwap(SELECTION_POS, swapDir, isSwap)
+
+        REQUEST_COMBO_CHECK = 1
+        
+        SELECTION_POS.x += swapDir.x
+        SELECTION_POS.y += swapDir.y
+
+        gosub update_selection_position
+    endif
+
+return
+
+
+handle_combos:
+
+    remstart
+        need to scan through the rows and find groups of similar valued cells 
+        once a group of big-enough size is found, it blows up 
+        all blow-ups happen "at once" (animated randomly) 
+        then all cells need to "fall" to fill in gaps
+        then new cells need to spawn in from the top and "fall" into place
+    remend
+
+    if REQUEST_COMBO_CHECK = 0 then return
+
+    ` clear the combo mask... 
+    for i = 1 to CELL_COUNT
+        c = CELLS(i-1)
+        c.comboFillMask = 0
+        c.comboFillId = 0
+        c.comboBlownUp = 0
+        c.comboDownShift = 0
+    
+        CELLS(i-1) = c
+    next
+
+    groupId = 0
+    for i = 1 to CELL_COUNT
+        c = CELLS(i-1)
+        
+        if c.comboFillMask > 0 then skip
+
+        ` flood fill from this cell if it has not already been combo checked
+    
+        CELLS(i-1).comboFillId = groupId
+        findCombos(i - 1, groupId)
+        groupId += 1
+    next
+
+    ` DEBUG: just color the groups for debug visuals
+    for i = 1 to CELL_COUNT
+        `color sprite CELLS(i-1).spriteId, DEBUG_COLORS(CELLS(i-1).comboFillId)
+    next
+
+    ` animate explosions of all groups
+    cellId = 0
+
+    totalComboCount = 0
+    for g = 0 to groupId - 1
+
+        ` need to check if this group is big enough
+        comboCount = 0
+        for i = 1 to CELL_COUNT
+            cell = CELLS(i-1)
+
+            if comboCount > 2 then skip 
+            if cell.comboFillId <> g then skip 
+            comboCount += 1
+        next
+
+        if comboCount < 3 then skip `if this group is not big enough, then we can skip rendering the explosion
+
+        totalComboCount += 1
+
+        ` animate the exit of the group
+        randomG = (totalComboCount-1)
+        for i = 1 to CELL_COUNT
+            cell = CELLS(i-1)
+            if cell.comboFillId <> g then skip 
+
+            CELLS(i-1).comboBlownUp = 1
+            cellId = i-1
+
+            smokeIndex = rnd(SMOKE_ANIM_COUNT)
+            smoke = SMOKE_ANIMS(smokeIndex)
+
+            delay = rnd(3)*75+25 `TODO: somehow use the delay to "randomize" the animation
+
+            create basic tween cell.comboAnimTweenId, smoke.startFrame, smoke.endFrame, 400, delay
+            set tween easing cell.comboAnimTweenId, EASING_LINEAR
+            show sprite cell.fxSpriteId
+            rotate sprite cell.fxSpriteId, rnd(8) * .25
+            color sprite cell.fxSpriteId, SMOKE_COLORS(rnd(SMOKE_COLOR_COUNT))
+            sprite cell.fxSpriteId, getCellX(cell.coord.x), getCellY(cell.coord.y), smoke.texId
+
+            create basic tween cell.comboDownShiftTweenId, 255, 0, 250, delay
+
+
+            create basic tween SHAKE_TWEEN_ID, 0, 15, 350, 0
+            set tween type SHAKE_TWEEN_ID, 1
+            set screen shake bounce .5
+
+
+        next
+
+    next
+
+    ` exit early if no combos
+    if totalComboCount = 0
+        REQUEST_COMBO_CHECK = 0
+        return
+    endif
+
+    ` wait for all exit animations to finish
+    repeat 
+        anyStillPlaying = 0
+        if is tween done(SHAKE_TWEEN_ID) < 1
+            anyStillPlaying = 1
+            set screen shake amount tweenVal(SHAKE_TWEEN_ID)
+            else 
+            set screen shake amount 0
+
+        endif
+        for i = 1 to CELL_COUNT
+            cell = CELLS(i-1)
+            if cell.comboBlownUp <> 1 then skip 
+
+            if is tween done(cell.comboDownShiftTweenId) < 1 OR is tween done(cell.comboAnimTweenId) < 1
+                anyStillPlaying = 1
+            endif
+
+            set sprite frame cell.fxSpriteId, tweenVal(cell.comboAnimTweenId)
+            if tweenRatio(cell.comboAnimTweenId) > 0 AND is tween done(cell.comboAnimTweenId) < 1
+                show sprite cell.fxSpriteId
+            else
+                hide sprite cell.fxSpriteId
+            endif
+
+
+            set sprite alpha cell.spriteId, tweenVal(cell.comboDownShiftTweenId)
+            `position sprite cell.spriteId, sprite x(cell.spriteId), tweenVal(cell.comboDownShiftTweenId)
+        next
+
+        sync
+    until anyStillPlaying = 0
+
+    ` for all cells that are not blown up, need to find out where they should live... 
+    startIndexOfLastRow = CELL_COUNT - CELL_COLUMN_COUNT
+    for x = 1 to CELL_COLUMN_COUNT
+
+        ` start at the bottom and work up.
+        index = startIndexOfLastRow + (x-1)
+
+        ` work up the column looking for empty spots
+        emptyCount = 0
+        for y = 1 to CELL_ROW_COUNT
+
+            cell = CELLS(index)
+            if cell.comboBlownUp
+                ` keep track that this cell is "gone" in the column
+                emptyCount += 1
+            else
+                ` save that the cell needs to move so many units DOWN 
+                CELLS(index).comboDownShift = emptyCount
+            endif
+
+            ` move the index UP the grid by 1 row
+            index -= CELL_COLUMN_COUNT 
+        next
+    next
+
+    ` and now for all cells, need to tween them to the correct position 
+    for i = 1 to CELL_COUNT
+        cell = CELLS(i-1)
+
+        ` hide the fxSprite if it was used
+        hide sprite cell.fxSpriteId
+
+        create basic tween cell.comboDownShiftTweenId, getCellY(cell.coord.y), getCellY(cell.coord.y + cell.comboDownShift), 500, 0
+        set tween easing cell.comboDownShiftTweenId, EASING_BOUNCE
+    next
+
+    while is tween done(CELLS(0).comboDownShiftTweenId) < 1
+        for i = 1 to CELL_COUNT
+            cell = CELLS(i-1)
+
+            position sprite cell.spriteId, sprite x(cell.spriteId), tweenVal(cell.comboDownShiftTweenId)
+        next
+
+        sync
+    endwhile
+
+    ` now all the cells have animated to the right spot; but we need to do 2 things...
+    `  1. ACTUALLY move the shizam to the shoozum 
+    `  2. all the blown up tiles need to be created and dropped in from the top 
+
+    ` step 1; swap all the cells that dropped
+    for x = 1 to CELL_COLUMN_COUNT
+
+        ` start at the bottom and work up.
+        index = startIndexOfLastRow + (x-1)
+        for y = 1 to CELL_ROW_COUNT
+            cell = CELLS(index)
+
+            updateCell(cell)
+            set sprite alpha cell.spriteId, 255
+
+            droppedToIndex = index + (cell.comboDownShift*CELL_COLUMN_COUNT)
+
+            tempValue = cell.value
+            CELLS(index).value = CELLS(droppedToIndex).value
+            CELLS(droppedToIndex).value = tempValue
+
+            tempValue = cell.comboBlownUp
+            CELLS(index).comboBlownUp = CELLS(droppedToIndex).comboBlownUp
+            CELLS(droppedToIndex).comboBlownUp = tempValue
+
+            ` this brings the correct value from the upper cell to the lower cell
+            updateCell(CELLS(droppedToIndex))
+            updateCell(CELLS(index))
+
+            index -= CELL_COLUMN_COUNT
+
+        next
+    next
+
+    ` step 2; spawn in new cells and animate them falling in  
+    for i = 1 to CELL_COUNT
+        cell = CELLS(i - 1)
+        y = getCellY(cell.coord.y)
+        targetY = y
+        startAlpha = 255
+        targetAlpha = 255
+        if cell.comboBlownUp > 0
+            CELLS(i-1).value = getRandomValue()
+            set sprite texture cell.spriteId, CELLS(i-1).value
+            targetY = y - CELL_SIZE * 2
+            startAlpha = 0
+            `color sprite cell.spriteId, rgb(0,0,0)
+        endif
+
+        delay = cell.coord.x * 20 + (CELL_ROW_COUNT - cell.coord.y)*20
+        create basic tween cell.comboDownShiftTweenId, targetY, y, 300, delay
+        set tween easing cell.comboDownShiftTweenId, EASING_BOUNCE
+        create basic tween cell.comboAlphaTweenId, startAlpha, targetAlpha, 150, delay
+    next
+
+    ` wait for all exit animations to finish
+    repeat 
+        anyStillPlaying = 0
+        for i = 1 to CELL_COUNT
+            cell = CELLS(i-1)
+            if cell.comboBlownUp <> 1 then skip 
+
+            if is tween done(cell.comboDownShiftTweenId) < 1
+                anyStillPlaying = 1
+            endif
+
+            position sprite cell.spriteId, sprite x(cell.spriteId), tweenVal(cell.comboDownShiftTweenId)
+            set sprite alpha cell.spriteId, tweenVal(cell.comboAlphaTweenId)
+        next
+
+        sync
+    until anyStillPlaying = 0
+
+
+return
+
+
+
+end `TODO: this shouldn't need to exist because the `return` statement... without this, I see a "symbol already declared" 
+routines_exit:

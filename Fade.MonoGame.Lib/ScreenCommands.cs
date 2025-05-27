@@ -9,19 +9,24 @@ public partial class FadeMonoGameCommands
     public static void SetFullScreen(bool fullScreen)
     {
         GameSystem.graphicsDeviceManager.IsFullScreen = fullScreen;
+        
+        GameSystem.graphicsDeviceManager.PreferredBackBufferWidth = GameSystem.graphicsDeviceManager.GraphicsDevice.Adapter.CurrentDisplayMode.Width;
+        GameSystem.graphicsDeviceManager.PreferredBackBufferHeight = GameSystem.graphicsDeviceManager.GraphicsDevice.Adapter.CurrentDisplayMode.Height;
         GameSystem.graphicsDeviceManager.ApplyChanges();
+        RenderSystem.ResetRenderPositioning();
+
     }
 
     [FadeBasicCommand("screen width")]
     public static int ScreenWidth()
     {
-        return GameSystem.graphicsDeviceManager.GraphicsDevice.Adapter.CurrentDisplayMode.Width;
+        return GameSystem.graphicsDeviceManager.PreferredBackBufferWidth;
     }
     
     [FadeBasicCommand("screen height")]
     public static int ScreenHeight()
     {
-        return GameSystem.graphicsDeviceManager.GraphicsDevice.Adapter.CurrentDisplayMode.Height;
+        return GameSystem.graphicsDeviceManager.PreferredBackBufferHeight;
     }
 
     [FadeBasicCommand("set screen size")]
@@ -31,6 +36,8 @@ public partial class FadeMonoGameCommands
         GameSystem.graphicsDeviceManager.PreferredBackBufferWidth = width;
         GameSystem.graphicsDeviceManager.PreferredBackBufferHeight = height;
         GameSystem.graphicsDeviceManager.ApplyChanges();
+        RenderSystem.ResetRenderPositioning();
+
 
     }
 }

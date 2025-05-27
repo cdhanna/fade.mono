@@ -3,7 +3,10 @@ using FadeBasic.Launch;
 using FadeBasic.Virtual;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Graphics.Fade;
 using Microsoft.Xna.Framework.Input;
+using Vector2 = System.Numerics.Vector2;
+using SpriteBatch = Microsoft.Xna.Framework.Graphics.Fade.SpriteBatch;
 
 namespace Fade.MonoGame.Game;
 
@@ -17,6 +20,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private LaunchOptions _options;
 
     private Texture2D _pixel;
+    private SpriteFont _defaultFont;
 
     public Game1(ILaunchable fadeProgram)
     {
@@ -45,20 +49,37 @@ public class Game1 : Microsoft.Xna.Framework.Game
         base.Initialize();
     }
 
-    protected override void OnExiting(object sender, EventArgs args)
+    protected override void OnExiting(object sender, ExitingEventArgs args)
     {
+        base.OnExiting(sender, args);
+        
         _debugSession?.ShutdownServer();
         base.OnExiting(sender, args);
     }
 
+    // protected override void OnExiting(object sender, EventArgs args)
+    // {
+    // }
+
     protected override void LoadContent()
     {
-        _spriteBatch = new SpriteBatch(GraphicsDevice);
 
-        
+        var customSpriteEffect = Content.Load<Effect>("FadeSpriteBatchEffect");
+        _spriteBatch = new SpriteBatch(GraphicsDevice, new FadeSpriteEffect(customSpriteEffect));
+
+// https://www.youtube.com/watch?v=-5ELPrIJNvA TARGET RESOLUTION 
+
+
+        _defaultFont = Content.Load<SpriteFont>("MyFont");
+
         _pixel = new Texture2D(GraphicsDevice, 1, 1);
         _pixel.SetData(new Color[]{Color.White});
-        
+
+        TransformSystem.GetTransformIndex(0, out _, out _); // create a blank index-0 
+
+        RenderSystem.SetMainRenderSize(1920, 1080);
+        RenderSystem.GetStageIndex(1, out _, out var stage);
+
         TextureSystem.GetTextureIndex(0, out var pixelIndex, out var pixelTex);
         pixelTex.descriptor = new TextureDescriptor(); // TODO: maybe add a frame dev?
         pixelTex.texture = _pixel;
@@ -74,11 +95,14 @@ public class Game1 : Microsoft.Xna.Framework.Game
             Exit();
 
         var keyState = Keyboard.GetState();
-        InputSystem.keyboardState = keyState;
-        if (keyState.IsKeyDown(Keys.Left))
-        {
-            
-        }
+        var mouseState = Mouse.GetState();
+        InputSystem.ApplyNewMouse(ref mouseState, ref keyState);
+
+        TweenSystem.currentTime = gameTime.TotalGameTime.TotalMilliseconds;
+        TweenSystem.ProcessTweens();
+
+        GameSystem.latestTime = gameTime;
+        
         if (_vm.instructionIndex >= _vm.program.Length)
         {
             Exit();
@@ -103,18 +127,27 @@ public class Game1 : Microsoft.Xna.Framework.Game
             }
         }
 
+        TransformSystem.CalculateTransforms();
+
         base.Update(gameTime);
     }
 
     protected override void Draw(GameTime gameTime)
     {
+        
+        // the final image will be stored in the mainBuffer...
+        RenderSystem.RenderAllStages(_spriteBatch);
+
+        GraphicsDevice.SetRenderTarget(null);
         GraphicsDevice.Clear(Color.Black);
+        
+        // _spriteBatch.Begin();
+        _spriteBatch.Begin(samplerState: SamplerState.PointClamp);
+        _spriteBatch.Draw(RenderSystem.mainBuffer, RenderSystem.mainBufferPosition, null, Color.White, 0f, Vector2.Zero, RenderSystem.mainBufferScale, SpriteEffects.None, 0);
 
-        // TODO: Add your drawing code here
-
-        _spriteBatch.Begin();
-        SpriteSystem.DrawSprites(_spriteBatch);
         _spriteBatch.End();
+        
         base.Draw(gameTime);
     }
+    
 }

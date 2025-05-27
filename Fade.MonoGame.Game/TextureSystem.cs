@@ -27,15 +27,27 @@ public struct RuntimeTexture
     public TextureDescriptor descriptor;
 }
 
+public struct RuntimeFont
+{
+    public int id;
+    public SpriteFont font;
+}
+
+
 public class TextureSystem
 {
     public static List<RuntimeTexture> textures = new List<RuntimeTexture>();
     private static Dictionary<int, int> _map = new Dictionary<int, int>();
+    public static int highestTextureId;
+    
+    public static List<RuntimeFont> fonts = new List<RuntimeFont>();
+    private static Dictionary<int, int> _fontMap = new Dictionary<int, int>();
 
     public static void GetTextureIndex(int textureId, out int index, out RuntimeTexture texture)
     {
         if (!_map.TryGetValue(textureId, out index))
         {
+            highestTextureId = textureId > highestTextureId ? textureId : highestTextureId;
             index = _map[textureId] = textures.Count;
             texture = new RuntimeTexture()
             {
@@ -48,6 +60,58 @@ public class TextureSystem
             texture = textures[index];
         }
     }
+
+    public static void GetSpriteFontIndex(int fontId, out int index, out RuntimeFont font)
+    {
+        if (!_fontMap.TryGetValue(fontId, out index))
+        {
+            index = _fontMap[fontId] = fonts.Count;
+            font = new RuntimeFont()
+            {
+                id = fontId,
+            };
+            fonts.Add(font);
+        }
+        else
+        {
+            font = fonts[index];
+        }
+    }
+
+    
+    public static Rectangle GetSourceRect(ref RuntimeTexture runtimeTex, ref Sprite sprite)
+    {
+        var tex = runtimeTex.texture;
+        var src = new Rectangle(0, 0, tex.Width, tex.Height);
+        if (sprite.currentFrame >= 0)
+        {
+            var frame = runtimeTex.descriptor.frames[sprite.currentFrame % runtimeTex.descriptor.frames.Count];
+            src = new Rectangle(frame.xOffset, frame.yOffset, frame.xSize, frame.ySize);
+        }
+
+        return src;
+    }
+
+    public static void LoadTextureFromContent(int textureId, string path)
+    {
+        var texture = GameSystem.game.Content.Load<Texture2D>(path);
+        GetTextureIndex(textureId, out var index, out var runtimeTex);
+        runtimeTex.descriptor = new TextureDescriptor
+        {
+            imageFilePath = path
+        };
+        runtimeTex.texture = texture;
+        textures[index] = runtimeTex;
+    }
+    
+    public static void LoadSpriteFontFromContent(int fontId, string path)
+    {
+        var font = GameSystem.game.Content.Load<SpriteFont>(path);
+        GetSpriteFontIndex(fontId, out var index, out var runtimeFont);
+        runtimeFont.font = font;
+        fonts[index] = runtimeFont;
+    }
+    
     
     public static void LoadTexture(int textureId, string filePath)
     {
@@ -55,7 +119,8 @@ public class TextureSystem
         {
             throw new InvalidOperationException("Only png textures are allowed");
         }
-        var texture = Texture2D.FromFile(GameSystem.graphicsDeviceManager.GraphicsDevice, Path.ChangeExtension(filePath, ".cropped2.png"));
+        
+        var texture = Texture2D.FromFile(GameSystem.graphicsDeviceManager.GraphicsDevice, filePath);
         var descriptor = new TextureDescriptor
         {
             imageFilePath = filePath
