@@ -8,6 +8,23 @@ namespace Fade.MonoGame.Lib;
 public partial class FadeMonoGameCommands
 {
 
+    [FadeBasicCommand("free text id")]
+    public static int GetFreeTextNextId(ref int textId)
+    {
+        textId = TextSystem.highestTextId + 1;
+        // TextureSystem.GetTextureIndex(textureId, out _, out _);
+        return textId;
+    }
+    
+    [FadeBasicCommand("reserve text id")]
+    public static int ReserveTextNextId(ref int textId)
+    {
+        GetFreeTextNextId(ref textId);
+        TextSystem.GetTextSpriteIndex(textId, out _, out _);
+        return textId;
+    }
+
+    
     [FadeBasicCommand("text")]
     public static void Text(int textId, int x, int y, int spriteFontId, string text)
     {
@@ -42,6 +59,44 @@ public partial class FadeMonoGameCommands
         textSprite.sprite.color = new Color(r, g, b, a);
         TextSystem.textSprites[index] = textSprite;
     }
+    
+    [FadeBasicCommand("color text drop shadow")]
+    public static void SetTextDropShadowColor(int textId, int colorCode)
+    {
+        TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
+        ColorUtil.UnpackColor(colorCode, out var r, out var g, out var b, out var a);
+        textSprite.dropShadowColor = new Color(r, g, b, a);
+        TextSystem.textSprites[index] = textSprite;
+    }
+    
+    [FadeBasicCommand("enable text drop shadow")]
+    public static void EnableTextDropShadow(int textId, int x, int y, int colorCode)
+    {
+        TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
+        ColorUtil.UnpackColor(colorCode, out var r, out var g, out var b, out var a);
+        textSprite.dropShadowEnabled = true;
+        textSprite.dropShadowOffset = new Vector2(x, y);
+        textSprite.dropShadowColor = new Color(r, g, b, a);
+        TextSystem.textSprites[index] = textSprite;
+    }
+    
+    [FadeBasicCommand("disable text drop shadow")]
+    public static void DisableTextDropShadow(int textId)
+    {
+        TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
+        textSprite.dropShadowEnabled = false;
+        TextSystem.textSprites[index] = textSprite;
+    }
+
+    
+    [FadeBasicCommand("set text alpha")]
+    public static void SetTextDiffuse(int textId, byte alpha)
+    {
+        TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
+        textSprite.sprite.color.A = alpha;
+        TextSystem.textSprites[index] = textSprite;
+    }
+
     
     [FadeBasicCommand("scale text")]
     public static void SetTextScale(int textId, float x, float y)

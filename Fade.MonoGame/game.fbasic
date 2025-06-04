@@ -1,83 +1,463 @@
+`global SPADE = 0
+#constant SPADE 0
+global CLUB = 1
+global HEART = 2
+global DIAMOND = 3
 
-`set fullscreen 1
+global TWO = 0
+global THREE = 1
+global FOUR = 2
+global FIVE = 3
+global SIX = 4
+global SEVEN = 5
+global EIGHT = 6
+global NINE = 7
+global TEN = 8
+global JACK = 9
+global QUEEN = 10
+global KING = 11
+global ACE = 12
+
+type card 
+    startSpriteId
+    transformId
+    suit
+    value
+    x as float
+    y as float
+    angle as float
+    order
+endtype
+
+type vec2
+    x as float
+    y as float
+endtype
+
+type cardPosition 
+    pos as vec2
+    textXOffset
+    key$
+    textId
+    offset
+endtype
 
 
-path$ = "/Users/chrishanna/Downloads/heart_jog2.png"
 
-attackPath$ = "/Users/chrishanna/Downloads/heart_attack1.png"
 
-texture 1, path$
-texture 2, attackPath$
+font 1, "MyFont"
 
-scale# = .5
-scale sprite 1 scale# scale#
-scale sprite 2 scale# scale#
 
-x = 0
-y = 200
-rate = 3
-f = 1
-v = 0
-dir = 0
-attack = 0
+global width# = 1920
+global height# = 1080
+set screen size width#, height#
+`set fullscreen 1 
 
-animRate = 120
-animClock = 0
+global darkColor = rgb(110, 105, 120)
+global redColor = rgb(200, 40, 40)
 
-do 
+`set screen size 500, 800
 
-    gosub controls
-    gosub drawAttack
+` load assets
 
-    sync
+#constant TEXTURE_PAPER 10
+
+texture TEXTURE_PAPER, "Textures/paper"
+texture 11, "Textures/fakeGold"
+
+texture 20, "Textures/spade"
+texture 21, "Textures/diamond"
+texture 22, "Textures/club"
+texture 23, "Textures/heart"
+
+dim suitTextures(4)
+suitTextures(SPADE) = 20
+suitTextures(DIAMOND) = 21
+suitTextures(CLUB) = 22
+suitTextures(HEART) = 23
+
+texture 50, "Textures/2"
+texture 51, "Textures/3"
+texture 52, "Textures/4"
+texture 53, "Textures/5"
+texture 54, "Textures/6"
+texture 55, "Textures/7"
+texture 56, "Textures/8"
+texture 57, "Textures/9"
+texture 58, "Textures/10"
+texture 59, "Textures/J"
+texture 60, "Textures/Q"
+texture 61, "Textures/K"
+texture 62, "Textures/A"
+
+dim valueTextures(13)
+valueTextures(TWO) = 50
+valueTextures(THREE) = 51
+valueTextures(FOUR) = 52
+valueTextures(FIVE) = 53
+valueTextures(SIX) = 54
+valueTextures(SEVEN) = 55
+valueTextures(EIGHT) = 56
+valueTextures(NINE) = 57
+valueTextures(TEN) = 58
+valueTextures(JACK) = 59
+valueTextures(QUEEN) = 60
+valueTextures(KING) = 61
+valueTextures(ACE) = 62
+
+effect 1, "MySpriteEffect"
+set effect param color 1, "BorderColor", rgb(51, 51, 51)
+set effect param color 1, "CenterColor", rgb(128, 128, 140)
+set effect param texture 1, "CenterTexture", 10
+set effect param texture 1, "BorderTexture", 11
+
+effect 2, "BackgroundEffect"
+effect 3, "BackgroundCompositeEffect"
+set effect param float2 3, "iResolution", 1920*.5, 1080*.5
+global BACKGROUND_TIME as float = 0
+` set effect param float 3, "iTime", BACKGROUND_TIME
+
+
+global STAGE_CARDS = 3
+global STAGE_BACKGROUND_COMP = 6
+global STAGE_BACKGROUND = 8
+
+global STAGE_CARDS_TEXTURE = 16
+global STAGE_BACKGROUND_TEXTURE = 15
+global STAGE_BACKGROUND_COMP_TEXTURE = 17
+
+set stage effect STAGE_CARDS, 1
+set stage sampler STAGE_CARDS, 1
+grab render texture STAGE_CARDS, STAGE_CARDS_TEXTURE
+set stage background STAGE_CARDS, rgb(0, 255, 0, 0)
+
+set stage effect STAGE_BACKGROUND, 2
+grab render texture STAGE_BACKGROUND, STAGE_BACKGROUND_TEXTURE
+set stage background STAGE_BACKGROUND, rgb(255, 0, 0)
+`set stage size ratio STAGE_BACKGROUND, .25
+
+set stage effect STAGE_BACKGROUND_COMP, 3
+grab render texture STAGE_BACKGROUND_COMP, STAGE_BACKGROUND_COMP_TEXTURE
+set effect param texture 3, "PreviousTexture", STAGE_BACKGROUND_COMP_TEXTURE
+
+
+sprite 2, 0,0, STAGE_CARDS_TEXTURE
+set sprite offset 2, 0, 0
+order sprite 2, 2
+
+sprite 1, 0, 0, STAGE_BACKGROUND_COMP_TEXTURE
+set sprite offset 1, 0, 0
+order sprite 1, 1
+
+sprite 3, 0, 0, STAGE_BACKGROUND_TEXTURE
+set sprite stage 3, STAGE_BACKGROUND_COMP
+set sprite offset 3, 0, 0
+`scale sprite 3, 4,4
+
+set background color rgb(64, 64, 128)
+
+
+dim cardFileNames$(6)
+cardFileNames$(0) = "Textures/card_template_blank_1"
+cardFileNames$(1) = "Textures/card_template_blank_2"
+cardFileNames$(2) = "Textures/card_template_blank_3"
+cardFileNames$(3) = "Textures/card_template_blank_4"
+cardFileNames$(4) = "Textures/card_template_blank_5"
+cardFileNames$(5) = "Textures/card_template_blank_6"
+
+for i = 0 to 5
+    texture i + 1, cardFileNames$(i)
+next
+
+global TEXTURE_BACKGROUND = 6
+texture TEXTURE_BACKGROUND, "Textures/card_back_grad"
+
+` Create card positions
+DIM slots(4) as cardPosition 
+xSpacing = 150
+slots(0) = {
+    pos = {
+        x = width# * .5 - xSpacing
+        y = 200
+    },
+    textXOffset = -150
+    textId = 100,
+    key$ = "Q",
+    offset = 4
+}
+slots(1) = {
+    pos = {
+        x = width# * .5 + xSpacing
+        y = 200
+    },
+    textXOffset = 150
+    textId = 101,
+    key$ = "E", 
+    offset = 3
+}
+slots(2) = {
+    pos = {
+        x =  width# * .5 - xSpacing
+        y = 500
+    },
+    textXOffset = -150
+    textId = 102,
+    key$ = "A", 
+    offset = 2
+}
+slots(3) = {
+    pos = {
+        x =  width# * .5 + xSpacing
+        y = 500
+    }, 
+    textXOffset = 150
+    textId = 103
+    key$ = "D", 
+    offset = 1
+}
+
+global handSpot as vec2 = {
+    x = width# * .5,
+    y = 900
+}
+
+
+c as card
+slot as cardPosition
+movingTransformId = -1
+
+for n = 0 to 3
+    slot = slots(n)
+    text slot.textId, slot.pos.x + slot.textXOffset, slot.pos.y, 1, slot.key$
+next
+
+
+` Create a deck of cards
+DIM deck(52) AS card
+global deckSize = 52 - 8 `4 hearts and 4 diamonds don't exist...
+global cardIndex = 0
+
+DIM deckOrder(52)
+for n = 0 to 51
+    deckOrder(n) = n
+next
+shuffleDeckOrder()
+
+
+changePaperAt = timer() + 50
+
+
+click = 0
+clickX = 0
+clickY = 0
+
+setupDeck()
+
+` x =100
+` y = 140
+` for i = 0 to deckSize
+`     n = deckOrder(i)
+
+`     deck(n).x = x
+`     deck(n).y = y
+`     x += 180
+
+`     if (x > 1800)
+`         x = 100
+`         y += 270
+`     endif
+
+`     setupCard(deck(n))
+` next
+
+r# = 0
+dealRoom()
+
+
+do
+    BACKGROUND_TIME += .1
+    set effect param float 3, "iTime", BACKGROUND_TIME
+
+    perform collider checks
+
+
+    for n = 0 to 3
+        slot = slots(n)
+        if new key down(scanCode(slot.key$))
+            n = deckOrder(cardIndex - slot.offset)
+            c = deck(n)
+            create basic tween 1 get local transform x(c.transformId) handSpot.x 500 0
+            create basic tween 2 get local transform y(c.transformId) handSpot.y 400 10
+            movingTransformId = c.transformId
+            
+            setupCard(c)
+            hide text slot.textId
+        endif
+    next 
+
+    if (movingTransformId > 0)
+        transform movingTransformId, tweenVal(1), tweenVal(2)
+    endif
+
+    if (new left click())
+        dealRoom()
+    endif
+
+    ` cause the paper wrinkle effect to change by shifting UV coords
+    if (timer() > changePaperAt)
+        `set effect param float2 1, "UvOffset", rnd(100)*.01, rnd(100)*.01
+        changePaperAt = timer() + 350
+    endif
+    sync 
 loop
 
 
-controls:
-    v = 0
-    if rightKey() then v = rate : dir = 1
-    if leftKey() then v = -rate : dir = -1
-    if upKey() then attack = 1
-    
-    x = x + v
-return
+function dealRoom()
 
-drawAttack:
-    sprite 1,x,y,2
-    `sprite 2 -100 -100 1
-    
-    if timer() > animClock AND attack > 0
-        inc f
-        animClock = timer() + animRate
-    endif
-    
-    if f > 7 
-        f = 0
-        attack = 0
-    endif
-    set sprite frame 1 f
-return
 
-draw:
+    for i = 0 to 3
 
-    set sprite flip 1, dir < 0, 0
-    set sprite flip 2, dir < 0, 0
+        show text slots(i).textId
 
-    sprite 1 x y 1
-    sprite 2 x y 1
-    
-    if (v = 0)
-        set sprite frame 1 8
-        set sprite frame 2 9
-    else 
-        if timer() > animClock
-            inc f
-            animClock = timer() + animRate
+        index = cardIndex - (4 - i)
+        if (index >= 0)
+            c = deck( deckOrder(index))
+            c.x = -1000
+            c.y = -1000
+            setupCard(c)
         endif
-        
-        if f > 7 then f = 0
-        set sprite frame 1 f
-        set sprite frame 2 f+9
+    next
+
+    for slotIndex = 0 to 3
+        n = deckOrder(cardIndex)
+        cardIndex += 1
+        c1 = deck(n)
+        c1.x = slots(slotIndex).pos.x
+        c1.y = slots(slotIndex).pos.y 
+        setupCard(c1)
+    next
+
+endfunction
+
+
+function shuffleDeckOrder()
+    for i = 0 to 5000
+        a = rnd(deckSize)
+        b = rnd(deckSize)
+        t = deckOrder(b)
+        deckOrder(b) = deckOrder(a)
+        deckOrder(a) = t
+    next
+endfunction
+
+function setupDeck()
+    index = 0
+
+    x = 120
+    y = 140
+    for suit = SPADE to DIAMOND
+
+        upper = ACE
+        if suit = HEART OR suit = DIAMOND then upper = TEN
+
+        for value = TWO to upper
+
+            c as card
+            c.startSpriteId = 10 + index*10
+            c.value = value
+            c.suit = suit
+            c.x = -1000
+            c.y = -1000,
+            c.angle = .2*(rnd(100)/100.0) - .1,
+            c.transformId = 10 + index*10,
+            c.order = 50 + index
+            setupCard(c)
+
+            deck(index) = c
+            index += 1
+            x += 140
+        next
+        y += 270
+        x = 120
+    next
+
+
+endfunction
+
+
+function setupCard(c as card)
+
+    color = redColor
+    if c.suit = SPADE OR c.suit = CLUB
+        color = darkColor
     endif
+
+    ` create a root transform for this object
+    transform c.transformId, c.x, c.y
+    set transform rotation c.transformId, c.angle
+
+
+    backgroundSpriteId = c.startSpriteId + 4
+    sprite backgroundSpriteId, 0, 0, TEXTURE_BACKGROUND
+    attach sprite to transform backgroundSpriteId, c.transformId
+    `order sprite backgroundSpriteId, 0
+    set sprite stage backgroundSpriteId, STAGE_BACKGROUND
+    `scale sprite backgroundSpriteId, 1,1
+    size sprite backgroundSpriteId, 200 + 90, 270 + 90
+
+    ` create the main card background
+    sprite c.startSpriteId, 0, 0, 2
     
-return
+    set sprite all texcoord1 c.startSpriteId, rnd(100)/100.0, rnd(100)/100.0, 1, 1
+    order sprite c.startSpriteId c.order
+    attach sprite to transform c.startSpriteId, c.transformId
+    set sprite offset c.startSpriteId, .5 .5
+    size sprite c.startSpriteId, 200, 270
+    set sprite stage c.startSpriteId, STAGE_CARDS
+    `add sprite stage c.startSpriteId, STAGE_BACKGROUND
+
+    ` create collider
+    box collider c.transformId, -100, -135, 200, 270
+    attach collider to transform c.transformId, c.transformId
+
+    ` create the suit art
+    artSpriteId = c.startSpriteId + 1
+    sprite artSpriteId, 0, 10, suitTextures(c.suit)
+    order sprite artSpriteId c.order
+    attach sprite to transform artSpriteId, c.transformId
+    set sprite offset artSpriteId, .5, .5
+    size sprite artSpriteId, 130, 170
+    color sprite artSpriteId, color
+    set sprite stage artSpriteId, STAGE_CARDS
+
+    ` create the top-left number
+    
+    numberSize = 30
+    offset = 0
+    if c.value >= TEN
+        numberSize += 15
+        offset = 10
+    endif
+
+    numberSpriteId = c.startSpriteId + 2
+    sprite numberSpriteId, -70 + offset, -95, valueTextures(c.value)
+    order sprite numberSpriteId c.order
+    attach sprite to transform numberSpriteId, c.transformId
+    set sprite offset numberSpriteId, .5, .5
+
+    size sprite x numberSpriteId, numberSize
+    color sprite numberSpriteId, color
+    set sprite stage numberSpriteId, STAGE_CARDS
+
+    ` create the low-right number
+    number2SpriteId = c.startSpriteId + 3
+    sprite number2SpriteId, 70 - offset, 70, valueTextures(c.value)
+    order sprite number2SpriteId c.order
+    attach sprite to transform number2SpriteId, c.transformId
+    set sprite offset number2SpriteId, .5, 1
+    size sprite x number2SpriteId, numberSize
+    rotate sprite number2SpriteId, 3.14
+    color sprite number2SpriteId, color
+    set sprite stage number2SpriteId, STAGE_CARDS
+
+endfunction

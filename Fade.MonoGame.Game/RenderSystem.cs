@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Content.Pipeline.Extra;
 using Microsoft.Xna.Framework.Graphics;
 
 using SpriteBatch = Microsoft.Xna.Framework.Graphics.Fade.SpriteBatch;
@@ -29,7 +30,8 @@ public class RenderStage
 public struct RuntimeEffect
 {
     public int id;
-    public Effect effect;
+    public WatchedAsset<Effect> watchedEffect;
+    public Effect effect => watchedEffect.Asset;
     public string filePath;
     // TODO: could I somehow recompile on file change?
 }
@@ -53,6 +55,25 @@ public static class RenderSystem
     public static List<RuntimeEffect> effects = new List<RuntimeEffect>();
     private static Dictionary<int, int> _effectMap = new Dictionary<int, int>();
 
+    public static int screenEffectIndex = -1;
+    
+    public static void Reset()
+    {
+        backgroundColor = Color.CornflowerBlue;
+        mainBuffer = null;
+        mainBufferPosition = default;
+        mainBufferScale = default;
+        screenShakeOffset = default;
+        screenShakeOffsetTarget = default;
+        screenShakeMag = default;
+        screenShakeElastic = default;
+        stages.Clear();
+        _stageMap.Clear();
+        effects.Clear();
+        _effectMap.Clear();
+        screenEffectIndex = -1;
+    }
+    
     public static void GetEffectIndex(int effectId, out int index, out RuntimeEffect effect)
     {
         if (!_effectMap.TryGetValue(effectId, out index))
@@ -193,6 +214,29 @@ public static class RenderSystem
         return (1.0 - ((x * (x * x * 15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741824.0);
     }
 
+    public static void RefreshEffects()
+    {
+        for (var i = 0 ; i < effects.Count; i ++)
+        {
+            var fx = effects[i];
+            if (GameSystem.game.ContentWatcher.TryRefreshAsset(ref fx.watchedEffect))
+            {
+                effects[i] = fx;
+            }
+            
+        }
+
+        foreach (var fx in effects)
+        {
+            
+            if (fx.effect.Parameters.ContainsParameter("Time"))
+                fx.effect.Parameters["Time"].SetValue((float)GameSystem.latestTime.TotalGameTime.TotalSeconds);
+            
+            if (fx.effect.Parameters.ContainsParameter("Resolution"))
+                fx.effect.Parameters["Resolution"].SetValue(new Vector2(mainBuffer.Width, mainBuffer.Height));
+        }
+    }
+
     public static void RenderAllStages(SpriteBatch sb)
     {
         // var localStages = stages; // TODO: maybe this gets sorted someday?
@@ -276,6 +320,21 @@ public static class RenderSystem
 
                 var order = 1 - ((text.sprite.zOrder / 200f) + (text.sprite.id / 500f));
                 sb.DrawString(font, text.text, position, text.sprite.color, angle, origin, scale, text.sprite.effects, order);
+
+                if (text.dropShadowEnabled)
+                {
+                    position -= text.dropShadowOffset;
+                    order += (2f / 200f);
+                    var color = text.dropShadowColor;
+                    if (text.sprite.color.A <= 1)
+                    {
+                    }
+                    color.A = text.sprite.color.A;
+
+                    sb.DrawString(font, text.text, position, color, angle, origin, scale, text.sprite.effects, order);
+                    
+                }
+                
                 
             }
             

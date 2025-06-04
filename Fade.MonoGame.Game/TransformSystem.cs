@@ -26,6 +26,14 @@ public static class TransformSystem
     public static int transformCount = 0;
     private static Dictionary<int, int> _transformMap = new Dictionary<int, int>();
     
+    public static void Reset()
+    {
+        transforms = new Transform[MAX_TRANSFORM_COUNT];
+        transformCount = 0;
+        _transformMap.Clear();
+    }
+
+    
     public static void GetTransformIndex(int transformId, out int index, out Transform transform)
     {
         if (!_transformMap.TryGetValue(transformId, out index))

@@ -2,10 +2,10 @@
 using FadeBasic.Launch;
 using FadeBasic.Virtual;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Content.Pipeline.Extra;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Graphics.Fade;
 using Microsoft.Xna.Framework.Input;
-using Vector2 = System.Numerics.Vector2;
 using SpriteBatch = Microsoft.Xna.Framework.Graphics.Fade.SpriteBatch;
 
 namespace Fade.MonoGame.Game;
@@ -18,12 +18,17 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private VirtualMachine _vm;
     private DebugSession _debugSession;
     private LaunchOptions _options;
+    public ContentWatcher ContentWatcher;
 
     private Texture2D _pixel;
     private SpriteFont _defaultFont;
+    private Func<bool> _isNewBuildReady;
+    private bool _autoAcceptNewBuilds;
 
-    public Game1(ILaunchable fadeProgram)
+    public Game1(ILaunchable fadeProgram, Func<bool> isNewBuildReady, bool autoAcceptNewBuilds=false)
     {
+        _autoAcceptNewBuilds = autoAcceptNewBuilds;
+        _isNewBuildReady = isNewBuildReady;
         _fadeProgram = fadeProgram;
         _vm = new VirtualMachine(_fadeProgram.Bytecode)
         {
@@ -48,12 +53,13 @@ public class Game1 : Microsoft.Xna.Framework.Game
         GameSystem.graphicsDeviceManager = _graphics;
         base.Initialize();
     }
+    
 
     protected override void OnExiting(object sender, ExitingEventArgs args)
     {
-        base.OnExiting(sender, args);
-        
+        Content.Dispose();
         _debugSession?.ShutdownServer();
+        Console.WriteLine("Game exited...");
         base.OnExiting(sender, args);
     }
 
@@ -63,13 +69,19 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
     protected override void LoadContent()
     {
-
+        ContentWatcher = new ContentWatcher(Content);
+        ContentWatcher.Init();
+        
+        
         var customSpriteEffect = Content.Load<Effect>("FadeSpriteBatchEffect");
         _spriteBatch = new SpriteBatch(GraphicsDevice, new FadeSpriteEffect(customSpriteEffect));
 
 // https://www.youtube.com/watch?v=-5ELPrIJNvA TARGET RESOLUTION 
 
+        //_testFx = ContentWatcher.Watch<Effect>("Fish/Shaders/ScreenEffect");
 
+        
+        
         _defaultFont = Content.Load<SpriteFont>("MyFont");
 
         _pixel = new Texture2D(GraphicsDevice, 1, 1);
@@ -91,22 +103,37 @@ public class Game1 : Microsoft.Xna.Framework.Game
     protected override void Update(GameTime gameTime)
     {
         if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed ||
-            Keyboard.GetState().IsKeyDown(Keys.Escape))
+            Keyboard.GetState().IsKeyDown(Keys.Escape) )
+        {
             Exit();
+        }
 
+        if (_autoAcceptNewBuilds && _isNewBuildReady())
+        {
+            Exit();
+        }
+
+        // if (ContentWatcher.TryRefreshAsset(ref _testFx))
+        // {
+        //     Console.WriteLine("fx changed!");
+        // }
+
+        GameSystem.currentFrameNumber++;
         var keyState = Keyboard.GetState();
         var mouseState = Mouse.GetState();
         InputSystem.ApplyNewMouse(ref mouseState, ref keyState);
 
-        TweenSystem.currentTime = gameTime.TotalGameTime.TotalMilliseconds;
+        TweenSystem.currentTime = AudioInstanceSystem.currentTime = gameTime.TotalGameTime.TotalMilliseconds;
         TweenSystem.ProcessTweens();
-
+        AudioInstanceSystem.HandleAudio();
+        RenderSystem.RefreshEffects();
         GameSystem.latestTime = gameTime;
         
         if (_vm.instructionIndex >= _vm.program.Length)
         {
             Exit();
         }
+        
 
         if (_options.debug)
         {
@@ -140,14 +167,38 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
         GraphicsDevice.SetRenderTarget(null);
         GraphicsDevice.Clear(Color.Black);
-        
-        // _spriteBatch.Begin();
-        _spriteBatch.Begin(samplerState: SamplerState.PointClamp);
+
+        var screenEffect = RenderSystem.screenEffectIndex > -1
+            ? RenderSystem.effects[RenderSystem.screenEffectIndex].effect
+            : null;
+        _spriteBatch.Begin(
+            sortMode: SpriteSortMode.Immediate,
+            blendState: BlendState.Opaque,
+            samplerState: SamplerState.PointClamp,
+            effect: screenEffect
+            );
         _spriteBatch.Draw(RenderSystem.mainBuffer, RenderSystem.mainBufferPosition, null, Color.White, 0f, Vector2.Zero, RenderSystem.mainBufferScale, SpriteEffects.None, 0);
 
+
+        if (_isNewBuildReady())
+        {
+            // a silly indicator that a new build is ready
+            _spriteBatch.Draw(_pixel, Vector2.Zero, null, Color.Red, 0f, Vector2.Zero, 20, SpriteEffects.None, 0);
+            
+            _spriteBatch.Draw(_pixel, new Rectangle(0, 0, GraphicsDevice.Viewport.Width, 20), Color.Red);
+            _spriteBatch.Draw(_pixel, new Rectangle(0, 20, 20, GraphicsDevice.Viewport.Height - 40), Color.Red);
+            _spriteBatch.Draw(_pixel, new Rectangle(GraphicsDevice.Viewport.Width - 20, 20, 20, GraphicsDevice.Viewport.Height - 40), Color.Red);
+            _spriteBatch.Draw(_pixel, new Rectangle(0, GraphicsDevice.Viewport.Height - 20, GraphicsDevice.Viewport.Width, 20), Color.Red);
+        }
+        
         _spriteBatch.End();
         
         base.Draw(gameTime);
     }
-    
+
+    public void Quit()
+    {
+        Exit();
+    }
+
 }

@@ -51,6 +51,16 @@ public static class CollisionSystem
     public static Dictionary<int, List<int>> colliderIdToHitIds = new Dictionary<int, List<int>>();
 
 
+    public static void Reset()
+    {
+        aabbs = new ColliderBox[MAX_AABB_COUNT];
+        _colliderMap.Clear();
+        AabbsCount = 0;
+
+        hits = new CollisionHit[MAX_HIT_COUNT];
+        HitCount = 0;
+    }
+    
     public static void GetColliderIndex(int colliderId, out int index, out ColliderBox collider)
     {
         if (!_colliderMap.TryGetValue(colliderId, out index))

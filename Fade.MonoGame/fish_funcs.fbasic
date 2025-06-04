@@ -7,12 +7,105 @@ endfunction GRID_POS.y + row * CELL_SIZE
 function getCellIndex(pos as vec)
 endfunction pos.x + pos.y * CELL_COLUMN_COUNT
 
+function getFishColorIndex(fishValue)
+endfunction fishValue - 1
+
 function getRandomValue()
 endfunction rnd(7)+1
+
+function getImpossibleRandomValue(leftValue, topValue)
+    rand = getRandomValue()
+    while rand = leftValue OR rand = topValue
+        rand = getRandomValue()
+    endwhile
+endfunction rand
+
+function getImpossibleRandomValueForCell(cellId)
+    leftValue = -1
+    cell = CELLS(cellId)
+    if cell.coord.x > 0
+        leftValue = CELLS(cellId - 1).value
+    endif
+    topValue = -1
+    if (cell.coord.y > 0)
+        topValue = CELLS(cellId - CELL_COLUMN_COUNT).value
+    endif
+endfunction getImpossibleRandomValue(leftValue, topValue)
 
 function updateCell(c as cell)
     sprite c.spriteId, getCellX(c.coord.x), getCellY(c.coord.y), c.value
 endfunction
+ 
+function spawnScoreText(pos as vec, score$, delay)
+    i = SCORE_TEXT_NUM
+    SCORE_TEXT_NUM += 1
+
+    if SCORE_TEXT_NUM >= SCORE_TEXT_COUNT then SCORE_TEXT_NUM = 0
+
+    txt = SCORE_TEXTS(i)
+    txt.active = 1
+    
+    set text txt.textId, score$
+    set text position txt.textId, pos.x, pos.y
+    set text alpha txt.textId, 0
+    rotate text txt.textId, rnd(10)*.05 - .25
+    enable text drop shadow txt.textId, 2, -4, rgb(0,0,40)
+
+    create basic tween txt.floatTweenIdX, pos.x, pos.x + rnd(10)-5, 230, delay + 50
+    create basic tween txt.floatTweenIdY, pos.y, pos.y - 15, 260, delay + 50
+    create basic tween txt.fadeTweenId, 255, 0, 200, 400 + delay + 100
+    create basic tween txt.fadeInTweenId, 0, 255, 100, delay
+endfunction txt.textId
+
+function setProgressTween(bar as progressBar, progress)
+    x = progress - bar.startVal
+    dist# = bar.endVal - bar.startVal
+
+    r# = x / dist#
+
+    create basic tween bar.progressTweenId, tweenVal(bar.progressTweenId), r#, 100, 50
+
+endfunction
+
+function createProgressBar(pos as vec, size as vec)
+    bar as progressBar 
+    bar.pos = pos
+    bar.size = size
+
+    reserve sprite id(bar.backgroundSpriteId)
+    reserve sprite id(bar.foregroundSpriteId)
+
+    reserve tween id(bar.progressTweenId)
+    reserve tween id(bar.scaleTweenId)
+
+    sprite bar.backgroundSpriteId, pos.x, pos.y, TEX_PIXEL
+    size sprite bar.backgroundSpriteId, size.x, size.y
+    set sprite offset bar.backgroundSpriteId, 0, 0
+    color sprite bar.backgroundSpriteId, rgb(32, 64, 128, 128)
+
+    sprite bar.foregroundSpriteId, pos.x + 1, pos.y + 1, TEX_PIXEL
+    size sprite bar.foregroundSpriteId, 0, size.y - 2
+    set sprite offset bar.foregroundSpriteId, 0, 0
+    color sprite bar.foregroundSpriteId, rgb(64, 128, 255, 200)
+
+    reserve text id(bar.textNumId)
+    text bar.textNumId, pos.x + size.x, pos.y+2, SCORE_FONT, "0/100"
+    size text y bar.textNumId, 15
+    set text offset bar.textNumId, 1, 0
+    color text bar.textNumId, rgb(64, 128, 255, 200)
+    enable text drop shadow bar.textNumId, 2, -2, rgb(0,0,0)
+
+    reserve text id(bar.textTitleId)
+    text bar.textTitleId, pos.x, pos.y+3, SCORE_FONT, "Progress"
+    ` size text y bar.textTitleId, 14
+    set text offset bar.textTitleId, 0, 1
+    color text bar.textTitleId, rgb(64, 128, 255, 200)
+    enable text drop shadow bar.textTitleId, 2, -2, rgb(0,0,0)
+
+
+
+endfunction bar
+
 
 function findCombos(cIndex, groupId)
     ` find the cell to the left, 
@@ -69,6 +162,32 @@ function findCombos(cIndex, groupId)
 
 endfunction
 
+function collectInput()
+
+    if frame number() = COLLECTED_INPUT_MASK then exitfunction
+    
+    swapDir as vec = {
+        x = 0, 
+        y = 0
+    } 
+
+    isSwap = spaceKey()
+
+    if new rightkey() then swapDir.x = 1
+    if new leftkey() then swapDir.x = -1
+    if new upKey() then swapDir.y = -1
+    if new downKey() then swapDir.y = 1
+
+    if swapDir.x <> 0 or swapDir.y <> 0
+        QUEUED_MOVES(QUEUED_MOVE_NUM) = {
+            dir = swapDir
+            swap = isSwap
+        }
+        QUEUED_MOVE_NUM += 1
+        COLLECTED_INPUT_MASK = frame number()
+    endif
+
+endfunction
 
 function doSwap(start as vec, dir as vec, doSwap)
 
@@ -101,6 +220,9 @@ function doSwap(start as vec, dir as vec, doSwap)
     create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, CELL_SIZE * 1.5, 150, 50
     set tween type SELECTION_TWEEN_PUNCH_ID, 1
 
+    create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
+    set tween type SWAP_TWEEN_SFX, 1
+
     while (is tween done(TWEEN_SWAP_AX) < 1) or (is tween done(SELECTION_TWEEN_PUNCH_ID) < 1)
 
         if (doSwap)
@@ -110,7 +232,12 @@ function doSwap(start as vec, dir as vec, doSwap)
 
         position sprite SELECTION_SPRITE, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
         scale sprite SELECTION_SPRITE, tweenVal(SELECTION_TWEEN_PUNCH_ID), tweenVal(SELECTION_TWEEN_PUNCH_ID)
+
+        set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
+
+        collectInput()
         sync
+
     endwhile
 
 

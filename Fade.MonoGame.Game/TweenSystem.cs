@@ -43,6 +43,15 @@ public static class TweenSystem
     public static int tweenCount = 0;
     private static Dictionary<int, int> _tweenMap = new Dictionary<int, int>();
     public static int highestTweenId;
+
+    public static void Reset()
+    {
+        currentTime = 0;
+        tweens = new Tween[MAX_TWEEN_COUNT];
+        tweenCount = 0;
+        _tweenMap.Clear();
+        highestTweenId = 0;
+    }
     
     public static void GetTweenIndex(int tweenId, out int index, out Tween tween)
     {

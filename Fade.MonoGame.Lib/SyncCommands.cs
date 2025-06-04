@@ -21,4 +21,10 @@ public partial class FadeMonoGameCommands
     {
         vm.Suspend();
     }
+    
+    [FadeBasicCommand("frame number")]
+    public static long Sync()
+    {
+        return GameSystem.currentFrameNumber;
+    }
 }

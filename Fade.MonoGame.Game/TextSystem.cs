@@ -8,6 +8,10 @@ public struct TextSprite
 {
     public Sprite sprite;
     public string text;
+
+    public Color dropShadowColor;
+    public Vector2 dropShadowOffset;
+    public bool dropShadowEnabled;
 }
 
 
@@ -18,12 +22,23 @@ public static class TextSystem
     public static TextSprite[] textSprites = new TextSprite[MAX_SPRITE_TEXT_COUNT];
     public static int textSpriteCount = 0;
     private static Dictionary<int, int> _textSpriteMap = new Dictionary<int, int>();
+    public static int highestTextId = 0;
+
     
+    public static void Reset()
+    {
+        textSprites = new TextSprite[MAX_SPRITE_TEXT_COUNT];
+        textSpriteCount = 0;
+        highestTextId = 0;
+        _textSpriteMap.Clear();
+    }
     
     public static void GetTextSpriteIndex(int textId, out int index, out TextSprite text)
     {
         if (!_textSpriteMap.TryGetValue(textId, out index))
         {
+            highestTextId = textId > highestTextId ? textId : highestTextId;
+
             index = _textSpriteMap[textId] = textSpriteCount;
             text = new TextSprite
             {

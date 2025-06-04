@@ -3,8 +3,76 @@
 
 goto routines_exit
 
+load_audio:
+    global EXPLODE_SOUND_COUNT=2
+    global dim EXPLODE_SOUNDS(2)
+
+    EXPLODE_SOUNDS(0) = 0
+    EXPLODE_SOUNDS(1) = 1
+
+    load sfx clip EXPLODE_SOUNDS(0), "Fish/Audio/bubble-pop-2"
+    load sfx clip EXPLODE_SOUNDS(1), "Fish/Audio/bubble-pop-4"
+    
+    load sfx clip 100, "Fish/Audio/underwater-ambiencewav-14428"
+
+
+    global SFX_CLIP_SWAP    
+    load sfx clip reserve sfx clip id(SFX_CLIP_SWAP), "Fish/Audio/river-and-stones"
+    global SFX_SWAP
+    sfx reserve sfx id(SFX_SWAP), 100
+    set sfx loop SFX_SWAP, 1
+    set sfx volume SFX_SWAP 0
+    play sfx SFX_SWAP
+
+
+    global SFX_CLIP_DROP
+    load sfx clip reserve sfx clip id(SFX_CLIP_DROP), "Fish/Audio/rocks-falling"
+    global SFX_DROP
+    sfx reserve sfx id(SFX_DROP), SFX_CLIP_DROP
+    set sfx loop SFX_DROP, 1
+    set sfx volume SFX_DROP, 0
+    play sfx SFX_DROP
+
+    global SFX_TWEEN_DROP
+    reserve tween id(SFX_TWEEN_DROP)
+
+
+
+
+    sfx 100,100
+    play sfx 100
+    set sfx loop 100, 1
+
+return
+
+load_fonts:
+
+    global SCORE_FONT = 1
+
+    font SCORE_FONT, "Fish/Fonts/ZeroCool"
+
+
+    global SCORE_TEXT_COUNT = 100
+    global SCORE_TEXT_NUM = 0
+    global dim SCORE_TEXTS(SCORE_TEXT_COUNT) as floatingText
+
+    for i = 0 to SCORE_TEXT_COUNT - 1
+        SCORE_TEXTS(i) = {
+            active = 0
+            textId = i + 1 `TODO: add reserve, 
+            floatTweenIdX = reserve tween id(n)
+            floatTweenIdY = reserve tween id(n)
+            fadeTweenId = reserve tween id(n)
+            fadeInTweenId = reserve tween id(n)
+        }
+        text SCORE_TEXTS(i).textId, 0, 0, SCORE_FONT, ""
+        `hide text SCORE_TEXTS(i).textId
+    next
+
+return
+
 load_textures:
-    TEX_PIXEL = 0 `magic texture that always exists
+    global TEX_PIXEL = 0 `magic texture that always exists
     texture free texture id(TEX_PUFFER), "Fish/Textures/Pufferfish"
     texture free texture id(TEX_CATFISH), "Fish/Textures/Catfish"
     texture free texture id(TEX_GOLDFISH), "Fish/Textures/Goldfish"
@@ -13,6 +81,16 @@ load_textures:
     texture free texture id(TEX_BASS), "Fish/Textures/Bass"
     texture free texture id(TEX_WORM), "Fish/Textures/Worm"
 
+    texture reserve texture id(TEX_NOISE), "Fish/Textures/Turbulence_13-256x256"
+
+    global dim FISH_COLORS(7)
+    FISH_COLORS(getFishColorIndex(TEX_PUFFER)) = rgb(250, 190, 54)
+    FISH_COLORS(getFishColorIndex(TEX_CATFISH)) = rgb(160, 150, 121)
+    FISH_COLORS(getFishColorIndex(TEX_GOLDFISH)) = rgb(255, 174, 48)
+    FISH_COLORS(getFishColorIndex(TEX_ANGELFISH)) = rgb(255, 211, 52)
+    FISH_COLORS(getFishColorIndex(TEX_CRAB)) = rgb(223, 55, 55)
+    FISH_COLORS(getFishColorIndex(TEX_BASS)) = rgb(154, 181, 89)
+    FISH_COLORS(getFishColorIndex(TEX_WORM)) = rgb(255, 144, 144)
 
     texture free texture id(TEX_SMOKE_1), "Fish/Textures/Free Smoke Fx  Pixel 04"
     set texture frame grid TEX_SMOKE_1, 10 8 `rows, columns
@@ -61,12 +139,13 @@ return
 
 setup_grid:
 
-    global CELL_SIZE = 32
+    global CELL_SIZE = 28
     global CELL_ART_SIZE = 16
     global GRID_POS as vec = {
-        x = 32, 
-        y = 32
+        x = 32 + 16, 
+        y = 64
     }
+
 
     global CELL_COLUMN_COUNT = 9
     global CELL_ROW_COUNT = 9
@@ -91,11 +170,18 @@ setup_grid:
                 }
                 value = getRandomValue()
             }
+
+            CELLS(cellId).value = getImpossibleRandomValueForCell(cellId)
+
             reserve sprite id(CELLS(cellId).spriteId)
             reserve sprite id(CELLS(cellId).fxSpriteId)
             reserve tween id(CELLS(cellId).comboDownShiftTweenId)
             reserve tween id(CELLS(cellId).comboAlphaTweenId)
             reserve tween id(CELLS(cellId).comboAnimTweenId)
+            reserve tween id(CELLS(cellId).scaleWaveTweenId)
+            create basic tween CELLS(cellId).scaleWaveTweenId, 1, 1, 100, 0
+
+            reserve sfx id(CELLS(cellid).explodeSfxId)
 
             c as cell = CELLS(cellId)
             sprite c.spriteId, getCellX(c.coord.x), getCellY(c.coord.y), c.value
@@ -111,10 +197,59 @@ setup_grid:
     next
 return
 
+setup_score:
+
+    global SCORE_POS as vec = {
+        x = 32,
+        y = 24
+    }
+
+    global SCORE_SIZE as vec = {
+        x = CELL_COLUMN_COUNT * CELL_SIZE, 
+        y = 4
+    }
+    global SCORE_BAR as progressBar = createProgressBar(SCORE_POS, SCORE_SIZE)
+    SCORE_BAR.startVal = 0
+    SCORE_BAR.endVal = 200
+    
+    global dim PROGRESS_BARS(1) as progressBar
+    global PROGRESS_BAR_COUNT = 1
+    PROGRESS_BARS(0) = SCORE_BAR
+
+    ` global SCORE_SLIDE_BACKDROP_SPRITE
+    ` global SCORE_SLIDE_FRONT_SPRITE
+    ` global SCORE_SLIDE_TWEEN_ID
+
+    ` reserve sprite id(SCORE_SLIDE_BACKDROP_SPRITE)
+    ` reserve sprite id(SCORE_SLIDE_FRONT_SPRITE)
+    ` reserve tween id(SCORE_SLIDE_TWEEN_ID)
+
+    global CURRENT_SCORE = 0
+
+    ` sprite SCORE_SLIDE_BACKDROP_SPRITE, SCORE_POS.x, SCORE_POS.y, TEX_PIXEL
+    ` size sprite SCORE_SLIDE_BACKDROP_SPRITE, CELL_COLUMN_COUNT * CELL_SIZE, 4
+    ` set sprite offset SCORE_SLIDE_BACKDROP_SPRITE, 0, 0
+    ` color sprite SCORE_SLIDE_BACKDROP_SPRITE, rgb(32, 64, 128, 128)
+
+    ` sprite SCORE_SLIDE_FRONT_SPRITE, SCORE_POS.x + 1, SCORE_POS.y + 1, TEX_PIXEL
+    ` size sprite SCORE_SLIDE_FRONT_SPRITE, 100, 2
+    ` set sprite offset SCORE_SLIDE_FRONT_SPRITE, 0, 0
+    ` color sprite SCORE_SLIDE_FRONT_SPRITE, rgb(64, 128, 255, 200)
+
+return
+
+
 setup_selection:
+
+    global COLLECTED_INPUT_MASK as long = 0
     global SELECTION_POS as vec = {
         2, 2
     }
+
+    global QUEUED_MOVE_MAX = 100
+    global dim QUEUED_MOVES(QUEUED_MOVE_MAX) as move
+    global QUEUED_MOVE_NUM
+    global QUEUED_MOVE_TAIL
 
     global SELECTION_SPRITE
     reserve sprite id(SELECTION_SPRITE)
@@ -144,6 +279,9 @@ setup_swap_tweens:
     global SELECTION_TWEEN_PUNCH_ID
     reserve tween id (SELECTION_TWEEN_PUNCH_ID)
 
+    global SWAP_TWEEN_SFX
+    reserve tween id (SWAP_TWEEN_SFX)
+
 return
 
 
@@ -152,19 +290,19 @@ update_selection_position:
 return
 
 
-handle_input:
-    
-    swapDir as vec = {
-        x = 0, 
-        y = 0
-    } 
+process_input:
+    collectInput()
 
-    isSwap = spaceKey()
+    if QUEUED_MOVE_NUM <= 0
+        return
+    endif
 
-    if new rightkey() then swapDir.x = 1
-    if new leftkey() then swapDir.x = -1
-    if new upKey() then swapDir.y = -1
-    if new downKey() then swapDir.y = 1
+
+    move = QUEUED_MOVES(QUEUED_MOVE_TAIL)
+    QUEUED_MOVE_TAIL += 1
+
+    swapDir = move.dir
+    isSwap = move.swap
 
     if swapDir.x <> 0 or swapDir.y <> 0
 
@@ -187,8 +325,77 @@ handle_input:
         gosub update_selection_position
     endif
 
+    
+    if QUEUED_MOVE_TAIL = QUEUED_MOVE_NUM
+        QUEUED_MOVE_TAIL = 0
+        QUEUED_MOVE_NUM = 0
+    endif
 return
 
+update_frame:
+    gosub frame_texts
+    gosub frame_scale_wave
+    gosub frame_score
+return
+
+frame_score:
+
+    if CURRENT_SCORE >= SCORE_BAR.endVal
+        `CURRENT_SCORE = 0
+        SCORE_BAR.startVal = SCORE_BAR.endVal
+        SCORE_BAR.endVal = SCORE_BAR.endVal * 2
+        print "start", SCORE_BAR.startVal, SCORE_BAR.endVal
+        PROGRESS_BARS(0) = SCORE_BAR
+        create basic tween SCORE_BAR.progressTweenId, tweenVal(SCORE_BAR.progressTweenId), 0, 100, 0
+    endif
+
+    for i = 0 to PROGRESS_BAR_COUNT - 1
+        bar = PROGRESS_BARS(i)
+        scoreWidth# = (bar.size.x - 2.0) * tweenVal(bar.progressTweenId)
+        size sprite bar.foregroundSpriteId, scoreWidth#, 2
+        span = bar.endVal - bar.startVal
+        y$ = str$(span * tweenVal(bar.progressTweenId)) `+ "/" + str$(span)
+        z$ = "/"
+        x$ = str$(span)
+
+        concat$ = y$ + z$ + x$
+        set text bar.textNumId, str$(span * tweenVal(bar.progressTweenId)) + "/" + str$(span)
+    next
+
+
+
+return
+
+frame_texts:
+    for i = 0 to SCORE_TEXT_COUNT - 1
+        scoreTxt = SCORE_TEXTS(i)
+
+        if scoreTxt.active = 0
+            `hide text scoreTxt.textId
+        else 
+            `show text scoreTxt.textId
+        endif
+        
+        set text position scoreTxt.textId, tweenVal(scoreTxt.floatTweenIdX), tweenVal(scoreTxt.floatTweenIdY)
+
+        if is tween done(scoreTxt.fadeInTweenId) > 0
+            set text alpha scoreTxt.textId, tweenVal(scoreTxt.fadeTweenId)
+        else 
+            set text alpha scoreTxt.textId, tweenVal(scoreTxt.fadeInTweenId)
+        endif
+        ` TODO: add 'set text alpha' command
+    next
+return
+
+frame_scale_wave:
+
+    for i = 0 to CELL_COUNT - 1
+        c = CELLS(i)
+        scale = tweenVal(c.scaleWaveTweenId) * CELL_ART_SIZE
+        size sprite c.spriteId, scale, scale
+    next
+
+return
 
 handle_combos:
 
@@ -235,6 +442,8 @@ handle_combos:
     cellId = 0
 
     totalComboCount = 0
+    explodePitch# = (rnd(4)*.02)
+    explodeIndex = 0
     for g = 0 to groupId - 1
 
         ` need to check if this group is big enough
@@ -250,9 +459,11 @@ handle_combos:
         if comboCount < 3 then skip `if this group is not big enough, then we can skip rendering the explosion
 
         totalComboCount += 1
+        scoreAdd = 0
 
         ` animate the exit of the group
         randomG = (totalComboCount-1)
+        
         for i = 1 to CELL_COUNT
             cell = CELLS(i-1)
             if cell.comboFillId <> g then skip 
@@ -263,8 +474,10 @@ handle_combos:
             smokeIndex = rnd(SMOKE_ANIM_COUNT)
             smoke = SMOKE_ANIMS(smokeIndex)
 
-            delay = rnd(3)*75+25 `TODO: somehow use the delay to "randomize" the animation
+            explodeIndex += 1
+            delay = explodeIndex * 50`rnd(3)*75+25 `TODO: somehow use the delay to "randomize" the animation
 
+            ` kaboom sprite
             create basic tween cell.comboAnimTweenId, smoke.startFrame, smoke.endFrame, 400, delay
             set tween easing cell.comboAnimTweenId, EASING_LINEAR
             show sprite cell.fxSpriteId
@@ -272,13 +485,33 @@ handle_combos:
             color sprite cell.fxSpriteId, SMOKE_COLORS(rnd(SMOKE_COLOR_COUNT))
             sprite cell.fxSpriteId, getCellX(cell.coord.x), getCellY(cell.coord.y), smoke.texId
 
+            ` sfx
+            sfx cell.explodeSfxId, rnd(EXPLODE_SOUND_COUNT)
+            delay play sfx cell.explodeSfxId, delay
+            set sfx pitch cell.explodeSfxId, explodePitch#
+            explodePitch# -= .02
+
+
+            ` animate fade out
             create basic tween cell.comboDownShiftTweenId, 255, 0, 250, delay
 
-
+            ` animate screen shake
             create basic tween SHAKE_TWEEN_ID, 0, 15, 350, 0
             set tween type SHAKE_TWEEN_ID, 1
             set screen shake bounce .5
 
+            ` spawn score text
+            txtPos as vec = {
+                x = getCellX(cell.coord.x),
+                y = getCellY(cell.coord.y)
+            }
+            scoreAdd += 10
+            txtId = spawnScoreText(txtPos, "+" + str$(scoreAdd), delay)
+            color text txtId, FISH_COLORS(getFishColorIndex(cell.value))
+
+            ` create basic tween SCORE_BAR.progressTweenId, getScoreRatio(0), getScoreRatio(scoreAdd), 100, 50
+            CURRENT_SCORE += scoreAdd
+            setProgressTween(SCORE_BAR, CURRENT_SCORE)
 
         next
 
@@ -320,6 +553,7 @@ handle_combos:
             `position sprite cell.spriteId, sprite x(cell.spriteId), tweenVal(cell.comboDownShiftTweenId)
         next
 
+        gosub update_frame
         sync
     until anyStillPlaying = 0
 
@@ -366,6 +600,7 @@ handle_combos:
             position sprite cell.spriteId, sprite x(cell.spriteId), tweenVal(cell.comboDownShiftTweenId)
         next
 
+        gosub update_frame
         sync
     endwhile
 
@@ -403,6 +638,8 @@ handle_combos:
         next
     next
 
+    set sfx volume SFX_DROP, 1
+
     ` step 2; spawn in new cells and animate them falling in  
     for i = 1 to CELL_COUNT
         cell = CELLS(i - 1)
@@ -411,7 +648,7 @@ handle_combos:
         startAlpha = 255
         targetAlpha = 255
         if cell.comboBlownUp > 0
-            CELLS(i-1).value = getRandomValue()
+            CELLS(i-1).value = getImpossibleRandomValueForCell(i - 1)
             set sprite texture cell.spriteId, CELLS(i-1).value
             targetY = y - CELL_SIZE * 2
             startAlpha = 0
@@ -424,6 +661,7 @@ handle_combos:
         create basic tween cell.comboAlphaTweenId, startAlpha, targetAlpha, 150, delay
     next
 
+
     ` wait for all exit animations to finish
     repeat 
         anyStillPlaying = 0
@@ -435,13 +673,17 @@ handle_combos:
                 anyStillPlaying = 1
             endif
 
+            
+
             position sprite cell.spriteId, sprite x(cell.spriteId), tweenVal(cell.comboDownShiftTweenId)
             set sprite alpha cell.spriteId, tweenVal(cell.comboAlphaTweenId)
         next
 
+        gosub update_frame
         sync
     until anyStillPlaying = 0
 
+    set sfx volume SFX_DROP, 0
 
 return
 

@@ -32,6 +32,14 @@ public static class SpriteSystem
     public static int highestSpriteId = 0;
     private static Dictionary<int, int> _spriteMap = new Dictionary<int, int>();
 
+
+    public static void Reset()
+    {
+        sprites = new Sprite[MAX_SPRITE_COUNT];
+        spriteCount = 0;
+        highestSpriteId = 0;
+        _spriteMap.Clear();
+    }
     
     public static void GetSpriteIndex(int spriteId, out int index, out Sprite sprite)
     {

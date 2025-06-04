@@ -47,10 +47,12 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("effect")]
     public static void LoadEffect(int effectId, string effectName)
     {
-        var effect = GameSystem.game.Content.Load<Effect>(effectName);
+        //var effect = GameSystem.game.Content.Load<Effect>(effectName);
+
+        var effect = GameSystem.game.ContentWatcher.Watch<Effect>(effectName);
         
         RenderSystem.GetEffectIndex(effectId, out var index, out var runtimeEffect);
-        runtimeEffect.effect = effect;
+        runtimeEffect.watchedEffect = effect;
         runtimeEffect.filePath = effectName;
 
         RenderSystem.effects[index] = runtimeEffect;
@@ -134,6 +136,22 @@ public partial class FadeMonoGameCommands
         RenderSystem.stages[index] = stage;
     }
 
+    
+    
+    [FadeBasicCommand("clear screen effect")]
+    public static void ClearScreenEffect()
+    {
+        RenderSystem.screenEffectIndex = -1;
+    }
+    
+    [FadeBasicCommand("set screen effect")]
+    public static void SetScreenEffect(int effectId)
+    {
+        RenderSystem.GetEffectIndex(effectId, out var index, out var runtimeEffect);
+        RenderSystem.screenEffectIndex = index;
+
+    }
+    
     [FadeBasicCommand("set stage effect")]
     public static void SetStageEffect(int stageId, int effectId)
     {

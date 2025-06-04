@@ -43,6 +43,17 @@ public class TextureSystem
     public static List<RuntimeFont> fonts = new List<RuntimeFont>();
     private static Dictionary<int, int> _fontMap = new Dictionary<int, int>();
 
+    public static void Reset()
+    {
+       textures.Clear();
+       _map.Clear();
+       highestTextureId = 0;
+       
+       fonts.Clear();
+       _fontMap.Clear();
+    }
+
+    
     public static void GetTextureIndex(int textureId, out int index, out RuntimeTexture texture)
     {
         if (!_map.TryGetValue(textureId, out index))

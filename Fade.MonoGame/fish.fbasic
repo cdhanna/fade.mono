@@ -1,6 +1,11 @@
 #CONSTANT SAMPLER_STATE_POINT 1
 
-set screen size 1920, 1080
+set screen size 1080, 1080
+
+` sprite 100, 0, 0, 0
+` sprite 5, 0, 0, 0
+
+` color sprite 100, hsl(0, 100.00%, 50.00%)
 
 ` the world space is a tiny pixelly space
 global WORLD_WIDTH = 320
@@ -10,18 +15,31 @@ set stage sampler 1 SAMPLER_STATE_POINT
 set background color rgb(32, 40, 64)
 
 gosub load_textures
+gosub load_audio
+gosub load_fonts
 gosub setup_grid
 gosub setup_selection
 gosub setup_swap_tweens
+gosub setup_score
 
+effect 1, "Fish/Shaders/ScreenEffect"
+set screen effect 1
+set effect param texture 1, "Noise", TEX_NOISE
+
+
+p# = 0
 do 
-    gosub handle_input
+
+    COLLECTED_INPUT_MASK = 0
+    set effect param float 1, "TimeSpeed", 1
+
+    set effect param float 1, "Time", game ms() / 1000.0
+
+    gosub process_input
 
     gosub handle_combos
 
-    if new key down(scanCode("C"))
-
-    endif
+    gosub update_frame
 
     sync 
 loop
