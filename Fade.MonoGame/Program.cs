@@ -25,48 +25,52 @@ csProjPath = GameReloader.GetCsprojPath(); // TODO: support a non-dev way of run
 if (!string.IsNullOrEmpty(csProjPath))
 {
     var commandCollection = new CommandCollection(
-        new StandardCommands(), 
+        new StandardCommands(),
         new FadeMonoGameCommands()
     );
 
-    Game1 game = null;
-    ILaunchable fade = null;
+    // Game1 game = null;
+    ILaunchable fade = new GeneratedFade();
     GameReloader.WatchFiles(csProjPath, commandCollection);
-    while (true)
-    {
-        if (GameReloader.LatestBuild == null)
-        {
-            Thread.Sleep(25);
-            continue;
-        }
-        
-        
-        if (GameReloader.LatestBuild != fade)
-        {
-            Console.WriteLine("new build available...");
-            fade = GameReloader.LatestBuild;
-
-            if (game != null)
-            {
-                game.Quit();
-            }
-
-            GameSystem.ResetAll();
-            
-            game = new Game1(fade, () => GameReloader.LatestBuild != fade);
-           
-            game.Run(GameRunBehavior.Synchronous);
-
-            game.Dispose();
-            
-        }
-
-        if (GameReloader.LatestBuild == fade)
-        {
-            // the same build; so quit.
-            break;
-        }
-        
-        // time to reset?
-    }
+    var game = new Game1(fade);
+    game.Run();
 }
+
+//     while (true)
+//     {
+//         if (GameReloader.LatestBuild == null)
+//         {
+//             Thread.Sleep(25);
+//             continue;
+//         }
+//         
+//         
+//         if (GameReloader.LatestBuild != fade)
+//         {
+//             Console.WriteLine("new build available...");
+//             fade = GameReloader.LatestBuild;
+//
+//             if (game != null)
+//             {
+//                 game.Quit();
+//             }
+//
+//             GameSystem.ResetAll();
+//             
+//             game = new Game1(fade, () => GameReloader.LatestBuild != fade);
+//            
+//             game.Run(GameRunBehavior.Synchronous);
+//
+//             game.Dispose();
+//             
+//         }
+//
+//         if (GameReloader.LatestBuild == fade)
+//         {
+//             // the same build; so quit.
+//             break;
+//         }
+//         
+//         // time to reset?
+//     }
+// }

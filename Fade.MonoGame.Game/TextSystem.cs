@@ -27,7 +27,7 @@ public static class TextSystem
     
     public static void Reset()
     {
-        textSprites = new TextSprite[MAX_SPRITE_TEXT_COUNT];
+        //textSprites = new TextSprite[MAX_SPRITE_TEXT_COUNT];
         textSpriteCount = 0;
         highestTextId = 0;
         _textSpriteMap.Clear();

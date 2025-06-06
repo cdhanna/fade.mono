@@ -12,7 +12,7 @@ namespace Fade.MonoGame.Game;
 
 public class Game1 : Microsoft.Xna.Framework.Game
 {
-    private readonly ILaunchable _fadeProgram;
+    private ILaunchable _fadeProgram;
     private GraphicsDeviceManager _graphics;
     private SpriteBatch _spriteBatch;
     private VirtualMachine _vm;
@@ -21,26 +21,14 @@ public class Game1 : Microsoft.Xna.Framework.Game
     public ContentWatcher ContentWatcher;
 
     private Texture2D _pixel;
-    private SpriteFont _defaultFont;
-    private Func<bool> _isNewBuildReady;
     private bool _autoAcceptNewBuilds;
 
-    public Game1(ILaunchable fadeProgram, Func<bool> isNewBuildReady, bool autoAcceptNewBuilds=false)
+    public Game1(ILaunchable fadeProgram, bool autoAcceptNewBuilds=false)
     {
         _autoAcceptNewBuilds = autoAcceptNewBuilds;
-        _isNewBuildReady = isNewBuildReady;
         _fadeProgram = fadeProgram;
-        _vm = new VirtualMachine(_fadeProgram.Bytecode)
-        {
-            hostMethods = HostMethodTable.FromCommandCollection(_fadeProgram.CommandCollection)
-        };
-        _options = LaunchOptions.DefaultOptions;
-        if (_options.debug)
-        {
-            _debugSession = new DebugSession(_vm, _fadeProgram.DebugData, _fadeProgram.CommandCollection, _options,
-                "Fade.Mono");
-            _debugSession.StartServer();
-        }
+
+        
         
         _graphics = new GraphicsDeviceManager(this);
         Content.RootDirectory = "Content";
@@ -49,9 +37,68 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
     protected override void Initialize()
     {
+        base.Initialize();
+        
+        ResetFade();
+    }
+
+    private static DateTimeOffset _dbgTime;
+    private static void StartTracking() => _dbgTime = DateTimeOffset.Now;
+
+    private static void PrintTracking(string title)
+    {
+        Console.WriteLine($"{title} took {(DateTimeOffset.Now - _dbgTime).TotalMilliseconds}");
+        _dbgTime = DateTimeOffset.Now;
+    }
+
+    public void Restart()
+    {
+        UnloadContent();
+        
+        LoadContent();
+        ResetFade();
+
+    }
+
+    bool IsNewBuildAvailable()
+    {
+        return GameReloader.LatestBuild != null && GameReloader.LatestBuild != _fadeProgram;
+    }
+    
+    public void ResetFade()
+    {
+        // _vm = GameReloader.LatestMachine;
+        // if (_vm == null)
+        {
+            _vm = new VirtualMachine(_fadeProgram.Bytecode)
+            {
+                hostMethods = HostMethodTable.FromCommandCollection(_fadeProgram.CommandCollection)
+            };
+        }
+
+        _options = LaunchOptions.DefaultOptions;
+        if (_options.debug)
+        {
+            _debugSession = new DebugSession(_vm, _fadeProgram.DebugData, _fadeProgram.CommandCollection, _options,
+                "Fade.Mono");
+            _debugSession.StartServer();
+        }
+        
+        StartTracking();
+        GameSystem.ResetAll();
+        PrintTracking("Reset All Systems");
+
+        
         GameSystem.game = this;
         GameSystem.graphicsDeviceManager = _graphics;
-        base.Initialize();
+        TransformSystem.GetTransformIndex(0, out _, out _); // create a blank index-0 
+        RenderSystem.SetMainRenderSize(1920, 1080);
+        RenderSystem.GetStageIndex(1, out _, out var stage);
+        TextureSystem.GetTextureIndex(0, out var pixelIndex, out var pixelTex);
+        pixelTex.descriptor = new TextureDescriptor(); // TODO: maybe add a frame dev?
+        pixelTex.texture = _pixel;
+        TextureSystem.textures[pixelIndex] = pixelTex;
+
     }
     
 
@@ -76,47 +123,41 @@ public class Game1 : Microsoft.Xna.Framework.Game
         var customSpriteEffect = Content.Load<Effect>("FadeSpriteBatchEffect");
         _spriteBatch = new SpriteBatch(GraphicsDevice, new FadeSpriteEffect(customSpriteEffect));
 
-// https://www.youtube.com/watch?v=-5ELPrIJNvA TARGET RESOLUTION 
-
-        //_testFx = ContentWatcher.Watch<Effect>("Fish/Shaders/ScreenEffect");
-
-        
-        
-        _defaultFont = Content.Load<SpriteFont>("MyFont");
-
         _pixel = new Texture2D(GraphicsDevice, 1, 1);
         _pixel.SetData(new Color[]{Color.White});
 
-        TransformSystem.GetTransformIndex(0, out _, out _); // create a blank index-0 
-
-        RenderSystem.SetMainRenderSize(1920, 1080);
-        RenderSystem.GetStageIndex(1, out _, out var stage);
-
-        TextureSystem.GetTextureIndex(0, out var pixelIndex, out var pixelTex);
-        pixelTex.descriptor = new TextureDescriptor(); // TODO: maybe add a frame dev?
-        pixelTex.texture = _pixel;
-        TextureSystem.textures[pixelIndex] = pixelTex;
-        
+      
         // TODO: use this.Content to load your game content here
     }
 
+    private bool _justReloaded = false;
     protected override void Update(GameTime gameTime)
     {
-        if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed ||
-            Keyboard.GetState().IsKeyDown(Keys.Escape) )
+        if (Keyboard.GetState().IsKeyDown(Keys.Escape) )
         {
             Exit();
         }
 
-        if (_autoAcceptNewBuilds && _isNewBuildReady())
+        
+   
+        if (!_justReloaded && Keyboard.GetState().IsKeyDown(Keys.F1))
         {
-            Exit();
+            if (GameReloader.LatestBuild != null)
+            {
+                _fadeProgram = GameReloader.LatestBuild;
+            }
+
+            _justReloaded = true;
+
+            Restart();
+            return;
         }
 
-        // if (ContentWatcher.TryRefreshAsset(ref _testFx))
-        // {
-        //     Console.WriteLine("fx changed!");
-        // }
+        if (_justReloaded && Keyboard.GetState().IsKeyUp(Keys.F1))
+        {
+            _justReloaded = false;
+        }
+
 
         GameSystem.currentFrameNumber++;
         var keyState = Keyboard.GetState();
@@ -128,19 +169,17 @@ public class Game1 : Microsoft.Xna.Framework.Game
         AudioInstanceSystem.HandleAudio();
         RenderSystem.RefreshEffects();
         GameSystem.latestTime = gameTime;
-        
         if (_vm.instructionIndex >= _vm.program.Length)
         {
             Exit();
         }
         
-
         if (_options.debug)
         {
-            // TODO: need to make debugger respond to 
             _debugSession._vm.isSuspendRequested = false;
             while (!_debugSession._vm.isSuspendRequested  && _vm.instructionIndex < _vm.program.Length)
             {
+                // TODO: debugging is too slow :(
                 _debugSession.StartDebugging(1);
             }
             
@@ -150,8 +189,11 @@ public class Game1 : Microsoft.Xna.Framework.Game
             _vm.isSuspendRequested = false;
             while (!_vm.isSuspendRequested && _vm.instructionIndex < _vm.program.Length)
             {
-                _vm.Execute2(1);
+                //Console.WriteLine($"instruction index: {_vm.instructionIndex}");
+            
+                _vm.Execute2(1000);
             }
+
         }
 
         TransformSystem.CalculateTransforms();
@@ -161,6 +203,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
     protected override void Draw(GameTime gameTime)
     {
+        if (_vm.instructionIndex <= 4) return; // the VM hasn't started yet; so don't draw anything...
         
         // the final image will be stored in the mainBuffer...
         RenderSystem.RenderAllStages(_spriteBatch);
@@ -180,7 +223,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         _spriteBatch.Draw(RenderSystem.mainBuffer, RenderSystem.mainBufferPosition, null, Color.White, 0f, Vector2.Zero, RenderSystem.mainBufferScale, SpriteEffects.None, 0);
 
 
-        if (_isNewBuildReady())
+        if (IsNewBuildAvailable())
         {
             // a silly indicator that a new build is ready
             _spriteBatch.Draw(_pixel, Vector2.Zero, null, Color.Red, 0f, Vector2.Zero, 20, SpriteEffects.None, 0);

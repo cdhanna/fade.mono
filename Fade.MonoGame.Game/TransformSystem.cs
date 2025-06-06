@@ -28,7 +28,7 @@ public static class TransformSystem
     
     public static void Reset()
     {
-        transforms = new Transform[MAX_TRANSFORM_COUNT];
+       // transforms = new Transform[MAX_TRANSFORM_COUNT];
         transformCount = 0;
         _transformMap.Clear();
     }

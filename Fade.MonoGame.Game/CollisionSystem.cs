@@ -53,11 +53,11 @@ public static class CollisionSystem
 
     public static void Reset()
     {
-        aabbs = new ColliderBox[MAX_AABB_COUNT];
+        //aabbs = new ColliderBox[MAX_AABB_COUNT];
         _colliderMap.Clear();
         AabbsCount = 0;
 
-        hits = new CollisionHit[MAX_HIT_COUNT];
+        //hits = new CollisionHit[MAX_HIT_COUNT];
         HitCount = 0;
     }
     

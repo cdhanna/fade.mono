@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using FadeBasic;
 using FadeBasic.Launch;
+using FadeBasic.Virtual;
 
 namespace Fade.MonoGame.Game;
 
@@ -15,6 +16,7 @@ public static class GameReloader
     static readonly object debounceLock = new();
 
     public static ILaunchable LatestBuild { get; private set; }
+    public static VirtualMachine LatestMachine { get; private set; }
     // public static Action<ILaunchable> OnBuild = _ => { };
 
     public static string? GetCsprojPath([CallerFilePath] string callerFilePath = "")
@@ -54,7 +56,6 @@ public static class GameReloader
         {
             HandleUpdate();
         };
-        HandleUpdate();
 
         void HandleUpdate()
         {
@@ -82,6 +83,7 @@ public static class GameReloader
         }
 
         LatestBuild = ctx;
+      //  LatestMachine = ctx.Machine;
         // OnBuild?.Invoke(ctx);
     }
 }

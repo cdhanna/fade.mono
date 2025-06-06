@@ -47,7 +47,7 @@ public static class TweenSystem
     public static void Reset()
     {
         currentTime = 0;
-        tweens = new Tween[MAX_TWEEN_COUNT];
+        //tweens = new Tween[MAX_TWEEN_COUNT];
         tweenCount = 0;
         _tweenMap.Clear();
         highestTweenId = 0;

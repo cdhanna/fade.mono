@@ -35,7 +35,7 @@ public static class SpriteSystem
 
     public static void Reset()
     {
-        sprites = new Sprite[MAX_SPRITE_COUNT];
+        //sprites = new Sprite[MAX_SPRITE_COUNT];
         spriteCount = 0;
         highestSpriteId = 0;
         _spriteMap.Clear();
