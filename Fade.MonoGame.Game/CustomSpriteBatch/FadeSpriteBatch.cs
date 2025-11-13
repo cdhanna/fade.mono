@@ -34,7 +34,7 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
         bool _beginCalled;
 
         FadeSpriteEffect _spriteEffect;
-        readonly EffectPass _spritePass;
+        EffectPass _spritePass;
 
 		Rectangle _tempRect = new Rectangle (0,0,0,0);
 		Vector2 _texCoordTL = new Vector2 (0,0);
@@ -72,6 +72,12 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
 
             _beginCalled = false;
 		}
+
+        public void ResetEffect()
+        {
+            _spritePass = _spriteEffect.CurrentTechnique.Passes[0];
+
+        }
 
         /// <summary>
         /// Begins a new sprite and text batch with the specified render state.

@@ -1,0 +1,48 @@
+goto routines_input_exit
+
+
+process_input:
+    collectInput()
+
+    if QUEUED_MOVE_NUM <= 0
+        return
+    endif
+
+
+    move = QUEUED_MOVES(QUEUED_MOVE_TAIL)
+    QUEUED_MOVE_TAIL += 1
+
+    if QUEUED_MOVE_TAIL = QUEUED_MOVE_NUM
+        QUEUED_MOVE_TAIL = 0
+        QUEUED_MOVE_NUM = 0
+    endif
+
+
+    swapDir = move.dir
+    isSwap = move.swap
+
+    if swapDir.x <> 0 or swapDir.y <> 0
+
+        target as vec = addCoordinates(SELECTION_POS, swapDir)
+
+        if target.x < 0 then return 
+        if target.x >= CELL_COLUMN_COUNT then return 
+        if target.y < 0 then return 
+        if target.y >= CELL_ROW_COUNT then return 
+
+        doSwap(SELECTION_POS, swapDir, isSwap)
+
+        REQUEST_COMBO_CHECK = 1
+        
+        SELECTION_POS = target
+
+        gosub update_selection_position
+    endif
+
+    
+return
+
+
+end
+routines_input_exit:
+

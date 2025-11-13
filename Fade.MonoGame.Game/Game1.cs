@@ -120,8 +120,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
         ContentWatcher.Init();
         
         
-        var customSpriteEffect = Content.Load<Effect>("FadeSpriteBatchEffect");
-        _spriteBatch = new SpriteBatch(GraphicsDevice, new FadeSpriteEffect(customSpriteEffect));
+        _customSpriteEffect = ContentWatcher.Watch<Effect>("FadeSpriteBatchEffect");
+        _fadeEffect = new FadeSpriteEffect(_customSpriteEffect.Asset);
+        _spriteBatch = new SpriteBatch(GraphicsDevice, _fadeEffect);
 
         _pixel = new Texture2D(GraphicsDevice, 1, 1);
         _pixel.SetData(new Color[]{Color.White});
@@ -131,6 +132,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
     }
 
     private bool _justReloaded = false;
+    private WatchedAsset<Effect> _customSpriteEffect;
+    private FadeSpriteEffect _fadeEffect;
+
     protected override void Update(GameTime gameTime)
     {
         if (Keyboard.GetState().IsKeyDown(Keys.Escape) )
@@ -167,7 +171,14 @@ public class Game1 : Microsoft.Xna.Framework.Game
         TweenSystem.currentTime = AudioInstanceSystem.currentTime = gameTime.TotalGameTime.TotalMilliseconds;
         TweenSystem.ProcessTweens();
         AudioInstanceSystem.HandleAudio();
-        RenderSystem.RefreshEffects();
+        RenderSystem.RefreshEffects(_fadeEffect);
+
+        if (ContentWatcher.TryRefreshAsset(ref _customSpriteEffect))
+        {
+            _fadeEffect.SetEffect(_customSpriteEffect.Asset);
+            _spriteBatch.ResetEffect();
+        }
+        
         GameSystem.latestTime = gameTime;
         if (_vm.instructionIndex >= _vm.program.Length)
         {

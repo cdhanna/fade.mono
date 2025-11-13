@@ -156,8 +156,8 @@ public partial class FadeMonoGameCommands
     public static void SetStageEffect(int stageId, int effectId)
     {
         RenderSystem.GetStageIndex(stageId, out _, out var stage);
-        RenderSystem.GetEffectIndex(effectId, out _, out var runtimeEffect);
-        stage.effect = runtimeEffect.effect;
+        // RenderSystem.GetEffectIndex(effectId, out _, out var runtimeEffect);
+        stage.effectId = effectId;
     }
     
     

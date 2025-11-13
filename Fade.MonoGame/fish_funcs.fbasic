@@ -162,6 +162,8 @@ function findCombos(cIndex, groupId)
 
 endfunction
 
+
+
 function collectInput()
 
     if frame number() = COLLECTED_INPUT_MASK then exitfunction
@@ -189,12 +191,40 @@ function collectInput()
 
 endfunction
 
-function doSwap(start as vec, dir as vec, doSwap)
+global soap = 4
 
+
+
+function addCoordinates(start as vec, dir as vec)
     target as vec = {
         x = start.x + dir.x, 
         y = start.y + dir.y
     }
+    
+
+    if isAbility_Wrap()
+
+        if target.x >= CELL_COLUMN_COUNT
+            target.x = target.x - CELL_COLUMN_COUNT
+        endif
+        if target.x < 0
+            target.x = CELL_COLUMN_COUNT + target.x
+        endif
+
+        if target.y >= CELL_ROW_COUNT
+            target.y = target.y - CELL_ROW_COUNT
+        endif
+        if target.y < 0
+            target.y = CELL_ROW_COUNT + target.y
+        endif
+
+    endif
+
+endfunction target
+
+function doSwap(start as vec, dir as vec, doSwap)
+
+    target as vec = addCoordinates(start, dir)
 
     aIndex = getCellIndex(start)
     bIndex = getCellIndex(target)

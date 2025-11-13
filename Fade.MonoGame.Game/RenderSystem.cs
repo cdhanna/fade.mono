@@ -4,7 +4,7 @@ using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content.Pipeline.Extra;
 using Microsoft.Xna.Framework.Graphics;
-
+using Microsoft.Xna.Framework.Graphics.Fade;
 using SpriteBatch = Microsoft.Xna.Framework.Graphics.Fade.SpriteBatch;
 
 namespace Fade.MonoGame.Game;
@@ -13,7 +13,8 @@ public class RenderStage
 {
     public int id;
 
-    public Effect effect;
+    // public Effect effect;
+    public int effectId;
     public BlendState blendState;
     public SamplerState samplerState;
     public RenderTarget2D target;
@@ -214,7 +215,7 @@ public static class RenderSystem
         return (1.0 - ((x * (x * x * 15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741824.0);
     }
 
-    public static void RefreshEffects()
+    public static void RefreshEffects(FadeSpriteEffect fadeFx)
     {
         for (var i = 0 ; i < effects.Count; i ++)
         {
@@ -234,6 +235,7 @@ public static class RenderSystem
             
             if (fx.effect.Parameters.ContainsParameter("Resolution"))
                 fx.effect.Parameters["Resolution"].SetValue(new Vector2(mainBuffer.Width, mainBuffer.Height));
+            
         }
     }
 
@@ -269,12 +271,27 @@ public static class RenderSystem
             var screenDelta = screenShakeOffsetTarget - screenShakeOffset;
             screenShakeOffset += screenDelta * screenShakeElastic;
             var mat2 = Matrix.Identity * Matrix.CreateTranslation(new Vector3(screenShakeOffset.X, screenShakeOffset.Y, 0));
+
+            Effect stageEffect = null;
+            if (_effectMap.TryGetValue(stage.effectId, out var stageEffectIndex))
+            {
+                stageEffect = effects[stageEffectIndex].effect;
+            }
+
+            var vp = sb.GraphicsDevice.Viewport;
+            if (stageEffect?.Parameters.ContainsParameter("MatrixTransform") ?? false)
+            {
+                Matrix.CreateOrthographicOffCenter(0, vp.Width, vp.Height, 0, 0, -100, out var projection);
+                stageEffect.Parameters["MatrixTransform"].SetValue(mat2 * projection);
+
+            }
+
             
             // start a sprite batch with the given settings
             sb.Begin(
                 sortMode: SpriteSortMode.BackToFront,
                 blendState: stage.blendState, 
-                effect: stage.effect,
+                effect: stageEffect,
                 samplerState: stage.samplerState, 
                 // samplerState: SamplerState.AnisotropicClamp, 
                 
@@ -377,7 +394,9 @@ public static class RenderSystem
                 // var order = 1 - ((sprite.zOrder / 200f) + (sprite.id / 500f));
                  var order = 1 - ((sprite.zOrder / 500f) + .001f * (sprite.id / 500f));
                 //float order = 1f -(sprite.zOrder / 500f);
-                sb.Draw(tex, position, src, sprite.color, angle, origin, scale, sprite.effects, order, sprite.texCoord1);
+
+                
+                sb.Draw(tex, position, src, sprite.color, angle, origin, scale, sprite.effects, order, sprite.texCoord1); 
             }
             
             sb.End();

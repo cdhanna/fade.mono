@@ -15,6 +15,7 @@ set stage sampler 1 SAMPLER_STATE_POINT
 set background color rgb(32, 40, 64)
 sync
 
+gosub setup_abilities
 gosub load_textures
 gosub load_audio
 gosub load_fonts
@@ -22,18 +23,25 @@ gosub setup_grid
 gosub setup_selection
 gosub setup_swap_tweens
 gosub setup_score
-gosub setup_abilities
 
 effect 1, "Fish/Shaders/ScreenEffect"
 set screen effect 1
-set effect param texture 1, "Noise", TEX_NOISE
 
 
+effect 2, "Fish/Shaders/FishEffect"
+render stage 2
+set stage effect 2, 2
+
+REQUEST_ABILITY_SELECTION = 1
 p# = 0
+
+isAbility_Wrap()
 do 
 
     COLLECTED_INPUT_MASK = 0
     set effect param float 1, "TimeSpeed", 1
+
+    gosub handle_ability_selection
 
     gosub process_input
 

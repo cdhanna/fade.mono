@@ -8,6 +8,14 @@ public class FadeSpriteEffect : Effect
         CacheEffectParameters();
     }
     
+    
+    public void SetEffect(Effect asset)
+    {
+        Clone(asset);
+        CacheEffectParameters();
+
+    }
+    
     private EffectParameter _matrixParam;
         private Viewport _lastViewport;
         private Matrix _projection;
@@ -16,6 +24,20 @@ public class FadeSpriteEffect : Effect
         /// An optional matrix used to transform the sprite geometry. Uses <see cref="Matrix.Identity"/> if null.
         /// </summary>
         public Matrix? TransformMatrix { get; set; }
+
+        public Matrix ProjectionMatrix
+        {
+            get
+            {
+                var vp = GraphicsDevice.Viewport;
+                Matrix.CreateOrthographicOffCenter(0, vp.Width, vp.Height, 0, 0, -100, out var projection);
+
+                if (TransformMatrix.HasValue)
+                    return (TransformMatrix.GetValueOrDefault() * _projection);
+                else
+                    return (_projection);
+            }
+        }
 
 
         /// <summary>
@@ -54,4 +76,5 @@ public class FadeSpriteEffect : Effect
             else
                 _matrixParam.SetValue(_projection);
         }
+
 }
