@@ -46,10 +46,10 @@ VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
 	//float y_rot = Time*200;
 	//float x_rot = 180;//40 + 120*sin(Time*2);
 	
-	float y_rot = custom.y;
+	float y_rot = custom.y ;
 	float x_rot = custom.x + 180;
 	float fov = 90;
-	float inset = 0;
+	float inset = .3;
 	
 	float sin_b = sin(y_rot / 180.0 * PI);
 	float cos_b = cos(y_rot / 180.0 * PI);
@@ -95,7 +95,6 @@ float4 MainPS(VertexShaderOutput input) : COLOR
    	float4 c= tex2D(SpriteTextureSampler,uv + .5) * input.Color;
 	
 	c.a *= step(max(abs(uv.x), abs(uv.y)), 0.5);
-
 	return c;
 }
 

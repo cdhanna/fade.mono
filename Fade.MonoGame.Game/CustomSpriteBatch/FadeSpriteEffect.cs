@@ -11,6 +11,7 @@ public class FadeSpriteEffect : Effect
     
     public void SetEffect(Effect asset)
     {
+        //Clone();
         Clone(asset);
         CacheEffectParameters();
 

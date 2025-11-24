@@ -73,6 +73,10 @@ return
 
 load_textures:
     global TEX_PIXEL = 0 `magic texture that always exists
+
+    global TEX_CRAB
+    global TEX_WORM
+
     texture free texture id(TEX_PUFFER), "Fish/Textures/Pufferfish"
     texture free texture id(TEX_CATFISH), "Fish/Textures/Catfish"
     texture free texture id(TEX_GOLDFISH), "Fish/Textures/Goldfish"
@@ -142,7 +146,7 @@ setup_grid:
     global CELL_SIZE = 28
     global CELL_ART_SIZE = 16
     global GRID_POS as vec = {
-        x = 32 + 16, 
+        x = 32 + 16 + 128, 
         y = 64
     }
 
@@ -159,7 +163,6 @@ setup_grid:
     next
 
     global REQUEST_COMBO_CHECK = 0
-    global REQUEST_ABILITY_SELECTION = 0
 
     cellId = 0
     for y = 1 to CELL_ROW_COUNT
@@ -202,7 +205,7 @@ return
 setup_score:
 
     global SCORE_POS as vec = {
-        x = 32,
+        x = 32 + 128,
         y = 24
     }
 
@@ -212,7 +215,7 @@ setup_score:
     }
     global SCORE_BAR as progressBar = createProgressBar(SCORE_POS, SCORE_SIZE)
     SCORE_BAR.startVal = 0
-    SCORE_BAR.endVal = 200
+    SCORE_BAR.endVal = 500
     
     global dim PROGRESS_BARS(1) as progressBar
     global PROGRESS_BAR_COUNT = 1
@@ -227,17 +230,46 @@ setup_score:
     ` reserve tween id(SCORE_SLIDE_TWEEN_ID)
 
     global CURRENT_SCORE = 0
+    global CURRENT_ROUND = 0
+    global CURRENT_MOVE_COUNT = 0
+    global MOVE_COUNT_TEXT_ID
+    global ROUND_COUNT_TEXT_ID
 
-    ` sprite SCORE_SLIDE_BACKDROP_SPRITE, SCORE_POS.x, SCORE_POS.y, TEX_PIXEL
-    ` size sprite SCORE_SLIDE_BACKDROP_SPRITE, CELL_COLUMN_COUNT * CELL_SIZE, 4
-    ` set sprite offset SCORE_SLIDE_BACKDROP_SPRITE, 0, 0
-    ` color sprite SCORE_SLIDE_BACKDROP_SPRITE, rgb(32, 64, 128, 128)
 
-    ` sprite SCORE_SLIDE_FRONT_SPRITE, SCORE_POS.x + 1, SCORE_POS.y + 1, TEX_PIXEL
-    ` size sprite SCORE_SLIDE_FRONT_SPRITE, 100, 2
-    ` set sprite offset SCORE_SLIDE_FRONT_SPRITE, 0, 0
-    ` color sprite SCORE_SLIDE_FRONT_SPRITE, rgb(64, 128, 255, 200)
+    ` set up the "moves" label on left
+    reserve text id(MOVE_TEXT_ID)
+    text MOVE_TEXT_ID, 32, SCORE_POS.y - 16, SCORE_FONT, "Moves"
+    size text y MOVE_TEXT_ID, 20
+    set text offset MOVE_TEXT_ID, 0, 0
+    color text MOVE_TEXT_ID, rgb(64, 128, 255, 200)
+    enable text drop shadow MOVE_TEXT_ID, 2, -2, rgb(0,0,0)
 
+    ` re-use id, and set up "rounds left" label on right
+    reserve text id(MOVE_TEXT_ID)
+    text MOVE_TEXT_ID, 570 - 32, SCORE_POS.y - 16, SCORE_FONT, "Rounds Left"
+    size text y MOVE_TEXT_ID, 20
+    set text offset MOVE_TEXT_ID, 1, 0
+    color text MOVE_TEXT_ID, rgb(64, 128, 255, 200)
+    enable text drop shadow MOVE_TEXT_ID, 2, -2, rgb(0,0,0)
+
+
+    reserve text id(MOVE_COUNT_TEXT_ID)
+    text MOVE_COUNT_TEXT_ID, 32 + 24 SCORE_POS.y + 42, SCORE_FONT, "0"
+    size text y MOVE_COUNT_TEXT_ID, 42
+    set text offset MOVE_COUNT_TEXT_ID, .5, 1
+    color text MOVE_COUNT_TEXT_ID, rgb(64, 128, 255, 200)
+    enable text drop shadow MOVE_COUNT_TEXT_ID, 2, -2, rgb(0,0,0)
+
+    reserve text id(ROUND_COUNT_TEXT_ID)
+    text ROUND_COUNT_TEXT_ID, 570 - 64 - 10 SCORE_POS.y + 42, SCORE_FONT, str$(getRoundsLeft())
+    size text y ROUND_COUNT_TEXT_ID, 42
+    set text offset ROUND_COUNT_TEXT_ID, .5, 1
+    color text ROUND_COUNT_TEXT_ID, rgb(64, 128, 255, 200)
+    enable text drop shadow ROUND_COUNT_TEXT_ID, 2, -2, rgb(0,0,0)
+return
+
+setup_passives:
+    
 return
 
 
@@ -261,6 +293,7 @@ setup_selection:
     gosub update_selection_position
     size sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
     order sprite SELECTION_SPRITE, -1
+    set sprite stage SELECTION_SPRITE, 2
     color sprite SELECTION_SPRITE, rgb(60, 90, 170, 170)
 return
 
@@ -331,10 +364,15 @@ return
 frame_score:
 
     if CURRENT_SCORE >= SCORE_BAR.endVal
-        `CURRENT_SCORE = 0
+        
+        ` update the rounds left
+        CURRENT_ROUND = CURRENT_ROUND + 1
+        set text ROUND_COUNT_TEXT_ID, str$(getRoundsLeft())
+
+
+        ` produce next score range
         SCORE_BAR.startVal = SCORE_BAR.endVal
         SCORE_BAR.endVal = SCORE_BAR.endVal * 2
-        print "start", SCORE_BAR.startVal, SCORE_BAR.endVal
         PROGRESS_BARS(0) = SCORE_BAR
         create basic tween SCORE_BAR.progressTweenId, tweenVal(SCORE_BAR.progressTweenId), 0, 100, 0
     endif
@@ -344,12 +382,12 @@ frame_score:
         scoreWidth# = (bar.size.x - 2.0) * tweenVal(bar.progressTweenId)
         size sprite bar.foregroundSpriteId, scoreWidth#, 2
         span = bar.endVal - bar.startVal
-        y$ = str$(span * tweenVal(bar.progressTweenId)) `+ "/" + str$(span)
         z$ = "/"
         x$ = str$(span)
+        y$ = str$(CURRENT_SCORE - SCORE_BAR.startVal)
 
         concat$ = y$ + z$ + x$
-        set text bar.textNumId, str$(span * tweenVal(bar.progressTweenId)) + "/" + str$(span)
+        set text bar.textNumId, y$ + z$ + x$
     next
 
 
@@ -501,6 +539,7 @@ handle_combos:
 
             ` create basic tween SCORE_BAR.progressTweenId, getScoreRatio(0), getScoreRatio(scoreAdd), 100, 50
             CURRENT_SCORE += scoreAdd
+            print CURRENT_SCORE
             setProgressTween(SCORE_BAR, CURRENT_SCORE)
 
         next

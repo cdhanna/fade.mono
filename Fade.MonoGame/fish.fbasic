@@ -1,6 +1,8 @@
 #CONSTANT SAMPLER_STATE_POINT 1
 
-set screen size 1080, 1080
+global SCREEN_WIDTH = 1920
+global SCREEN_HEIGHT = 1080
+set screen size SCREEN_WIDTH, SCREEN_HEIGHT
 
 ` sprite 100, 0, 0, 0
 ` sprite 5, 0, 0, 0
@@ -8,7 +10,7 @@ set screen size 1080, 1080
 ` color sprite 100, hsl(0, 100.00%, 50.00%)
 
 ` the world space is a tiny pixelly space
-global WORLD_WIDTH = 320
+global WORLD_WIDTH = 570
 global WORLD_HEIGHT = 320
 set render size WORLD_WIDTH, WORLD_HEIGHT
 set stage sampler 1 SAMPLER_STATE_POINT
@@ -23,14 +25,18 @@ gosub setup_grid
 gosub setup_selection
 gosub setup_swap_tweens
 gosub setup_score
+gosub setup_passives
+
 
 effect 1, "Fish/Shaders/ScreenEffect"
 set screen effect 1
 
 
+
 effect 2, "Fish/Shaders/FishEffect"
 render stage 2
 set stage effect 2, 2
+
 
 REQUEST_ABILITY_SELECTION = 1
 p# = 0

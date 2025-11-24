@@ -1,21 +1,43 @@
 goto routines_abilities_exit
 
 setup_abilities:
-    global ABILITY_INDEX_WRAP = 1
-    global dim CARDS(2) as ability
+    global REQUEST_ABILITY_SELECTION = 0
 
+    global ABILITY_INDEX_WRAP = 1
+    global ABILITY_INDEX_CRABS = 2
+    global ABILITY_INDEX_BIRD_FEAST = 3
+
+    global dim CARDS(10) as ability
+
+    reserve sprite id (SPRITE_ABILITY_BACKDROP)
 
     CARDS(ABILITY_INDEX_WRAP) = {
-        name$ = "wrap x/y"
+        name$ = "seamless"
         obtained = 1
     }
-    
+    CARDS(ABILITY_INDEX_CRABS) = {
+        name$ = "crabs"
+        obtained = 1
+    }
+    CARDS(ABILITY_INDEX_BIRD_FEAST) = {
+        name$ = "bird feast"
+        obtained = 1
+    }
+
 return
 
 
 handle_ability_selection:
 
     if REQUEST_ABILITY_SELECTION <> 0 then return 
+
+
+    sprite SPRITE_ABILITY_BACKDROP, 160, 160, 0
+    size sprite SPRITE_ABILITY_BACKDROP, 320, 320
+    color sprite SPRITE_ABILITY_BACKDROP, rgb(0, 0, 0, 240)
+    order sprite SPRITE_ABILITY_BACKDROP, 100
+
+    `sprite 
 
     remstart
         need to do several animations
@@ -39,3 +61,8 @@ routines_abilities_exit:
 function isAbility_Wrap()
 endfunction CARDS(ABILITY_INDEX_WRAP).obtained > 0
 
+function isAbility_Crabs()
+endfunction CARDS(ABILITY_INDEX_CRABS).obtained > 0
+
+function isAbility_BirdFeast()
+endfunction CARDS(ABILITY_INDEX_BIRD_FEAST).obtained > 0

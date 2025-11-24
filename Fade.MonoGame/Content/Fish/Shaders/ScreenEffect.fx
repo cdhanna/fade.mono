@@ -66,8 +66,10 @@ float makeWaves(float2 uv, float theTime, float offset)
 
 float4 MainPS(float2 texCoord : TEXCOORD0) : COLOR0
 {
-    float2 uv = texCoord * Resolution.xy;
-    uv /= Resolution.x;
+   // float2 uv = texCoord * Resolution.xy;
+   // uv /= Resolution.y; // TODO: this resolution scaling is not correct.
+float2 uv = texCoord;
+    //return float4(uv.xy, 0, 1);
 
     float2 uv2 = uv * 60.0;
 

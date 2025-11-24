@@ -44,11 +44,11 @@ VSOutput SpriteVertexShader(	float4 position	: POSITION0,
 	output.texCoord = texCoord;
 	float2 uv = texCoord;
 	// float2 ScreenSize = float2(1920.0, 1080.0);
-	float2 ScreenSize = float2(320.0, 320.0);
-	float2 TextureSize = ScreenSize;
-	if (custom.x > 0.0){
-	    TextureSize = custom.xy;
-	}
+//	float2 ScreenSize = float2(320.0, 320.0);
+//	float2 TextureSize = ScreenSize;
+//	if (custom.x > 0.0){
+//	    TextureSize = custom.xy;
+//	}
 	output.custom = custom;
 
 	return output;

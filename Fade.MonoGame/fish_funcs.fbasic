@@ -10,9 +10,6 @@ endfunction pos.x + pos.y * CELL_COLUMN_COUNT
 function getFishColorIndex(fishValue)
 endfunction fishValue - 1
 
-function getRandomValue()
-endfunction rnd(7)+1
-
 function getImpossibleRandomValue(leftValue, topValue)
     rand = getRandomValue()
     while rand = leftValue OR rand = topValue
@@ -48,6 +45,7 @@ function spawnScoreText(pos as vec, score$, delay)
     set text txt.textId, score$
     set text position txt.textId, pos.x, pos.y
     set text alpha txt.textId, 0
+    size text y txt.textId, 24
     rotate text txt.textId, rnd(10)*.05 - .25
     enable text drop shadow txt.textId, 2, -4, rgb(0,0,40)
 
@@ -66,6 +64,10 @@ function setProgressTween(bar as progressBar, progress)
     create basic tween bar.progressTweenId, tweenVal(bar.progressTweenId), r#, 100, 50
 
 endfunction
+
+function getRoundsLeft()
+
+endfunction 100 - CURRENT_ROUND
 
 function createProgressBar(pos as vec, size as vec)
     bar as progressBar 
@@ -96,11 +98,11 @@ function createProgressBar(pos as vec, size as vec)
     enable text drop shadow bar.textNumId, 2, -2, rgb(0,0,0)
 
     reserve text id(bar.textTitleId)
-    text bar.textTitleId, pos.x, pos.y+3, SCORE_FONT, "Score"
-    ` size text y bar.textTitleId, 14
+    text bar.textTitleId, pos.x, pos.y+3, SCORE_FONT, "Round Progress"
+    size text y bar.textTitleId, 20
     set text offset bar.textTitleId, 0, 1
     color text bar.textTitleId, rgb(64, 128, 255, 200)
-    enable text drop shadow bar.textTitleId, 2, -2, rgb(0,0,0)
+    enable text drop shadow bar.textTitleId, 1, -1, rgb(0,0,0)
 
 
 
@@ -222,6 +224,24 @@ function addCoordinates(start as vec, dir as vec)
 
 endfunction target
 
+
+function getRandomValue()
+    if (isAbility_Crabs())
+        if rnd(10) > 7 `a 20 % chance to spawn a crab.
+            exitfunction TEX_CRAB
+        endif
+    endif
+
+    if (isAbility_BirdFeast())
+        ` worm is the last texture, so ignoring it is simple.
+        if (rnd(10) > 7) ` a 20% chance to not pick worm.
+            exitfunction rnd(6) + 1
+        endif
+    endif
+
+endfunction rnd(7)+1
+
+
 function doSwap(start as vec, dir as vec, doSwap)
 
     target as vec = addCoordinates(start, dir)
@@ -279,5 +299,10 @@ function doSwap(start as vec, dir as vec, doSwap)
 
         updateCell(cells(aIndex))
         updateCell(cells(bIndex))
+
+        ` register the move against the score
+        CURRENT_MOVE_COUNT = CURRENT_MOVE_COUNT + 1
+        set text MOVE_COUNT_TEXT_ID, str$(CURRENT_MOVE_COUNT)
+    
     endif
 endfunction
