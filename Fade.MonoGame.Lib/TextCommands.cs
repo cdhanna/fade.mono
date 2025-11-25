@@ -1,4 +1,5 @@
-﻿using Fade.MonoGame.Game;
+﻿using System.Diagnostics;
+using Fade.MonoGame.Game;
 using FadeBasic.Lib.Standard.Util;
 using FadeBasic.SourceGenerators;
 using Microsoft.Xna.Framework;
@@ -180,17 +181,48 @@ public partial class FadeMonoGameCommands
     {
         TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
         TextureSystem.GetSpriteFontIndex(textSprite.sprite.imageId, out _, out var runtimeFont);
+        if (runtimeFont.font == null)
+        {
+            Console.Error.WriteLine($"`size text x {textId}, {xPixels}` has no effect, because text has no font yet");
+            return;
+        }
         var size = runtimeFont.font.MeasureString(textSprite.text);
         var xRatio = xPixels / size.X;
         textSprite.sprite.scale = new Vector2(xRatio, xRatio);
         TextSystem.textSprites[index] = textSprite;
 
     }
+    
+    [FadeBasicCommand("size text x")]
+    public static void SizeSpriteTextAspectX(int textId, float xPixels, float min, float max)
+    {
+        TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
+        TextureSystem.GetSpriteFontIndex(textSprite.sprite.imageId, out _, out var runtimeFont);
+        if (runtimeFont.font == null)
+        {
+            Console.Error.WriteLine($"`size text x {textId}, {xPixels}` has no effect, because text has no font yet");
+            return;
+        }
+        var size = runtimeFont.font.MeasureString(textSprite.text);
+        var xRatio = xPixels / size.X;
+        xRatio = Math.Clamp(xRatio, min, max);
+        
+        textSprite.sprite.scale = new Vector2(xRatio, xRatio);
+        TextSystem.textSprites[index] = textSprite;
+
+    }
+    
+    
     [FadeBasicCommand("size text y")]
     public static void SizeSpriteTextAspectY(int textId, float yPixels)
     {
         TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
         TextureSystem.GetSpriteFontIndex(textSprite.sprite.imageId, out _, out var runtimeFont);
+        if (runtimeFont.font == null)
+        {
+            Console.Error.WriteLine($"`size text y {textId}, {yPixels}` has no effect, because text has no font yet");
+            return;
+        }
         var size = runtimeFont.font.MeasureString(textSprite.text);
         var yRatio = yPixels / size.Y;
         textSprite.sprite.scale = new Vector2(yRatio, yRatio);
@@ -220,5 +252,19 @@ public partial class FadeMonoGameCommands
         TextSystem.GetTextSpriteIndex(textId, out var index, out var text);
         text.sprite.origin = new Vector2(xRatio, yRatio);
         TextSystem.textSprites[index] = text;
+    }
+    
+    [FadeBasicCommand("text x")]
+    public static float TextX(int textId)
+    {
+        TextSystem.GetTextSpriteIndex(textId, out var index, out var sprite);
+        return sprite.sprite.position.X;
+    }
+    
+    [FadeBasicCommand("text y")]
+    public static float TextY(int textId)
+    {
+        TextSystem.GetTextSpriteIndex(textId, out var index, out var sprite);
+        return sprite.sprite.position.Y;
     }
 }

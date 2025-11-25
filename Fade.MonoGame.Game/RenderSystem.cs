@@ -309,7 +309,9 @@ public static class RenderSystem
                 
                 TextureSystem.GetSpriteFontIndex(text.sprite.imageId, out _, out var runtimeFont);
                 var font = runtimeFont.font;
-
+                
+                // cannot render text without a default font.
+                if (font == null) continue;
 
                 var size = font.MeasureString(text.text);
                 var origin = new Vector2(size.X * text.sprite.origin.X, size.Y * text.sprite.origin.Y);

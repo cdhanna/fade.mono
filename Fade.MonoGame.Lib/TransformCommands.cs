@@ -6,6 +6,23 @@ namespace Fade.MonoGame.Lib;
 
 public partial class FadeMonoGameCommands
 {
+    
+    [FadeBasicCommand("free transform id")]
+    public static int GetFreeTransformNextId(ref int transformId)
+    {
+        transformId = TransformSystem.highestTransformId + 1;
+        return transformId;
+    }
+    
+    [FadeBasicCommand("reserve transform id")]
+    public static int ReserveTransformNextId(ref int transformId)
+    {
+        GetFreeTransformNextId(ref transformId);
+        TransformSystem.GetTransformIndex(transformId, out _, out _);
+        return transformId;
+    }
+
+    
     [FadeBasicCommand("transform")]
     public static void CreateTransform(int transformId, float x, float y)
     {
@@ -33,6 +50,18 @@ public partial class FadeMonoGameCommands
         return transform.position.Y;
     }
     
+    [FadeBasicCommand("get local transform scale x")]
+    public static float GetTransformLocalScaleX(int transformId)
+    {
+        TransformSystem.GetTransformIndex(transformId, out var index, out var transform);
+        return transform.scale.X;
+    }
+    [FadeBasicCommand("get local transform scale y")]
+    public static float GetTransformLocalScaleY(int transformId)
+    {
+        TransformSystem.GetTransformIndex(transformId, out var index, out var transform);
+        return transform.scale.Y;
+    }
     [FadeBasicCommand("set transform scale")]
     public static void SetTransformScale(int transformId, float x, float y)
     {

@@ -80,4 +80,18 @@ public partial class FadeMonoGameCommands
         return tween.interpolator >= 1;
     }
     
+    [FadeBasicCommand("any tweens running")]
+    public static bool GetAnyTweenPlaying(params int[] tweenIds)
+    {
+        for (var i = 0; i < tweenIds.Length; i++)
+        {
+            var tweenId = tweenIds[i];
+            TweenSystem.GetTweenIndex(tweenId, out var index, out var tween);
+            if (tween.interpolator < 1) return true;
+        }
+
+        return false;
+    }
+
+    
 }

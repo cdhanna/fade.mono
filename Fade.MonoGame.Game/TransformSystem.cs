@@ -24,12 +24,14 @@ public static class TransformSystem
     public const int MAX_TRANSFORM_COUNT = 10_000_000;
     public static Transform[] transforms = new Transform[MAX_TRANSFORM_COUNT];
     public static int transformCount = 0;
+    public static int highestTransformId = 0;
     private static Dictionary<int, int> _transformMap = new Dictionary<int, int>();
     
     public static void Reset()
     {
        // transforms = new Transform[MAX_TRANSFORM_COUNT];
         transformCount = 0;
+        highestTransformId = 0;
         _transformMap.Clear();
     }
 
@@ -38,6 +40,8 @@ public static class TransformSystem
     {
         if (!_transformMap.TryGetValue(transformId, out index))
         {
+            highestTransformId = transformId > highestTransformId ? transformId : highestTransformId;
+            
             index = _transformMap[transformId] = transformCount;
             transform = new Transform()
             {

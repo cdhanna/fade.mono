@@ -1,43 +1,137 @@
+
+
 goto routines_abilities_exit
 
 setup_abilities:
-    global REQUEST_ABILITY_SELECTION = 0
 
-    global ABILITY_INDEX_WRAP = 1
-    global ABILITY_INDEX_CRABS = 2
-    global ABILITY_INDEX_BIRD_FEAST = 3
 
-    global dim CARDS(10) as ability
-
-    reserve sprite id (SPRITE_ABILITY_BACKDROP)
 
     CARDS(ABILITY_INDEX_WRAP) = {
         name$ = "seamless"
-        obtained = 1
+        desc$ = "move fish around the edges of the grid"
+        obtained = 0
     }
     CARDS(ABILITY_INDEX_CRABS) = {
         name$ = "crabs"
-        obtained = 1
+        desc$ = "higher % chance that crabs spawn"
+        obtained = 0
     }
     CARDS(ABILITY_INDEX_BIRD_FEAST) = {
         name$ = "bird feast"
-        obtained = 1
+        desc$ = "lower % chance that worms span"
+        obtained = 0
     }
 
 return
 
 
+setup_ability_selection:
+
+    global ABILITY_CHOICE_LENGTH = 4
+    global ABILITY_SELECT_DESC_TEXT_ID
+    global ABILITY_SELECTION_INDEX = 0
+    global ABILITY_SELECTION_INDICATOR_SPRITE_ID
+    global ABILITY_SELECTION_INDICATOR_TWEEN_ID
+    global ABILITY_SELECTION_SIZE_TWEEN_ID
+    global ABILITY_BACKDROP_FADE_TWEEN_ID
+    global ABILITY_SELECT_LABEL_FADE_TWEEN_ID
+
+    ` the backdrop    
+    reserve tween id(ABILITY_BACKDROP_FADE_TWEEN_ID)
+    reserve sprite id (SPRITE_ABILITY_BACKDROP)
+    sprite SPRITE_ABILITY_BACKDROP, 0, 0, 0
+    size sprite SPRITE_ABILITY_BACKDROP, WORLD_WIDTH, WORLD_HEIGHT
+    set sprite offset SPRITE_ABILITY_BACKDROP, 0, 0
+    color sprite SPRITE_ABILITY_BACKDROP, rgb(0, 0, 0, 0)
+    order sprite SPRITE_ABILITY_BACKDROP, 100
+    set sprite stage SPRITE_ABILITY_BACKDROP, 1
+    `hide sprite SPRITE_ABILITY_BACKDROP
+
+    ` the title
+    reserve text id(ABILITY_SELECT_LABEL_TEXT_ID)
+    reserve tween id(ABILITY_SELECT_LABEL_FADE_TWEEN_ID)
+
+    text ABILITY_SELECT_LABEL_TEXT_ID, WORLD_WIDTH / 2, 64, SCORE_FONT, "Select Upgrade"
+    size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
+    enable text drop shadow ABILITY_SELECT_LABEL_TEXT_ID, 2, -2, rgb(64, 128, 255)
+    set text alpha ABILITY_SELECT_LABEL_TEXT_ID, 0
+
+    ` description text
+    reserve text id(ABILITY_SELECT_DESC_TEXT_ID)
+    text ABILITY_SELECT_DESC_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT - 64, SCORE_FONT, "Blah blah blah "
+    set text offset ABILITY_SELECT_DESC_TEXT_ID, .5, 1
+    size text x ABILITY_SELECT_DESC_TEXT_ID, WORLD_WIDTH * .7, .2, .4
+    enable text drop shadow ABILITY_SELECT_DESC_TEXT_ID, 2, -2, rgb(32, 64, 128)
+    set text alpha ABILITY_SELECT_DESC_TEXT_ID, 0
+
+    ` selection indicator sprite
+    reserve sprite id(ABILITY_SELECTION_INDICATOR_SPRITE_ID)
+    sprite ABILITY_SELECTION_INDICATOR_SPRITE_ID, 0, 0, 0
+    color sprite ABILITY_SELECTION_INDICATOR_SPRITE_ID, rgb(255, 255, 255, 255)
+    set sprite stage ABILITY_SELECTION_INDICATOR_SPRITE_ID, 0
+    size sprite ABILITY_SELECTION_INDICATOR_SPRITE_ID, 10, 15
+
+    reserve tween id(ABILITY_SELECTION_INDICATOR_TWEEN_ID)
+    create basic tween ABILITY_SELECTION_INDICATOR_TWEEN_ID, 0, 0, 0, 0 
+
+    reserve tween id(ABILITY_SELECTION_SIZE_TWEEN_ID)
+
+
+    ` render each card to a separate render target
+
+    ` selections
+    global dim ABILITY_CHOICES(ABILITY_CHOICE_LENGTH) as abilityChoice
+    for i = 0 to ABILITY_CHOICE_LENGTH - 1
+        a = ABILITY_CHOICES(i)
+        a.abilityIndex = 0
+
+        reserve sprite id (a.spriteId)
+        reserve text id(a.titleTextId)
+        reserve text id(a.typeTextId)
+
+        reserve transform id(a.transformId)
+        reserve tween id(a.sizeTweenId)
+        create basic tween a.sizeTweenId, 1, 1, 0, 0
+
+        attach text to transform a.titleTextId, a.transformId
+        attach text to transform a.typeTextId, a.transformId
+        attach sprite to transform a.spriteId, a.transformId
+
+        sprite a.spriteId, 0, -15, 0
+        color sprite a.spriteId, rgb(255, 255, 255, 240)
+        size sprite a.spriteId, 135, 100
+        set sprite offset a.spriteId, .5, 0
+        order sprite a.spriteId, -100
+
+        text a.titleTextId, 0, 0, SCORE_FONT, "title"
+        size text y a.titleTextId, 48
+        set text offset a.titleTextId, .5, 0
+        color text a.titleTextId, rgb(200, 200, 240)
+        enable text drop shadow a.titleTextId, 3, -3, 0
+
+
+        text a.typeTextId, 0, 64, SCORE_FONT, "passive" 
+        size text y a.typeTextId, 24
+        set text offset a.typeTextId, .5, 1
+
+        color text a.typeTextId, rgb(200, 200, 200)
+        enable text drop shadow a.typeTextId, 3, -3, 0
+
+        set transform position a.transformId, -1000, -1000
+
+        ABILITY_CHOICES(i) = a
+    next
+
+return
+
+
+
 handle_ability_selection:
 
-    if REQUEST_ABILITY_SELECTION <> 0 then return 
 
+    if REQUEST_ABILITY_SELECTION = 0 then return 
+    REQUEST_ABILITY_SELECTION = 0
 
-    sprite SPRITE_ABILITY_BACKDROP, 160, 160, 0
-    size sprite SPRITE_ABILITY_BACKDROP, 320, 320
-    color sprite SPRITE_ABILITY_BACKDROP, rgb(0, 0, 0, 240)
-    order sprite SPRITE_ABILITY_BACKDROP, 100
-
-    `sprite 
 
     remstart
         need to do several animations
@@ -48,9 +142,196 @@ handle_ability_selection:
         fade out, and move the ability to an on screen inventory 
     remend
 
+    
+    ` clear any old choices
+    for i = 0 to ABILITY_CHOICE_LENGTH - 1
+        ABILITY_CHOICES(i).available = 0
+    next
+
+    ` set the ability choices 
+    choiceCount = 2
+    cardWidth = 125
+    cardPadding = 25
+    startX = WORLD_WIDTH / 2 - ((choiceCount) * (cardWidth + cardPadding)) * .5
+    ABILITY_SELECTION_INDEX = rnd(choiceCount) + 1
+
+
+    for i = 0 to choiceCount
+        scale# = .9
+        if (i = ABILITY_SELECTION_INDEX) then scale# = 1.2
+        create basic tween ABILITY_CHOICES(i).sizeTweenId, get local transform scale x(ABILITY_CHOICES(i).transformId), scale#, 300, 50
+    next
+
+    for i = 0 to choiceCount
+        a = ABILITY_CHOICES(i)
+
+        a.available = 1
+
+        ` pick a random ability that is not yet owned.
+        a.abilityIndex = i + 1 `TODO: actually pick this instead of hard coding
+
+        ` bind the data we need.
+        text a.titleTextId, 0, 0, SCORE_FONT, CARDS(a.abilityIndex).name$
+        size text x a.titleTextId, cardWidth, .1, .4
+        set transform position a.transformId, startX + i * (cardWidth + cardPadding), 110
+
+        if i = 1
+            set transform scale a.transformId, 1.1, 1.1
+        endif
+
+        ABILITY_CHOICES(i) = a
+    next
+
+    ` set the starting text correctly
+    selection = ABILITY_CHOICES(ABILITY_SELECTION_INDEX)
+    set text ABILITY_SELECT_DESC_TEXT_ID, CARDS(selection.abilityIndex).desc$
+    position sprite ABILITY_SELECTION_INDICATOR_SPRITE_ID, tweenVal(ABILITY_SELECTION_INDICATOR_TWEEN_ID), WORLD_HEIGHT - 110
+
+
+    ` move the selection indicator
+    create basic tween ABILITY_SELECTION_INDICATOR_TWEEN_ID, 
+        sprite x(ABILITY_SELECTION_INDICATOR_SPRITE_ID), 
+        get local transform x(ABILITY_CHOICES(ABILITY_SELECTION_INDEX).transformId), 
+        400, 0 
+
+
+    ` fade in the background
+    create basic tween ABILITY_BACKDROP_FADE_TWEEN_ID, 0, 1, 400, 0
+    create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 0, 1, 300, 200
+
+    free tween id(titleDropTweenId)
+    create basic tween titleDropTweenId, 64 - 100,  64, 300, 100
+
+    free tween id(descUpTweenId)
+    create basic tween descUpTweenId, (WORLD_HEIGHT - 64) + 80,  WORLD_HEIGHT - 64, 250, 150
+    show sprite ABILITY_SELECTION_INDICATOR_SPRITE_ID
+    while any tweens running(ABILITY_BACKDROP_FADE_TWEEN_ID, ABILITY_SELECT_LABEL_FADE_TWEEN_ID, titleDropTweenId, descUpTweenId)
+        val# = tweenVal(ABILITY_BACKDROP_FADE_TWEEN_ID)
+        color sprite SPRITE_ABILITY_BACKDROP, rgb(0,0,0, 200 * val#)
+
+        set text alpha ABILITY_SELECT_LABEL_TEXT_ID, 255 * tweenVal(ABILITY_SELECT_LABEL_FADE_TWEEN_ID)
+        set text alpha ABILITY_SELECT_DESC_TEXT_ID, 255 * tweenVal(ABILITY_SELECT_LABEL_FADE_TWEEN_ID)
+        set text position ABILITY_SELECT_LABEL_TEXT_ID, text x(ABILITY_SELECT_LABEL_TEXT_ID), tweenVal(titleDropTweenId)
+        set text position ABILITY_SELECT_DESC_TEXT_ID, text x(ABILITY_SELECT_DESC_TEXT_ID), tweenVal(descUpTweenId)
+
+        ` animate the selection cards
+        for i = 0 to choiceCount
+            scale# = tweenVal(ABILITY_CHOICES(i).sizeTweenId)
+            set transform scale ABILITY_CHOICES(i).transformId, scale#, scale#
+        next
+        sync
+    endwhile
+
+
     do
+
+        ` allow left/right input
+        dir = 0
+        if new rightkey() then dir = 1
+        if new leftkey() then dir = -1
+
+        if dir <> 0
+
+            oldIndex = ABILITY_SELECTION_INDEX
+
+            ABILITY_SELECTION_INDEX = ABILITY_SELECTION_INDEX + dir
+            if ABILITY_SELECTION_INDEX < 0 then ABILITY_SELECTION_INDEX = choiceCount
+            if ABILITY_SELECTION_INDEX > choiceCount then ABILITY_SELECTION_INDEX = 0
+
+
+            ` move the selection indicator
+            create basic tween ABILITY_SELECTION_INDICATOR_TWEEN_ID, 
+                get local transform x(ABILITY_CHOICES(oldIndex).transformId), 
+                get local transform x(ABILITY_CHOICES(ABILITY_SELECTION_INDEX).transformId), 
+                400, 0 
+
+            for i = 0 to choiceCount
+                scale# = .9
+                if (i = ABILITY_SELECTION_INDEX) then scale# = 1.2
+                create basic tween ABILITY_CHOICES(i).sizeTweenId, get local transform scale x(ABILITY_CHOICES(i).transformId), scale#, 300, 50
+            next
+        endif
+
+
+        selection = ABILITY_CHOICES(ABILITY_SELECTION_INDEX)
+        set text ABILITY_SELECT_DESC_TEXT_ID, CARDS(selection.abilityIndex).desc$
+        position sprite ABILITY_SELECTION_INDICATOR_SPRITE_ID, tweenVal(ABILITY_SELECTION_INDICATOR_TWEEN_ID), WORLD_HEIGHT - 110
+
+        ` animate the selection cards
+        for i = 0 to choiceCount
+            scale# = tweenVal(ABILITY_CHOICES(i).sizeTweenId)
+            set transform scale ABILITY_CHOICES(i).transformId, scale#, scale#
+        next
+
+
+        ` allow the user to pick an ability 
+        if new upkey() or new spacekey()
+            
+            ` add the passive
+            binding = PASSIVE_BINDINGS(PASSIVE_COUNT)
+            binding.assigned = 1
+            binding.abilityIndex = ABILITY_CHOICES(ABILITY_SELECTION_INDEX).abilityIndex
+            
+            CARDS(binding.abilityIndex).obtained = 1
+
+            set text binding.titleTextId, CARDS(binding.abilityIndex).name$
+            PASSIVE_BINDINGS(PASSIVE_COUNT) = binding
+            PASSIVE_COUNT = PASSIVE_COUNT + 1
+            create basic tween binding.fadeTweenId, 0, 1, 400, 0
+
+
+            ` fade out the background
+            create basic tween ABILITY_BACKDROP_FADE_TWEEN_ID, 1, 0, 400, 0
+            create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 1, 0, 300, 200
+
+            free tween id(titleDropTweenId)
+            create basic tween titleDropTweenId, text y(ABILITY_SELECT_LABEL_TEXT_ID),  64 - 100, 300, 100
+
+            free tween id(descUpTweenId)
+            create basic tween descUpTweenId, text y(ABILITY_SELECT_DESC_TEXT_ID), (WORLD_HEIGHT - 64) + 80, 250, 150
+
+            for i = 0 to choiceCount
+                create basic tween ABILITY_CHOICES(i).sizeTweenId, get local transform scale x(ABILITY_CHOICES(i).transformId), 0, 300, 0
+            next
+
+            hide sprite ABILITY_SELECTION_INDICATOR_SPRITE_ID
+
+            while any tweens running(ABILITY_BACKDROP_FADE_TWEEN_ID, ABILITY_SELECT_LABEL_FADE_TWEEN_ID, titleDropTweenId, descUpTweenId)
+                val# = tweenVal(ABILITY_BACKDROP_FADE_TWEEN_ID)
+                color sprite SPRITE_ABILITY_BACKDROP, rgb(0,0,0, 200 * val#)
+
+                set text alpha ABILITY_SELECT_LABEL_TEXT_ID, 255 * tweenVal(ABILITY_SELECT_LABEL_FADE_TWEEN_ID)
+                set text alpha ABILITY_SELECT_DESC_TEXT_ID, 255 * tweenVal(ABILITY_SELECT_LABEL_FADE_TWEEN_ID)
+                set text position ABILITY_SELECT_LABEL_TEXT_ID, text x(ABILITY_SELECT_LABEL_TEXT_ID), tweenVal(titleDropTweenId)
+                set text position ABILITY_SELECT_DESC_TEXT_ID, text x(ABILITY_SELECT_DESC_TEXT_ID), tweenVal(descUpTweenId)
+
+                ` animate the selection cards
+                for i = 0 to choiceCount
+                    scale# = tweenVal(ABILITY_CHOICES(i).sizeTweenId)
+                    set transform scale ABILITY_CHOICES(i).transformId, scale#, scale#
+                next
+                sync
+            endwhile
+
+
+            exit
+        endif
+
+
         sync
     loop
+
+return
+
+
+frame_passive_render:
+
+    if PASSIVE_COUNT > 0
+        for n = 0 to PASSIVE_COUNT - 1
+            passive = PASSIVE_BINDINGS(n)
+            set text alpha passive.titleTextId, tweenVal(passive.fadeTweenId) * 255
+        next
+    endif
 
 return
 

@@ -47,8 +47,7 @@ return
 
 load_fonts:
 
-    global SCORE_FONT = 1
-
+    SCORE_FONT = 1
     font SCORE_FONT, "Fish/Fonts/ZeroCool"
 
 
@@ -215,7 +214,7 @@ setup_score:
     }
     global SCORE_BAR as progressBar = createProgressBar(SCORE_POS, SCORE_SIZE)
     SCORE_BAR.startVal = 0
-    SCORE_BAR.endVal = 500
+    SCORE_BAR.endVal = 120
     
     global dim PROGRESS_BARS(1) as progressBar
     global PROGRESS_BAR_COUNT = 1
@@ -240,6 +239,7 @@ setup_score:
     reserve text id(MOVE_TEXT_ID)
     text MOVE_TEXT_ID, 32, SCORE_POS.y - 16, SCORE_FONT, "Moves"
     size text y MOVE_TEXT_ID, 20
+    set text stage MOVE_TEXT_ID, STAGE_HUD_TEXT
     set text offset MOVE_TEXT_ID, 0, 0
     color text MOVE_TEXT_ID, rgb(64, 128, 255, 200)
     enable text drop shadow MOVE_TEXT_ID, 2, -2, rgb(0,0,0)
@@ -248,6 +248,7 @@ setup_score:
     reserve text id(MOVE_TEXT_ID)
     text MOVE_TEXT_ID, 570 - 32, SCORE_POS.y - 16, SCORE_FONT, "Rounds Left"
     size text y MOVE_TEXT_ID, 20
+    set text stage MOVE_TEXT_ID, STAGE_HUD_TEXT
     set text offset MOVE_TEXT_ID, 1, 0
     color text MOVE_TEXT_ID, rgb(64, 128, 255, 200)
     enable text drop shadow MOVE_TEXT_ID, 2, -2, rgb(0,0,0)
@@ -256,12 +257,15 @@ setup_score:
     reserve text id(MOVE_COUNT_TEXT_ID)
     text MOVE_COUNT_TEXT_ID, 32 + 24 SCORE_POS.y + 42, SCORE_FONT, "0"
     size text y MOVE_COUNT_TEXT_ID, 42
+    set text stage MOVE_COUNT_TEXT_ID, STAGE_HUD_TEXT
+
     set text offset MOVE_COUNT_TEXT_ID, .5, 1
     color text MOVE_COUNT_TEXT_ID, rgb(64, 128, 255, 200)
     enable text drop shadow MOVE_COUNT_TEXT_ID, 2, -2, rgb(0,0,0)
 
     reserve text id(ROUND_COUNT_TEXT_ID)
     text ROUND_COUNT_TEXT_ID, 570 - 64 - 10 SCORE_POS.y + 42, SCORE_FONT, str$(getRoundsLeft())
+    set text stage ROUND_COUNT_TEXT_ID, STAGE_HUD_TEXT
     size text y ROUND_COUNT_TEXT_ID, 42
     set text offset ROUND_COUNT_TEXT_ID, .5, 1
     color text ROUND_COUNT_TEXT_ID, rgb(64, 128, 255, 200)
@@ -269,6 +273,32 @@ setup_score:
 return
 
 setup_passives:
+    for i = 0 to PASSIVE_BINDINGS_LENGTH - 1
+
+        passive as passiveDisplay = PASSIVE_BINDINGS(i)
+        
+        reserve text id(passive.titleTextId)
+        reserve text id(passive.descTextId)
+        reserve tween id(passive.fadeTweenId)
+
+        text passive.titleTextId, WORLD_WIDTH - 120, SCORE_POS.y + 32 + i*16, SCORE_FONT, "Extra Crabs"
+        set text offset passive.titleTextId, 0, 0
+        size text x passive.titleTextId, 100, .1, .3
+        color text passive.titleTextId, rgb(64, 128, 255, 200)
+        enable text drop shadow passive.titleTextId, 2, -2, rgb(0,0,0)
+        set text alpha passive.titleTextId, 0
+        set text stage passive.titleTextId, STAGE_HUD_TEXT
+        ` text passive.descTextId, WORLD_WIDTH - 120, SCORE_POS.y + 34 + i*45, SCORE_FONT, "more crabs \n okay"
+        ` set text offset passive.descTextId, 0, 0
+        ` size text x passive.descTextId, 100, .15, .2
+        ` color text passive.descTextId, rgb(84, 148, 255, 230)
+        ` enable text drop shadow passive.descTextId, 0, -1, rgb(255,255,255)
+
+       PASSIVE_BINDINGS(i) = passive
+       ` hide text PASSIVE_BINDINGS(index).titleTextId
+
+    next
+
     
 return
 
@@ -332,7 +362,7 @@ update_frame:
     gosub frame_texts
     gosub frame_scale_wave
     gosub frame_score
-
+    gosub frame_passive_render
 
 `     for i = 0 to CELL_COUNT - 1
 `         c = CELLS(i)
@@ -365,6 +395,9 @@ frame_score:
 
     if CURRENT_SCORE >= SCORE_BAR.endVal
         
+        ` show ability upgrade!
+        REQUEST_ABILITY_SELECTION = 1
+
         ` update the rounds left
         CURRENT_ROUND = CURRENT_ROUND + 1
         set text ROUND_COUNT_TEXT_ID, str$(getRoundsLeft())
