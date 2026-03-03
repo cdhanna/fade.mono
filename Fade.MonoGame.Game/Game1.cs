@@ -1,12 +1,19 @@
 ﻿using System;
+using System.Diagnostics;
+using System.Threading.Tasks;
+
 using FadeBasic.Launch;
+using FadeBasic.Sdk;
 using FadeBasic.Virtual;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content.Pipeline.Extra;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Graphics.Fade;
-using Microsoft.Xna.Framework.Input;
+using Keyboard = Microsoft.Xna.Framework.Input.Keyboard;
+using Keys = Microsoft.Xna.Framework.Input.Keys;
 using SpriteBatch = Microsoft.Xna.Framework.Graphics.Fade.SpriteBatch;
+
+using Mouse = Microsoft.Xna.Framework.Input.Mouse;
 
 namespace Fade.MonoGame.Game;
 
@@ -23,6 +30,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private Texture2D _pixel;
     private bool _autoAcceptNewBuilds;
 
+ 
     public Game1(ILaunchable fadeProgram, bool autoAcceptNewBuilds=false)
     {
         _autoAcceptNewBuilds = autoAcceptNewBuilds;
@@ -134,6 +142,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private bool _justReloaded = false;
     private WatchedAsset<Effect> _customSpriteEffect;
     private FadeSpriteEffect _fadeEffect;
+    private VirtualRuntimeException _fatal;
+    private Task<int?> _t;
 
     protected override void Update(GameTime gameTime)
     {
@@ -159,6 +169,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
         if (_justReloaded && Keyboard.GetState().IsKeyUp(Keys.F1))
         {
+            _fatal = null;
             _justReloaded = false;
         }
 
@@ -184,27 +195,58 @@ public class Game1 : Microsoft.Xna.Framework.Game
         {
             Exit();
         }
-        
-        if (_options.debug)
-        {
-            _debugSession._vm.isSuspendRequested = false;
-            while (!_debugSession._vm.isSuspendRequested  && _vm.instructionIndex < _vm.program.Length)
-            {
-                // TODO: debugging is too slow :(
-                _debugSession.StartDebugging(1);
-            }
-            
-        }
-        else
-        {
-            _vm.isSuspendRequested = false;
-            while (!_vm.isSuspendRequested && _vm.instructionIndex < _vm.program.Length)
-            {
-                //Console.WriteLine($"instruction index: {_vm.instructionIndex}");
-            
-                _vm.Execute2(1000);
-            }
 
+        if (_fatal == null)
+        {
+
+
+            try
+            {
+                if (_options.debug)
+                {
+                    _debugSession._vm.isSuspendRequested = false;
+                    while (!_debugSession._vm.isSuspendRequested && _vm.instructionIndex < _vm.program.Length)
+                    {
+                        // TODO: debugging is too slow :(
+                        _debugSession.StartDebugging(1);
+                    }
+
+                }
+                else
+                {
+                    _vm.isSuspendRequested = false;
+                    while (!_vm.isSuspendRequested && _vm.instructionIndex < _vm.program.Length)
+                    {
+                        //Console.WriteLine($"instruction index: {_vm.instructionIndex}");
+
+                        _vm.Execute2(1000);
+                    }
+
+                }
+            }
+            catch (VirtualRuntimeException ex)
+            {
+                var map = new IndexCollection(_fadeProgram.DebugData.statementTokens);
+                if (map.TryFindClosestTokenBeforeIndex(ex.Error.insIndex, out var token))
+                {
+                    if (GameReloader.LatestRuntime != null)
+                    {
+                        var local = GameReloader.LatestRuntime.SourceMap.GetOriginalLocation(token.token);
+                        Console.Error.WriteLine(
+                            $"source location: {local.fileName} - {local.startLine+1}:{local.startChar}");
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine($"need to reload with source for exact area. raw={token.token.raw}");
+                    }
+                }
+                else
+                {
+                    Console.Error.WriteLine("Unknown source location");
+                }
+                Console.Error.WriteLine(ex.Message);
+                _fatal = ex;
+            }
         }
 
         TransformSystem.CalculateTransforms();

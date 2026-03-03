@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using FadeBasic;
 using FadeBasic.Launch;
+using FadeBasic.Sdk;
 using FadeBasic.Virtual;
 
 namespace Fade.MonoGame.Game;
@@ -20,6 +21,7 @@ public static class GameReloader
     static readonly object effectLock = new();
 
     public static ILaunchable LatestBuild { get; private set; }
+    public static FadeRuntimeContext LatestRuntime { get; private set; }
     public static VirtualMachine LatestMachine { get; private set; }
     // public static Action<ILaunchable> OnBuild = _ => { };
 
@@ -65,6 +67,7 @@ public static class GameReloader
             IncludeSubdirectories = true,
             EnableRaisingEvents = true
         };
+        Build(csProjPath, commands);
         
         _fadeScriptWatcher.Changed += (sender, args) =>
         {
@@ -139,6 +142,7 @@ public static class GameReloader
             return;
         }
 
+        LatestRuntime = ctx;
         LatestBuild = ctx;
       //  LatestMachine = ctx.Machine;
         // OnBuild?.Invoke(ctx);

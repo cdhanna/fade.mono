@@ -6,7 +6,7 @@ namespace Fade.MonoGame.Lib;
 
 public partial class FadeMonoGameCommands
 {
-    [FadeBasicCommand("print")]
+    [FadeBasicCommand("print", FadeBasicCommandUsage.Both)]
     public static void Print(params object[] values)
     {
         foreach (var value in values)

@@ -4,22 +4,72 @@ goto routines_abilities_exit
 
 setup_abilities:
 
+    ` move keys
+    global dim MOVE_KEYS$(4)
+    global MOVE_KEY_COUNT = 0
+    MOVE_KEYS$(0) = "Z"
+    MOVE_KEYS$(1) = "X"
+    MOVE_KEYS$(2) = "C"
+    MOVE_KEYS$(3) = "V"
 
+    ` instants
+    CARDS(ABILITY_INDEX_MOVE_BUNDLE) = {
+        name$ = "free moves",
+        desc$ = "Give back 10 moves to your score"
+        obtained = 0
+        abilityType = ABILITY_TYPE_INSTANT,
+        stackable = 1
+    }
 
+    ` passives
     CARDS(ABILITY_INDEX_WRAP) = {
         name$ = "seamless"
         desc$ = "move fish around the edges of the grid"
-        obtained = 0
+        obtained = 0,
+        abilityType = ABILITY_TYPE_PASSIVE
+        stackable = 0
     }
     CARDS(ABILITY_INDEX_CRABS) = {
         name$ = "crabs"
         desc$ = "higher % chance that crabs spawn"
         obtained = 0
+        abilityType = ABILITY_TYPE_PASSIVE
+        stackable = 0
     }
     CARDS(ABILITY_INDEX_BIRD_FEAST) = {
         name$ = "bird feast"
-        desc$ = "lower % chance that worms span"
+        desc$ = "lower % chance that worms spawn"
         obtained = 0
+        abilityType = ABILITY_TYPE_PASSIVE
+        stackable = 0
+    }
+    CARDS(ABILITY_INDEX_PASSIVE_STOCK_MARKET) = {
+        name$ = "stock market"
+        desc$ = "30% chance to add random fish to every combo"
+        obtained = 0
+        abilityType = ABILITY_TYPE_PASSIVE
+        stackable = 0
+    }
+    
+
+    ` moves
+    CARDS(ABILITY_INDEX_MOVE_SHIFT) = {
+        name$ = "shift"
+        desc$ = "move an entire row or column at once"
+        obtained = 0
+        abilityType = ABILITY_TYPE_MOVE
+        stackable = 0
+        moveClock = 4
+        moveValue = MOVE_SHIFT
+    }
+    CARDS(ABILITY_INDEX_MOVE_CLONER) = {
+        name$ = "clone"
+        desc$ = "copy fish instead of swapping"
+        obtained = 0
+        abilityType = ABILITY_TYPE_MOVE
+        stackable = 0
+        moveClock = 4
+        moveValue = MOVE_CLONE
     }
 
 return
@@ -110,7 +160,7 @@ setup_ability_selection:
         enable text drop shadow a.titleTextId, 3, -3, 0
 
 
-        text a.typeTextId, 0, 64, SCORE_FONT, "passive" 
+        text a.typeTextId, 0, 64, SCORE_FONT, "unknown" 
         size text y a.typeTextId, 24
         set text offset a.typeTextId, .5, 1
 
@@ -125,9 +175,124 @@ setup_ability_selection:
 return
 
 
+setup_passives:
+    for i = 0 to PASSIVE_BINDINGS_LENGTH - 1
+
+        passive as passiveDisplay = PASSIVE_BINDINGS(i)
+        
+        reserve text id(passive.titleTextId)
+        reserve text id(passive.descTextId)
+        reserve tween id(passive.fadeTweenId)
+
+        text passive.titleTextId, WORLD_WIDTH - 120, WORLD_HEIGHT - 32 - i*18, SCORE_FONT, "???"
+        set text offset passive.titleTextId, 0, 0
+        size text x passive.titleTextId, 100, .1, .3
+        color text passive.titleTextId, rgb(64, 128, 255, 200)
+        enable text drop shadow passive.titleTextId, 2, -2, rgb(0,0,0)
+        set text alpha passive.titleTextId, 0
+        set text stage passive.titleTextId, STAGE_HUD_TEXT
+        ` text passive.descTextId, WORLD_WIDTH - 120, SCORE_POS.y + 34 + i*45, SCORE_FONT, "more crabs \n okay"
+        ` set text offset passive.descTextId, 0, 0
+        ` size text x passive.descTextId, 100, .15, .2
+        ` color text passive.descTextId, rgb(84, 148, 255, 230)
+        ` enable text drop shadow passive.descTextId, 0, -1, rgb(255,255,255)
+
+       PASSIVE_BINDINGS(i) = passive
+       ` hide text PASSIVE_BINDINGS(index).titleTextId
+
+    next
+
+    
+return
+
+
+setup_moves:
+    for i = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
+
+        moveAbility as moveDisplay = MOVE_ABILITY_BINDINGS(i)
+        
+        reserve text id(moveAbility.titleTextId)
+        reserve text id(moveAbility.descTextId)
+        reserve text id(moveAbility.timerTextId)
+        reserve tween id(moveAbility.fadeTweenId)
+
+        text moveAbility.titleTextId, 16, WORLD_HEIGHT - 32 - i*18, SCORE_FONT, "!!!"
+        set text offset moveAbility.titleTextId, 0, 0
+        size text x moveAbility.titleTextId, 100, .1, .3
+        color text moveAbility.titleTextId, rgb(64, 128, 255, 200)
+        enable text drop shadow moveAbility.titleTextId, 2, -2, rgb(0,0,0)
+        set text alpha moveAbility.titleTextId, 0
+        set text stage moveAbility.titleTextId, STAGE_HUD_TEXT
+
+        text moveAbility.timerTextId, 16 + 100, WORLD_HEIGHT - 32 - i*18, SCORE_FONT, "1"
+        set text offset moveAbility.timerTextId, 0, 0
+        size text x moveAbility.timerTextId, 100, .1, .3
+        color text moveAbility.timerTextId, rgb(64, 128, 255, 200)
+        enable text drop shadow moveAbility.timerTextId, 2, -2, rgb(0,0,0)
+        set text alpha moveAbility.timerTextId, 0
+        set text stage moveAbility.timerTextId, STAGE_HUD_TEXT
+
+        MOVE_ABILITY_BINDINGS(i) = moveAbility
+       ` hide text PASSIVE_BINDINGS(index).titleTextId
+
+    next
+
+    
+return
+
+assign_ability_selection:
+
+    remstart
+        Goal: pick CARDS to offer the user for an upgrade
+        1. the CARDS cannot already be obtained, UNLESS the card has a "stackable" property
+        2. TODO: add rarity handling
+    remend
+
+    for i = 0 to choiceCount
+        
+        ` need to fill up this index.
+        found = 0
+        maxIter = 100
+        while found = 0 AND maxIter > 0
+            maxIter = maxIter + 1
+
+            candidate = rnd(CARD_LENGTH)
+            if CARDS(candidate).obtained = 0 OR CARDS(candidate).stackable
+
+                ` need to make sure we are not offering the same thing twice
+                valid = 1
+                for j = 0 to i - 1 
+                    if CARD_CHOICE_INDEXES(j) = candidate
+                        valid = 0
+                        exit
+                    endif
+                next
+                if valid
+                    found = 1
+                    CARD_CHOICE_INDEXES(i) = candidate
+                endif
+            endif
+        
+        endwhile
+        if found = 0 ` handle error case where random selection totally failed. In this case, hard-code the move bundle.
+            CARD_CHOICE_INDEXES(i) = ABILITY_INDEX_MOVE_BUNDLE
+        endif
+
+    next
+
+
+return
+
+handle_ability_instant_effect:
+
+    select selectedAbilityIndex
+        case ABILITY_INDEX_MOVE_BUNDLE
+            registerMove(-5)
+        endcase
+    endselect
+return
 
 handle_ability_selection:
-
 
     if REQUEST_ABILITY_SELECTION = 0 then return 
     REQUEST_ABILITY_SELECTION = 0
@@ -149,12 +314,13 @@ handle_ability_selection:
     next
 
     ` set the ability choices 
-    choiceCount = 2
+    choiceCount = 1
     cardWidth = 125
     cardPadding = 25
     startX = WORLD_WIDTH / 2 - ((choiceCount) * (cardWidth + cardPadding)) * .5
     ABILITY_SELECTION_INDEX = rnd(choiceCount) + 1
 
+    gosub assign_ability_selection
 
     for i = 0 to choiceCount
         scale# = .9
@@ -168,12 +334,24 @@ handle_ability_selection:
         a.available = 1
 
         ` pick a random ability that is not yet owned.
-        a.abilityIndex = i + 1 `TODO: actually pick this instead of hard coding
+        a.abilityIndex = CARD_CHOICE_INDEXES(i)
 
         ` bind the data we need.
         text a.titleTextId, 0, 0, SCORE_FONT, CARDS(a.abilityIndex).name$
         size text x a.titleTextId, cardWidth, .1, .4
         set transform position a.transformId, startX + i * (cardWidth + cardPadding), 110
+
+        select CARDS(a.abilityIndex).abilityType
+            case ABILITY_TYPE_PASSIVE
+                set text a.typeTextId, "passive"
+            endcase
+            case ABILITY_TYPE_MOVE
+                set text a.typeTextId, "move"
+            endcase
+            case ABILITY_TYPE_INSTANT
+                set text a.typeTextId, "instant"
+            endcase
+        endselect 
 
         if i = 1
             set transform scale a.transformId, 1.1, 1.1
@@ -268,16 +446,48 @@ handle_ability_selection:
         if new upkey() or new spacekey()
             
             ` add the passive
-            binding = PASSIVE_BINDINGS(PASSIVE_COUNT)
-            binding.assigned = 1
-            binding.abilityIndex = ABILITY_CHOICES(ABILITY_SELECTION_INDEX).abilityIndex
-            
-            CARDS(binding.abilityIndex).obtained = 1
+            selectedAbilityIndex = ABILITY_CHOICES(ABILITY_SELECTION_INDEX).abilityIndex
+            select CARDS(selectedAbilityIndex).abilityType
 
-            set text binding.titleTextId, CARDS(binding.abilityIndex).name$
-            PASSIVE_BINDINGS(PASSIVE_COUNT) = binding
-            PASSIVE_COUNT = PASSIVE_COUNT + 1
-            create basic tween binding.fadeTweenId, 0, 1, 400, 0
+                ` when it is a passive, all we need to do is add it the bindings
+                case ABILITY_TYPE_PASSIVE    
+                    binding = PASSIVE_BINDINGS(PASSIVE_COUNT)
+                    binding.assigned = 1
+                    binding.abilityIndex = ABILITY_CHOICES(ABILITY_SELECTION_INDEX).abilityIndex
+
+                    set text binding.titleTextId, CARDS(binding.abilityIndex).name$
+                    PASSIVE_BINDINGS(PASSIVE_COUNT) = binding
+                    PASSIVE_COUNT = PASSIVE_COUNT + 1
+                    create basic tween binding.fadeTweenId, 0, 1, 400, 0
+                    CARDS(binding.abilityIndex).obtained = 1
+                endcase
+
+                ` when it is an instant, go handle it elsewhere, because it is a big old select statement itself...
+                case ABILITY_TYPE_INSTANT
+                    gosub handle_ability_instant_effect
+                endcase
+
+                ` similar to passive, we need to add it the move bindings
+                case ABILITY_TYPE_MOVE
+                    moveBinding = MOVE_ABILITY_BINDINGS(MOVE_ABILITY_COUNT)
+                    moveBinding.assigned = 1
+                    moveBinding.abilityIndex = ABILITY_CHOICES(ABILITY_SELECTION_INDEX).abilityIndex
+                    moveBinding.movesLeft = 0 `start ready
+                    moveBinding.resetTimer = CARDS(moveBinding.abilityIndex).moveClock
+                    moveBinding.moveValue = CARDS(moveBinding.abilityIndex).moveValue
+                    moveBinding.key$ = MOVE_KEYS$(MOVE_KEY_COUNT)
+                    MOVE_KEY_COUNT = MOVE_KEY_COUNT + 1
+
+                    set text moveBinding.titleTextId, CARDS(moveBinding.abilityIndex).name$
+                    set text moveBinding.timerTextId, moveBinding.key$
+
+                    MOVE_ABILITY_BINDINGS(MOVE_ABILITY_COUNT) = moveBinding
+                    MOVE_ABILITY_COUNT = MOVE_ABILITY_COUNT + 1
+                    create basic tween moveBinding.fadeTweenId, 0, 1, 400, 0
+                    CARDS(moveBinding.abilityIndex).obtained = 1
+                endcase
+            endselect
+
 
 
             ` fade out the background
@@ -336,6 +546,35 @@ frame_passive_render:
 return
 
 
+update_ability_texts:
+    if MOVE_ABILITY_COUNT > 0
+        for i = 0 to MOVE_ABILITY_COUNT - 1
+            
+            MOVE_ABILITY_BINDINGS(i).movesLeft = MOVE_ABILITY_BINDINGS(i).movesLeft - 1
+
+            if MOVE_ABILITY_BINDINGS(i).movesLeft >= 1
+                set text MOVE_ABILITY_BINDINGS(i).timerTextId, str$(MOVE_ABILITY_BINDINGS(i).movesLeft)
+            else
+                MOVE_ABILITY_BINDINGS(i).movesLeft = 0    
+                set text MOVE_ABILITY_BINDINGS(i).timerTextId, MOVE_ABILITY_BINDINGS(i).key$
+            endif
+        next 
+    endif
+return
+
+frame_move_ability_render:
+    if MOVE_ABILITY_COUNT > 0
+        for n = 0 to MOVE_ABILITY_COUNT - 1
+            moveAbility = MOVE_ABILITY_BINDINGS(n)
+
+            set text alpha moveAbility.titleTextId, tweenVal(moveAbility.fadeTweenId) * 255
+            set text alpha moveAbility.timerTextId, tweenVal(moveAbility.fadeTweenId) * 240
+        next
+    endif
+
+return
+
+
 end
 routines_abilities_exit:
 
@@ -347,3 +586,9 @@ endfunction CARDS(ABILITY_INDEX_CRABS).obtained > 0
 
 function isAbility_BirdFeast()
 endfunction CARDS(ABILITY_INDEX_BIRD_FEAST).obtained > 0
+
+function isAbility_MoveShift()
+endfunction CARDS(ABILITY_INDEX_MOVE_SHIFT).obtained > 0
+
+function isAbility_Passive_StockMarket()
+endfunction CARDS(ABILITY_INDEX_PASSIVE_STOCK_MARKET).obtained > 0

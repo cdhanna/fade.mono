@@ -1,0 +1,140 @@
+#begin
+
+function add(a, b)
+exitfunction a + b
+
+#end
+
+#invoke add(1,2)
+
+
+#include 'file.basic'
+
+` need a way to turn something into a string 
+
+
+
+
+` need a way to take a "value" and turn it into a token (tokenize)
+
+
+#include -- inject new source code inline
+#include end -- add new source code at the end of the code (useful for adding functions, for example)
+
+
+
+the [] syntax used from within a macro 
+
+
+` use cases
+
+declare array 
+
+```fbasic
+#begin macro
+
+function DECLARE(name as token, size as integer)
+    #commit
+    [name]Size = [size]
+    [name]Index = 0
+    dim [name](size)
+    #endcommit
+endfunction
+
+function DECLARE2(name$, size)
+    for n = 0 to size
+        #commit
+            [name$]_[$str(n)] = [n + 1]
+        #endcommit
+    next
+endfunction
+
+#end macro
+
+#run DECLARE(tuna, 5) `tuna is treated as a 'token' value. Normally it would be an undefined symbol, but because it is being passed to #run, it is a generic token. 
+tuna(tunaIndex) = 1
+for n = 0 to tunaSize - 1
+    print tuna(n)
+next
+
+#run DECLARE2(salmon, 5) `salmon is interpreted as a string
+print salmon_0
+print salmon_1
+print salmon_2
+print salmon_3
+print salmon_4
+print salmon_5
+
+```
+
+conditionally include a file
+
+```fbasic
+
+#begin macro
+
+global dim INCLUDED_FILES$(1000)
+global INCLUDED_FILES_NUM = 0
+
+function COND_INCLUDE(file$)
+    for n = 0 to INCLUDED_FILES_NUM - 1
+        if file$ = INCLUDED_FILES(n)
+            exitfunction
+        endif
+    next n
+    INCLUDED_FILES(INCLUDED_FILES_NUM) = file$
+    INCLUDED_FILES_NUM += 1
+
+    #commit 
+        #include [file$]
+    #endcommit
+endfunction
+
+#end macro
+
+#run COND_INCLUDE('file1.fbasic')
+#run COND_INCLUDE('file2.fbasic')
+#run COND_INCLUDE('file1.fbasic')
+
+```
+
+
+the include itself can be a macro as long as there is a file based plugin handy. 
+```fbasic
+#begin macro
+
+file 1, "other.fbasic"
+read all text 1, code$ 
+[code$] `this line literally plants all the contents of that string into the current expression text. 
+
+#end macro
+```
+
+
+#macro / #endmacro
+[] substitution syntax
+#run 
+#constant 
+#include 
+#if / #endif
+
+
+
+
+the # symbol is used to indicate compile-time.
+the ## syntax takes a variable, evaluates it in the compile time scope, and commits the token back into the lexer. 
+
+`generate numbers from 1 to 10 as constants
+#begin macro
+
+for n = 1 to 10
+    #commit
+    global num_##n = n
+    #endcommit
+
+    ` as the macro is running, this dynamically includes files into the code-space.
+    #include 'file' + str(n)
+
+next
+
+#end macro

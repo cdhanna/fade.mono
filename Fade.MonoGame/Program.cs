@@ -32,6 +32,7 @@ if (!string.IsNullOrEmpty(csProjPath))
     // Game1 game = null;
     ILaunchable fade = new GeneratedFade();
     GameReloader.WatchFiles(csProjPath, commandCollection);
+    fade = GameReloader.LatestBuild;
     var game = new Game1(fade);
     game.Run();
 }

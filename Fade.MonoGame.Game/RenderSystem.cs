@@ -116,6 +116,13 @@ public static class RenderSystem
         }
     }
 
+    public static void Test()
+    {
+        Effect e = null;
+        var p = e.Parameters["a"];
+        var a = p.Annotations["b"];
+    }
+    
     public static void AddSpriteToStage(int spriteIndex, int stageId, int existingFlags)
     {
         if (SpriteSystem.DoesFlagContainId(stageId, existingFlags))

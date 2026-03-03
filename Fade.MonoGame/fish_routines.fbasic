@@ -182,6 +182,7 @@ setup_grid:
             reserve tween id(CELLS(cellId).comboAlphaTweenId)
             reserve tween id(CELLS(cellId).comboAnimTweenId)
             reserve tween id(CELLS(cellId).scaleWaveTweenId)
+            reserve tween id(CELLS(cellId).shiftTweenId)
             create basic tween CELLS(cellId).scaleWaveTweenId, 1, 1, 100, 0
 
             reserve sfx id(CELLS(cellid).explodeSfxId)
@@ -203,10 +204,6 @@ return
 
 setup_score:
 
-    global SCORE_POS as vec = {
-        x = 32 + 128,
-        y = 24
-    }
 
     global SCORE_SIZE as vec = {
         x = CELL_COLUMN_COUNT * CELL_SIZE, 
@@ -214,7 +211,7 @@ setup_score:
     }
     global SCORE_BAR as progressBar = createProgressBar(SCORE_POS, SCORE_SIZE)
     SCORE_BAR.startVal = 0
-    SCORE_BAR.endVal = 120
+    SCORE_BAR.endVal = 100
     
     global dim PROGRESS_BARS(1) as progressBar
     global PROGRESS_BAR_COUNT = 1
@@ -230,8 +227,7 @@ setup_score:
 
     global CURRENT_SCORE = 0
     global CURRENT_ROUND = 0
-    global CURRENT_MOVE_COUNT = 0
-    global MOVE_COUNT_TEXT_ID
+
     global ROUND_COUNT_TEXT_ID
 
 
@@ -270,36 +266,6 @@ setup_score:
     set text offset ROUND_COUNT_TEXT_ID, .5, 1
     color text ROUND_COUNT_TEXT_ID, rgb(64, 128, 255, 200)
     enable text drop shadow ROUND_COUNT_TEXT_ID, 2, -2, rgb(0,0,0)
-return
-
-setup_passives:
-    for i = 0 to PASSIVE_BINDINGS_LENGTH - 1
-
-        passive as passiveDisplay = PASSIVE_BINDINGS(i)
-        
-        reserve text id(passive.titleTextId)
-        reserve text id(passive.descTextId)
-        reserve tween id(passive.fadeTweenId)
-
-        text passive.titleTextId, WORLD_WIDTH - 120, SCORE_POS.y + 32 + i*16, SCORE_FONT, "Extra Crabs"
-        set text offset passive.titleTextId, 0, 0
-        size text x passive.titleTextId, 100, .1, .3
-        color text passive.titleTextId, rgb(64, 128, 255, 200)
-        enable text drop shadow passive.titleTextId, 2, -2, rgb(0,0,0)
-        set text alpha passive.titleTextId, 0
-        set text stage passive.titleTextId, STAGE_HUD_TEXT
-        ` text passive.descTextId, WORLD_WIDTH - 120, SCORE_POS.y + 34 + i*45, SCORE_FONT, "more crabs \n okay"
-        ` set text offset passive.descTextId, 0, 0
-        ` size text x passive.descTextId, 100, .15, .2
-        ` color text passive.descTextId, rgb(84, 148, 255, 230)
-        ` enable text drop shadow passive.descTextId, 0, -1, rgb(255,255,255)
-
-       PASSIVE_BINDINGS(i) = passive
-       ` hide text PASSIVE_BINDINGS(index).titleTextId
-
-    next
-
-    
 return
 
 
@@ -363,6 +329,7 @@ update_frame:
     gosub frame_scale_wave
     gosub frame_score
     gosub frame_passive_render
+    gosub frame_move_ability_render
 
 `     for i = 0 to CELL_COUNT - 1
 `         c = CELLS(i)
@@ -502,6 +469,7 @@ handle_combos:
     ` animate explosions of all groups
     cellId = 0
 
+
     totalComboCount = 0
     explodePitch# = (rnd(4)*.02)
     explodeIndex = 0
@@ -512,12 +480,29 @@ handle_combos:
         for i = 1 to CELL_COUNT
             cell = CELLS(i-1)
 
-            if comboCount > 2 then skip 
+            if comboCount > 2 then skip  ` once we know there are 3 or more, no need to check the rest of the group
             if cell.comboFillId <> g then skip 
             comboCount += 1
         next
 
         if comboCount < 3 then skip `if this group is not big enough, then we can skip rendering the explosion
+
+        ` handle stock market ability
+        if isAbility_Passive_StockMarket()
+            ` find a fish that is not part of a group, and add it to this group. 
+            randoChance = rnd(10) >= 7 `30% chance
+            if randoChance
+                startIndex = rnd(CELL_COUNT)
+                for i = 0 to CELL_COUNT - 1
+                    cellIndex = (i + startIndex) mod CELL_COUNT
+                    if CELLS(cellIndex).comboFillMask = 0
+                        CELLS(cellIndex).comboFillId = g
+                        CELLS(cellIndex).comboFillMask = 1
+                        exit
+                    endif
+                next
+            endif
+        endif
 
         totalComboCount += 1
         scoreAdd = 0

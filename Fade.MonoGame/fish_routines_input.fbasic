@@ -30,8 +30,51 @@ process_input:
         if target.y < 0 then return 
         if target.y >= CELL_ROW_COUNT then return 
 
-        doSwap(SELECTION_POS, swapDir, isSwap)
 
+        if move.moveBindingIndex >= 0
+            moveAbility = MOVE_ABILITY_BINDINGS(move.moveBindingIndex)
+            
+            if moveAbility.movesLeft <= 0
+                print "FOUND MOVE", moveAbility.moveValue
+                MOVE_ABILITY_BINDINGS(move.moveBindingIndex).movesLeft = moveAbility.resetTimer
+                gosub update_ability_texts
+                print "BACK FROM ROUTINE" + str$(moveAbility.movesLeft) + " / " + str$(moveAbility.resetTimer)
+
+                print "wtf", MOVE_SHIFT, MOVE_CLONE, moveAbility.moveValue
+                select moveAbility.moveValue
+                    case MOVE_SHIFT
+                        print "DOING SHIFT"
+                        doShift(SELECTION_POS, swapDir)
+                    endcase
+                    case MOVE_CLONE
+                        print "DOING CLONE"
+                        doClone(SELECTION_POS, swapDir)
+                    endcase
+                    case default 
+                        print "DOING NOTHING"
+
+                        `doSwap(SELECTION_POS, swapDir, 0)
+                    endcase 
+                endselect
+            else
+                ` TODO: play a sad animation, the move is not ready yet!
+                doSwap(SELECTION_POS, swapDir, 0)
+            endif
+        else 
+            if (isSwap)
+                gosub update_ability_texts
+            endif
+            doSwap(SELECTION_POS, swapDir, isSwap)
+        endif
+
+        if move.swap = MOVE_SHIFT
+
+
+
+
+            ` doShift(SELECTION_POS, swapDir)
+            
+        endif
         REQUEST_COMBO_CHECK = 1
 
         SELECTION_POS = target

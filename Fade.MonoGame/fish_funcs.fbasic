@@ -107,7 +107,6 @@ function createProgressBar(pos as vec, size as vec)
     enable text drop shadow bar.textTitleId, 1, -1, rgb(0,0,0)
 
 
-
 endfunction bar
 
 
@@ -178,6 +177,24 @@ function collectInput()
     } 
 
     isSwap = spaceKey()
+    swapVal = -1
+    if MOVE_ABILITY_COUNT > 0
+        for i = 0 to MOVE_ABILITY_COUNT - 1
+            moveBinding = MOVE_ABILITY_BINDINGS(i)
+
+            isKey = key down(scancode(moveBinding.key$))
+            ` TODO: check for the ready staus when actually processing input.
+            `isReady = moveBinding.movesLeft <= 0
+
+            if isKey ` and isReady
+                swapVal = i
+            endif
+
+        next i
+    endif
+
+    
+`    isShift = isAbility_MoveShift() and key down(scancode("Z"))
 
     if new rightkey() then swapDir.x = 1
     if new leftkey() then swapDir.x = -1
@@ -187,8 +204,12 @@ function collectInput()
     if swapDir.x <> 0 or swapDir.y <> 0
         QUEUED_MOVES(QUEUED_MOVE_NUM) = {
             dir = swapDir
-            swap = isSwap
+            swap = 0,
+            moveBindingIndex = swapVal
         }
+        if isSwap then QUEUED_MOVES(QUEUED_MOVE_NUM).swap = 1
+        ` if isShift then QUEUED_MOVES(QUEUED_MOVE_NUM).swap = MOVE_SHIFT
+        ` if swapVal >= 0 then QUEUED_MOVES(QUEUED_MOVE_NUM).moveBindingIndex = swapVal
         QUEUED_MOVE_NUM += 1
         COLLECTED_INPUT_MASK = frame number()
     endif
@@ -243,6 +264,236 @@ function getRandomValue()
 
 endfunction rnd(7)+1
 
+function doClone(start as vec, dir as vec)
+    target as vec = addCoordinates(start, dir)
+
+    aIndex = getCellIndex(start)
+    bIndex = getCellIndex(target)
+
+    ` do a little fake animation thiny? 
+    startPosition as vec = {
+        x = getCellX(start.x),
+        y = getCellY(start.y)
+    }
+    endPosition as vec = {
+        x = getCellX(target.x),
+        y = getCellY(target.y)
+    }
+
+    ` there are 4 tweens, 
+    duration = 150
+    
+    ` this is the sprite moving into the slot. 
+    create basic tween TWEEN_SWAP_AX, startPosition.x, endPosition.x, duration, 0
+    create basic tween TWEEN_SWAP_AY, startPosition.y, endPosition.y, duration, 0
+
+    ` this is the slotted sprite vanishing
+    create basic tween TWEEN_SWAP_BX, 1, 0, duration * .25, 0
+
+    ` this is the sprite re-appearing in the old slot. 
+    create basic tween TWEEN_SWAP_BY, 0, 1, duration * .75, duration * .25 `it starts after the other one has finished. 
+
+    create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, CELL_SIZE * 1.5, 150, 50
+    set tween type SELECTION_TWEEN_PUNCH_ID, 1
+
+    create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
+    set tween type SWAP_TWEEN_SFX, 1
+
+    while (is tween done(TWEEN_SWAP_AX) < 1) or (is tween done(SELECTION_TWEEN_PUNCH_ID) < 1)
+
+        position sprite cells(aIndex).spriteId, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
+            ` position sprite cells(bIndex).spriteId, tweenVal(TWEEN_SWAP_BX), tweenVal(TWEEN_SWAP_BY)
+        
+        if (is tween done(TWEEN_SWAP_BX) < 1)
+            scale sprite cells(bIndex).spriteId, tweenVal(TWEEN_SWAP_BX), tweenVal(TWEEN_SWAP_BX)
+        else 
+            position sprite cells(bIndex).spriteId, startPosition.x, startPosition.y
+            set sprite texture cells(bIndex).spriteId, cells(aIndex).value
+            scale sprite cells(bIndex).spriteId, tweenVal(TWEEN_SWAP_BY), tweenVal(TWEEN_SWAP_BY)
+
+        endif
+
+        position sprite SELECTION_SPRITE, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
+        scale sprite SELECTION_SPRITE, tweenVal(SELECTION_TWEEN_PUNCH_ID), tweenVal(SELECTION_TWEEN_PUNCH_ID)
+
+        set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
+
+        collectInput()
+        sync
+
+    endwhile
+
+
+    ` map the values of the cells to the new values 
+    t = cells(bIndex).value
+    cells(bIndex).value = cells(aIndex).value
+    ` cells(aIndex).value = t
+
+    updateCell(cells(aIndex))
+    updateCell(cells(bIndex))
+
+    registerMove(1)
+
+endfunction
+
+
+function doShift(start as vec, dir as vec)
+    target as vec = addCoordinates(start, dir)
+    aIndex = getCellIndex(start)
+
+    ` identify all sprites in row
+    a as vec = {
+        x = 0, 
+        y = start.y
+    }
+    if dir.x = 0
+        a.x = start.x
+        a.y = 0
+    endif
+
+
+    ai = getCellIndex(a)
+    startPosition as vec = {
+        x = getCellX(start.x),
+        y = getCellY(start.y)
+    }
+    endPosition as vec = {
+        x = getCellX(target.x),
+        y = getCellY(target.y)
+    }
+    duration = 150
+
+    shiftSize = CELL_ROW_COUNT
+    if (dir.x = 0)
+        shiftSize = CELL_COLUMN_COUNT
+    endif
+    for i = 0 to shiftSize - 1
+        
+        if dir.x = 1
+            index = ai + i
+            startVal = getCellX(i)
+            endVal = getCellX(i + 1)
+            if i = shiftSize - 1 then endVal = getCellX(0)
+        endif
+ 
+        if dir.y = 1
+            index = ai + (i * CELL_ROW_COUNT)
+            startVal = getCellY(i)
+            endVal = getCellY(i + 1)
+            if i = shiftSize - 1 then endVal = getCellY(0)
+        endif
+
+        if dir.x = -1
+            index = ai + i
+            startVal = getCellX(i)
+            endVal = getCellX(i - 1)
+            if i = 0 then endVal = getCellX(CELL_COLUMN_COUNT - 1)
+        endif
+
+        if dir.y = -1
+            index = ai + (i * CELL_ROW_COUNT)
+            startVal = getCellY(i)
+            endVal = getCellY(i - 1)
+            if i = 0 then endVal = getCellY(CELL_ROW_COUNT - 1)
+        endif
+
+        cell = cells(index)
+        create basic tween cell.shiftTweenId, startVal, endVal, duration, 0
+    next 
+
+    create basic tween TWEEN_SWAP_AX, startPosition.x, endPosition.x, duration, 0
+    create basic tween TWEEN_SWAP_AY, startPosition.y, endPosition.y, duration, 0
+
+    create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, CELL_SIZE * 1.5, duration, 50
+    set tween type SELECTION_TWEEN_PUNCH_ID, 1
+
+    create basic tween SWAP_TWEEN_SFX, 0, 1, duration, 0
+    set tween type SWAP_TWEEN_SFX, 1
+
+    while any tweens running(cells(ai).shiftTweenId)
+        for i = 0 to CELL_ROW_COUNT - 1
+            index = ai + i
+
+            if (dir.y <> 0)
+                index = ai + i*CELL_ROW_COUNT
+            endif
+
+            cell = cells(index)
+
+            if dir.y = 0
+                position sprite cell.spriteId, tweenVal(cell.shiftTweenId), sprite y(cell.spriteId)
+            else
+                position sprite cell.spriteId, sprite x(cell.spriteId), tweenVal(cell.shiftTweenId)
+            endif
+            position sprite SELECTION_SPRITE, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
+            scale sprite SELECTION_SPRITE, tweenVal(SELECTION_TWEEN_PUNCH_ID), tweenVal(SELECTION_TWEEN_PUNCH_ID)
+
+            set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
+        next
+        sync
+    endwhile
+
+    ` actually update the map
+    
+    temp = 0
+    if (dir.x = 1)
+        temp = cells(ai + (shiftSize - 1)).value
+        for i = (shiftSize - 1) to 1 step -1
+            index = ai + i
+            cells(index).value = cells(index - 1).value
+            updateCell(cells(index))
+        next
+            
+        cells(ai).value = temp
+        updateCell(cells(ai))
+    endif
+
+    if (dir.x = -1)
+        temp = cells(ai).value
+        for i = 0 to (shiftSize - 2)
+            index = ai + i
+            cells(index).value = cells(index + 1).value
+            updateCell(cells(index))
+        next
+    
+        cells(ai + shiftSize-1).value = temp
+        updateCell(cells(ai + shiftSize-1))
+    endif
+
+    if (dir.y = 1)
+        endIndex = ai + ((CELL_COLUMN_COUNT-1) * CELL_ROW_COUNT)
+        temp = cells(endIndex).value
+        for i = (shiftSize - 1) to 1 step -1
+
+            index = ai + ((i) * CELL_ROW_COUNT)
+            prevIndex = ai + ((i - 1) * CELL_ROW_COUNT)
+            cells(index).value = cells(prevIndex).value
+            updateCell(cells(index))
+        next
+            
+        cells(ai).value = temp
+        updateCell(cells(ai))
+    endif
+
+    if (dir.y = -1)
+        endIndex = ai + ((CELL_COLUMN_COUNT-1) * CELL_ROW_COUNT)
+        temp = cells(ai).value
+        for i = 0 to (shiftSize - 2)
+
+            index = ai + ((i) * CELL_ROW_COUNT)
+            prevIndex = ai + ((i + 1) * CELL_ROW_COUNT)
+            cells(index).value = cells(prevIndex).value
+            updateCell(cells(index))
+        next
+            
+        cells(endIndex).value = temp
+        updateCell(cells(endIndex))
+    endif
+
+    registerMove(1)
+
+
+endfunction
 
 function doSwap(start as vec, dir as vec, doSwap)
 
@@ -302,9 +553,12 @@ function doSwap(start as vec, dir as vec, doSwap)
         updateCell(cells(aIndex))
         updateCell(cells(bIndex))
 
-        ` register the move against the score
-        CURRENT_MOVE_COUNT = CURRENT_MOVE_COUNT + 1
-        set text MOVE_COUNT_TEXT_ID, str$(CURRENT_MOVE_COUNT)
-    
+        registerMove(1)
     endif
+endfunction
+
+function registerMove(delta)
+    ` register the move against the score
+    CURRENT_MOVE_COUNT = CURRENT_MOVE_COUNT + delta
+    set text MOVE_COUNT_TEXT_ID, str$(CURRENT_MOVE_COUNT)
 endfunction
