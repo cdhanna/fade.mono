@@ -451,7 +451,7 @@ handle_combos:
     groupId = 0
     for i = 1 to CELL_COUNT
         c = CELLS(i-1)
-        
+
         if c.comboFillMask > 0 then skip
 
         ` flood fill from this cell if it has not already been combo checked
@@ -460,6 +460,20 @@ handle_combos:
         findCombos(i - 1, groupId)
         groupId += 1
     next
+
+    ` handle forced explosions...
+    maxComboForce = 0
+    for i = 0 to CELL_COUNT - 1
+        c = CELLS(i)
+        if c.comboForce > 0
+            if c.comboForce > maxComboForce then maxComboForce = c.comboForce
+            CELLS(i).comboFillId = c.comboForce + groupId `by adding them together, there are no overlaps, right?
+            print "FORCING EXPLO" + str$(c.comboForce) + " " + str$(CELLS(i).comboFillId)
+        endif
+    next
+    print "BEFORE" + str$(groupId)
+    groupId += maxComboForce
+    print "BEFORE" + str$(groupId)
 
     ` DEBUG: just color the groups for debug visuals
     for i = 1 to CELL_COUNT
@@ -473,7 +487,7 @@ handle_combos:
     totalComboCount = 0
     explodePitch# = (rnd(4)*.02)
     explodeIndex = 0
-    for g = 0 to groupId - 1
+    for g = 0 to groupId
 
         ` need to check if this group is big enough
         comboCount = 0
@@ -482,6 +496,11 @@ handle_combos:
 
             if comboCount > 2 then skip  ` once we know there are 3 or more, no need to check the rest of the group
             if cell.comboFillId <> g then skip 
+            if cell.comboForce > 0 
+                print "FORCE COMBO COUNT"
+                comboCount = 99 `some really high number to force
+            endif
+
             comboCount += 1
         next
 
@@ -563,6 +582,11 @@ handle_combos:
         next
 
     next
+
+    ` reset comboForce
+    for i = 0 to CELL_COUNT - 1
+        CELLS(i).comboForce = 0
+    next 
 
     ` exit early if no combos
     if totalComboCount = 0

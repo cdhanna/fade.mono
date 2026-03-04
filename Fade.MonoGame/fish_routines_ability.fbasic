@@ -60,7 +60,7 @@ setup_abilities:
         abilityType = ABILITY_TYPE_MOVE
         stackable = 0
         moveClock = 4
-        moveValue = MOVE_SHIFT
+        moveValue = [MOVE_SHIFT]
     }
     CARDS(ABILITY_INDEX_MOVE_CLONER) = {
         name$ = "clone"
@@ -69,7 +69,16 @@ setup_abilities:
         abilityType = ABILITY_TYPE_MOVE
         stackable = 0
         moveClock = 4
-        moveValue = MOVE_CLONE
+        moveValue = [MOVE_CLONE]
+    }
+    CARDS(ABILITY_INDEX_MOVE_BOMB3x3) = {
+        name$ = "bomb"
+        desc$ = "blow up 9 fish"
+        obtained = 0
+        abilityType = ABILITY_TYPE_MOVE
+        stackable = 0
+        moveClock = 4
+        moveValue = [MOVE_BOMB3x3]
     }
 
 return
@@ -253,10 +262,17 @@ assign_ability_selection:
         ` need to fill up this index.
         found = 0
         maxIter = 100
+        forceCandidate = ABILITY_INDEX_MOVE_BOMB3x3
         while found = 0 AND maxIter > 0
             maxIter = maxIter + 1
 
             candidate = rnd(CARD_LENGTH)
+
+            ` leave a little hack to force a card selection for testing. 
+            if forceCandidate >= 0
+                candidate = forceCandidate
+                forceCandidate = -1
+            endif
             if CARDS(candidate).obtained = 0 OR CARDS(candidate).stackable
 
                 ` need to make sure we are not offering the same thing twice

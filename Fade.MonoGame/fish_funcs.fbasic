@@ -264,6 +264,132 @@ function getRandomValue()
 
 endfunction rnd(7)+1
 
+function doBomb(start as vec, dir as vec)
+    target as vec = addCoordinates(start, dir)
+    aIndex = getCellIndex(start)
+
+    duration = 150
+
+    startPosition as vec = {
+        x = getCellX(start.x),
+        y = getCellY(start.y)
+    }
+    endPosition as vec = {
+        x = getCellX(target.x),
+        y = getCellY(target.y)
+    }
+    ` start scale down tween.
+    create basic tween TWEEN_SWAP_AX, startPosition.x, endPosition.x, duration, 0
+    create basic tween TWEEN_SWAP_AY, startPosition.y, endPosition.y, duration, 0
+
+    create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, CELL_SIZE * 1.5, 150, 50
+    set tween type SELECTION_TWEEN_PUNCH_ID, 1
+
+    for x = -1 to 1
+        for y = -1 to 1
+            offset as vec = {
+                x = x, 
+                y = y
+            }
+            position as vec = addCoordinates(start, offset)
+            lastTweenId = 0
+            if position.x >= 0 and position.x < CELL_COLUMN_COUNT
+                if position.y >= 0 and position.y < CELL_ROW_COUNT
+                    bIndex = getCellIndex(position)
+                    cells(bIndex).value = cells(aIndex).value
+                    lastTweenId = cells(bIndex).shiftTweenId
+                    create basic tween lastTweenId, 1, 0, duration * .8, 0 `scale down.
+                endif
+            endif
+        next
+    next
+
+
+    ` scale down all the sprites...
+    while (is tween done(lastTweenId) < 1) 
+        for x = -1 to 1
+            for y = -1 to 1
+                offset = {
+                    x = x, 
+                    y = y
+                }
+                position = addCoordinates(start, offset)
+                
+                if position.x >= 0 and position.x < CELL_COLUMN_COUNT
+                    if position.y >= 0 and position.y < CELL_ROW_COUNT
+                        bIndex = getCellIndex(position)
+                        scaleVal = tweenVal(cells(bIndex).shiftTweenId)
+                        scale sprite cells(bIndex).spriteId, scaleVal, scaleVal
+                    endif
+                endif
+            next 
+        next
+
+        position sprite SELECTION_SPRITE, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
+        scale sprite SELECTION_SPRITE, tweenVal(SELECTION_TWEEN_PUNCH_ID), tweenVal(SELECTION_TWEEN_PUNCH_ID)
+
+        set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
+
+        collectInput()
+        sync
+    endwhile
+
+    
+    ` start scale up tween.
+    for x = -1 to 1
+        for y = -1 to 1
+            offset = {
+                x = x, 
+                y = y
+            }
+            position = addCoordinates(start, offset)
+            duration = 70
+            lastTweenId = 0
+            if position.x >= 0 and position.x < CELL_COLUMN_COUNT
+                if position.y >= 0 and position.y < CELL_ROW_COUNT
+                    bIndex = getCellIndex(position)
+                    updateCell(cells(bIndex))
+                    lastTweenId = cells(bIndex).shiftTweenId
+                    create basic tween lastTweenId, 0, 1, duration*.2, 0 `scale up.
+                endif
+            endif
+        next
+    next
+
+
+    ` scale up all the sprites...
+    while (is tween done(lastTweenId) < 1) 
+        for x = -1 to 1
+            for y = -1 to 1
+                offset = {
+                    x = x, 
+                    y = y
+                }
+                position = addCoordinates(start, offset)
+                
+                if position.x >= 0 and position.x < CELL_COLUMN_COUNT
+                    if position.y >= 0 and position.y < CELL_ROW_COUNT
+                        bIndex = getCellIndex(position)
+                        scaleVal = tweenVal(cells(bIndex).shiftTweenId)
+                        scale sprite cells(bIndex).spriteId, scaleVal, scaleVal
+                    endif
+                endif
+            next 
+        next
+
+        
+        position sprite SELECTION_SPRITE, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
+        scale sprite SELECTION_SPRITE, tweenVal(SELECTION_TWEEN_PUNCH_ID), tweenVal(SELECTION_TWEEN_PUNCH_ID)
+
+        set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
+
+        collectInput()
+        sync
+    endwhile
+
+    registerMove(1)
+endfunction
+
 function doClone(start as vec, dir as vec)
     target as vec = addCoordinates(start, dir)
 

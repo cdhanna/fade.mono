@@ -40,15 +40,19 @@ process_input:
                 gosub update_ability_texts
                 print "BACK FROM ROUTINE" + str$(moveAbility.movesLeft) + " / " + str$(moveAbility.resetTimer)
 
-                print "wtf", MOVE_SHIFT, MOVE_CLONE, moveAbility.moveValue
+                print "wtf", [MOVE_SHIFT], [MOVE_CLONE], moveAbility.moveValue
                 select moveAbility.moveValue
-                    case MOVE_SHIFT
+                    case [MOVE_SHIFT]
                         print "DOING SHIFT"
                         doShift(SELECTION_POS, swapDir)
                     endcase
-                    case MOVE_CLONE
+                    case [MOVE_CLONE]
                         print "DOING CLONE"
                         doClone(SELECTION_POS, swapDir)
+                    endcase
+                    case [MOVE_BOMB3x3]
+                        print "DOING BOMB"
+                        doBomb(SELECTION_POS, swapDir)
                     endcase
                     case default 
                         print "DOING NOTHING"
@@ -67,14 +71,6 @@ process_input:
             doSwap(SELECTION_POS, swapDir, isSwap)
         endif
 
-        if move.swap = MOVE_SHIFT
-
-
-
-
-            ` doShift(SELECTION_POS, swapDir)
-            
-        endif
         REQUEST_COMBO_CHECK = 1
 
         SELECTION_POS = target
