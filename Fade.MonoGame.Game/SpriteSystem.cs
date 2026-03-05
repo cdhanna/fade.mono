@@ -21,6 +21,9 @@ public struct Sprite
     public int stageIdFlags;
     public int anchorTransformId;
     public int zOrder;
+
+    public int effectId;
+    public int outputIdFlags; // a sprite can be a part of up to 64 stages. 
 }
 
 public static class SpriteSystem
@@ -55,9 +58,10 @@ public static class SpriteSystem
                 scale = Vector2.One,
                 origin = Vector2.One * .5f,
                 currentFrame = -1,
+                outputIdFlags = 1, // by default, put the sprite in the first output.
                 stageIdFlags = 1 // by default, put the sprite in the first stage
             };
-            RenderSystem.AddSpriteToStage(index, 1, 0);
+            RenderSystem.AddSpriteToOutput(index, 1, 0);
             sprites[index] = sprite;
             spriteCount++;
         }

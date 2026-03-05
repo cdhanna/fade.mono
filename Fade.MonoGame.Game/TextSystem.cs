@@ -49,10 +49,13 @@ public static class TextSystem
                     scale = Vector2.One,
                     origin = Vector2.One * .5f,
                     currentFrame = -1,
+                    outputIdFlags = 1,
                     stageIdFlags = 1 // by default, put the sprite in the first stage
+                    
                 }, 
             };
-            RenderSystem.AddSpriteTextToStage(index, 1, 0);
+            
+            RenderSystem.AddSpriteTextToOutput(index, 1, 0);
             textSprites[index] = text;
             textSpriteCount++;
         }

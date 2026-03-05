@@ -44,6 +44,23 @@ public partial class FadeMonoGameCommands
         RenderSystem.backgroundColor = new Color(r, g, b, a);
     }
     
+    
+    
+    [FadeBasicCommand("free effect id")]
+    public static int GetFreeEffectNextId(ref int effectId)
+    {
+        effectId = RenderSystem.highestEffectId + 1;
+        return effectId;
+    }
+    
+    [FadeBasicCommand("reserve effect id")]
+    public static int ReserveEffectNextId(ref int effectId)
+    {
+        GetFreeEffectNextId(ref effectId);
+        RenderSystem.GetEffectIndex(effectId, out _, out _);
+        return effectId;
+    }
+    
     [FadeBasicCommand("effect")]
     public static void LoadEffect(int effectId, string effectName)
     {
@@ -128,15 +145,6 @@ public partial class FadeMonoGameCommands
         }
     }
     
-    [FadeBasicCommand("render stage")]
-    public static void SetStage(int stageId)
-    {
-        RenderSystem.GetStageIndex(stageId, out var index, out var stage);
-        
-        RenderSystem.stages[index] = stage;
-    }
-
-    
     
     [FadeBasicCommand("clear screen effect")]
     public static void ClearScreenEffect()
@@ -152,82 +160,95 @@ public partial class FadeMonoGameCommands
 
     }
     
-    [FadeBasicCommand("set stage effect")]
-    public static void SetStageEffect(int stageId, int effectId)
-    {
-        RenderSystem.GetStageIndex(stageId, out _, out var stage);
-        // RenderSystem.GetEffectIndex(effectId, out _, out var runtimeEffect);
-        stage.effectId = effectId;
-    }
-    
-    
-    [FadeBasicCommand("set stage sampler")]
-    public static void SetSamplerState(int stageId, int mode)
-    {
-        // TextureFilter.Point, TextureAddressMode.Wrap
-        RenderSystem.GetStageIndex(stageId, out _, out var stage);
-        switch (mode)
-        {
-            case 0:
-                stage.samplerState = SamplerState.LinearWrap;
-                break;
-            case 1:
-                stage.samplerState = SamplerState.PointWrap;
-                break;
-        }
-    }
+    //
+    // [FadeBasicCommand("set stage sampler")]
+    // public static void SetSamplerState(int stageId, int mode)
+    // {
+    //     // TextureFilter.Point, TextureAddressMode.Wrap
+    //     RenderSystem.GetStageIndex(stageId, out _, out var stage);
+    //     switch (mode)
+    //     {
+    //         case 0:
+    //             stage.samplerState = SamplerState.LinearWrap;
+    //             break;
+    //         case 1:
+    //             stage.samplerState = SamplerState.PointWrap;
+    //             break;
+    //     }
+    // }
+    //
 
-    [FadeBasicCommand("set stage background")]
-    public static void SetBackgroundColor(int stageId, int colorCode)
+    [FadeBasicCommand("set render target background color")]
+    public static void SetRenderTargetBackground(int outputId, int colorCode)
     {
-        RenderSystem.GetStageIndex(stageId, out var index, out var stage);
-        stage.clearTarget = true;
+        RenderSystem.GetOutputIndex(outputId, out var index, out var output);
         ColorUtil.UnpackColor(colorCode, out var r, out var g, out var b, out var a);
-        stage.clearColor = new Color(r, g, b, a);
+        output.clearColor = new Color(r, g, b, a);
     }
     
-    [FadeBasicCommand("clear stage background")]
-    public static void ClearStageBackground(int stageId)
+    [FadeBasicCommand("set render target clear flags")]
+    public static void SetRenderTargetClearFlags(int outputId, int clearTarget)
     {
-        RenderSystem.GetStageIndex(stageId, out var index, out var stage);
-        stage.clearTarget = false;
+        RenderSystem.GetOutputIndex(outputId, out var index, out var output);
+        output.clearTarget = clearTarget > 0;
     }
 
-    [FadeBasicCommand("set stage size ratio")]
-    public static void SetRenderSizeRatio(int stageId, float ratio)
+    [FadeBasicCommand("render target texture")]
+    public static int GetRenderTargetTexture(int outputId)
     {
-        RenderSystem.GetStageIndex(stageId, out _, out var stage);
-        stage.renderSizeRatio = ratio;
+        RenderSystem.GetOutputIndex(outputId, out _, out var output);
+        return output.targetTextureId;
+    }
 
-        if (stage.targetTextureId > 0)
+    [FadeBasicCommand("free render target id")]
+    public static int GetFreeOutputNextId(ref int outputId)
+    {
+        outputId = RenderSystem.highestOutputId + 1;
+        return outputId;
+    }
+    
+    [FadeBasicCommand("reserve render target id")]
+    public static int ReserveOutputNextId(ref int outputId)
+    {
+        GetFreeOutputNextId(ref outputId);
+        RenderSystem.GetOutputIndex(outputId, out _, out _);
+        return outputId;
+    }
+
+
+    [FadeBasicCommand("render target")]
+    public static void SetRenderTargetTexture(int outputId, int textureId=0)
+    {
+        RenderSystem.GetOutputIndex(outputId, out _, out var output);
+        if (textureId < 0)
         {
-            TextureSystem.GetTextureIndex(stage.targetTextureId, out var index, out var runtimeTex);
-
-            stage.target = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
-                width: (int)(GameSystem.graphicsDeviceManager.GraphicsDevice.Viewport.Width * stage.renderSizeRatio),
-                height: (int)(GameSystem.graphicsDeviceManager.GraphicsDevice.Viewport.Height * stage.renderSizeRatio));
-            runtimeTex.texture = stage.target;
-            TextureSystem.textures[index] = runtimeTex;
+            output.targetTextureId = -1;
+            output.target = null;
+            return;
         }
 
-    }
-
-    
-    [FadeBasicCommand("grab render texture")]
-    public static void GrabRenderTexture(int stageId, int textureId)
-    {
-        TextureSystem.GetTextureIndex(textureId, out var index, out var runtimeTex);
+        if (textureId == 0 && output.targetTextureId <= 0)
+        {
+            ReserveTextureNextId(ref textureId);
+        }
         
-        RenderSystem.GetStageIndex(stageId, out _, out var stage);
-        if (stage.target == null)
+        TextureSystem.GetTextureIndex(textureId, out var index, out var runtimeTex);
+        if (output.targetTextureId != textureId)
         {
-            stage.target = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
-                width: (int)(GameSystem.graphicsDeviceManager.GraphicsDevice.Viewport.Width * stage.renderSizeRatio),
-                height: (int)(GameSystem.graphicsDeviceManager.GraphicsDevice.Viewport.Height * stage.renderSizeRatio));
+            output.target = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
+                width: (int)(RenderSystem.mainBuffer.width),
+                height: (int)(RenderSystem.mainBuffer.height), 
+                mipMap: false, 
+                preferredFormat: SurfaceFormat.Color, 
+                preferredDepthFormat: DepthFormat.None);
+            // output.target = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
+            //     width: (int)(GameSystem.graphicsDeviceManager.GraphicsDevice.Viewport.Width * 1),
+            //     height: (int)(GameSystem.graphicsDeviceManager.GraphicsDevice.Viewport.Height * 1));
         }
 
-        stage.targetTextureId = textureId;
-        runtimeTex.texture = stage.target;
+        output.targetTextureId = textureId;
+        runtimeTex.texture = output.target;
         TextureSystem.textures[index] = runtimeTex;
     }
+
 }

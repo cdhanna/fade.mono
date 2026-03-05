@@ -1,0 +1,80 @@
+goto routines_info_exit
+
+setup_infos:
+    ` some of the set up is actually done in the fish_fish headers
+
+
+    ` load effects
+    global INFO_FX_ID
+    reserve effect id(INFO_FX_ID)
+    effect INFO_FX_ID, "Fish/Shaders/InfoMaskEffect"
+
+    global INFO_MASK_FX_ID
+    reserve effect id(INFO_MASK_FX_ID)
+    effect INFO_MASK_FX_ID, "Fish/Shaders/InfoMaskElementEffect"
+
+    ` create a new render target
+    global TARGET_INFO
+    reserve render target id(TARGET_INFO)
+    render target TARGET_INFO
+
+    ` allocate all info data with basic reservations. 
+    for i = 0 to INFO_COUNT - 1
+
+        ` make sure we have a valid sprite id. 
+        reserve sprite id(INFOS(i).spriteMaskId)
+
+        info = INFOS(i)
+
+        sprite info.spriteMaskId, WORLD_WIDTH - 100, 0, 0
+        size sprite info.spriteMaskId, 100, 100
+        set sprite offset info.spriteMaskId, 0, 0
+        set sprite render target info.spriteMaskId, TARGET_INFO
+        hide sprite info.spriteMaskId
+        set sprite effect info.spriteMaskId, INFO_MASK_FX_ID
+
+
+    next
+
+    ` setup the mask sprite 
+    global INFO_MASK_SPRITE
+    reserve sprite id(INFO_MASK_SPRITE)
+
+    sprite INFO_MASK_SPRITE, 0, 0, render target texture(TARGET_INFO)
+    size sprite INFO_MASK_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    set sprite offset INFO_MASK_SPRITE, 0, 0
+    order sprite INFO_MASK_SPRITE, ORDER_FISH+1
+    set sprite effect INFO_MASK_SPRITE, INFO_FX_ID
+
+return 
+
+frame_info_render:
+    ` not sure anything here needs to render?
+
+    `set effect param texture INFO_FX_ID, "MaskTexture", STAGE_INFO_TEX
+
+return 
+
+
+routines_info_exit:
+
+
+function allocateInfoBlob(x, y, width, height)
+    curr = INFO_LENGTH
+
+    if curr > INFO_COUNT
+        `TODO: we could scan through the infos looking for un-assigned ones, but until we actually allocate more than 100, who cares?
+        print "CRASH: ran out of info blobs"
+        end
+    endif
+
+    ` mark the info as taken, and move up. 
+    INFO_LENGTH += 1
+
+    INFOS(curr).assigned = 1
+    show sprite INFOS(curr).spriteMaskId
+    sprite INFOS(curr).spriteMaskId, x, y, 0
+    size sprite INFOS(curr).spriteMaskId, width, height
+
+
+endfunction curr 

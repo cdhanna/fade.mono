@@ -59,6 +59,9 @@ public partial class FadeMonoGameCommands
     {
         SpriteSystem.GetSpriteIndex(spriteId, out var index, out var sprite);
         sprite.zOrder = order;
+        RenderSystem.GetOutputIndex(sprite.outputIdFlags, out _, out var output);
+        output.spritesOrderDirty = true;
+            
         SpriteSystem.sprites[index] = sprite;
     }
 
@@ -87,31 +90,29 @@ public partial class FadeMonoGameCommands
         SpriteSystem.sprites[index].imageId = textureId;
     }
     
-    [FadeBasicCommand("set sprite stage")]
-    public static void SetSpriteStage(int spriteId, int stageId)
+    
+    [FadeBasicCommand("set sprite render target")]
+    public static void SetSpriteTarget(int spriteId, int outputId)
     {
         SpriteSystem.GetSpriteIndex(spriteId, out var index, out var sprite);
         
-        RenderSystem.SetSpriteToStage(index, stageId, sprite.stageIdFlags);
-        sprite.stageIdFlags = stageId;
+        RenderSystem.SetSpriteToOutput(index, outputId, sprite.outputIdFlags);
+        sprite.outputIdFlags = outputId;
         SpriteSystem.sprites[index] = sprite;
     }
-    
-    [FadeBasicCommand("reset sprite stage")]
-    public static void ResetSpriteStage(int spriteId)
+    [FadeBasicCommand("reset sprite render target")]
+    public static void ResetSpriteTarget(int spriteId)
     {
-        SetSpriteStage(spriteId, 0);
+        SetSpriteTarget(spriteId, 1);
     }
-    
-    [FadeBasicCommand("add sprite stage")]
-    public static void AddSpriteStage(int spriteId, int stageId)
+    [FadeBasicCommand("add sprite render target")]
+    public static void AddSpriteTarget(int spriteId, int outputId)
     {
         SpriteSystem.GetSpriteIndex(spriteId, out var index, out var sprite);
-        RenderSystem.AddSpriteToStage(index, stageId, sprite.stageIdFlags);
-        sprite.stageIdFlags = SpriteSystem.AddIdToFlags(stageId, sprite.stageIdFlags);
+        RenderSystem.AddSpriteToOutput(index, outputId, sprite.outputIdFlags);
+        sprite.outputIdFlags = SpriteSystem.AddIdToFlags(outputId, sprite.outputIdFlags);
         SpriteSystem.sprites[index] = sprite;
     }
-
     
     [FadeBasicCommand("scale sprite")]
     public static void ScaleSprite(int spriteId, float x, float y)
@@ -238,6 +239,14 @@ public partial class FadeMonoGameCommands
     }
     
 
+    [FadeBasicCommand("set sprite effect")]
+    public static void SetSpriteEffect(int spriteId, int effectId)
+    {
+        SpriteSystem.GetSpriteIndex(spriteId, out var index, out var sprite);
+        sprite.effectId = effectId;
+        SpriteSystem.sprites[index] = sprite;
+    }
+    
     [FadeBasicCommand("set sprite diffuse")]
     public static void SetSpriteDiffuse(int spriteId, byte red, byte green, byte blue)
     {

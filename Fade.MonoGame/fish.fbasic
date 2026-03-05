@@ -13,11 +13,41 @@ set screen size SCREEN_WIDTH, SCREEN_HEIGHT
 global WORLD_WIDTH = 570
 global WORLD_HEIGHT = 320
 set render size WORLD_WIDTH, WORLD_HEIGHT
-set stage sampler 1 SAMPLER_STATE_POINT
-set background color rgb(32, 40, 64)
+` set stage sampler 1 SAMPLER_STATE_POINT
+` set background color rgb(32, 40, 64)
+set render target background color 1, rgb(32, 40, 64)
 sync
 
+
+` `TEST START
+` SCORE_FONT = 1
+` font SCORE_FONT, "Fish/Fonts/ZeroCool"
+
+
+` sprite 1, 100, 100, 0
+` set sprite offset 1, 0, 0
+` size sprite 1, 100, 100
+` color sprite 1, rgb(255, 0, 0)
+` text 2, 100, 120, 1, "hello"
+
+` ` order text 1, 20
+` order sprite 1, 10
+
+` do 
+`     sync
+` loop
+` end
+` `TEST END.
+
 global SCORE_FONT
+
+
+effect 1, "Fish/Shaders/ScreenEffect"
+set screen effect 1
+
+
+effect 2, "Fish/Shaders/FishEffect"
+
 
 gosub setup_abilities
 gosub load_textures
@@ -26,19 +56,13 @@ gosub load_fonts
 gosub setup_grid
 gosub setup_selection
 gosub setup_swap_tweens
+gosub setup_infos
 gosub setup_score
 gosub setup_passives
 gosub setup_moves
 gosub setup_ability_selection
 
 
-effect 1, "Fish/Shaders/ScreenEffect"
-set screen effect 1
-
-
-effect 2, "Fish/Shaders/FishEffect"
-render stage 2
-set stage effect 2, 2
 
 p# = 0
 
@@ -46,15 +70,25 @@ isAbility_Wrap()
 do 
 
     COLLECTED_INPUT_MASK = 0
+
+    ` TODO: stupid FX system loses parameters between reloads, so best to set them in a loop. 
     set effect param float 1, "TimeSpeed", 1
 
-    gosub handle_ability_selection
+    gosub frame_info_render
 
-    gosub process_input
+    if INFO_MODE
+        ` handle info mode.
 
-    gosub handle_combos
 
-    gosub update_frame
+    else 
+        ` handle the gameplay. 
+        
+        gosub handle_ability_selection
+        gosub process_input
+        gosub handle_combos
+        gosub update_frame
+
+    endif
 
     sync 
 loop

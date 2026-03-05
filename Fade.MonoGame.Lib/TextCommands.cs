@@ -113,6 +113,8 @@ public partial class FadeMonoGameCommands
         TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
         textSprite.sprite.zOrder = order;
         TextSystem.textSprites[index] = textSprite;
+        RenderSystem.GetOutputIndex(textSprite.sprite.outputIdFlags, out _, out var output);
+        output.spritesOrderDirty = true;
     }
     
     
@@ -132,33 +134,30 @@ public partial class FadeMonoGameCommands
         TextSystem.textSprites[index] = textSprite;
     }
 
-    [FadeBasicCommand("set text stage")]
-    public static void SetSpriteTextStage(int textId, int stageId)
+    [FadeBasicCommand("set text render target")]
+    public static void SetSpriteTextRenderTarget(int textId, int outputId)
     {
         TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
-        RenderSystem.SetSpriteTextToStage(index, stageId, textSprite.sprite.stageIdFlags);
-        textSprite.sprite.stageIdFlags = stageId;
+        RenderSystem.SetSpriteTextToOutput(textId, outputId, textSprite.sprite.outputIdFlags);
+        textSprite.sprite.outputIdFlags = outputId;
+        TextSystem.textSprites[index] = textSprite;
+    }
+    [FadeBasicCommand("reset text render target")]
+    public static void ResetSpriteTextRenderTarget(int textId)
+    {
+        SetSpriteTextRenderTarget(textId, 1);
+    }
+    [FadeBasicCommand("add text render target")]
+    public static void AddSpriteTextRenderTarget(int textId, int outputId)
+    {
+        TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
+
+        RenderSystem.AddSpriteTextToOutput(index, outputId, textSprite.sprite.outputIdFlags);
+        textSprite.sprite.outputIdFlags = SpriteSystem.AddIdToFlags(outputId, textSprite.sprite.outputIdFlags);
         TextSystem.textSprites[index] = textSprite;
 
     }
     
-    [FadeBasicCommand("reset text stage")]
-    public static void ResetSpriteTextStage(int textId)
-    {
-        SetSpriteTextStage(textId, 0);
-    }
-    
-    [FadeBasicCommand("add text stage")]
-    public static void AddSpriteTextStage(int textId, int stageId)
-    {
-        TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
-
-        RenderSystem.AddSpriteTextToStage(index, stageId, textSprite.sprite.stageIdFlags);
-        textSprite.sprite.stageIdFlags = SpriteSystem.AddIdToFlags(stageId, textSprite.sprite.stageIdFlags);
-        TextSystem.textSprites[index] = textSprite;
-
-    }
-
     
     [FadeBasicCommand("size text")]
     public static void SizeText(int textId, float xPixels, float yPixels)

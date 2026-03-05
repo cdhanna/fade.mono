@@ -101,7 +101,6 @@ public class Game1 : Microsoft.Xna.Framework.Game
         GameSystem.graphicsDeviceManager = _graphics;
         TransformSystem.GetTransformIndex(0, out _, out _); // create a blank index-0 
         RenderSystem.SetMainRenderSize(1920, 1080);
-        RenderSystem.GetStageIndex(1, out _, out var stage);
         TextureSystem.GetTextureIndex(0, out var pixelIndex, out var pixelTex);
         pixelTex.descriptor = new TextureDescriptor(); // TODO: maybe add a frame dev?
         pixelTex.texture = _pixel;
@@ -259,7 +258,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
         if (_vm.instructionIndex <= 4) return; // the VM hasn't started yet; so don't draw anything...
         
         // the final image will be stored in the mainBuffer...
-        RenderSystem.RenderAllStages(_spriteBatch);
+        // RenderSystem.RenderAllStages(_spriteBatch);
+        RenderSystem.RenderAll2(_spriteBatch);
 
         GraphicsDevice.SetRenderTarget(null);
         GraphicsDevice.Clear(Color.Black);
@@ -273,6 +273,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
             samplerState: SamplerState.PointClamp,
             effect: screenEffect
             );
+        
         _spriteBatch.Draw(RenderSystem.mainBuffer, RenderSystem.mainBufferPosition, null, Color.White, 0f, Vector2.Zero, RenderSystem.mainBufferScale, SpriteEffects.None, 0);
 
 

@@ -102,8 +102,7 @@ setup_ability_selection:
     size sprite SPRITE_ABILITY_BACKDROP, WORLD_WIDTH, WORLD_HEIGHT
     set sprite offset SPRITE_ABILITY_BACKDROP, 0, 0
     color sprite SPRITE_ABILITY_BACKDROP, rgb(0, 0, 0, 0)
-    order sprite SPRITE_ABILITY_BACKDROP, 100
-    set sprite stage SPRITE_ABILITY_BACKDROP, 1
+    order sprite SPRITE_ABILITY_BACKDROP, ORDER_ABILITY_BACKDROP
     `hide sprite SPRITE_ABILITY_BACKDROP
 
     ` the title
@@ -114,21 +113,24 @@ setup_ability_selection:
     size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
     enable text drop shadow ABILITY_SELECT_LABEL_TEXT_ID, 2, -2, rgb(64, 128, 255)
     set text alpha ABILITY_SELECT_LABEL_TEXT_ID, 0
+    order text ABILITY_SELECT_LABEL_TEXT_ID, ORDER_ABILITY_TEXT
 
     ` description text
     reserve text id(ABILITY_SELECT_DESC_TEXT_ID)
     text ABILITY_SELECT_DESC_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT - 64, SCORE_FONT, "Blah blah blah "
     set text offset ABILITY_SELECT_DESC_TEXT_ID, .5, 1
     size text x ABILITY_SELECT_DESC_TEXT_ID, WORLD_WIDTH * .7, .2, .4
+    color text ABILITY_SELECT_DESC_TEXT_ID, rgb(216, 216, 216)
     enable text drop shadow ABILITY_SELECT_DESC_TEXT_ID, 2, -2, rgb(32, 64, 128)
     set text alpha ABILITY_SELECT_DESC_TEXT_ID, 0
+    order text ABILITY_SELECT_DESC_TEXT_ID, ORDER_ABILITY_TEXT
 
     ` selection indicator sprite
     reserve sprite id(ABILITY_SELECTION_INDICATOR_SPRITE_ID)
     sprite ABILITY_SELECTION_INDICATOR_SPRITE_ID, 0, 0, 0
     color sprite ABILITY_SELECTION_INDICATOR_SPRITE_ID, rgb(255, 255, 255, 255)
-    set sprite stage ABILITY_SELECTION_INDICATOR_SPRITE_ID, 0
     size sprite ABILITY_SELECTION_INDICATOR_SPRITE_ID, 10, 15
+    order sprite ABILITY_SELECTION_INDICATOR_SPRITE_ID, ORDER_ABILITY_CARD
 
     reserve tween id(ABILITY_SELECTION_INDICATOR_TWEEN_ID)
     create basic tween ABILITY_SELECTION_INDICATOR_TWEEN_ID, 0, 0, 0, 0 
@@ -157,22 +159,23 @@ setup_ability_selection:
         attach sprite to transform a.spriteId, a.transformId
 
         sprite a.spriteId, 0, -15, 0
-        color sprite a.spriteId, rgb(255, 255, 255, 240)
+        color sprite a.spriteId, rgb(83, 93, 137)
         size sprite a.spriteId, 135, 100
         set sprite offset a.spriteId, .5, 0
-        order sprite a.spriteId, -100
+        order sprite a.spriteId, ORDER_ABILITY_CARD
 
         text a.titleTextId, 0, 0, SCORE_FONT, "title"
         size text y a.titleTextId, 48
         set text offset a.titleTextId, .5, 0
-        color text a.titleTextId, rgb(200, 200, 240)
+        color text a.titleTextId, rgb(154, 154, 227)
         enable text drop shadow a.titleTextId, 3, -3, 0
+        order text a.titleTextId, ORDER_ABILITY_TEXT
 
 
         text a.typeTextId, 0, 64, SCORE_FONT, "unknown" 
         size text y a.typeTextId, 24
         set text offset a.typeTextId, .5, 1
-
+        order text a.typeTextId, ORDER_ABILITY_TEXT
         color text a.typeTextId, rgb(200, 200, 200)
         enable text drop shadow a.typeTextId, 3, -3, 0
 
@@ -199,7 +202,6 @@ setup_passives:
         color text passive.titleTextId, rgb(64, 128, 255, 200)
         enable text drop shadow passive.titleTextId, 2, -2, rgb(0,0,0)
         set text alpha passive.titleTextId, 0
-        set text stage passive.titleTextId, STAGE_HUD_TEXT
         ` text passive.descTextId, WORLD_WIDTH - 120, SCORE_POS.y + 34 + i*45, SCORE_FONT, "more crabs \n okay"
         ` set text offset passive.descTextId, 0, 0
         ` size text x passive.descTextId, 100, .15, .2
@@ -231,7 +233,6 @@ setup_moves:
         color text moveAbility.titleTextId, rgb(64, 128, 255, 200)
         enable text drop shadow moveAbility.titleTextId, 2, -2, rgb(0,0,0)
         set text alpha moveAbility.titleTextId, 0
-        set text stage moveAbility.titleTextId, STAGE_HUD_TEXT
 
         text moveAbility.timerTextId, 16 + 100, WORLD_HEIGHT - 32 - i*18, SCORE_FONT, "1"
         set text offset moveAbility.timerTextId, 0, 0
@@ -239,7 +240,6 @@ setup_moves:
         color text moveAbility.timerTextId, rgb(64, 128, 255, 200)
         enable text drop shadow moveAbility.timerTextId, 2, -2, rgb(0,0,0)
         set text alpha moveAbility.timerTextId, 0
-        set text stage moveAbility.timerTextId, STAGE_HUD_TEXT
 
         MOVE_ABILITY_BINDINGS(i) = moveAbility
        ` hide text PASSIVE_BINDINGS(index).titleTextId

@@ -190,7 +190,7 @@ setup_grid:
 
             c as cell = CELLS(cellId)
             sprite c.spriteId, getCellX(c.coord.x), getCellY(c.coord.y), c.value
-            set sprite stage c.spriteId, 2
+            order sprite c.spriteId, ORDER_FISH
 
             sprite c.fxSpriteId, getCellX(c.coord.y), getCellY(c.coord.y), TEX_SMOKE_1
             hide sprite c.fxSpriteId
@@ -236,25 +236,25 @@ setup_score:
     reserve text id(MOVE_TEXT_ID)
     text MOVE_TEXT_ID, 32, SCORE_POS.y - 16, SCORE_FONT, "Moves"
     size text y MOVE_TEXT_ID, 20
-    set text stage MOVE_TEXT_ID, STAGE_HUD_TEXT
     set text offset MOVE_TEXT_ID, 0, 0
     color text MOVE_TEXT_ID, rgb(64, 128, 255, 200)
     enable text drop shadow MOVE_TEXT_ID, 2, -2, rgb(0,0,0)
+    infoIndex = allocateInfoBlob(32 - 4, SCORE_POS.y - 16 - 2, 50, 50)
+
 
     ` re-use id, and set up "rounds left" label on right
     reserve text id(MOVE_TEXT_ID)
     text MOVE_TEXT_ID, 570 - 32, SCORE_POS.y - 16, SCORE_FONT, "Rounds Left"
     size text y MOVE_TEXT_ID, 20
-    set text stage MOVE_TEXT_ID, STAGE_HUD_TEXT
     set text offset MOVE_TEXT_ID, 1, 0
     color text MOVE_TEXT_ID, rgb(64, 128, 255, 200)
     enable text drop shadow MOVE_TEXT_ID, 2, -2, rgb(0,0,0)
+    infoIndex = allocateInfoBlob(480 - 32 - 4, SCORE_POS.y - 16 - 2, 100, 50)
 
 
     reserve text id(MOVE_COUNT_TEXT_ID)
     text MOVE_COUNT_TEXT_ID, 32 + 24 SCORE_POS.y + 42, SCORE_FONT, "0"
     size text y MOVE_COUNT_TEXT_ID, 42
-    set text stage MOVE_COUNT_TEXT_ID, STAGE_HUD_TEXT
 
     set text offset MOVE_COUNT_TEXT_ID, .5, 1
     color text MOVE_COUNT_TEXT_ID, rgb(64, 128, 255, 200)
@@ -262,7 +262,6 @@ setup_score:
 
     reserve text id(ROUND_COUNT_TEXT_ID)
     text ROUND_COUNT_TEXT_ID, 570 - 64 - 10 SCORE_POS.y + 42, SCORE_FONT, str$(getRoundsLeft())
-    set text stage ROUND_COUNT_TEXT_ID, STAGE_HUD_TEXT
     size text y ROUND_COUNT_TEXT_ID, 42
     set text offset ROUND_COUNT_TEXT_ID, .5, 1
     color text ROUND_COUNT_TEXT_ID, rgb(64, 128, 255, 200)
@@ -289,9 +288,9 @@ setup_selection:
 
     gosub update_selection_position
     size sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
-    order sprite SELECTION_SPRITE, -1
-    set sprite stage SELECTION_SPRITE, 2
-    color sprite SELECTION_SPRITE, rgb(60, 90, 170, 170)
+    order sprite SELECTION_SPRITE, ORDER_SELECTION
+    color sprite SELECTION_SPRITE, rgb(160, 90, 170, 170)
+
 return
 
 
@@ -423,7 +422,6 @@ frame_texts:
             ` TODO: BUG: float division seems broken? These always come out to zero. 
             flip# = 1.0 / (WORLD_HEIGHT + 1.0)
             r# = tweenVal(scoreTxt.floatTweenIdY)/(WORLD_HEIGHT*1.0)
-            print "R# = "+str$(tweenVal(scoreTxt.floatTweenIdY)) + "/" + str$(WORLD_HEIGHT*1.0) + " = " +str$(flip#*100)
             speed = 200` + 2*tweenVal(scoreTxt.floatTweenIdY) `it would be nice to scale the duration with the distance needs to travel. 
             create basic tween scoreTxt.floatTweenIdX, tweenVal(scoreTxt.floatTweenIdX), x, speed, 150
             create basic tween scoreTxt.floatTweenIdY, tweenVal(scoreTxt.floatTweenIdY), y, speed, 150
