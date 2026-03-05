@@ -63,6 +63,7 @@ load_fonts:
             floatTweenIdY = reserve tween id(n)
             fadeTweenId = reserve tween id(n)
             fadeInTweenId = reserve tween id(n)
+            scaleOutTweenId = reserve tween id(n)
         }
         text SCORE_TEXTS(i).textId, 0, 0, SCORE_FONT, ""
         `hide text SCORE_TEXTS(i).textId
@@ -404,7 +405,33 @@ frame_texts:
             `show text scoreTxt.textId
         endif
         
-        set text position scoreTxt.textId, tweenVal(scoreTxt.floatTweenIdX), tweenVal(scoreTxt.floatTweenIdY)
+        if is tween done(scoreTxt.floatTweenIdX)
+
+            ` TODO: this is all a mess. I don't know how I want the score to move.
+
+            ` should it move up to the score bar?
+            x = SCORE_BAR.pos.x + SCORE_BAR.size.x - 4 `* tweenVal(SCORE_BAR.progressTweenId)
+            y = SCORE_BAR.pos.y
+
+            ` or should it just go "up"
+            x = tweenVal(scoreTxt.floatTweenIdX)
+            y = tweenVal(scoreTxt.floatTweenIdY) - 50
+            
+            `x+= (rnd(6)-3) * 5
+            y -= rnd(2) * 4
+
+            ` TODO: BUG: float division seems broken? These always come out to zero. 
+            flip# = 1.0 / (WORLD_HEIGHT + 1.0)
+            r# = tweenVal(scoreTxt.floatTweenIdY)/(WORLD_HEIGHT*1.0)
+            print "R# = "+str$(tweenVal(scoreTxt.floatTweenIdY)) + "/" + str$(WORLD_HEIGHT*1.0) + " = " +str$(flip#*100)
+            speed = 200` + 2*tweenVal(scoreTxt.floatTweenIdY) `it would be nice to scale the duration with the distance needs to travel. 
+            create basic tween scoreTxt.floatTweenIdX, tweenVal(scoreTxt.floatTweenIdX), x, speed, 150
+            create basic tween scoreTxt.floatTweenIdY, tweenVal(scoreTxt.floatTweenIdY), y, speed, 150
+        else
+            set text position scoreTxt.textId, tweenVal(scoreTxt.floatTweenIdX), tweenVal(scoreTxt.floatTweenIdY)
+        endif
+        
+        size text y scoreTxt.textId, tweenVal(scoreTxt.scaleOutTweenId)
 
         if is tween done(scoreTxt.fadeInTweenId) > 0
             set text alpha scoreTxt.textId, tweenVal(scoreTxt.fadeTweenId)
