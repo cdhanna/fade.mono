@@ -285,7 +285,7 @@ setup_selection:
 
     global SELECTION_SPRITE
     reserve sprite id(SELECTION_SPRITE)
-
+print SELECTION_SPRITE
     gosub update_selection_position
     size sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
     order sprite SELECTION_SPRITE, ORDER_SELECTION
@@ -496,9 +496,7 @@ handle_combos:
             print "FORCING EXPLO" + str$(c.comboForce) + " " + str$(CELLS(i).comboFillId)
         endif
     next
-    print "BEFORE" + str$(groupId)
     groupId += maxComboForce
-    print "BEFORE" + str$(groupId)
 
     ` DEBUG: just color the groups for debug visuals
     for i = 1 to CELL_COUNT
@@ -530,12 +528,13 @@ handle_combos:
         next
 
         if comboCount < 3 then skip `if this group is not big enough, then we can skip rendering the explosion
-
+        
         ` handle stock market ability
-        if isAbility_Passive_StockMarket()
+        if 1 or isAbility_Passive_StockMarket()
             ` find a fish that is not part of a group, and add it to this group. 
             randoChance = rnd(10) >= 7 `30% chance
             if randoChance
+               
                 startIndex = rnd(CELL_COUNT)
                 for i = 0 to CELL_COUNT - 1
                     cellIndex = (i + startIndex) mod CELL_COUNT

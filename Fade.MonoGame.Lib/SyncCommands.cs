@@ -23,7 +23,7 @@ public partial class FadeMonoGameCommands
     }
     
     [FadeBasicCommand("frame number")]
-    public static long Sync()
+    public static long Sync() 
     {
         return GameSystem.currentFrameNumber;
     }

@@ -77,6 +77,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
     {
         // _vm = GameReloader.LatestMachine;
         // if (_vm == null)
+        var oldVm = _vm;
         {
             _vm = new VirtualMachine(_fadeProgram.Bytecode)
             {
@@ -87,9 +88,17 @@ public class Game1 : Microsoft.Xna.Framework.Game
         _options = LaunchOptions.DefaultOptions;
         if (_options.debug)
         {
-            _debugSession = new DebugSession(_vm, _fadeProgram.DebugData, _fadeProgram.CommandCollection, _options,
-                "Fade.Mono");
-            _debugSession.StartServer();
+            if (_debugSession != null)
+            {
+                _debugSession.Restart(_vm, _fadeProgram.DebugData, _fadeProgram.CommandCollection);
+            }
+            else
+            {
+                _debugSession = new DebugSession(_vm, _fadeProgram.DebugData, _fadeProgram.CommandCollection, _options,
+                    "Fade.Mono");
+                _debugSession.StartServer();
+            }
+            
         }
         
         StartTracking();
@@ -207,8 +216,11 @@ public class Game1 : Microsoft.Xna.Framework.Game
                     while (!_debugSession._vm.isSuspendRequested && _vm.instructionIndex < _vm.program.Length)
                     {
                         // TODO: debugging is too slow :(
-                        _debugSession.StartDebugging(1);
+                        // Console.WriteLine("START - " + gameTime.TotalGameTime.Seconds + " _ " + _debugSession._options.debugWaitForConnection);
+                        _debugSession.StartDebugging();
+                        
                     }
+                    // Console.WriteLine("SYNC ???");
 
                 }
                 else
@@ -218,7 +230,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
                     {
                         //Console.WriteLine($"instruction index: {_vm.instructionIndex}");
 
-                        _vm.Execute2(1000);
+                        _vm.Execute2();
                     }
 
                 }

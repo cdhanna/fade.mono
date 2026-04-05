@@ -27,7 +27,13 @@ public partial class FadeMonoGameCommands
     }
 
     
-    
+    /// <summary>
+    /// Create a sprite. If the sprite already exists, then this will update the x, y, and texture.
+    /// </summary>
+    /// <param name="spriteId">the unique id for the sprite</param>
+    /// <param name="x">the x position to place the sprite</param>
+    /// <param name="y">the y position to place the sprite</param>
+    /// <param name="textureId">the id of the texture to use for the sprite</param>
     [FadeBasicCommand("sprite")]
     public static void Sprite(int spriteId, float x, float y, int textureId)
     {
