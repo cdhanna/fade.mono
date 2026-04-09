@@ -236,8 +236,8 @@ public partial class FadeMonoGameCommands
         if (output.targetTextureId != textureId)
         {
             output.target = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
-                width: (int)(RenderSystem.mainBuffer.width),
-                height: (int)(RenderSystem.mainBuffer.height), 
+                width: (int)(RenderSystem.mainBuffer.Width),
+                height: (int)(RenderSystem.mainBuffer.Height), 
                 mipMap: false, 
                 preferredFormat: SurfaceFormat.Color, 
                 preferredDepthFormat: DepthFormat.None);

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
+using Fade.MonoGame.Game;
 
 namespace Microsoft.Xna.Framework.Content.Pipeline.Extra;
 
@@ -21,9 +22,12 @@ public class ContentWatcher
 
     private Dictionary<string, DateTimeOffset> assetFullPathToUpdatedAt = new Dictionary<string, DateTimeOffset>();
     private Dictionary<string, Timer> pathToTimer = new Dictionary<string, Timer>();
+    private string _rootDirectory;
+
     public ContentWatcher(ContentManager manager)
     {
         _manager = manager;
+        _rootDirectory = _manager.GetRootDirectoryFullPath();
     }
     
     public void Init()
@@ -32,7 +36,7 @@ public class ContentWatcher
 
         _fw = new FileSystemWatcher()
         {
-            Path = _manager.RootDirectoryFullPath,
+            Path = _rootDirectory,
             Filter = "*.xnb",
             IncludeSubdirectories = true,
             NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.CreationTime | NotifyFilters.FileName | NotifyFilters.Size,
@@ -72,7 +76,7 @@ public class ContentWatcher
 
     public bool TryRefreshAsset<T>(ref WatchedAsset<T> current)
     {
-        var assetPath = (Path.Combine(_manager.RootDirectoryFullPath, current.assetName) + ".xnb").Replace("\\", "/");
+        var assetPath = (Path.Combine(_rootDirectory, current.assetName) + ".xnb").Replace("\\", "/");
         
         lock (assetFullPathToUpdatedAt)
         {
@@ -101,7 +105,7 @@ public class ContentWatcher
         lock (assetFullPathToUpdatedAt)
         {
             var now = DateTimeOffset.Now;
-            var assetPath = (Path.Combine(_manager.RootDirectoryFullPath, assetName) + ".xnb").Replace("\\", "/");
+            var assetPath = (Path.Combine(_rootDirectory, assetName) + ".xnb").Replace("\\", "/");
            
             assetFullPathToUpdatedAt[assetPath] = now;
             var asset = _manager.Load<T>(assetName);

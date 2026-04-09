@@ -4,6 +4,7 @@
 
 using System;
 using System.Text;
+using Fade.MonoGame.Game;
 
 namespace Microsoft.Xna.Framework.Graphics.Fade
 {
@@ -20,7 +21,7 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
     /// <summary>
     /// Helper class for drawing text strings and sprites in one or more optimized batches.
     /// </summary>
-	public class SpriteBatch : GraphicsResource
+	public class SpriteBatch
 	{
         #region Private Fields
         readonly SpriteBatcher _batcher;
@@ -41,6 +42,8 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
 		Vector2 _texCoordBR = new Vector2 (0,0);
         #endregion
 
+        public GraphicsDevice GraphicsDevice;
+
         /// <summary>
         /// Constructs a <see cref="SpriteBatch"/>.
         /// </summary>
@@ -58,10 +61,10 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="graphicsDevice"/> is null.</exception>
         public SpriteBatch (GraphicsDevice graphicsDevice, FadeSpriteEffect customEffect, int capacity)
 		{
-			if (graphicsDevice == null)
-            {
-				throw new ArgumentNullException ("graphicsDevice", FrameworkResources.ResourceCreationWhenDeviceIsNull);
-			}	
+			// if (graphicsDevice == null)
+   //          {
+			// 	throw new ArgumentNullException ("graphicsDevice", FrameworkResources.ResourceCreationWhenDeviceIsNull);
+			// }	
 
 			this.GraphicsDevice = graphicsDevice;
 
@@ -73,6 +76,12 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
             _beginCalled = false;
 		}
 
+        public void ResetEffect(FadeSpriteEffect spriteEffect)
+        {
+            _spriteEffect = spriteEffect;
+            ResetEffect();
+        }
+        
         public void ResetEffect()
         {
             _spritePass = _spriteEffect.CurrentTechnique.Passes[0];
@@ -106,6 +115,12 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
             if (_beginCalled)
                 throw new InvalidOperationException("Begin cannot be called again until End has been successfully called.");
 
+            if (sortMode == SpriteSortMode.Texture)
+            {
+                throw new InvalidOperationException(
+                    "cannot use texture sorting. Texture uses an internal property we don't have access to use");
+            }
+            
             // defaults
             _sortMode = sortMode;
             _blendState = blendState ?? BlendState.AlphaBlend;
@@ -149,6 +164,7 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
 			gd.RasterizerState = _rasterizerState;
 			gd.SamplerStates[0] = _samplerState;
 
+            _spriteEffect?.OnApply();
             _spritePass.Apply();
 		}
 		
@@ -213,8 +229,7 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
             {
                 // Comparison of Texture objects.
 case SpriteSortMode.Texture:
-    item.SortKey = texture.SortingKey;
-    break;
+                    throw new InvalidOperationException("cannot use texture sorting");
                 // Comparison of Depth
                 case SpriteSortMode.FrontToBack:
                     item.SortKey = layerDepth;
@@ -346,7 +361,8 @@ case SpriteSortMode.Texture:
             {
                 // Comparison of Texture objects.
                 case SpriteSortMode.Texture:
-                    item.SortKey = texture.SortingKey;
+                    throw new InvalidOperationException(
+                        "cannot use texture sorting. Texture uses an internal property we don't have access to use");
                     break;
                 // Comparison of Depth
                 case SpriteSortMode.FrontToBack:
@@ -451,7 +467,7 @@ case SpriteSortMode.Texture:
 			item.Texture = texture;
             
             // set SortKey based on SpriteSortMode.
-            item.SortKey = _sortMode == SpriteSortMode.Texture ? texture.SortingKey : 0;
+            item.SortKey = 0;
 
             Vector2 size;
 
@@ -466,7 +482,7 @@ case SpriteSortMode.Texture:
             }
             else
             {
-                size = new Vector2(texture.width, texture.height);
+                size = new Vector2(texture.Width, texture.Height);
                 _texCoordTL = Vector2.Zero;
                 _texCoordBR = Vector2.One;
             }
@@ -498,7 +514,7 @@ case SpriteSortMode.Texture:
 			item.Texture = texture;
             
             // set SortKey based on SpriteSortMode.
-            item.SortKey = _sortMode == SpriteSortMode.Texture ? texture.SortingKey : 0;
+            item.SortKey = 0;
             
             if (sourceRectangle.HasValue)
             {
@@ -540,7 +556,7 @@ case SpriteSortMode.Texture:
 			item.Texture = texture;
             
             // set SortKey based on SpriteSortMode.
-            item.SortKey = _sortMode == SpriteSortMode.Texture ? texture.SortingKey : 0;
+            item.SortKey = 0;
             
             item.Set(position.X,
                      position.Y,
@@ -568,7 +584,7 @@ case SpriteSortMode.Texture:
             item.Texture = texture;
             
             // set SortKey based on SpriteSortMode.
-            item.SortKey = _sortMode == SpriteSortMode.Texture ? texture.SortingKey : 0;
+            item.SortKey = 0;
             
             item.Set(destinationRectangle.X,
                      destinationRectangle.Y,
@@ -593,7 +609,7 @@ case SpriteSortMode.Texture:
 		{
             CheckValid(spriteFont, text);
             
-            float sortKey = (_sortMode == SpriteSortMode.Texture) ? spriteFont.Texture.SortingKey : 0;
+            float sortKey = 0;
 
             var offset = Vector2.Zero;
             var firstGlyphOfLine = true;
@@ -704,8 +720,8 @@ case SpriteSortMode.Texture:
             {
                     // Comparison of Texture objects.
                     case SpriteSortMode.Texture:
-                        sortKey = spriteFont.Texture.SortingKey;
-                        break;
+                        throw new InvalidOperationException(
+                            "cannot use texture sorting. Texture uses an internal property we don't have access to use");
                     // Comparison of Depth
                     case SpriteSortMode.FrontToBack:
                         sortKey = layerDepth;
@@ -890,8 +906,8 @@ case SpriteSortMode.Texture:
             {
                 // Comparison of Texture objects.
                 case SpriteSortMode.Texture:
-                    sortKey = spriteFont.Texture.SortingKey;
-                    break;
+                    throw new InvalidOperationException(
+                        "cannot use texture sorting. Texture uses an internal property we don't have access to use");
                 // Comparison of Depth
                 case SpriteSortMode.FrontToBack:
                     sortKey = layerDepth;
@@ -1061,7 +1077,7 @@ case SpriteSortMode.Texture:
 		{
             CheckValid(spriteFont, text);
             
-            float sortKey =  (_sortMode == SpriteSortMode.Texture) ? spriteFont.Texture.SortingKey : 0;
+            float sortKey = 0;
 
             var offset = Vector2.Zero;
             var firstGlyphOfLine = true;
@@ -1172,8 +1188,7 @@ case SpriteSortMode.Texture:
             {
                     // Comparison of Texture objects.
                     case SpriteSortMode.Texture:
-                        sortKey = spriteFont.Texture.SortingKey;
-                        break;
+                        throw new InvalidOperationException("cannot use texture sort mode");
                     // Comparison of Depth
                     case SpriteSortMode.FrontToBack:
                         sortKey = layerDepth;
@@ -1357,8 +1372,7 @@ case SpriteSortMode.Texture:
             {
                 // Comparison of Texture objects.
                 case SpriteSortMode.Texture:
-                    sortKey = spriteFont.Texture.SortingKey;
-                    break;
+                    throw new InvalidOperationException("cannot use texture sorting");
                 // Comparison of Depth
                 case SpriteSortMode.FrontToBack:
                     sortKey = layerDepth;
@@ -1521,20 +1535,16 @@ case SpriteSortMode.Texture:
         /// Immediately releases the unmanaged resources used by this object.
         /// </summary>
         /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
-        protected override void Dispose(bool disposing)
+        protected void Dispose(bool disposing)
         {
-            if (!IsDisposed)
+            if (disposing)
             {
-                if (disposing)
+                if (_spriteEffect != null)
                 {
-                    if (_spriteEffect != null)
-                    {
-                        _spriteEffect.Dispose();
-                        _spriteEffect = null;
-                    }
+                    _spriteEffect.Dispose();
+                    _spriteEffect = null;
                 }
             }
-            base.Dispose(disposing);
         }
 	}
 }

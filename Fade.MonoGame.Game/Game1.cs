@@ -194,8 +194,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
         if (ContentWatcher.TryRefreshAsset(ref _customSpriteEffect))
         {
-            _fadeEffect.SetEffect(_customSpriteEffect.Asset);
-            _spriteBatch.ResetEffect();
+            _fadeEffect?.Dispose(); // get rid of old one?
+            _fadeEffect = new FadeSpriteEffect(_customSpriteEffect.Asset);
+            _spriteBatch.ResetEffect(_fadeEffect);
         }
         
         GameSystem.latestTime = gameTime;

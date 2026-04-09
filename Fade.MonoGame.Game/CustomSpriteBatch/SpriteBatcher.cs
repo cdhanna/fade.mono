@@ -171,13 +171,7 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
             // Determine how many iterations through the drawing code we need to make
             int batchIndex = 0;
             int batchCount = _batchItemCount;
-
             
-            unchecked
-            {
-                // TODO: Is it safe to remove this?
-                _device._graphicsMetrics._spriteCount += batchCount;
-            }
 
             // Iterate through the batches, doing short.MaxValue sets of vertices only.
             while(batchCount > 0)
@@ -253,6 +247,7 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
                 var passes = effect.CurrentTechnique.Passes;
                 foreach (var pass in passes)
                 {
+                    // TODO: note; Fade cannot handle multiple pass setups :( 
                     pass.Apply();
 
                     // Whatever happens in pass.Apply, make sure the texture being drawn

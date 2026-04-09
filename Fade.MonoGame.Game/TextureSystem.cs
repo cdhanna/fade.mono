@@ -4,6 +4,8 @@ using System.IO;
 using System.Text.Json;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using SpriteFont = Microsoft.Xna.Framework.Graphics.Fade.SpriteFont;
+using SpriteFontXna = Microsoft.Xna.Framework.Graphics.SpriteFont;
 
 namespace Fade.MonoGame.Game;
 
@@ -117,9 +119,11 @@ public class TextureSystem
     
     public static void LoadSpriteFontFromContent(int fontId, string path)
     {
-        var font = GameSystem.game.Content.Load<SpriteFont>(path);
+        var xnaFont = GameSystem.game.Content.Load<SpriteFontXna>(path);
+        var fadeFont = SpriteFont.FromXnaFont(xnaFont);
+        
         GetSpriteFontIndex(fontId, out var index, out var runtimeFont);
-        runtimeFont.font = font;
+        runtimeFont.font = fadeFont;
         fonts[index] = runtimeFont;
     }
     
