@@ -45,9 +45,16 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
     protected override void Initialize()
     {
+        // initialize calls Load Content
         base.Initialize();
         
         ResetFade();
+        
+        
+        _customSpriteEffect = ContentWatcher.Watch<Effect>("FadeSpriteBatchEffect");
+        _fadeEffect = new FadeSpriteEffect(_customSpriteEffect.Asset);
+        _spriteBatch = new SpriteBatch(GraphicsDevice, _fadeEffect);
+
     }
 
     private static DateTimeOffset _dbgTime;
@@ -61,9 +68,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
     public void Restart()
     {
-        UnloadContent();
-        
-        LoadContent();
+        // UnloadContent();
+        //
+        // LoadContent();
         ResetFade();
 
     }
@@ -75,6 +82,11 @@ public class Game1 : Microsoft.Xna.Framework.Game
     
     public void ResetFade()
     {
+
+        // var x = Content.GetRootDirectoryFullPath();
+        // Console.WriteLine("CONTENT DIR: " + x);
+        // Console.WriteLine("CURR DIR: " + GameReloader.GetRoot());
+        // Environment.Exit(0);
         // _vm = GameReloader.LatestMachine;
         // if (_vm == null)
         var oldVm = _vm;
@@ -105,6 +117,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         GameSystem.ResetAll();
         PrintTracking("Reset All Systems");
 
+        ContentSystem.BuildContent();
         
         GameSystem.game = this;
         GameSystem.graphicsDeviceManager = _graphics;
@@ -112,7 +125,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         RenderSystem.SetMainRenderSize(1920, 1080);
         TextureSystem.GetTextureIndex(0, out var pixelIndex, out var pixelTex);
         pixelTex.descriptor = new TextureDescriptor(); // TODO: maybe add a frame dev?
-        pixelTex.texture = _pixel;
+        pixelTex.SetComputedTexture(_pixel);
         TextureSystem.textures[pixelIndex] = pixelTex;
 
     }
@@ -136,10 +149,6 @@ public class Game1 : Microsoft.Xna.Framework.Game
         ContentWatcher.Init();
         
         
-        _customSpriteEffect = ContentWatcher.Watch<Effect>("FadeSpriteBatchEffect");
-        _fadeEffect = new FadeSpriteEffect(_customSpriteEffect.Asset);
-        _spriteBatch = new SpriteBatch(GraphicsDevice, _fadeEffect);
-
         _pixel = new Texture2D(GraphicsDevice, 1, 1);
         _pixel.SetData(new Color[]{Color.White});
 
@@ -190,6 +199,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         TweenSystem.currentTime = AudioInstanceSystem.currentTime = gameTime.TotalGameTime.TotalMilliseconds;
         TweenSystem.ProcessTweens();
         AudioInstanceSystem.HandleAudio();
+        TextureSystem.RefreshTextures();
         RenderSystem.RefreshEffects(_fadeEffect);
 
         if (ContentWatcher.TryRefreshAsset(ref _customSpriteEffect))

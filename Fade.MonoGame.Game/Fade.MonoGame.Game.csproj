@@ -4,6 +4,10 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <LangVersion>14</LangVersion>
     </PropertyGroup>
+    
+    <PropertyGroup>
+        <ShouldIncludeContentBuilder Condition="'$(Configuration)' == 'Debug'">true</ShouldIncludeContentBuilder>
+    </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="FadeBasic.Lang.Core" Version="$(FadeVersion)" />
         <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)"/>
@@ -12,6 +16,17 @@
 <!--            <PrivateAssets>All</PrivateAssets>-->
 <!--        </PackageReference>-->
     </ItemGroup>
-    
+
+    <ItemGroup Condition="'$(ShouldIncludeContentBuilder)' == 'true'">
+        <ProjectReference Include="..\Fade.MonoGame.Content\Fade.MonoGame.Content.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Fade.MonoGame.Contracts\Fade.MonoGame.Contracts.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="ContentBuilds\" />
+    </ItemGroup>
+
     
 </Project>

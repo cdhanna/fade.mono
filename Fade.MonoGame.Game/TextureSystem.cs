@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Content.Pipeline.Extra;
 using Microsoft.Xna.Framework.Graphics;
 using SpriteFont = Microsoft.Xna.Framework.Graphics.Fade.SpriteFont;
 using SpriteFontXna = Microsoft.Xna.Framework.Graphics.SpriteFont;
@@ -25,8 +26,18 @@ public struct TextureFrame
 public struct RuntimeTexture
 {
     public int id;
-    public Texture2D texture;
+    public Texture2D texture => watchedTexture.Asset;
+    public WatchedAsset<Texture2D> watchedTexture;
     public TextureDescriptor descriptor;
+
+    public void SetComputedTexture(Texture2D tex)
+    {
+        watchedTexture = new WatchedAsset<Texture2D>
+        {
+            // don't set the name/path, so it is computed. 
+            Asset = tex
+        };
+    }
 }
 
 public struct RuntimeFont
@@ -55,7 +66,18 @@ public class TextureSystem
        _fontMap.Clear();
     }
 
-    
+    public static void RefreshTextures()
+    {
+        for (var i = 0; i < textures.Count; i++)
+        {
+            var tex = textures[i];
+            if (tex.watchedTexture.assetName != null && GameSystem.game.ContentWatcher.TryRefreshAsset(ref tex.watchedTexture))
+            {
+                textures[i] = tex;
+            }
+        }
+    }
+
     public static void GetTextureIndex(int textureId, out int index, out RuntimeTexture texture)
     {
         if (!_map.TryGetValue(textureId, out index))
@@ -107,13 +129,14 @@ public class TextureSystem
 
     public static void LoadTextureFromContent(int textureId, string path)
     {
-        var texture = GameSystem.game.Content.Load<Texture2D>(path);
+        var texture = GameSystem.game.ContentWatcher.Watch<Texture2D>(path);
+        
         GetTextureIndex(textureId, out var index, out var runtimeTex);
         runtimeTex.descriptor = new TextureDescriptor
         {
             imageFilePath = path
         };
-        runtimeTex.texture = texture;
+        runtimeTex.watchedTexture = texture;
         textures[index] = runtimeTex;
     }
     
@@ -128,34 +151,34 @@ public class TextureSystem
     }
     
     
-    public static void LoadTexture(int textureId, string filePath)
-    {
-        if (!filePath.EndsWith(".png"))
-        {
-            throw new InvalidOperationException("Only png textures are allowed");
-        }
-        
-        var texture = Texture2D.FromFile(GameSystem.graphicsDeviceManager.GraphicsDevice, filePath);
-        var descriptor = new TextureDescriptor
-        {
-            imageFilePath = filePath
-        };
-
-        var metadataPath = Path.ChangeExtension(filePath, ".metadata.json");
-        if (File.Exists(metadataPath))
-        {
-            var json = File.ReadAllText(metadataPath);
-            descriptor = JsonSerializer.Deserialize<TextureDescriptor>(json, new JsonSerializerOptions
-            {
-                IncludeFields = true
-            });
-            descriptor.imageFilePath = filePath; // this ignores whatever is in the file. I guess that data is useless?
-        }
-
-        GetTextureIndex(textureId, out var index, out var runtimeTex);
-        runtimeTex.descriptor = descriptor;
-        runtimeTex.texture = texture;
-        textures[index] = runtimeTex;
-
-    }
+    // public static void LoadTexture(int textureId, string filePath)
+    // {
+    //     if (!filePath.EndsWith(".png"))
+    //     {
+    //         throw new InvalidOperationException("Only png textures are allowed");
+    //     }
+    //     
+    //     var texture = Texture2D.FromFile(GameSystem.graphicsDeviceManager.GraphicsDevice, filePath);
+    //     var descriptor = new TextureDescriptor
+    //     {
+    //         imageFilePath = filePath
+    //     };
+    //
+    //     var metadataPath = Path.ChangeExtension(filePath, ".metadata.json");
+    //     if (File.Exists(metadataPath))
+    //     {
+    //         var json = File.ReadAllText(metadataPath);
+    //         descriptor = JsonSerializer.Deserialize<TextureDescriptor>(json, new JsonSerializerOptions
+    //         {
+    //             IncludeFields = true
+    //         });
+    //         descriptor.imageFilePath = filePath; // this ignores whatever is in the file. I guess that data is useless?
+    //     }
+    //
+    //     GetTextureIndex(textureId, out var index, out var runtimeTex);
+    //     runtimeTex.descriptor = descriptor;
+    //     runtimeTex.texture = texture;
+    //     textures[index] = runtimeTex;
+    //
+    // }
 }

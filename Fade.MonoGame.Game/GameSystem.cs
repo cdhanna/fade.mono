@@ -12,6 +12,11 @@ public class GameSystem
 
     public static long currentFrameNumber;
 
+    public static void ResetMacros()
+    {
+        ContentSystem.Reset();
+    }
+    
     public static void ResetAll()
     {
         game = null;

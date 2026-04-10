@@ -1,7 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using FadeBasic;
@@ -14,7 +17,7 @@ namespace Fade.MonoGame.Game;
 public static class GameReloader
 {
     private static FileSystemWatcher _fadeScriptWatcher;
-    private static FileSystemWatcher _effectWatcher;
+    private static FileSystemWatcher _assetWatcher;
     static Timer? debounceTimer;
     static Timer? effectTimer;
     static readonly object debounceLock = new();
@@ -25,6 +28,15 @@ public static class GameReloader
     public static VirtualMachine LatestMachine { get; private set; }
     // public static Action<ILaunchable> OnBuild = _ => { };
 
+    public static string GetRoot()
+    {
+        var attr = Assembly.GetEntryAssembly()
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(a => a.Key == "ProjectDir");
+
+        return attr?.Value;
+    }
+    
     public static string? GetCsprojPath([CallerFilePath] string callerFilePath = "")
     {
 #if DEBUG
@@ -44,11 +56,19 @@ public static class GameReloader
         return null;
     }
     
+    private static readonly HashSet<string> _extensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".fx",
+        ".fxh",
+        ".png"
+    };
+
     public static void WatchFiles(string csProjPath, CommandCollection commands)
     {
         var files = FadeBasic.Sdk.Fade.GetFadeFilesFromProject(csProjPath);
 
         var projectDir = Path.GetDirectoryName(csProjPath);
+        var changeFiles = new HashSet<string>();
         
         Console.WriteLine("Watching files...");
         _fadeScriptWatcher = new FileSystemWatcher
@@ -59,10 +79,10 @@ public static class GameReloader
             IncludeSubdirectories = true,
             EnableRaisingEvents = true
         };
-        _effectWatcher = new FileSystemWatcher
+        _assetWatcher = new FileSystemWatcher
         {
-            Path = Path.Combine(projectDir, "Content"),
-            Filter = "*.fx",
+            Path = projectDir,
+            Filter = "*.*",
             NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
             IncludeSubdirectories = true,
             EnableRaisingEvents = true
@@ -73,10 +93,18 @@ public static class GameReloader
         {
             HandleUpdate();
         };
-        
-        _effectWatcher.Changed += (sender, args) =>
+
+        _assetWatcher.Created += (sender, args) =>
         {
-            HandleEffectUpdate();
+            HandleEffectUpdate(args.FullPath);
+        };
+        _assetWatcher.Renamed += (sender, args) =>
+        {
+            HandleEffectUpdate(args.FullPath);
+        };
+        _assetWatcher.Changed += (sender, args) =>
+        {
+            HandleEffectUpdate(args.FullPath);
         };
         void HandleUpdate()
         {
@@ -92,18 +120,28 @@ public static class GameReloader
             }
         }
 
-        void HandleEffectUpdate()
+        void HandleEffectUpdate(string fxPath)
         {
+            if (!_extensions.Contains(Path.GetExtension(fxPath)))
+                return;
             lock (effectLock)
             {
+                changeFiles.Add(fxPath);
                 effectTimer?.Dispose();
                 effectTimer = new Timer(_ =>
                 {
-                    Console.WriteLine($"Detected change(s) to .fx files at {DateTime.Now:HH:mm:ss.fff}");
-                    BuildEffects(csProjPath);
+                    Console.WriteLine($"Detected change(s) to asset files at {DateTime.Now:HH:mm:ss.fff}");
+                    BuildEffects2(changeFiles.ToList());
+                    changeFiles.Clear();
+                    
                 }, null, 100, Timeout.Infinite);
             }
         }
+    }
+
+    public static void BuildEffects2(List<string> paths)
+    {
+        ContentSystem.BuildSomeContent(paths);
     }
 
     public static void BuildEffects(string csProjPath)
@@ -135,6 +173,7 @@ public static class GameReloader
 
     public static void Build(string csProjPath, CommandCollection commands)
     {
+        GameSystem.ResetMacros();
         if (!FadeBasic.Sdk.Fade.TryCreateFromProject(csProjPath, commands, out var ctx, out var errs))
         {
             Console.Error.WriteLine("Build errors!");

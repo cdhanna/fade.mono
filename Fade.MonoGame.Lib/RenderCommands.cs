@@ -3,6 +3,7 @@ using Fade.MonoGame.Game;
 using FadeBasic.Lib.Standard.Util;
 using FadeBasic.SourceGenerators;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Content.Pipeline.Extra;
 using Microsoft.Xna.Framework.Graphics;
 
 namespace Fade.MonoGame.Lib;
@@ -247,7 +248,8 @@ public partial class FadeMonoGameCommands
         }
 
         output.targetTextureId = textureId;
-        runtimeTex.texture = output.target;
+        // runtimeTex.texture = output.target;
+        runtimeTex.SetComputedTexture(output.target);
         TextureSystem.textures[index] = runtimeTex;
     }
 
