@@ -1,5 +1,7 @@
+using System.Runtime.InteropServices;
 using Fade.MonoGame.Game;
 using FadeBasic.SourceGenerators;
+using Microsoft.Xna.Framework;
 
 namespace Fade.MonoGame.Lib;
 
@@ -10,11 +12,41 @@ public partial class FadeMonoGameCommands
     {
         GameSystem.graphicsDeviceManager.IsFullScreen = fullScreen;
         
-        GameSystem.graphicsDeviceManager.PreferredBackBufferWidth = GameSystem.graphicsDeviceManager.GraphicsDevice.Adapter.CurrentDisplayMode.Width;
-        GameSystem.graphicsDeviceManager.PreferredBackBufferHeight = GameSystem.graphicsDeviceManager.GraphicsDevice.Adapter.CurrentDisplayMode.Height;
+        GameSystem.graphicsDeviceManager.PreferredBackBufferWidth = DisplayWidth();
+        GameSystem.graphicsDeviceManager.PreferredBackBufferHeight = DisplayHeight();
         GameSystem.graphicsDeviceManager.ApplyChanges();
         RenderSystem.ResetRenderPositioning();
 
+    }
+
+    [FadeBasicCommand("set window title")]
+    public static void SetWindowTitle(string title)
+    {
+        GameSystem.game.Window.Title = title;
+    }
+    
+    [FadeBasicCommand("is os windows")]
+    public static int IsWindows()
+    {
+        return OperatingSystem.IsWindows() ? 1 : 0;
+    }
+    
+    [FadeBasicCommand("is os mac")]
+    public static int IsMac()
+    {
+        return OperatingSystem.IsMacOS() ? 1 : 0;
+    }
+
+    [FadeBasicCommand("display width")]
+    public static int DisplayWidth()
+    {
+        return GameSystem.graphicsDeviceManager.GraphicsDevice.Adapter.CurrentDisplayMode.Width;
+    }
+
+    [FadeBasicCommand("display height")]
+    public static int DisplayHeight()
+    {
+        return GameSystem.graphicsDeviceManager.GraphicsDevice.Adapter.CurrentDisplayMode.Height;
     }
 
     [FadeBasicCommand("screen width")]

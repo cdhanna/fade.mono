@@ -28,6 +28,7 @@ public class ContentWatcher
     {
         _manager = manager;
         _rootDirectory = _manager.GetRootDirectoryFullPath();
+        Directory.CreateDirectory(_rootDirectory);
     }
     
     public void Init()

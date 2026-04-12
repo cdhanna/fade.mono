@@ -226,24 +226,16 @@ public class Game1 : Microsoft.Xna.Framework.Game
                     _debugSession._vm.isSuspendRequested = false;
                     while (!_debugSession._vm.isSuspendRequested && _vm.instructionIndex < _vm.program.Length)
                     {
-                        // TODO: debugging is too slow :(
-                        // Console.WriteLine("START - " + gameTime.TotalGameTime.Seconds + " _ " + _debugSession._options.debugWaitForConnection);
                         _debugSession.StartDebugging();
-                        
                     }
-                    // Console.WriteLine("SYNC ???");
-
                 }
                 else
                 {
                     _vm.isSuspendRequested = false;
                     while (!_vm.isSuspendRequested && _vm.instructionIndex < _vm.program.Length)
                     {
-                        //Console.WriteLine($"instruction index: {_vm.instructionIndex}");
-
                         _vm.Execute2();
                     }
-
                 }
             }
             catch (VirtualRuntimeException ex)
