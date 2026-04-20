@@ -55,6 +55,18 @@ public partial class FadeMonoGameCommands
         value = b ? 1 : 0;
     }
     
+    [FadeBasicCommand("debug same line")]
+    public static void Debug_SameLine()
+    {
+        ImGui.SameLine();
+    }
+    
+    [FadeBasicCommand("debug textbox")]
+    public static bool Debug_TextBox(string label, ref string value, string placeholder="", int maxLength=300)
+    {
+        return ImGui.InputTextWithHint(label, placeholder, ref value, (uint)maxLength, ImGuiInputTextFlags.AutoSelectAll);
+    }
+    
     [FadeBasicCommand("debug int slider")]
     public static void Debug_Slider(string label, ref int value, int min=0, int max=100)
     {
