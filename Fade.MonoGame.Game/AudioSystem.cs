@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using Microsoft.Xna.Framework.Audio;
 
-namespace Fade.MonoGame.Game;
+namespace Fade.MonoGame.Core;
 
 
 public struct RuntimeSfxClip

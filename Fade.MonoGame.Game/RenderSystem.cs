@@ -8,7 +8,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Graphics.Fade;
 using SpriteBatch = Microsoft.Xna.Framework.Graphics.Fade.SpriteBatch;
 
-namespace Fade.MonoGame.Game;
+namespace Fade.MonoGame.Core;
 
 
 public class RenderOutput
@@ -85,6 +85,7 @@ public static class RenderSystem
     public static Color backgroundColor = Color.CornflowerBlue;
 
     public static RenderTarget2D mainBuffer;
+    public static RenderTarget2D dbgBuffer;
     public static Vector2 mainBufferPosition;
     public static float mainBufferScale;
     
@@ -107,6 +108,7 @@ public static class RenderSystem
     {
         backgroundColor = Color.CornflowerBlue;
         mainBuffer = null;
+        dbgBuffer = null;
         mainBufferPosition = default;
         mainBufferScale = default;
         screenShakeOffset = default;
@@ -240,6 +242,7 @@ public static class RenderSystem
     public static void SetMainRenderSize(int width, int height)
     {
         mainBuffer = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice, width, height);
+        dbgBuffer = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice, GameSystem.graphicsDeviceManager.PreferredBackBufferWidth, GameSystem.graphicsDeviceManager.PreferredBackBufferHeight, false, SurfaceFormat.Color, DepthFormat.None, 0, RenderTargetUsage.PreserveContents);
         ResetRenderPositioning();
     }
 

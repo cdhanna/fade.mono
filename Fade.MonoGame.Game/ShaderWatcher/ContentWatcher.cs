@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
-using Fade.MonoGame.Game;
+using Fade.MonoGame.Core;
 
 namespace Microsoft.Xna.Framework.Content.Pipeline.Extra;
 

@@ -2,7 +2,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
-namespace Fade.MonoGame.Game;
+namespace Fade.MonoGame.Core;
 
 public struct TextSprite
 {

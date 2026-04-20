@@ -1,6 +1,6 @@
 using Microsoft.Xna.Framework;
 
-namespace Fade.MonoGame.Game;
+namespace Fade.MonoGame.Core;
 
 public class GameSystem
 {

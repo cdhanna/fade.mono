@@ -4,7 +4,7 @@
 
 using System;
 using System.Text;
-using Fade.MonoGame.Game;
+using Fade.MonoGame.Core;
 
 namespace Microsoft.Xna.Framework.Graphics.Fade
 {

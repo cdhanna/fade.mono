@@ -335,6 +335,7 @@ update_frame:
     gosub frame_score
     gosub frame_passive_render
     gosub frame_move_ability_render
+    gosub frame_dbg
 
 `     for i = 0 to CELL_COUNT - 1
 `         c = CELLS(i)
@@ -361,6 +362,21 @@ update_frame:
 `     next
 `     time# += 2
     
+return
+
+dbg# = 1.0
+frame_dbg:
+    begin debug window("test")
+        if debug button("click")
+            dbg_count += 1
+        endif
+        debug label("dbg count", str$(dbg_count))
+        
+        debug int slider "y", CURRENT_SCORE
+        debug float slider "db", dbg#
+        debug toggle "MODE", INFO_MODE
+        
+    end debug window
 return
 
 frame_score:

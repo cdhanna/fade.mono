@@ -1,4 +1,4 @@
-﻿using Fade.MonoGame.Game;
+﻿using Fade.MonoGame.Core;
 using Fade.MonoGame.Lib;
 using FadeBasic;
 using FadeBasic.Launch;

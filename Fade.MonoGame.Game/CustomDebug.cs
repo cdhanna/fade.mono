@@ -5,7 +5,7 @@ using FadeBasic.Json;
 using FadeBasic.Launch;
 using FadeBasic.Virtual;
 
-namespace Fade.MonoGame.Game;
+namespace Fade.MonoGame.Core;
 
 public class CustomDebug : DebugSession
 {

@@ -4,7 +4,7 @@ using System.Reflection;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
 
-namespace Fade.MonoGame.Game;
+namespace Fade.MonoGame.Core;
 
 public static class EffectExtensions
 {

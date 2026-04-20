@@ -15,7 +15,7 @@ using SpriteBatch = Microsoft.Xna.Framework.Graphics.Fade.SpriteBatch;
 
 using Mouse = Microsoft.Xna.Framework.Input.Mouse;
 
-namespace Fade.MonoGame.Game;
+namespace Fade.MonoGame.Core;
 
 public class Game1 : Microsoft.Xna.Framework.Game
 {
@@ -25,6 +25,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private VirtualMachine _vm;
     private DebugSession _debugSession;
     private LaunchOptions _options;
+    public ImGuiRenderer _imguiRenderer;
     public ContentWatcher ContentWatcher;
 
     private Texture2D _pixel;
@@ -54,7 +55,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
         _customSpriteEffect = ContentWatcher.Watch<Effect>("FadeSpriteBatchEffect");
         _fadeEffect = new FadeSpriteEffect(_customSpriteEffect.Asset);
         _spriteBatch = new SpriteBatch(GraphicsDevice, _fadeEffect);
-
+        
+        _imguiRenderer = new ImGuiRenderer(this);
+        _imguiRenderer.RebuildFontAtlas();
     }
 
     private static DateTimeOffset _dbgTime;
@@ -210,11 +213,20 @@ public class Game1 : Microsoft.Xna.Framework.Game
         }
         
         GameSystem.latestTime = gameTime;
+        DebugUISystem.renderer = _imguiRenderer;
         if (_vm.instructionIndex >= _vm.program.Length)
         {
             Exit();
         }
 
+        
+        { // handle debug ui drawing...
+            GraphicsDevice.SetRenderTarget(RenderSystem.dbgBuffer);
+            GraphicsDevice.Clear(Color.Transparent);
+
+            DebugUISystem.StartDebug();
+        }
+        
         if (_fatal == null)
         {
 
@@ -263,6 +275,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
             }
         }
 
+
+        DebugUISystem.EndDebug();
         TransformSystem.CalculateTransforms();
 
         base.Update(gameTime);
@@ -290,7 +304,10 @@ public class Game1 : Microsoft.Xna.Framework.Game
             );
         
         _spriteBatch.Draw(RenderSystem.mainBuffer, RenderSystem.mainBufferPosition, null, Color.White, 0f, Vector2.Zero, RenderSystem.mainBufferScale, SpriteEffects.None, 0);
-
+        _spriteBatch.End();
+        
+        _spriteBatch.Begin(blendState: BlendState.NonPremultiplied);
+        _spriteBatch.Draw(RenderSystem.dbgBuffer, Vector2.Zero, Color.White);
 
         if (IsNewBuildAvailable())
         {
@@ -304,6 +321,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         }
         
         _spriteBatch.End();
+        
         
         base.Draw(gameTime);
     }

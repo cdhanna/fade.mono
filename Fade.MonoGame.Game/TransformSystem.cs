@@ -4,7 +4,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Microsoft.Xna.Framework;
 
-namespace Fade.MonoGame.Game;
+namespace Fade.MonoGame.Core;
 
 public struct Transform
 {

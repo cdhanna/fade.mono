@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace Fade.MonoGame.Game;
+namespace Fade.MonoGame.Core;
 
 public enum TweenInterpolator
 {

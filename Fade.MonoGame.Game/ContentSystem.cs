@@ -3,7 +3,7 @@ using System.Diagnostics;
 using Fade.MonoGame.Content;
 using FadeBasic.Virtual;
 
-namespace Fade.MonoGame.Game;
+namespace Fade.MonoGame.Core;
 
 
 public static class ContentSystem

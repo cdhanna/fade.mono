@@ -1,6 +1,6 @@
 using Microsoft.Xna.Framework.Input;
 
-namespace Fade.MonoGame.Game;
+namespace Fade.MonoGame.Core;
 
 public static class InputSystem
 {

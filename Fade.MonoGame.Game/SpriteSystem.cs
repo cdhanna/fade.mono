@@ -3,7 +3,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Graphics.Fade;
 
-namespace Fade.MonoGame.Game;
+namespace Fade.MonoGame.Core;
 
 public struct Sprite
 {

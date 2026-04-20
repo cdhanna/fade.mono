@@ -12,7 +12,7 @@ using FadeBasic.Launch;
 using FadeBasic.Sdk;
 using FadeBasic.Virtual;
 
-namespace Fade.MonoGame.Game;
+namespace Fade.MonoGame.Core;
 
 public static class GameReloader
 {
@@ -90,6 +90,14 @@ public static class GameReloader
         Build(csProjPath, commands);
         
         _fadeScriptWatcher.Changed += (sender, args) =>
+        {
+            HandleUpdate();
+        };
+        _fadeScriptWatcher.Created += (sender, args) =>
+        {
+            HandleUpdate();
+        };
+        _fadeScriptWatcher.Renamed += (sender, args) =>
         {
             HandleUpdate();
         };

@@ -8,7 +8,7 @@ using Microsoft.Xna.Framework.Graphics;
 using SpriteFont = Microsoft.Xna.Framework.Graphics.Fade.SpriteFont;
 using SpriteFontXna = Microsoft.Xna.Framework.Graphics.SpriteFont;
 
-namespace Fade.MonoGame.Game;
+namespace Fade.MonoGame.Core;
 
 public struct TextureDescriptor
 {
