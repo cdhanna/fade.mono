@@ -221,8 +221,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
         
         { // handle debug ui drawing...
-            GraphicsDevice.SetRenderTarget(RenderSystem.dbgBuffer);
-            GraphicsDevice.Clear(Color.Transparent);
+            // GraphicsDevice.SetRenderTarget(RenderSystem.dbgBuffer);
+            // GraphicsDevice.Clear(Color.Transparent);
 
             DebugUISystem.StartDebug();
         }
@@ -307,8 +307,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         _spriteBatch.End();
         
         _spriteBatch.Begin(blendState: BlendState.NonPremultiplied);
-        _spriteBatch.Draw(RenderSystem.dbgBuffer, Vector2.Zero, Color.White);
-
+        DebugUISystem.Render();
         if (IsNewBuildAvailable())
         {
             // a silly indicator that a new build is ready
