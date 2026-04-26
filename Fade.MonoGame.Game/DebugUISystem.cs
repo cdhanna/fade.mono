@@ -4,6 +4,8 @@ using System.IO;
 using System.Text.Json;
 using ImGuiNET;
 using Microsoft.Xna.Framework;
+using FadeBasic.Launch;
+using FadeBasic.Virtual;
 using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Graphics;
 using Vector2 = System.Numerics.Vector2;
@@ -64,6 +66,7 @@ public enum DebugControlType
 
     // composite
     INSPECTOR,
+    CONSOLE,
 
     // browsers
     BROWSER_SPRITE,
@@ -85,6 +88,7 @@ public enum DebugControlType
 public static class DebugUISystem
 {
     public static ImGuiRenderer renderer;
+    public static DebugSession debugSession; // set by Game1 so the console can call ReplExec
     public static Queue<DebugUICommand> controls = new Queue<DebugUICommand>();
     public static Dictionary<int, bool> controlIdToBool = new Dictionary<int, bool>();
     public static Dictionary<int, int> controlIdToInt = new Dictionary<int, int>();
@@ -105,6 +109,9 @@ public static class DebugUISystem
     const string STYLE_FILE = "imgui_fade_style.json";
     static bool _styleDirty;
     static bool _styleLoaded;
+
+    // auto-inspector: when enabled, sync automatically renders a debug inspector window
+    public static bool autoInspectorEnabled;
 
     public static void Push(DebugUICommand control)
     {
@@ -310,6 +317,9 @@ public static class DebugUISystem
                 // composite
                 case DebugControlType.INSPECTOR:
                     RenderInspector(ctrl);
+                    break;
+                case DebugControlType.CONSOLE:
+                    RenderConsole(ctrl);
                     break;
 
                 // browsers
@@ -1035,8 +1045,24 @@ public static class DebugUISystem
 
     static void RenderInspector(DebugUICommand ctrl)
     {
-        if (ImGui.BeginTabBar("inspector_tabs"))
+        // perf header — always visible, collapsible
+        RenderInspectorHeader();
+
+        ImGui.Separator();
+
+        // single tab bar for everything — tools first, then resource browsers
+        if (ImGui.BeginTabBar("inspector_tabs", ImGuiTabBarFlags.FittingPolicyScroll))
         {
+            if (ImGui.BeginTabItem("Console"))
+            {
+                RenderConsole(ctrl with { label = "console_tab" });
+                ImGui.EndTabItem();
+            }
+            if (ImGui.BeginTabItem("Settings"))
+            {
+                RenderMetadata(ctrl);
+                ImGui.EndTabItem();
+            }
             if (ImGui.BeginTabItem("Sprites"))
             {
                 BrowseSprites(ctrl with { label = "browse_sprites_tab" }, useTree: false);
@@ -1082,13 +1108,34 @@ public static class DebugUISystem
                 BrowseRenderOutputs(ctrl with { label = "browse_outputs_tab" }, useTree: false);
                 ImGui.EndTabItem();
             }
-            if (ImGui.BeginTabItem("Metadata"))
-            {
-                RenderMetadata(ctrl);
-                ImGui.EndTabItem();
-            }
             ImGui.EndTabBar();
         }
+    }
+
+    /// Compact perf summary line that always shows at the top of the inspector.
+    static void RenderInspectorHeader()
+    {
+        var elapsed = GameSystem.latestTime?.ElapsedGameTime.TotalSeconds ?? 0;
+        var fps = elapsed > 0 ? 1.0 / elapsed : 0;
+        var frameMs = elapsed * 1000.0;
+
+        var totalBytes = GC.GetTotalMemory(false);
+        var totalMb = (float)(totalBytes / (1024.0 * 1024.0));
+        var baselineMb = _baselineBytes > 0 ? (float)(_baselineBytes / (1024.0 * 1024.0)) : 0f;
+        var dynamicMb = _baselineBytes > 0 ? Math.Max(0, totalMb - baselineMb) : totalMb;
+
+        var drawItems = 0;
+        for (var i = 0; i < RenderSystem.outputs.Count; i++)
+            drawItems += RenderSystem.outputs[i].orderedItems.Count;
+
+        ImGui.Text($"FPS: {fps:F0} ({frameMs:F1}ms)");
+        ImGui.SameLine();
+        ImGui.TextDisabled($"| mem: {dynamicMb:F0}MB | draws: {drawItems}");
+
+        // still feed the fps history so the chart in the Settings tab is up to date
+        _fpsHistory[_fpsHistoryIdx % FPS_HISTORY] = (float)fps;
+        _fpsHistoryIdx++;
+        if (fps > 0 && fps < _fpsMin) _fpsMin = (float)fps;
     }
 
     // ── browsers ─────────────────────────────────────────────
@@ -1545,6 +1592,210 @@ public static class DebugUISystem
     static readonly float[] _memoryHistory = new float[MEMORY_HISTORY];
     static int _memoryHistoryIdx;
     static float _memoryPeakMb;
+
+    // ── console ──────────────────────────────────────────────
+
+    static string _consoleInput = "";
+    static readonly List<ConsoleEntry> _consoleLog = new List<ConsoleEntry>();
+    static readonly List<string> _consoleHistory = new List<string>();
+    static int _consoleHistoryIdx = -1;
+    static bool _consoleScrollToBottom;
+
+    struct ConsoleEntry
+    {
+        public string text;
+        public Vector4 color;
+        public DebugEvalResult result; // non-null for expandable results
+    }
+
+    static void RenderConsole(DebugUICommand ctrl)
+    {
+        // output area (scrollable)
+        var footerHeight = ImGui.GetStyle().ItemSpacing.Y + ImGui.GetFrameHeightWithSpacing();
+        if (ImGui.BeginChild("console_scroll", new Vector2(0, -footerHeight), ImGuiChildFlags.None, ImGuiWindowFlags.HorizontalScrollbar))
+        {
+            for (var i = 0; i < _consoleLog.Count; i++)
+            {
+                var entry = _consoleLog[i];
+                if (entry.result != null && entry.result.scope != null && entry.result.scope.variables.Count > 0)
+                {
+                    // expandable result — render as a tree
+                    ImGui.PushStyleColor(ImGuiCol.Text, entry.color);
+                    RenderConsoleResult(entry.result, entry.text, i);
+                    ImGui.PopStyleColor();
+                }
+                else
+                {
+                    ImGui.PushStyleColor(ImGuiCol.Text, entry.color);
+                    ImGui.TextWrapped(entry.text);
+                    ImGui.PopStyleColor();
+                }
+            }
+            if (_consoleScrollToBottom)
+            {
+                ImGui.SetScrollHereY(1f);
+                _consoleScrollToBottom = false;
+            }
+        }
+        ImGui.EndChild();
+
+        ImGui.Separator();
+
+        // input line
+        ImGui.SetNextItemWidth(-100);
+        var submitted = ImGui.InputText("##console_in", ref _consoleInput, 2048, ImGuiInputTextFlags.EnterReturnsTrue);
+        ImGui.SameLine();
+        if (ImGui.Button("Run") || submitted)
+        {
+            var input = _consoleInput.Trim();
+            if (input.Length > 0)
+            {
+                ConsoleExec(input);
+                _consoleInput = "";
+                _consoleHistoryIdx = -1;
+            }
+            ImGui.SetKeyboardFocusHere(-1);
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Clear"))
+        {
+            _consoleLog.Clear();
+        }
+
+        // up/down arrow history (checked outside the input, since callback API varies)
+        if (ImGui.IsItemFocused() || submitted)
+        {
+            if (ImGui.IsKeyPressed(ImGuiKey.UpArrow) && _consoleHistory.Count > 0)
+            {
+                if (_consoleHistoryIdx < 0) _consoleHistoryIdx = _consoleHistory.Count;
+                if (_consoleHistoryIdx > 0) _consoleHistoryIdx--;
+                _consoleInput = _consoleHistory[_consoleHistoryIdx];
+            }
+            if (ImGui.IsKeyPressed(ImGuiKey.DownArrow) && _consoleHistory.Count > 0)
+            {
+                if (_consoleHistoryIdx >= 0 && _consoleHistoryIdx < _consoleHistory.Count - 1)
+                {
+                    _consoleHistoryIdx++;
+                    _consoleInput = _consoleHistory[_consoleHistoryIdx];
+                }
+                else
+                {
+                    _consoleHistoryIdx = -1;
+                    _consoleInput = "";
+                }
+            }
+        }
+    }
+
+    static void ConsoleExec(string input)
+    {
+        // add to history
+        if (_consoleHistory.Count == 0 || _consoleHistory[_consoleHistory.Count - 1] != input)
+            _consoleHistory.Add(input);
+        _consoleHistoryIdx = -1;
+
+        // echo input
+        _consoleLog.Add(new ConsoleEntry { text = "> " + input, color = new Vector4(0.7f, 0.8f, 1f, 1f) });
+
+        if (debugSession == null)
+        {
+            _consoleLog.Add(new ConsoleEntry { text = "error: no debug session active", color = new Vector4(1f, 0.3f, 0.3f, 1f) });
+            _consoleScrollToBottom = true;
+            return;
+        }
+
+        try
+        {
+            var result = debugSession.ReplExec(0, input);
+            if (result.id < 0)
+            {
+                _consoleLog.Add(new ConsoleEntry { text = result.value, color = new Vector4(1f, 0.4f, 0.4f, 1f) });
+            }
+            else if (result.scope != null && result.scope.variables.Count > 0)
+            {
+                // complex type — store the full result for tree rendering
+                var typeHint = string.IsNullOrEmpty(result.type) ? "" : " (" + result.type + ")";
+                var label = (string.IsNullOrEmpty(result.value) ? result.type : result.value + typeHint);
+                _consoleLog.Add(new ConsoleEntry
+                {
+                    text = label,
+                    color = new Vector4(0.5f, 1f, 0.5f, 1f),
+                    result = result
+                });
+            }
+            else if (!string.IsNullOrEmpty(result.value))
+            {
+                var typeHint = string.IsNullOrEmpty(result.type) ? "" : " (" + result.type + ")";
+                _consoleLog.Add(new ConsoleEntry { text = result.value + typeHint, color = new Vector4(0.5f, 1f, 0.5f, 1f) });
+            }
+            else
+            {
+                _consoleLog.Add(new ConsoleEntry { text = "OK", color = new Vector4(0.5f, 0.5f, 0.5f, 1f) });
+            }
+        }
+        catch (Exception ex)
+        {
+            _consoleLog.Add(new ConsoleEntry { text = "exception: " + ex.Message, color = new Vector4(1f, 0.3f, 0.3f, 1f) });
+        }
+
+        _consoleScrollToBottom = true;
+    }
+
+    /// Renders a DebugEvalResult as a tree node with expandable children.
+    static void RenderConsoleResult(DebugEvalResult result, string label, int uniqueIdx)
+    {
+        if (ImGui.TreeNode(label + "##res" + uniqueIdx))
+        {
+            if (result.scope != null)
+            {
+                RenderDebugScope(result.scope);
+            }
+            ImGui.TreePop();
+        }
+    }
+
+    /// Recursively renders a DebugScope's variables as tree nodes.
+    static void RenderDebugScope(DebugScope scope)
+    {
+        foreach (var v in scope.variables)
+        {
+            var hasChildren = v.fieldCount > 0 || v.elementCount > 0;
+            if (hasChildren)
+            {
+                // try to expand via the debug session
+                DebugScope childScope = null;
+                try
+                {
+                    childScope = debugSession?.variableDb?.Expand(v.id);
+                }
+                catch
+                {
+                    // expansion may fail for stale IDs
+                }
+
+                if (childScope != null && childScope.variables.Count > 0)
+                {
+                    var nodeLabel = v.name + ": " + (string.IsNullOrEmpty(v.value) ? v.type : v.value) + " (" + v.type + ")";
+                    if (ImGui.TreeNode(nodeLabel + "##v" + v.id))
+                    {
+                        RenderDebugScope(childScope);
+                        ImGui.TreePop();
+                    }
+                }
+                else
+                {
+                    ImGui.TextDisabled(v.name + ": " + v.value + " (" + v.type + ") [" + v.elementCount + " elements]");
+                }
+            }
+            else
+            {
+                var typeHint = string.IsNullOrEmpty(v.type) ? "" : " (" + v.type + ")";
+                ImGui.Text(v.name + ": " + v.value + typeHint);
+            }
+        }
+    }
+
+    // ── memory tracking ─────────────────────────────────────
 
     static long _baselineBytes = -1;
 

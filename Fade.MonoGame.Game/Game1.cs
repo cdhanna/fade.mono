@@ -101,21 +101,21 @@ public class Game1 : Microsoft.Xna.Framework.Game
         }
 
         _options = LaunchOptions.DefaultOptions;
-        if (_options.debug)
+        if (_debugSession != null)
         {
-            if (_debugSession != null)
+            _debugSession.Restart(_vm, _fadeProgram.DebugData, _fadeProgram.CommandCollection);
+        }
+        else
+        {
+            _debugSession = new DebugSession(_vm, _fadeProgram.DebugData, _fadeProgram.CommandCollection, _options,
+                "Fade.Mono");
+            if (_options.debug)
             {
-                _debugSession.Restart(_vm, _fadeProgram.DebugData, _fadeProgram.CommandCollection);
-            }
-            else
-            {
-                _debugSession = new DebugSession(_vm, _fadeProgram.DebugData, _fadeProgram.CommandCollection, _options,
-                    "Fade.Mono");
                 _debugSession.StartServer();
             }
-            
         }
-        
+        DebugUISystem.debugSession = _debugSession;
+
         StartTracking();
         GameSystem.ResetAll();
         DebugUISystem.CaptureMemoryBaseline();

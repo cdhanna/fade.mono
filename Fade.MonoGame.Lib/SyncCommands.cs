@@ -88,6 +88,26 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("sync")]
     public static void Sync([FromVm] VirtualMachine vm)
     {
+        if (DebugUISystem.autoInspectorEnabled)
+        {
+            DebugUISystem.Push(new DebugUICommand
+            {
+                vmInstructionIndex = vm.instructionIndex,
+                label = "Debug",
+                type = DebugControlType.WINDOW_START
+            });
+            DebugUISystem.Push(new DebugUICommand
+            {
+                vmInstructionIndex = vm.instructionIndex,
+                label = "auto_inspector",
+                type = DebugControlType.INSPECTOR
+            });
+            DebugUISystem.Push(new DebugUICommand
+            {
+                vmInstructionIndex = vm.instructionIndex,
+                type = DebugControlType.WINDOW_END
+            });
+        }
         vm.Suspend();
     }
     

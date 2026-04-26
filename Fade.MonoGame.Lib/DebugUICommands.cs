@@ -285,6 +285,20 @@ public partial class FadeMonoGameCommands
         return DebugUISystem.TryGetPreviousBool(command) ? 1 : 0;
     }
 
+    // ── auto inspector ───────────────────────────────────────
+
+    [FadeBasicCommand("enable debug inspector")]
+    public static void Debug_EnableInspector()
+    {
+        DebugUISystem.autoInspectorEnabled = true;
+    }
+
+    [FadeBasicCommand("disable debug inspector")]
+    public static void Debug_DisableInspector()
+    {
+        DebugUISystem.autoInspectorEnabled = false;
+    }
+
     // ── resource browsers ────────────────────────────────────
 
     [FadeBasicCommand("debug browse sprites")]
@@ -378,6 +392,16 @@ public partial class FadeMonoGameCommands
     }
 
     // ── composite ───────────────────────────────────────────
+
+    [FadeBasicCommand("debug console")]
+    public static void Debug_Console([FromVm] VirtualMachine vm)
+    {
+        DebugUISystem.Push(new DebugUICommand
+        {
+            label = "console", type = DebugControlType.CONSOLE,
+            vmInstructionIndex = vm.instructionIndex,
+        });
+    }
 
     [FadeBasicCommand("debug inspector")]
     public static void Debug_Inspector([FromVm] VirtualMachine vm)
