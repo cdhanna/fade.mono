@@ -26,6 +26,7 @@ public static class GameReloader
     public static ILaunchable LatestBuild { get; private set; }
     public static FadeRuntimeContext LatestRuntime { get; private set; }
     public static VirtualMachine LatestMachine { get; private set; }
+    public static DateTimeOffset LastBuildTime { get; private set; }
     // public static Action<ILaunchable> OnBuild = _ => { };
 
     public static string GetRoot()
@@ -191,6 +192,7 @@ public static class GameReloader
 
         LatestRuntime = ctx;
         LatestBuild = ctx;
+        LastBuildTime = DateTimeOffset.Now;
       //  LatestMachine = ctx.Machine;
         // OnBuild?.Invoke(ctx);
     }

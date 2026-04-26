@@ -118,6 +118,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         
         StartTracking();
         GameSystem.ResetAll();
+        DebugUISystem.CaptureMemoryBaseline();
         PrintTracking("Reset All Systems");
 
         ContentSystem.BuildContent();
