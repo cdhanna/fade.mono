@@ -121,7 +121,8 @@ namespace Fade.MonoGame.Core
         /// </summary>
         public virtual void BeforeLayout(GameTime gameTime)
         {
-            ImGui.GetIO().DeltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
+            var seconds = (float)gameTime.ElapsedGameTime.TotalSeconds;
+            ImGui.GetIO().DeltaTime = seconds;
 
             UpdateInput();
 

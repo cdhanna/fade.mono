@@ -8,7 +8,7 @@
 #endif
 
 Texture2D SpriteTexture;
-
+float2 Example;
 sampler2D SpriteTextureSampler = sampler_state
 {
 	Texture = <SpriteTexture>;
@@ -87,7 +87,7 @@ float2 uv = texCoord;
 
     float4 tex = tex2D(SpriteTextureSampler, uv + p);
     float4 finalColor = float4(.45, 0.4, .8, 1.0) * result * 0.08 + tex;
-
+   // finalColor.rg *= Example.rg;
     return finalColor;
 }
 

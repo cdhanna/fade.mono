@@ -1,9 +1,12 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
-
+using ImGuiNET;
 using FadeBasic.Launch;
 using FadeBasic.Sdk;
+using FadeBasic.Testing;
 using FadeBasic.Virtual;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content.Pipeline.Extra;
@@ -19,10 +22,54 @@ namespace Fade.MonoGame.Core;
 
 public class Game1 : Microsoft.Xna.Framework.Game
 {
+    public ConcurrentQueue<QueuedTest> queuedTests = new ConcurrentQueue<QueuedTest>();
+    public QueuedTest currentTest = null;
+    // Set by MonoGameTestHost.AfterAllTestsAsync once MTP has dispatched every
+    // test. Until then, an empty queue means "MTP hasn't enqueued the next one
+    // yet" — not "we're done" — so the testMode branch must idle, not Quit.
+    public volatile bool allTestsDone = false;
+
+    public class QueuedTest
+    {
+        public FadeTestRunContext ctx;
+        public CancellationToken ct;
+        public FadeTestResult result;
+        public TaskCompletionSource source;
+    }
+    public async Task<FadeTestResult> QueueTest(FadeTestRunContext ctx, CancellationToken ct)
+    {
+        // return new FadeTestResult
+        // {
+        //     passed = true
+        // };
+        // add the data
+        FileLog.WriteLine("Queue Test " + ctx.Entry.name);
+        var q = new QueuedTest
+        {
+            ctx = ctx,
+            ct = ct,
+            result = new FadeTestResult
+            {
+                testName = ctx.Entry.name
+            },
+            // RunContinuationsAsynchronously: SetResult() is called from the
+            // game's Update tick (main thread). With the default TCS options,
+            // MTP's continuation would run inline on main, processing the
+            // result and looping into the next test's RunTestAsync — all while
+            // hijacking the thread that needs to be free to run the next
+            // Update. This flag posts continuations to the ThreadPool, so the
+            // game thread returns immediately after SetResult.
+            source = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
+        };
+        queuedTests.Enqueue(q);
+        await q.source.Task;
+        return q.result;
+    }
+    
     private ILaunchable _fadeProgram;
     private GraphicsDeviceManager _graphics;
     private SpriteBatch _spriteBatch;
-    private VirtualMachine _vm;
+    public VirtualMachine _vm;
     private DebugSession _debugSession;
     private LaunchOptions _options;
     public ImGuiRenderer _imguiRenderer;
@@ -30,10 +77,12 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
     private Texture2D _pixel;
     private bool _autoAcceptNewBuilds;
+    private bool _reloadRequestedFromUi;
 
  
-    public Game1(ILaunchable fadeProgram, bool autoAcceptNewBuilds=false)
+    public Game1(ILaunchable fadeProgram, bool autoAcceptNewBuilds=false, bool testMode=false)
     {
+        _testMode = testMode;
         _autoAcceptNewBuilds = autoAcceptNewBuilds;
         _fadeProgram = fadeProgram;
 
@@ -83,7 +132,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         return GameReloader.LatestBuild != null && GameReloader.LatestBuild != _fadeProgram;
     }
     
-    public void ResetFade()
+    public void ResetFade(Action<VirtualMachine> customize=null)
     {
 
         // var x = Content.GetRootDirectoryFullPath();
@@ -99,8 +148,17 @@ public class Game1 : Microsoft.Xna.Framework.Game
                 hostMethods = HostMethodTable.FromCommandCollection(_fadeProgram.CommandCollection)
             };
         }
+        customize?.Invoke(_vm);
 
         _options = LaunchOptions.DefaultOptions;
+
+        if (!_testMode)
+        {
+            _options.debug = true;
+            _options.debugWaitForConnection = false;
+        }
+
+        //
         if (_debugSession != null)
         {
             _debugSession.Restart(_vm, _fadeProgram.DebugData, _fadeProgram.CommandCollection);
@@ -109,16 +167,22 @@ public class Game1 : Microsoft.Xna.Framework.Game
         {
             _debugSession = new DebugSession(_vm, _fadeProgram.DebugData, _fadeProgram.CommandCollection, _options,
                 "Fade.Mono");
+            // Tests run multiple programs through one debug session and rely on
+            // Restart() between them; auto-EXITED at end-of-program would drop
+            // the debugger before the next test's Restart fires.
+            _debugSession.suppressExitOnProgramEnd = _testMode;
             if (_options.debug)
             {
                 _debugSession.StartServer();
             }
         }
         DebugUISystem.debugSession = _debugSession;
+        DebugUISystem.commandCollection = _fadeProgram.CommandCollection;
+        DebugUISystem.isNewBuildAvailable = IsNewBuildAvailable;
+        DebugUISystem.requestReload = () => _reloadRequestedFromUi = true;
 
         StartTracking();
         GameSystem.ResetAll();
-        DebugUISystem.CaptureMemoryBaseline();
         PrintTracking("Reset All Systems");
 
         ContentSystem.BuildContent();
@@ -132,12 +196,19 @@ public class Game1 : Microsoft.Xna.Framework.Game
         pixelTex.SetComputedTexture(_pixel);
         TextureSystem.textures[pixelIndex] = pixelTex;
 
+        FileLog.WriteLine("Finsihed resetting...");
     }
     
 
     protected override void OnExiting(object sender, ExitingEventArgs args)
     {
         Content.Dispose();
+        // In test mode the debug session's auto-EXITED at end-of-program is
+        // suppressed (so individual tests don't drop the debugger), so emit
+        // it explicitly now that the whole test run is wrapping up.
+        // ShutdownServer below waits for outboundMessages to drain, so the
+        // client reliably receives this before the socket closes.
+        if (_testMode) _debugSession?.SendExitedMessage();
         _debugSession?.ShutdownServer();
         Console.WriteLine("Game exited...");
         base.OnExiting(sender, args);
@@ -165,6 +236,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private FadeSpriteEffect _fadeEffect;
     private VirtualRuntimeException _fatal;
     private Task<int?> _t;
+    private bool _testMode;
 
     protected override void Update(GameTime gameTime)
     {
@@ -173,9 +245,50 @@ public class Game1 : Microsoft.Xna.Framework.Game
             Exit();
         }
 
+        // TODO: need to let the current test run to completion.
+        if (_testMode)
+        {
+            if (currentTest == null)
+            {
+                if (queuedTests.TryDequeue(out var nextTest))
+                {
+                    FileLog.WriteLine("DEQUEED TEST");
+                    _justReloaded = true;
+                    _reloadRequestedFromUi = false;
+                    _fadeProgram = nextTest.ctx.Launchable;
+
+                    FileLog.WriteLine("FadeProgram: " + nextTest.ctx.Launchable.Bytecode.Length);
+                    currentTest = nextTest;
+                    ResetFade(vm =>
+                    {
+                        vm.instructionIndex = nextTest.ctx.Entry.entryPointAddress;
+                    });
+                    return;
+                }
+                if (allTestsDone)
+                {
+                    Quit();
+                    return;
+                }
+                // wait for a test to start. 
+                return;
+            }
+            else
+            {
+                // is the current test cancelled?
+                if (currentTest.ct.IsCancellationRequested)
+                {
+                    FileLog.WriteLine("TRYING TO CANCEL EARLY");
+                    currentTest.source.TrySetCanceled(currentTest.ct);
+                    currentTest = null;
+                    return;
+                }
+            }
+        }
         
    
-        if (!_justReloaded && Keyboard.GetState().IsKeyDown(Keys.F1))
+        var f1Down = Keyboard.GetState().IsKeyDown(Keys.F1);
+        if ((!_justReloaded && f1Down) || _reloadRequestedFromUi)
         {
             if (GameReloader.LatestBuild != null)
             {
@@ -183,12 +296,13 @@ public class Game1 : Microsoft.Xna.Framework.Game
             }
 
             _justReloaded = true;
+            _reloadRequestedFromUi = false;
 
             Restart();
             return;
         }
 
-        if (_justReloaded && Keyboard.GetState().IsKeyUp(Keys.F1))
+        if (_justReloaded && !f1Down)
         {
             _fatal = null;
             _justReloaded = false;
@@ -198,6 +312,14 @@ public class Game1 : Microsoft.Xna.Framework.Game
         GameSystem.currentFrameNumber++;
         var keyState = Keyboard.GetState();
         var mouseState = Mouse.GetState();
+
+        // when ImGui is capturing keyboard/mouse, feed blank state to the game's InputSystem
+        var io = ImGui.GetIO();
+        if (io.WantCaptureKeyboard)
+            keyState = default;
+        if (io.WantCaptureMouse)
+            mouseState = default;
+
         InputSystem.ApplyNewMouse(ref mouseState, ref keyState);
 
         TweenSystem.currentTime = AudioInstanceSystem.currentTime = gameTime.TotalGameTime.TotalMilliseconds;
@@ -217,7 +339,38 @@ public class Game1 : Microsoft.Xna.Framework.Game
         DebugUISystem.renderer = _imguiRenderer;
         if (_vm.instructionIndex >= _vm.program.Length)
         {
-            Exit();
+            // if we are testing, then mark the current test as complete. 
+            if (currentTest != null)
+            {
+                FileLog.WriteLine("CURRENT TEST IS NOW OVER");
+               
+                currentTest.result.passed = true; // TODO;
+
+                if (_vm.assertionFailure != null)
+                {
+                    currentTest.result.passed = false;
+                    
+                    currentTest.result.failureInstructionIndex = _vm.assertionFailure.instructionIndex;
+                    currentTest.result.failureSourceText = _vm.assertionFailure.sourceText;
+                    currentTest.result.failureMessage = "Failed Assert: " + _vm.assertionFailure.sourceText;
+                    var map = new IndexCollection(_fadeProgram.DebugData.statementTokens);
+                    if (map.TryFindClosestTokenBeforeIndex(_vm.assertionFailure.instructionIndex, out var token))
+                    {
+                        var local = GameReloader.LatestRuntime.SourceMap.GetOriginalLocation(token.token);
+                        currentTest.result.failureMessage += Environment.NewLine + "\t" +
+                                                             $"source location: {local.fileName} - {local.startLine}:{local.startChar}";
+                    }
+
+                }
+                
+                currentTest.source.SetResult();
+                currentTest = null;
+                return; // loop around
+            }
+            else
+            {
+                Quit();
+            }
         }
 
         
@@ -280,6 +433,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         DebugUISystem.EndDebug();
         TransformSystem.CalculateTransforms();
 
+        
         base.Update(gameTime);
     }
 
@@ -328,6 +482,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
     public void Quit()
     {
+                    FileLog.WriteLine("TRYING TO QUIT");
+        
         Exit();
     }
 

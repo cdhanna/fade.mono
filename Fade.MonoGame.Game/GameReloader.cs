@@ -63,6 +63,7 @@ public static class GameReloader
         ".fxh",
         ".png"
     };
+    
 
     public static void WatchFiles(string csProjPath, CommandCollection commands)
     {

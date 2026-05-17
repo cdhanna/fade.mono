@@ -112,29 +112,4 @@ public partial class FadeMonoGameCommands
         return GameSystem.latestTime.TotalGameTime.TotalMilliseconds;
     }
     
-    
-    /// <summary>
-    /// <para>Prints a single integer to the console.</para>
-    /// <para>This is a bare-bones debug helper. Use <see cref="Print">print</see> if you need to output arbitrary types.</para>
-    /// </summary>
-    /// <remarks>
-    /// Exists mainly for quick sanity checks during development. If you find yourself reaching
-    /// for this a lot, <see cref="Print">print</see> is more flexible since it accepts any type
-    /// and any number of values.
-    /// </remarks>
-    /// <example>
-    /// Quick check that a calculation is correct:
-    /// <code>
-    /// ` verify a value during development
-    /// health = 100 - 25
-    /// test health
-    /// </code>
-    /// </example>
-    /// <param name="x">The integer value to print.</param>
-    /// <seealso cref="Print">print</seealso>
-    [FadeBasicCommand("test")]
-    public static void Test(int x)
-    {
-        Console.WriteLine(x);
-    }
 }

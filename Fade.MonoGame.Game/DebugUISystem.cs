@@ -1,10 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using ImGuiNET;
 using Microsoft.Xna.Framework;
+using FadeBasic;
+using FadeBasic.Ast;
 using FadeBasic.Launch;
+using FadeBasic.Lsp;
+using FadeBasic.Sdk;
 using FadeBasic.Virtual;
 using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Graphics;
@@ -89,6 +95,7 @@ public static class DebugUISystem
 {
     public static ImGuiRenderer renderer;
     public static DebugSession debugSession; // set by Game1 so the console can call ReplExec
+    public static CommandCollection commandCollection; // set by Game1 for console completions
     public static Queue<DebugUICommand> controls = new Queue<DebugUICommand>();
     public static Dictionary<int, bool> controlIdToBool = new Dictionary<int, bool>();
     public static Dictionary<int, int> controlIdToInt = new Dictionary<int, int>();
@@ -112,6 +119,10 @@ public static class DebugUISystem
 
     // auto-inspector: when enabled, sync automatically renders a debug inspector window
     public static bool autoInspectorEnabled;
+
+    // wired by Game1 so the inspector can show reload state and trigger F1 reloads from a button
+    public static Func<bool> isNewBuildAvailable;
+    public static Action requestReload;
 
     public static void Push(DebugUICommand control)
     {
@@ -185,6 +196,8 @@ public static class DebugUISystem
             _styleLoaded = true;
             LoadStyle();
         }
+
+        if (GameSystem.latestTime == null) return;
 
         renderer.BeforeLayout(GameSystem.latestTime);
 
@@ -839,16 +852,18 @@ public static class DebugUISystem
             var elapsed = GameSystem.latestTime?.ElapsedGameTime.TotalSeconds ?? 0;
             var fps = elapsed > 0 ? 1.0 / elapsed : 0;
             var frameMs = elapsed * 1000.0;
+            var gameTimeSec = GameSystem.latestTime?.TotalGameTime.TotalSeconds ?? 0;
 
-            // fps + frame time + min on one line
-            if (fps > 0 && fps < _fpsMin) _fpsMin = (float)fps;
+            RecordFpsSample(gameTimeSec, (float)fps);
+
+            var min60 = GetFpsMinOverSeconds(gameTimeSec, 60);
+            var avg10m = GetFpsAvgOverSeconds(gameTimeSec, 600);
+
             ImGui.Text($"FPS: {fps:F1}");
             ImGui.SameLine();
-            ImGui.TextDisabled($"({frameMs:F1} ms)  min: {_fpsMin:F0}");
+            ImGui.TextDisabled($"({frameMs:F1} ms)  min60s: {min60:F0}  avg10m: {avg10m:F0}");
 
             // fps history chart
-            _fpsHistory[_fpsHistoryIdx % FPS_HISTORY] = (float)fps;
-            _fpsHistoryIdx++;
             ImGui.PlotLines("##fps", ref _fpsHistory[0], FPS_HISTORY, _fpsHistoryIdx % FPS_HISTORY,
                 null, 0, 120f, new Vector2(-1, 32));
 
@@ -872,16 +887,10 @@ public static class DebugUISystem
         // ── game info ───────────────────────────────────────
         ImGui.TextDisabled("game time: " + (GameSystem.latestTime?.TotalGameTime.TotalSeconds ?? 0).ToString("F1") + "s");
 
-        var runtime = GameReloader.LatestRuntime;
-        if (runtime != null)
-        {
-            var ago = DateTimeOffset.Now - GameReloader.LastBuildTime;
-            ImGui.TextDisabled("last script load: " + FormatTimeAgo(ago));
-        }
-        else
-        {
-            ImGui.TextDisabled("script: not loaded");
-        }
+        ImGui.Separator();
+
+        // ── debugger ────────────────────────────────────────
+        RenderDebuggerSection();
 
         ImGui.Separator();
 
@@ -1036,6 +1045,110 @@ public static class DebugUISystem
         }
     }
 
+    static void RenderDebuggerSection()
+    {
+        if (!ImGui.TreeNodeEx("Debugger", ImGuiTreeNodeFlags.DefaultOpen))
+            return;
+
+        // colors used for status pills
+        var ok = new Vector4(0.45f, 0.85f, 0.45f, 1f);
+        var warn = new Vector4(0.95f, 0.75f, 0.30f, 1f);
+        var dim = new Vector4(0.65f, 0.65f, 0.65f, 1f);
+
+        // build configuration
+#if DEBUG
+        ImGui.Text("build:");
+        ImGui.SameLine();
+        ImGui.TextColored(warn, "DEBUG");
+#else
+        ImGui.Text("build:");
+        ImGui.SameLine();
+        ImGui.TextColored(dim, "RELEASE");
+#endif
+
+        // fade debug session info
+        var sess = debugSession;
+        if (sess != null)
+        {
+            var opts = sess._options;
+            var debugOn = opts != null && opts.debug;
+            ImGui.Text("fade debug mode:");
+            ImGui.SameLine();
+            ImGui.TextColored(debugOn ? ok : dim, debugOn ? "enabled" : "disabled");
+
+            ImGui.Text("fade debugger:");
+            ImGui.SameLine();
+            ImGui.TextColored(sess.IsClientConnected ? ok : dim, sess.IsClientConnected ? "attached" : "not attached");
+
+            if (opts != null)
+            {
+                ImGui.TextDisabled("debug server port: " + opts.debugPort);
+                ImGui.TextDisabled("wait for connection: " + (opts.debugWaitForConnection ? "yes" : "no"));
+                if (!string.IsNullOrEmpty(opts.debugLogPath))
+                    ImGui.TextDisabled("log: " + opts.debugLogPath);
+            }
+
+            ImGui.Text("vm:");
+            ImGui.SameLine();
+            ImGui.TextColored(sess.IsPaused ? warn : ok, sess.IsPaused ? "paused" : "running");
+            ImGui.SameLine();
+            ImGui.TextDisabled("ip=" + sess.InstructionPointer);
+        }
+        else
+        {
+            ImGui.TextDisabled("fade debug session: none");
+        }
+
+        // .NET debugger attached (IDE/managed debugger) — secondary, shown after the fade debugger
+        var managedAttached = Debugger.IsAttached;
+        ImGui.Text(".net debugger:");
+        ImGui.SameLine();
+        ImGui.TextColored(managedAttached ? ok : dim, managedAttached ? "attached" : "not attached");
+
+        // process info — useful when attaching an external debugger
+        try
+        {
+            var proc = Process.GetCurrentProcess();
+            ImGui.TextDisabled("process: " + proc.ProcessName + " (pid " + proc.Id + ")");
+        }
+        catch { /* permissions can refuse this in odd environments */ }
+
+        ImGui.Separator();
+
+        // ── script reload ───────────────────────────────────
+        var runtime = GameReloader.LatestRuntime;
+        if (runtime != null)
+        {
+            var ago = DateTimeOffset.Now - GameReloader.LastBuildTime;
+            ImGui.TextDisabled("last script load: " + FormatTimeAgo(ago));
+        }
+        else
+        {
+            ImGui.TextDisabled("script: not loaded");
+        }
+
+        var newBuild = isNewBuildAvailable != null && isNewBuildAvailable();
+        if (newBuild)
+        {
+            ImGui.TextColored(ok, "new build ready");
+        }
+        else
+        {
+            ImGui.TextDisabled("no pending build");
+        }
+
+        // disable the button if there is nothing to reload or no handler wired
+        var canReload = newBuild && requestReload != null;
+        if (!canReload) ImGui.BeginDisabled();
+        if (ImGui.Button("Reload now (F1)"))
+        {
+            requestReload?.Invoke();
+        }
+        if (!canReload) ImGui.EndDisabled();
+
+        ImGui.TreePop();
+    }
+
     static string FormatTimeAgo(TimeSpan ago)
     {
         if (ago.TotalSeconds < 60) return $"{ago.TotalSeconds:F0}s ago";
@@ -1118,6 +1231,12 @@ public static class DebugUISystem
         var elapsed = GameSystem.latestTime?.ElapsedGameTime.TotalSeconds ?? 0;
         var fps = elapsed > 0 ? 1.0 / elapsed : 0;
         var frameMs = elapsed * 1000.0;
+        var gameTimeSec = GameSystem.latestTime?.TotalGameTime.TotalSeconds ?? 0;
+
+        RecordFpsSample(gameTimeSec, (float)fps);
+
+        var min60 = GetFpsMinOverSeconds(gameTimeSec, 60);
+        var avg10m = GetFpsAvgOverSeconds(gameTimeSec, 600);
 
         var totalBytes = GC.GetTotalMemory(false);
         var totalMb = (float)(totalBytes / (1024.0 * 1024.0));
@@ -1130,12 +1249,7 @@ public static class DebugUISystem
 
         ImGui.Text($"FPS: {fps:F0} ({frameMs:F1}ms)");
         ImGui.SameLine();
-        ImGui.TextDisabled($"| mem: {dynamicMb:F0}MB | draws: {drawItems}");
-
-        // still feed the fps history so the chart in the Settings tab is up to date
-        _fpsHistory[_fpsHistoryIdx % FPS_HISTORY] = (float)fps;
-        _fpsHistoryIdx++;
-        if (fps > 0 && fps < _fpsMin) _fpsMin = (float)fps;
+        ImGui.TextDisabled($"| min60s: {min60:F0} | avg10m: {avg10m:F0} | mem: {dynamicMb:F0}MB | draws: {drawItems}");
     }
 
     // ── browsers ─────────────────────────────────────────────
@@ -1583,10 +1697,62 @@ public static class DebugUISystem
 
     // ── perf tracking ───────────────────────────────────────
 
+    // chart history (short ring buffer for the plot line)
     const int FPS_HISTORY = 120;
     static readonly float[] _fpsHistory = new float[FPS_HISTORY];
     static int _fpsHistoryIdx;
-    static float _fpsMin = float.MaxValue;
+
+    // rolling stats: store (time, fps) pairs for the last 10 minutes
+    const int FPS_STATS_MAX = 36000; // ~10 min at 60fps
+    static readonly float[] _fpsStatsValues = new float[FPS_STATS_MAX];
+    static readonly double[] _fpsStatsTimes = new double[FPS_STATS_MAX];
+    static int _fpsStatsCount;
+    static int _fpsStatsHead;
+
+    static void RecordFpsSample(double gameTimeSec, float fps)
+    {
+        // write into chart ring buffer
+        _fpsHistory[_fpsHistoryIdx % FPS_HISTORY] = fps;
+        _fpsHistoryIdx++;
+
+        // write into stats ring buffer
+        var idx = _fpsStatsHead % FPS_STATS_MAX;
+        _fpsStatsValues[idx] = fps;
+        _fpsStatsTimes[idx] = gameTimeSec;
+        _fpsStatsHead++;
+        if (_fpsStatsCount < FPS_STATS_MAX) _fpsStatsCount++;
+    }
+
+    static float GetFpsMinOverSeconds(double gameTimeSec, double windowSec)
+    {
+        var min = float.MaxValue;
+        var cutoff = gameTimeSec - windowSec;
+        var start = _fpsStatsHead - _fpsStatsCount;
+        for (var i = _fpsStatsHead - 1; i >= start; i--)
+        {
+            var idx = ((i % FPS_STATS_MAX) + FPS_STATS_MAX) % FPS_STATS_MAX;
+            if (_fpsStatsTimes[idx] < cutoff) break;
+            var v = _fpsStatsValues[idx];
+            if (v > 0 && v < min) min = v;
+        }
+        return min == float.MaxValue ? 0 : min;
+    }
+
+    static float GetFpsAvgOverSeconds(double gameTimeSec, double windowSec)
+    {
+        var sum = 0.0;
+        var count = 0;
+        var cutoff = gameTimeSec - windowSec;
+        var start = _fpsStatsHead - _fpsStatsCount;
+        for (var i = _fpsStatsHead - 1; i >= start; i--)
+        {
+            var idx = ((i % FPS_STATS_MAX) + FPS_STATS_MAX) % FPS_STATS_MAX;
+            if (_fpsStatsTimes[idx] < cutoff) break;
+            sum += _fpsStatsValues[idx];
+            count++;
+        }
+        return count > 0 ? (float)(sum / count) : 0;
+    }
 
     const int MEMORY_HISTORY = 120;
     static readonly float[] _memoryHistory = new float[MEMORY_HISTORY];
@@ -1600,6 +1766,10 @@ public static class DebugUISystem
     static readonly List<string> _consoleHistory = new List<string>();
     static int _consoleHistoryIdx = -1;
     static bool _consoleScrollToBottom;
+    static List<string> _commandNames;
+    static int _completionIdx = -1;
+    static bool _consoleRefocus;
+    static string _completionError;
 
     struct ConsoleEntry
     {
@@ -1642,8 +1812,30 @@ public static class DebugUISystem
         ImGui.Separator();
 
         // input line
+        // input line
+        if (_consoleRefocus)
+        {
+            ImGui.SetKeyboardFocusHere();
+            _consoleRefocus = false;
+        }
         ImGui.SetNextItemWidth(-100);
         var submitted = ImGui.InputText("##console_in", ref _consoleInput, 2048, ImGuiInputTextFlags.EnterReturnsTrue);
+        var inputRectMin = ImGui.GetItemRectMin();
+        var inputRectMax = ImGui.GetItemRectMax();
+
+        // if Enter was pressed and a completion is highlighted, accept it instead of submitting
+        if (submitted && _completionIdx >= 0)
+        {
+            var pendingCompletions = _consoleInput.Length > 0 ? GetCompletionMatches(_consoleInput) : _emptyCompletions;
+            if (_completionIdx < pendingCompletions.Count)
+            {
+                _consoleInput = pendingCompletions[_completionIdx].insertText + " ";
+                _completionIdx = -1;
+                _consoleRefocus = true;
+                submitted = false; // don't submit, just accept the completion
+            }
+        }
+
         ImGui.SameLine();
         if (ImGui.Button("Run") || submitted)
         {
@@ -1653,8 +1845,8 @@ public static class DebugUISystem
                 ConsoleExec(input);
                 _consoleInput = "";
                 _consoleHistoryIdx = -1;
+                _completionIdx = -1;
             }
-            ImGui.SetKeyboardFocusHere(-1);
         }
         ImGui.SameLine();
         if (ImGui.Button("Clear"))
@@ -1662,16 +1854,18 @@ public static class DebugUISystem
             _consoleLog.Clear();
         }
 
-        // up/down arrow history (checked outside the input, since callback API varies)
-        if (ImGui.IsItemFocused() || submitted)
+        // history: simple buttons
+        if (_consoleHistory.Count > 0)
         {
-            if (ImGui.IsKeyPressed(ImGuiKey.UpArrow) && _consoleHistory.Count > 0)
+            ImGui.SameLine();
+            if (ImGui.ArrowButton("##hist_up", ImGuiDir.Up))
             {
                 if (_consoleHistoryIdx < 0) _consoleHistoryIdx = _consoleHistory.Count;
                 if (_consoleHistoryIdx > 0) _consoleHistoryIdx--;
                 _consoleInput = _consoleHistory[_consoleHistoryIdx];
             }
-            if (ImGui.IsKeyPressed(ImGuiKey.DownArrow) && _consoleHistory.Count > 0)
+            ImGui.SameLine();
+            if (ImGui.ArrowButton("##hist_down", ImGuiDir.Down))
             {
                 if (_consoleHistoryIdx >= 0 && _consoleHistoryIdx < _consoleHistory.Count - 1)
                 {
@@ -1685,6 +1879,343 @@ public static class DebugUISystem
                 }
             }
         }
+
+        // completions
+        var completions = _consoleInput.Length > 0 ? GetCompletionMatches(_consoleInput) : _emptyCompletions;
+        if (_completionIdx >= completions.Count) _completionIdx = completions.Count - 1;
+        if (completions.Count == 0) _completionIdx = -1;
+
+        // up/down navigate completions via ImGui key detection
+        if (completions.Count > 0)
+        {
+            if (ImGui.IsKeyPressed(ImGuiKey.DownArrow))
+                _completionIdx = (_completionIdx + 1) % completions.Count;
+            if (ImGui.IsKeyPressed(ImGuiKey.UpArrow))
+                _completionIdx = _completionIdx <= 0 ? completions.Count - 1 : _completionIdx - 1;
+
+        }
+
+        // popup
+        if (completions.Count > 0)
+        {
+            var popupPos = new Vector2(inputRectMin.X, inputRectMax.Y + 2);
+            ImGui.SetNextWindowPos(popupPos, ImGuiCond.Always);
+            ImGui.SetNextWindowBgAlpha(0.95f);
+            ImGui.SetNextWindowSizeConstraints(new Vector2(300, 0), new Vector2(500, 250));
+
+            const ImGuiWindowFlags popupFlags =
+                ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoMove |
+                ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoSavedSettings |
+                ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoFocusOnAppearing |
+                ImGuiWindowFlags.NoNav;
+
+            ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(6, 4));
+            ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(4, 1));
+            if (ImGui.Begin("##completions_popup", popupFlags))
+            {
+                for (var i = 0; i < completions.Count; i++)
+                {
+                    var c = completions[i];
+                    var isSelected = i == _completionIdx;
+
+                    if (isSelected)
+                    {
+                        var cursorPos = ImGui.GetCursorScreenPos();
+                        var lineHeight = ImGui.GetTextLineHeightWithSpacing();
+                        ImGui.GetWindowDrawList().AddRectFilled(
+                            cursorPos,
+                            new Vector2(cursorPos.X + ImGui.GetContentRegionAvail().X, cursorPos.Y + lineHeight),
+                            ImGui.GetColorU32(new Vector4(0.3f, 0.4f, 0.6f, 0.6f)));
+                    }
+
+                    ImGui.PushStyleColor(ImGuiCol.Text, KindColor(c.kind));
+                    ImGui.TextUnformatted(c.kindLabel);
+                    ImGui.PopStyleColor();
+                    ImGui.SameLine();
+                    if (ImGui.Selectable(c.label + "##c" + i, isSelected))
+                    {
+                        _consoleInput = c.insertText + " ";
+                        _completionIdx = -1;
+                        _consoleRefocus = true;
+                    }
+                }
+            }
+            ImGui.End();
+            ImGui.PopStyleVar(2);
+        }
+    }
+
+    struct CompletionEntry
+    {
+        public string label;
+        public string insertText;
+        public string kindLabel;
+        public PortableCompletionKind kind;
+    }
+
+    static readonly List<CompletionEntry> _completionResults = new List<CompletionEntry>();
+    static readonly List<CompletionEntry> _emptyCompletions = new List<CompletionEntry>();
+
+    static Vector4 KindColor(PortableCompletionKind kind)
+    {
+        return kind switch
+        {
+            PortableCompletionKind.Variable => new Vector4(0.8f, 1f, 0.6f, 1f),
+            PortableCompletionKind.Function => new Vector4(1f, 0.85f, 0.5f, 1f),
+            PortableCompletionKind.Interface => new Vector4(0.6f, 0.8f, 1f, 1f), // commands
+            PortableCompletionKind.Keyword => new Vector4(0.85f, 0.6f, 0.85f, 1f),
+            PortableCompletionKind.Field => new Vector4(0.6f, 1f, 0.9f, 1f),
+            PortableCompletionKind.Class => new Vector4(0.5f, 0.9f, 1f, 1f),
+            PortableCompletionKind.Constant => new Vector4(1f, 0.7f, 0.5f, 1f),
+            _ => new Vector4(0.7f, 0.7f, 0.7f, 1f),
+        };
+    }
+
+    static string KindLabel(PortableCompletionKind kind)
+    {
+        return kind switch
+        {
+            PortableCompletionKind.Variable => "var",
+            PortableCompletionKind.Function => "func",
+            PortableCompletionKind.Interface => "cmd",
+            PortableCompletionKind.Keyword => "key",
+            PortableCompletionKind.Field => "field",
+            PortableCompletionKind.Class => "type",
+            PortableCompletionKind.Constant => "const",
+            PortableCompletionKind.Reference => "label",
+            _ => "",
+        };
+    }
+
+    static List<CompletionEntry> GetCompletionMatches(string input)
+    {
+        _completionResults.Clear();
+
+        var runtime = GameReloader.LatestRuntime;
+        var commands = commandCollection;
+        if (runtime == null || commands == null) return _completionResults;
+        var mainProgram = runtime.Program;
+        if (mainProgram == null) return _completionResults;
+
+        try
+        {
+            // count lines in the main program so we can offset the console input
+            // past all existing symbols (GetSymbolCompletions filters by position)
+            var fullSource = runtime.SourceMap.fullSource;
+            var programLineCount = 0;
+            for (var ci = 0; ci < fullSource.Length; ci++)
+                if (fullSource[ci] == '\n') programLineCount++;
+            var offsetLine = programLineCount + 10;
+
+            // prepend newlines so the console input's tokens are at a line number
+            // past the main program — this makes both the Group walk and symbol
+            // position filtering work correctly
+            var padding = new string('\n', offsetLine);
+            var paddedInput = padding + input;
+
+            // lex the padded input (cheap — just newlines + one line of real code)
+            var lexer = new Lexer();
+            var lexResults = lexer.TokenizeWithErrors(paddedInput, commands);
+
+            // cursor position is on the offset line, at the end of the input
+            var cursorLine = offsetLine;
+            var cursorChar = input.Length;
+
+            // find the left token — same scan as CompletionHandler2
+            Token leftToken = null;
+            for (var i = lexResults.allTokens.Count - 1; i >= 0; i--)
+            {
+                var t = lexResults.allTokens[i];
+                if (t.lineNumber < cursorLine)
+                {
+                    leftToken = t;
+                    break;
+                }
+                if (t.lineNumber == cursorLine && t.charNumber <= cursorChar)
+                {
+                    leftToken = t;
+                    break;
+                }
+            }
+            if (leftToken == null)
+                return _completionResults;
+
+            // parse the padded input to get AST with correct token positions
+            ProgramNode consoleProgram = null;
+            if (lexResults.stream != null)
+            {
+                var parser = new Parser(lexResults.stream, commands);
+                consoleProgram = parser.ParseProgram(new ParseOptions { ignoreChecks = true });
+            }
+            if (consoleProgram == null)
+                return _completionResults;
+
+            // fake cursor token at the end of the console input
+            var fakeToken = new Token
+            {
+                lineNumber = cursorLine,
+                charNumber = cursorChar
+            };
+
+            // walk the console AST for the Group — same as CompletionHandler2
+            bool Visit(IAstVisitable v)
+            {
+                return v is ProgramNode
+                    || (Token.IsLocationBeforeOrEqual(v.StartToken, fakeToken)
+                        && Token.IsLocationBeforeOrEqual(fakeToken, v.EndToken));
+            }
+            var group = consoleProgram.Where(Visit);
+
+            // get scope from the main program
+            SymbolTable localScope;
+            string funcName;
+            if (mainProgram.scope.positionedVariables.entries.Count > 0)
+            {
+                var lastEntry = mainProgram.scope.positionedVariables.entries[
+                    mainProgram.scope.positionedVariables.entries.Count - 1];
+                localScope = lastEntry.value.Item1 ?? new SymbolTable();
+                funcName = lastEntry.value.Item2;
+            }
+            else
+            {
+                localScope = new SymbolTable();
+                funcName = null;
+            }
+
+            // fixup: the console parse is standalone so no types are resolved.
+            // walk all nodes and resolve variable types from the main program's symbols.
+            ResolveTypesFromMainProgram(consoleProgram, mainProgram, localScope);
+
+            // build context — console AST for Group/LeftToken, main program for scope
+            var context = new CompletionContext
+            {
+                FakeToken = fakeToken,
+                LeftToken = leftToken,
+                Program = mainProgram,
+                Commands = commands,
+                FunctionName = funcName,
+                Group = group,
+                ConstantTable = lexResults.constantTable ?? new Dictionary<string, string>(),
+                LocalScope = localScope,
+                IsMacro = false
+            };
+
+            var items = LSPUtil.GetCompletions(context);
+
+            if (items.Count == 0)
+            {
+                // statement completions (void commands + keywords)
+                items = LSPUtil.GetStatementCompletions(context, true);
+                // expression completions (all commands, functions, variables — any return type)
+                var exprItems = LSPUtil.GetExpressionCompletions(context);
+                var existing = new HashSet<string>(items.Select(x => x.Label), StringComparer.OrdinalIgnoreCase);
+                foreach (var item in exprItems)
+                {
+                    if (existing.Add(item.Label))
+                        items.Add(item);
+                }
+            }
+
+            // extract the last word for prefix filtering
+            var lower = input.ToLowerInvariant();
+            var filterStart = lower.Length;
+            for (var ci = lower.Length - 1; ci >= 0; ci--)
+            {
+                var ch = lower[ci];
+                if (ch == ' ' || ch == ',' || ch == '(' || ch == '.')
+                {
+                    filterStart = ci + 1;
+                    break;
+                }
+                if (ci == 0) filterStart = 0;
+            }
+            var filter = filterStart < lower.Length ? lower.Substring(filterStart) : "";
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in items)
+            {
+                if (!seen.Add(item.Label)) continue;
+                if (filter.Length > 0 && !item.Label.ToLowerInvariant().StartsWith(filter))
+                    continue;
+
+                var insert = item.InsertText ?? item.Label;
+                insert = insert.Replace("($0)", "").Replace("$0", "");
+
+                _completionResults.Add(new CompletionEntry
+                {
+                    label = item.Label + (string.IsNullOrEmpty(item.Detail) ? "" : "  " + item.Detail),
+                    insertText = ReplaceLastWord(input, insert),
+                    kindLabel = KindLabel(item.Kind),
+                    kind = item.Kind
+                });
+
+                if (_completionResults.Count >= 20) break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _completionError = ex.Message;
+        }
+
+        return _completionResults;
+    }
+
+    /// Replaces the last word in the input with the completion text.
+    /// Recursively walks the console AST and resolves variable types by looking them up
+    /// in the main program's symbol tables. This bridges the gap between the standalone
+    /// console parse (which has no type info) and the main program's fully-resolved scope.
+    static void ResolveTypesFromMainProgram(ProgramNode consoleProgram, ProgramNode mainProgram, SymbolTable localScope)
+    {
+        var globals = mainProgram.scope.globalVariables;
+
+        foreach (var node in consoleProgram.Where(_ => true))
+        {
+            // resolve VariableRefNode types
+            if (node is VariableRefNode vrn && ((AstNode)vrn).ParsedType.unset)
+            {
+                if (localScope.TryGetValue(vrn.variableName, out var localSym))
+                {
+                    ((AstNode)vrn).ParsedType = localSym.typeInfo;
+                    vrn.DeclaredFromSymbol = localSym;
+                }
+                else if (globals.TryGetValue(vrn.variableName, out var globalSym))
+                {
+                    ((AstNode)vrn).ParsedType = globalSym.typeInfo;
+                    vrn.DeclaredFromSymbol = globalSym;
+                }
+            }
+
+            // resolve ArrayIndexReference (function calls look like this)
+            if (node is ArrayIndexReference air && ((AstNode)air).ParsedType.unset)
+            {
+                if (localScope.TryGetValue(air.variableName, out var localSym))
+                {
+                    ((AstNode)air).ParsedType = localSym.typeInfo;
+                    air.DeclaredFromSymbol = localSym;
+                }
+                else if (globals.TryGetValue(air.variableName, out var globalSym))
+                {
+                    ((AstNode)air).ParsedType = globalSym.typeInfo;
+                    air.DeclaredFromSymbol = globalSym;
+                }
+                else if (mainProgram.scope.functionSymbolTable.TryGetValue(air.variableName, out var funcSym))
+                {
+                    ((AstNode)air).ParsedType = funcSym.typeInfo;
+                    air.DeclaredFromSymbol = funcSym;
+                }
+            }
+        }
+    }
+
+    static string ReplaceLastWord(string input, string replacement)
+    {
+        for (var i = input.Length - 1; i >= 0; i--)
+        {
+            var ch = input[i];
+            if (ch == ' ' || ch == ',' || ch == '(' || ch == '.')
+                return input.Substring(0, i + 1) + replacement;
+        }
+        return replacement;
     }
 
     static void ConsoleExec(string input)
@@ -1706,7 +2237,24 @@ public static class DebugUISystem
 
         try
         {
+            // try ReplExec first (handles statements and expressions)
             var result = debugSession.ReplExec(0, input);
+
+            // if ReplExec failed, try Eval directly (better for bare expressions/variables)
+            if (result.id < 0)
+            {
+                try
+                {
+                    var evalResult = debugSession.Eval(0, input);
+                    if (evalResult != null && evalResult.id >= 0)
+                        result = evalResult;
+                }
+                catch
+                {
+                    // Eval also failed, keep the original error
+                }
+            }
+
             if (result.id < 0)
             {
                 _consoleLog.Add(new ConsoleEntry { text = result.value, color = new Vector4(1f, 0.4f, 0.4f, 1f) });
@@ -1802,6 +2350,7 @@ public static class DebugUISystem
     /// Call once early (after static arrays are allocated but before content loads) to snapshot the baseline.
     public static void CaptureMemoryBaseline()
     {
+        if (_baselineBytes != -1) return; // only do this once. 
         GC.Collect();
         _baselineBytes = GC.GetTotalMemory(true);
     }

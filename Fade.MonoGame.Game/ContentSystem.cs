@@ -9,7 +9,7 @@ namespace Fade.MonoGame.Core;
 public static class ContentSystem
 {
 
-    public static FastStack<ContentEntry> entries = new FastStack<ContentEntry>();
+    public static FastStack<ContentEntry> entries = new FastStack<ContentEntry>(4);
     
     public static List<ContentEntry> contentEntries = new List<ContentEntry>();
 

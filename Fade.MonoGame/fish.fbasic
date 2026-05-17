@@ -7,6 +7,38 @@ if is os mac()
     SCREEN_HEIGHT = display height() * .5 - 75
 endif
 
+test sampleTest
+    waitSeconds = 2
+    gosub runforseconds
+
+    ` force a combo by setting the first 3 cells to the same value...
+    CELLS(1).value = CELLS(0).value
+    CELLS(2).value = CELLS(0).value
+    updateCell(CELLS(1))
+    updateCell(CELLS(2))
+
+    waitSeconds = 1
+    gosub runforseconds
+
+    REQUEST_COMBO_CHECK = 1
+    assert CURRENT_SCORE = 0 ` assert there is no score at the start.
+
+    waitSeconds = 2
+    gosub runforseconds
+
+    ` assert that score was awarded for the combo
+    assert CURRENT_SCORE > 0
+    
+    end `end the test
+    runForSeconds:
+        endFrame = frame number() + (60 * waitSeconds)
+        while frame number() <= endFrame
+            runto _loop
+        endwhile
+    return
+endtest
+
+
 
 set screen size SCREEN_WIDTH, SCREEN_HEIGHT
 `set fullscreen 1
@@ -77,6 +109,8 @@ p# = 0
 isAbility_Wrap()
 sync
         dbg_count = 0
+        
+enable debug inspector
 do 
 
 
@@ -90,10 +124,10 @@ do
 
     if INFO_MODE
         ` handle info mode.
-
+        
 
     else 
-        ` handle the gameplay. 
+        ` handle the gameplay.
         
         gosub handle_ability_selection
         gosub process_input
@@ -104,8 +138,8 @@ do
     gosub update_frame
 
     sync 
+    
+    _loop:
 loop
 
-
 end
-
