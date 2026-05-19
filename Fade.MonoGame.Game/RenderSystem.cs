@@ -283,6 +283,10 @@ public static class RenderSystem
 
     public static void RefreshEffects(FadeSpriteEffect fadeFx)
     {
+#if !BROWSER
+        // Live shader/effect reload — only desktop has ContentWatcher hooked up
+        // to a FileSystemWatcher. Browser ships assets pre-built and never
+        // hot-reloads them (custom shader pipeline lands in Phase 3 of mg.md).
         for (var i = 0 ; i < effects.Count; i ++)
         {
             var fx = effects[i];
@@ -290,8 +294,9 @@ public static class RenderSystem
             {
                 effects[i] = fx;
             }
-            
+
         }
+#endif
 
         foreach (var fx in effects)
         {

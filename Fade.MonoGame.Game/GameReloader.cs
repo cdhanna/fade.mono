@@ -16,12 +16,14 @@ namespace Fade.MonoGame.Core;
 
 public static class GameReloader
 {
+#if !BROWSER
     private static FileSystemWatcher _fadeScriptWatcher;
     private static FileSystemWatcher _assetWatcher;
     static Timer? debounceTimer;
     static Timer? effectTimer;
     static readonly object debounceLock = new();
     static readonly object effectLock = new();
+#endif
 
     public static ILaunchable LatestBuild { get; private set; }
     public static FadeRuntimeContext LatestRuntime { get; private set; }
@@ -40,7 +42,7 @@ public static class GameReloader
     
     public static string? GetCsprojPath([CallerFilePath] string callerFilePath = "")
     {
-#if DEBUG
+#if DEBUG && !BROWSER
         var dir = Path.GetDirectoryName(callerFilePath);
 
         while (dir != null && Directory.Exists(dir))
@@ -65,6 +67,7 @@ public static class GameReloader
     };
     
 
+#if !BROWSER
     public static void WatchFiles(string csProjPath, CommandCollection commands)
     {
         var files = FadeBasic.Sdk.Fade.GetFadeFilesFromProject(csProjPath);
@@ -191,10 +194,19 @@ public static class GameReloader
             return;
         }
 
+        SetBuild(ctx);
+    }
+#endif
+
+    // Browser path: WebRuntime.MonoGame compiles a Fade source string
+    // in-memory and hands the FadeRuntimeContext here to install it as the
+    // active build. This mirrors what Build(csProjPath, ...) does on desktop,
+    // minus the filesystem path. Available on both TFMs so callers can use
+    // the same API regardless of platform.
+    public static void SetBuild(FadeRuntimeContext ctx)
+    {
         LatestRuntime = ctx;
         LatestBuild = ctx;
         LastBuildTime = DateTimeOffset.Now;
-      //  LatestMachine = ctx.Machine;
-        // OnBuild?.Invoke(ctx);
     }
 }

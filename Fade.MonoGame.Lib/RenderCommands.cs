@@ -208,7 +208,18 @@ public partial class FadeMonoGameCommands
     public static void SetBackgroundColor(int colorCode)
     {
         ColorUtil.UnpackColor(colorCode, out var r, out var g, out var b, out var a);
-        RenderSystem.backgroundColor = new Color(r, g, b, a);
+        var color = new Color(r, g, b, a);
+        RenderSystem.backgroundColor = color;
+        // `RenderSystem.backgroundColor` alone isn't read by the render
+        // path (the only consumer in RenderSystem is commented out). The
+        // per-output clearColor is what RenderAll2 actually clears with,
+        // so route this to output id 1 — the default main output that
+        // every fresh sprite lands on. Matches what
+        // `set render target background color 1, …` would do, just with
+        // the implicit "main output" target. Without this `set background
+        // color` is a silent no-op.
+        RenderSystem.GetOutputIndex(1, out _, out var mainOutput);
+        mainOutput.clearColor = color;
     }
 
 
@@ -350,6 +361,12 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("effect")]
     public static void LoadEffect(int effectId, string effectName)
     {
+#if BROWSER
+        // Browser: custom effects ship in Phase 3 (mg.md) via dxc + spirv-cross.
+        // For now, `effect` is a no-op so user fbasic that references it
+        // compiles without breaking the build.
+        return;
+#else
         //var effect = GameSystem.game.Content.Load<Effect>(effectName);
 
         var effect = GameSystem.game.ContentWatcher.Watch<Effect>(effectName);
@@ -359,6 +376,7 @@ public partial class FadeMonoGameCommands
         runtimeEffect.filePath = effectName;
 
         RenderSystem.effects[index] = runtimeEffect;
+#endif
     }
 
     /// <summary>

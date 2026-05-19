@@ -1,3 +1,4 @@
+#if !BROWSER
 using ImGuiNET;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -28,3 +29,4 @@ namespace Fade.MonoGame.Core.Imgui
         }
     }
 }
+#endif

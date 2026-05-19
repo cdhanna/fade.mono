@@ -17,7 +17,15 @@ public struct TextSprite
 
 public static class TextSystem
 {
+#if BROWSER
+    // WASM heap is bounded; 10M-element arrays of struct types blow it
+    // past the 2GB cap before user code ever runs. Cap browser builds at
+    // 100k — still vastly more sprites than any real game needs, and
+    // expandable per-project later via a build property.
+    public const int MAX_SPRITE_TEXT_COUNT = 100_000;
+#else
     public const int MAX_SPRITE_TEXT_COUNT = 10_000_000;
+#endif
 
     public static TextSprite[] textSprites = new TextSprite[MAX_SPRITE_TEXT_COUNT];
     public static int textSpriteCount = 0;

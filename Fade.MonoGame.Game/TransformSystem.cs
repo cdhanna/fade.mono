@@ -21,7 +21,11 @@ public struct Transform
 
 public static class TransformSystem
 {
+    #if BROWSER
+    public const int MAX_TRANSFORM_COUNT = 100_000;
+#else
     public const int MAX_TRANSFORM_COUNT = 10_000_000;
+#endif
     public static Transform[] transforms = new Transform[MAX_TRANSFORM_COUNT];
     public static int transformCount = 0;
     public static int highestTransformId = 0;

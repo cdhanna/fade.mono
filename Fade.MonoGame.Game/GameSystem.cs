@@ -35,6 +35,8 @@ public class GameSystem
         TextureSystem.Reset();
         TransformSystem.Reset();
         TweenSystem.Reset();
+#if !BROWSER
         DebugUISystem.CaptureMemoryBaseline();
+#endif
     }
 }

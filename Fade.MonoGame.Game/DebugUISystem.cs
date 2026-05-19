@@ -1,3 +1,4 @@
+#if !BROWSER
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -2518,3 +2519,4 @@ public static class DebugUISystem
     }
 
 }
+#endif

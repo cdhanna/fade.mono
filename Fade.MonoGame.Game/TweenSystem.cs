@@ -37,7 +37,11 @@ public struct Tween
 public static class TweenSystem
 {
     public static double currentTime;
+    #if BROWSER
+    public const int MAX_TWEEN_COUNT = 100_000;
+#else
     public const int MAX_TWEEN_COUNT = 10_000_000;
+#endif
 
     public static Tween[] tweens = new Tween[MAX_TWEEN_COUNT];
     public static int tweenCount = 0;

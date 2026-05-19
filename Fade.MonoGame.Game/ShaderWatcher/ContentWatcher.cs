@@ -1,11 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
+#if !BROWSER
 using System.IO;
 using System.Threading;
+#endif
 using Fade.MonoGame.Core;
 
 namespace Microsoft.Xna.Framework.Content.Pipeline.Extra;
 
+// WatchedAsset<T> lives in both desktop and browser builds because Texture/Effect
+// system structs (RuntimeTexture, RuntimeEffect) carry it as a field. On
+// browser the asset is set once and the UpdatedAt never changes — no watcher.
 public struct WatchedAsset<T>
 {
     public T Asset;
@@ -13,6 +18,7 @@ public struct WatchedAsset<T>
     public string assetName;
 }
 
+#if !BROWSER
 public class ContentWatcher
 {
     private readonly ContentManager _manager;
@@ -30,7 +36,7 @@ public class ContentWatcher
         _rootDirectory = _manager.GetRootDirectoryFullPath();
         Directory.CreateDirectory(_rootDirectory);
     }
-    
+
     public void Init()
     {
         if (_fw != null) throw new InvalidOperationException("already init");
@@ -45,8 +51,8 @@ public class ContentWatcher
         };
         _fw.Changed += OnFileChanged;
         _fw.Created += OnFileCreated;
-        
-        
+
+
         _fw.EnableRaisingEvents = true;
         _fw.Error += (sender, args) =>
         {
@@ -78,7 +84,7 @@ public class ContentWatcher
     public bool TryRefreshAsset<T>(ref WatchedAsset<T> current)
     {
         var assetPath = (Path.Combine(_rootDirectory, current.assetName) + ".xnb").Replace("\\", "/");
-        
+
         lock (assetFullPathToUpdatedAt)
         {
             if (assetFullPathToUpdatedAt.TryGetValue(assetPath, out var existing))
@@ -107,7 +113,7 @@ public class ContentWatcher
         {
             var now = DateTimeOffset.Now;
             var assetPath = (Path.Combine(_rootDirectory, assetName) + ".xnb").Replace("\\", "/");
-           
+
             assetFullPathToUpdatedAt[assetPath] = now;
             var asset = _manager.Load<T>(assetName);
             return new WatchedAsset<T>
@@ -124,3 +130,4 @@ public class ContentWatcher
         return "";
     }
 }
+#endif

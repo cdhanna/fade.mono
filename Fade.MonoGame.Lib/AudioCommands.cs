@@ -239,7 +239,27 @@ public partial class FadeMonoGameCommands
     {
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
         AudioSystem.GetAudioEffectIndex(clipId, out _, out var clip);
-        sfx.instance = clip.source.CreateInstance();
+        if (clip.source == null)
+        {
+            // Reached if `load sfx clip <clipId>, "name"` previously failed
+            // (browser: ContentLoadException, unsupported format, etc.) — the
+            // catch in LoadSfxFromContent logged the cause already. Without
+            // this guard the next line would NRE; with it the user gets a
+            // clear message and the program keeps running.
+            System.Console.Error.WriteLine(
+                $"[fade] sfx: clip {clipId} has no loaded source — did `load sfx clip {clipId}` succeed?");
+            return;
+        }
+        try
+        {
+            sfx.instance = clip.source.CreateInstance();
+        }
+        catch (System.Exception ex)
+        {
+            System.Console.Error.WriteLine(
+                $"[fade] sfx: CreateInstance() threw for clip {clipId}: {ex}");
+            return;
+        }
         AudioInstanceSystem.audioEffects[index] = sfx;
     }
 
@@ -331,9 +351,27 @@ public partial class FadeMonoGameCommands
     public static void PlaySfx(int sfxId)
     {
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
-        AudioInstanceSystem.audioEffects[index].instance.Stop();
-        AudioInstanceSystem.audioEffects[index].instance.Play();
-
+        var instance = AudioInstanceSystem.audioEffects[index].instance;
+        if (instance == null)
+        {
+            // Reached if `sfx <sfxId>, <clipId>` previously failed (null clip
+            // source, CreateInstance threw, etc.). The earlier failure was
+            // already logged; a clear message here is friendlier than the
+            // VM exploding with a raw NRE the user can't trace.
+            System.Console.Error.WriteLine(
+                $"[fade] play sfx: instance {sfxId} has no playable source — did `sfx {sfxId}, …` succeed?");
+            return;
+        }
+        try
+        {
+            instance.Stop();
+            instance.Play();
+        }
+        catch (System.Exception ex)
+        {
+            System.Console.Error.WriteLine(
+                $"[fade] play sfx: instance.Play() threw for {sfxId}: {ex}");
+        }
     }
 
     /// <summary>

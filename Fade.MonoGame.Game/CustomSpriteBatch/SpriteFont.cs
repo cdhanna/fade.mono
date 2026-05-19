@@ -120,12 +120,23 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
 			var cropping = new List<Rectangle>();
 			var characters = new List<char>();
 			var kernings = new List<Vector3>();
+			// KNI's SpriteFont.Glyphs yields IEnumerable<KeyValuePair<char, Glyph>>
+			// where Value has the per-glyph properties. Upstream MonoGame yields
+			// Glyph directly.
 			foreach (var g in xnaFont.Glyphs)
 			{
-				glyphBounds.Add(g.BoundsInTexture);
-				cropping.Add(g.Cropping);
-				characters.Add(g.Character);
-				kernings.Add(new Vector3(g.LeftSideBearing, g.WidthIncludingBearings, g.RightSideBearing));
+#if BROWSER
+				// KNI's SpriteFont.Glyphs is Dictionary<char, Glyph>; the
+				// character is the KEY (Glyph itself doesn't carry it).
+				var glyph = g.Value;
+				characters.Add(g.Key);
+#else
+				var glyph = g;
+				characters.Add(glyph.Character);
+#endif
+				glyphBounds.Add(glyph.BoundsInTexture);
+				cropping.Add(glyph.Cropping);
+				kernings.Add(new Vector3(glyph.LeftSideBearing, glyph.WidthIncludingBearings, glyph.RightSideBearing));
 			}
 			
 			return new SpriteFont(xnaFont.Texture, glyphBounds, cropping, characters, xnaFont.LineSpacing,

@@ -39,12 +39,20 @@ public struct CollisionHit
 
 public static class CollisionSystem
 {
+    #if BROWSER
+    public const int MAX_AABB_COUNT = 100_000;
+#else
     public const int MAX_AABB_COUNT = 10_000_000;
+#endif
     public static ColliderBox[] aabbs = new ColliderBox[MAX_AABB_COUNT];
     private static Dictionary<int, int> _colliderMap = new Dictionary<int, int>();
     public static int AabbsCount;
 
+    #if BROWSER
+    public const int MAX_HIT_COUNT = 100_000;
+#else
     public const int MAX_HIT_COUNT = 10_000_000;
+#endif
     public static CollisionHit[] hits = new CollisionHit[MAX_HIT_COUNT];
     public static int HitCount;
 

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Microsoft.Xna.Framework.Audio;
 
 namespace Fade.MonoGame.Core;
@@ -52,7 +53,23 @@ public static class AudioSystem
     
     public static void LoadSfxFromContent(int audioId, string path)
     {
-        var clip = GameSystem.game.Content.Load<SoundEffect>(path);
+        SoundEffect clip;
+        try
+        {
+            clip = GameSystem.game.Content.Load<SoundEffect>(path);
+        }
+        catch (Exception ex)
+        {
+            // Browser: BrowserContentManager throws ContentLoadException when
+            // the page hasn't registered an XNB under this name. KNI also
+            // throws here for unsupported audio formats (e.g. ADPCM via the
+            // SoundEffectReader path on Blazor). Log the *full* exception
+            // including stack so the user can see whether this is a missing-
+            // asset issue or a format-support issue.
+            Console.Error.WriteLine($"[fade] sfx load failed: '{path}': {ex}");
+            return;
+        }
+        Console.WriteLine($"[fade] sfx loaded: '{path}' duration={clip.Duration.TotalMilliseconds:F0}ms");
         GetAudioEffectIndex(audioId, out var index, out var runtimeAudio);
 
         runtimeAudio.source = clip;

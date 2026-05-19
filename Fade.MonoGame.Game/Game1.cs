@@ -3,13 +3,17 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+#if !BROWSER
 using ImGuiNET;
+#endif
 using FadeBasic.Launch;
 using FadeBasic.Sdk;
 using FadeBasic.Testing;
 using FadeBasic.Virtual;
 using Microsoft.Xna.Framework;
+#if !BROWSER
 using Microsoft.Xna.Framework.Content.Pipeline.Extra;
+#endif
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Graphics.Fade;
 using Keyboard = Microsoft.Xna.Framework.Input.Keyboard;
@@ -70,10 +74,22 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private GraphicsDeviceManager _graphics;
     private SpriteBatch _spriteBatch;
     public VirtualMachine _vm;
+    // Public so the browser JS bridge (Pages/Index.razor.cs) can drive
+    // step/pause/breakpoint requests + drain outbound messages. Desktop
+    // uses its TCP socket and never accesses this from outside.
+    public DebugSession DebugSession => _debugSession;
     private DebugSession _debugSession;
+#if BROWSER
+    // Surfaces the BrowserDebugSession subclass for JS-bridged callers
+    // that need its extra public helpers (Enqueue/DrainOutbound/DebugDataAccess).
+    // Same instance as _debugSession — just typed more specifically.
+    public BrowserDebugSession BrowserDebugSession => (BrowserDebugSession)_debugSession;
+#endif
     private LaunchOptions _options;
+#if !BROWSER
     public ImGuiRenderer _imguiRenderer;
     public ContentWatcher ContentWatcher;
+#endif
 
     private Texture2D _pixel;
     private bool _autoAcceptNewBuilds;
@@ -86,27 +102,63 @@ public class Game1 : Microsoft.Xna.Framework.Game
         _autoAcceptNewBuilds = autoAcceptNewBuilds;
         _fadeProgram = fadeProgram;
 
-        
-        
+
+
         _graphics = new GraphicsDeviceManager(this);
         Content.RootDirectory = "Content";
+#if BROWSER
+        // Browser has no filesystem to serve XNBs from. Swap the default
+        // ContentManager for one backed by a dict the page fills via
+        // RegisterAsset() before LoadProgram. The base Game.Content setter
+        // disposes the old one for us.
+        Content = new BrowserContentManager(Services) { RootDirectory = "Content" };
+        _browserContent = (BrowserContentManager)Content;
+#endif
         IsMouseVisible = true;
     }
+
+#if BROWSER
+    // Cached strongly-typed handle to the BrowserContentManager that
+    // Content was swapped to in the ctor. JS-bridged callers
+    // (WebRuntime.MonoGame Index.razor.cs RegisterContent) reach the
+    // RegisterAsset API through this property.
+    private BrowserContentManager _browserContent;
+    public BrowserContentManager BrowserContent => _browserContent;
+
+    // Convenience for the JS bridge: register a single asset by name.
+    public void RegisterAsset(string name, byte[] bytes) =>
+        _browserContent?.RegisterAsset(name, bytes);
+#endif
 
     protected override void Initialize()
     {
         // initialize calls Load Content
         base.Initialize();
-        
+
         ResetFade();
-        
-        
+
+#if !BROWSER
+        // Desktop: live-watch the bundled FadeSpriteBatchEffect.fx so shader
+        // edits hot-reload. Browser uses KNI's built-in SpriteEffect — see
+        // the #else branch below.
         _customSpriteEffect = ContentWatcher.Watch<Effect>("FadeSpriteBatchEffect");
         _fadeEffect = new FadeSpriteEffect(_customSpriteEffect.Asset);
         _spriteBatch = new SpriteBatch(GraphicsDevice, _fadeEffect);
-        
+
         _imguiRenderer = new ImGuiRenderer(this);
         _imguiRenderer.RebuildFontAtlas();
+#else
+        // Browser: KNI ships its own default sprite shader (`SpriteEffect`)
+        // for stock SpriteBatch. We re-use that bytecode by wrapping it in
+        // FadeSpriteEffect, which only needs an Effect with a
+        // "MatrixTransform" parameter — which SpriteEffect has. FadeSpriteBatch
+        // can then render normally with the default vertex transform +
+        // texture sample, just no Fade per-sprite custom-effect features
+        // until Phase 3 lands the dxc + spirv-cross shader pipeline.
+        var defaultSpriteEffect = new SpriteEffect(GraphicsDevice);
+        var fadeEffect = new FadeSpriteEffect(defaultSpriteEffect);
+        _spriteBatch = new SpriteBatch(GraphicsDevice, fadeEffect);
+#endif
     }
 
     private static DateTimeOffset _dbgTime;
@@ -125,6 +177,20 @@ public class Game1 : Microsoft.Xna.Framework.Game
         // LoadContent();
         ResetFade();
 
+    }
+
+    // Public entry point for swapping in a newly-compiled Fade program at
+    // runtime (browser hot-reload, desktop test runner). Sets the new
+    // ILaunchable and flags a reload — the Update loop picks it up on the
+    // next tick, mirroring how F1 reload + `requestReload` flow today.
+    public void LoadProgram(ILaunchable program)
+    {
+        _fadeProgram = program;
+        if (program is FadeRuntimeContext ctx)
+        {
+            GameReloader.SetBuild(ctx);
+        }
+        _reloadRequestedFromUi = true;
     }
 
     bool IsNewBuildAvailable()
@@ -150,6 +216,14 @@ public class Game1 : Microsoft.Xna.Framework.Game
         }
         customize?.Invoke(_vm);
 
+        // LaunchOptions had a static initializer that allocated a TCP port
+        // for DAP — System.Net.Sockets is unavailable in WASM, so touching
+        // LaunchOptions crashed the type permanently in browser. The local
+        // FadeBasic source (ProjectReferenced from this csproj's browser
+        // TFM) wraps the allocation in try/catch, so DefaultOptions stays
+        // usable in WASM. We still skip StartServer in browser — there's
+        // no socket; the JS-bridged DebugBridge wraps StartDebugging
+        // directly instead.
         _options = LaunchOptions.DefaultOptions;
 
         if (!_testMode)
@@ -158,28 +232,49 @@ public class Game1 : Microsoft.Xna.Framework.Game
             _options.debugWaitForConnection = false;
         }
 
-        //
         if (_debugSession != null)
         {
             _debugSession.Restart(_vm, _fadeProgram.DebugData, _fadeProgram.CommandCollection);
+#if BROWSER
+            // Restart() resets debuggerSaidHello=0 + debuggerReset=1,
+            // which would make the next StartDebugging enter a
+            // Thread.Sleep wait loop expecting a TCP-side PROTO_HELLO.
+            // Browser has no socket; re-mark connected so the wait
+            // short-circuits.
+            ((BrowserDebugSession)_debugSession).MarkConnected();
+#endif
         }
         else
         {
+#if BROWSER
+            // Browser uses a subclass that exposes the queues + helpers
+            // for the JS bridge (Pages/Index.Debug.cs).
+            _debugSession = new BrowserDebugSession(_vm, _fadeProgram.DebugData, _fadeProgram.CommandCollection,
+                _options, "Fade.Mono");
+#else
             _debugSession = new DebugSession(_vm, _fadeProgram.DebugData, _fadeProgram.CommandCollection, _options,
                 "Fade.Mono");
+#endif
             // Tests run multiple programs through one debug session and rely on
             // Restart() between them; auto-EXITED at end-of-program would drop
             // the debugger before the next test's Restart fires.
             _debugSession.suppressExitOnProgramEnd = _testMode;
+#if !BROWSER
+            // Desktop: open a real DAP socket. Browser uses JS-bridged
+            // tick/drain (Pages/Index.razor.cs's DebugBridge surface) and
+            // never opens a socket — no StartServer needed.
             if (_options.debug)
             {
                 _debugSession.StartServer();
             }
+#endif
         }
+#if !BROWSER
         DebugUISystem.debugSession = _debugSession;
         DebugUISystem.commandCollection = _fadeProgram.CommandCollection;
         DebugUISystem.isNewBuildAvailable = IsNewBuildAvailable;
         DebugUISystem.requestReload = () => _reloadRequestedFromUi = true;
+#endif
 
         StartTracking();
         GameSystem.ResetAll();
@@ -200,6 +295,10 @@ public class Game1 : Microsoft.Xna.Framework.Game
     }
     
 
+    // KNI's Game.OnExiting takes (object, EventArgs); upstream MonoGame
+    // ships a (object, ExitingEventArgs) overload. Both compile against the
+    // same logical signature when guarded.
+#if !BROWSER
     protected override void OnExiting(object sender, ExitingEventArgs args)
     {
         Content.Dispose();
@@ -213,37 +312,40 @@ public class Game1 : Microsoft.Xna.Framework.Game
         Console.WriteLine("Game exited...");
         base.OnExiting(sender, args);
     }
-
-    // protected override void OnExiting(object sender, EventArgs args)
-    // {
-    // }
+#endif
+    // Browser: KNI's Game.OnExiting has a different signature than
+    // upstream MonoGame's and there's no window to close anyway — JS owns
+    // shutdown via the rAF loop returning. Skip the override entirely.
 
     protected override void LoadContent()
     {
+#if !BROWSER
         ContentWatcher = new ContentWatcher(Content);
         ContentWatcher.Init();
-        
-        
+#endif
+
         _pixel = new Texture2D(GraphicsDevice, 1, 1);
         _pixel.SetData(new Color[]{Color.White});
-
-      
-        // TODO: use this.Content to load your game content here
     }
 
     private bool _justReloaded = false;
+#if !BROWSER
     private WatchedAsset<Effect> _customSpriteEffect;
     private FadeSpriteEffect _fadeEffect;
+#endif
     private VirtualRuntimeException _fatal;
     private Task<int?> _t;
     private bool _testMode;
 
     protected override void Update(GameTime gameTime)
     {
+#if !BROWSER
+        // Escape to quit only makes sense on desktop. Browser closes the tab.
         if (Keyboard.GetState().IsKeyDown(Keys.Escape) )
         {
             Exit();
         }
+#endif
 
         // TODO: need to let the current test run to completion.
         if (_testMode)
@@ -313,12 +415,14 @@ public class Game1 : Microsoft.Xna.Framework.Game
         var keyState = Keyboard.GetState();
         var mouseState = Mouse.GetState();
 
+#if !BROWSER
         // when ImGui is capturing keyboard/mouse, feed blank state to the game's InputSystem
         var io = ImGui.GetIO();
         if (io.WantCaptureKeyboard)
             keyState = default;
         if (io.WantCaptureMouse)
             mouseState = default;
+#endif
 
         InputSystem.ApplyNewMouse(ref mouseState, ref keyState);
 
@@ -326,6 +430,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
         TweenSystem.ProcessTweens();
         AudioInstanceSystem.HandleAudio();
         TextureSystem.RefreshTextures();
+
+#if !BROWSER
         RenderSystem.RefreshEffects(_fadeEffect);
 
         if (ContentWatcher.TryRefreshAsset(ref _customSpriteEffect))
@@ -334,9 +440,12 @@ public class Game1 : Microsoft.Xna.Framework.Game
             _fadeEffect = new FadeSpriteEffect(_customSpriteEffect.Asset);
             _spriteBatch.ResetEffect(_fadeEffect);
         }
-        
+#endif
+
         GameSystem.latestTime = gameTime;
+#if !BROWSER
         DebugUISystem.renderer = _imguiRenderer;
+#endif
         if (_vm.instructionIndex >= _vm.program.Length)
         {
             // if we are testing, then mark the current test as complete. 
@@ -378,7 +487,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
             // GraphicsDevice.SetRenderTarget(RenderSystem.dbgBuffer);
             // GraphicsDevice.Clear(Color.Transparent);
 
+#if !BROWSER
             DebugUISystem.StartDebug();
+#endif
         }
         
         if (_fatal == null)
@@ -387,12 +498,35 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
             try
             {
+                // Both desktop and browser route through DebugSession now.
+                // _options.debug is true unless in test mode. Browser pulls
+                // the JS-bridged debug surface in Pages/Index.razor.cs;
+                // desktop has its DAP socket. The StartDebugging path
+                // handles breakpoints, pause, step, and ticking when no
+                // debug state is active (just keeps ticking).
                 if (_options.debug)
                 {
                     _debugSession._vm.isSuspendRequested = false;
                     while (!_debugSession._vm.isSuspendRequested && _vm.instructionIndex < _vm.program.Length)
                     {
+#if BROWSER
+                        // Budgeted call so the outer while inside StartDebugging
+                        // *always* returns within ~1000 spins, even while it's
+                        // spin-waiting on a paused state. Without a budget,
+                        // StartDebugging spins forever calling ReadMessage —
+                        // and on WASM's single thread, JS can't deliver the
+                        // REQUEST_PLAY/STEP message that would resume it.
+                        _debugSession.StartDebugging(1000);
+                        // When the session is paused (hit breakpoint, manual
+                        // pause, step landed), break so the rAF tick returns
+                        // to JS — the next frame's TickDotNet will re-enter
+                        // and pick up any inbound debug messages. Desktop
+                        // doesn't need this because StartDebugging sits on
+                        // a thread that receives socket data concurrently.
+                        if (_debugSession.IsPaused) break;
+#else
                         _debugSession.StartDebugging();
+#endif
                     }
                 }
                 else
@@ -430,7 +564,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
         }
 
 
+#if !BROWSER
         DebugUISystem.EndDebug();
+#endif
         TransformSystem.CalculateTransforms();
 
         
@@ -440,7 +576,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
     protected override void Draw(GameTime gameTime)
     {
         if (_vm.instructionIndex <= 4) return; // the VM hasn't started yet; so don't draw anything...
-        
+
         // the final image will be stored in the mainBuffer...
         // RenderSystem.RenderAllStages(_spriteBatch);
         RenderSystem.RenderAll2(_spriteBatch);
@@ -462,7 +598,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
         _spriteBatch.End();
         
         _spriteBatch.Begin(blendState: BlendState.NonPremultiplied);
+#if !BROWSER
         DebugUISystem.Render();
+#endif
         if (IsNewBuildAvailable())
         {
             // a silly indicator that a new build is ready
@@ -482,9 +620,13 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
     public void Quit()
     {
-                    FileLog.WriteLine("TRYING TO QUIT");
-        
+        FileLog.WriteLine("TRYING TO QUIT");
+#if !BROWSER
         Exit();
+#endif
+        // Browser: there's no window to close. The JS rAF loop owns the
+        // game lifecycle — leaving the VM idle is enough; the next
+        // LoadProgram call will swap in new bytecode.
     }
 
 }

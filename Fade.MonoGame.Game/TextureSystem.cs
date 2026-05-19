@@ -68,6 +68,7 @@ public class TextureSystem
 
     public static void RefreshTextures()
     {
+#if !BROWSER
         for (var i = 0; i < textures.Count; i++)
         {
             var tex = textures[i];
@@ -76,6 +77,7 @@ public class TextureSystem
                 textures[i] = tex;
             }
         }
+#endif
     }
 
     public static void GetTextureIndex(int textureId, out int index, out RuntimeTexture texture)
@@ -129,8 +131,32 @@ public class TextureSystem
 
     public static void LoadTextureFromContent(int textureId, string path)
     {
+#if BROWSER
+        // Browser: BrowserContentManager serves XNBs from an in-memory dict
+        // the page fills before LoadProgram. Hot-reload (the desktop
+        // ContentWatcher contract) doesn't apply — re-running re-pushes the
+        // asset bytes, which is enough for v1.
+        Texture2D texture;
+        try
+        {
+            texture = GameSystem.game.Content.Load<Texture2D>(path);
+        }
+        catch (Exception ex)
+        {
+            // Surface as a runtime log rather than a tick-killing exception.
+            // Without this, the next sprite-render frame would NRE on the
+            // null texture; we'd rather print and keep the game running so
+            // the user can fix the asset and re-run.
+            Console.Error.WriteLine($"[fade] texture load failed: '{path}': {ex.Message}");
+            return;
+        }
+        GetTextureIndex(textureId, out var index, out var runtimeTex);
+        runtimeTex.descriptor = new TextureDescriptor { imageFilePath = path };
+        runtimeTex.SetComputedTexture(texture);
+        textures[index] = runtimeTex;
+#else
         var texture = GameSystem.game.ContentWatcher.Watch<Texture2D>(path);
-        
+
         GetTextureIndex(textureId, out var index, out var runtimeTex);
         runtimeTex.descriptor = new TextureDescriptor
         {
@@ -138,6 +164,7 @@ public class TextureSystem
         };
         runtimeTex.watchedTexture = texture;
         textures[index] = runtimeTex;
+#endif
     }
     
     public static void LoadSpriteFontFromContent(int fontId, string path)

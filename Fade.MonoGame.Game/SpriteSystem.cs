@@ -28,7 +28,11 @@ public struct Sprite
 
 public static class SpriteSystem
 {
+    #if BROWSER
+    public const int MAX_SPRITE_COUNT = 100_000;
+#else
     public const int MAX_SPRITE_COUNT = 10_000_000;
+#endif
 
     public static Sprite[] sprites = new Sprite[MAX_SPRITE_COUNT];
     public static int spriteCount = 0;
