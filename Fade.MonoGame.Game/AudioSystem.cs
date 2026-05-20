@@ -93,11 +93,24 @@ public static class AudioInstanceSystem
         {
             audio.instance?.Dispose();
         }
-        
+
         audioEffects.Clear();
         _effectMap.Clear();
         highestEffectId = 0;
         currentTime = 0;
+    }
+
+    // Halts every active SoundEffectInstance without disposing — so the
+    // user can hit Stop, edit, Run again, and audio resumes from
+    // re-created instances. The Game1 reload path (ResetFade) will call
+    // Reset() above which does dispose; this is the lighter touch for the
+    // Stop button. Hitting it twice is a no-op.
+    public static void StopAll()
+    {
+        foreach (var audio in audioEffects)
+        {
+            try { audio.instance?.Stop(); } catch { /* best-effort */ }
+        }
     }
     
     public static void GetAudioEffectIndex(int audioEffectId, out int index, out AudioInstance audioEffect)

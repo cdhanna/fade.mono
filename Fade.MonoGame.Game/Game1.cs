@@ -193,6 +193,43 @@ public class Game1 : Microsoft.Xna.Framework.Game
         _reloadRequestedFromUi = true;
     }
 
+#if BROWSER
+    // Flip the game in/out of test mode at runtime. Desktop sets these via
+    // ctor + LaunchOptions env vars at boot; the browser doesn't have that
+    // option, so we expose a single atomic setter the page calls before
+    // invoking a test through MonoGameTestHost.
+    //
+    //  - `_testMode` controls the Update-loop's dequeue-and-run branch.
+    //  - `_options.debug` controls whether the DebugSession arms breakpoint
+    //    / pause handling. Tests-with-debug need this set; test-only-run
+    //    doesn't, but leaving it on is harmless because no debug client
+    //    will issue pauses.
+    //  - `suppressExitOnProgramEnd` keeps `_debugSession` alive across
+    //    test-VM completions; without it, the first finished test would
+    //    SendExitedMessage and drop the debugger.
+    //
+    // When the page wants to resume normal play, it calls
+    // SetTestMode(false) and then LoadProgram(userSource) — ResetFade
+    // re-evaluates `_options.debug` against `_testMode`, and the dequeue
+    // branch is skipped on each tick.
+    public void SetTestMode(bool enabled, bool withDebug = false)
+    {
+        _testMode = enabled;
+        _testModeWithDebug = withDebug;
+        if (_options != null)
+        {
+            // Force-enable debug on opt-in; never force-off — a previously
+            // armed Run session shouldn't have its debug surface stripped
+            // just because we flipped into test mode.
+            if (withDebug) _options.debug = true;
+        }
+        if (_debugSession != null)
+        {
+            _debugSession.suppressExitOnProgramEnd = enabled;
+        }
+    }
+#endif
+
     bool IsNewBuildAvailable()
     {
         return GameReloader.LatestBuild != null && GameReloader.LatestBuild != _fadeProgram;
@@ -226,7 +263,10 @@ public class Game1 : Microsoft.Xna.Framework.Game
         // directly instead.
         _options = LaunchOptions.DefaultOptions;
 
-        if (!_testMode)
+        // Enable debug for normal runs and for test-debug runs.
+        // Plain test runs (withDebug=false) stay non-debug so the Execute2
+        // path runs without breakpoint overhead.
+        if (!_testMode || _testModeWithDebug)
         {
             _options.debug = true;
             _options.debugWaitForConnection = false;
@@ -336,6 +376,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private VirtualRuntimeException _fatal;
     private Task<int?> _t;
     private bool _testMode;
+    private bool _testModeWithDebug;
 
     protected override void Update(GameTime gameTime)
     {
@@ -364,6 +405,16 @@ public class Game1 : Microsoft.Xna.Framework.Game
                     ResetFade(vm =>
                     {
                         vm.instructionIndex = nextTest.ctx.Entry.entryPointAddress;
+                        // Without this, ASSERT_FAIL ops take the
+                        // "main-program execution" branch in
+                        // VirtualMachine.Execute2 (line 1436+), which
+                        // treats the assert as a hard runtime error and
+                        // *never sets* vm.assertionFailure — the result
+                        // collector below then reports the test as
+                        // passed. The test-execution branch (line 1408+)
+                        // populates vm.assertionFailure with the
+                        // sourceText / reason / call-stack we need.
+                        vm.isTestExecution = true;
                     });
                     return;
                 }
@@ -465,9 +516,13 @@ public class Game1 : Microsoft.Xna.Framework.Game
                     var map = new IndexCollection(_fadeProgram.DebugData.statementTokens);
                     if (map.TryFindClosestTokenBeforeIndex(_vm.assertionFailure.instructionIndex, out var token))
                     {
-                        var local = GameReloader.LatestRuntime.SourceMap.GetOriginalLocation(token.token);
-                        currentTest.result.failureMessage += Environment.NewLine + "\t" +
-                                                             $"source location: {local.fileName} - {local.startLine}:{local.startChar}";
+                        var runtime = GameReloader.LatestRuntime;
+                        if (runtime?.SourceMap != null)
+                        {
+                            var local = runtime.SourceMap.GetOriginalLocation(token.token);
+                            currentTest.result.failureMessage += Environment.NewLine + "\t" +
+                                                                 $"source location: {local.fileName} - {local.startLine}:{local.startChar}";
+                        }
                     }
 
                 }

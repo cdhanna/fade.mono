@@ -5,6 +5,22 @@
         <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+
+        <!-- The FadeBasic command source generator reads XML doc comments
+             from /// trivia. Roslyn only classifies /// as
+             SingleLineDocumentationCommentTrivia when documentation mode
+             is on, which `GenerateDocumentationFile=true` flips. The
+             NuGet-package flavor of the generator (used by net10) ships a
+             .props file that sets this, but the local ProjectReference
+             flavor (used by net8 for browser dev) skips .props auto-import
+             — so without this property the browser build's metadata blob
+             gets `"docString": ""` for every command and the Help tab
+             shows command names with no descriptions. -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <!-- Doc-comment coverage isn't 100% across the command set yet;
+             suppress CS1591 (missing-xml-comment) so noisy warnings don't
+             drown out real diagnostics during the browser build. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">

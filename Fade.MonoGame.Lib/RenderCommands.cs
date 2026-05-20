@@ -362,10 +362,30 @@ public partial class FadeMonoGameCommands
     public static void LoadEffect(int effectId, string effectName)
     {
 #if BROWSER
-        // Browser: custom effects ship in Phase 3 (mg.md) via dxc + spirv-cross.
-        // For now, `effect` is a no-op so user fbasic that references it
-        // compiles without breaking the build.
-        return;
+        // Browser: BrowserContentManager serves XNBs from an in-memory dict
+        // the page fills before LoadProgram. Hot-reload (the desktop
+        // ContentWatcher contract) doesn't apply — re-running re-pushes the
+        // asset bytes, which is enough for v1. Mirrors the texture pattern
+        // in TextureSystem.LoadTextureFromContent.
+        Effect effect;
+        try
+        {
+            effect = GameSystem.game.Content.Load<Effect>(effectName);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[fade] effect load failed: '{effectName}': {ex.Message}");
+            return;
+        }
+        RenderSystem.GetEffectIndex(effectId, out var index, out var runtimeEffect);
+        runtimeEffect.watchedEffect = new WatchedAsset<Effect>
+        {
+            Asset = effect,
+            UpdatedAt = DateTimeOffset.Now,
+            assetName = effectName,
+        };
+        runtimeEffect.filePath = effectName;
+        RenderSystem.effects[index] = runtimeEffect;
 #else
         //var effect = GameSystem.game.Content.Load<Effect>(effectName);
 
@@ -504,6 +524,7 @@ public partial class FadeMonoGameCommands
     public static void SetEffectParameter_ColorInt(int effectId, string parameterName, int colorCode)
     {
         RenderSystem.GetEffectIndex(effectId, out var index, out var runtimeEffect);
+        if (runtimeEffect.effect == null) return;
         ColorUtil.UnpackColor(colorCode, out var r, out var g, out var b, out var a);
         var mgColor = new Color(r, g, b, a);
         if (runtimeEffect.effect.Parameters.ContainsParameter(parameterName))
@@ -561,6 +582,7 @@ public partial class FadeMonoGameCommands
     public static void SetEffectParameter_Float(int effectId, string parameterName, float value)
     {
         RenderSystem.GetEffectIndex(effectId, out var index, out var runtimeEffect);
+        if (runtimeEffect.effect == null) return;
         if (runtimeEffect.effect.Parameters.ContainsParameter(parameterName))
 
             runtimeEffect.effect.Parameters[parameterName].SetValue(value);
@@ -614,6 +636,7 @@ public partial class FadeMonoGameCommands
     public static void SetEffectParameter_Float2(int effectId, string parameterName, float x, float y)
     {
         RenderSystem.GetEffectIndex(effectId, out var index, out var runtimeEffect);
+        if (runtimeEffect.effect == null) return;
         if (runtimeEffect.effect.Parameters.ContainsParameter(parameterName))
 
             runtimeEffect.effect.Parameters[parameterName].SetValue(new Vector2(x, y));
@@ -672,6 +695,7 @@ public partial class FadeMonoGameCommands
     public static void SetEffectParameter_Float3(int effectId, string parameterName, float x, float y, float z)
     {
         RenderSystem.GetEffectIndex(effectId, out var index, out var runtimeEffect);
+        if (runtimeEffect.effect == null) return;
         if (runtimeEffect.effect.Parameters.ContainsParameter(parameterName))
 
             runtimeEffect.effect.Parameters[parameterName].SetValue(new Vector3(x, y, z));
@@ -724,6 +748,7 @@ public partial class FadeMonoGameCommands
     public static void SetEffectParameter_Float4(int effectId, string parameterName, float x, float y, float z, float w)
     {
         RenderSystem.GetEffectIndex(effectId, out var index, out var runtimeEffect);
+        if (runtimeEffect.effect == null) return;
         if (runtimeEffect.effect.Parameters.ContainsParameter(parameterName))
 
             runtimeEffect.effect.Parameters[parameterName].SetValue(new Vector4(x, y, z, w));
@@ -797,6 +822,7 @@ public partial class FadeMonoGameCommands
     public static void SetEffectParameter_Texture(int effectId, string parameterName, int textureId)
     {
         RenderSystem.GetEffectIndex(effectId, out var index, out var runtimeEffect);
+        if (runtimeEffect.effect == null) return;
         TextureSystem.GetTextureIndex(textureId, out _, out var runtimeTexture);
         if (runtimeEffect.effect.Parameters.ContainsParameter(parameterName))
         {
