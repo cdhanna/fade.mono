@@ -31,8 +31,11 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("free sfx clip id")]
     public static int GetFreeSfxClipNextId(ref int sfxClipId)
     {
+#if BROWSER
+        sfxClipId = BrowserAudioBridge.GetHighestClipId() + 1;
+#else
         sfxClipId = AudioSystem.highestClipId + 1;
-        // TextureSystem.GetTextureIndex(textureId, out _, out _);
+#endif
         return sfxClipId;
     }
 
@@ -61,7 +64,11 @@ public partial class FadeMonoGameCommands
     public static int ReserveSfxClipNextId(ref int sfxClipId)
     {
         GetFreeSfxClipNextId(ref sfxClipId);
+#if BROWSER
+        BrowserAudioBridge.ReserveClipId(sfxClipId);
+#else
         AudioSystem.GetAudioEffectIndex(sfxClipId, out _, out _);
+#endif
         return sfxClipId;
     }
 
@@ -89,8 +96,11 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("free sfx id")]
     public static int GetFreeSfxNextId(ref int sfxId)
     {
+#if BROWSER
+        sfxId = BrowserAudioBridge.GetHighestInstanceId() + 1;
+#else
         sfxId = AudioInstanceSystem.highestEffectId + 1;
-        // TextureSystem.GetTextureIndex(textureId, out _, out _);
+#endif
         return sfxId;
     }
 
@@ -119,7 +129,11 @@ public partial class FadeMonoGameCommands
     public static int ReserveSfxNextId(ref int sfxId)
     {
         GetFreeSfxNextId(ref sfxId);
+#if BROWSER
+        BrowserAudioBridge.ReserveInstanceId(sfxId);
+#else
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out _, out _);
+#endif
         return sfxId;
     }
 
@@ -171,7 +185,14 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("load sfx clip")]
     public static void LoadSoundEffect(int clipId, string path)
     {
+#if BROWSER
+        // Browser path: source bytes were decoded by window.fadeAudio
+        // when the playground sent register-audio. LoadClip just maps
+        // the clip slot id to the registered name. No XNB involved.
+        BrowserAudioBridge.LoadClip(clipId, path);
+#else
         AudioSystem.LoadSfxFromContent(clipId, path);
+#endif
     }
 
     /// <summary>
@@ -237,6 +258,9 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("sfx")]
     public static void CreateSoundEffect(int sfxId, int clipId)
     {
+#if BROWSER
+        BrowserAudioBridge.CreateInstance(sfxId, clipId);
+#else
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
         AudioSystem.GetAudioEffectIndex(clipId, out _, out var clip);
         if (clip.source == null)
@@ -261,6 +285,7 @@ public partial class FadeMonoGameCommands
             return;
         }
         AudioInstanceSystem.audioEffects[index] = sfx;
+#endif
     }
 
     /// <summary>
@@ -301,8 +326,12 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("pause sfx")]
     public static void PauseSfx(int sfxId)
     {
+#if BROWSER
+        BrowserAudioBridge.Pause(sfxId);
+#else
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
         AudioInstanceSystem.audioEffects[index].instance.Pause();
+#endif
     }
 
 
@@ -350,6 +379,9 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("play sfx")]
     public static void PlaySfx(int sfxId)
     {
+#if BROWSER
+        BrowserAudioBridge.Play(sfxId);
+#else
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
         var instance = AudioInstanceSystem.audioEffects[index].instance;
         if (instance == null)
@@ -372,6 +404,7 @@ public partial class FadeMonoGameCommands
             System.Console.Error.WriteLine(
                 $"[fade] play sfx: instance.Play() threw for {sfxId}: {ex}");
         }
+#endif
     }
 
     /// <summary>
@@ -410,10 +443,14 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("delay play sfx")]
     public static void PlaySfx(int sfxId, int delayMs)
     {
+#if BROWSER
+        BrowserAudioBridge.PlayWithDelay(sfxId, delayMs);
+#else
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
         AudioInstanceSystem.audioEffects[index].instance.Stop();
         sfx.playingDelayedUntil = AudioInstanceSystem.currentTime + delayMs;
         AudioInstanceSystem.audioEffects[index] = sfx;
+#endif
     }
 
     /// <summary>
@@ -459,8 +496,12 @@ public partial class FadeMonoGameCommands
     {
         if (pitch >= 1) pitch = 1;
         if (pitch <= -1) pitch = -1;
+#if BROWSER
+        BrowserAudioBridge.SetPitch(sfxId, pitch);
+#else
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
         AudioInstanceSystem.audioEffects[index].instance.Pitch = pitch;
+#endif
     }
 
 
@@ -490,8 +531,12 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("sfx pitch")]
     public static float GetSfxPitch(int sfxId)
     {
+#if BROWSER
+        return BrowserAudioBridge.GetPitch(sfxId);
+#else
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
         return AudioInstanceSystem.audioEffects[index].instance.Pitch;
+#endif
     }
 
 
@@ -535,11 +580,14 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("set sfx pan")]
     public static void SetSfxPan(int sfxId, float pan)
     {
-
         if (pan >= 1) pan = 1;
         if (pan <= -1) pan = -1;
+#if BROWSER
+        BrowserAudioBridge.SetPan(sfxId, pan);
+#else
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
         AudioInstanceSystem.audioEffects[index].instance.Pan = pan;
+#endif
     }
 
     /// <summary>
@@ -567,8 +615,12 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("sfx pan")]
     public static float GetSfxPan(int sfxId)
     {
+#if BROWSER
+        return BrowserAudioBridge.GetPan(sfxId);
+#else
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
         return AudioInstanceSystem.audioEffects[index].instance.Pan;
+#endif
     }
 
 
@@ -615,8 +667,12 @@ public partial class FadeMonoGameCommands
     {
         if (volume >= 1) volume = 1;
         if (volume <= 0) volume = 0;
+#if BROWSER
+        BrowserAudioBridge.SetVolume(sfxId, volume);
+#else
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
         AudioInstanceSystem.audioEffects[index].instance.Volume = volume;
+#endif
     }
 
     /// <summary>
@@ -645,8 +701,12 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("sfx volume")]
     public static float GetSfxVolume(int sfxId)
     {
+#if BROWSER
+        return BrowserAudioBridge.GetVolume(sfxId);
+#else
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
         return AudioInstanceSystem.audioEffects[index].instance.Volume;
+#endif
     }
 
 
@@ -699,8 +759,12 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("set sfx loop")]
     public static void SetSfxLoop(int sfxId, bool isLooped)
     {
+#if BROWSER
+        BrowserAudioBridge.SetLoop(sfxId, isLooped);
+#else
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
         AudioInstanceSystem.audioEffects[index].instance.IsLooped = isLooped;
+#endif
     }
     //
 
@@ -749,8 +813,12 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("is sfx done")]
     public static bool IsSfxDone(int sfxId)
     {
+#if BROWSER
+        return BrowserAudioBridge.IsDone(sfxId);
+#else
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
         return AudioInstanceSystem.audioEffects[index].instance.State == SoundState.Stopped;
+#endif
     }
 
 }

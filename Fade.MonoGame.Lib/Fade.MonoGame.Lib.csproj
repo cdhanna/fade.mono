@@ -1,52 +1,48 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <!-- See Fade.MonoGame.Contracts.csproj for TFM convention. -->
+        <PackageId>FadeBasic.MonoGame.Lib</PackageId>
+        <Title>FadeBasic MonoGame Standard Library</Title>
+        <Description>FadeBasic command implementations for MonoGame projects (sprite, texture, audio, sync, etc.).</Description>
+        <IsPackable>true</IsPackable>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <!-- TFM and FadeMonoGamePlatform are independent. See Fade.MonoGame.Game.csproj. -->
         <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
 
-        <!-- The FadeBasic command source generator reads XML doc comments
-             from /// trivia. Roslyn only classifies /// as
-             SingleLineDocumentationCommentTrivia when documentation mode
-             is on, which `GenerateDocumentationFile=true` flips. The
-             NuGet-package flavor of the generator (used by net10) ships a
-             .props file that sets this, but the local ProjectReference
-             flavor (used by net8 for browser dev) skips .props auto-import
-             — so without this property the browser build's metadata blob
-             gets `"docString": ""` for every command and the Help tab
-             shows command names with no descriptions. -->
+        <!-- The FadeBasic command source generator reads XML doc comments from ///
+             trivia.  The NuGet-package flavor sets GenerateDocumentationFile via its
+             own .props; the local ProjectReference flavor (web dev) does not — so
+             without this property the browser build's metadata has empty docStrings. -->
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
-        <!-- Doc-comment coverage isn't 100% across the command set yet;
-             suppress CS1591 (missing-xml-comment) so noisy warnings don't
-             drown out real diagnostics during the browser build. -->
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
 
-    <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <PropertyGroup Condition="'$(FadeMonoGamePlatform)' == 'Web'">
         <DefineConstants>$(DefineConstants);BROWSER</DefineConstants>
     </PropertyGroup>
 
-    <!-- net10 desktop: published NuGets. net8 browser: cross-repo
-         ProjectReferences to the local source in dby/FadeBasic/ so we share
-         the same FadeBasic assembly as Fade.MonoGame.Game (browser TFM) and
-         WebRuntime.csproj. MSBuild de-duplicates by .csproj path, so only
-         one FadeBasic + one Lib.Standard + one source generator end up in
-         the published browser output. -->
-    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <ItemGroup>
       <PackageReference Include="FadeBasic.Lang.CommandSourceGenerator" Version="$(FadeVersion)" />
       <PackageReference Include="FadeBasic.Lib.Standard" Version="$(FadeVersion)" />
-    </ItemGroup>
-    <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
-      <ProjectReference Include="..\..\..\dby\FadeBasic\CommandSourceGenerator\CommandSourceGenerator.csproj"
-                        OutputItemType="Analyzer"
-                        ReferenceOutputAssembly="false" />
-      <ProjectReference Include="..\..\..\dby\FadeBasic\FadeBasic.Lib.Standard\FadeBasic.Lib.Standard.csproj" />
     </ItemGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\Fade.MonoGame.Game\Fade.MonoGame.Game.csproj" />
     </ItemGroup>
 
+    <!-- Desktop deps: MonoGame DesktopGL + ImGui. -->
+    <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Desktop'">
+        <PackageReference Include="ImGui.NET" Version="1.91.6.1" PrivateAssets="all" />
+        <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)" PrivateAssets="all" />
+    </ItemGroup>
+
+    <!-- Browser deps: KNI BlazorGL. No ImGui (cimgui has no WASM build). -->
+    <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Web'">
+        <PackageReference Include="nkast.Kni.Platform.Blazor.GL" Version="$(KniPlatformBlazorGLVersion)" PrivateAssets="all" />
+    </ItemGroup>
+
 </Project>
-<!--.NET Host (35296), .NET Host (22736)-->

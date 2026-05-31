@@ -586,10 +586,26 @@ public class Game1 : Microsoft.Xna.Framework.Game
                 }
                 else
                 {
-                    _vm.isSuspendRequested = false;
-                    while (!_vm.isSuspendRequested && _vm.instructionIndex < _vm.program.Length)
+#if BROWSER
+                    // Cooperative-pump integration: prompt$ and wait ms
+                    // route through FadeBasic.Sdk.CooperativePump
+                    // (wired by WebRuntime.MonoGame's Index page). Skip
+                    // the per-frame VM tick while the pump is waiting
+                    // on a host reply or a wait-ms deadline. The canvas
+                    // keeps rendering the last frame either way.
+                    if (FadeBasic.Sdk.CooperativePump.IsBusyWaiting())
                     {
-                        _vm.Execute2();
+                        // Skip this frame's VM tick — but do not return,
+                        // so transform/render systems below still run.
+                    }
+                    else
+#endif
+                    {
+                        _vm.isSuspendRequested = false;
+                        while (!_vm.isSuspendRequested && _vm.instructionIndex < _vm.program.Length)
+                        {
+                            _vm.Execute2();
+                        }
                     }
                 }
             }

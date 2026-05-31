@@ -54,9 +54,25 @@
         <FadeCommand Include="Fade.MonoGame.Lib" FullName="Fade.MonoGame.Lib.FadeMonoGameCommands" />
         
         
+        
+        
+        
 <!--        <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.3" />-->
 <!--        <PackageReference Include="MonoGame.Content.Builder.Task" Version="$(MonogameVersion)" />-->
     </ItemGroup>
+
+    <!-- Desktop deps: MonoGame DesktopGL + ImGui. -->
+    <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Desktop'">
+        <PackageReference Include="ImGui.NET" Version="1.91.6.1" PrivateAssets="all" />
+        <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)" PrivateAssets="all" />
+    </ItemGroup>
+
+    <!-- Browser deps: KNI BlazorGL. No ImGui (cimgui has no WASM build). -->
+    <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Web'">
+        <PackageReference Include="nkast.Kni.Platform.Blazor.GL" Version="$(KniPlatformBlazorGLVersion)" PrivateAssets="all" />
+    </ItemGroup>
+    
+    
     <Target Name="RestoreDotnetTools" BeforeTargets="Restore">
         <Message Text="Restoring dotnet tools" Importance="High" />
         <Exec Command="dotnet tool restore" />

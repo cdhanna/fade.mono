@@ -1,0 +1,1480 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Fade WebRuntime.MonoGame — Standalone</title>
+    <base href="./" />
+    <link href="css/app.css" rel="stylesheet" />
+    <style>
+        /* Suppress Blazor's default error overlay. Playground forwards
+           errors to the host page's Output panel via postMessage
+           (type: 'game-error'); standalone exports surface them via
+           the friendly splash's error state. Either way, the in-iframe
+           "An unhandled error has occurred" banner is just visual noise. */
+        #blazor-error-ui { display: none !important; }
+
+        /* ── Boot splash ───────────────────────────────────────────────
+           Ghost-in-and-out-of-house animation + status line shown over
+           the canvas while Blazor mounts and LoadProgram runs. Visible
+           in BOTH modes:
+             - Preview (Playground iframe): hidden once the parent sends
+               run-start-source / debug-start* and LoadProgram succeeds.
+             - Standalone (deployed export): hidden once the self-boot
+               path completes its LoadProgram.
+           Initial visibility is unconditional so the first paint of the
+           iframe is the friendly splash, not a black canvas or the
+           dev-era boot-stub status text. */
+        #fade-splash {
+            display: flex;
+            position: fixed;
+            inset: 0;
+            z-index: 999;
+            background: radial-gradient(ellipse at center, #2a2a2a 0%, #161616 70%, #0a0a0a 100%);
+            color: #b5b5b5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1.2rem;
+            transition: opacity 220ms ease-out;
+        }
+        #fade-splash.is-hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        /* Abstract house + ghost + zzz's assembled from plain <div>s
+           and a few text spans (for the z's). No emoji, no SVG, no image
+           assets — just border-radius, clip-path, and transforms.
+
+           The loop:
+             0%–18%   Ghost slides from off-screen left toward the house
+                      (constant Y, pure translateX).
+             18%–22%  Ghost fades into the house wall (still at the same
+                      Y; no curved motion).
+             22%–34%  House lights blink on; body does a quick scared
+                      jump; the roof pops up and tilts.
+             34%–48%  House settles; lights still on; ghost is invisible.
+             48%–62%  Ghost emerges from the right wall, slides right
+                      while scaling up + fading (zoom-out exit).
+             62%–80%  Lights fade out; zzz's float up from the house.
+             80%–100% Quiet beat, then ghost begins to reset at far
+                      left for the next loop.
+
+           Single 5.4s loop driving every element through its own
+           @keyframes — synced via shared animation-duration. */
+        #fade-splash .splash-scene {
+            position: relative;
+            width: 240px;
+            height: 150px;
+            margin: 0 auto;
+        }
+        #fade-splash .splash-house {
+            position: absolute;
+            left: 50%;
+            bottom: 0;
+            transform: translateX(-50%);
+            width: 90px;
+            height: 100px;
+            filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45));
+            animation: splash-house-jump 5.4s ease-in-out infinite;
+            z-index: 1;
+        }
+        #fade-splash .splash-roof {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform-origin: 50% 100%;
+            transform: translateX(-50%);
+            width: 90px;
+            height: 40px;
+            background: #4a4a4a;
+            clip-path: polygon(50% 0, 0 100%, 100% 100%);
+            animation: splash-roof-pop 5.4s ease-in-out infinite;
+        }
+        #fade-splash .splash-body {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 76px;
+            height: 60px;
+            background: #6b6b6b;
+            /* Squared off — was 3px/4px rounded before. */
+            border-radius: 0;
+        }
+        #fade-splash .splash-window {
+            /* Boxy square window. Dark when "off", warm grey + glow when
+               the lights come on. */
+            position: absolute;
+            bottom: 32px;
+            left: 50%;
+            margin-left: -23px;
+            width: 12px;
+            height: 12px;
+            background: #1a1a1a;
+            border-radius: 0;
+            animation: splash-window-light 5.4s ease-in-out infinite;
+        }
+        #fade-splash .splash-door {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            margin-left: -8px;
+            width: 16px;
+            height: 26px;
+            background: #2a2a2a;
+            border-radius: 0;
+        }
+        #fade-splash .splash-ghost {
+            /* Ghost: tall rounded dome, three scalloped humps at the
+               bottom. Sits behind the house (z-index: 0). */
+            position: absolute;
+            bottom: 22px;
+            left: 50%;
+            margin-left: -19px;
+            width: 38px;
+            height: 48px;
+            background: #b0b0b0;
+            clip-path: path('M 0 22 C 0 0, 38 0, 38 22 L 38 38 C 38 48, 32 48, 25 38 C 25 48, 19 48, 12 38 C 12 48, 6 48, 0 38 Z');
+            filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.3));
+            animation: splash-ghost-path 5.4s linear infinite;
+            z-index: 0;
+        }
+
+        @keyframes splash-ghost-path {
+            /* Translate + opacity only — ghost never scales or changes Y
+               except during the exit wiggle.
+
+               Timing (5.4s loop):
+                 0–10%   slow fade-in at far left (longer ramp)
+                 10–18%  slide toward the house entrance
+                 18–22%  fade into the house wall
+                 22–40%  inside; house startles 34–42%
+                 40–42%  ghost re-emerges on right side
+                 42–57%  wiggling exit: Y wobble while fading right
+                 57–100% off-screen; snap back for next loop */
+            0%   { transform: translate(-100px, 0); opacity: 0; }
+            10%  { transform: translate(-100px, 0); opacity: 1; }
+            18%  { transform: translate(-32px, 0);  opacity: 1; }
+            22%  { transform: translate(-20px, 0);  opacity: 0; }
+            40%  { transform: translate(20px, 0);   opacity: 0; }
+            42%  { transform: translate(28px, 0);    opacity: 0.95; }
+            46%  { transform: translate(54px, -3px);  opacity: 0.8; }
+            50%  { transform: translate(82px, 2px);   opacity: 0.55; }
+            54%  { transform: translate(108px, -1px); opacity: 0.25; }
+            57%  { transform: translate(128px, 0);    opacity: 0; }
+            100% { transform: translate(-100px, 0); opacity: 0; }
+        }
+        @keyframes splash-house-jump {
+            /* Single slow startled hop — one clean arc up and back. */
+            0%, 33%, 100% { transform: translateX(-50%) translateY(0); }
+            40%   { transform: translateX(-50%) translateY(-12px); }
+            50%   { transform: translateX(-50%) translateY(0); }
+        }
+        @keyframes splash-roof-pop {
+            /* Single slow roof pop: rises with a left tilt, settles
+               back with a slight right lean, then returns to rest. */
+            0%, 33%, 100% { transform: translateX(-50%) translateY(0) rotate(0deg); }
+            39%   { transform: translateX(-50%) translateY(-18px) rotate(-7deg); }
+            46%   { transform: translateX(-50%) translateY(-4px) rotate(6deg); }
+            51%   { transform: translateX(-50%) translateY(0) rotate(0deg); }
+        }
+        @keyframes splash-window-light {
+            0%, 35% {
+                background: #1a1a1a;
+                box-shadow: none;
+            }
+            39%, 60% {
+                background: #d8d4b8;
+                box-shadow: 0 0 12px rgba(216, 212, 184, 0.55),
+                            0 0 22px rgba(216, 212, 184, 0.25);
+            }
+            70%, 100% {
+                background: #1a1a1a;
+                box-shadow: none;
+            }
+        }
+
+        /* Excitement lines bursting from near the roof peak during the
+           startle. Three lines spread across the upper hemisphere,
+           anchored at the roof area and radiating outward/upward.
+           CSS custom property --a sets the rotation per element. */
+        #fade-splash .splash-excite {
+            position: absolute;
+            top: 54px;    /* near the roof peak within 150px scene (roof is Y 50–90) */
+            left: 50%;
+            width: 22px;
+            height: 2px;
+            background: #888;
+            border-radius: 1px;
+            transform-origin: 0 50%;
+            transform: rotate(var(--a)) translateX(40px);
+            opacity: 0;
+            animation: splash-excite-pulse 5.4s ease-out infinite;
+        }
+        @keyframes splash-excite-pulse {
+            /* Fast fade-in, slow fade-out — no flashing. */
+            0%, 35%  { opacity: 0; }
+            38%      { opacity: 0.7; }
+            55%      { opacity: 0; }
+            100%     { opacity: 0; }
+        }
+
+        /* Sleepy zzz's that float up after the ghost leaves. Three
+           letters, staggered, each on its own keyframe so they cascade
+           upward instead of moving in lockstep. */
+        #fade-splash .splash-z {
+            position: absolute;
+            color: #888;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-weight: 600;
+            font-style: italic;
+            opacity: 0;
+            pointer-events: none;
+        }
+        #fade-splash .splash-z1 {
+            bottom: 100px;
+            left: calc(50% - 22px);
+            font-size: 14px;
+            animation: splash-z1 5.4s ease-out infinite;
+        }
+        #fade-splash .splash-z2 {
+            bottom: 100px;
+            left: calc(50% - 4px);
+            font-size: 17px;
+            animation: splash-z2 5.4s ease-out infinite;
+        }
+        #fade-splash .splash-z3 {
+            bottom: 100px;
+            left: calc(50% + 14px);
+            font-size: 20px;
+            animation: splash-z3 5.4s ease-out infinite;
+        }
+        @keyframes splash-z1 {
+            0%, 60% { opacity: 0; transform: translateY(0); }
+            64%     { opacity: 0.85; transform: translateY(-2px); }
+            76%     { opacity: 0.6;  transform: translateY(-14px); }
+            86%, 100% { opacity: 0;  transform: translateY(-24px); }
+        }
+        @keyframes splash-z2 {
+            0%, 68% { opacity: 0; transform: translateY(0); }
+            72%     { opacity: 0.85; transform: translateY(-2px); }
+            84%     { opacity: 0.6;  transform: translateY(-18px); }
+            92%, 100% { opacity: 0;  transform: translateY(-26px); }
+        }
+        @keyframes splash-z3 {
+            0%, 76% { opacity: 0; transform: translateY(0); }
+            80%     { opacity: 0.85; transform: translateY(-2px); }
+            92%     { opacity: 0.6;  transform: translateY(-20px); }
+            100%    { opacity: 0;    transform: translateY(-28px); }
+        }
+
+        #fade-splash .splash-status {
+            font-size: 0.95rem;
+            color: #888;
+            letter-spacing: 0.04em;
+            min-height: 1.4rem;
+            text-align: center;
+            transition: color 180ms ease-out;
+        }
+        #fade-splash .splash-status.is-error { color: #d8a0a0; }
+        /* In preview mode the outer Playground page shows its own boot
+           splash. Pause all iframe splash animations until the parent
+           signals its splash is gone (pg-splash-hidden postMessage), so
+           the two animations are never simultaneously visible. */
+        #fade-splash.splash-anim-paused * {
+            animation-play-state: paused !important;
+        }
+        /* Hide the dev-era splashes in standalone — our overlay covers
+           the same UX. Kept visible in preview so devs still see the
+           live runtime _status field over the canvas. */
+        .fade-standalone #app { display: none !important; }
+        .fade-standalone #status { display: none !important; }
+    </style>
+</head>
+
+<body>
+
+    <!-- Decide standalone vs preview mode synchronously so the splash
+         CSS picks the right hidden/visible state from the first paint.
+         Without this inline check, the Blazor splash flashes on the
+         deployed export before our friendlier overlay takes over. -->
+    <script>
+        if (!new URLSearchParams(location.search).has('preview')) {
+            document.documentElement.classList.add('fade-standalone');
+        } else {
+            // Start animations paused in preview mode. The parent page sends
+            // 'pg-splash-hidden' once its own boot splash finishes dimming out,
+            // at which point we remove the class and animations begin. This
+            // prevents both splashes from running simultaneously on first load.
+            document.getElementById('fade-splash').classList.add('splash-anim-paused');
+        }
+    </script>
+
+    <!-- Friendly boot splash. Shown in both preview and standalone
+         modes; hidden once LoadProgram succeeds. Plain <div>s + text
+         spans for the z's. The scene runs a five-phase loop:
+         ghost-enters → house-startles → ghost-exits → zzz's-float
+         → reset. See the CSS block in <head> for the keyframes. -->
+    <div id="fade-splash" aria-live="polite">
+        <div class="splash-scene" aria-hidden="true">
+            <span class="splash-z splash-z1">z</span>
+            <span class="splash-z splash-z2">z</span>
+            <span class="splash-z splash-z3">z</span>
+            <span class="splash-excite" style="--a: 210deg"></span>
+            <span class="splash-excite" style="--a: 270deg"></span>
+            <span class="splash-excite" style="--a: 330deg"></span>
+            <div class="splash-house">
+                <div class="splash-roof"></div>
+                <div class="splash-body"></div>
+                <div class="splash-window"></div>
+                <div class="splash-door"></div>
+            </div>
+            <div class="splash-ghost"></div>
+        </div>
+        <div class="splash-status" id="fade-splash-status">Booting Fade Basic</div>
+    </div>
+
+    <!-- Splash visible until Blazor mounts and replaces #mg-blazor-root's contents. -->
+    <div id="app">
+        <div class="boot-splash">
+            <div>loading WebRuntime.MonoGame…</div>
+            <div class="boot-splash-sub">Standalone test: a color-clear canvas means KNI + Game1 are alive. Use the browser console to call <code>window.theInstance.invokeMethodAsync('LoadProgram', source)</code> to run a Fade program.</div>
+        </div>
+    </div>
+
+    <!-- Blazor mounts WebRuntime.MonoGame.App into this div (selector in Program.cs).
+         A separate root from #app keeps the boot splash visible until Blazor
+         takes over, and avoids collision when this runtime is loaded inline
+         into the Playground page (which uses its own #app). -->
+    <div id="mg-blazor-root"></div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">x</a>
+    </div>
+
+    <script src="_framework/blazor.webassembly.js" autostart="false"></script>
+    <script>
+        // ── Splash control surface ──────────────────────────────────────
+        // Exposed early so both the preview-mode handlers (below) and
+        // the standalone-mode boot (further below) can drive it.
+        window.__fadeSplash = (function () {
+            const el = document.getElementById('fade-splash');
+            const statusEl = document.getElementById('fade-splash-status');
+            let hidden = false;
+            return {
+                setStatus(text, isError) {
+                    if (!statusEl) return;
+                    statusEl.textContent = text;
+                    statusEl.classList.toggle('is-error', !!isError);
+                },
+                hide() {
+                    if (!el || hidden) return;
+                    hidden = true;
+                    el.classList.add('is-hidden');
+                    setTimeout(() => { if (el) el.style.display = 'none'; }, 260);
+                },
+                // Re-display the splash for subsequent Runs. The first
+                // boot left it visible by default; this is for the
+                // "user clicked Run again with a new MP3 in the project"
+                // case where asset decoding takes a beat and we want a
+                // visible loading state IN the game canvas.
+                show() {
+                    if (!el) return;
+                    hidden = false;
+                    el.style.display = '';
+                    el.classList.remove('is-hidden');
+                    if (statusEl) statusEl.classList.remove('is-error');
+                },
+                isHidden() { return hidden; },
+            };
+        })();
+
+        // ── stdout / stderr forwarding ─────────────────────────────────
+        // Standard fbasic `print` is bound to FadeBasic.Lib.Standard's
+        // ConsoleCommands which calls System.Console.WriteLine → Blazor's
+        // WASM runtime → globalThis.console.log. Hook console.log/.warn/
+        // .error here so user `print` output and runtime-side messages
+        // (e.g. '[fade] texture load failed') stream into the host
+        // Playground's Output panel via postMessage.
+        //
+        // Gated on `__fadeForwardingArmed` (flipped true in initRenderJS)
+        // so Blazor's noisy boot logs don't flood the host before the
+        // user has even hit Run. Preview-mode only; standalone keeps
+        // its raw console behavior (everything visible to dev tools).
+        window.__fadeForwardingArmed = false;
+        (function () {
+            const inPreview = new URLSearchParams(location.search).has('preview');
+            if (!inPreview) return;
+            const orig = {
+                log: console.log.bind(console),
+                warn: console.warn.bind(console),
+                error: console.error.bind(console),
+            };
+            const stringify = (args) => args.map((a) =>
+                typeof a === 'string' ? a
+                : (a && a.message) ? a.message
+                : (() => { try { return JSON.stringify(a); } catch { return String(a); } })()
+            ).join(' ');
+            const isInternal = (text) =>
+                text.startsWith('[fade-monogame') ||
+                text.startsWith('[WebRuntime.MonoGame');
+            const forward = (channel, args) => {
+                if (!window.__fadeForwardingArmed) return;
+                const line = stringify(args);
+                if (isInternal(line)) return;
+                try { window.parent.postMessage({ type: channel, line }, '*'); }
+                catch { /* parent may be cross-origin */ }
+            };
+            console.log = (...args) => { orig.log(...args); forward('stdout', args); };
+            console.warn = (...args) => { orig.warn(...args); forward('stderr', args); };
+            console.error = (...args) => { orig.error(...args); forward('stderr', args); };
+        })();
+
+        // Boot Blazor manually so we can hook before/after the runtime starts.
+        Blazor.start();
+    </script>
+
+    <!--
+        KNI's Wasm JS shims. These are static web assets shipped by the
+        nkast.Wasm.* packages (transitive deps of nkast.Kni.Platform.Blazor.GL).
+        At publish time, `dotnet publish` copies them into wwwroot/_content/.
+
+        Version suffix must match the package's static-web-asset version. If
+        KNI bumps its Wasm dependency we'll see 404s here — `ls bin/Release/net8.0/publish/wwwroot/_content/nkast.Wasm.*/js/`
+        to discover the new version, then update suffixes below.
+    -->
+    <script src="_content/nkast.Wasm.JSInterop/js/JSObject.8.0.11.js"></script>
+    <script src="_content/nkast.Wasm.Dom/js/Window.8.0.11.js"></script>
+    <script src="_content/nkast.Wasm.Dom/js/Document.8.0.11.js"></script>
+    <script src="_content/nkast.Wasm.Dom/js/Navigator.8.0.11.js"></script>
+    <script src="_content/nkast.Wasm.Dom/js/Gamepad.8.0.11.js"></script>
+    <script src="_content/nkast.Wasm.Dom/js/Media.8.0.11.js"></script>
+    <script src="_content/nkast.Wasm.XHR/js/XHR.8.0.11.js"></script>
+    <script src="_content/nkast.Wasm.Canvas/js/Canvas.8.0.11.js"></script>
+    <script src="_content/nkast.Wasm.Canvas/js/CanvasGLContext.8.0.11.js"></script>
+    <script src="_content/nkast.Wasm.Audio/js/Audio.8.0.11.js"></script>
+    <script src="_content/nkast.Wasm.XR/js/XR.8.0.11.js"></script>
+
+    <script>
+        // ── Watchdog ─────────────────────────────────────────────────────────
+        // If a single TickDotNet() call blocks JS this long, the .NET side gets
+        // OnGameTimedOut() and we expect _game to be nulled. Matches XnaFiddle's
+        // posture; leniency is intentional so first-boot Initialize()/LoadContent()
+        // don't false-positive.
+        const WATCHDOG_FRAME_MS = 5000;
+
+        // ── rAF tick loop ────────────────────────────────────────────────────
+        // .NET does NOT own the game loop. JS does. Per frame:
+        //   1. Sync canvas drawing-buffer to its container's pixel size.
+        //   2. Notify .NET of any size change via OnCanvasResized.
+        //   3. Call TickDotNet() — one Game.Tick() (Update + Draw).
+        //   4. If the tick exceeded WATCHDOG_FRAME_MS, call OnGameTimedOut so
+        //      .NET drops its game reference. Subsequent ticks become no-ops.
+        // Set to true when a fatal tick exception bubbles up through
+        // invokeMethod('TickDotNet'). The tick loop bails so the same
+        // error doesn't fire 60 times a second; a fresh LoadProgram
+        // (preview run-start-source / debug-start* / standalone reboot)
+        // clears it and re-arms rAF.
+        let tickHalted = false;
+        function tickJS(timestamp) {
+            if (tickHalted) return;
+            const canvas = document.getElementById('theCanvas');
+            const holder = document.getElementById('canvasHolder');
+            if (canvas && holder && window.theInstance) {
+                const w = holder.clientWidth;
+                const h = holder.clientHeight;
+                if (canvas.width !== w || canvas.height !== h) {
+                    canvas.width = w;
+                    canvas.height = h;
+                    window.theInstance.invokeMethod('OnCanvasResized', w, h);
+                }
+
+                let eventsJson;
+                const tickStart = performance.now();
+                try {
+                    eventsJson = window.theInstance.invokeMethod('TickDotNet');
+                } catch (e) {
+                    // .NET-side exception bubbled through invokeMethod.
+                    // Park rAF so we don't spam the error every frame.
+                    // Preview: forward to parent for the host's Output
+                    // panel. Standalone: surface in the splash so the
+                    // user knows something broke.
+                    tickHalted = true;
+                    const msg = e?.message ?? String(e);
+                    try {
+                        window.parent.postMessage({ type: 'game-error', message: msg }, '*');
+                    } catch { /* parent may be cross-origin */ }
+                    if (window.__fadeSplash && !window.__fadeSplash.isHidden()) {
+                        window.__fadeSplash.setStatus('Runtime error — see console.', true);
+                    }
+                    return;
+                }
+                const tickMs = performance.now() - tickStart;
+
+                // TickDotNet returns the JSON-serialized debug events the
+                // tick produced (drain pattern from Pages/Index.razor.cs).
+                // Forward each event to a registered listener if any — the
+                // preview-mode relay below sets one up to bridge into the
+                // parent window's postMessage channel. In standalone mode
+                // no listener is registered and the events are discarded.
+                if (eventsJson && eventsJson !== '[]' && window.onMonoGameDebugEvent) {
+                    try {
+                        const events = JSON.parse(eventsJson);
+                        if (Array.isArray(events)) {
+                            for (const evt of events) window.onMonoGameDebugEvent(evt);
+                        }
+                    } catch { /* malformed; ignore */ }
+                }
+
+                if (tickMs > WATCHDOG_FRAME_MS) {
+                    window.theInstance.invokeMethod('OnGameTimedOut', tickMs);
+                }
+            }
+            window.requestAnimationFrame(tickJS);
+        }
+
+        // ── Blazor internal-API shims (load-bearing, fragile) ───────────────
+        // KNI's JS expects two things that aren't part of Blazor's public API:
+        //   1. globalThis.Module — the Emscripten module object. Blazor 8+
+        //      stopped exposing it at the top level; we re-route from
+        //      Blazor.runtime.Module.
+        //   2. Blazor.platform.getArrayLength — removed in newer Blazor.
+        //      Polyfill via HEAP32 read of the array-header length slot.
+        //
+        // If a future Blazor moves either of these, this function will throw
+        // with a clear message instead of failing silently inside KNI.
+        function applyBlazorKniShims() {
+            if (!globalThis.Module) {
+                if (!Blazor.runtime?.Module) {
+                    throw new Error('[WebRuntime.MonoGame] Blazor.runtime.Module not available. ' +
+                        'Blazor internal API may have changed; update the Module shim in index.html.');
+                }
+                globalThis.Module = Blazor.runtime.Module;
+            }
+            if (typeof Blazor.platform.getArrayLength !== 'function') {
+                Object.assign(Blazor.platform, {
+                    getArrayLength: function (arr) {
+                        const arrPtr = Blazor.platform.getArrayEntryPtr(arr, 0, 4);
+                        return Module.HEAP32[(arrPtr - 4) >> 2];
+                    }
+                });
+            }
+        }
+
+        // ── Web Audio backend (browser-native replacement for MonoGame audio)
+        // The playground bypasses MonoGame's SoundEffectReader/SoundEffectInstance
+        // entirely. Source files (WAV/MP3/OGG/FLAC/AAC) get pushed in raw via
+        // postMessage 'register-audio'; the host decodes via Web Audio's
+        // decodeAudioData and serves playback through AudioBufferSourceNode +
+        // Gain + StereoPanner. C# (BrowserAudioBridge) calls these via
+        // IJSInProcessRuntime.InvokeVoid — synchronous, single-thread, no
+        // round-trip needed because every method is local to the iframe.
+        //
+        // Instance model: each fade `sfx N` allocates one InstanceState
+        // (gain + panner + persistent settings). play/stop swap out a
+        // BufferSourceNode beneath those graph nodes — sources are
+        // single-use per Web Audio spec but the surrounding graph
+        // persists, so pan/volume/pitch carry across replays cleanly.
+        window.fadeAudio = (function () {
+            let _ctx = null;
+            let _master = null;
+            // name → AudioBuffer (decoded sources)
+            const _bufferByName = new Map();
+            // name → Promise<AudioBuffer> while decode is in flight
+            const _decodingByName = new Map();
+            // clipId (int) → name (string) — what `load sfx clip` associates
+            const _clipNameById = new Map();
+            // sfxId (int) → InstanceState
+            const _instanceById = new Map();
+            let _highestClipId = 0;
+            let _highestInstanceId = 0;
+
+            function ensureCtx() {
+                if (_ctx) {
+                    if (_ctx.state === 'suspended') _ctx.resume().catch(() => {});
+                    return _ctx;
+                }
+                const Ctor = window.AudioContext || window.webkitAudioContext;
+                if (!Ctor) return null;
+                _ctx = new Ctor();
+                _master = _ctx.createGain();
+                _master.gain.value = 1.0;
+                _master.connect(_ctx.destination);
+                return _ctx;
+            }
+
+            function stopAndDetachSource(inst) {
+                if (!inst.source) return;
+                try { inst.source.onended = null; } catch { /* gone */ }
+                try { inst.source.stop(); } catch { /* not started */ }
+                try { inst.source.disconnect(); } catch { /* already gone */ }
+                inst.source = null;
+            }
+
+            // [-1, 1] linear pitch maps to playbackRate [0.5, 2.0]
+            // (one octave each way) — matches XAudio2 convention.
+            function pitchToRate(pitch) { return Math.pow(2, pitch); }
+
+            // Build a fresh BufferSourceNode and start it. Source nodes
+            // are single-use per Web Audio spec, so we re-create on
+            // every play. Gain + panner persist on the instance so the
+            // user's volume/pan/pitch settings survive replays.
+            function startSource(inst, offsetSec) {
+                const ctx = ensureCtx();
+                if (!ctx) return false;
+                stopAndDetachSource(inst);
+                const src = ctx.createBufferSource();
+                src.buffer = inst.buffer;
+                src.loop = inst.loop;
+                src.playbackRate.value = pitchToRate(inst.pitch);
+                src.connect(inst.panner);
+                inst.source = src;
+                inst.startedAt = ctx.currentTime - offsetSec;
+                inst.isPaused = false;
+                inst.isPlaying = true;
+                src.onended = () => {
+                    // Only flip state if this is still the active source.
+                    // pause()/stop() detach onended before stopping so we
+                    // don't race the manual-stop path.
+                    if (inst.source === src) {
+                        inst.isPlaying = false;
+                        inst.source = null;
+                    }
+                };
+                try { src.start(0, offsetSec); }
+                catch (e) {
+                    console.error('[fade-audio] source.start threw:', e);
+                    inst.isPlaying = false; inst.source = null;
+                    return false;
+                }
+                return true;
+            }
+
+            return {
+                // ── Asset registration (playground → host) ──────────
+                // Decodes bytes once, holds the AudioBuffer for the rest
+                // of the session. Returns the promise so the playground
+                // can await it before unblocking BeginPendingProgram.
+                async register(name, bytes) {
+                    const ctx = ensureCtx();
+                    if (!ctx) return false;
+                    if (_decodingByName.has(name)) return _decodingByName.get(name);
+                    // decodeAudioData detaches the ArrayBuffer it receives;
+                    // copy to a fresh one so callers can keep their bytes.
+                    const ab = new ArrayBuffer(bytes.byteLength);
+                    new Uint8Array(ab).set(bytes);
+                    const p = ctx.decodeAudioData(ab)
+                        .then((buf) => {
+                            _bufferByName.set(name, buf);
+                            _decodingByName.delete(name);
+                            return true;
+                        })
+                        .catch((e) => {
+                            _decodingByName.delete(name);
+                            console.error('[fade-audio] decode failed for', name, e);
+                            return false;
+                        });
+                    _decodingByName.set(name, p);
+                    return p;
+                },
+
+                // Wipe everything — called only on explicit "clear"
+                // (project switch, forceAssetCacheClear). NOT called
+                // between Runs anymore; the playground does a diff-based
+                // sync via unregister(name) for each asset that actually
+                // changed, so unchanged MP3s aren't re-decoded.
+                clearAssets() {
+                    for (const inst of _instanceById.values()) {
+                        stopAndDetachSource(inst);
+                        try { inst.gain?.disconnect(); } catch {}
+                        try { inst.panner?.disconnect(); } catch {}
+                    }
+                    _instanceById.clear();
+                    _clipNameById.clear();
+                    _bufferByName.clear();
+                    _decodingByName.clear();
+                    _highestClipId = 0;
+                    _highestInstanceId = 0;
+                },
+
+                // Remove one named buffer (and stop any instances still
+                // referring to it). Called when the source bytes change
+                // OR when the source file is deleted from OPFS. Other
+                // unrelated buffers stay decoded and ready to play.
+                unregister(name) {
+                    _bufferByName.delete(name);
+                    _decodingByName.delete(name);
+                    // Any instances built from a clip that pointed at
+                    // this name are now orphaned — stop them so the
+                    // user's program doesn't keep playing stale audio.
+                    // Identify by walking _clipNameById: any clipId
+                    // mapped to this name is dead.
+                    const deadClipIds = new Set();
+                    for (const [clipId, clipName] of _clipNameById.entries()) {
+                        if (clipName === name) deadClipIds.add(clipId);
+                    }
+                    for (const clipId of deadClipIds) _clipNameById.delete(clipId);
+                    // (Instance state is managed by the next program
+                    // re-issuing `sfx N, clipId` against the live clip
+                    // map, so we don't need to walk _instanceById here.)
+                },
+
+                // Halt every playing instance without disposing — Stop
+                // button. Reuses BrowserContentManager's stopAll model.
+                stopAll() {
+                    for (const inst of _instanceById.values()) {
+                        stopAndDetachSource(inst);
+                        inst.isPlaying = false;
+                        inst.isPaused = false;
+                        inst.pauseOffset = 0;
+                    }
+                },
+
+                // Master mute. Drives the gain node ahead of destination
+                // (preserves per-instance volume / pan / pitch state, so
+                // unmuting restores the previous mix rather than reset).
+                // No-op until ensureCtx has built the context, which is
+                // the first time anything plays or registers — calling
+                // setMuted before any sound is fine; the next ensureCtx
+                // call inherits the requested state.
+                setMuted(muted) {
+                    const ctx = ensureCtx();
+                    if (!ctx || !_master) return;
+                    _master.gain.value = muted ? 0 : 1.0;
+                },
+
+                // ── Clip / instance allocation ──────────────────────
+                loadClip(clipId, name) {
+                    if (clipId > _highestClipId) _highestClipId = clipId;
+                    if (!_bufferByName.has(name)) {
+                        // Either no audio was registered under this name,
+                        // or it's still decoding. The playground awaits
+                        // decoding before BeginPendingProgram, so a miss
+                        // here means the user typo'd or didn't upload it.
+                        console.warn('[fade-audio] loadClip:', name, 'not registered. Registered:',
+                            Array.from(_bufferByName.keys()));
+                        return false;
+                    }
+                    _clipNameById.set(clipId, name);
+                    return true;
+                },
+                highestClipId() { return _highestClipId; },
+                reserveClipId(clipId) {
+                    if (clipId > _highestClipId) _highestClipId = clipId;
+                },
+
+                createInstance(sfxId, clipId) {
+                    if (sfxId > _highestInstanceId) _highestInstanceId = sfxId;
+                    const name = _clipNameById.get(clipId);
+                    const buf = name ? _bufferByName.get(name) : null;
+                    if (!buf) {
+                        console.warn('[fade-audio] createInstance: clip', clipId, 'has no buffer');
+                        return false;
+                    }
+                    // Free any prior instance under this id (matches the
+                    // existing AudioCommands semantic).
+                    const old = _instanceById.get(sfxId);
+                    if (old) {
+                        stopAndDetachSource(old);
+                        try { old.gain?.disconnect(); } catch {}
+                        try { old.panner?.disconnect(); } catch {}
+                    }
+                    const ctx = ensureCtx();
+                    if (!ctx) return false;
+                    const gain = ctx.createGain();
+                    gain.gain.value = 1.0;
+                    const panner = ctx.createStereoPanner();
+                    panner.pan.value = 0.0;
+                    panner.connect(gain);
+                    gain.connect(_master);
+                    _instanceById.set(sfxId, {
+                        buffer: buf,
+                        gain, panner,
+                        volume: 1.0,
+                        pitch: 0.0,
+                        pan: 0.0,
+                        loop: false,
+                        source: null,
+                        startedAt: 0,
+                        isPaused: false,
+                        pauseOffset: 0,
+                        isPlaying: false,
+                    });
+                    return true;
+                },
+                highestInstanceId() { return _highestInstanceId; },
+                reserveInstanceId(sfxId) {
+                    if (sfxId > _highestInstanceId) _highestInstanceId = sfxId;
+                },
+
+                // ── Playback control ────────────────────────────────
+                play(sfxId) {
+                    const inst = _instanceById.get(sfxId);
+                    if (!inst) return false;
+                    // play sfx restarts from the beginning — matches the
+                    // SoundEffectInstance.Stop()+Play() pattern in
+                    // AudioCommands.PlaySfx.
+                    return startSource(inst, 0);
+                },
+                playWithDelay(sfxId, delayMs) {
+                    const inst = _instanceById.get(sfxId);
+                    if (!inst) return false;
+                    stopAndDetachSource(inst);
+                    inst.isPlaying = false;
+                    // setTimeout is fine for ms-precision; precise audio
+                    // scheduling via ctx.currentTime is a future polish.
+                    setTimeout(() => { if (_instanceById.get(sfxId) === inst) startSource(inst, 0); }, delayMs);
+                    return true;
+                },
+                pause(sfxId) {
+                    const inst = _instanceById.get(sfxId);
+                    if (!inst || !inst.isPlaying || !inst.source) return false;
+                    const ctx = _ctx;
+                    if (!ctx) return false;
+                    const offset = Math.max(0, ctx.currentTime - inst.startedAt);
+                    stopAndDetachSource(inst);
+                    inst.isPlaying = false;
+                    inst.isPaused = true;
+                    inst.pauseOffset = offset;
+                    return true;
+                },
+                stop(sfxId) {
+                    const inst = _instanceById.get(sfxId);
+                    if (!inst) return false;
+                    stopAndDetachSource(inst);
+                    inst.isPlaying = false;
+                    inst.isPaused = false;
+                    inst.pauseOffset = 0;
+                    return true;
+                },
+
+                // ── Settings (volume / pitch / pan / loop) ─────────
+                setVolume(sfxId, vol) {
+                    const inst = _instanceById.get(sfxId); if (!inst) return;
+                    const v = Math.max(0, Math.min(1, vol));
+                    inst.volume = v;
+                    inst.gain.gain.value = v;
+                },
+                getVolume(sfxId) { return _instanceById.get(sfxId)?.volume ?? 0; },
+                setPitch(sfxId, pitch) {
+                    const inst = _instanceById.get(sfxId); if (!inst) return;
+                    const p = Math.max(-1, Math.min(1, pitch));
+                    inst.pitch = p;
+                    if (inst.source) inst.source.playbackRate.value = pitchToRate(p);
+                },
+                getPitch(sfxId) { return _instanceById.get(sfxId)?.pitch ?? 0; },
+                setPan(sfxId, pan) {
+                    const inst = _instanceById.get(sfxId); if (!inst) return;
+                    const p = Math.max(-1, Math.min(1, pan));
+                    inst.pan = p;
+                    inst.panner.pan.value = p;
+                },
+                getPan(sfxId) { return _instanceById.get(sfxId)?.pan ?? 0; },
+                setLoop(sfxId, loop) {
+                    const inst = _instanceById.get(sfxId); if (!inst) return;
+                    const b = !!loop;
+                    inst.loop = b;
+                    if (inst.source) inst.source.loop = b;
+                },
+                // True when no source is currently playing (stopped or
+                // finished). Paused instances return false — they're
+                // "not done", just waiting.
+                isDone(sfxId) {
+                    const inst = _instanceById.get(sfxId);
+                    return !inst || !inst.isPlaying;
+                },
+            };
+        })();
+
+        // ── Cooperative-pump host-message handler ──────────────────────────
+        // Library commands (HostBridge.PostMessage in C#) call into JS via
+        // a synchronous IJSInProcessRuntime.InvokeVoid → window.postHostMessage.
+        // We dispatch by channel name and, when the handler returns a typed
+        // result, invoke the corresponding DepositResult* JSInvokable on the
+        // .NET side so the VM can resume.
+        //
+        // Same plugin-extensibility model as Export.Web: register additional
+        // channels in window.fadeHostHandlers before the runtime fires its
+        // first host-message. Built-in: 'fade-web/prompt' uses window.prompt.
+        window.fadeHostHandlers = {
+            'fade-web/prompt': (payload) => ({
+                resultType: 'string',
+                value: (() => { try { return window.prompt(payload) ?? ''; }
+                                catch { return ''; } })(),
+            }),
+        };
+
+        // resultType → JSInvokable method name on Index.razor.cs. New
+        // primitive types are added by adding a DepositResult* method
+        // there plus the corresponding case here.
+        const depositMethodForResultType = {
+            'string': 'DepositResultString',
+            'int':    'DepositResultInt',
+            'real':   'DepositResultReal',
+            'bool':   'DepositResultBool',
+            'byte':   'DepositResultByte',
+            'word':   'DepositResultWord',
+            'dword':  'DepositResultDword',
+            'dint':   'DepositResultDint',
+            'dfloat': 'DepositResultDfloat',
+            'void':   'DepositResultVoid',
+        };
+
+        window.postHostMessage = async function (channel, payload) {
+            const handler = window.fadeHostHandlers[channel];
+            let reply;
+            if (!handler) {
+                console.warn('[fade-monogame] no host handler for channel:', channel);
+                reply = { resultType: 'string', value: '' };
+            } else {
+                try {
+                    reply = await handler(payload);
+                } catch (e) {
+                    console.error('[fade-monogame] host handler for', channel, 'threw:', e);
+                    reply = { resultType: 'string', value: '' };
+                }
+            }
+            const method = depositMethodForResultType[reply?.resultType] ?? 'DepositResultVoid';
+            try {
+                if (method === 'DepositResultVoid') {
+                    await window.theInstance.invokeMethodAsync(method);
+                } else {
+                    await window.theInstance.invokeMethodAsync(method, reply.value);
+                }
+            } catch (e) {
+                console.error('[fade-monogame] deposit', method, 'failed:', e);
+            }
+        };
+
+        // ── Entry point from .NET ───────────────────────────────────────────
+        // Pages/Index.razor.cs's OnAfterRender(firstRender:true) calls this via
+        // IJSRuntime.InvokeVoidAsync("initRenderJS", dotNetRef). We store the
+        // ref so tickJS can call back into .NET, apply the Blazor shims, set
+        // up the canvas, and start the rAF loop.
+        window.initRenderJS = function (instance) {
+            applyBlazorKniShims();
+            window.theInstance = instance;
+
+            // Arm console-forwarding to the parent (preview mode only,
+            // gated above). Past this point user `print` lines and
+            // runtime warnings stream into the host's Output panel
+            // without any Blazor boot chatter beforehand.
+            window.__fadeForwardingArmed = true;
+
+            if (window.__fadeSplash) window.__fadeSplash.setStatus('Runtime ready…');
+
+            // Fade out the boot splash now that Blazor + KNI are fully mounted.
+            // A short delay lets the status message read "Runtime ready…" briefly
+            // before disappearing, then reveals the black canvas waiting for Run.
+            // Any subsequent run-start-source / debug-start hide() calls are
+            // no-ops (the hidden flag prevents double-hiding).
+            setTimeout(() => { if (window.__fadeSplash) window.__fadeSplash.hide(); }, 400);
+
+            // Hide the boot splash now that KNI + Game1 are alive. The Blazor
+            // mount lives in a separate #mg-blazor-root so the splash sat
+            // alongside until this moment — fade it out so the canvas shows.
+            const splash = document.getElementById('app');
+            if (splash) splash.style.display = 'none';
+
+            const canvas = document.getElementById('theCanvas');
+            const holder = document.getElementById('canvasHolder');
+            if (!canvas || !holder) {
+                console.error('[WebRuntime.MonoGame] canvas/holder missing — Index.razor markup did not render.');
+                return;
+            }
+
+            canvas.width = holder.clientWidth;
+            canvas.height = holder.clientHeight;
+            // Disable browser context menu so right-click is available to the game.
+            canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+            // Push the initial canvas size into .NET *before* the user's
+            // program runs. Without this, GraphicsDeviceManager keeps its
+            // KNI default (e.g. 800x480) at boot, so SetMainRenderSize
+            // (called once from `set display W,H` in user code) computes
+            // the letterbox transform against that stale value and the
+            // 1920x1080 render lands in a small corner. tickJS only
+            // calls OnCanvasResized when canvas dims differ from holder,
+            // which is false on first frame (we just synced them), so
+            // without this explicit call the initial size never makes
+            // it across.
+            try {
+                window.theInstance.invokeMethod('OnCanvasResized', canvas.width, canvas.height);
+            } catch (e) {
+                console.warn('[WebRuntime.MonoGame] initial OnCanvasResized failed:', e);
+            }
+
+            // Belt-and-suspenders resize handling for cases tickJS can
+            // miss — chiefly itch.io's fullscreen toggle, which can
+            // resize the iframe between rAF callbacks (and may briefly
+            // suspend rAF entirely during the transition). ResizeObserver
+            // fires whenever the holder element's box changes, and we
+            // re-sync the canvas + notify .NET right then. The tickJS
+            // poll in the rAF loop still runs and is the redundant
+            // safety net for layout shifts ResizeObserver doesn't pick
+            // up (e.g. DPR changes without a box change).
+            if (typeof ResizeObserver !== 'undefined') {
+                const ro = new ResizeObserver(() => {
+                    const w = holder.clientWidth;
+                    const h = holder.clientHeight;
+                    if (canvas.width !== w || canvas.height !== h) {
+                        canvas.width = w;
+                        canvas.height = h;
+                        try {
+                            window.theInstance.invokeMethod('OnCanvasResized', w, h);
+                        } catch (e) { /* .NET may still be tearing down */ }
+                    }
+                });
+                ro.observe(holder);
+            }
+            // Also listen for fullscreenchange — some browsers fire it
+            // before the ResizeObserver callback, and explicit re-poll
+            // here gets the new dimensions into .NET one frame sooner.
+            const onFullscreenChange = () => {
+                requestAnimationFrame(() => {
+                    const w = holder.clientWidth;
+                    const h = holder.clientHeight;
+                    if (canvas.width !== w || canvas.height !== h) {
+                        canvas.width = w;
+                        canvas.height = h;
+                        try {
+                            window.theInstance.invokeMethod('OnCanvasResized', w, h);
+                        } catch { /* ignore */ }
+                    }
+                });
+            };
+            document.addEventListener('fullscreenchange', onFullscreenChange);
+            document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+            window.requestAnimationFrame(tickJS);
+        };
+
+        // ── Iframe preview-mode relay ───────────────────────────────────────
+        // When the Playground loads this index.html in an iframe with
+        // `?preview`, mirror Export.Web's iframe protocol so the same runner
+        // surface in main.ts drives both targets. Wire-protocol mapping:
+        //
+        //   parent → iframe:                  → JSInvokable on Index.razor.cs
+        //   ───────────────────────────────────────────────────────────────
+        //   bootstrap                         no-op (libraries baked-in)
+        //                                      reply: { type: 'preview-armed' }
+        //   run-start-source { source, id }   LoadProgram(source)
+        //                                      reply: { type: 'run-tick-result',
+        //                                               id, result: JSON.stringify({ ok, done }) }
+        //   stop-run                          StopGame()
+        //   list-tests { source, id }         ListTests(source)
+        //                                      reply: { type: 'list-tests-result',
+        //                                               id, result: <json from ListTests> }
+        //   run-tests { source, testName, id} RunTests(source, testName)
+        //                                      reply: { type: 'run-tests-result',
+        //                                               id, result: <json from RunTests> }
+        //
+        // Drains debug events through window.onMonoGameDebugEvent (set
+        // below) which fire from tickJS's TickDotNet return value.
+        //
+        // MonoGame's libraries (FadeMonoGameCommands + StandardCommands)
+        // are baked in — there's no command-DLL hot-load surface like
+        // Export.Web. So the bootstrap step is a no-op handshake purely
+        // for protocol symmetry with the iframe lifecycle main.ts already
+        // implements.
+        if (new URLSearchParams(location.search).has('preview')) {
+            const waitForInstance = () => new Promise((resolve) => {
+                const tick = () => {
+                    if (window.theInstance) resolve();
+                    else setTimeout(tick, 50);
+                };
+                tick();
+            });
+
+            // tickJS calls this every frame for each debug event TickDotNet
+            // produced. In preview mode, forward to the Playground so its
+            // debug control bar (breakpoint hit, scope, etc.) updates.
+            // Wrapped in a `debug-event` envelope so the parent's message
+            // listener can distinguish protocol replies (run-tick-result,
+            // debug-scopes-result, etc.) from streaming debug events —
+            // both kinds have a `type` field, and inner debug-event types
+            // ('REV_REQUEST_BREAKPOINT', 'PROTO_ACK', …) would otherwise
+            // collide with the reserved protocol names.
+            window.onMonoGameDebugEvent = (evt) => {
+                try { window.parent.postMessage({ type: 'debug-event', event: evt }, '*'); }
+                catch { /* parent may be cross-origin */ }
+            };
+
+            // Helper: invoke a JSInvokable and reply with an id-correlated
+            // result envelope. `replyType` is the parent-facing message
+            // type the Playground correlates on.
+            const invokeAndReply = async (replyType, id, method, ...args) => {
+                const result = await window.theInstance.invokeMethodAsync(method, ...args);
+                window.parent.postMessage({ type: replyType, id, result }, '*');
+            };
+
+            const handleParent = async (m) => {
+                if (!m || !m.type) return;
+                try {
+                    switch (m.type) {
+                        case 'pg-splash-hidden':
+                            // Parent Playground page's boot splash has finished
+                            // dimming out. Un-pause our animations now so both
+                            // splashes are never visible at the same time.
+                            document.getElementById('fade-splash')?.classList.remove('splash-anim-paused');
+                            return;
+
+                        case 'bootstrap':
+                            // commandDlls intentionally ignored — monogame
+                            // libraries are statically referenced. Reply
+                            // armed so the parent's bootstrap promise
+                            // resolves and run/test traffic can begin.
+                            window.parent.postMessage({ type: 'preview-armed' }, '*');
+                            return;
+
+                        // ── Run lifecycle ─────────────────────────────────
+                        case 'run-start-source': {
+                            if (window.__fadeSplash && !window.__fadeSplash.isHidden())
+                                window.__fadeSplash.setStatus('Loading program…');
+                            const ok = await window.theInstance.invokeMethodAsync('LoadProgram', m.source);
+                            // A prior fatal tick error parked the rAF
+                            // loop; a fresh LoadProgram is the user
+                            // saying "try again", so re-arm it.
+                            if (ok && tickHalted) {
+                                tickHalted = false;
+                                window.requestAnimationFrame(tickJS);
+                            }
+                            // First successful LoadProgram fades out the
+                            // friendly splash. Subsequent Reset clicks
+                            // are no-ops (the splash has already gone).
+                            if (ok && window.__fadeSplash) {
+                                window.__fadeSplash.hide();
+                            }
+                            window.parent.postMessage({
+                                type: 'run-tick-result',
+                                id: m.id,
+                                result: JSON.stringify({ ok, done: ok }),
+                            }, '*');
+                            return;
+                        }
+                        case 'stop-run':
+                            await window.theInstance.invokeMethodAsync('StopGame');
+                            return;
+                        case 'get-version-info':
+                            await invokeAndReply('get-version-info-result', m.id, 'GetVersionInfo');
+                            return;
+
+                        // ── Asset management ──────────────────────────────
+                        // The Playground pushes each .xnb's bytes before
+                        // running a monogame project so `texture` / `load
+                        // sfx clip` resolve against an in-memory dict.
+                        case 'register-asset':
+                            if (window.__fadeSplash && !window.__fadeSplash.isHidden()) {
+                                // We can't distinguish texture vs SpriteFont
+                                // XNBs from JS without parsing the header;
+                                // call it "asset" so both look right.
+                                window.__fadeSplash.setStatus(`Loading asset: ${m.name}…`);
+                            }
+                            await window.theInstance.invokeMethodAsync('RegisterAsset', m.name, m.bytes);
+                            return;
+                        case 'clear-assets':
+                            await window.theInstance.invokeMethodAsync('ClearAssets');
+                            // Also wipe the Web Audio host — the audio path
+                            // bypasses MonoGame's content manager so clearing
+                            // only the texture dict would leave stale decoded
+                            // AudioBuffers + live SourceNodes hanging around
+                            // between Runs.
+                            try { window.fadeAudio.clearAssets(); } catch (e) {
+                                console.warn('[fade-audio] clearAssets:', e);
+                            }
+                            return;
+
+                        // ── Audio assets (Web Audio path) ────────────────
+                        // Browser-native audio replaces MonoGame's
+                        // SoundEffect XNB path. `register-audio` hands the
+                        // raw source bytes (MP3/OGG/WAV/FLAC/AAC) to the
+                        // audio host, which decodes via decodeAudioData and
+                        // stores the resulting AudioBuffer keyed by name.
+                        // Reply is id-correlated so the playground can
+                        // await decode completion before unblocking
+                        // BeginPendingProgram.
+                        // Selective eviction — playground sends these
+                        // when an asset's source bytes have changed (or
+                        // the file was deleted) and the existing
+                        // cached Texture2D / SpriteFont / AudioBuffer
+                        // needs to be invalidated. Other registered
+                        // assets stay intact.
+                        case 'unregister-asset':
+                            await window.theInstance.invokeMethodAsync('UnregisterAsset', m.name);
+                            return;
+                        case 'unregister-audio':
+                            try { window.fadeAudio.unregister(m.name); } catch (e) {
+                                console.warn('[fade-audio] unregister threw:', e);
+                            }
+                            return;
+                        case 'register-audio': {
+                            // Surface decoding progress on the in-canvas
+                            // splash so the user sees "what" is loading
+                            // (especially helpful for big MP3s that take
+                            // a noticeable moment).
+                            if (window.__fadeSplash) {
+                                window.__fadeSplash.setStatus(`Loading audio: ${m.name}…`);
+                            }
+                            let ok = false;
+                            try {
+                                ok = await window.fadeAudio.register(m.name, m.bytes);
+                            } catch (e) {
+                                console.error('[fade-audio] register threw:', e);
+                            }
+                            window.parent.postMessage(
+                                { type: 'register-audio-result', id: m.id, result: !!ok },
+                                '*',
+                            );
+                            return;
+                        }
+
+                        // ── Test discovery / execution ────────────────────
+                        case 'list-tests':
+                            await invokeAndReply('list-tests-result', m.id, 'ListTests', m.source);
+                            return;
+                        case 'run-tests':
+                            await invokeAndReply('run-tests-result', m.id, 'RunTests', m.source, m.testName ?? '');
+                            return;
+
+                        // ── Debug session ─────────────────────────────────
+                        // Same wire shape as Export.Web's worker protocol so
+                        // main.ts's runner can dispatch identically against
+                        // either iframe. monoGameHost.debugStart used to
+                        // LoadProgram-then-DebugStart on the page side; we
+                        // mirror that two-step here so the iframe protocol
+                        // surface stays uniform with Export.Web's
+                        // debug-start.
+                        case 'debug-start': {
+                            if (window.__fadeSplash && !window.__fadeSplash.isHidden())
+                                window.__fadeSplash.setStatus('Loading program…');
+                            const compileOk = await window.theInstance.invokeMethodAsync('LoadProgram', m.source);
+                            if (compileOk && tickHalted) {
+                                tickHalted = false;
+                                window.requestAnimationFrame(tickJS);
+                            }
+                            if (compileOk && window.__fadeSplash) {
+                                window.__fadeSplash.hide();
+                            }
+                            const result = compileOk
+                                ? await window.theInstance.invokeMethodAsync('DebugStart')
+                                : JSON.stringify({ ok: false, error: 'compile failed', statementLines: [] });
+                            window.parent.postMessage({
+                                type: 'debug-start-result',
+                                id: m.id,
+                                result,
+                            }, '*');
+                            return;
+                        }
+                        case 'debug-start-test':
+                            if (tickHalted) {
+                                tickHalted = false;
+                                window.requestAnimationFrame(tickJS);
+                            }
+                            if (window.__fadeSplash) window.__fadeSplash.hide();
+                            await invokeAndReply('debug-start-test-result', m.id, 'DebugStartTest', m.source, m.testName ?? '');
+                            return;
+                        // ── Two-phase compile/run (asset-aware loop) ─────
+                        // The playground uses these in place of run-start-source
+                        // when it needs to register PNG-compiled XNBs from the
+                        // macro pass's plan before the program ticks.
+                        case 'compile-for-run':
+                            // Re-display the splash on every Run so the
+                            // asset-loading window (decode MP3s, register
+                            // textures) is visible inside the game canvas
+                            // instead of a frozen previous frame.
+                            if (window.__fadeSplash) {
+                                window.__fadeSplash.show();
+                                window.__fadeSplash.setStatus('Compiling…');
+                            }
+                            await invokeAndReply('compile-for-run-result', m.id, 'CompileForRun', m.source);
+                            return;
+                        case 'get-content-build-plan':
+                            await invokeAndReply('get-content-build-plan-result', m.id, 'GetContentBuildPlan');
+                            return;
+                        case 'begin-pending-program':
+                            // Mirrors run-start-source's tickHalted + splash
+                            // bookkeeping so the second phase finishes the
+                            // boot the user expects to see.
+                            if (tickHalted) {
+                                tickHalted = false;
+                                window.requestAnimationFrame(tickJS);
+                            }
+                            if (window.__fadeSplash) window.__fadeSplash.hide();
+                            await invokeAndReply('begin-pending-program-result', m.id, 'BeginPendingProgram');
+                            return;
+                        case 'debug-terminate':
+                            await window.theInstance.invokeMethodAsync('DebugTerminate');
+                            return;
+                        case 'get-debug-test-result':
+                            // Snapshot the just-finished debug-test outcome
+                            // so the playground can flip the test row from
+                            // 'running' to 'pass'/'fail' instead of falling
+                            // back to the purple 'stopped' safety branch.
+                            await invokeAndReply('get-debug-test-result-result', m.id, 'GetDebugTestResult');
+                            return;
+                        case 'debug-set-breakpoints':
+                            await window.theInstance.invokeMethodAsync('DebugSetBreakpoints', m.linesJson ?? '[]');
+                            return;
+                        case 'debug-step':
+                            await window.theInstance.invokeMethodAsync('DebugStep', m.kind ?? 'over');
+                            return;
+                        case 'debug-continue':
+                            await window.theInstance.invokeMethodAsync('DebugContinue');
+                            return;
+                        case 'debug-pause':
+                            await window.theInstance.invokeMethodAsync('DebugPause');
+                            return;
+                        case 'debug-stack-frames':
+                            await invokeAndReply('debug-stack-frames-result', m.id, 'DebugStackFrames');
+                            return;
+                        case 'debug-resolve-instruction':
+                            await invokeAndReply('debug-resolve-instruction-result', m.id, 'DebugResolveInstruction', m.insIndex | 0);
+                            return;
+                        case 'debug-scopes':
+                            await invokeAndReply('debug-scopes-result', m.id, 'DebugScopes', m.frameId | 0);
+                            return;
+                        case 'debug-variable-expansion':
+                            await invokeAndReply('debug-variable-expansion-result', m.id, 'DebugVariableExpansion', m.variableId | 0);
+                            return;
+                        case 'debug-eval':
+                            await invokeAndReply('debug-eval-result', m.id, 'DebugEval', m.frameId | 0, m.expression ?? '');
+                            return;
+                        case 'debug-repl':
+                            await invokeAndReply('debug-repl-result', m.id, 'DebugRepl', m.frameId | 0, m.code ?? '');
+                            return;
+                        case 'debug-set-variable':
+                            await invokeAndReply('debug-set-variable-result', m.id, 'DebugSetVariable',
+                                m.frameId | 0, m.variableId | 0, m.rhs ?? '');
+                            return;
+
+                        // ── Game-loop lifecycle ──────────────────────────
+                        // pause-tick / resume-tick let the Playground free
+                        // up rAF cycles when the editor takes focus, so
+                        // Monaco's own rAF work (cursor blink, decoration
+                        // refresh, hover) doesn't have to fight KNI for
+                        // the frame budget. set-muted drives the Web Audio
+                        // master gain — fadeAudio.setMuted is idempotent
+                        // and tolerates being called before the context
+                        // is built.
+                        case 'pause-tick':
+                            tickHalted = true;
+                            return;
+                        case 'resume-tick':
+                            if (tickHalted) {
+                                tickHalted = false;
+                                window.requestAnimationFrame(tickJS);
+                            }
+                            return;
+                        case 'set-muted':
+                            try { window.fadeAudio.setMuted(!!m.muted); }
+                            catch (e) { console.warn('[fade-audio] setMuted:', e); }
+                            return;
+
+                        default:
+                            console.warn('[fade-monogame preview] unhandled message type:', m.type);
+                    }
+                } catch (e) {
+                    console.error('[fade-monogame preview] handler', m.type, 'threw:', e);
+                    window.parent.postMessage({
+                        type: 'error',
+                        id: m.id,
+                        message: e?.message ?? String(e),
+                    }, '*');
+                }
+            };
+
+            window.addEventListener('message', (e) => {
+                if (e.source !== window.parent) return;
+                handleParent(e.data);
+            });
+
+            // Tell parent we're ready as soon as Blazor mounts. Symmetrical
+            // with Export.Web's iframe — main.ts's ensureWebPreviewArmed
+            // waits for preview-ready before sending bootstrap.
+            waitForInstance().then(() => {
+                try { window.parent.postMessage({ type: 'preview-ready' }, '*'); }
+                catch { /* parent may be cross-origin */ }
+            });
+        } else {
+            // ── Static-host boot ────────────────────────────────────────
+            // No `?preview` flag → we're a deployed export (Playground
+            // download or `dotnet publish` artifact uploaded to itch.io,
+            // GitHub Pages, etc.). Self-bootstrap from fade-manifest.json:
+            //
+            //   {
+            //     "type": "monogame",
+            //     "exportFormat": "1",
+            //     "source": "program.fbasic",          // file under game/
+            //     "assets": ["Goldfish", "Boop", ...]  // bare names
+            //   }
+            //
+            // We wait for Blazor to mount, fetch the source + each XNB
+            // asset, register the assets, then call LoadProgram(source).
+            // Same JSInvokable the Playground drives via postMessage; the
+            // only difference is the parent/iframe protocol is gone here.
+            //
+            // Source-bundling (vs bytecode) is intentional: LoadProgram
+            // already takes a source string and compiles in-runtime, so
+            // no C# changes are needed and the export pipeline stays
+            // symmetrical between the Playground download and the
+            // FadeBasic.Export.MonoGame MSBuild target.
+            const waitForInstanceStandalone = () => new Promise((resolve) => {
+                const tick = () => {
+                    if (window.theInstance) resolve();
+                    else setTimeout(tick, 50);
+                };
+                tick();
+            });
+            const splash = window.__fadeSplash;
+            (async () => {
+                try {
+                    // Initial "Booting Fade Basic" text comes from the
+                    // HTML. We update through fetch phases so the user
+                    // sees forward progress on slow connections.
+                    await waitForInstanceStandalone();
+                    if (splash) splash.setStatus('Loading game assets…');
+                    const manifest = await fetch('fade-manifest.json').then((r) => r.json());
+                    if (manifest.type !== 'monogame') {
+                        console.warn('[fade-monogame] fade-manifest.json type is not "monogame":', manifest.type);
+                    }
+                    const sourceFile = manifest.source || 'program.fbasic';
+                    const assets = Array.isArray(manifest.assets) ? manifest.assets : [];
+
+                    for (const name of assets) {
+                        try {
+                            const buf = await fetch(`game/${name}.xnb`).then((r) => r.arrayBuffer());
+                            await window.theInstance.invokeMethodAsync('RegisterAsset', name, new Uint8Array(buf));
+                        } catch (e) {
+                            console.error('[fade-monogame] asset load failed for', name, e);
+                        }
+                    }
+
+                    if (splash) splash.setStatus('Starting game…');
+                    const source = await fetch(`game/${sourceFile}`).then((r) => r.text());
+                    const ok = await window.theInstance.invokeMethodAsync('LoadProgram', source);
+                    if (!ok) {
+                        if (splash) splash.setStatus('Failed to start — see browser console.', true);
+                        console.error('[fade-monogame] LoadProgram returned false — compile failed.');
+                        return;
+                    }
+                    // Give the game a couple of frames to draw its first
+                    // scene before fading out the splash — otherwise the
+                    // user sees the splash vanish to a black canvas
+                    // before the first sync.
+                    setTimeout(() => { if (splash) splash.hide(); }, 350);
+                } catch (e) {
+                    if (splash) splash.setStatus('Failed to load — see browser console.', true);
+                    console.error('[fade-monogame] standalone boot failed:', e);
+                }
+            })();
+        }
+    </script>
+
+</body>
+
+</html>

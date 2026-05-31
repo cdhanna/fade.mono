@@ -1,0 +1,85 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>WebRuntime.MonoGame</RootNamespace>
+    <AssemblyName>WebRuntime.MonoGame</AssemblyName>
+    <!-- KNI requires this define for its WebGL platform code paths. -->
+    <DefineConstants>$(DefineConstants);BLAZORGL</DefineConstants>
+    <KniPlatform>BlazorGL</KniPlatform>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+<!--    <PublishTrimmed>true</PublishTrimmed>-->
+    <PublishTrimmed>false</PublishTrimmed>
+    
+    <!-- Removes all ICU globalization data files (~2.5 MB). Games don't need
+         locale-sensitive string ops; the invariant culture is sufficient. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!-- NuGet package: FadeBasic.Export.MonoGame
+       Mirrors FadeBasic.Export.Web — install.sh-style flow runs
+       `dotnet publish` first to populate the wasm staging dir, then
+       `dotnet pack` picks up those files as package content. Adding
+       this package to a fbasic project + `dotnet publish` yields a
+       deployable monogame web bundle (see build/FadeBasic.Export.MonoGame.targets). -->
+  <PropertyGroup>
+    <PackageId>FadeBasic.Export.MonoGame</PackageId>
+    <Title>FadeBasic MonoGame Web Export</Title>
+    <Description>Adds dotnet publish support for exporting a FadeBasic project as a self-contained monogame WebGL bundle (KNI + Game1 runtime).</Description>
+    <IsPackable>true</IsPackable>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <!-- Always ship the .targets file. Consumers reference this package and
+       MSBuild auto-imports our targets at evaluation time. -->
+  <ItemGroup>
+    <None Include="build/FadeBasic.Export.MonoGame.targets"
+          Pack="true"
+          PackagePath="build/FadeBasic.Export.MonoGame.targets" />
+  </ItemGroup>
+
+  <!-- Desktop deps: MonoGame DesktopGL + ImGui. -->
+  <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Desktop'">
+    <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
+    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)" />
+  </ItemGroup>
+
+  <!-- Browser deps: KNI BlazorGL. No ImGui (cimgui has no WASM build). -->
+  <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Web'">
+    <PackageReference Include="nkast.Kni.Platform.Blazor.GL" Version="$(KniPlatformBlazorGLVersion)" />
+  </ItemGroup>
+  
+  <!-- Only when packing should we include the staged wasm artifacts. The
+       wasm bundle is built by `dotnet publish` (which produces
+       bin/Release/net8.0/publish/wwwroot/*) and pointed at via
+       $(FADE_MG_WASM_ARTIFACT_DIR). Mirrors Export.Web's pattern. -->
+  <ItemGroup Condition="'$(IsPack)'=='true'">
+    <None Include="$(FADE_MG_WASM_ARTIFACT_DIR)/wwwroot/**"
+          Condition="Exists('$(FADE_MG_WASM_ARTIFACT_DIR)/wwwroot')"
+          Pack="true"
+          PackagePath="build/wasm/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+
+  <!-- KniPlatformBlazorGLVersion is defined in Directory.Build.props. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.0.17" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.0.17" PrivateAssets="all" />
+    <PackageReference Include="nkast.Kni.Platform.Blazor.GL" Version="$(KniPlatformBlazorGLVersion)" />
+  </ItemGroup>
+
+  <!-- Build the lib graph (Lib → Game → Contracts) at net8.0 for the Web platform.
+       Both knobs are independent: SetTargetFramework picks the TFM, SetProperties picks
+       the export platform (KNI packages + BROWSER define). Properties propagate down
+       the ProjectReference chain. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Fade.MonoGame.Lib\Fade.MonoGame.Lib.csproj">
+      <SetTargetFramework>TargetFramework=net8.0</SetTargetFramework>
+      <SetProperties>FadeMonoGamePlatform=Web</SetProperties>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>

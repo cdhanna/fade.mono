@@ -1,15 +1,20 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <!-- net10.0 = desktop (DesktopGL + ImGui). net8.0 = browser (KNI BlazorGL,
-             no ImGui, no FileSystemWatcher). The TFM is the platform discriminator;
-             matching #if BROWSER guards live in source. -->
+        <!-- TFM and FadeMonoGamePlatform are independent. See Fade.MonoGame.Game.csproj. -->
         <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
-    <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <PropertyGroup>
+        <PackageId>FadeBasic.MonoGame.Contracts</PackageId>
+        <Title>FadeBasic MonoGame Contracts</Title>
+        <Description>Shared interfaces and contracts for the FadeBasic MonoGame runtime.</Description>
+        <IsPackable>true</IsPackable>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(FadeMonoGamePlatform)' == 'Web'">
         <DefineConstants>$(DefineConstants);BROWSER</DefineConstants>
     </PropertyGroup>
 

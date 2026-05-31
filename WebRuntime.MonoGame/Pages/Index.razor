@@ -1,0 +1,27 @@
+@page "/"
+@*
+    Second route so the iframe-mount flow works: the Playground loads the
+    monogame template at /runtime/monogame/index.html?preview=1, and with
+    <base href="./"> Blazor's NavigationManager resolves the app-relative
+    path to "index.html". Without this @page Blazor's Router falls through
+    to <NotFound> ("Sorry, there's nothing at this address.") and never
+    renders the canvas. The standalone-from-vite-preview flow that opens
+    at /runtime/monogame/ (no explicit index.html) still uses @page "/".
+*@
+@page "/index.html"
+@inject IJSRuntime JsRuntime
+
+<PageTitle>Fade WebRuntime.MonoGame</PageTitle>
+
+@*
+    Inline styles (not via css/app.css) so the panel works when this Razor
+    component is dropped into the Playground's dockview — the Playground
+    page doesn't load WebRuntime.MonoGame's app.css. canvasHolder fills
+    whatever parent #mg-blazor-root resolves to; standalone wwwroot/index.html
+    makes that the full viewport, Playground constrains it to a panel cell.
+*@
+<div id="canvasHolder" style="position: absolute; inset: 0; background: #000;">
+    <canvas id="theCanvas" tabindex="0"
+            style="display: block; width: 100%; height: 100%; outline: none;"></canvas>
+</div>
+

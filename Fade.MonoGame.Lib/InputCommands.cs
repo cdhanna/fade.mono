@@ -224,6 +224,12 @@ public partial class FadeMonoGameCommands
     {
         return InputSystem.mouseState.LeftButton == ButtonState.Pressed && InputSystem.oldMouseState.LeftButton == ButtonState.Released;
     }
+    
+    [FadeBasicCommand("new right click")]
+    public static bool IsNewRightMouse()
+    {
+        return InputSystem.mouseState.RightButton == ButtonState.Pressed && InputSystem.oldMouseState.RightButton == ButtonState.Released;
+    }
 
     /// <summary>
     /// <para>Returns <c>1</c> while the right mouse button is held down.</para>

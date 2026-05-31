@@ -1,7 +1,9 @@
 #if BROWSER
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using Microsoft.Xna.Framework.Content;
 
 namespace Fade.MonoGame.Core;
@@ -50,7 +52,79 @@ public sealed class BrowserContentManager : ContentManager
 
     public IEnumerable<string> RegisteredNames => _assets.Keys;
 
-    public void ClearAssets() => _assets.Clear();
+    /// <summary>
+    /// Evict a single asset by name. Removes the registered bytes AND
+    /// any cached Texture2D / SpriteFont / etc. instance, disposing
+    /// GPU resources. Used by the playground's per-asset sync path to
+    /// invalidate stale entries without nuking the whole asset registry
+    /// the way ClearAssets does.
+    /// </summary>
+    // KNI's ContentManager doesn't expose its loaded-assets dictionary
+    // (it's private, unlike MonoGame's protected `LoadedAssets`). We
+    // need to evict by name to invalidate stale Texture2D / SpriteFont
+    // instances after RegisterAsset replaces an asset's bytes. Reach in
+    // via reflection — the field is named `loadedAssets` in both
+    // MonoGame and KNI as of net8.0, but try a couple of fallback names
+    // so a future rename doesn't silently start re-using disposed
+    // textures.
+    private static readonly FieldInfo _loadedAssetsField =
+        ResolveLoadedAssetsField();
+
+    private static FieldInfo ResolveLoadedAssetsField()
+    {
+        var t = typeof(ContentManager);
+        foreach (var name in new[] { "loadedAssets", "_loadedAssets", "LoadedAssets" })
+        {
+            var f = t.GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            if (f != null) return f;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Evict a single asset by name. Removes the registered bytes AND
+    /// any cached Texture2D / SpriteFont / etc. instance, disposing
+    /// GPU resources. Used by the playground's per-asset sync path so
+    /// unchanged assets stay cached across Runs (avoiding repeated
+    /// `decodeAudioData` + texture re-uploads) while changed ones are
+    /// invalidated without nuking the whole asset registry.
+    /// </summary>
+    public void UnregisterAsset(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return;
+        if (name.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase))
+        {
+            name = name.Substring(0, name.Length - 4);
+        }
+        _assets.Remove(name);
+        if (_loadedAssetsField?.GetValue(this) is IDictionary loaded && loaded.Contains(name))
+        {
+            var existing = loaded[name];
+            loaded.Remove(name);
+            if (existing is IDisposable d)
+            {
+                try { d.Dispose(); } catch { /* GC will clean up */ }
+            }
+        }
+    }
+
+    public void ClearAssets()
+    {
+        _assets.Clear();
+        // Also flush the base ContentManager's cache of loaded objects
+        // (Texture2D, SoundEffect, etc.) so subsequent `Content.Load<T>`
+        // calls go back through OpenStream and pick up the fresh bytes.
+        // Without this, swapping a texture's underlying bytes via
+        // RegisterAsset has no visible effect — Load returns the
+        // already-cached GPU Texture2D from the previous run, so macro
+        // tweaks (e.g. `dxt5` → `color`) appear to silently fail.
+        //
+        // Unload() disposes the cached assets too — fine here because
+        // the playground calls ClearAssets right before swapping in a
+        // brand-new fbasic VM context (BeginPendingProgram), so nothing
+        // in the running program still references them.
+        Unload();
+    }
 
     protected override Stream OpenStream(string assetName)
     {

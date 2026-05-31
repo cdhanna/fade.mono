@@ -1,0 +1,105 @@
+<Project>
+  <!--
+    Imported automatically by MSBuild when FadeBasic.Export.MonoGame is referenced.
+    $(MSBuildThisFileDirectory) resolves to the build/ folder inside the restored
+    NuGet package cache.
+
+    Consumer project declares:
+        <FadeSource Include="game.fbasic" />   (one or more .fbasic files)
+
+    Raw assets (PNGs, MP3s, .fx, .spritefont) go in $(FadeMonoGameAssetsDir)
+    (defaults to Assets/ next to the project).  The content CLI builds them to
+    XNBs and applies KNI patches automatically — no <FadeAsset> items needed.
+
+    Requires the fadecontent tool.  Either:
+      a) $(FadeMonoGameContentTool) points at the tool bundled in this package
+         (build/tools/fadecontent.dll, set automatically below), or
+      b) Override $(FadeMonoGameContentTool) to a custom invocation.
+  -->
+
+  <PropertyGroup>
+    <FadeMonoGameExportWasmDir>$(MSBuildThisFileDirectory)wasm\</FadeMonoGameExportWasmDir>
+    <FadeMonoGameExportOutDir Condition="'$(FadeMonoGameExportOutDir)' == ''">$(PublishDir)monogame\</FadeMonoGameExportOutDir>
+    <FadeMonoGameProgramFile  Condition="'$(FadeMonoGameProgramFile)'  == ''">program.fbasic</FadeMonoGameProgramFile>
+
+    <!-- Consumer's content project (.csproj path).  Set this to the same
+         ___SafeGameName___.Content.csproj that your BuildContent.targets points at.
+         When set, the export builds content for Web automatically during publish.
+         Leave empty to skip the content build (assets must be pre-placed in
+         $(FadeMonoGameExportOutDir)game\ before publish). -->
+    <FadeMonoGameContentProject Condition="'$(FadeMonoGameContentProject)' == ''"></FadeMonoGameContentProject>
+  </PropertyGroup>
+
+  <!-- ── Step 1: build raw assets → XNBs using the KNI/BlazorGL pipeline ────
+       Builds the consumer's content project with FadeMonoGamePlatform=Web,
+       then runs the resulting binary against the project's Assets/ folder.
+       Mirrors exactly what BuildContent.targets does for desktop, just with
+       the Web platform.  Skipped when FadeMonoGameContentProject is not set. -->
+  <Target Name="FadeMonoGameBuildContent" BeforeTargets="FadeMonoGameExport"
+          Condition="'$(FadeMonoGameContentProject)' != ''">
+    <PropertyGroup>
+      <_FadeContentBinDir>$([System.IO.Path]::GetDirectoryName('$(FadeMonoGameContentProject)'))\bin\Release\net10.0\</_FadeContentBinDir>
+      <_FadeContentExe>$([System.IO.Path]::Combine('$(_FadeContentBinDir)', '$([System.IO.Path]::GetFileNameWithoutExtension($(FadeMonoGameContentProject)))'))</_FadeContentExe>
+    </PropertyGroup>
+    <Message Text="[FadeBasic.Export.MonoGame] building content (BlazorGL) → $(FadeMonoGameExportOutDir)game\" Importance="high" />
+    <MakeDir Directories="$(FadeMonoGameExportOutDir)game\" />
+    <MSBuild Projects="$(FadeMonoGameContentProject)"
+             Targets="Build"
+             Properties="FadeMonoGamePlatform=Web;Configuration=Release"
+             RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers" />
+    <Exec Command="&quot;$(_FadeContentExe)&quot; --platform Web --output &quot;$(FadeMonoGameExportOutDir)game\&quot;"
+          WorkingDirectory="$([System.IO.Path]::GetDirectoryName('$(FadeMonoGameContentProject)'))"
+          CustomErrorRegularExpression="\[E\] .+"
+          CustomWarningRegularExpression="\[W\] .+" />
+  </Target>
+
+  <!-- ── Step 2: assemble the export bundle ────────────────────────────────── -->
+  <Target Name="FadeMonoGameExport" AfterTargets="Publish">
+    <Message Text="[FadeBasic.Export.MonoGame] assembling monogame web export → $(FadeMonoGameExportOutDir)" Importance="high" />
+
+    <MakeDir Directories="$(FadeMonoGameExportOutDir)" />
+    <MakeDir Directories="$(FadeMonoGameExportOutDir)game\" />
+
+    <!-- Copy the pre-built WebRuntime.MonoGame WASM bundle shipped in this package. -->
+    <ItemGroup>
+      <_FadeMonoGameWasmFiles Include="$(FadeMonoGameExportWasmDir)**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_FadeMonoGameWasmFiles)"
+          DestinationFiles="@(_FadeMonoGameWasmFiles->'$(FadeMonoGameExportOutDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <!-- Concatenate every @(FadeSource) file into game/program.fbasic. -->
+    <Error Code="FADE0010"
+           Condition="'@(FadeSource)' == ''"
+           Text="FadeBasic.Export.MonoGame requires at least one &lt;FadeSource Include=&quot;…&quot; /&gt; item in this project." />
+    <ItemGroup>
+      <_FadeMonoGameSourceFiles Include="@(FadeSource)" />
+    </ItemGroup>
+    <ReadLinesFromFile File="%(_FadeMonoGameSourceFiles.Identity)">
+      <Output TaskParameter="Lines" ItemName="_FadeMonoGameSourceLines" />
+    </ReadLinesFromFile>
+    <WriteLinesToFile
+        File="$(FadeMonoGameExportOutDir)game\$(FadeMonoGameProgramFile)"
+        Lines="@(_FadeMonoGameSourceLines)"
+        Overwrite="true" />
+
+    <!-- Discover XNBs produced by FadeMonoGameBuildContent (or pre-placed by
+         the developer).  Asset names are bare filenames without the .xnb
+         extension, matching what fbasic commands pass at runtime. -->
+    <ItemGroup>
+      <_FadeMonoGameXnbFiles Include="$(FadeMonoGameExportOutDir)game\*.xnb" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_FadeMonoGameAssetsJson Condition="'@(_FadeMonoGameXnbFiles)' != ''">@(_FadeMonoGameXnbFiles->'&quot;%(Filename)&quot;', ',')</_FadeMonoGameAssetsJson>
+      <_FadeMonoGameAssetsJson Condition="'@(_FadeMonoGameXnbFiles)' == ''"></_FadeMonoGameAssetsJson>
+    </PropertyGroup>
+
+    <!-- fade-manifest.json — read by index.html on boot. -->
+    <WriteLinesToFile
+        File="$(FadeMonoGameExportOutDir)fade-manifest.json"
+        Lines='{"fadeBasic":"$(Version)","exportFormat":"1","type":"monogame","source":"$(FadeMonoGameProgramFile)","assets":[$(_FadeMonoGameAssetsJson)]}'
+        Overwrite="true" />
+
+    <Message Text="[FadeBasic.Export.MonoGame] done. Upload the contents of $(FadeMonoGameExportOutDir) to itch.io / a static host." Importance="high" />
+  </Target>
+</Project>

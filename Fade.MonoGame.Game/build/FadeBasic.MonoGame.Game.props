@@ -1,0 +1,31 @@
+<Project>
+  <!--
+    Platform dispatch for FadeBasic.MonoGame.Game consumers.
+
+    Auto-imported by MSBuild when this package is restored. Set
+    $(FadeMonoGamePlatform) in your project (or Directory.Build.props) to
+    choose which platform packages get injected into the build:
+
+        Desktop  (default) — MonoGame.Framework.DesktopGL + ImGui.NET
+        Web                — FadeBasic.Export.MonoGame (KNI BlazorGL bundle)
+
+    The MonoGame version is pinned to match the runtime this package was
+    compiled against. FadeBasic.Export.MonoGame is intentionally unversioned:
+    it always ships in lockstep with this package, so NuGet resolves the
+    matching release (override the version in your project to pin it).
+  -->
+
+  <PropertyGroup>
+    <FadeMonoGamePlatform Condition="'$(FadeMonoGamePlatform)' == ''">Desktop</FadeMonoGamePlatform>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Desktop'">
+    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.5-preview.4" />
+    <PackageReference Include="ImGui.NET"                    Version="1.91.6.1" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Web'">
+    <PackageReference Include="FadeBasic.Export.MonoGame" />
+  </ItemGroup>
+
+</Project>

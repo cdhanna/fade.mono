@@ -1,65 +1,61 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <!-- net10.0 = desktop (DesktopGL + ImGui + content pipeline).
-             net8.0  = browser (KNI BlazorGL, no ImGui, no content pipeline,
-                       no FileSystemWatcher). Source guards live in #if BROWSER. -->
+        <PackageId>FadeBasic.MonoGame.Game</PackageId>
+        <Title>FadeBasic MonoGame Game</Title>
+        <Description>MonoGame Game1 base class and runtime core for FadeBasic MonoGame projects.</Description>
+        <IsPackable>true</IsPackable>
+    </PropertyGroup>
+
+    <PropertyGroup>
         <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <LangVersion>14</LangVersion>
     </PropertyGroup>
 
-    <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <PropertyGroup Condition="'$(FadeMonoGamePlatform)' == 'Web'">
         <DefineConstants>$(DefineConstants);BROWSER</DefineConstants>
     </PropertyGroup>
 
     <PropertyGroup>
-        <!-- Desktop-only: pull in the content pipeline ProjectReference in Debug
-             builds. Browser builds never need this. -->
-        <ShouldIncludeContentBuilder Condition="'$(Configuration)' == 'Debug' AND '$(TargetFramework)' == 'net10.0'">true</ShouldIncludeContentBuilder>
+
+        <ShouldIncludeContentBuilder Condition="'$(Configuration)' == 'Debug'">true</ShouldIncludeContentBuilder>
     </PropertyGroup>
 
-    <!-- KNI BlazorGL version — single source of truth. Mirrors the property
-         convention used in WebRuntime.MonoGame.csproj. -->
-    <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
-        <KniPlatformBlazorGLVersion>4.2.9001.2</KniPlatformBlazorGLVersion>
-    </PropertyGroup>
+    <!-- Platform packages are compile-time stubs only — PrivateAssets="all"
+         prevents them from flowing transitively to consumers.  The consumer's
+         platform is injected by build/FadeBasic.MonoGame.Game.props (auto-
+         imported via NuGet) based on $(FadeMonoGamePlatform). -->
 
     <!-- Desktop deps: MonoGame DesktopGL + ImGui. -->
-    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-        <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
-        <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)" />
+    <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Desktop'">
+        <PackageReference Include="ImGui.NET" Version="1.91.6.1" PrivateAssets="all" />
+        <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)" PrivateAssets="all" />
     </ItemGroup>
 
     <!-- Browser deps: KNI BlazorGL. No ImGui (cimgui has no WASM build). -->
-    <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
-        <PackageReference Include="nkast.Kni.Platform.Blazor.GL" Version="$(KniPlatformBlazorGLVersion)" />
+    <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Web'">
+        <PackageReference Include="nkast.Kni.Platform.Blazor.GL" Version="$(KniPlatformBlazorGLVersion)" PrivateAssets="all" />
     </ItemGroup>
 
-    <!-- Fade compiler core.
-         net10 (desktop) uses the published NuGet.
-         net8 (browser) cross-repos to the local source in dby/FadeBasic/
-         so we pick up the LaunchOptions cctor try/catch fix (the published
-         0.0.2.578 NuGet calls TcpListener in its cctor, which crashes in
-         WASM and bricks the entire LaunchOptions type permanently). Same
-         physical csproj that WebRuntime ProjectReferences, so MSBuild
-         de-duplicates the assembly across both consumers. -->
-    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <!-- Ship the platform-dispatch .props inside the NuGet package so it is
+         auto-imported into every consumer project at restore time. -->
+    <ItemGroup>
+        <None Include="build\FadeBasic.MonoGame.Game.props"
+              Pack="true"
+              PackagePath="build\FadeBasic.MonoGame.Game.props" />
+    </ItemGroup>
+
+
+    <ItemGroup>
         <PackageReference Include="FadeBasic.Lang.Core" Version="$(FadeVersion)" />
+        <ProjectReference Include="..\Fade.MonoGame.Contracts\Fade.MonoGame.Contracts.csproj" />
     </ItemGroup>
-    <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
-        <ProjectReference Include="..\..\..\dby\FadeBasic\FadeBasic\FadeBasic.csproj" />
-    </ItemGroup>
-
     <ItemGroup Condition="'$(ShouldIncludeContentBuilder)' == 'true'">
         <ProjectReference Include="..\Fade.MonoGame.Content\Fade.MonoGame.Content.csproj" />
-    </ItemGroup>
-    <ItemGroup>
-        <ProjectReference Include="..\Fade.MonoGame.Contracts\Fade.MonoGame.Contracts.csproj" />
     </ItemGroup>
 
     <ItemGroup>
       <Folder Include="ContentBuilds\" />
     </ItemGroup>
-
 
 </Project>
