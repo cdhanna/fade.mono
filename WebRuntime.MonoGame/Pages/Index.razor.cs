@@ -185,6 +185,140 @@ loop
                 BrowserAudioBridge.Reset = () =>
                     js.InvokeVoid("fadeAudio.clearAssets");
             }
+
+            // Debug UI bridge — DebugUISystem.EndDebug serializes the per-
+            // frame command queue and hands it here, where we hop into JS
+            // (which postMessages the parent Playground). The reverse path
+            // is ApplyDebugUiChange below (JSInvokable from the parent).
+            if (JsRuntime is Microsoft.JSInterop.IJSInProcessRuntime jsDbg)
+            {
+                DebugUISystem.FrameSink = json => jsDbg.InvokeVoid("fadeDebugUi.frame", json);
+            }
+        }
+
+        // Parent Playground → game: user moved a slider, clicked a button,
+        // toggled a checkbox in the Tweakpane debug panel. ctrlId comes
+        // back unmodified from the queue we shipped out; the matching
+        // DebugUICommand.ControlId on the C# side hashes the same way.
+        // kind: 0=bool, 1=int, 2=float, 3=string. value: stringified
+        // payload (parsed in ApplyChange with InvariantCulture).
+        [JSInvokable]
+        public void ApplyDebugUiChange(int ctrlId, int kind, string value)
+        {
+            DebugUISystem.ApplyChange(ctrlId, kind, value);
+        }
+
+        // ─── Debug Inspector RPC ───────────────────────────────────────
+        // Generic provider-driven inspector surface — the Playground
+        // Tweakpane panel calls these once per user interaction (not
+        // per frame), so the overhead is bounded regardless of how
+        // many sprites/transforms/etc. the running program has.
+        //
+        // Each method delegates to the matching IDebugProvider via
+        // DebugRegistry. Providers are registered by Game1.Initialize
+        // (see SpriteDebugProvider, MetadataDebugProvider, etc.). The
+        // JSON shapes are documented on IDebugProvider; everything is
+        // System.Text.Json-serialized so the JS side can parse with
+        // plain JSON.parse.
+
+        static readonly JsonSerializerOptions _dbgInspectorJsonOpts = new()
+        {
+            // Snapshot dicts use camelCase keys; let System.Text.Json
+            // handle the rest. Numbers serialize as JS-friendly
+            // doubles/ints by default.
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        };
+
+        /// <summary> Return all registered provider type names — used by
+        ///  the panel's "what sections should I render" boot probe. </summary>
+        [JSInvokable]
+        public string DebugListTypes()
+        {
+            return JsonSerializer.Serialize(
+                Fade.MonoGame.Core.Debug.DebugRegistry.ListTypes(),
+                _dbgInspectorJsonOpts);
+        }
+
+        /// <summary> Return the field schema for one provider — drives
+        ///  the panel's widget choice (slider vs color vs checkbox) and
+        ///  min/max limits. Returns "null" if the type isn't registered. </summary>
+        [JSInvokable]
+        public string DebugGetSchema(string typeName)
+        {
+            var p = Fade.MonoGame.Core.Debug.DebugRegistry.Get(typeName);
+            if (p == null) return "null";
+            return JsonSerializer.Serialize(p.Schema, _dbgInspectorJsonOpts);
+        }
+
+        /// <summary> Per-entity schema. Most providers return the same
+        ///  fields for every id; EffectDebugProvider overrides to add
+        ///  per-shader parameter fields. The panel calls this instead
+        ///  of DebugGetSchema when it knows a specific id (e.g. when
+        ///  expanding an entity folder). </summary>
+        [JSInvokable]
+        public string DebugGetEntitySchema(string typeName, int id)
+        {
+            var p = Fade.MonoGame.Core.Debug.DebugRegistry.Get(typeName);
+            if (p == null) return "null";
+            try
+            {
+                return JsonSerializer.Serialize(p.SchemaFor(id), _dbgInspectorJsonOpts);
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine($"DebugGetEntitySchema({typeName}, {id}) threw: {e}");
+                return JsonSerializer.Serialize(p.Schema, _dbgInspectorJsonOpts);
+            }
+        }
+
+        /// <summary> Return the live id list for one provider. </summary>
+        [JSInvokable]
+        public string DebugListEntities(string typeName)
+        {
+            var p = Fade.MonoGame.Core.Debug.DebugRegistry.Get(typeName);
+            if (p == null) return "[]";
+            var ids = new List<int>();
+            foreach (var id in p.ListIds()) ids.Add(id);
+            return JsonSerializer.Serialize(ids, _dbgInspectorJsonOpts);
+        }
+
+        /// <summary> Snapshot one entity. </summary>
+        [JSInvokable]
+        public string DebugGetEntity(string typeName, int id)
+        {
+            var p = Fade.MonoGame.Core.Debug.DebugRegistry.Get(typeName);
+            if (p == null) return "null";
+            try
+            {
+                var snap = p.Snapshot(id);
+                return JsonSerializer.Serialize(snap, _dbgInspectorJsonOpts);
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine($"DebugGetEntity({typeName}, {id}) threw: {e}");
+                return "null";
+            }
+        }
+
+        /// <summary> Apply one field change. valueJson is a single JSON
+        ///  value (number, string, bool — never an object/array; the
+        ///  panel always edits one leaf at a time). Returns true if
+        ///  the provider accepted the change. </summary>
+        [JSInvokable]
+        public bool DebugSetField(string typeName, int id, string path, string valueJson)
+        {
+            var p = Fade.MonoGame.Core.Debug.DebugRegistry.Get(typeName);
+            if (p == null) return false;
+            try
+            {
+                using var doc = JsonDocument.Parse(valueJson);
+                return p.Apply(id, path, doc.RootElement);
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine($"DebugSetField({typeName}, {id}, {path}) threw: {e}");
+                return false;
+            }
         }
 
         [JSInvokable]
@@ -270,6 +404,11 @@ loop
             // Stop until the clip naturally ended. Call into JS too.
             try { BrowserAudioBridge.StopAll(); }
             catch (Exception e) { Console.Error.WriteLine("StopGame: BrowserAudioBridge.StopAll threw: " + e); }
+            // Wipe DebugUI inspector state — the user expects Stop to look
+            // like a fresh slate, not a frozen snapshot of the last run.
+            // The generation bump signals the JS panel to drop its
+            // window folders + inspector section.
+            DebugUISystem.NotifyProgramReset();
             StateHasChanged();
         }
 
@@ -381,6 +520,11 @@ loop
                 _pendingContext = null;
                 _currentCommands = _pendingCommands;
                 _pendingCommands = null;
+                // Bump the DebugUI generation BEFORE Run/LoadProgram so any
+                // frame envelope shipped by the new program carries the new
+                // gen — the JS panel drops the old window folders +
+                // inspector state on the gen change.
+                DebugUISystem.NotifyProgramReset();
                 CooperativePump.RunStartWithVm(ctx.Machine);
 
                 if (_game == null)
@@ -576,6 +720,11 @@ loop
                 // SuspendVm-induced waits don't yet resume on their
                 // own — see mg-export-3.md phase 2 remaining work.
                 _currentCommands = commands;
+                // Reset DebugUI state for the new program (matches desktop
+                // semantics: autoInspector has to be re-enabled by the
+                // fbasic source). Skip on the boot stub since there's no
+                // prior state to invalidate.
+                if (!initialBoot) DebugUISystem.NotifyProgramReset();
                 CooperativePump.RunStartWithVm(ctx.Machine);
 
                 if (_game == null)

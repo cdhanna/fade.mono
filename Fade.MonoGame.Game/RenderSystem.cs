@@ -284,9 +284,9 @@ public static class RenderSystem
     public static void RefreshEffects(FadeSpriteEffect fadeFx)
     {
 #if !BROWSER
-        // Live shader/effect reload — only desktop has ContentWatcher hooked up
-        // to a FileSystemWatcher. Browser ships assets pre-built and never
-        // hot-reloads them (custom shader pipeline lands in Phase 3 of mg.md).
+        // Desktop: ContentWatcher's FileSystemWatcher fires when an .fx file
+        // on disk changes; TryRefreshAsset checks the watch slot per frame
+        // and swaps in the freshly-compiled Effect when the bytes change.
         for (var i = 0 ; i < effects.Count; i ++)
         {
             var fx = effects[i];
@@ -295,6 +295,37 @@ public static class RenderSystem
                 effects[i] = fx;
             }
 
+        }
+#else
+        // Browser: the playground recompiles .fx → MGFX XNB on file save and
+        // re-registers the bytes via BrowserContentManager. RegisterAsset
+        // marks the name as "reloaded" when it's replacing existing bytes;
+        // ConsumeReloadedAssets drains that set so we only re-Load effects
+        // whose underlying asset actually changed.
+        var reloaded = GameSystem.game.BrowserContent.ConsumeReloadedAssets();
+        if (reloaded.Count > 0)
+        {
+            for (var i = 0; i < effects.Count; i++)
+            {
+                var fx = effects[i];
+                if (string.IsNullOrEmpty(fx.filePath)) continue;
+                if (!reloaded.Contains(fx.filePath)) continue;
+                try
+                {
+                    var fresh = GameSystem.game.Content.Load<Effect>(fx.filePath);
+                    fx.watchedEffect = new WatchedAsset<Effect>
+                    {
+                        Asset = fresh,
+                        UpdatedAt = DateTimeOffset.Now,
+                        assetName = fx.filePath,
+                    };
+                    effects[i] = fx;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[fade] hot-reload failed for effect '{fx.filePath}': {ex.Message}");
+                }
+            }
         }
 #endif
 

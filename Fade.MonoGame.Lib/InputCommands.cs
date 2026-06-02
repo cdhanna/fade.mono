@@ -1,5 +1,7 @@
+using System;
 using Fade.MonoGame.Core;
 using FadeBasic.SourceGenerators;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 
 namespace Fade.MonoGame.Lib;
@@ -941,6 +943,345 @@ public partial class FadeMonoGameCommands
     {
         var code = Enum.Parse<Keys>(key);
         return (int)code;
+    }
+
+    // ── Hit-test helpers ────────────────────────────────────────────────
+    // Resolve the world matrix of a transform fresh, walking up the
+    // parent chain by index rather than reading transform.computedWorld.
+    // The cached field is only repopulated by TransformSystem.Calculate-
+    // Transforms once per frame, so a hit-test that runs after a user
+    // command mutates a transform (and before the next frame's pass)
+    // would otherwise see stale data. Cost is O(depth) matrix multiplies
+    // per call — negligible in practice and isolated to these two
+    // commands; the rendering pipeline keeps using the cache.
+    private static Matrix ResolveWorldMatrixByIndex(int transformIndex)
+    {
+        if (transformIndex <= 0) return Matrix.Identity;
+        var t = TransformSystem.transforms[transformIndex];
+        var local = TransformSystem.CreateMatrix(t.position, t.angle, t.scale);
+        return local * ResolveWorldMatrixByIndex(t.parentIndex);
+    }
+
+    private static Matrix ResolveWorldMatrixByTransformId(int transformId)
+    {
+        if (transformId <= 0) return Matrix.Identity;
+        TransformSystem.GetTransformIndex(transformId, out var index, out _);
+        return ResolveWorldMatrixByIndex(index);
+    }
+
+    // Float-precision mouse coordinates in render-target space. The
+    // public `mouse x` / `mouse y` commands cast to int for fbasic;
+    // hit-tests want the raw float so a sprite edge at, say, x=99.7
+    // doesn't get rounded to 100 and produce a false miss/hit.
+    private static float GetMouseRenderX()
+    {
+        var v = (float)InputSystem.mouseState.X;
+        v -= RenderSystem.mainBufferPosition.X;
+        v /= GameSystem.graphicsDeviceManager.PreferredBackBufferWidth - RenderSystem.mainBufferPosition.X * 2;
+        v *= RenderSystem.mainBuffer.Width;
+        return v;
+    }
+    private static float GetMouseRenderY()
+    {
+        var v = (float)InputSystem.mouseState.Y;
+        v -= RenderSystem.mainBufferPosition.Y;
+        v /= GameSystem.graphicsDeviceManager.PreferredBackBufferHeight - RenderSystem.mainBufferPosition.Y * 2;
+        v *= RenderSystem.mainBuffer.Height;
+        return v;
+    }
+
+    /// <summary>
+    /// <para>Returns <c>1</c> if the mouse cursor is currently over the bounding
+    /// rectangle of the given sprite, <c>0</c> otherwise.</para>
+    /// <para>The hit-test honors the sprite's position, scale, rotation, origin,
+    /// and any transform it's attached to via
+    /// <see cref="SetSpriteRelativeToAnother">attach sprite to transform</see>.
+    /// Hidden sprites (via <see cref="HideSprite">hide sprite</see>) always
+    /// return <c>0</c>.</para>
+    /// </summary>
+    /// <remarks>
+    /// <para>The test is a rectangle hit (oriented to the sprite's rotation),
+    /// not pixel-perfect — a transparent corner of the texture still counts as
+    /// a hit. Mouse coordinates are pulled in render-target space, matching
+    /// <see cref="GetMouseX">mouse x</see>, so the comparison is direct.</para>
+    /// <para>Transform-attached sprites are handled correctly even when the
+    /// parent transform was just modified this frame: the world matrix is
+    /// resolved fresh by walking the parent chain, not from the cached
+    /// per-frame computation.</para>
+    /// </remarks>
+    /// <example>
+    /// Highlight a button sprite while the mouse hovers it:
+    /// <code>
+    /// texture 1, "Images/Button"
+    /// sprite 1, 100, 100, 1
+    /// DO
+    ///   IF mouse over sprite(1) = 1
+    ///     color sprite 1, 255, 255, 128
+    ///   ELSE
+    ///     color sprite 1, 255, 255, 255
+    ///   ENDIF
+    ///   sync
+    /// LOOP
+    /// </code>
+    /// </example>
+    /// <param name="spriteId">The sprite to test against.</param>
+    /// <returns><c>1</c> when the cursor is inside the sprite's drawn region, <c>0</c> otherwise.</returns>
+    /// <seealso cref="GetMouseX">mouse x</seealso>
+    /// <seealso cref="GetMouseY">mouse y</seealso>
+    /// <seealso cref="IsMouseOverCollider">mouse over collider</seealso>
+    /// <seealso cref="IsPointOverSprite">point over sprite</seealso>
+    [FadeBasicCommand("mouse over sprite")]
+    public static bool IsMouseOverSprite(int spriteId)
+    {
+        return PointHitsSprite(spriteId, GetMouseRenderX(), GetMouseRenderY());
+    }
+
+    // Shared by `mouse over sprite` and `point over sprite`. x/y are in
+    // render-target / world coordinates — the same space sprite positions
+    // live in. Honors the same hidden/anchor-transform semantics as the
+    // mouse-over check, so the point-over command is a drop-in replacement
+    // when the caller already has a coordinate (touch input, AI raycast,
+    // a controller-driven cursor).
+    private static bool PointHitsSprite(int spriteId, float x, float y)
+    {
+        SpriteSystem.GetSpriteIndex(spriteId, out _, out var sprite);
+        if (sprite.hidden) return false;
+
+        // Frame size in unscaled texture pixels — same call the renderer
+        // uses when computing the source rect for SpriteBatch.Draw.
+        TextureSystem.GetTextureIndex(sprite.imageId, out _, out var runtimeTex);
+        var src = TextureSystem.GetSourceRect(ref runtimeTex, ref sprite);
+        float frameW = src.Width;
+        float frameH = src.Height;
+        if (frameW <= 0 || frameH <= 0) return false;
+        var originPx = new Vector2(frameW * sprite.origin.X, frameH * sprite.origin.Y);
+
+        // Composite with the anchor transform if any. Mirrors the render
+        // path at RenderSystem.cs ~line 491, but reads no cached matrices.
+        var position = sprite.position;
+        var rotation = sprite.rotation;
+        var scale = sprite.scale;
+        if (sprite.anchorTransformId > 0)
+        {
+            var localMat = TransformSystem.CreateMatrix(position, rotation, scale);
+            var parentMat = ResolveWorldMatrixByTransformId(sprite.anchorTransformId);
+            var worldMat = localMat * parentMat;
+            TransformSystem.DecomposeMatrix(worldMat, out var p3, out var r3, out var s3);
+            position = new Vector2(p3.X, p3.Y);
+            rotation = r3.Z;
+            scale = new Vector2(s3.X, s3.Y);
+        }
+        if (scale.X == 0 || scale.Y == 0) return false;
+
+        // Inverse-transform input point → sprite-local pixel coords. The
+        // sprite draw is (translate position) ∘ (rotate angle) ∘
+        // (scale scale) ∘ (translate -origin) applied to local-pixel space,
+        // so the inverse is the same chain reversed.
+        var rx = x - position.X;
+        var ry = y - position.Y;
+        var cos = (float)Math.Cos(-rotation);
+        var sin = (float)Math.Sin(-rotation);
+        var ux = rx * cos - ry * sin;
+        var uy = rx * sin + ry * cos;
+        var localX = ux / scale.X;
+        var localY = uy / scale.Y;
+
+        return localX >= -originPx.X
+            && localX <= frameW - originPx.X
+            && localY >= -originPx.Y
+            && localY <= frameH - originPx.Y;
+    }
+
+    /// <summary>
+    /// Returns <c>1</c> if the given world-space point lands inside the sprite's drawn region, <c>0</c> otherwise.
+    ///
+    /// This is the same hit-test <see cref="IsMouseOverSprite">mouse over sprite</see> uses, but you supply the point yourself instead of reading the cursor — handy for touch input, AI vision checks, or a controller-driven cursor.
+    /// </summary>
+    /// <remarks>
+    /// The test is a rectangle hit oriented to the sprite's rotation, not pixel-perfect — a transparent corner of the texture still counts as a hit. The sprite's position, scale, rotation, origin, and any attached transform (via <see cref="SetSpriteRelativeToAnother">attach sprite to transform</see>) are all honored.
+    ///
+    /// Coordinates are in render-target space — the same space sprite positions live in, and the same space <see cref="GetMouseX">mouse x</see> reports. If you're projecting from a different coordinate system (a UI panel, a camera-relative position), convert first.
+    ///
+    /// Hidden sprites (via <see cref="HideSprite">hide sprite</see>) always return <c>0</c>, matching the mouse-over behavior. If you need to hit-test a hidden sprite, show it first.
+    ///
+    /// Transform-attached sprites are resolved fresh each call, so a sprite whose parent transform was just moved this frame produces correct hits without waiting for the next frame's transform pass.
+    /// </remarks>
+    /// <example>
+    /// Hit-test a touch point against several buttons:
+    /// <code>
+    /// touchX = 200.0
+    /// touchY = 150.0
+    /// FOR i = 1 TO 5
+    ///   IF point over sprite(i, touchX, touchY) = 1
+    ///     print "tapped button "; i
+    ///   ENDIF
+    /// NEXT i
+    /// </code>
+    /// </example>
+    /// <example>
+    /// AI "can I see the player?" check by sampling a ray every few pixels:
+    /// <code>
+    /// rayX = 100.0
+    /// rayY = 100.0
+    /// targetX = 400.0
+    /// targetY = 300.0
+    /// dx = (targetX - rayX) / 20.0
+    /// dy = (targetY - rayY) / 20.0
+    /// blocked = 0
+    /// FOR step = 1 TO 20
+    ///   px = rayX + dx * step
+    ///   py = rayY + dy * step
+    ///   IF point over sprite(wallSpriteId, px, py) = 1
+    ///     blocked = 1
+    ///     EXIT
+    ///   ENDIF
+    /// NEXT step
+    /// </code>
+    /// </example>
+    /// <param name="spriteId">The sprite to test against.</param>
+    /// <param name="x">The X coordinate of the point in render-target space.</param>
+    /// <param name="y">The Y coordinate of the point in render-target space.</param>
+    /// <returns><c>1</c> when the point falls inside the sprite's drawn region, <c>0</c> otherwise.</returns>
+    /// <seealso cref="IsMouseOverSprite">mouse over sprite</seealso>
+    /// <seealso cref="IsPointOverCollider">point over collider</seealso>
+    /// <seealso cref="GetMouseX">mouse x</seealso>
+    /// <seealso cref="GetMouseY">mouse y</seealso>
+    /// <seealso cref="HideSprite">hide sprite</seealso>
+    /// <seealso cref="SetSpriteRelativeToAnother">attach sprite to transform</seealso>
+    [FadeBasicCommand("point over sprite")]
+    public static bool IsPointOverSprite(int spriteId, float x, float y)
+    {
+        return PointHitsSprite(spriteId, x, y);
+    }
+
+    /// <summary>
+    /// <para>Returns <c>1</c> if the mouse cursor is currently inside the given
+    /// collider's bounding box, <c>0</c> otherwise.</para>
+    /// <para>The hit-test honors the collider's position, size, and any transform
+    /// it's attached to via
+    /// <see cref="AttachColliderToTransform">attach collider to transform</see>.
+    /// Colliders are axis-aligned; rotation on an attached transform shifts the
+    /// collider's origin but does not rotate its bounds (matching the rest of
+    /// the collision system's behavior).</para>
+    /// </summary>
+    /// <remarks>
+    /// Mouse coordinates are in render-target space, matching the collider's
+    /// own coordinate system. Transform-attached colliders are resolved fresh
+    /// each call, so a collider whose parent transform was just moved this
+    /// frame still produces correct hits without waiting for the next frame's
+    /// transform pass.
+    /// </remarks>
+    /// <example>
+    /// Detect clicks inside a free-floating button collider:
+    /// <code>
+    /// make collider 1, 50, 50, 200, 80
+    /// DO
+    ///   IF mouse over collider(1) = 1 AND new left click() = 1
+    ///     print "clicked!"
+    ///   ENDIF
+    ///   sync
+    /// LOOP
+    /// </code>
+    /// </example>
+    /// <param name="colliderId">The collider to test against.</param>
+    /// <returns><c>1</c> when the cursor is inside the collider's bounds, <c>0</c> otherwise.</returns>
+    /// <seealso cref="GetMouseX">mouse x</seealso>
+    /// <seealso cref="GetMouseY">mouse y</seealso>
+    /// <seealso cref="IsMouseOverSprite">mouse over sprite</seealso>
+    /// <seealso cref="IsPointOverCollider">point over collider</seealso>
+    [FadeBasicCommand("mouse over collider")]
+    public static bool IsMouseOverCollider(int colliderId)
+    {
+        return PointHitsCollider(colliderId, GetMouseRenderX(), GetMouseRenderY());
+    }
+
+    // Shared by `mouse over collider` and `point over collider`. Colliders
+    // are axis-aligned even if their parent transform has rotation, so this
+    // is a straight AABB test against the composed world position/size.
+    private static bool PointHitsCollider(int colliderId, float x, float y)
+    {
+        CollisionSystem.GetColliderIndex(colliderId, out _, out var box);
+
+        var position = box.position;
+        var size = box.size;
+        if (box.targetTransformId > 0)
+        {
+            // Mirrors CollisionSystem's per-frame compute (CollisionSystem.cs
+            // ~line 104) but reads no cached matrices — walks the parent
+            // chain fresh.
+            var localMat = TransformSystem.CreateMatrix(position, 0, size);
+            var parentMat = ResolveWorldMatrixByTransformId(box.targetTransformId);
+            var worldMat = localMat * parentMat;
+            TransformSystem.DecomposeMatrix(worldMat, out var p3, out _, out var s3);
+            position = new Vector2(p3.X, p3.Y);
+            size = new Vector2(s3.X, s3.Y);
+        }
+        if (size.X <= 0 || size.Y <= 0) return false;
+
+        return x >= position.X
+            && x < position.X + size.X
+            && y >= position.Y
+            && y < position.Y + size.Y;
+    }
+
+    /// <summary>
+    /// Returns <c>1</c> if the given world-space point lands inside the collider's bounds, <c>0</c> otherwise.
+    ///
+    /// This is the same hit-test <see cref="IsMouseOverCollider">mouse over collider</see> uses, but you supply the point yourself instead of reading the cursor — handy for touch input, AI sight-line checks, or a controller-driven cursor.
+    /// </summary>
+    /// <remarks>
+    /// Colliders are axis-aligned. Even if the parent transform has rotation, the collider's bounds stay AABB — rotation shifts the collider's center but doesn't tilt the box. This matches how the rest of the collision system behaves.
+    ///
+    /// Coordinates are in render-target space — the same space colliders live in, and the same space <see cref="GetMouseX">mouse x</see> reports.
+    ///
+    /// Transform-attached colliders are resolved fresh each call (the parent chain is walked, not the cached per-frame matrix), so a collider whose parent was just moved this frame still produces correct hits without waiting for the next frame's transform pass.
+    ///
+    /// Unlike <see cref="IsPointOverSprite">point over sprite</see>, this command isn't affected by any "hidden" flag — colliders don't have one. If you want a collider to stop responding, detach or destroy it.
+    /// </remarks>
+    /// <example>
+    /// Check whether a touch point lands on any of several pickup colliders:
+    /// <code>
+    /// touchX = 200.0
+    /// touchY = 150.0
+    /// FOR id = 1 TO 5
+    ///   IF point over collider(id, touchX, touchY) = 1
+    ///     print "tapped pickup "; id
+    ///   ENDIF
+    /// NEXT id
+    /// </code>
+    /// </example>
+    /// <example>
+    /// Walk a vector forward in small steps to find the first collider along the way:
+    /// <code>
+    /// rayX = 100.0
+    /// rayY = 100.0
+    /// dx = 4.0
+    /// dy = 0.0
+    /// hitId = 0
+    /// FOR step = 1 TO 80
+    ///   px = rayX + dx * step
+    ///   py = rayY + dy * step
+    ///   IF point over collider(wallColliderId, px, py) = 1
+    ///     hitId = wallColliderId
+    ///     EXIT
+    ///   ENDIF
+    /// NEXT step
+    /// </code>
+    /// </example>
+    /// <param name="colliderId">The collider to test against.</param>
+    /// <param name="x">The X coordinate of the point in render-target space.</param>
+    /// <param name="y">The Y coordinate of the point in render-target space.</param>
+    /// <returns><c>1</c> when the point falls inside the collider's bounds, <c>0</c> otherwise.</returns>
+    /// <seealso cref="IsMouseOverCollider">mouse over collider</seealso>
+    /// <seealso cref="IsPointOverSprite">point over sprite</seealso>
+    /// <seealso cref="GetMouseX">mouse x</seealso>
+    /// <seealso cref="GetMouseY">mouse y</seealso>
+    /// <seealso cref="CreateBoxCollider">box collider</seealso>
+    /// <seealso cref="AttachColliderToTransform">attach collider to transform</seealso>
+    [FadeBasicCommand("point over collider")]
+    public static bool IsPointOverCollider(int colliderId, float x, float y)
+    {
+        return PointHitsCollider(colliderId, x, y);
     }
 
 }

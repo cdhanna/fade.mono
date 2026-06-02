@@ -32,7 +32,9 @@
         <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)" PrivateAssets="all" />
     </ItemGroup>
 
-    <!-- Browser deps: KNI BlazorGL. No ImGui (cimgui has no WASM build). -->
+    <!-- Browser deps: KNI BlazorGL. No ImGui (cimgui has no WASM build);
+         the microui port + bundled atlas render text/icons in pure managed
+         code via the SpriteBatch backend in MicroUi/MicroUiRenderer.cs. -->
     <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Web'">
         <PackageReference Include="nkast.Kni.Platform.Blazor.GL" Version="$(KniPlatformBlazorGLVersion)" PrivateAssets="all" />
     </ItemGroup>
@@ -48,6 +50,10 @@
 
     <ItemGroup>
         <PackageReference Include="FadeBasic.Lang.Core" Version="$(FadeVersion)" />
+        <!-- For ColorUtil.PackColor / UnpackColor in the debug
+             inspector providers — keeps the wire format identical
+             to what fbasic's `rgb()` command produces. -->
+        <PackageReference Include="FadeBasic.Lib.Standard" Version="$(FadeVersion)" />
         <ProjectReference Include="..\Fade.MonoGame.Contracts\Fade.MonoGame.Contracts.csproj" />
     </ItemGroup>
     <ItemGroup Condition="'$(ShouldIncludeContentBuilder)' == 'true'">

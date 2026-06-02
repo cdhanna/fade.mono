@@ -156,7 +156,7 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
             _batcher.DrawBatch(_sortMode, _effect);
         }
 		
-		void Setup() 
+		void Setup()
         {
             var gd = GraphicsDevice;
 			gd.BlendState = _blendState;
@@ -166,6 +166,21 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
 
             _spriteEffect?.OnApply();
             _spritePass.Apply();
+
+            // Push the same projection matrix that _spriteEffect just uploaded
+            // onto the user's custom effect, if it carries a MatrixTransform
+            // parameter. The Playground's compile-fx auto-injects a default VS
+            // (mirroring MonoGame's offline compiler behavior for PS-only
+            // .fx files) and that VS reads its transform from MatrixTransform.
+            // Without this push the matrix stays at its initial value (identity)
+            // and the screen-space quad maps to NDC (0..width) → off-screen,
+            // hence a black render.
+            if (_effect != null && _spriteEffect != null)
+            {
+                var mtParam = _effect.Parameters["MatrixTransform"];
+                if (mtParam != null)
+                    mtParam.SetValue(_spriteEffect.ProjectionMatrix);
+            }
 		}
 		
         void CheckValid(Texture2D texture)

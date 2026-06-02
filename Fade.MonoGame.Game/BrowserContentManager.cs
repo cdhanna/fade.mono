@@ -3,6 +3,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using Microsoft.Xna.Framework.Content;
 
@@ -32,6 +33,28 @@ public sealed class BrowserContentManager : ContentManager
     {
     }
 
+    // Asset names that have been re-registered since the last drain via
+    // ConsumeReloadedAssets(). RenderSystem.RefreshEffects polls this each
+    // frame so an effect whose .fx source changed in the editor gets re-
+    // Loaded into its RuntimeEffect slot without the game restarting.
+    //
+    // We only care about *replacements*, not the initial registration —
+    // first-time RegisterAsset is just the asset becoming available, not
+    // a hot-reload event. RuntimeEffect's first Load happens via the
+    // explicit `effect` command at program start; reloads are what we
+    // signal here.
+    private readonly HashSet<string> _reloadedSinceDrain =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    // Set of names that have been UnregisterAsset'd since their most-
+    // recent RegisterAsset call. The playground's syncAssetsToRuntime
+    // emits an unregister+register pair for any asset whose bytes
+    // changed — by the time RegisterAsset runs, _assets no longer
+    // contains the name, so a simple ContainsKey check would miss
+    // these. Tracking the recent-unregister set bridges the gap.
+    private readonly HashSet<string> _recentlyUnregistered =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
     public void RegisterAsset(string name, byte[] bytes)
     {
         if (string.IsNullOrEmpty(name)) return;
@@ -42,7 +65,23 @@ public sealed class BrowserContentManager : ContentManager
         {
             name = name.Substring(0, name.Length - 4);
         }
+        bool isReload = _recentlyUnregistered.Remove(name) || _assets.ContainsKey(name);
         _assets[name] = bytes;
+        if (isReload) _reloadedSinceDrain.Add(name);
+    }
+
+    /// <summary>
+    /// Returns the set of asset names that have been re-registered since
+    /// the previous call, then clears the internal set. Mainly used by
+    /// RenderSystem.RefreshEffects to detect which Effect / Texture
+    /// instances need re-Loading mid-game.
+    /// </summary>
+    public IReadOnlyCollection<string> ConsumeReloadedAssets()
+    {
+        if (_reloadedSinceDrain.Count == 0) return Array.Empty<string>();
+        var snapshot = _reloadedSinceDrain.ToArray();
+        _reloadedSinceDrain.Clear();
+        return snapshot;
     }
 
     public bool TryGetAsset(string name, out byte[] bytes) =>
@@ -96,7 +135,15 @@ public sealed class BrowserContentManager : ContentManager
         {
             name = name.Substring(0, name.Length - 4);
         }
+        // Remember we evicted this — the next RegisterAsset for the same
+        // name is a hot-reload, not a first-time register.
+        if (_assets.ContainsKey(name)) _recentlyUnregistered.Add(name);
         _assets.Remove(name);
+
+        // Per-name eviction via reflection into KNI's private loadedAssets
+        // dictionary. When this succeeds, the next Content.Load<T>(name)
+        // pulls fresh bytes through OpenStream — cheap and surgical.
+        bool perNameEvicted = false;
         if (_loadedAssetsField?.GetValue(this) is IDictionary loaded && loaded.Contains(name))
         {
             var existing = loaded[name];
@@ -105,12 +152,31 @@ public sealed class BrowserContentManager : ContentManager
             {
                 try { d.Dispose(); } catch { /* GC will clean up */ }
             }
+            perNameEvicted = true;
+        }
+
+        // Fallback: when reflection can't see the field (KNI version skew
+        // or a future rename), call the public Unload() — the sledgehammer
+        // that disposes every loaded asset and clears the cache. Costs the
+        // re-construction of *other* assets on next access (their source
+        // bytes are still in our _assets dict, so this is just GPU re-upload
+        // work), but guarantees correctness for the asset that was edited.
+        //
+        // This branch is the difference between "shader hot-reload works"
+        // and "shader hot-reload fails until full page refresh" — the
+        // latter is what was observed when the reflection path silently
+        // failed to find the field.
+        if (!perNameEvicted)
+        {
+            try { Unload(); } catch { /* best effort */ }
         }
     }
 
     public void ClearAssets()
     {
         _assets.Clear();
+        _recentlyUnregistered.Clear();
+        _reloadedSinceDrain.Clear();
         // Also flush the base ContentManager's cache of loaded objects
         // (Texture2D, SoundEffect, etc.) so subsequent `Content.Load<T>`
         // calls go back through OpenStream and pick up the fresh bytes.

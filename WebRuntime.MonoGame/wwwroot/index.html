@@ -358,6 +358,11 @@
     </div>
 
     <script src="_framework/blazor.webassembly.js" autostart="false"></script>
+    <!-- Standalone-export debug inspector. Self-gates on the
+         `?inspector=1` URL param or `window.__fadeShowInspector`, so
+         normal exports never see it. Loads Tweakpane via CDN on
+         first activation. -->
+    <script src="debug-inspector.js" defer></script>
     <script>
         // ── Splash control surface ──────────────────────────────────────
         // Exposed early so both the preview-mode handlers (below) and
@@ -434,6 +439,160 @@
             console.warn = (...args) => { orig.warn(...args); forward('stderr', args); };
             console.error = (...args) => { orig.error(...args); forward('stderr', args); };
         })();
+
+        // ── Debug UI bridge (C# DebugUISystem ↔ Tweakpane panel) ──────
+        // DebugUISystem.FrameSink (wired in Pages/Index.razor.cs) calls
+        // fadeDebugUi.frame(json) once per game frame with the queued
+        // debug envelope as JSON. The same call fans out to two
+        // possible consumers:
+        //
+        //  1. The parent Playground via postMessage. In standalone
+        //     exports there's no parent listening; the postMessage
+        //     just no-ops.
+        //
+        //  2. The in-page overlay panel, when the user has opted in
+        //     via `window.fadeDebug.enable()` or the `?debug=1` URL
+        //     flag. The panel module lives in debug-ui-panel.js and
+        //     is loaded lazily on first enable.
+        const localPanelState = { handle: null, container: null, mode: 'corner' };
+        window.fadeDebugUi = {
+            frame(json) {
+                try { window.parent.postMessage({ type: 'debug-ui-frame', json }, '*'); }
+                catch { /* parent may be cross-origin, or no parent in standalone */ }
+                if (localPanelState.handle) {
+                    try {
+                        const env = localPanelState.parse(json);
+                        localPanelState.handle.applyFrameEnvelope(env);
+                    } catch (e) { console.warn('[fadeDebug] applyFrameEnvelope threw', e); }
+                }
+            },
+        };
+
+        // ── window.fadeDebug: opt-in debug overlay ────────────────────
+        // Activated either by `?debug=1` (auto on boot, or
+        // `?debug=corner` / `?debug=sidebar` for an explicit mode),
+        // or by typing `fadeDebug.enable()` in the dev console.
+        // Stays off by default in both Playground and standalone
+        // exports so there's no double panel during normal use.
+        function applyOverlayLayout() {
+            const c = localPanelState.container;
+            if (!c) return;
+            c.style.position = 'fixed';
+            c.style.zIndex = '99999';
+            c.style.background = '#181818ee';
+            c.style.color = '#ddd';
+            c.style.font = '11px ui-monospace, SFMono-Regular, Menlo, monospace';
+            c.style.boxShadow = '0 6px 24px #0008';
+            c.style.border = '1px solid #ffffff22';
+            c.style.borderRadius = '4px';
+            c.style.overflow = 'hidden';
+            if (localPanelState.mode === 'sidebar') {
+                c.style.top = '0';
+                c.style.right = '0';
+                c.style.bottom = '0';
+                c.style.left = '';
+                c.style.width = 'min(420px, 40vw)';
+                c.style.height = '';
+                c.style.maxHeight = '';
+                c.style.resize = 'horizontal';
+            } else {
+                c.style.top = '12px';
+                c.style.right = '12px';
+                c.style.bottom = '';
+                c.style.left = '';
+                c.style.width = '380px';
+                c.style.height = '';
+                c.style.maxHeight = 'calc(100vh - 24px)';
+                c.style.resize = 'both';
+            }
+        }
+        function debugCallbacksForStandalone() {
+            // In standalone mode every callback talks straight to
+            // Index.razor.cs's JSInvokables. They're instance methods
+            // (declared with `[JSInvokable]` on the partial class, not
+            // `[JSInvokable] public static`), so we have to dispatch
+            // via the per-page DotNetObjectReference — the same way
+            // the iframe relay does. `window.theInstance` is set by
+            // initRenderJS(_pageDotNetRef) once Index.razor's
+            // OnAfterRender wires it up.
+            //
+            // Static-assembly dispatch (`DotNet.invokeMethodAsync(
+            // 'WebRuntime.MonoGame', name, ...)`) would throw with
+            // "does not contain a public invokable method" — that
+            // form only finds [JSInvokable] static methods on the
+            // assembly, which we don't have.
+            const inv = (name, ...args) => {
+                if (!window.theInstance) {
+                    return Promise.reject(new Error('Blazor instance not ready (theInstance is null)'));
+                }
+                return window.theInstance.invokeMethodAsync(name, ...args);
+            };
+            const parseList = (json) => {
+                try { return JSON.parse(json); } catch { return []; }
+            };
+            const parseOrNull = (json) => {
+                if (!json || json === 'null') return null;
+                try { return JSON.parse(json); } catch { return null; }
+            };
+            return {
+                getSchema: async (t) => parseOrNull(await inv('DebugGetSchema', t)),
+                getEntitySchema: async (t, id) => parseOrNull(await inv('DebugGetEntitySchema', t, id | 0)),
+                listEntities: async (t) => parseList(await inv('DebugListEntities', t)),
+                getEntity: async (t, id) => parseOrNull(await inv('DebugGetEntity', t, id | 0)),
+                setField: async (t, id, p, v) => !!(await inv('DebugSetField', t, id | 0, p, v)),
+                sendFbasicChange: (ctrlId, kind, value) =>
+                    inv('ApplyDebugUiChange', ctrlId | 0, kind | 0, String(value)),
+            };
+        }
+        async function enableLocalPanel(mode) {
+            if (localPanelState.handle) {
+                if (mode) { localPanelState.mode = mode; applyOverlayLayout(); }
+                return;
+            }
+            localPanelState.mode = mode === 'sidebar' ? 'sidebar' : 'corner';
+            const container = document.createElement('div');
+            container.id = 'fade-debug-overlay';
+            document.body.appendChild(container);
+            localPanelState.container = container;
+            applyOverlayLayout();
+            const mod = await import('./debug-ui-panel.js');
+            localPanelState.parse = mod.parseDebugUiEnvelope;
+            localPanelState.handle = mod.mountDebugUiPanel({
+                container,
+                ...debugCallbacksForStandalone(),
+            });
+        }
+        function disableLocalPanel() {
+            if (!localPanelState.handle) return;
+            try { localPanelState.handle.dispose(); } catch { /* ignore */ }
+            if (localPanelState.container) localPanelState.container.remove();
+            localPanelState.handle = null;
+            localPanelState.container = null;
+        }
+        window.fadeDebug = {
+            enable(mode) { return enableLocalPanel(mode); },
+            disable() { disableLocalPanel(); },
+            setMode(mode) {
+                localPanelState.mode = mode === 'sidebar' ? 'sidebar' : 'corner';
+                applyOverlayLayout();
+            },
+        };
+        // Honour `?debug=1` / `?debug=corner` / `?debug=sidebar` on
+        // boot. The query param is checked once at script load — the
+        // Playground iframe URL doesn't include it, so the overlay
+        // stays off in Playground unless the user explicitly opts in.
+        try {
+            const params = new URLSearchParams(location.search);
+            const flag = params.get('debug');
+            if (flag) {
+                const mode = flag === 'sidebar' ? 'sidebar' : 'corner';
+                // Defer until Blazor has booted enough that
+                // DotNet.invokeMethodAsync resolves — the panel's
+                // callbacks need it. We just kick off enable() and
+                // let the first calls retry naturally.
+                window.fadeDebug.enable(mode);
+            }
+        } catch { /* ignore — bad location/URL is non-fatal */ }
 
         // Boot Blazor manually so we can hook before/after the runtime starts.
         Blazor.start();
@@ -1375,6 +1534,56 @@
                             catch (e) { console.warn('[fade-audio] setMuted:', e); }
                             return;
 
+                        // ── Debug UI (Tweakpane in parent) ───────────────
+                        // User moved a slider / clicked a button / toggled
+                        // a checkbox in the Playground's Debug UI panel.
+                        // Hand off to Index.razor.cs's ApplyDebugUiChange,
+                        // which writes into DebugUISystem's value dicts so
+                        // the next frame's fbasic Push picks up the change
+                        // via TryGetPrevious*.
+                        case 'debug-ui-change':
+                            try {
+                                await window.theInstance.invokeMethodAsync(
+                                    'ApplyDebugUiChange',
+                                    m.ctrlId | 0,
+                                    m.kind | 0,
+                                    String(m.value ?? ''));
+                            } catch (e) {
+                                console.warn('[fade-monogame] ApplyDebugUiChange threw:', e);
+                            }
+                            return;
+
+                        // ── Debug Inspector (DebugRegistry RPC) ─────────
+                        // Generic provider surface for the Tweakpane
+                        // inspector panel — list/get/set against any
+                        // game system that exposes an IDebugProvider.
+                        // The C# side returns JSON strings; we forward
+                        // them verbatim and the panel parses.
+                        case 'debug-list-types':
+                            await invokeAndReply('debug-list-types-result', m.id, 'DebugListTypes');
+                            return;
+                        case 'debug-get-schema':
+                            await invokeAndReply('debug-get-schema-result', m.id, 'DebugGetSchema',
+                                String(m.typeName ?? ''));
+                            return;
+                        case 'debug-get-entity-schema':
+                            await invokeAndReply('debug-get-entity-schema-result', m.id, 'DebugGetEntitySchema',
+                                String(m.typeName ?? ''), m.entityId | 0);
+                            return;
+                        case 'debug-list-entities':
+                            await invokeAndReply('debug-list-entities-result', m.id, 'DebugListEntities',
+                                String(m.typeName ?? ''));
+                            return;
+                        case 'debug-get-entity':
+                            await invokeAndReply('debug-get-entity-result', m.id, 'DebugGetEntity',
+                                String(m.typeName ?? ''), m.entityId | 0);
+                            return;
+                        case 'debug-set-field':
+                            await invokeAndReply('debug-set-field-result', m.id, 'DebugSetField',
+                                String(m.typeName ?? ''), m.entityId | 0,
+                                String(m.path ?? ''), String(m.valueJson ?? 'null'));
+                            return;
+
                         default:
                             console.warn('[fade-monogame preview] unhandled message type:', m.type);
                     }
@@ -1388,9 +1597,22 @@
                 }
             };
 
+            // Serialize message processing — handleParent is async (it awaits
+            // JSInterop invokeMethodAsync calls), so firing it directly inside
+            // the listener spawns parallel handler invocations. That race makes
+            // BeginPendingProgram fire *before* the preceding RegisterAsset
+            // finishes writing the new shader/texture bytes into
+            // BrowserContentManager._assets, so the program restart loads
+            // stale bytes. Chain each message onto a queue so they FIFO.
+            let _msgQueue = Promise.resolve();
             window.addEventListener('message', (e) => {
                 if (e.source !== window.parent) return;
-                handleParent(e.data);
+                const data = e.data;
+                _msgQueue = _msgQueue
+                    .then(() => handleParent(data))
+                    .catch((err) => {
+                        try { console.error('[fade] handleParent error:', err); } catch {}
+                    });
             });
 
             // Tell parent we're ready as soon as Blazor mounts. Symmetrical

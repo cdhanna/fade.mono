@@ -250,4 +250,104 @@ public partial class FadeMonoGameCommands
 
         return false;
     }
+
+    /// <summary>
+    /// <para>Resizes and repositions a collider so its bounds match the given
+    /// sprite's current closest-fit AABB on screen.</para>
+    /// <para>The sprite's position, scale, rotation, origin, and any attached
+    /// transform are all taken into account. For a rotated sprite the AABB
+    /// expands to enclose the rotated rectangle — that's the "closest-fit"
+    /// behavior an axis-aligned collider can offer.</para>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Snap detaches the collider from any transform it was attached to.</b>
+    /// The collider's <c>x</c>/<c>y</c>/<c>width</c>/<c>height</c> become absolute
+    /// world coordinates after this call — keeping it attached would cause the
+    /// next per-frame collision update to compose those world coords with the
+    /// parent transform a second time, putting the collider in the wrong place.
+    /// If you need the collider to stay aligned with a moving sprite, call this
+    /// command each frame inside your game loop.</para>
+    /// <para>No-op when the sprite has no texture loaded yet (frame size is zero).</para>
+    /// </remarks>
+    /// <example>
+    /// Keep a collider glued to a rotating sprite's drawn bounds every frame:
+    /// <code>
+    /// texture 1, "Images/Player"
+    /// sprite 1, 200, 200, 1
+    /// make collider 2, 0, 0, 1, 1
+    /// angle = 0
+    /// DO
+    ///   angle = angle + 1
+    ///   rotate sprite 1, angle
+    ///   snap collider to sprite 2, 1
+    ///   sync
+    /// LOOP
+    /// </code>
+    /// </example>
+    /// <param name="colliderId">The collider to resize and reposition.</param>
+    /// <param name="spriteId">The sprite to read the AABB from.</param>
+    /// <seealso cref="AttachColliderToTransform">attach collider to transform</seealso>
+    /// <seealso cref="IsMouseOverSprite">mouse over sprite</seealso>
+    [FadeBasicCommand("snap collider to sprite")]
+    public static void SnapColliderToSprite(int colliderId, int spriteId)
+    {
+        SpriteSystem.GetSpriteIndex(spriteId, out _, out var sprite);
+
+        // Frame size in unscaled texture pixels. Skip silently if the
+        // sprite has no texture loaded yet — better to leave the collider
+        // alone than collapse it to a zero-area degenerate.
+        TextureSystem.GetTextureIndex(sprite.imageId, out _, out var runtimeTex);
+        var src = TextureSystem.GetSourceRect(ref runtimeTex, ref sprite);
+        float frameW = src.Width;
+        float frameH = src.Height;
+        if (frameW <= 0 || frameH <= 0) return;
+        var originPx = new Vector2(frameW * sprite.origin.X, frameH * sprite.origin.Y);
+
+        // Composite world transform fresh — same approach as the hit-tests,
+        // no cache reads, so a sprite that was just moved this frame snaps
+        // to its real position rather than last frame's.
+        var position = sprite.position;
+        var rotation = sprite.rotation;
+        var scale = sprite.scale;
+        if (sprite.anchorTransformId > 0)
+        {
+            var localMat = TransformSystem.CreateMatrix(position, rotation, scale);
+            var parentMat = ResolveWorldMatrixByTransformId(sprite.anchorTransformId);
+            var worldMat = localMat * parentMat;
+            TransformSystem.DecomposeMatrix(worldMat, out var p3, out var r3, out var s3);
+            position = new Vector2(p3.X, p3.Y);
+            rotation = r3.Z;
+            scale = new Vector2(s3.X, s3.Y);
+        }
+
+        // Four corners of the sprite's drawn rectangle in world space.
+        // Local rect spans [-origin*scale, (frame - origin)*scale] before
+        // rotation; rotate each corner and pick the min/max for the AABB.
+        var minLocalX = -originPx.X * scale.X;
+        var maxLocalX = (frameW - originPx.X) * scale.X;
+        var minLocalY = -originPx.Y * scale.Y;
+        var maxLocalY = (frameH - originPx.Y) * scale.Y;
+        var cos = (float)System.Math.Cos(rotation);
+        var sin = (float)System.Math.Sin(rotation);
+        Vector2 RotatedCorner(float lx, float ly) => new Vector2(
+            position.X + lx * cos - ly * sin,
+            position.Y + lx * sin + ly * cos);
+        var c0 = RotatedCorner(minLocalX, minLocalY);
+        var c1 = RotatedCorner(maxLocalX, minLocalY);
+        var c2 = RotatedCorner(maxLocalX, maxLocalY);
+        var c3 = RotatedCorner(minLocalX, maxLocalY);
+        var minX = System.Math.Min(System.Math.Min(c0.X, c1.X), System.Math.Min(c2.X, c3.X));
+        var maxX = System.Math.Max(System.Math.Max(c0.X, c1.X), System.Math.Max(c2.X, c3.X));
+        var minY = System.Math.Min(System.Math.Min(c0.Y, c1.Y), System.Math.Min(c2.Y, c3.Y));
+        var maxY = System.Math.Max(System.Math.Max(c0.Y, c1.Y), System.Math.Max(c2.Y, c3.Y));
+
+        // Detach + write absolute world coords. See remarks: if we left
+        // targetTransformId set, the next CollisionSystem update would
+        // compose these world coords with the parent matrix a second time.
+        CollisionSystem.GetColliderIndex(colliderId, out var idx, out var box);
+        box.position = new Vector2(minX, minY);
+        box.size = new Vector2(maxX - minX, maxY - minY);
+        box.targetTransformId = 0;
+        CollisionSystem.aabbs[idx] = box;
+    }
 }

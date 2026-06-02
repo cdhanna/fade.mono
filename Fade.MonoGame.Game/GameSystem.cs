@@ -35,6 +35,7 @@ public class GameSystem
         TextureSystem.Reset();
         TransformSystem.Reset();
         TweenSystem.Reset();
+        GizmoSystem.Reset();
 #if !BROWSER
         DebugUISystem.CaptureMemoryBaseline();
 #endif

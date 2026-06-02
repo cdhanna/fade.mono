@@ -128,6 +128,11 @@ public class Game1 : Microsoft.Xna.Framework.Game
     // Convenience for the JS bridge: register a single asset by name.
     public void RegisterAsset(string name, byte[] bytes) =>
         _browserContent?.RegisterAsset(name, bytes);
+
+    // microui renders the browser debug UI in the canvas. Context +
+    // renderer are owned by DebugUISystem (browser flavor) — see
+    // DebugUISystem.Browser.cs. Game1 just initializes them and ticks
+    // the per-frame render in Draw.
 #endif
 
     protected override void Initialize()
@@ -158,7 +163,29 @@ public class Game1 : Microsoft.Xna.Framework.Game
         var defaultSpriteEffect = new SpriteEffect(GraphicsDevice);
         var fadeEffect = new FadeSpriteEffect(defaultSpriteEffect);
         _spriteBatch = new SpriteBatch(GraphicsDevice, fadeEffect);
+
+        // Browser debug UI flows through DebugRegistry → Playground
+        // Tweakpane Inspector (provider-driven, HTML overlay). See
+        // Debug/IDebugProvider.cs + the [JSInvokable] DebugListTypes
+        // surface in WebRuntime.MonoGame/Pages/Index.razor.cs.
 #endif
+
+        // Cross-platform: register IDebugProvider instances so the
+        // browser JS bridge (Pages/Index.razor.cs's JSInvokables) can
+        // route generic inspector RPC calls — "list sprites", "get
+        // sprite 5", "set sprite 5 position.X 42.5" — to the matching
+        // game system. Registry replaces by TypeName so hot-reload
+        // doesn't leak stale providers.
+        Core.Debug.DebugRegistry.Register(new Core.Debug.MetadataDebugProvider());
+        Core.Debug.DebugRegistry.Register(new Core.Debug.SpriteDebugProvider());
+        Core.Debug.DebugRegistry.Register(new Core.Debug.TransformDebugProvider());
+        Core.Debug.DebugRegistry.Register(new Core.Debug.TweenDebugProvider());
+        Core.Debug.DebugRegistry.Register(new Core.Debug.ColliderDebugProvider());
+        Core.Debug.DebugRegistry.Register(new Core.Debug.TextDebugProvider());
+        Core.Debug.DebugRegistry.Register(new Core.Debug.SfxDebugProvider());
+        Core.Debug.DebugRegistry.Register(new Core.Debug.TextureDebugProvider());
+        Core.Debug.DebugRegistry.Register(new Core.Debug.RenderOutputDebugProvider());
+        Core.Debug.DebugRegistry.Register(new Core.Debug.EffectDebugProvider());
     }
 
     private static DateTimeOffset _dbgTime;
@@ -366,6 +393,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
         _pixel = new Texture2D(GraphicsDevice, 1, 1);
         _pixel.SetData(new Color[]{Color.White});
+        GizmoSystem.pixelTexture = _pixel;
     }
 
     private bool _justReloaded = false;
@@ -542,9 +570,11 @@ public class Game1 : Microsoft.Xna.Framework.Game
             // GraphicsDevice.SetRenderTarget(RenderSystem.dbgBuffer);
             // GraphicsDevice.Clear(Color.Transparent);
 
-#if !BROWSER
+            // Browser uses the same queue+state surface as desktop — only
+            // Render() (ImGui rendering) is desktop-only. See
+            // DebugUISystem.Browser.cs; EndDebug there serializes the queue
+            // and posts to the parent Playground for Tweakpane rendering.
             DebugUISystem.StartDebug();
-#endif
         }
         
         if (_fatal == null)
@@ -635,9 +665,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         }
 
 
-#if !BROWSER
         DebugUISystem.EndDebug();
-#endif
         TransformSystem.CalculateTransforms();
 
         
@@ -667,7 +695,12 @@ public class Game1 : Microsoft.Xna.Framework.Game
         
         _spriteBatch.Draw(RenderSystem.mainBuffer, RenderSystem.mainBufferPosition, null, Color.White, 0f, Vector2.Zero, RenderSystem.mainBufferScale, SpriteEffects.None, 0);
         _spriteBatch.End();
-        
+
+        // Gizmos draw in world-space (mainBuffer pixels) but to the
+        // back-buffer after the screen-effect composite, so debug overlays
+        // aren't part of the post-process and always render on top.
+        GizmoSystem.Render(_spriteBatch, RenderSystem.mainBufferPosition, RenderSystem.mainBufferScale);
+
         _spriteBatch.Begin(blendState: BlendState.NonPremultiplied);
 #if !BROWSER
         DebugUISystem.Render();
@@ -684,8 +717,6 @@ public class Game1 : Microsoft.Xna.Framework.Game
         }
         
         _spriteBatch.End();
-        
-        
         base.Draw(gameTime);
     }
 
