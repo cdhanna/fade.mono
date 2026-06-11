@@ -417,28 +417,6 @@ namespace WebRuntime.MonoGame.Pages
         public string DebugScopes(int frameId)
         {
             if (_game?.DebugSession == null) return "{\"scopes\":[]}";
-            // [DEBUG-LOGGING — remove once scope-after-step issue is resolved]
-            try
-            {
-                var vm = _game.DebugSession._vm;
-                var dbg = _game.BrowserDebugSession.DebugDataAccess;
-                var insCount = dbg?.insToVariable?.Count ?? 0;
-                Console.WriteLine($"[WASM-DBG] DebugScopes(frame={frameId}) ins={vm.instructionIndex} scopeStack={vm.scopeStack.Count} dbg.insToVariable.count={insCount}");
-                if (vm.scopeStack.Count > 0 && dbg != null)
-                {
-                    var s = vm.scopeStack.buffer[0];
-                    var registered = new List<string>();
-                    for (ulong k = 0; k < (ulong)s.insIndexes.LongLength; k++)
-                    {
-                        var insIdx = s.insIndexes[k];
-                        if (insIdx <= 0) continue;
-                        var hit = dbg.insToVariable.TryGetValue(insIdx, out var dv);
-                        registered.Add($"reg{k}@ins{insIdx}({(hit ? dv.name : "<no-map>")}={s.dataRegisters[k]} flag={s.flags[k]})");
-                    }
-                    Console.WriteLine($"[WASM-DBG] scope0 registers: {string.Join(", ", registered)}");
-                }
-            }
-            catch (Exception ex) { Console.Error.WriteLine("[WASM-DBG] DebugScopes log threw: " + ex.Message); }
             var resp = _game.DebugSession.GetScopes(new DebugScopeRequest { frameIndex = frameId });
             StripRuntimeRefs(resp);
             return JsonSerializer.Serialize(resp, _debugJsonOpts);
@@ -490,13 +468,39 @@ namespace WebRuntime.MonoGame.Pages
         // VM internals (delegates, byref data) — System.Text.Json can't
         // serialize them. Null the field before serializing so the response
         // is clean. Matches the helper in WebRuntime/FadeBridge.cs.
+        // Null out runtimeVariable for serialization WITHOUT mutating the
+        // original Launch.DebugVariable objects — those live in the
+        // variableDb's idToVariable map and subsequent setVariable calls
+        // need their runtimeVariable to still point at the live VM data.
+        // (Mutating in place worked back when variables didn't carry a
+        // runtimeVariable, but the array-element fix in DebugUtil.Expand
+        // now attaches one so TrySetValue's heap-write branch fires.
+        // Stripping in place broke that — the element id was in
+        // idToVariable but its runtimeVariable came back null, so
+        // TrySetValue's null-check threw "no variable for given id".)
         private static void StripRuntimeRefs(ScopesMessage msg)
         {
             if (msg?.scopes == null) return;
-            foreach (var scope in msg.scopes)
+            for (var si = 0; si < msg.scopes.Count; si++)
             {
+                var scope = msg.scopes[si];
                 if (scope?.variables == null) continue;
-                foreach (var v in scope.variables) v.runtimeVariable = null;
+                for (var vi = 0; vi < scope.variables.Count; vi++)
+                {
+                    var v = scope.variables[vi];
+                    if (v?.runtimeVariable == null) continue;
+                    scope.variables[vi] = new FadeBasic.Launch.DebugVariable
+                    {
+                        id = v.id,
+                        name = v.name,
+                        type = v.type,
+                        value = v.value,
+                        evalName = v.evalName,
+                        fieldCount = v.fieldCount,
+                        elementCount = v.elementCount,
+                        // runtimeVariable intentionally left null — STJ-safe.
+                    };
+                }
             }
         }
 

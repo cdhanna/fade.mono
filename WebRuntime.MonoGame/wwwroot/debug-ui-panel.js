@@ -452,6 +452,31 @@ export function mountDebugUiPanel(opts) {
             }
         }
 
+        // Fetch friendly labels once per sync — same endpoint as the
+        // reference-type dropdowns. Best-effort with a short timeout
+        // so a hung host can't keep new folder titles in limbo.
+        let labels = {};
+        if (opts.getLabels) {
+            try {
+                labels = await Promise.race([
+                    opts.getLabels(typeName),
+                    new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('getLabels timeout')), 1500)),
+                ]);
+            } catch { /* fall back to "<type> #<id>" */ }
+        }
+        const entityTitle = (id) => {
+            const named = labels[String(id)];
+            return named && named.length > 0 ? named : `${typeName} #${id}`;
+        };
+
+        // Re-title existing folders too — asset paths can change
+        // without the id set changing.
+        for (const [id, ef] of existing) {
+            const desired = entityTitle(id);
+            if (ef.folder.title !== desired) ef.folder.title = desired;
+        }
+
         for (const id of ids) {
             if (existing.has(id) || pending.has(id)) continue;
             pending.add(id);
@@ -466,7 +491,7 @@ export function mountDebugUiPanel(opts) {
                 if (existing.has(id)) continue;
                 const entKey = `insp/type:${typeName}/ent:${id}`;
                 const entInitiallyExpanded = recallExpand(entKey, false);
-                const sub = parentNow.addFolder({ title: `${typeName} #${id}`, expanded: entInitiallyExpanded });
+                const sub = parentNow.addFolder({ title: entityTitle(id), expanded: entInitiallyExpanded });
                 const ef = { folder: sub, fields: [], expanded: entInitiallyExpanded };
                 sub.on('fold', (ev) => {
                     ef.expanded = ev.expanded;
@@ -653,16 +678,39 @@ export function mountDebugUiPanel(opts) {
 
     async function refreshRefSelectOptions(sel, field, currentValue) {
         if (!field.referenceType) return;
-        const ids = await opts.listEntities(field.referenceType);
+        const refType = field.referenceType;
+        // listEntities IS the critical path — without an id list there's
+        // nothing to show. getLabels is best-effort: if the host hangs
+        // or rejects, fall back to numeric labels so the dropdown stays
+        // usable.
+        let ids = [];
+        try { ids = await opts.listEntities(refType); }
+        catch (e) { console.warn('[debug-ui] listEntities failed', refType, e); }
+        let labels = {};
+        if (opts.getLabels) {
+            try {
+                labels = await Promise.race([
+                    opts.getLabels(refType),
+                    new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('getLabels timeout')), 1500)),
+                ]);
+            } catch (e) { /* fall back to "type #id" */ }
+        }
         const want = new Set([0, currentValue, ...ids]);
         const sorted = Array.from(want).sort((a, b) => a - b);
-        const existing = Array.from(sel.options).map((o) => Number(o.value));
-        if (existing.length === sorted.length && existing.every((v, i) => v === sorted[i])) return;
+        const labelText = (id) => {
+            if (id === 0) return '(none)';
+            const named = labels[String(id)];
+            return named && named.length > 0 ? named : `${refType} #${id}`;
+        };
+        const wantSignature = sorted.map((id) => `${id}|${labelText(id)}`).join(',');
+        const existingSignature = Array.from(sel.options).map((o) => `${o.value}|${o.textContent ?? ''}`).join(',');
+        if (existingSignature === wantSignature) return;
         sel.replaceChildren();
         for (const id of sorted) {
             const opt = document.createElement('option');
             opt.value = String(id);
-            opt.textContent = id === 0 ? `(none)` : `${field.referenceType} #${id}`;
+            opt.textContent = labelText(id);
             if (id === currentValue) opt.selected = true;
             sel.appendChild(opt);
         }

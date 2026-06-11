@@ -282,6 +282,28 @@ loop
             return JsonSerializer.Serialize(ids, _dbgInspectorJsonOpts);
         }
 
+        /// <summary>
+        /// Return per-id labels for one provider. Used by the inspector's
+        /// reference-type dropdowns to show human-readable names
+        /// ("Images/Player") instead of the generic "texture #1" form.
+        /// Output shape: { "<id>": "<label>", ... }, with only the
+        /// entries that have a non-null/empty label. Empty when the
+        /// provider doesn't override GetLabel.
+        /// </summary>
+        [JSInvokable]
+        public string DebugGetLabels(string typeName)
+        {
+            var p = Fade.MonoGame.Core.Debug.DebugRegistry.Get(typeName);
+            if (p == null) return "{}";
+            var labels = new Dictionary<string, string>();
+            foreach (var id in p.ListIds())
+            {
+                var label = p.GetLabel(id);
+                if (!string.IsNullOrEmpty(label)) labels[id.ToString(System.Globalization.CultureInfo.InvariantCulture)] = label;
+            }
+            return JsonSerializer.Serialize(labels, _dbgInspectorJsonOpts);
+        }
+
         /// <summary> Snapshot one entity. </summary>
         [JSInvokable]
         public string DebugGetEntity(string typeName, int id)

@@ -534,10 +534,18 @@
                 if (!json || json === 'null') return null;
                 try { return JSON.parse(json); } catch { return null; }
             };
+            const parseObjOrEmpty = (json) => {
+                if (!json) return {};
+                try {
+                    const v = JSON.parse(json);
+                    return v && typeof v === 'object' ? v : {};
+                } catch { return {}; }
+            };
             return {
                 getSchema: async (t) => parseOrNull(await inv('DebugGetSchema', t)),
                 getEntitySchema: async (t, id) => parseOrNull(await inv('DebugGetEntitySchema', t, id | 0)),
                 listEntities: async (t) => parseList(await inv('DebugListEntities', t)),
+                getLabels: async (t) => parseObjOrEmpty(await inv('DebugGetLabels', t)),
                 getEntity: async (t, id) => parseOrNull(await inv('DebugGetEntity', t, id | 0)),
                 setField: async (t, id, p, v) => !!(await inv('DebugSetField', t, id | 0, p, v)),
                 sendFbasicChange: (ctrlId, kind, value) =>
@@ -1572,6 +1580,10 @@
                             return;
                         case 'debug-list-entities':
                             await invokeAndReply('debug-list-entities-result', m.id, 'DebugListEntities',
+                                String(m.typeName ?? ''));
+                            return;
+                        case 'debug-get-labels':
+                            await invokeAndReply('debug-get-labels-result', m.id, 'DebugGetLabels',
                                 String(m.typeName ?? ''));
                             return;
                         case 'debug-get-entity':

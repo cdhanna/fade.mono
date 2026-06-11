@@ -510,6 +510,22 @@ public class Game1 : Microsoft.Xna.Framework.Game
         AudioInstanceSystem.HandleAudio();
         TextureSystem.RefreshTextures();
 
+        // RefreshEffects branches internally — the !BROWSER side runs
+        // ContentWatcher.TryRefreshAsset against the file-system watcher;
+        // the BROWSER side drains BrowserContentManager.ConsumeReloadedAssets
+        // and re-Content.Load's any user effect whose source the playground
+        // just re-pushed. Both need to fire every frame, so the call lives
+        // outside the `#if !BROWSER` block. Previously it was wrapped on
+        // browser too, which meant the reloaded-asset set never drained:
+        // BrowserContentManager.UnregisterAsset had already disposed the
+        // old Effect instance via reflection-eviction, but the RuntimeEffect
+        // slot still pointed at that disposed reference — every subsequent
+        // frame's SpriteBatch.End() threw ObjectDisposedException('effect').
+        //
+        // The `fadeFx` parameter is currently unused inside RefreshEffects,
+        // and `_fadeEffect` itself is desktop-only (wrapped in
+        // `#if !BROWSER`), so the browser call passes null — kept as a
+        // parameter for now in case the desktop path needs it later.
 #if !BROWSER
         RenderSystem.RefreshEffects(_fadeEffect);
 
@@ -519,6 +535,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
             _fadeEffect = new FadeSpriteEffect(_customSpriteEffect.Asset);
             _spriteBatch.ResetEffect(_fadeEffect);
         }
+#else
+        RenderSystem.RefreshEffects(null);
 #endif
 
         GameSystem.latestTime = gameTime;
