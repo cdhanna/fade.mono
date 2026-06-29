@@ -1,0 +1,73 @@
+<Project>
+  <!--
+    Auto-imported by NuGet into every (direct OR transitive) consumer of the
+    FadeBasic.MonoGame.Game package — including a game that only references
+    FadeBasic.MonoGame.Lib.
+
+    Purpose: run the Fade source compiler (which emits `GeneratedFade` from
+    <FadeSource>/<FadeCommand>) WITHOUT the consuming project referencing
+    FadeBasic.Build directly. The generator's task is bundled under
+    buildTransitive/fadecore/ at pack time, so the core build-tooling version
+    is locked to THIS MonoGame package — the template carries no separate
+    FadeBasic.* version that could drift from the runtime VM shipped here.
+  -->
+  <PropertyGroup>
+    <_FadeCoreBuildDir>$(MSBuildThisFileDirectory)fadecore\build\</_FadeCoreBuildDir>
+  </PropertyGroup>
+
+  <!-- Import the core PROPS only: it declares the FadeProjectTask <UsingTask>
+       and resolves the bundled task assembly via its own relative
+       ..\tasks\net8.0 path (no items, safe to import unconditionally).
+
+       We deliberately do NOT import the core *.targets. Its GenerateFadeBasic
+       runs BeforeTargets=CoreCompile gated only on a property — and a
+       BeforeTargets guard can't flip that property in time (the target's
+       Condition is already locked in), so it would emit a GeneratedFade even in
+       command-only plugin projects. Instead we invoke the same task from our
+       own target, correctly gated on <FadeSource> (item lists CAN be tested in
+       a target Condition). -->
+  <Import Project="$(_FadeCoreBuildDir)FadeBasic.Build.props"
+          Condition="Exists('$(_FadeCoreBuildDir)FadeBasic.Build.props')" />
+
+  <PropertyGroup>
+    <FadeBasicDebug Condition="'$(FadeBasicDebug)'=='' AND '$(Configuration)'=='Debug'">true</FadeBasicDebug>
+    <FadeGenerateMain Condition="'$(FadeGenerateMain)'==''">True</FadeGenerateMain>
+    <FadeIgnoreChecks Condition="'$(FadeIgnoreChecks)'==''">False</FadeIgnoreChecks>
+    <FadeGeneratedLaunchType Condition="'$(FadeGeneratedLaunchType)'==''">GeneratedFade</FadeGeneratedLaunchType>
+    <FadeGeneratedFolder Condition="'$(FadeGeneratedFolder)'==''">Launch</FadeGeneratedFolder>
+    <FadeGeneratedLaunchFile Condition="'$(FadeGeneratedLaunchFile)'==''">$(MSBuildProjectDirectory)/$(FadeGeneratedFolder)/$(FadeGeneratedLaunchType).g.cs</FadeGeneratedLaunchFile>
+  </PropertyGroup>
+
+  <!-- Generate GeneratedFade from <FadeSource>. The item-list Condition means a
+       command-only plugin (no program) generates nothing. Mirrors the core
+       FadeBasic.Build GenerateFadeBasic target's task invocation. -->
+  <Target Name="FadeMonoGameGenerateLaunch"
+          BeforeTargets="CoreCompile"
+          Condition="'@(FadeSource)' != '' AND '$(FadeDisableAutoBuild)' != 'true'"
+          Inputs="@(FadeSource);@(FadeCommand);@(ReferencePath)"
+          Outputs="$(FadeGeneratedLaunchFile)">
+    <FadeProjectTask
+        OutputPath="$(TargetDir)"
+        GenerateDebugData="$(FadeBasicDebug)"
+        GeneratedClassName="$(FadeGeneratedLaunchType)"
+        SourceFiles="@(FadeSource)"
+        Commands="@(FadeCommand)"
+        GenerateEntryPoint="$(FadeGenerateMain)"
+        IgnoreSafetyChecks="$(FadeIgnoreChecks)"
+        References="@(ReferencePath)"
+        GenerateFileLocation="$(FadeGeneratedLaunchFile)"
+        EnableTesting="$(FadeEnableTesting)">
+      <Output TaskParameter="GeneratedFile" PropertyName="FadeGeneratedClassFileName" />
+    </FadeProjectTask>
+    <PropertyGroup>
+      <_FadeGeneratedAlreadyCompiled Condition="'%(Compile.FullPath)' == '$(FadeGeneratedClassFileName)'">1</_FadeGeneratedAlreadyCompiled>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(_FadeGeneratedAlreadyCompiled)' != '1'">
+      <Compile Include="$(FadeGeneratedClassFileName)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="FadeMonoGameRegenOnClean" AfterTargets="CoreClean">
+    <Delete Files="$(FadeGeneratedLaunchFile)" Condition="'$(FadeGeneratedLaunchFile)' != ''" />
+  </Target>
+</Project>

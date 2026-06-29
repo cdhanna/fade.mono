@@ -454,17 +454,120 @@
         //     via `window.fadeDebug.enable()` or the `?debug=1` URL
         //     flag. The panel module lives in debug-ui-panel.js and
         //     is loaded lazily on first enable.
+        //
+        // Iframe→parent uses a DIFF protocol: we parse the envelope on
+        // this side, compare to the last one we sent, and ship only the
+        // fields that changed (as 'debug-ui-frame-delta'). Saves the
+        // structured-clone + parse cost on the parent for fields that
+        // are stable across frames (typically queue + entities, since
+        // widget structure and entity composition don't change every
+        // frame — only metadata does). First emission goes as a
+        // baseline (full envelope with `baseline: true`) so the parent
+        // has a complete starting state.
+        //
+        // The local-panel branch below still receives the full envelope
+        // every frame because it has no parse to skip (the panel's
+        // applyFrameEnvelope does its own internal dedup via gen + a
+        // queue-structure hash).
         const localPanelState = { handle: null, container: null, mode: 'corner' };
+        // Subscription flag: parent toggles this via the
+        // 'debug-ui-subscribe' message when its Debug UI dock tab
+        // becomes visible / hidden. When BOTH the parent is not
+        // subscribed AND there's no local overlay panel, the
+        // fadeDebugUi.frame call below short-circuits without
+        // parsing the envelope or sending any postMessage. C# can
+        // also poll window.fadeDebugUi.isSubscribed() to skip the
+        // snapshot work upstream (the bigger win — the iframe-side
+        // no-op only saves transport + parse). Default true at boot
+        // so we don't drop envelopes during the parent's first few
+        // frames before its visibility hook fires; parent will set
+        // false within a tick or two if its panel is hidden.
+        let parentSubscribed = true;
+        const debugUiDiff = (() => {
+            let last = null;
+            function eqVal(a, b) {
+                if (a === b) return true;
+                if (a == null || b == null) return a == b;
+                if (typeof a !== typeof b) return false;
+                if (typeof a !== 'object') return false;
+                if (Array.isArray(a)) {
+                    if (!Array.isArray(b) || a.length !== b.length) return false;
+                    for (let i = 0; i < a.length; i++) if (!eqVal(a[i], b[i])) return false;
+                    return true;
+                }
+                if (Array.isArray(b)) return false;
+                const ak = Object.keys(a), bk = Object.keys(b);
+                if (ak.length !== bk.length) return false;
+                for (const k of ak) if (!eqVal(a[k], b[k])) return false;
+                return true;
+            }
+            function compute(json) {
+                let env;
+                try { env = JSON.parse(json); } catch { return null; }
+                if (!env || typeof env !== 'object') return null;
+                // Normalise common shapes so the parent's merger gets
+                // predictable fields. Treat the legacy "bare queue array"
+                // shape the same way the existing parser does.
+                if (Array.isArray(env)) env = { gen: 0, queue: env, autoInspector: false };
+                const prev = last;
+                last = env;
+                if (!prev) {
+                    return {
+                        baseline: true,
+                        gen: env.gen ?? 0,
+                        queue: env.queue ?? [],
+                        autoInspector: !!env.autoInspector,
+                        metadata: env.metadata ?? null,
+                        entities: env.entities ?? null,
+                    };
+                }
+                const d = {};
+                let changed = false;
+                if (env.gen !== prev.gen) { d.gen = env.gen; changed = true; }
+                if (!!env.autoInspector !== !!prev.autoInspector) {
+                    d.autoInspector = !!env.autoInspector; changed = true;
+                }
+                if (!eqVal(env.queue ?? [], prev.queue ?? [])) {
+                    d.queue = env.queue ?? []; changed = true;
+                }
+                if (!eqVal(env.metadata ?? null, prev.metadata ?? null)) {
+                    d.metadata = env.metadata ?? null; changed = true;
+                }
+                if (!eqVal(env.entities ?? null, prev.entities ?? null)) {
+                    d.entities = env.entities ?? null; changed = true;
+                }
+                return changed ? d : null;
+            }
+            return { compute };
+        })();
         window.fadeDebugUi = {
             frame(json) {
-                try { window.parent.postMessage({ type: 'debug-ui-frame', json }, '*'); }
-                catch { /* parent may be cross-origin, or no parent in standalone */ }
+                // Short-circuit when no consumer exists. The C# side still
+                // does its snapshot work — for the FULL win, C# should
+                // check isSubscribed() below before generating the
+                // envelope at all.
+                if (!parentSubscribed && !localPanelState.handle) return;
+                const delta = parentSubscribed ? debugUiDiff.compute(json) : null;
+                if (delta) {
+                    try { window.parent.postMessage({ type: 'debug-ui-frame-delta', delta }, '*'); }
+                    catch { /* parent may be cross-origin, or no parent in standalone */ }
+                }
                 if (localPanelState.handle) {
                     try {
                         const env = localPanelState.parse(json);
                         localPanelState.handle.applyFrameEnvelope(env);
                     } catch (e) { console.warn('[fadeDebug] applyFrameEnvelope threw', e); }
                 }
+            },
+            /** True when any consumer wants per-frame envelopes (the
+             *  parent has signaled its Debug UI tab is visible, or the
+             *  local overlay panel is mounted). C# polls this once per
+             *  frame in DebugUISystem.FrameSink and skips the snapshot
+             *  entirely when false — that's where the real perf win
+             *  comes from. The JS-side short-circuit above only saves
+             *  the postMessage + parent parse cost. */
+            isSubscribed() {
+                return parentSubscribed || !!localPanelState.handle;
             },
         };
 
@@ -1594,6 +1697,35 @@
                             await invokeAndReply('debug-set-field-result', m.id, 'DebugSetField',
                                 String(m.typeName ?? ''), m.entityId | 0,
                                 String(m.path ?? ''), String(m.valueJson ?? 'null'));
+                            return;
+
+                        case 'debug-ui-subscribe':
+                            // Parent toggles this when its Debug UI dock
+                            // tab becomes visible / hidden. Two effects:
+                            //   1. fadeDebugUi.frame() short-circuits in
+                            //      JS when neither this flag nor a local
+                            //      overlay panel wants envelopes —
+                            //      saves the postMessage + parent parse.
+                            //   2. Index.razor's SetDebugUiSubscribed
+                            //      JSInvokable flips DebugUISystem.
+                            //      IsSubscribed in C# so EndDebug skips
+                            //      the entire snapshot pipeline (no
+                            //      metadata reflection, no entity
+                            //      enumeration, no JSON build). That's
+                            //      where the bulk of the per-frame
+                            //      cost lives, so this is the larger
+                            //      of the two wins. window.theInstance
+                            //      may not be ready yet during early
+                            //      boot; we catch + ignore — the
+                            //      default IsSubscribed = true keeps
+                            //      envelopes flowing in that brief
+                            //      window.
+                            parentSubscribed = !!m.active;
+                            try {
+                                if (window.theInstance) {
+                                    void window.theInstance.invokeMethodAsync('SetDebugUiSubscribed', !!m.active);
+                                }
+                            } catch { /* not armed yet */ }
                             return;
 
                         default:

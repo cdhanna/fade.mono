@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <!-- Desktop is the default. Build the web (KNI/WebGL) bundle with:
+             dotnet publish -p:FadeMonoGamePlatform=Web
+         The platform-correct MonoGame/KNI packages + the BROWSER define are
+         injected by FadeBasic.MonoGame.Game's build props based on this value. -->
+    <!-- MonoGame ships its own entry point (Program.cs launches Game1), so the
+         console-style generated Main is suppressed. FadeBasic.Build still emits
+         `GeneratedFade` from the <FadeSource>/<FadeCommand> items below. -->
+    <FadeGenerateMain>false</FadeGenerateMain>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Lib = the built-in commands (FadeMonoGameCommands), and brings the engine
+         (Game1 + systems) and the Fade core transitively. (We do NOT reference
+         .Game directly: its build props would inject DesktopGL/ImGui too, which
+         can't restore from a consumed package's props anyway and just duplicate
+         the platform refs below.) Stamped to the monogame release at pack time. -->
+    <PackageReference Include="FadeBasic.MonoGame.Lib" Version="0.0.0-LOCAL" />
+    <!-- The Fade source compiler that emits `GeneratedFade` from the items
+         below rides in transitively: FadeBasic.MonoGame.Game bundles the
+         FadeBasic.Build generator under buildTransitive/ and runs it here. So
+         there is NO FadeBasic.* version to pin in this template — the core
+         build-tooling version is locked to the MonoGame package, matching the
+         runtime VM it also ships. -->
+    <!-- Built-in command surface available to the .fbasic program. -->
+    <FadeCommand Include="FadeBasic.Lib.Standard" FullName="FadeBasic.Lib.Standard.StandardCommands" />
+    <FadeCommand Include="Fade.MonoGame.Lib" FullName="Fade.MonoGame.Lib.FadeMonoGameCommands" />
+    <!-- Your game. Add more <FadeSource> files as the project grows. -->
+    <FadeSource Include="game.fbasic" />
+  </ItemGroup>
+  <!-- The platform MonoGame package, referenced DIRECTLY. NuGet can't restore a
+       PackageReference that a consumed package's build props try to inject, so
+       the game owns this. Desktop by default; build the web bundle with
+       `dotnet publish -p:FadeMonoGamePlatform=Web` (swaps to KNI/BlazorGL). -->
+  <ItemGroup Condition="'$(FadeMonoGamePlatform)' != 'Web'">
+    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.5-preview.4" />
+    <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Web'">
+    <PackageReference Include="nkast.Kni.Platform.Blazor.GL" Version="4.2.9001.2" />
+  </ItemGroup>
+</Project>

@@ -69,7 +69,10 @@ public static class FadeContentSystem
     public static void PatchXnbsForKni(string outputDir)
     {
         if (!Directory.Exists(outputDir)) return;
-        foreach (var path in Directory.GetFiles(outputDir, "*.xnb", SearchOption.TopDirectoryOnly))
+        // The content builder writes XNBs into a "Content/" subfolder under
+        // outputDir (MonoGame convention), so scan recursively — a top-level
+        // scan silently patches nothing and ships v11 MGFX that KNI rejects.
+        foreach (var path in Directory.GetFiles(outputDir, "*.xnb", SearchOption.AllDirectories))
         {
             var original = File.ReadAllBytes(path);
             var patched  = PatchXnbForKni(original);

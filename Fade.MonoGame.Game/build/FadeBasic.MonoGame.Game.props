@@ -1,31 +1,18 @@
 <Project>
   <!--
-    Platform dispatch for FadeBasic.MonoGame.Game consumers.
+    Auto-imported into projects that reference the FadeBasic.MonoGame.Game
+    package directly. It only establishes the platform default:
 
-    Auto-imported by MSBuild when this package is restored. Set
-    $(FadeMonoGamePlatform) in your project (or Directory.Build.props) to
-    choose which platform packages get injected into the build:
+        $(FadeMonoGamePlatform) = Desktop (default) | Web
 
-        Desktop  (default) — MonoGame.Framework.DesktopGL + ImGui.NET
-        Web                — FadeBasic.Export.MonoGame (KNI BlazorGL bundle)
-
-    The MonoGame version is pinned to match the runtime this package was
-    compiled against. FadeBasic.Export.MonoGame is intentionally unversioned:
-    it always ships in lockstep with this package, so NuGet resolves the
-    matching release (override the version in your project to pin it).
+    It does NOT inject the platform MonoGame packages. NuGet fixes the restore
+    graph before a consumed package's build props are evaluated, so a
+    PackageReference added here would never restore — the consuming project must
+    reference the platform package (MonoGame.Framework.DesktopGL / ImGui.NET, or
+    nkast.Kni.Platform.Blazor.GL) itself. The `dotnet new fadebasic-monogame`
+    template does exactly that, switching on $(FadeMonoGamePlatform).
   -->
-
   <PropertyGroup>
     <FadeMonoGamePlatform Condition="'$(FadeMonoGamePlatform)' == ''">Desktop</FadeMonoGamePlatform>
   </PropertyGroup>
-
-  <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Desktop'">
-    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.5-preview.4" />
-    <PackageReference Include="ImGui.NET"                    Version="1.91.6.1" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Web'">
-    <PackageReference Include="FadeBasic.Export.MonoGame" />
-  </ItemGroup>
-
 </Project>

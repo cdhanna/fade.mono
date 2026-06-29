@@ -6,6 +6,10 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>WebRuntime.MonoGame</RootNamespace>
     <AssemblyName>WebRuntime.MonoGame</AssemblyName>
+    <!-- This host is ALWAYS web — pin the platform so it builds directly (IDE /
+         plain `dotnet build`) without needing -p:FadeMonoGamePlatform=Web, and
+         so the BROWSER define + KNI flavor reach the referenced lib graph. -->
+    <FadeMonoGamePlatform>Web</FadeMonoGamePlatform>
     <!-- KNI requires this define for its WebGL platform code paths. -->
     <DefineConstants>$(DefineConstants);BLAZORGL</DefineConstants>
     <KniPlatform>BlazorGL</KniPlatform>
@@ -41,17 +45,9 @@
           PackagePath="build/FadeBasic.Export.MonoGame.targets" />
   </ItemGroup>
 
-  <!-- Desktop deps: MonoGame DesktopGL + ImGui. -->
-  <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Desktop'">
-    <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
-    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)" />
-  </ItemGroup>
+  <!-- This is a Blazor WASM host: always web, KNI only. (The KNI package is
+       referenced unconditionally below; no Desktop/DesktopGL path here.) -->
 
-  <!-- Browser deps: KNI BlazorGL. No ImGui (cimgui has no WASM build). -->
-  <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Web'">
-    <PackageReference Include="nkast.Kni.Platform.Blazor.GL" Version="$(KniPlatformBlazorGLVersion)" />
-  </ItemGroup>
-  
   <!-- Only when packing should we include the staged wasm artifacts. The
        wasm bundle is built by `dotnet publish` (which produces
        bin/Release/net8.0/publish/wwwroot/*) and pointed at via
@@ -71,13 +67,19 @@
     <PackageReference Include="nkast.Kni.Platform.Blazor.GL" Version="$(KniPlatformBlazorGLVersion)" />
   </ItemGroup>
 
-  <!-- Build the lib graph (Lib → Game → Contracts) at net8.0 for the Web platform.
-       Both knobs are independent: SetTargetFramework picks the TFM, SetProperties picks
-       the export platform (KNI packages + BROWSER define). Properties propagate down
-       the ProjectReference chain. -->
+  <!-- Build the lib graph (Lib → Game → Contracts) for the Web platform.
+       Everything is net8 now, so no SetTargetFramework is needed; SetProperties
+       flavors the export platform (KNI packages + BROWSER define) down the
+       ProjectReference chain. -->
   <ItemGroup>
     <ProjectReference Include="..\Fade.MonoGame.Lib\Fade.MonoGame.Lib.csproj">
-      <SetTargetFramework>TargetFramework=net8.0</SetTargetFramework>
+      <!-- NOTE: the reliable way to flavor the whole lib graph for web is the
+           GLOBAL property — build/publish with `-p:FadeMonoGamePlatform=Web`
+           (the Playground build script and the export targets do this). An
+           in-project `AdditionalProperties=…` propagates FadeMonoGamePlatform
+           but NOT the other web signals (KniPlatform/BLAZORGL), so Game compiles
+           against the wrong KNI surface; `SetProperties` is ignored entirely.
+           Until that's reworked, web builds go through the global flag. -->
       <SetProperties>FadeMonoGamePlatform=Web</SetProperties>
     </ProjectReference>
   </ItemGroup>

@@ -7,11 +7,15 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
+        <TargetFramework>net8.0</TargetFramework>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <LangVersion>14</LangVersion>
     </PropertyGroup>
 
+    <PropertyGroup Condition="'$(FadeMonoGamePlatform)' == ''">
+        <!-- Default the platform to Desktop -->
+        <FadeMonoGamePlatform>Desktop</FadeMonoGamePlatform>
+    </PropertyGroup>
     <PropertyGroup Condition="'$(FadeMonoGamePlatform)' == 'Web'">
         <DefineConstants>$(DefineConstants);BROWSER</DefineConstants>
     </PropertyGroup>
@@ -21,14 +25,15 @@
         <ShouldIncludeContentBuilder Condition="'$(Configuration)' == 'Debug'">true</ShouldIncludeContentBuilder>
     </PropertyGroup>
 
-    <!-- Platform packages are compile-time stubs only — PrivateAssets="all"
-         prevents them from flowing transitively to consumers.  The consumer's
-         platform is injected by build/FadeBasic.MonoGame.Game.props (auto-
-         imported via NuGet) based on $(FadeMonoGamePlatform). -->
+    <!-- Platform packages for compiling THIS project, by platform.
+         PrivateAssets="all" keeps them from flowing transitively to consumers —
+         a consuming game references the platform package directly (a consumed
+         package's build props cannot inject a restorable PackageReference; see
+         build/FadeBasic.MonoGame.Game.props). -->
 
     <!-- Desktop deps: MonoGame DesktopGL + ImGui. -->
     <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Desktop'">
-        <PackageReference Include="ImGui.NET" Version="1.91.6.1" PrivateAssets="all" />
+        <PackageReference Include="ImGui.NET" Version="$(ImGuiVersion)" PrivateAssets="all" />
         <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)" PrivateAssets="all" />
     </ItemGroup>
 
@@ -47,6 +52,55 @@
               PackagePath="build\FadeBasic.MonoGame.Game.props" />
     </ItemGroup>
 
+    <!-- ───────────────────────────────────────────────────────────────────
+         Bundle the FadeBasic.Build generator so package consumers compile
+         their .fbasic WITHOUT referencing FadeBasic.Build (and thus without a
+         core FadeBasic version that could drift from the runtime VM this
+         package already ships transitively).
+
+         IncludeAssets="none" → we do NOT consume FadeBasic.Build's build/
+         logic here (this project sets no <FadeSource> and must not generate a
+         GeneratedFade of its own); GeneratePathProperty exposes the restored
+         package dir as $(PkgFadeBasic_Build) for the pack hook below.
+         ─────────────────────────────────────────────────────────────────── -->
+    <ItemGroup>
+        <PackageReference Include="FadeBasic.Build" Version="$(FadeVersion)"
+                          PrivateAssets="all" IncludeAssets="none"
+                          GeneratePathProperty="true" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="buildTransitive\FadeBasic.MonoGame.Game.targets"
+              Pack="true"
+              PackagePath="buildTransitive\FadeBasic.MonoGame.Game.targets" />
+    </ItemGroup>
+
+    <!-- Copy FadeBasic.Build's build/ + tasks/ verbatim into the package under
+         buildTransitive/fadecore/. The core props derive the task assembly via
+         $(MSBuildThisFileName) + a relative ..\tasks\net8.0 path, so preserving
+         the build/ ↔ tasks/ layout keeps those references valid after import. -->
+    <PropertyGroup>
+        <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_AddFadeBuildBundle</TargetsForTfmSpecificContentInPackage>
+    </PropertyGroup>
+    <Target Name="_AddFadeBuildBundle">
+        <Error Condition="'$(PkgFadeBasic_Build)' == '' OR !Exists('$(PkgFadeBasic_Build)')"
+               Text="FadeBasic.Build package path not resolved ($(PkgFadeBasic_Build)); cannot bundle the generator." />
+        <!-- Capture each tree into its own item type and use QUALIFIED metadata
+             in PackagePath, so the two globs don't cross-batch (an unqualified
+             %(...) over both in one ItemGroup mangles tasks/ into tasks/<build
+             filename>/…, breaking the relative ..\tasks\net8.0 task lookup). -->
+        <ItemGroup>
+            <_FadeBuildBuildFiles Include="$(PkgFadeBasic_Build)\build\**\*" />
+            <_FadeBuildTaskFiles  Include="$(PkgFadeBasic_Build)\tasks\**\*" />
+        </ItemGroup>
+        <ItemGroup>
+            <TfmSpecificPackageFile Include="@(_FadeBuildBuildFiles)"
+                                    PackagePath="buildTransitive/fadecore/build/%(_FadeBuildBuildFiles.RecursiveDir)%(_FadeBuildBuildFiles.Filename)%(_FadeBuildBuildFiles.Extension)" />
+            <TfmSpecificPackageFile Include="@(_FadeBuildTaskFiles)"
+                                    PackagePath="buildTransitive/fadecore/tasks/%(_FadeBuildTaskFiles.RecursiveDir)%(_FadeBuildTaskFiles.Filename)%(_FadeBuildTaskFiles.Extension)" />
+        </ItemGroup>
+    </Target>
+
 
     <ItemGroup>
         <PackageReference Include="FadeBasic.Lang.Core" Version="$(FadeVersion)" />
@@ -63,5 +117,53 @@
     <ItemGroup>
       <Folder Include="ContentBuilds\" />
     </ItemGroup>
+
+    <!-- ───────────────────────────────────────────────────────────────────
+         Bake the engine's baseline sprite shader (FadeSpriteBatchEffect) into
+         this assembly as an embedded XNB, so any consumer — including a
+         packaged Release build with no content pipeline — can load it from
+         resources. Game1 prefers a local Content/FadeSpriteBatchEffect.xnb
+         (hot-reload) when one exists and falls back to this baked copy.
+
+         The XNB is produced by the Fade.MonoGame.Content CLI, run as a
+         standalone desktop process (RemoveProperties strips this project's
+         TFM/platform/RID) so it works even when this project targets Web.
+         The Web platform additionally patches the XNB for KNI BlazorGL.
+         ─────────────────────────────────────────────────────────────────── -->
+    <PropertyGroup>
+        <BakeEngineSpriteEffect Condition="'$(BakeEngineSpriteEffect)' == ''">true</BakeEngineSpriteEffect>
+        <_EngineShaderSrcDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', 'EngineContent'))</_EngineShaderSrcDir>
+        <!-- Use BaseIntermediateOutputPath ("obj/", set in props and available
+             at evaluation); IntermediateOutputPath is set later (after the TFM
+             is known) and would be empty here, writing outside obj. -->
+        <_EngineShaderObjDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'engineshader', '$(FadeMonoGamePlatform)'))</_EngineShaderObjDir>
+        <_EngineShaderXnb>$(_EngineShaderObjDir)Content$([System.IO.Path]::DirectorySeparatorChar)FadeSpriteBatchEffect.xnb</_EngineShaderXnb>
+    </PropertyGroup>
+
+    <!-- Declared statically so the resource is in the snapshot CoreCompile
+         reads (adding it from a BeforeCompile target is too late). The file
+         itself is produced by BakeEngineSpriteEffect before csc runs. -->
+    <ItemGroup Condition="'$(BakeEngineSpriteEffect)' == 'true'">
+        <EmbeddedResource Include="$(_EngineShaderXnb)">
+            <LogicalName>FadeSpriteBatchEffect.xnb</LogicalName>
+            <Visible>false</Visible>
+        </EmbeddedResource>
+    </ItemGroup>
+
+    <Target Name="BakeEngineSpriteEffect"
+            BeforeTargets="BeforeCompile;CoreCompile"
+            Condition="'$(BakeEngineSpriteEffect)' == 'true'"
+            Inputs="$(_EngineShaderSrcDir)FadeSpriteBatchEffect.fx"
+            Outputs="$(_EngineShaderXnb)">
+        <Message Importance="high" Text="Baking engine sprite shader for $(FadeMonoGamePlatform)…" />
+        <MakeDir Directories="$(_EngineShaderObjDir)" />
+        <MSBuild Projects="$(MSBuildProjectDirectory)/../Fade.MonoGame.Content/Fade.MonoGame.Content.csproj"
+                 Targets="Build"
+                 RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;FadeMonoGamePlatform;SelfContained;PublishTrimmed;PublishReadyToRun">
+            <Output TaskParameter="TargetOutputs" ItemName="_FadeContentCli" />
+        </MSBuild>
+        <Exec Command="dotnet &quot;@(_FadeContentCli)&quot; --platform $(FadeMonoGamePlatform) --source &quot;$(_EngineShaderSrcDir)&quot; --output &quot;$(_EngineShaderObjDir)&quot; --intermediate &quot;$(_EngineShaderObjDir)obj&quot;"
+              CustomErrorRegularExpression="\[E\] .+" />
+    </Target>
 
 </Project>

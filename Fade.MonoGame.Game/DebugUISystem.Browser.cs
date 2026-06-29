@@ -80,6 +80,42 @@ namespace Fade.MonoGame.Core
         // boot stub frame ticks before Index.razor's OnAfterRender runs).
         public static Action<string> FrameSink;
 
+        // True when SOMEONE (parent Playground's Debug UI dock tab, or
+        // an in-iframe debug overlay enabled via window.fadeDebug.enable())
+        // wants per-frame envelopes. When false, EndDebug short-circuits
+        // BEFORE the snapshot work — no metadata reflection, no entity
+        // enumeration, no envelope serialization. This is the largest
+        // single perf win for games that don't have the Debug UI panel
+        // visible: standalone exports default to true (no parent ever
+        // tells them otherwise), but Playground games with a hidden
+        // Debug UI tab pay zero cost.
+        //
+        // Updated by Pages/Index.razor.cs:SetDebugUiSubscribed (a
+        // JSInvokable the iframe HTML calls when the parent posts a
+        // 'debug-ui-subscribe' message).
+        public static bool IsSubscribed = true;
+
+        // Cached last-serialized envelope. EndDebug skips the FrameSink
+        // call entirely when the rebuilt envelope matches the cache —
+        // saves the JS round-trip on truly-static frames. Reset on
+        // NotifyProgramReset so the new program's first frame goes
+        // through as a baseline.
+        private static string _lastEnvelope;
+
+        // Metadata throttle. The metadata provider's snapshot is the
+        // bulk of envelope cost — reflection over the registered dict
+        // every frame at the running game's framerate. We sample it
+        // at ~10Hz and reuse the cached JSON between samples; the JS
+        // diff producer then sees `metadata` as unchanged for ~5/6 of
+        // frames and omits it from deltas, saving both reflection
+        // here and Tweakpane churn on the consumer side. 10Hz is
+        // imperceptibly stale for human-readable values.
+        private static readonly System.Diagnostics.Stopwatch _metaClock =
+            System.Diagnostics.Stopwatch.StartNew();
+        private const double MetadataIntervalSeconds = 0.1;
+        private static double _lastMetadataSampleAt = -1.0;
+        private static string _lastMetadataJson;
+
         public static void Push(DebugUICommand control)
         {
             controls.Enqueue(control);
@@ -129,21 +165,44 @@ namespace Fade.MonoGame.Core
         {
             autoInspectorEnabled = false;
             generation++;
+            // Drop cached state so the new program's first frame emits
+            // a fresh baseline (the gen change alone would cause the JS
+            // panel to wipe, but we also want our local dedup to not
+            // accidentally skip the first frame because it happens to
+            // string-equal a stale leftover).
+            _lastEnvelope = null;
+            _lastMetadataJson = null;
+            _lastMetadataSampleAt = -1.0;
         }
 
         public static void EndDebug()
         {
-            // Always push a frame envelope when FrameSink is wired —
-            // even when the queue is empty. Pushing every frame lets
-            // the JS panel poll-free (it learns autoInspectorEnabled,
-            // metadata, entity lists from the envelope each tick) and
-            // detect resets via the generation counter.
-            if (FrameSink != null)
+            // FrameSink null = JS interop not yet wired (we're still
+            // in the boot stub before Index.razor mounted).
+            // IsSubscribed false = no consumer wants envelopes; skip
+            // the entire snapshot pipeline. This is the bulk of the
+            // per-frame cost — metadata reflection + entity provider
+            // enumeration + JSON serialization all happen inside
+            // BuildFrameEnvelope below. When the parent's Debug UI
+            // dock tab is hidden the user pays effectively zero for
+            // the debug system.
+            if (FrameSink != null && IsSubscribed)
             {
                 try
                 {
                     var envelope = BuildFrameEnvelope();
-                    FrameSink(envelope);
+                    // C#-side dedup: skip the FrameSink call entirely
+                    // when the rebuilt envelope is byte-identical to
+                    // the last one we sent. Catches truly-static
+                    // frames (e.g. pause screens, idle menus) at the
+                    // cost of one string compare. The JS-side diff
+                    // producer also dedups, but doing it here saves
+                    // the JS round-trip + diff work entirely.
+                    if (envelope != _lastEnvelope)
+                    {
+                        _lastEnvelope = envelope;
+                        FrameSink(envelope);
+                    }
                 }
                 catch (Exception e) { Console.Error.WriteLine("DebugUISystem.FrameSink threw: " + e); }
             }
@@ -178,13 +237,48 @@ namespace Fade.MonoGame.Core
             _sb.Append(",\"autoInspector\":").Append(autoInspectorEnabled ? "true" : "false");
             if (autoInspectorEnabled)
             {
+                // Metadata is the expensive bit — reflection over the
+                // metadata provider's Snapshot dict + JsonSerializer
+                // every call. Sample at ~10Hz and reuse the cached
+                // JSON between samples. Reading the cached string is
+                // O(1); the JS diff producer downstream compares this
+                // field against its previous and naturally skips it
+                // in the delta when unchanged, saving both transport
+                // and Tweakpane reconciliation.
+                var nowSec = _metaClock.Elapsed.TotalSeconds;
+                var refresh = _lastMetadataJson == null
+                    || (nowSec - _lastMetadataSampleAt) >= MetadataIntervalSeconds;
                 _sb.Append(",\"metadata\":");
-                AppendMetadata(_sb);
+                if (refresh)
+                {
+                    _lastMetadataJson = SnapshotMetadataJson();
+                    _lastMetadataSampleAt = nowSec;
+                }
+                _sb.Append(_lastMetadataJson ?? "null");
                 _sb.Append(",\"entities\":");
                 AppendEntityIds(_sb);
             }
             _sb.Append('}');
             return _sb.ToString();
+        }
+
+        // Build the metadata JSON value as a standalone string (no
+        // surrounding StringBuilder context) so EndDebug can cache it
+        // and AppendMetadata-style throttling can reuse the bytes.
+        private static string SnapshotMetadataJson()
+        {
+            var p = Fade.MonoGame.Core.Debug.DebugRegistry.Get("metadata");
+            if (p == null) return "null";
+            try
+            {
+                var snap = p.Snapshot(0);
+                return System.Text.Json.JsonSerializer.Serialize(snap, _envelopeJsonOpts);
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine("[DebugUISystem] metadata snapshot threw: " + e.Message);
+                return "null";
+            }
         }
 
         private static void AppendQueue(StringBuilder sb)
@@ -207,24 +301,11 @@ namespace Fade.MonoGame.Core
             sb.Append(']');
         }
 
-        // Pull metadata via the registered MetadataDebugProvider. System.Text.Json
-        // is already loaded by Index.razor.cs's other JSInvokables, so the
-        // reflection cost is sunk; we use it here for the nested dict.
-        private static void AppendMetadata(StringBuilder sb)
-        {
-            var p = Fade.MonoGame.Core.Debug.DebugRegistry.Get("metadata");
-            if (p == null) { sb.Append("null"); return; }
-            try
-            {
-                var snap = p.Snapshot(0);
-                sb.Append(System.Text.Json.JsonSerializer.Serialize(snap, _envelopeJsonOpts));
-            }
-            catch (Exception e)
-            {
-                Console.Error.WriteLine("[DebugUISystem] metadata snapshot threw: " + e.Message);
-                sb.Append("null");
-            }
-        }
+        // (Old AppendMetadata removed — its body was inlined into the
+        // SnapshotMetadataJson helper above so the cached-string
+        // throttle in BuildFrameEnvelope can reuse a single allocation
+        // across the ~5 frames between samples instead of writing
+        // freshly each tick.)
 
         // For each provider (except metadata), the list of currently-live
         // entity ids. The panel diffs these against its last-known set to

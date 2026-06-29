@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 #if !BROWSER
@@ -11,6 +14,7 @@ using FadeBasic.Sdk;
 using FadeBasic.Testing;
 using FadeBasic.Virtual;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Content;
 #if !BROWSER
 using Microsoft.Xna.Framework.Content.Pipeline.Extra;
 #endif
@@ -143,25 +147,32 @@ public class Game1 : Microsoft.Xna.Framework.Game
         ResetFade();
 
 #if !BROWSER
-        // Desktop: live-watch the bundled FadeSpriteBatchEffect.fx so shader
-        // edits hot-reload. Browser uses KNI's built-in SpriteEffect — see
-        // the #else branch below.
-        _customSpriteEffect = ContentWatcher.Watch<Effect>("FadeSpriteBatchEffect");
-        _fadeEffect = new FadeSpriteEffect(_customSpriteEffect.Asset);
+        // Desktop: prefer a project-local Content/FadeSpriteBatchEffect.xnb
+        // (compiled from a local FadeSpriteBatchEffect shader) so shader edits
+        // hot-reload. Otherwise load the engine shader baked into this assembly
+        // at build time, so a packaged consumer with no content pipeline still
+        // gets the real Fade sprite effect.
+        if (HasLocalContent("FadeSpriteBatchEffect"))
+        {
+            _customSpriteEffect = ContentWatcher.Watch<Effect>("FadeSpriteBatchEffect");
+            _fadeEffect = new FadeSpriteEffect(_customSpriteEffect.Asset);
+        }
+        else
+        {
+            _usingEmbeddedSpriteEffect = true;
+            _fadeEffect = new FadeSpriteEffect(LoadEmbeddedEffect("FadeSpriteBatchEffect"));
+        }
         _spriteBatch = new SpriteBatch(GraphicsDevice, _fadeEffect);
 
         _imguiRenderer = new ImGuiRenderer(this);
         _imguiRenderer.RebuildFontAtlas();
 #else
-        // Browser: KNI ships its own default sprite shader (`SpriteEffect`)
-        // for stock SpriteBatch. We re-use that bytecode by wrapping it in
-        // FadeSpriteEffect, which only needs an Effect with a
-        // "MatrixTransform" parameter — which SpriteEffect has. FadeSpriteBatch
-        // can then render normally with the default vertex transform +
-        // texture sample, just no Fade per-sprite custom-effect features
-        // until Phase 3 lands the dxc + spirv-cross shader pipeline.
-        var defaultSpriteEffect = new SpriteEffect(GraphicsDevice);
-        var fadeEffect = new FadeSpriteEffect(defaultSpriteEffect);
+        // Browser: load the engine FadeSpriteBatchEffect baked into this
+        // assembly (patched for KNI BlazorGL at build time — MGFX v10) so Fade's
+        // custom sprite shader works on the web. Previously this fell back to
+        // KNI's feature-less built-in SpriteEffect, which silently dropped the
+        // per-sprite custom-effect features a bunch of sprite commands rely on.
+        var fadeEffect = new FadeSpriteEffect(LoadEmbeddedEffect("FadeSpriteBatchEffect"));
         _spriteBatch = new SpriteBatch(GraphicsDevice, fadeEffect);
 
         // Browser debug UI flows through DebugRegistry → Playground
@@ -400,7 +411,66 @@ public class Game1 : Microsoft.Xna.Framework.Game
 #if !BROWSER
     private WatchedAsset<Effect> _customSpriteEffect;
     private FadeSpriteEffect _fadeEffect;
+    // True when the sprite effect came from the baked-in resource rather than a
+    // live-watched local Content/FadeSpriteBatchEffect.xnb — skip hot-reload.
+    private bool _usingEmbeddedSpriteEffect;
 #endif
+    // Holds loaded embedded content (e.g. the baked sprite shader) alive;
+    // disposing a ContentManager unloads its assets, so this is never disposed.
+    private ContentManager _embeddedContentManager;
+
+#if !BROWSER
+    // A project-local Content/<name>.xnb (built from a local shader of the same
+    // name) overrides the baked engine copy and is hot-reloaded. ContentWatcher
+    // resolves against the title content root (AppContext.BaseDirectory/Content).
+    private static bool HasLocalContent(string assetName) =>
+        File.Exists(Path.Combine(AppContext.BaseDirectory, "Content", assetName + ".xnb"));
+#endif
+
+    // Loads an Effect from an XNB baked into this assembly as an embedded
+    // resource (LogicalName "<assetName>.xnb", produced by the
+    // BakeEngineSpriteEffect build target). Works on desktop and KNI browser.
+    private Effect LoadEmbeddedEffect(string assetName)
+    {
+        var asm = typeof(Game1).Assembly;
+        var resourceName = assetName + ".xnb";
+        if (asm.GetManifestResourceInfo(resourceName) == null)
+        {
+            resourceName = asm.GetManifestResourceNames()
+                .FirstOrDefault(n => n == assetName + ".xnb"
+                                  || n.EndsWith("." + assetName + ".xnb", StringComparison.Ordinal))
+                ?? throw new InvalidOperationException(
+                    $"Baked content '{assetName}.xnb' not found in {asm.GetName().Name}. " +
+                    "Ensure the BakeEngineSpriteEffect build target ran.");
+        }
+
+        var manager = (EmbeddedResourceContentManager)(_embeddedContentManager ??=
+            new EmbeddedResourceContentManager(Services, asm));
+        manager.Map(assetName, resourceName);
+        return manager.Load<Effect>(assetName);
+    }
+
+    // ContentManager that serves Load<T>(assetName) from embedded-resource
+    // streams instead of files. Never disposed (see _embeddedContentManager).
+    private sealed class EmbeddedResourceContentManager : ContentManager
+    {
+        private readonly Assembly _assembly;
+        private readonly System.Collections.Generic.Dictionary<string, string> _resourceByAsset = new();
+
+        public EmbeddedResourceContentManager(IServiceProvider services, Assembly assembly)
+            : base(services) => _assembly = assembly;
+
+        public void Map(string assetName, string resourceName) =>
+            _resourceByAsset[assetName] = resourceName;
+
+        protected override Stream OpenStream(string assetName)
+        {
+            if (!_resourceByAsset.TryGetValue(assetName, out var resourceName))
+                throw new ContentLoadException($"No embedded resource mapped for asset '{assetName}'.");
+            return _assembly.GetManifestResourceStream(resourceName)
+                ?? throw new ContentLoadException($"Embedded resource '{resourceName}' missing.");
+        }
+    }
     private VirtualRuntimeException _fatal;
     private Task<int?> _t;
     private bool _testMode;
@@ -529,7 +599,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
 #if !BROWSER
         RenderSystem.RefreshEffects(_fadeEffect);
 
-        if (ContentWatcher.TryRefreshAsset(ref _customSpriteEffect))
+        if (!_usingEmbeddedSpriteEffect && ContentWatcher.TryRefreshAsset(ref _customSpriteEffect))
         {
             _fadeEffect?.Dispose(); // get rid of old one?
             _fadeEffect = new FadeSpriteEffect(_customSpriteEffect.Asset);

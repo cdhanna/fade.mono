@@ -1,0 +1,108 @@
+name: Release
+
+# Modeled on the core FadeBasic repo's release.yml, trimmed for this repo which
+# ships only NuGet packages (no VS Code / Rider / Pages steps).
+#
+# Builds + publishes the FadeBasic.MonoGame.* packages (Contracts, Game, Lib,
+# Templates) and the FadeBasic.Export.MonoGame WASM bundle via ./install.sh,
+# then tags the commit and cuts a GitHub release.
+#
+# Required repo secrets (same names as the core repo):
+#   NUGET_HOST      — the NuGet push source (e.g. https://api.nuget.org/v3/index.json)
+#   NUGET_API_KEY   — the API key for that source
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        type: string
+        description: Commit/ref to deploy
+        default: main
+      majorSemver:
+        type: number
+        description: MonoGame package major version
+        required: true
+        default: 0
+      minorSemver:
+        type: number
+        description: MonoGame package minor version
+        required: true
+        default: 1
+      patchSemver:
+        type: number
+        description: MonoGame package patch version
+        required: true
+        default: 0
+      buildNumber:
+        type: number
+        description: 4th version segment (NuGet revision)
+        required: true
+        default: 1
+      fadeVersion:
+        type: string
+        description: Fade CORE version these packages depend on (must exist on the feed)
+        required: true
+        default: '0.0.2.594'
+      publishNuget:
+        type: boolean
+        description: Push the packages to NuGet? (off = build + pack only)
+        required: true
+        default: true
+
+run-name: Release MonoGame ${{ inputs.majorSemver }}.${{ inputs.minorSemver }}.${{ inputs.patchSemver }}.${{ inputs.buildNumber }} by @${{ github.actor }}
+
+jobs:
+  release:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit }}
+
+      - uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 8.0.x
+
+      # WebRuntime.MonoGame publishes a Blazor/KNI WASM bundle.
+      - name: Install wasm-tools workload
+        run: dotnet workload install wasm-tools
+
+      - name: Set dry-run when publishing is disabled
+        if: inputs.publishNuget == false
+        run: echo "FADE_NUGET_DRYRUN=true" >> $GITHUB_ENV
+
+      - name: Build + publish packages
+        run: |
+          bash ./install.sh \
+            ${{ inputs.majorSemver }}.${{ inputs.minorSemver }}.${{ inputs.patchSemver }} \
+            ${{ inputs.buildNumber }} \
+            ${{ secrets.NUGET_HOST }} \
+            ${{ secrets.NUGET_API_KEY }} \
+            ${{ inputs.fadeVersion }}
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkgs
+          path: bin/artifacts_*/**/*.nupkg
+
+      - name: Tag + GitHub release
+        if: inputs.publishNuget == true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          V="v${{ inputs.majorSemver }}.${{ inputs.minorSemver }}.${{ inputs.patchSemver }}.${{ inputs.buildNumber }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$V"
+          git push origin "$V"
+          gh release create "$V" \
+            --title "$V" \
+            --notes "FadeBasic MonoGame $V — depends on Fade core ${{ inputs.fadeVersion }}." \
+            bin/artifacts_*/*.nupkg

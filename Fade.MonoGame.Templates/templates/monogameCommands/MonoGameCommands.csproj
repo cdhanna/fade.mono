@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- net8 (not netstandard) because commands here may touch raw MonoGame. -->
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Lib brings the engine (Game1 + systems) and the Fade core transitively,
+         so your commands can drive the systems with raw MonoGame types. (We use
+         Lib rather than Game directly to avoid Game's build props duplicating the
+         platform refs below.) Version stamped to the monogame release at pack time. -->
+    <PackageReference Include="FadeBasic.MonoGame.Lib" Version="0.0.0-LOCAL" />
+    <!-- The source-generator that turns [FadeBasicCommand] methods into a
+         registered command source. It's an analyzer, which NuGet does NOT flow
+         transitively — so reference it directly, pinned to the Fade CORE version
+         (stamped separately at pack time). -->
+    <PackageReference Include="FadeBasic.Lang.CommandSourceGenerator" Version="0.0.0-CORE" />
+  </ItemGroup>
+  <!-- The platform MonoGame package, referenced directly (a consumed package's
+       build props can't inject a restorable PackageReference). Desktop by default;
+       FadeMonoGamePlatform=Web swaps to KNI/BlazorGL. -->
+  <ItemGroup Condition="'$(FadeMonoGamePlatform)' != 'Web'">
+    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.5-preview.4" />
+    <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Web'">
+    <PackageReference Include="nkast.Kni.Platform.Blazor.GL" Version="4.2.9001.2" />
+  </ItemGroup>
+</Project>

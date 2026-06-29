@@ -1,0 +1,81 @@
+<!--
+  FadeBasic.MonoGame.Templates — a `dotnet new` template PACKAGE for Fade Basic
+  games on MonoGame. Modeled on dby/FadeBasic/Templates/Templates.csproj.
+
+  This project compiles nothing; it packs templates/** as NuGet template content.
+
+  Pack + try locally:
+      dotnet pack
+      dotnet new install ./bin/Release/FadeBasic.MonoGame.Templates.<ver>.nupkg
+      dotnet new fadebasic-monogame -n MyGame
+
+  NOTE (Phase-2 prerequisite): the generated game references ONLY
+  `FadeBasic.MonoGame.Game`. For it to build, that package must bring the Fade
+  core libs AND the `FadeBasic.Build` generator (which emits `GeneratedFade`)
+  transitively — see README.md. Until then the generated project won't restore.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Version Condition="'$(Version)' == ''">0.0.1</Version>
+
+    <PackageId>FadeBasic.MonoGame.Templates</PackageId>
+    <Title>FadeBasic MonoGame Project Templates</Title>
+    <Description>dotnet new templates for Fade Basic games on MonoGame (desktop, with web export).</Description>
+
+    <PackageType>Template</PackageType>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <ContentTargetFolders>content</ContentTargetFolders>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- A template package intentionally ships no lib/ assembly. -->
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="templates\**\*" Exclude="templates\**\bin\**;templates\**\obj\**" />
+    <Compile Remove="**\*" />
+  </ItemGroup>
+
+  <!-- Stamp the template csprojs' package versions at pack time, in streams:
+         • FadeBasic.MonoGame.*  → this template package's $(Version)
+         • Fade core (FadeBasic.Lang.CommandSourceGenerator, …) → $(FadeVersion)
+         • MonoGame / ImGui / KNI platform packages → the versions pinned in
+           ../Directory.Build.props, so a generated project always uses the
+           exact platform versions this MonoGame release was built against.
+       The monogame runtime libs ride transitively from the MonoGame package, but
+       the build-time generators (FadeBasic.Build / CommandSourceGenerator) and
+       the platform packages do NOT flow transitively, so generated projects
+       reference them directly. $(FadeVersion), $(MonogameVersion),
+       $(ImGuiVersion) and $(KniPlatformBlazorGLVersion) are inherited from
+       ../Directory.Build.props. -->
+  <Target Name="StampFadeVersions" BeforeTargets="CoreBuild">
+    <ItemGroup>
+      <_FadeTemplateProjects Include="templates/**/*.csproj" />
+    </ItemGroup>
+    <Message Importance="high" Text="[templates] stamping FadeBasic.MonoGame.* → $(Version); Fade core → $(FadeVersion); MonoGame → $(MonogameVersion); ImGui → $(ImGuiVersion); KNI → $(KniPlatformBlazorGLVersion)" />
+    <XmlPoke
+        XmlInputPath="%(_FadeTemplateProjects.Identity)"
+        Query="Project/ItemGroup/PackageReference[starts-with(@Include, &quot;FadeBasic.MonoGame&quot;)]/@Version"
+        Value="$(Version)" />
+    <XmlPoke
+        XmlInputPath="%(_FadeTemplateProjects.Identity)"
+        Query="Project/ItemGroup/PackageReference[starts-with(@Include, &quot;FadeBasic.&quot;) and not(starts-with(@Include, &quot;FadeBasic.MonoGame&quot;))]/@Version"
+        Value="$(FadeVersion)" />
+    <XmlPoke
+        XmlInputPath="%(_FadeTemplateProjects.Identity)"
+        Query="Project/ItemGroup/PackageReference[@Include = &quot;MonoGame.Framework.DesktopGL&quot;]/@Version"
+        Value="$(MonogameVersion)" />
+    <XmlPoke
+        XmlInputPath="%(_FadeTemplateProjects.Identity)"
+        Query="Project/ItemGroup/PackageReference[@Include = &quot;ImGui.NET&quot;]/@Version"
+        Value="$(ImGuiVersion)" />
+    <XmlPoke
+        XmlInputPath="%(_FadeTemplateProjects.Identity)"
+        Query="Project/ItemGroup/PackageReference[@Include = &quot;nkast.Kni.Platform.Blazor.GL&quot;]/@Version"
+        Value="$(KniPlatformBlazorGLVersion)" />
+  </Target>
+
+</Project>

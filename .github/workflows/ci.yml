@@ -1,0 +1,31 @@
+name: CI
+
+# Lightweight build check on push / PR: builds + packs the desktop library
+# packages (Contracts, Game, Lib, Templates) via install.sh in dry-run mode
+# (no NuGet push, no WASM bundle). Catches compile/pack breakage before release.
+# The full WASM bundle + publish are exercised by the Release workflow.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 8.0.x
+
+      # Build + pack everything except the WASM bundle; FADE_NUGET_DRYRUN skips
+      # the push. Uses the Fade core version pinned in Directory.Build.props.
+      - name: Build + pack (dry-run)
+        env:
+          FADE_NUGET_DRYRUN: 'true'
+        run: bash ./install.sh 0.0.0 0 nuget.org "" "" --skip-wasm

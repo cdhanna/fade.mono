@@ -208,6 +208,20 @@ loop
             DebugUISystem.ApplyChange(ctrlId, kind, value);
         }
 
+        // Parent Playground → game: the Debug UI dock tab has become
+        // visible / hidden. When hidden, DebugUISystem.EndDebug skips
+        // its entire snapshot pipeline (metadata reflection, entity
+        // enumeration, JSON serialization, the FrameSink JS hop) —
+        // the biggest single perf win for games whose debug panel
+        // isn't being looked at. Default is true so standalone exports
+        // (which never receive this call — no parent) keep emitting
+        // envelopes at full rate.
+        [JSInvokable]
+        public void SetDebugUiSubscribed(bool active)
+        {
+            DebugUISystem.IsSubscribed = active;
+        }
+
         // ─── Debug Inspector RPC ───────────────────────────────────────
         // Generic provider-driven inspector surface — the Playground
         // Tweakpane panel calls these once per user interaction (not
