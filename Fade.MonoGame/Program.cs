@@ -49,6 +49,10 @@ public class Program
                 // }
 
                 var game = new Game1(fade, testMode: true);
+#if FADE_CONTENT_HOTRELOAD
+                game.Services.AddService(typeof(Fade.MonoGame.Content.IContentBuilder),
+                    new Fade.MonoGame.Content.FadeContentBuilder());
+#endif
                 var host = new MonoGameTestHost(game);
                 var mtp = FadeTestApplicationBuilder.RunAsync((ITestLaunchable)fade, args, host);
                 if (mtp.IsCompleted)
@@ -75,6 +79,10 @@ public class Program
                 GameReloader.WatchFiles(csProjPath, commandCollection);
                 var fade = GameReloader.LatestBuild;
                 var game = new Game1(fade);
+#if FADE_CONTENT_HOTRELOAD
+                game.Services.AddService(typeof(Fade.MonoGame.Content.IContentBuilder),
+                    new Fade.MonoGame.Content.FadeContentBuilder());
+#endif
                 game.Run();
 
             }

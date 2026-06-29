@@ -6,6 +6,11 @@
         <PublishReadyToRun>false</PublishReadyToRun>
         <TieredCompilation>false</TieredCompilation>
     </PropertyGroup>
+    <!-- Matches the conditional Fade.MonoGame.Content reference below: enables the
+         in-process content hot-reload registration in Program.cs for Debug desktop. -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Debug' and '$(FadeMonoGamePlatform)' != 'Web'">
+        <DefineConstants>$(DefineConstants);FADE_CONTENT_HOTRELOAD</DefineConstants>
+    </PropertyGroup>
     <PropertyGroup>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <ApplicationIcon>Icon.ico</ApplicationIcon>
@@ -42,6 +47,12 @@
         <ProjectReference Include="..\Fade.MonoGame.Game\Fade.MonoGame.Game.csproj" />
 
         <ProjectReference Include="..\Fade.MonoGame.Lib\Fade.MonoGame.Lib.csproj" />
+
+        <!-- Debug desktop: the content pipeline, injected into Game.Services in
+             Program.cs (under FADE_CONTENT_HOTRELOAD) so the engine builds +
+             hot-reloads assets in-process. Same seam the dotnet-new template uses. -->
+        <ProjectReference Include="..\Fade.MonoGame.Content\Fade.MonoGame.Content.csproj"
+                          Condition="'$(Configuration)' == 'Debug' and '$(FadeMonoGamePlatform)' != 'Web'" />
 
         <PackageReference Include="FadeBasic.Lang.Core" Version="$(FadeVersion)" />
         

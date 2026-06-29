@@ -144,6 +144,11 @@ public class Game1 : Microsoft.Xna.Framework.Game
         // initialize calls Load Content
         base.Initialize();
 
+        // Pick up an optional content builder the host registered in
+        // Game.Services (the template does this in Debug desktop builds) so
+        // ContentSystem can build/hot-reload assets in-process. Null otherwise.
+        ContentSystem.ResolveContentBuilder(Services);
+
         ResetFade();
 
 #if !BROWSER

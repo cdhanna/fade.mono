@@ -20,10 +20,6 @@
         <DefineConstants>$(DefineConstants);BROWSER</DefineConstants>
     </PropertyGroup>
 
-    <PropertyGroup>
-
-        <ShouldIncludeContentBuilder Condition="'$(Configuration)' == 'Debug'">true</ShouldIncludeContentBuilder>
-    </PropertyGroup>
 
     <!-- Platform packages for compiling THIS project, by platform.
          PrivateAssets="all" keeps them from flowing transitively to consumers —
@@ -110,9 +106,10 @@
         <PackageReference Include="FadeBasic.Lib.Standard" Version="$(FadeVersion)" />
         <ProjectReference Include="..\Fade.MonoGame.Contracts\Fade.MonoGame.Contracts.csproj" />
     </ItemGroup>
-    <ItemGroup Condition="'$(ShouldIncludeContentBuilder)' == 'true'">
-        <ProjectReference Include="..\Fade.MonoGame.Content\Fade.MonoGame.Content.csproj" />
-    </ItemGroup>
+    <!-- .Game does NOT reference .Content: content building goes through the
+         IContentBuilder seam (in .Contracts), with the desktop-only pipeline
+         injected by the host via Game.Services. (The engine shader bake target
+         below still invokes .Content via <MSBuild> on its path, not a code ref.) -->
 
     <ItemGroup>
       <Folder Include="ContentBuilds\" />
@@ -157,6 +154,15 @@
             Outputs="$(_EngineShaderXnb)">
         <Message Importance="high" Text="Baking engine sprite shader for $(FadeMonoGamePlatform)…" />
         <MakeDir Directories="$(_EngineShaderObjDir)" />
+        <!-- Restore in its own <MSBuild> call first. In a Release build the
+             Content project is NOT a ProjectReference of this project (that's
+             Debug-only), so on a clean checkout it has never been restored and
+             the Build below would fail with NETSDK1004 (no project.assets.json).
+             A separate invocation guarantees Build re-evaluates with the freshly
+             written assets. -->
+        <MSBuild Projects="$(MSBuildProjectDirectory)/../Fade.MonoGame.Content/Fade.MonoGame.Content.csproj"
+                 Targets="Restore"
+                 RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;FadeMonoGamePlatform;SelfContained;PublishTrimmed;PublishReadyToRun" />
         <MSBuild Projects="$(MSBuildProjectDirectory)/../Fade.MonoGame.Content/Fade.MonoGame.Content.csproj"
                  Targets="Build"
                  RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;FadeMonoGamePlatform;SelfContained;PublishTrimmed;PublishReadyToRun">

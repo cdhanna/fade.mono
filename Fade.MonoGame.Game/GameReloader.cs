@@ -152,6 +152,51 @@ public static class GameReloader
         }
     }
 
+    // Content-only live reload for package consumers (the dotnet-new template).
+    // Watches the project's source assets and rebuilds changed ones via the
+    // injected IContentBuilder; ContentWatcher then hot-swaps the rebuilt XNB.
+    // Unlike WatchFiles (used by the in-repo example) this does NOT reload the
+    // .fbasic program — template games run a statically generated GeneratedFade.
+    // Requires the project to expose its dir via [AssemblyMetadata("ProjectDir")]
+    // (the template csproj does this in Debug desktop); otherwise it no-ops.
+    public static void WatchContentForReload()
+    {
+        var projectDir = GetRoot();
+        if (string.IsNullOrEmpty(projectDir) || !Directory.Exists(projectDir))
+            return;
+
+        var changeFiles = new HashSet<string>();
+        _assetWatcher = new FileSystemWatcher
+        {
+            Path = projectDir,
+            Filter = "*.*",
+            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+            IncludeSubdirectories = true,
+            EnableRaisingEvents = true
+        };
+
+        void HandleEffectUpdate(string fxPath)
+        {
+            if (!_extensions.Contains(Path.GetExtension(fxPath)))
+                return;
+            lock (effectLock)
+            {
+                changeFiles.Add(fxPath);
+                effectTimer?.Dispose();
+                effectTimer = new Timer(_ =>
+                {
+                    Console.WriteLine($"Detected change(s) to asset files at {DateTime.Now:HH:mm:ss.fff}");
+                    BuildEffects2(changeFiles.ToList());
+                    changeFiles.Clear();
+                }, null, 100, Timeout.Infinite);
+            }
+        }
+
+        _assetWatcher.Created += (s, a) => HandleEffectUpdate(a.FullPath);
+        _assetWatcher.Renamed += (s, a) => HandleEffectUpdate(a.FullPath);
+        _assetWatcher.Changed += (s, a) => HandleEffectUpdate(a.FullPath);
+    }
+
     public static void BuildEffects2(List<string> paths)
     {
         ContentSystem.BuildSomeContent(paths);

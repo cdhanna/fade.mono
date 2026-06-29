@@ -66,7 +66,9 @@ echo "installing FadeBasic MonoGame packages version=${SEM_VER} (Fade core=${FAD
 # build can't satisfy alongside the desktop projects (the example exe stays
 # Desktop, WebRuntime must be Web).
 BUILD_ARGS="-c Release /p:Version=$SEM_VER $FADE_VERSION_ARG"
-for proj in Contracts Game Lib; do
+# Content is published too: games opt into in-process content hot-reload by
+# referencing FadeBasic.MonoGame.Content (Debug desktop) — see the template.
+for proj in Contracts Game Lib Content; do
   dotnet clean "$SOLUTION_DIR/Fade.MonoGame.$proj" -c Release
   dotnet build "$SOLUTION_DIR/Fade.MonoGame.$proj" $BUILD_ARGS
 done
@@ -79,6 +81,7 @@ LIB_PACK_ARGS="--output $OUTPUT_FOLDER /p:Version=$SEM_VER $FADE_VERSION_ARG \
 dotnet pack "$SOLUTION_DIR/Fade.MonoGame.Contracts" $LIB_PACK_ARGS
 dotnet pack "$SOLUTION_DIR/Fade.MonoGame.Game"      $LIB_PACK_ARGS
 dotnet pack "$SOLUTION_DIR/Fade.MonoGame.Lib"       $LIB_PACK_ARGS
+dotnet pack "$SOLUTION_DIR/Fade.MonoGame.Content"   $LIB_PACK_ARGS
 
 # Templates package: the `dotnet new fadebasic-monogame` templates. It's
 # content-only and not built, so no symbols. /p:Version stamps the

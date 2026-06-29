@@ -42,4 +42,22 @@
   <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Web'">
     <PackageReference Include="nkast.Kni.Platform.Blazor.GL" Version="4.2.9001.2" />
   </ItemGroup>
+  <!-- Debug desktop only: pulls in the content pipeline so the engine builds +
+       hot-reloads your assets in-process (Program.cs registers it via
+       Game.Services). Release and Web builds omit this reference and the
+       FADE_CONTENT_HOTRELOAD symbol, so they carry no desktop-only pipeline and
+       use baked/published content instead. -->
+  <ItemGroup Condition="'$(Configuration)' == 'Debug' and '$(FadeMonoGamePlatform)' != 'Web'">
+    <PackageReference Include="FadeBasic.MonoGame.Content" Version="0.0.0-LOCAL" />
+    <!-- Exposes this project's directory to the engine (GameReloader.GetRoot) so
+         the content watcher can locate + rebuild your source assets. Debug only,
+         so the build-machine path isn't baked into Release/Web output. -->
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>ProjectDir</_Parameter1>
+      <_Parameter2>$(MSBuildProjectDirectory)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug' and '$(FadeMonoGamePlatform)' != 'Web'">
+    <DefineConstants>$(DefineConstants);FADE_CONTENT_HOTRELOAD</DefineConstants>
+  </PropertyGroup>
 </Project>

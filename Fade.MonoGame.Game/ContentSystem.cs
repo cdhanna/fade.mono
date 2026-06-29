@@ -1,6 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
-using Fade.MonoGame.Content;     // ContentEntry, ContentParameterKeys, TextureCompression
+using System.IO;
+using Fade.MonoGame.Content;     // ContentEntry, ContentParameterKeys, TextureCompression, IContentBuilder
 using FadeBasic.Virtual;
 
 namespace Fade.MonoGame.Core;
@@ -99,24 +101,31 @@ public static class ContentSystem
         });
     }
     
-    [Conditional("DEBUG")]
-    public static void BuildContent()
+    // The content pipeline (FadeContentSystem) is desktop-only and heavy, so
+    // .Game never references it directly. Instead the host registers an
+    // IContentBuilder in Game.Services (the template does this for Debug desktop
+    // builds); we resolve it once and build through it. Null on Release/Web →
+    // a clean no-op, falling back to baked/published content.
+    public static IContentBuilder ContentBuilder;
+
+    public static void ResolveContentBuilder(IServiceProvider services)
     {
-        // FadeContentSystem lives in Fade.MonoGame.Content, which is only
-        // ProjectReferenced when both Configuration=Debug AND TFM=net10.0.
-        // Browser builds never have it (no MGCB in WASM); Release desktop
-        // builds also strip the reference. Guard the body to match so the
-        // method still has a compilable signature in every configuration.
-#if DEBUG && !BROWSER
-        FadeContentSystem.Build(GameReloader.GetRoot() + "/Assets", entries.buffer, entries.ptr - 1);
-#endif
+        ContentBuilder = services?.GetService(typeof(IContentBuilder)) as IContentBuilder;
     }
 
-    [Conditional("DEBUG")]
+    public static void BuildContent()
+    {
+        if (ContentBuilder == null) return;
+        var assets = GameReloader.GetRoot() + "/Assets";
+        if (!Directory.Exists(assets)) return; // nothing to build (e.g. a minimal game with no assets)
+        ContentBuilder.Build(assets, entries.buffer, entries.ptr - 1);
+    }
+
     public static void BuildSomeContent(List<string> paths)
     {
-#if DEBUG && !BROWSER
-        FadeContentSystem.Build(GameReloader.GetRoot() + "/Assets", entries.buffer, entries.ptr - 1, paths);
-#endif
+        if (ContentBuilder == null) return;
+        var assets = GameReloader.GetRoot() + "/Assets";
+        if (!Directory.Exists(assets)) return;
+        ContentBuilder.Build(assets, entries.buffer, entries.ptr - 1, paths);
     }
 }

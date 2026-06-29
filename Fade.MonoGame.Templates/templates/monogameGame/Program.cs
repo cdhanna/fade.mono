@@ -14,6 +14,19 @@ public static class Program
     {
         var fade = new GeneratedFade();
         using var game = new Game1(fade);
+#if FADE_CONTENT_HOTRELOAD
+        // Debug desktop only (see the .csproj): register the content pipeline so
+        // the engine builds + hot-reloads your assets in-process. The symbol and
+        // the FadeBasic.MonoGame.Content reference are absent in Release/Web, so
+        // those builds carry no desktop-only pipeline.
+        game.Services.AddService(typeof(Fade.MonoGame.Content.IContentBuilder),
+            new Fade.MonoGame.Content.FadeContentBuilder());
+        // Watch the project's source assets and rebuild changed ones live — the
+        // engine hot-swaps the rebuilt asset, so editing a .png/.fx updates the
+        // running game. Needs the ProjectDir assembly metadata (added by the
+        // .csproj in this same Debug-desktop configuration).
+        GameReloader.WatchContentForReload();
+#endif
         game.Run();
     }
 }
