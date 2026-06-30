@@ -69,6 +69,17 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      # MonoGame's effect compiler shells out to the Windows fxc.exe to compile
+      # .fx shaders, which requires Wine on Linux — the .Game build bakes the
+      # engine FadeSpriteBatchEffect shader. See
+      # https://docs.monogame.net/errors/mgfx0001?tab=linux
+      - name: Setup Wine for MGFXC (shader compilation)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wine64
+          wget -qO- https://monogame.net/downloads/net8_mgfxc_wine_setup.sh | bash
+          echo "MGFXC_WINE_PATH=$HOME/.winemonogame" >> "$GITHUB_ENV"
+
       # WebRuntime.MonoGame publishes a Blazor/KNI WASM bundle.
       - name: Install wasm-tools workload
         run: dotnet workload install wasm-tools
