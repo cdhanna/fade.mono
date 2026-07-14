@@ -23,9 +23,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Peek at the next sprite ID to pre-size an array.
     /// <code>
+    /// ` load an image so we have something to draw
+    /// texture 1, "ghost"
     /// ` find out what the next sprite ID will be
-    /// free sprite id nextId
-    /// dim spriteIds(nextId + 10)
+    /// nextId = free sprite id(nextId)
+    /// ` use that peeked ID to create a ghost sprite
+    /// sprite nextId, 320, 240, 1
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">Receives the next free sprite ID.</param>
@@ -54,11 +60,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Reserve a sprite ID, configure it, then make it visible.
     /// <code>
-    /// ` reserve a slot and set it up before showing
-    /// reserve sprite id spr
-    /// set sprite texture spr, texId
+    /// ` load a texture, then reserve a slot and set it up before showing
+    /// texture 1, "ghost"
+    /// spr = reserve sprite id(spr)
+    /// set sprite texture spr, 1
     /// scale sprite spr, 2.0, 2.0
-    /// sprite spr, 100, 200, texId
+    /// sprite spr, 100, 200, 1
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">Receives the reserved sprite ID.</param>
@@ -91,16 +101,18 @@ public partial class FadeMonoGameCommands
     /// Load a texture and create a sprite at the center of the screen.
     /// <code>
     /// ` load an image and show it on screen
-    /// texture 1, "hero.png"
+    /// texture 1, "ghost"
     /// sprite 1, 320, 240, 1
-    /// sync
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Create multiple sprites from the same texture.
     /// <code>
     /// ` place three copies of the same image in a row
-    /// texture 1, "coin.png"
+    /// texture 1, "ghost"
     /// FOR i = 1 TO 3
     ///   sprite i, i * 80, 100, 1
     /// NEXT i
@@ -142,15 +154,23 @@ public partial class FadeMonoGameCommands
     /// Move a sprite with the arrow keys.
     /// <code>
     /// ` simple movement loop
-    /// texture 1, "player.png"
+    /// texture 1, "ghost"
     /// sprite 1, 320, 240, 1
     /// px = 320
     /// py = 240
     /// DO
-    ///   IF up key(1) THEN py = py - 2
-    ///   IF down key(1) THEN py = py + 2
-    ///   IF left key(1) THEN px = px - 2
-    ///   IF right key(1) THEN px = px + 2
+    ///   IF upkey() = 1
+    ///     py = py - 2
+    ///   ENDIF
+    ///   IF downkey() = 1
+    ///     py = py + 2
+    ///   ENDIF
+    ///   IF leftkey() = 1
+    ///     px = px - 2
+    ///   ENDIF
+    ///   IF rightkey() = 1
+    ///     px = px + 2
+    ///   ENDIF
     ///   position sprite 1, px, py
     ///   sync
     /// LOOP
@@ -185,16 +205,24 @@ public partial class FadeMonoGameCommands
     /// Tint a sprite red.
     /// <code>
     /// ` make a sprite appear red-tinted
-    /// texture 1, "enemy.png"
+    /// texture 1, "ghost"
     /// sprite 1, 100, 100, 1
     /// color sprite 1, 0xFF0000FF
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Darken a sprite to 50% brightness.
     /// <code>
-    /// ` half-grey tint dims the image
+    /// ` load a sprite, then apply a half-grey tint that dims the image
+    /// texture 1, "ghost"
+    /// sprite 1, 100, 100, 1
     /// color sprite 1, 0x808080FF
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to tint.</param>
@@ -226,13 +254,16 @@ public partial class FadeMonoGameCommands
     /// Layer a background behind a player sprite.
     /// <code>
     /// ` set up two sprites with explicit draw order
-    /// texture 1, "background.png"
-    /// texture 2, "player.png"
+    /// texture 1, "ghost"
+    /// texture 2, "ghost"
     /// sprite 1, 0, 0, 1
     /// sprite 2, 160, 120, 2
-    /// ` background draws first, player on top
+    /// ` sprite 1 draws first, sprite 2 on top
     /// order sprite 1, 0
     /// order sprite 2, 10
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to reorder.</param>
@@ -264,14 +295,14 @@ public partial class FadeMonoGameCommands
     /// Blink a sprite on and off every 30 frames.
     /// <code>
     /// ` simple blink effect
-    /// texture 1, "powerup.png"
+    /// texture 1, "ghost"
     /// sprite 1, 200, 150, 1
-    /// timer = 0
+    /// tick = 0
     /// visible = 1
     /// DO
-    ///   timer = timer + 1
-    ///   IF timer &gt; 30
-    ///     timer = 0
+    ///   tick = tick + 1
+    ///   IF tick &gt; 30
+    ///     tick = 0
     ///     IF visible = 1
     ///       hide sprite 1
     ///       visible = 0
@@ -308,12 +339,12 @@ public partial class FadeMonoGameCommands
     /// Show a hidden UI panel when the player presses a key.
     /// <code>
     /// ` toggle an inventory panel with the tab key
-    /// texture 10, "inventory.png"
+    /// texture 10, "ghost"
     /// sprite 10, 50, 50, 10
     /// hide sprite 10
     /// panelOpen = 0
     /// DO
-    ///   IF key hit(scancode("Tab")) = 1
+    ///   IF new key down(scancode("Tab")) = 1
     ///     IF panelOpen = 0
     ///       show sprite 10
     ///       panelOpen = 1
@@ -353,12 +384,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Swap a character's texture when they take damage.
     /// <code>
-    /// ` load both normal and hurt textures
-    /// texture 1, "hero.png"
-    /// texture 2, "hero_hurt.png"
+    /// ` load two textures to swap between
+    /// texture 1, "ghost"
+    /// texture 2, "ghost"
     /// sprite 1, 200, 200, 1
-    /// ` later, when the player gets hit
+    /// ` later, when the player gets hit, swap the texture
     /// set sprite texture 1, 2
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to update.</param>
@@ -391,11 +425,14 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Draw a sprite to an off-screen render target for a minimap.
     /// <code>
-    /// ` create a render target and draw the map icon to it
-    /// render target 5, 128, 128
-    /// texture 1, "map_icon.png"
+    /// ` create a render target and draw the ghost to it
+    /// render target 5
+    /// texture 1, "ghost"
     /// sprite 1, 64, 64, 1
     /// set sprite render target 1, 5
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to redirect.</param>
@@ -424,10 +461,16 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Move a sprite back to the main screen after rendering to a buffer.
     /// <code>
-    /// ` redirect sprite to a render target, then reset it
+    /// ` set up a sprite and a render target
+    /// render target 5
+    /// texture 1, "ghost"
+    /// sprite 1, 64, 64, 1
+    /// ` redirect the sprite to the render target, then reset it back to the main screen
     /// set sprite render target 1, 5
-    /// ` ... do some off-screen rendering ...
     /// reset sprite render target 1
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to reset to the default output.</param>
@@ -452,12 +495,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Draw a sprite to both the main screen and a minimap buffer.
     /// <code>
-    /// ` show the player icon on the main screen and the minimap
-    /// render target 5, 128, 128
-    /// texture 1, "player_icon.png"
+    /// ` show the ghost on the main screen and an off-screen buffer
+    /// render target 5
+    /// texture 1, "ghost"
     /// sprite 1, 320, 240, 1
-    /// ` add the minimap target without removing the main screen
+    /// ` add the second target without removing the main screen
     /// add sprite render target 1, 5
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to add a target to.</param>
@@ -489,18 +535,27 @@ public partial class FadeMonoGameCommands
     /// Double the size of a sprite uniformly.
     /// <code>
     /// ` make a sprite twice as big
-    /// texture 1, "gem.png"
+    /// texture 1, "ghost"
     /// sprite 1, 100, 100, 1
     /// scale sprite 1, 2.0, 2.0
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Stretch a sprite horizontally for a squash-and-stretch effect.
     /// <code>
+    /// ` load a sprite to squash and stretch
+    /// texture 1, "ghost"
+    /// sprite 1, 100, 100, 1
     /// ` squash on landing: wide and short
     /// scale sprite 1, 1.4, 0.7
     /// ` then spring back to normal
     /// scale sprite 1, 1.0, 1.0
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to scale.</param>
@@ -534,14 +589,17 @@ public partial class FadeMonoGameCommands
     /// Attach a sprite and collider to a shared transform.
     /// <code>
     /// ` create a transform and attach both a sprite and a collider
-    /// transform 1
-    /// texture 1, "hero.png"
+    /// transform 1, 0, 0
+    /// texture 1, "ghost"
     /// sprite 1, 0, 0, 1
     /// attach sprite to transform 1, 1
     /// box collider 1, 0, 0, 32, 32
     /// attach collider to transform 1, 1
     /// ` now moving the transform moves everything
-    /// position transform 1, 200, 150
+    /// set transform position 1, 200, 150
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to attach.</param>
@@ -572,9 +630,12 @@ public partial class FadeMonoGameCommands
     /// Force a sprite to be exactly 64x64 pixels on screen.
     /// <code>
     /// ` resize a sprite to a fixed pixel size regardless of texture dimensions
-    /// texture 1, "icon.png"
+    /// texture 1, "ghost"
     /// sprite 1, 10, 10, 1
     /// size sprite 1, 64, 64
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to resize.</param>
@@ -614,9 +675,12 @@ public partial class FadeMonoGameCommands
     /// Make a sprite 200 pixels wide while keeping its proportions.
     /// <code>
     /// ` set width to 200, height scales automatically
-    /// texture 1, "banner.png"
+    /// texture 1, "ghost"
     /// sprite 1, 50, 50, 1
     /// size sprite x 1, 200
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to resize.</param>
@@ -650,9 +714,12 @@ public partial class FadeMonoGameCommands
     /// Fit a sprite to a 48-pixel tall slot.
     /// <code>
     /// ` set height to 48, width scales to match
-    /// texture 1, "portrait.png"
+    /// texture 1, "ghost"
     /// sprite 1, 10, 10, 1
     /// size sprite y 1, 48
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to resize.</param>
@@ -690,7 +757,7 @@ public partial class FadeMonoGameCommands
     /// Spin a sprite around its center continuously.
     /// <code>
     /// ` rotate a sprite around its center each frame
-    /// texture 1, "star.png"
+    /// texture 1, "ghost"
     /// sprite 1, 320, 240, 1
     /// set sprite offset 1, 0.5, 0.5
     /// angle = 0.0
@@ -704,9 +771,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Rotate a sprite by 45 degrees using the <see cref="Rad">rad</see> helper.
     /// <code>
-    /// ` tilt a sprite 45 degrees
+    /// ` load a sprite to tilt
+    /// texture 1, "ghost"
+    /// sprite 1, 320, 240, 1
+    /// ` tilt the sprite 45 degrees around its center
     /// set sprite offset 1, 0.5, 0.5
     /// rotate sprite 1, rad(45)
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to rotate.</param>
@@ -736,17 +809,27 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Center a sprite's origin for rotation.
     /// <code>
-    /// ` set origin to the center so rotation looks natural
+    /// ` load a sprite, set origin to the center so rotation looks natural
+    /// texture 1, "ghost"
+    /// sprite 1, 320, 240, 1
     /// set sprite offset 1, 0.5, 0.5
     /// rotate sprite 1, rad(90)
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Anchor a sprite from its bottom-center (useful for characters standing on a surface).
     /// <code>
-    /// ` anchor at the bottom-center so the feet stay on the ground
+    /// ` load a sprite and anchor at the bottom-center so the feet stay on the ground
+    /// texture 1, "ghost"
+    /// sprite 1, 320, 400, 1
     /// set sprite offset 1, 0.5, 1.0
     /// position sprite 1, 320, 400
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to adjust.</param>
@@ -778,11 +861,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Pass a dissolve threshold to a custom shader.
     /// <code>
-    /// ` set up a dissolve effect and pass the threshold via texcoord1
-    /// effect 1, "dissolve.fx"
-    /// set sprite effect 1, 1
-    /// ` x = dissolve threshold (0.0 to 1.0), y/z/w unused
+    /// ` texcoord1 passes custom per-sprite data to a shader effect
+    /// texture 1, "ghost"
+    /// sprite 1, 200, 200, 1
+    /// ` x = a custom value such as a dissolve threshold (0.0 to 1.0), y/z/w unused here
+    /// ` a custom effect assigned with 'set sprite effect' would read these values
     /// set sprite all texcoord1 1, 0.5, 0.0, 0.0, 0.0
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to update.</param>
@@ -815,11 +902,17 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Set up a vertical gradient by giving top corners one value and bottom corners another.
     /// <code>
+    /// ` load a sprite whose corners carry per-vertex shader data
+    /// texture 1, "ghost"
+    /// sprite 1, 200, 200, 1
     /// ` top corners get 1.0, bottom corners get 0.0 in the x channel
     /// set sprite index texcoord1 1, 0, 1.0, 0.0, 0.0, 0.0
     /// set sprite index texcoord1 1, 1, 1.0, 0.0, 0.0, 0.0
     /// set sprite index texcoord1 1, 2, 0.0, 0.0, 0.0, 0.0
     /// set sprite index texcoord1 1, 3, 0.0, 0.0, 0.0, 0.0
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to update.</param>
@@ -869,11 +962,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Apply a custom glow shader to a sprite.
     /// <code>
-    /// ` load a shader and assign it to a sprite
+    /// ` load a shader effect and assign it to a sprite
+    /// ` (supply your own .fx shader file for the effect)
     /// effect 1, "glow.fx"
-    /// texture 1, "orb.png"
+    /// texture 1, "ghost"
     /// sprite 1, 200, 200, 1
     /// set sprite effect 1, 1
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to apply the effect to.</param>
@@ -904,8 +1001,13 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Give a sprite a green tint.
     /// <code>
-    /// ` tint the sprite green while keeping alpha as-is
+    /// ` load a sprite, then tint it green while keeping alpha as-is
+    /// texture 1, "ghost"
+    /// sprite 1, 200, 200, 1
     /// set sprite diffuse 1, 100, 255, 100
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to tint.</param>
@@ -942,7 +1044,7 @@ public partial class FadeMonoGameCommands
     /// Fade a sprite in from fully transparent to fully opaque.
     /// <code>
     /// ` gradually fade in a sprite over many frames
-    /// texture 1, "title.png"
+    /// texture 1, "ghost"
     /// sprite 1, 200, 100, 1
     /// set sprite alpha 1, 0
     /// alpha = 0
@@ -959,8 +1061,13 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Make a sprite semi-transparent for a ghost effect.
     /// <code>
-    /// ` 50% transparency
+    /// ` load a sprite and make it 50% transparent for a ghostly look
+    /// texture 1, "ghost"
+    /// sprite 1, 200, 200, 1
     /// set sprite alpha 1, 128
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to adjust.</param>
@@ -992,16 +1099,16 @@ public partial class FadeMonoGameCommands
     /// Animate a sprite by cycling through frames.
     /// <code>
     /// ` set up a 4x4 spritesheet and animate it
-    /// texture 1, "walk.png"
+    /// texture 1, "ghost"
     /// set texture frame grid 1, 4, 4
     /// sprite 1, 200, 200, 1
     /// frame = 0
     /// totalFrames = texture frames(1)
-    /// timer = 0
+    /// tick = 0
     /// DO
-    ///   timer = timer + 1
-    ///   IF timer &gt; 5
-    ///     timer = 0
+    ///   tick = tick + 1
+    ///   IF tick &gt; 5
+    ///     tick = 0
     ///     frame = frame + 1
     ///     IF frame &gt;= totalFrames THEN frame = 0
     ///     set sprite frame 1, frame
@@ -1036,15 +1143,22 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Flip a character sprite to face left when moving left.
     /// <code>
-    /// ` flip based on movement direction
-    /// IF left key(1)
-    ///   set sprite flip 1, 1, 0
-    ///   px = px - 2
-    /// ENDIF
-    /// IF right key(1)
-    ///   set sprite flip 1, 0, 0
-    ///   px = px + 2
-    /// ENDIF
+    /// ` load a sprite and flip it based on movement direction
+    /// texture 1, "ghost"
+    /// sprite 1, 320, 240, 1
+    /// px = 320
+    /// DO
+    ///   IF leftkey() = 1
+    ///     set sprite flip 1, 1, 0
+    ///     px = px - 2
+    ///   ENDIF
+    ///   IF rightkey() = 1
+    ///     set sprite flip 1, 0, 0
+    ///     px = px + 2
+    ///   ENDIF
+    ///   position sprite 1, px, 240
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to flip.</param>
@@ -1090,10 +1204,13 @@ public partial class FadeMonoGameCommands
     /// Center a sprite based on its width.
     /// <code>
     /// ` place a sprite so its center is at screen X = 320
-    /// texture 1, "logo.png"
+    /// texture 1, "ghost"
     /// sprite 1, 0, 100, 1
     /// w = sprite width(1)
     /// position sprite 1, 320 - w / 2, 100
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to measure.</param>
@@ -1124,10 +1241,16 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Stack two sprites vertically using their heights.
     /// <code>
-    /// ` place sprite 2 directly below sprite 1
+    /// ` set up two sprites, then place sprite 2 directly below sprite 1
+    /// texture 1, "ghost"
+    /// sprite 1, 200, 100, 1
+    /// sprite 2, 200, 100, 1
     /// h = sprite height(1)
     /// y1 = sprite y(1)
     /// position sprite 2, sprite x(1), y1 + h
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to measure.</param>
@@ -1159,9 +1282,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Read a sprite's position and print it.
     /// <code>
-    /// ` check where a sprite is
-    /// px = sprite x(1)
-    /// py = sprite y(1)
+    /// ` set up a sprite, read its X each frame, and nudge it right
+    /// texture 1, "ghost"
+    /// sprite 1, 100, 240, 1
+    /// DO
+    ///   px = sprite x(1)
+    ///   py = sprite y(1)
+    ///   position sprite 1, px + 1, py
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to query.</param>
@@ -1189,9 +1318,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Clamp a sprite so it cannot move off the bottom of the screen.
     /// <code>
-    /// ` keep the sprite above the screen floor
-    /// py = sprite y(1)
-    /// IF py &gt; 440 THEN position sprite 1, sprite x(1), 440
+    /// ` set up a sprite that falls, and clamp it above the screen floor
+    /// texture 1, "ghost"
+    /// sprite 1, 320, 100, 1
+    /// DO
+    ///   py = sprite y(1)
+    ///   position sprite 1, sprite x(1), py + 2
+    ///   IF py &gt; 440 THEN position sprite 1, sprite x(1), 440
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to query.</param>

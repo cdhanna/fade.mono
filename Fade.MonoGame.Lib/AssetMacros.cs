@@ -26,25 +26,37 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Push a texture asset so it is available at runtime:
     /// <code>
-    /// ` push an image into the content pipeline
-    /// # push asset "Assets/Images/player-sprite-v2.png"
-    /// # rename asset "Images/Player"
+    /// ` push an image into the content pipeline and give it a clean name
+    /// # push asset "Assets/Images/ghost-sprite-v2.png"
+    /// # rename asset "ghost"
     ///
-    /// ` later at runtime, load it by its renamed path
-    /// texture 1, "Images/Player"
-    /// sprite 1, 100, 100, 1
+    /// ` at runtime, load the pushed texture by its renamed name
+    /// texture 1, "ghost"
+    /// set sync rate 16
+    /// do
+    ///   set background color rgb(20, 20, 40)
+    ///   ` draw the sprite every frame so it stays on screen
+    ///   sprite 1, 100, 100, 1
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Push a font asset for text rendering:
     /// <code>
-    /// ` push a font into the content pipeline
-    /// # push asset "Assets/Fonts/MyFont.spritefont"
-    /// # rename asset "Fonts/Main"
+    /// ` push a font into the content pipeline and give it a clean name
+    /// # push asset "Assets/Fonts/MyFont.ttf"
+    /// # rename asset "font"
     ///
-    /// ` later at runtime, load and use the font
-    /// font 1, "Fonts/Main"
-    /// text 1, 1, 100, 50, "Hello!"
+    /// ` at runtime, load the pushed font and draw text every frame
+    /// font 1, "font"
+    /// set sync rate 16
+    /// do
+    ///   set background color rgb(20, 20, 40)
+    ///   ` text takes: textId, x, y, fontId, string
+    ///   text 1, 550, 230, 1, "HELLO!"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="path">The file path of the asset to add to the content build.</param>
@@ -75,25 +87,42 @@ public partial class FadeMonoGameCommands
     /// Rename a pushed asset to a shorter, cleaner path:
     /// <code>
     /// ` push an audio file with a long filename and give it a short name
-    /// # push asset "Assets/Audio/bubble-pop-2-293341.mp3"
-    /// # rename asset "Audio/BubblePop"
+    /// # push asset "Assets/Audio/coin-pickup-2-293341.wav"
+    /// # rename asset "coin"
     ///
-    /// ` at runtime, load using the short name
-    /// load sfx clip 1, "Audio/BubblePop"
+    /// ` at runtime, load using the short name and play it once
+    /// load sfx clip 1, "coin"
+    /// play sfx 1
+    ///
+    /// ` load a font so we can show something while the sound plays
+    /// font 1, "font"
+    /// set sync rate 16
+    /// do
+    ///   set background color rgb(20, 20, 40)
+    ///   text 1, 550, 280, 1, "COIN SOUND PLAYED"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Rename multiple assets in sequence:
     /// <code>
-    /// ` push and rename several textures
-    /// # push asset "Assets/Images/enemy_spritesheet_final_v3.png"
-    /// # rename asset "Images/Enemy"
-    /// # push asset "Assets/Images/bg-tiles-large.png"
-    /// # rename asset "Images/Background"
+    /// ` push and rename several assets, one rename per push
+    /// # push asset "Assets/Images/ghost-sprite-final-v3.png"
+    /// # rename asset "ghost"
+    /// # push asset "Assets/Fonts/pixel-font-regular.ttf"
+    /// # rename asset "font"
     ///
-    /// ` at runtime, load them by their clean names
-    /// texture 1, "Images/Enemy"
-    /// texture 2, "Images/Background"
+    /// ` at runtime, load them by their clean names and draw each frame
+    /// texture 1, "ghost"
+    /// font 1, "font"
+    /// set sync rate 16
+    /// do
+    ///   set background color rgb(20, 20, 40)
+    ///   sprite 1, 100, 100, 1
+    ///   text 1, 550, 240, 1, "READY"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="name">The new content name for the asset.</param>
@@ -129,15 +158,37 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Compile a UI sprite uncompressed for crisp pixels:
     /// <code>
-    /// # push asset "Images/ui.png"
-    /// # texture compression "Images/ui", "color"
+    /// ` push a texture and compile it uncompressed for crisp pixels
+    /// # push asset "Assets/Images/ghost.png"
+    /// # rename asset "ghost"
+    /// # texture compression "ghost", "color"
+    ///
+    /// ` at runtime, load and draw the texture each frame
+    /// texture 1, "ghost"
+    /// set sync rate 16
+    /// do
+    ///   set background color rgb(20, 20, 40)
+    ///   sprite 1, 100, 100, 1
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Force DXT5 on a large textured background:
     /// <code>
-    /// # push asset "Images/sky.png"
-    /// # texture compression "Images/sky", "dxt5"
+    /// ` push a texture and force the DXT5 (alpha) compression format
+    /// # push asset "Assets/Images/ghost.png"
+    /// # rename asset "ghost"
+    /// # texture compression "ghost", "dxt5"
+    ///
+    /// ` at runtime, load and draw the texture each frame
+    /// texture 1, "ghost"
+    /// set sync rate 16
+    /// do
+    ///   set background color rgb(20, 20, 40)
+    ///   sprite 1, 100, 100, 1
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="assetName">The asset name (the same string you pass to <c>texture</c> at runtime).</param>
@@ -192,9 +243,19 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Compile every texture uncompressed (typical playground iteration):
     /// <code>
+    /// ` every push after this line inherits the "color" (uncompressed) format
     /// # default texture compression "color"
-    /// # push asset "Images/Player.png"
-    /// # push asset "Images/Enemy.png"
+    /// # push asset "Assets/Images/ghost.png"
+    /// # rename asset "ghost"
+    ///
+    /// ` at runtime, load and draw the texture each frame
+    /// texture 1, "ghost"
+    /// set sync rate 16
+    /// do
+    ///   set background color rgb(20, 20, 40)
+    ///   sprite 1, 100, 100, 1
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="format">The compression format: <c>auto</c>, <c>none</c>/<c>color</c>, <c>dxt1</c>, <c>dxt3</c>, or <c>dxt5</c>.</param>
@@ -245,8 +306,21 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Compile a SFX with the default uncompressed PCM path:
     /// <code>
-    /// # push asset "Audio/Pop.wav"
-    /// # sound compression "Audio/Pop", "pcm"
+    /// ` push a sound and compile it as uncompressed 16-bit PCM
+    /// # push asset "Assets/Audio/coin.wav"
+    /// # rename asset "coin"
+    /// # sound compression "coin", "pcm"
+    ///
+    /// ` at runtime, load and play the sound, then keep the frame drawing
+    /// load sfx clip 1, "coin"
+    /// play sfx 1
+    /// font 1, "font"
+    /// set sync rate 16
+    /// do
+    ///   set background color rgb(20, 20, 40)
+    ///   text 1, 550, 280, 1, "PCM SOUND PLAYED"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="assetName">The asset name (the same string you pass to <c>load sfx clip</c> at runtime).</param>
@@ -289,9 +363,24 @@ public partial class FadeMonoGameCommands
     /// Compile every sound as uncompressed PCM (the default if you
     /// don't call this at all):
     /// <code>
+    /// ` every push after this line inherits the "pcm" (uncompressed) format
     /// # default sound compression "pcm"
-    /// # push asset "Audio/Pop.wav"
-    /// # push asset "Audio/Boom.mp3"
+    /// # push asset "Assets/Audio/coin.wav"
+    /// # rename asset "coin"
+    /// # push asset "Assets/Audio/boom.wav"
+    /// # rename asset "explosion"
+    ///
+    /// ` at runtime, load both sounds and play one, then keep drawing
+    /// load sfx clip 1, "coin"
+    /// load sfx clip 2, "explosion"
+    /// play sfx 1
+    /// font 1, "font"
+    /// set sync rate 16
+    /// do
+    ///   set background color rgb(20, 20, 40)
+    ///   text 1, 550, 280, 1, "SOUNDS LOADED"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="format">The compression format: <c>auto</c>, <c>pcm</c>, or <c>adpcm</c>.</param>
@@ -330,7 +419,19 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Render a font at 48px for use as a UI title:
     /// <code>
-    /// # font size "Fonts/Heading", 48
+    /// ` push a font and rasterize its glyphs at 48 pixels
+    /// # push asset "Assets/Fonts/heading.ttf"
+    /// # rename asset "font"
+    /// # font size "font", 48
+    ///
+    /// ` at runtime, load the font and draw a title each frame
+    /// font 1, "font"
+    /// set sync rate 16
+    /// do
+    ///   set background color rgb(20, 20, 40)
+    ///   text 1, 550, 240, 1, "TITLE"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="assetName">The asset name (the same string you pass to <c>font</c> at runtime).</param>

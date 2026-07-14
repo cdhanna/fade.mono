@@ -30,8 +30,12 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Save a screenshot when the player presses a key:
     /// <code>
+    /// ` load an image so there is something on screen to capture
+    /// texture 1, "ghost"
+    ///
     /// DO
-    ///   ` press S to take a screenshot
+    ///   sprite 1, 100, 100, 1
+    ///   ` press S to save a screenshot of the current frame
     ///   IF scancode("S") = 1
     ///     screenshot "my_screenshot"
     ///   ENDIF
@@ -78,15 +82,29 @@ public partial class FadeMonoGameCommands
     /// ` configure a small render buffer for pixel art
     /// set render size 320, 180
     ///
-    /// ` verify the size was applied
-    /// w = render width()
-    /// h = render height()
+    /// ` load an image to display at the new resolution
+    /// texture 1, "ghost"
+    ///
+    /// DO
+    ///   ` draw the sprite centered in the 320x180 buffer
+    ///   sprite 1, 160, 90, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Set up a standard HD resolution:
     /// <code>
+    /// ` use a standard HD internal resolution
     /// set render size 1280, 720
+    ///
+    /// ` load an image to display at HD
+    /// texture 1, "ghost"
+    ///
+    /// DO
+    ///   sprite 1, 640, 360, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="width">Width of the render buffer in pixels.</param>
@@ -116,11 +134,16 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Center a sprite horizontally on screen:
     /// <code>
-    /// ` place a sprite in the middle of the screen
-    /// texture 1, "Images/Logo"
-    /// cx = render width() / 2
-    /// cy = render height() / 2
-    /// sprite 1, cx, cy, 1
+    /// ` load an image to place in the middle of the screen
+    /// texture 1, "ghost"
+    ///
+    /// DO
+    ///   ` render width() gives the buffer width in pixels
+    ///   cx = render width() / 2
+    ///   cy = render height() / 2
+    ///   sprite 1, cx, cy, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <returns>The width of the main render buffer in pixels.</returns>
@@ -147,11 +170,17 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Place a HUD bar along the bottom of the screen:
     /// <code>
-    /// ` draw a health bar at the bottom
-    /// barY = render height() - 20
-    /// barW = render width()
-    /// ` use barY and barW to position your HUD sprite
-    /// sprite 1, 0, barY, hudImg
+    /// ` load an image to use as the HUD bar
+    /// texture 1, "ghost"
+    ///
+    /// DO
+    ///   ` render height() lets us anchor to the bottom edge
+    ///   barY = render height() - 20
+    ///   barW = render width()
+    ///   ` place the HUD sprite along the bottom
+    ///   sprite 1, 0, barY, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <returns>The height of the main render buffer in pixels.</returns>
@@ -184,18 +213,31 @@ public partial class FadeMonoGameCommands
     /// <code>
     /// ` deep blue sky color
     /// set background color rgb(20, 20, 80)
+    ///
+    /// ` load an image to show against the colored background
+    /// texture 1, "ghost"
+    ///
+    /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Cycle the background color over time for a day/night effect:
     /// <code>
+    /// ` load an image to show against the shifting sky
+    /// texture 1, "ghost"
+    ///
     /// t = 0
     /// DO
     ///   t = t + 0.01
+    ///   ` shift the background color over time
     ///   r = 40 + sin(t) * 40
     ///   g = 40 + sin(t) * 20
     ///   b = 80 + sin(t) * 60
     ///   set background color rgb(r, g, b)
+    ///   sprite 1, 100, 100, 1
     ///   sync
     /// LOOP
     /// </code>
@@ -245,8 +287,17 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Peek at the next effect ID before deciding to allocate:
     /// <code>
-    /// ` check what the next ID would be
-    /// nextId = free effect id()
+    /// ` load an image so we have something to draw
+    /// texture 1, "ghost"
+    ///
+    /// ` peek at what the next effect ID would be (does not reserve it)
+    /// nextId = free effect id(nextId)
+    ///
+    /// DO
+    ///   ` use the peeked ID to offset the sprite so the value is visible
+    ///   sprite 1, nextId * 20, 100, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="effectId">Receives the next available effect ID.</param>
@@ -280,9 +331,18 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Reserve an effect ID and load a shader:
     /// <code>
+    /// ` load an image so the screen has content to post-process
+    /// texture 1, "ghost"
+    ///
     /// ` grab an effect ID and load a bloom shader
-    /// fxId = reserve effect id()
+    /// fxId = reserve effect id(fxId)
     /// effect fxId, "bloom"
+    /// set screen effect fxId
+    ///
+    /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="effectId">Receives the reserved effect ID.</param>
@@ -323,21 +383,34 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Load a shader and apply it as a full-screen effect:
     /// <code>
+    /// ` load an image so the screen has content to shade
+    /// texture 1, "ghost"
+    ///
     /// ` set up a post-processing shader
-    /// fxId = reserve effect id()
+    /// fxId = reserve effect id(fxId)
     /// effect fxId, "vignette"
     /// set effect param float fxId, "Intensity", 0.5
     /// set screen effect fxId
+    ///
+    /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Load a shader and update parameters each frame:
     /// <code>
-    /// fxId = reserve effect id()
+    /// ` load an image so the distortion has something to warp
+    /// texture 1, "ghost"
+    ///
+    /// fxId = reserve effect id(fxId)
     /// effect fxId, "wave_distort"
     /// set screen effect fxId
     ///
     /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   ` feed elapsed seconds to the shader each frame
     ///   t = game ms() / 1000.0
     ///   set effect param float fxId, "Time", t
     ///   sync
@@ -421,15 +494,37 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Trigger a screen shake on an explosion:
     /// <code>
-    /// ` big explosion shake
-    /// set screen shake amount 15.0
-    /// set screen shake bounce 0.8
+    /// ` load an image so the shake is visible on screen
+    /// texture 1, "ghost"
+    ///
+    /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   ` press E to trigger a big explosion shake
+    ///   IF scancode("E") = 1
+    ///     set screen shake amount 15.0
+    ///     set screen shake bounce 0.8
+    ///   ENDIF
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Stop the screen shake:
     /// <code>
-    /// set screen shake amount 0
+    /// ` load an image so the shake is visible on screen
+    /// texture 1, "ghost"
+    ///
+    /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   ` press E to shake, press S to stop the shake
+    ///   IF scancode("E") = 1
+    ///     set screen shake amount 12.0
+    ///   ENDIF
+    ///   IF scancode("S") = 1
+    ///     set screen shake amount 0
+    ///   ENDIF
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="mag">The shake intensity. <c>0</c> means no shake; larger values mean more movement.</param>
@@ -459,17 +554,34 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Set up a sharp, punchy camera shake:
     /// <code>
-    /// ` quick jolt that settles fast
-    /// set screen shake amount 10.0
-    /// set screen shake bounce 0.5
+    /// ` load an image so the shake is visible on screen
+    /// texture 1, "ghost"
+    ///
+    /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   ` press J for a quick jolt that settles fast
+    ///   IF scancode("J") = 1
+    ///     set screen shake amount 10.0
+    ///     set screen shake bounce 0.5
+    ///   ENDIF
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Set up a sustained earthquake rumble:
     /// <code>
+    /// ` load an image so the shake is visible on screen
+    /// texture 1, "ghost"
+    ///
     /// ` ongoing tremor with high elasticity
     /// set screen shake amount 4.0
     /// set screen shake bounce 2.0
+    ///
+    /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="bounce">The elasticity of the shake. Higher values produce faster, snappier oscillation.</param>
@@ -501,12 +613,20 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Pass a tint color to a shader:
     /// <code>
-    /// fxId = reserve effect id()
+    /// ` load an image so the tint has content to color
+    /// texture 1, "ghost"
+    ///
+    /// fxId = reserve effect id(fxId)
     /// effect fxId, "color_tint"
     ///
     /// ` set a warm orange tint
     /// set effect param color fxId, "TintColor", rgb(255, 180, 80)
     /// set screen effect fxId
+    ///
+    /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="effectId">The effect to modify. Must have been loaded with <see cref="LoadEffect">effect</see>.</param>
@@ -552,11 +672,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Animate a shader parameter over time:
     /// <code>
-    /// fxId = reserve effect id()
+    /// ` load an image so the dissolve has something to act on
+    /// texture 1, "ghost"
+    ///
+    /// fxId = reserve effect id(fxId)
     /// effect fxId, "dissolve"
     /// set screen effect fxId
     ///
     /// DO
+    ///   sprite 1, 100, 100, 1
     ///   ` pass elapsed time in seconds to the shader
     ///   t = game ms() / 1000.0
     ///   set effect param float fxId, "Time", t
@@ -608,7 +732,10 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Pass the render resolution to a post-processing shader:
     /// <code>
-    /// fxId = reserve effect id()
+    /// ` load an image so the pixelate pass has content
+    /// texture 1, "ghost"
+    ///
+    /// fxId = reserve effect id(fxId)
     /// effect fxId, "pixelate"
     ///
     /// ` tell the shader the screen dimensions
@@ -616,6 +743,11 @@ public partial class FadeMonoGameCommands
     /// h = render height()
     /// set effect param float2 fxId, "ScreenSize", w, h
     /// set screen effect fxId
+    ///
+    /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="effectId">The effect to modify. Must have been loaded with <see cref="LoadEffect">effect</see>.</param>
@@ -663,19 +795,38 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Pass a light position to a shader:
     /// <code>
-    /// fxId = reserve effect id()
+    /// ` load an image so the lighting pass has content
+    /// texture 1, "ghost"
+    ///
+    /// fxId = reserve effect id(fxId)
     /// effect fxId, "lighting"
     ///
     /// ` set the light at world position (100, 200, 50)
     /// set effect param float3 fxId, "LightPos", 100.0, 200.0, 50.0
     /// set screen effect fxId
+    ///
+    /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Pass an RGB color without alpha as three separate floats:
     /// <code>
-    /// ` fog color in 0..1 range
-    /// set effect param float3 fxId, "FogColor", 0.6, 0.7, 0.9
+    /// ` load an image so the fog pass has content
+    /// texture 1, "ghost"
+    ///
+    /// fxId = reserve effect id(fxId)
+    /// effect fxId, "lighting"
+    /// set screen effect fxId
+    ///
+    /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   ` fog color in 0..1 range
+    ///   set effect param float3 fxId, "FogColor", 0.6, 0.7, 0.9
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="effectId">The effect to modify. Must have been loaded with <see cref="LoadEffect">effect</see>.</param>
@@ -722,12 +873,20 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Pass a clipping rectangle to a shader:
     /// <code>
-    /// fxId = reserve effect id()
+    /// ` load an image so the clip pass has content
+    /// texture 1, "ghost"
+    ///
+    /// fxId = reserve effect id(fxId)
     /// effect fxId, "clip_rect"
     ///
     /// ` define a rectangle as (x, y, width, height)
     /// set effect param float4 fxId, "ClipRect", 10.0, 20.0, 200.0, 150.0
     /// set screen effect fxId
+    ///
+    /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="effectId">The effect to modify. Must have been loaded with <see cref="LoadEffect">effect</see>.</param>
@@ -780,30 +939,47 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Feed a noise texture into a dissolve shader:
     /// <code>
-    /// ` load the noise texture
-    /// texture 1, "Images/Noise"
+    /// ` load an image to feed in as the noise input
+    /// texture 1, "ghost"
     ///
     /// ` set up the dissolve shader
-    /// fxId = reserve effect id()
+    /// fxId = reserve effect id(fxId)
     /// effect fxId, "dissolve"
     /// set effect param texture fxId, "NoiseTex", 1
     /// set effect param float fxId, "Threshold", 0.3
     /// set screen effect fxId
+    ///
+    /// DO
+    ///   ` draw the sprite that the dissolve pass acts on
+    ///   sprite 1, 100, 100, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Use a render target's output as input to another shader:
     /// <code>
+    /// ` load an image to draw into the render target
+    /// texture 1, "ghost"
+    ///
     /// ` create a render target and grab its texture
-    /// rtId = reserve render target id()
+    /// rtId = reserve render target id(rtId)
     /// render target rtId, 0
     /// rtTex = render target texture(rtId)
     ///
+    /// ` draw a sprite onto the render target
+    /// sprite 1, 50, 50, 1
+    /// set sprite render target 1, rtId
+    ///
     /// ` pass the render target texture into a blur shader
-    /// fxId = reserve effect id()
+    /// fxId = reserve effect id(fxId)
     /// effect fxId, "blur"
     /// set effect param texture fxId, "SceneTex", rtTex
     /// set screen effect fxId
+    ///
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="effectId">The effect to modify. Must have been loaded with <see cref="LoadEffect">effect</see>.</param>
@@ -848,11 +1024,16 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Toggle a post-processing effect on and off with a key press:
     /// <code>
-    /// fxId = reserve effect id()
+    /// ` load an image so the effect has content to process
+    /// texture 1, "ghost"
+    ///
+    /// fxId = reserve effect id(fxId)
     /// effect fxId, "grayscale"
     /// effectOn = 0
     ///
     /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   ` press G to toggle the grayscale effect on and off
     ///   IF scancode("G") = 1
     ///     IF effectOn = 0
     ///       set screen effect fxId
@@ -899,11 +1080,19 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Apply a CRT scanline effect to the whole screen:
     /// <code>
+    /// ` load an image so the CRT pass has content
+    /// texture 1, "ghost"
+    ///
     /// ` load and activate a CRT shader
-    /// fxId = reserve effect id()
+    /// fxId = reserve effect id(fxId)
     /// effect fxId, "crt_scanlines"
     /// set effect param float fxId, "ScanlineIntensity", 0.4
     /// set screen effect fxId
+    ///
+    /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="effectId">The effect to apply. Must have been loaded with <see cref="LoadEffect">effect</see>.</param>
@@ -960,11 +1149,26 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Set a render target to clear with a solid color each frame:
     /// <code>
-    /// rtId = reserve render target id()
+    /// ` load an image to draw into the render target
+    /// texture 1, "ghost"
+    ///
+    /// rtId = reserve render target id(rtId)
     /// render target rtId, 0
     ///
-    /// ` clear to opaque black each frame
+    /// ` clear the target to opaque black each frame
     /// set render target background color rtId, rgb(0, 0, 0)
+    ///
+    /// ` draw a sprite onto the render target
+    /// sprite 1, 50, 50, 1
+    /// set sprite render target 1, rtId
+    ///
+    /// ` show the render target's contents on the main screen
+    /// rtTex = render target texture(rtId)
+    ///
+    /// DO
+    ///   sprite 2, 0, 0, rtTex
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="outputId">The render target ID to configure.</param>
@@ -1002,17 +1206,47 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Disable clearing for a paint trail effect:
     /// <code>
-    /// rtId = reserve render target id()
+    /// ` load an image to draw into the render target
+    /// texture 1, "ghost"
+    ///
+    /// rtId = reserve render target id(rtId)
     /// render target rtId, 0
     ///
-    /// ` don't clear, so previous frames accumulate
+    /// ` don't clear, so previous frames accumulate into a trail
     /// set render target clear flags rtId, 0
+    ///
+    /// ` show the render target's contents on the main screen
+    /// rtTex = render target texture(rtId)
+    ///
+    /// t = 0
+    /// DO
+    ///   ` move a sprite so its trail builds up on the target
+    ///   t = t + 1
+    ///   sprite 1, t, 50, 1
+    ///   set sprite render target 1, rtId
+    ///   sprite 2, 0, 0, rtTex
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Re-enable clearing after a trail sequence:
     /// <code>
-    /// set render target clear flags rtId, 1
+    /// ` load an image to draw into the render target
+    /// texture 1, "ghost"
+    ///
+    /// rtId = reserve render target id(rtId)
+    /// render target rtId, 0
+    /// rtTex = render target texture(rtId)
+    ///
+    /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   set sprite render target 1, rtId
+    ///   ` clear the target each frame again (no trails)
+    ///   set render target clear flags rtId, 1
+    ///   sprite 2, 0, 0, rtTex
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="outputId">The render target ID to configure.</param>
@@ -1049,13 +1283,24 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Display a render target's contents as a sprite:
     /// <code>
+    /// ` load an image to draw into the render target
+    /// texture 1, "ghost"
+    ///
     /// ` set up a render target
-    /// rtId = reserve render target id()
+    /// rtId = reserve render target id(rtId)
     /// render target rtId, 0
     ///
-    /// ` grab the texture and show it as a sprite
+    /// ` draw a sprite onto the render target
+    /// sprite 1, 50, 50, 1
+    /// set sprite render target 1, rtId
+    ///
+    /// ` grab the target texture and show it on the main screen
     /// rtTex = render target texture(rtId)
-    /// sprite 10, 0, 0, rtTex
+    ///
+    /// DO
+    ///   sprite 10, 0, 0, rtTex
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="outputId">The render target ID to query.</param>
@@ -1091,7 +1336,17 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Peek at the next available render target ID:
     /// <code>
-    /// nextRtId = free render target id()
+    /// ` load an image so we have something to draw
+    /// texture 1, "ghost"
+    ///
+    /// ` peek at the next render target ID (does not reserve it)
+    /// nextRtId = free render target id(nextRtId)
+    ///
+    /// DO
+    ///   ` use the peeked ID to offset the sprite so the value is visible
+    ///   sprite 1, nextRtId * 20, 100, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="outputId">Receives the next available render target ID.</param>
@@ -1128,7 +1383,7 @@ public partial class FadeMonoGameCommands
     /// Full render target setup sequence:
     /// <code>
     /// ` reserve and create a render target
-    /// rtId = reserve render target id()
+    /// rtId = reserve render target id(rtId)
     /// render target rtId, 0
     ///
     /// ` configure it
@@ -1136,9 +1391,17 @@ public partial class FadeMonoGameCommands
     /// set render target clear flags rtId, 1
     ///
     /// ` assign a sprite to draw on it
-    /// texture 1, "Images/Player"
+    /// texture 1, "ghost"
     /// sprite 1, 50, 50, 1
     /// set sprite render target 1, rtId
+    ///
+    /// ` show the render target's contents on the main screen
+    /// rtTex = render target texture(rtId)
+    ///
+    /// DO
+    ///   sprite 2, 0, 0, rtTex
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="outputId">Receives the reserved render target ID.</param>
@@ -1194,20 +1457,42 @@ public partial class FadeMonoGameCommands
     /// Create a render target with an auto-allocated texture:
     /// <code>
     /// ` the simplest setup: pass 0 to auto-allocate
-    /// rtId = reserve render target id()
+    /// rtId = reserve render target id(rtId)
     /// render target rtId, 0
     ///
     /// ` draw a sprite onto the render target
-    /// texture 1, "Images/Enemy"
+    /// texture 1, "ghost"
     /// sprite 1, 100, 100, 1
     /// set sprite render target 1, rtId
+    ///
+    /// ` show the render target's contents on the main screen
+    /// rtTex = render target texture(rtId)
+    ///
+    /// DO
+    ///   sprite 2, 0, 0, rtTex
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Tear down a render target when done:
     /// <code>
-    /// ` release the render target and its backing buffer
-    /// render target rtId, -1
+    /// ` load an image and set up a render target
+    /// texture 1, "ghost"
+    /// rtId = reserve render target id(rtId)
+    /// render target rtId, 0
+    /// rtTex = render target texture(rtId)
+    ///
+    /// DO
+    ///   sprite 1, 100, 100, 1
+    ///   set sprite render target 1, rtId
+    ///   sprite 2, 0, 0, rtTex
+    ///   ` press R to release the render target and its backing buffer
+    ///   IF scancode("R") = 1
+    ///     render target rtId, -1
+    ///   ENDIF
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="outputId">The render target ID to create or configure.</param>

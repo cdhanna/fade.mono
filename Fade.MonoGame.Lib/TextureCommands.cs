@@ -24,24 +24,38 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Load a font and create a text sprite with it:
     /// <code>
-    /// ` load a font and display a greeting
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 50, 1, "Hello World!"
+    /// ` load the font before drawing any text
+    /// font 1, "font"
+    ///
+    /// ` create a text sprite that uses the loaded font
+    /// text 1, 550, 230, 1, "Hello World!"
+    ///
+    /// ` present the text every frame
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Load multiple fonts for different UI elements:
     /// <code>
-    /// ` load a heading font and a body font
-    /// font 1, "Fonts/TitleFont"
-    /// font 2, "Fonts/BodyFont"
+    /// ` load the same font into two ids for different ui elements
+    /// font 1, "font"
+    /// font 2, "font"
     ///
-    /// ` use the title font for the game name
-    /// text 1, 200, 50, 1, "My Game"
+    /// ` use font id 1 for the game name and scale it up
+    /// text 1, 650, 230, 1, "My Game"
     /// scale text 1, 2.0, 2.0
     ///
-    /// ` use the body font for instructions
-    /// text 2, 200, 120, 2, "Press space to start"
+    /// ` use font id 2 for the instructions
+    /// text 2, 650, 300, 2, "Press space to start"
+    ///
+    /// ` present both text sprites every frame
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="fontId">The ID to assign to this font.</param>
@@ -73,9 +87,18 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Peek at the next available texture ID:
     /// <code>
-    /// ` check what texture ID would be assigned next
+    /// ` peek at the next free texture id without reserving it
     /// nextId = free texture id(nextId)
-    /// print nextId
+    ///
+    /// ` load the ghost into that id and show it on screen
+    /// texture nextId, "ghost"
+    /// sprite 1, 320, 240, nextId
+    ///
+    /// ` keep drawing the sprite every frame
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="textureId">Receives the next free texture ID.</param>
@@ -108,10 +131,22 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Reserve a texture ID for later use with a render target:
     /// <code>
-    /// ` reserve a texture slot before setting up a render target
+    /// ` reserve a texture slot so nothing else can claim the id
     /// texId = reserve texture id(texId)
-    /// render target 1, 256, 256
-    /// render target texture 1, texId
+    ///
+    /// ` create a render target and point it at the reserved texture
+    /// rtId = reserve render target id(rtId)
+    /// render target rtId, texId
+    ///
+    /// ` load the ghost so we have something visible to draw
+    /// texture 2, "ghost"
+    /// sprite 1, 320, 240, 2
+    ///
+    /// ` keep drawing the sprite every frame
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="textureId">Receives the reserved texture ID.</param>
@@ -153,21 +188,33 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Load a texture and display it as a sprite:
     /// <code>
-    /// ` load a player texture and create a sprite with it
-    /// texture 1, "Images/Player"
+    /// ` load the ghost image and create a sprite with it
+    /// texture 1, "ghost"
     /// sprite 1, 100, 100, 1
+    ///
+    /// ` keep drawing the sprite every frame
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Load a spritesheet texture and set up animation frames:
     /// <code>
-    /// ` load a character spritesheet and split it into a 4x2 grid
-    /// texture 1, "Images/CharacterSheet"
+    /// ` load the ghost image and treat it as a 2x4 spritesheet
+    /// texture 1, "ghost"
     /// set texture frame grid 1, 2, 4
     ///
     /// ` create a sprite and show frame 0
     /// sprite 1, 100, 100, 1
     /// set sprite frame 1, 0
+    ///
+    /// ` keep the frame on screen every tick
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="textureId">The ID to assign to this texture. Must be unique; loading over an existing ID replaces it.</param>
@@ -208,8 +255,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Set up a 4x2 spritesheet and animate it in a loop:
     /// <code>
-    /// ` load a spritesheet and split it into frames
-    /// texture 1, "Images/RunCycle"
+    /// ` load the ghost image and split it into frames
+    /// texture 1, "ghost"
     /// set texture frame grid 1, 2, 4
     ///
     /// ` create the sprite
@@ -284,10 +331,13 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Use the frame count to loop an animation:
     /// <code>
-    /// ` load a spritesheet and get the total frame count
-    /// texture 1, "Images/Explosion"
+    /// ` load the ghost image and get the total frame count
+    /// texture 1, "ghost"
     /// set texture frame grid 1, 4, 4
     /// totalFrames = texture frames(1)
+    ///
+    /// ` create the sprite that will play the animation
+    /// sprite 1, 100, 100, 1
     ///
     /// ` cycle through all frames
     /// frame = 0
@@ -327,12 +377,18 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Size a sprite to match its texture dimensions:
     /// <code>
-    /// ` load a texture and size the sprite to match
-    /// texture 1, "Images/Logo"
+    /// ` load the ghost image and size the sprite to match
+    /// texture 1, "ghost"
     /// sprite 1, 100, 100, 1
     /// w = texture width(1)
     /// h = texture height(1)
     /// size sprite 1, w, h
+    ///
+    /// ` keep drawing the sized sprite every frame
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="textureId">The ID of the texture to measure. Must already be loaded with <see cref="LoadTexture">texture</see>.</param>
@@ -365,13 +421,19 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Use texture height to center a sprite vertically on screen:
     /// <code>
-    /// ` load a texture and center the sprite vertically
-    /// texture 1, "Images/Banner"
+    /// ` load the ghost image and center the sprite vertically
+    /// texture 1, "ghost"
     /// sprite 1, 0, 0, 1
     /// h = texture height(1)
     /// screenH = screen height()
     /// yPos = (screenH - h) / 2
     /// position sprite 1, 0, yPos
+    ///
+    /// ` keep drawing the centered sprite every frame
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="textureId">The ID of the texture to measure. Must already be loaded with <see cref="LoadTexture">texture</see>.</param>
@@ -405,8 +467,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Scale a sprite to a target width while preserving proportions:
     /// <code>
-    /// ` load a texture and scale the sprite proportionally
-    /// texture 1, "Images/Portrait"
+    /// ` load the ghost image and scale the sprite proportionally
+    /// texture 1, "ghost"
     /// sprite 1, 50, 50, 1
     ///
     /// ` set a target width and compute the matching height
@@ -414,6 +476,12 @@ public partial class FadeMonoGameCommands
     /// aspect = texture aspect(1)
     /// targetH = targetW * aspect
     /// size sprite 1, targetW, targetH
+    ///
+    /// ` keep drawing the scaled sprite every frame
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="textureId">The ID of the texture to measure. Must already be loaded with <see cref="LoadTexture">texture</see>.</param>

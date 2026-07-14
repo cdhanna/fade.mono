@@ -37,19 +37,43 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Create a collider for a player character and attach it to a transform.
     /// <code>
-    /// ` set up the player entity
+    /// ` load the ghost image and set up the player entity
+    /// texture 1, "ghost"
     /// playerId = 1
     /// transform playerId, 100, 200
+    ///
+    /// ` draw the player with a sprite attached to the transform
+    /// sprite playerId, 0, 0, 1
+    /// attach sprite to transform playerId, playerId
+    ///
+    /// ` give the player a 32x32 box collider that follows the transform
     /// box collider playerId, 0, 0, 32, 32
     /// attach collider to transform playerId, playerId
+    ///
+    /// set sync rate 16
+    /// DO
+    ///   ` the collider now travels with the player every frame
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Create a static wall collider that does not move.
     /// <code>
-    /// ` place a wall at the bottom of the screen
+    /// ` load the ghost image so there is something on screen
+    /// texture 1, "ghost"
+    /// sprite 1, 100, 100, 1
+    ///
+    /// ` place a static wall collider at the bottom of the screen
+    /// ` it has no transform, so it never moves
     /// wallId = 99
     /// box collider wallId, 0, 460, 640, 20
+    ///
+    /// set sync rate 16
+    /// DO
+    ///   ` the wall stays put while each frame is presented
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="colliderId">The ID to assign to this collider.</param>
@@ -90,20 +114,29 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Build a complete game entity with a transform, sprite, and collider.
     /// <code>
+    /// ` load the ghost image for the entity
+    /// texture 1, "ghost"
+    ///
     /// ` create the entity's transform
     /// enemyId = 5
     /// transform enemyId, 300, 100
     ///
-    /// ` create and attach a sprite
-    /// sprite enemyId, 0, 0
+    /// ` create and attach a sprite so we can see the entity
+    /// sprite enemyId, 0, 0, 1
     /// attach sprite to transform enemyId, enemyId
     ///
     /// ` create and attach a collider
     /// box collider enemyId, -16, -16, 32, 32
     /// attach collider to transform enemyId, enemyId
     ///
-    /// ` now moving the transform moves everything
-    /// set transform position enemyId, 400, 200
+    /// set sync rate 16
+    /// x = 300
+    /// DO
+    ///   ` moving the transform moves the sprite AND the collider together
+    ///   x = x + 1
+    ///   set transform position enemyId, x, 200
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="colliderId">The ID of the collider to attach.</param>
@@ -141,11 +174,21 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// A typical game loop that moves objects, sweeps collisions, then checks for hits.
     /// <code>
+    /// ` load the ghost image for both entities
+    /// texture 1, "ghost"
+    ///
     /// ` set up a player and an enemy
     /// playerId = 1
     /// enemyId = 2
     /// transform playerId, 100, 200
     /// transform enemyId, 300, 200
+    ///
+    /// ` give each a sprite so we can watch them move
+    /// sprite playerId, 0, 0, 1
+    /// attach sprite to transform playerId, playerId
+    /// sprite enemyId, 0, 0, 1
+    /// attach sprite to transform enemyId, enemyId
+    ///
     /// box collider playerId, 0, 0, 32, 32
     /// box collider enemyId, 0, 0, 32, 32
     /// attach collider to transform playerId, playerId
@@ -160,7 +203,7 @@ public partial class FadeMonoGameCommands
     ///   ` sweep all colliders, then check for hits
     ///   perform collider checks
     ///   hit = get collision(playerId, enemyId)
-    ///   IF hit = 1 THEN
+    ///   IF hit = 1
     ///     print "collision detected!"
     ///   ENDIF
     ///
@@ -200,26 +243,89 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Check if a bullet hit any of three enemies.
     /// <code>
-    /// ` assume bullet and enemy colliders are already set up
-    /// perform collider checks
+    /// ` load the ghost image for the bullet and enemies
+    /// texture 1, "ghost"
+    ///
+    /// ` set up three enemy colliders (ids 1, 2, 3)
     /// FOR e = 1 TO 3
-    ///   hit = get collision(bulletId, e)
-    ///   IF hit = 1 THEN
-    ///     print "enemy hit!"
-    ///   ENDIF
+    ///   transform e, 200, e * 100
+    ///   sprite e, 0, 0, 1
+    ///   attach sprite to transform e, e
+    ///   box collider e, 0, 0, 32, 32
+    ///   attach collider to transform e, e
     /// NEXT e
+    ///
+    /// ` set up a bullet collider that flies to the right
+    /// bulletId = 10
+    /// transform bulletId, 0, 100
+    /// sprite bulletId, 0, 0, 1
+    /// attach sprite to transform bulletId, bulletId
+    /// box collider bulletId, 0, 0, 8, 8
+    /// attach collider to transform bulletId, bulletId
+    ///
+    /// set sync rate 16
+    /// bx = 0
+    /// DO
+    ///   ` move the bullet across the screen
+    ///   bx = bx + 4
+    ///   set transform position bulletId, bx, 100
+    ///
+    ///   ` sweep, then check the bullet against each enemy
+    ///   perform collider checks
+    ///   FOR e = 1 TO 3
+    ///     hit = get collision(bulletId, e)
+    ///     IF hit = 1
+    ///       print "enemy hit!"
+    ///     ENDIF
+    ///   NEXT e
+    ///
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// React to a player touching a pickup item.
     /// <code>
-    /// ` inside the game loop, after perform collider checks
-    /// hit = get collision(playerId, coinId)
-    /// IF hit = 1 THEN
-    ///   score = score + 10
-    ///   ` move the coin off screen so it stops colliding
-    ///   set transform position coinId, -100, -100
-    /// ENDIF
+    /// ` load the ghost image and the coin pickup sound
+    /// texture 1, "ghost"
+    /// load sfx clip 1, "coin"
+    ///
+    /// ` set up the player
+    /// playerId = 1
+    /// transform playerId, 0, 200
+    /// sprite playerId, 0, 0, 1
+    /// attach sprite to transform playerId, playerId
+    /// box collider playerId, 0, 0, 32, 32
+    /// attach collider to transform playerId, playerId
+    ///
+    /// ` set up a coin pickup
+    /// coinId = 2
+    /// transform coinId, 300, 200
+    /// sprite coinId, 0, 0, 1
+    /// attach sprite to transform coinId, coinId
+    /// box collider coinId, 0, 0, 32, 32
+    /// attach collider to transform coinId, coinId
+    ///
+    /// set sync rate 16
+    /// score = 0
+    /// px = 0
+    /// DO
+    ///   ` walk the player toward the coin
+    ///   px = px + 2
+    ///   set transform position playerId, px, 200
+    ///
+    ///   ` sweep, then react to the player touching the pickup
+    ///   perform collider checks
+    ///   hit = get collision(playerId, coinId)
+    ///   IF hit = 1
+    ///     score = score + 10
+    ///     play sfx 1
+    ///     ` move the coin off screen so it stops colliding
+    ///     set transform position coinId, -100, -100
+    ///   ENDIF
+    ///
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="aColliderId">The ID of the first collider.</param>
@@ -272,14 +378,23 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Keep a collider glued to a rotating sprite's drawn bounds every frame:
     /// <code>
-    /// texture 1, "Images/Player"
+    /// ` load the ghost image and draw it as a sprite
+    /// texture 1, "ghost"
     /// sprite 1, 200, 200, 1
-    /// make collider 2, 0, 0, 1, 1
+    ///
+    /// ` create a tiny collider we will resize to fit the sprite each frame
+    /// box collider 2, 0, 0, 1, 1
+    ///
+    /// set sync rate 16
     /// angle = 0
     /// DO
+    ///   ` spin the sprite
     ///   angle = angle + 1
     ///   rotate sprite 1, angle
+    ///
+    ///   ` resize + reposition the collider to hug the rotated sprite
     ///   snap collider to sprite 2, 1
+    ///
     ///   sync
     /// LOOP
     /// </code>

@@ -19,9 +19,21 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Peek at the next tween ID before deciding whether to create one.
     /// <code>
-    /// ` check what the next tween ID would be
-    /// nextId = free tween id()
-    /// print nextId
+    /// ` load the ghost image and pick a frame rate
+    /// texture 1, "ghost"
+    /// set sync rate 16
+    ///
+    /// ` peek at what the next tween ID would be, then use it
+    /// nextId = free tween id(nextId)
+    /// create basic tween nextId, 0, 640, 1000, 0
+    /// sprite 1, 0, 240, 1
+    ///
+    /// DO
+    ///   ` drive the ghost with the tween we made on the peeked ID
+    ///   x = tweenVal(nextId)
+    ///   position sprite 1, x, 240
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="tweenId">Receives the next free tween ID.</param>
@@ -50,15 +62,31 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Reserve tween IDs for a staggered animation sequence.
     /// <code>
-    /// ` reserve three tween IDs for a multi-part intro
-    /// t1 = reserve tween id()
-    /// t2 = reserve tween id()
-    /// t3 = reserve tween id()
+    /// ` load the ghost image and pick a frame rate
+    /// texture 1, "ghost"
+    /// set sync rate 16
     ///
-    /// ` now configure them with staggered delays
+    /// ` reserve three tween IDs for a multi-part intro
+    /// t1 = reserve tween id(t1)
+    /// t2 = reserve tween id(t2)
+    /// t3 = reserve tween id(t3)
+    ///
+    /// ` now configure them with staggered delays (alpha 0..255)
     /// create basic tween t1, 0, 255, 500, 0
     /// create basic tween t2, 0, 255, 500, 200
     /// create basic tween t3, 0, 255, 500, 400
+    ///
+    /// ` three ghosts, each fading in on its own reserved tween
+    /// sprite 1, 200, 240, 1
+    /// sprite 2, 320, 240, 1
+    /// sprite 3, 440, 240, 1
+    ///
+    /// DO
+    ///   set sprite alpha 1, tweenVal(t1)
+    ///   set sprite alpha 2, tweenVal(t2)
+    ///   set sprite alpha 3, tweenVal(t3)
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="tweenId">Receives the reserved tween ID.</param>
@@ -94,15 +122,19 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Slide a sprite from left to right over one second.
     /// <code>
+    /// ` load the ghost image
+    /// texture 1, "ghost"
+    ///
     /// ` tween the X position from 0 to 640 in 1000ms
     /// tweenId = 1
     /// spriteId = 1
     /// create basic tween tweenId, 0, 640, 1000, 0
+    /// sprite spriteId, 0, 240, 1
     ///
     /// set sync rate 16
     /// DO
     ///   x = tweenVal(tweenId)
-    ///   set transform position spriteId, x, 240
+    ///   position sprite spriteId, x, 240
     ///   sync
     /// LOOP
     /// </code>
@@ -110,6 +142,11 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Fade in a sprite's alpha after a half-second delay.
     /// <code>
+    /// ` load the ghost image and show it
+    /// texture 1, "ghost"
+    /// spriteId = 1
+    /// sprite spriteId, 320, 240, 1
+    ///
     /// ` fade alpha from 0 to 255 over 800ms, starting after 500ms
     /// tweenId = 2
     /// create basic tween tweenId, 0, 255, 800, 500
@@ -164,10 +201,21 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Create a tween with a linear easing so it moves at constant speed.
     /// <code>
-    /// ` slide a sprite at constant speed
+    /// ` load the ghost image and show it
+    /// texture 1, "ghost"
+    /// sprite 1, 0, 240, 1
+    ///
+    /// ` slide a sprite at constant speed with linear easing
     /// tweenId = 1
     /// create basic tween tweenId, 0, 640, 2000, 0
     /// set tween easing tweenId, 0
+    ///
+    /// set sync rate 16
+    /// DO
+    ///   x = tweenVal(tweenId)
+    ///   position sprite 1, x, 240
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="tweenId">The ID of the tween.</param>
@@ -198,16 +246,20 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Make a sprite bob up and down forever with a ping-pong tween.
     /// <code>
+    /// ` load the ghost image and show it
+    /// texture 1, "ghost"
+    /// spriteId = 1
+    /// sprite spriteId, 320, 200, 1
+    ///
     /// ` bob between y=200 and y=240 over 1 second, repeating forever
     /// tweenId = 1
-    /// spriteId = 1
     /// create basic tween tweenId, 200, 240, 1000, 0
     /// set tween type tweenId, 2
     ///
     /// set sync rate 16
     /// DO
     ///   y = tweenVal(tweenId)
-    ///   set transform position spriteId, 320, y
+    ///   position sprite spriteId, 320, y
     ///   sync
     /// LOOP
     /// </code>
@@ -251,10 +303,17 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Use a tween to animate a transform's X position.
     /// <code>
-    /// ` smoothly slide an entity from x=50 to x=500
+    /// ` load the ghost image
+    /// texture 1, "ghost"
+    ///
+    /// ` smoothly slide a transform from x=50 to x=500
     /// tweenId = 1
     /// entityId = 1
     /// transform entityId, 50, 300
+    ///
+    /// ` attach a ghost sprite so the transform is visible
+    /// sprite 1, 50, 300, 1
+    /// attach sprite to transform 1, entityId
     /// create basic tween tweenId, 50, 500, 1500, 0
     ///
     /// set sync rate 16
@@ -268,7 +327,16 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Animate scale using two tweens at once.
     /// <code>
-    /// ` grow an entity from half-size to full-size
+    /// ` load the ghost image
+    /// texture 1, "ghost"
+    ///
+    /// ` a transform with a ghost sprite attached so scaling is visible
+    /// entityId = 1
+    /// transform entityId, 320, 240
+    /// sprite 1, 320, 240, 1
+    /// attach sprite to transform 1, entityId
+    ///
+    /// ` grow the transform from half-size to full-size
     /// tweenX = 1
     /// tweenY = 2
     /// create basic tween tweenX, 0.5, 1.0, 600, 0
@@ -311,15 +379,17 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Use the ratio to blend between two colors manually.
     /// <code>
-    /// ` blend from red to blue using the raw ratio
+    /// ` blend the background from red to blue using the raw ratio
     /// tweenId = 1
     /// create basic tween tweenId, 0, 1, 2000, 0
     ///
     /// set sync rate 16
     /// DO
     ///   r = tweenRatio(tweenId)
+    ///   ` feed the 0..1 ratio into our own color math
     ///   red = 255 * (1.0 - r)
     ///   blue = 255 * r
+    ///   set background color rgb(red, 0, blue)
     ///   sync
     /// LOOP
     /// </code>
@@ -351,18 +421,23 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Wait for a slide-in to finish, then print a message.
     /// <code>
-    /// ` slide a title in from the left
+    /// ` load a font and create the title text off-screen to the left
+    /// font 1, "font"
+    /// titleId = 1
+    /// text titleId, -200, 100, 1, "HELLO"
+    ///
+    /// ` slide the title in from the left
     /// tweenId = 1
     /// create basic tween tweenId, -200, 320, 1000, 0
     ///
     /// set sync rate 16
     /// DO
     ///   x = tweenVal(tweenId)
-    ///   set transform position titleId, x, 100
+    ///   set text position titleId, x, 100
     ///
     ///   done = is tween done(tweenId)
-    ///   IF done = 1 THEN
-    ///     print "title is in place!"
+    ///   IF done = 1
+    ///     set text titleId, "TITLE IS IN PLACE!"
     ///   ENDIF
     ///
     ///   sync
@@ -400,6 +475,9 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Wait for all UI tweens to finish before showing a menu.
     /// <code>
+    /// ` load the ghost image
+    /// texture 1, "ghost"
+    ///
     /// ` kick off three staggered fade-in tweens
     /// t1 = 1
     /// t2 = 2
@@ -408,11 +486,20 @@ public partial class FadeMonoGameCommands
     /// create basic tween t2, 0, 255, 400, 150
     /// create basic tween t3, 0, 255, 400, 300
     ///
+    /// ` three ghosts, each driven by one tween's alpha
+    /// sprite 1, 200, 240, 1
+    /// sprite 2, 320, 240, 1
+    /// sprite 3, 440, 240, 1
+    ///
     /// ` wait until all three are done
     /// set sync rate 16
     /// DO
+    ///   set sprite alpha 1, tweenVal(t1)
+    ///   set sprite alpha 2, tweenVal(t2)
+    ///   set sprite alpha 3, tweenVal(t3)
+    ///
     ///   running = any tweens running(t1, t2, t3)
-    ///   IF running = 0 THEN
+    ///   IF running = 0
     ///     print "all animations finished!"
     ///   ENDIF
     ///   sync

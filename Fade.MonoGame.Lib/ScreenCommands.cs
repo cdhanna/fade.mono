@@ -24,11 +24,21 @@ public partial class FadeMonoGameCommands
     /// ` configure screen size then go fullscreen
     /// set screen size 1920, 1080
     /// set fullscreen 1
+    /// ` load a sprite so the fullscreen result is visible on screen
+    /// texture 1, "ghost"
+    /// sprite 1, 400, 300, 1
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Toggle fullscreen on and off with the space key:
     /// <code>
+    /// ` load a sprite so there is something to see while toggling
+    /// texture 1, "ghost"
+    /// sprite 1, 400, 300, 1
     /// isFullscreen = 0
     /// set sync rate 16
     /// DO
@@ -75,6 +85,13 @@ public partial class FadeMonoGameCommands
     /// ` give the game window a title
     /// set window title "My Awesome Game"
     /// set screen size 1280, 720
+    /// ` show a sprite so the titled window stays open and visible
+    /// texture 1, "ghost"
+    /// sprite 1, 400, 300, 1
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="title">The title string to display in the window bar.</param>
@@ -102,6 +119,13 @@ public partial class FadeMonoGameCommands
     /// ELSE
     ///   set screen size 1280, 720
     /// ENDIF
+    /// ` show a sprite so the chosen resolution is visible
+    /// texture 1, "ghost"
+    /// sprite 1, 200, 200, 1
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <returns><c>1</c> if running on Windows, <c>0</c> otherwise.</returns>
@@ -125,10 +149,18 @@ public partial class FadeMonoGameCommands
     /// Adjust settings on macOS:
     /// <code>
     /// ` check if running on Mac and adjust accordingly
+    /// font 1, "font"
     /// IF is os mac() = 1
     ///   set screen size 1280, 800
-    ///   print "Running on macOS"
+    ///   text 1, 470, 200, 1, "Running on macOS"
     /// ENDIF
+    /// ` show a sprite so the adjusted window is visible
+    /// texture 1, "ghost"
+    /// sprite 1, 200, 200, 1
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <returns><c>1</c> if running on macOS, <c>0</c> otherwise.</returns>
@@ -157,8 +189,18 @@ public partial class FadeMonoGameCommands
     /// ` check the monitor's native resolution
     /// w = display width()
     /// h = display height()
-    /// print w
-    /// print h
+    /// ` draw the values on the canvas so they are visible
+    /// font 1, "font"
+    /// text 1, 470, 200, 1, "width " + str$(w)
+    /// text 2, 470, 240, 1, "height " + str$(h)
+    /// ` use the monitor width to place a sprite too
+    /// texture 1, "ghost"
+    /// sprite 1, 0, 0, 1
+    /// position sprite 1, w / 4, h / 4
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
@@ -168,6 +210,13 @@ public partial class FadeMonoGameCommands
     /// dw = display width()
     /// dh = display height()
     /// set screen size dw / 2, dh / 2
+    /// ` show a sprite so the resized window is visible
+    /// texture 1, "ghost"
+    /// sprite 1, 100, 100, 1
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <returns>The monitor width in pixels.</returns>
@@ -199,6 +248,13 @@ public partial class FadeMonoGameCommands
     /// ELSE
     ///   set screen size 1280, 720
     /// ENDIF
+    /// ` show a sprite so the chosen resolution is visible
+    /// texture 1, "ghost"
+    /// sprite 1, 100, 100, 1
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <returns>The monitor height in pixels.</returns>
@@ -224,12 +280,16 @@ public partial class FadeMonoGameCommands
     /// Center a sprite horizontally on screen:
     /// <code>
     /// ` place a sprite in the center of the screen
-    /// texture 1, "Images/Logo"
+    /// texture 1, "ghost"
     /// sprite 1, 0, 0, 1
     /// sw = screen width()
     /// w = texture width(1)
     /// xPos = (sw - w) / 2
     /// position sprite 1, xPos, 100
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <returns>The game's back buffer width in pixels.</returns>
@@ -254,12 +314,16 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Keep a sprite at the bottom of the screen:
     /// <code>
-    /// ` position a ground sprite at the bottom edge
-    /// texture 1, "Images/Ground"
+    /// ` position a sprite at the bottom edge of the screen
+    /// texture 1, "ghost"
     /// sprite 1, 0, 0, 1
     /// sh = screen height()
     /// h = texture height(1)
     /// position sprite 1, 0, sh - h
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <returns>The game's back buffer height in pixels.</returns>
@@ -294,6 +358,9 @@ public partial class FadeMonoGameCommands
     /// ` configure a 720p game window
     /// set window title "My Game"
     /// set screen size 1280, 720
+    /// ` show a sprite so the sized window has something to draw
+    /// texture 1, "ghost"
+    /// sprite 1, 400, 300, 1
     /// set sync rate 16
     /// DO
     ///   sync
@@ -307,6 +374,13 @@ public partial class FadeMonoGameCommands
     /// dw = display width()
     /// dh = display height()
     /// set screen size dw, dh
+    /// ` show a sprite so the borderless window is visible
+    /// texture 1, "ghost"
+    /// sprite 1, 100, 100, 1
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="width">Desired window width in pixels. Typical values are <c>640</c>, <c>1280</c>, or <c>1920</c>.</param>

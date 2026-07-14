@@ -40,10 +40,16 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Toggle the whole gizmo overlay with the G key:
     /// <code>
+    /// ` load a ghost and outline it with a sprite gizmo
+    /// texture 1, "ghost"
+    /// sprite 1, 200, 200, 1
+    /// enable sprite gizmo 1
+    /// ` start with the whole overlay hidden
     /// disable gizmos
     /// shown = 0
+    /// gKey = scanCode("G")
     /// DO
-    ///   IF key hit(scancode("G")) = 1
+    ///   IF new key down(gKey) = 1
     ///     IF shown = 0
     ///       enable gizmos
     ///       shown = 1
@@ -84,7 +90,15 @@ public partial class FadeMonoGameCommands
     /// Hide all gizmos before shipping but leave them ready to flip
     /// back on for support purposes:
     /// <code>
+    /// ` load a ghost and outline it with a sprite gizmo
+    /// texture 1, "ghost"
+    /// sprite 1, 200, 200, 1
+    /// enable sprite gizmo 1
+    /// ` hide every gizmo, but keep the per-sprite setup ready
     /// disable gizmos
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <seealso cref="EnableGizmos">enable gizmos</seealso>
@@ -115,8 +129,10 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Outline a sprite so you can see its bounds while moving it around:
     /// <code>
-    /// texture 1, "Images/Player"
+    /// ` load the ghost image and draw it as a sprite
+    /// texture 1, "ghost"
     /// sprite 1, 200, 200, 1
+    /// ` outline the sprite so you can see its bounds
     /// enable sprite gizmo 1
     /// DO
     ///   position sprite 1, mouse x(), mouse y()
@@ -127,8 +143,13 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Enable a thicker red outline in one call:
     /// <code>
+    /// texture 1, "ghost"
+    /// sprite 1, 200, 200, 1
     /// ` thickness 3, red opaque
     /// enable sprite gizmo 1, 3, rgb(255, 0, 0)
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to outline. Must have been created with <see cref="Sprite">sprite</see>.</param>
@@ -167,11 +188,12 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Toggle a sprite's gizmo with a key press:
     /// <code>
-    /// texture 1, "Images/Player"
+    /// texture 1, "ghost"
     /// sprite 1, 200, 200, 1
     /// showing = 0
+    /// gKey = scanCode("G")
     /// DO
-    ///   IF key hit(scancode("G")) = 1
+    ///   IF new key down(gKey) = 1
     ///     IF showing = 0
     ///       enable sprite gizmo 1
     ///       showing = 1
@@ -207,10 +229,11 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Toggle a sprite's gizmo without tracking the on/off state yourself:
     /// <code>
-    /// texture 1, "Images/Player"
+    /// texture 1, "ghost"
     /// sprite 1, 200, 200, 1
+    /// gKey = scanCode("G")
     /// DO
-    ///   IF key hit(scancode("G")) = 1
+    ///   IF new key down(gKey) = 1
     ///     IF get sprite gizmo enabled(1) = 1
     ///       disable sprite gizmo 1
     ///     ELSE
@@ -246,10 +269,14 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Tint a sprite's outline red:
     /// <code>
-    /// texture 1, "Images/Enemy"
+    /// texture 1, "ghost"
     /// sprite 1, 100, 100, 1
     /// enable sprite gizmo 1
+    /// ` tint the outline red to mark it as an enemy
     /// set sprite gizmo color 1, rgb(255, 0, 0)
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite whose gizmo should change color.</param>
@@ -281,10 +308,14 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Give a player sprite a thicker outline than the rest:
     /// <code>
-    /// texture 1, "Images/Player"
+    /// texture 1, "ghost"
     /// sprite 1, 200, 200, 1
     /// enable sprite gizmo 1
+    /// ` make this outline 3 pixels wide so it stands out
     /// set sprite gizmo thickness 1, 3.0
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite whose gizmo thickness should change.</param>
@@ -321,18 +352,26 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Show a collider outline next to its sprite to confirm they line up:
     /// <code>
-    /// texture 1, "Images/Player"
+    /// texture 1, "ghost"
     /// sprite 1, 200, 200, 1
     /// enable sprite gizmo 1
+    /// ` add a hitbox and outline it too, so you can compare the two
     /// box collider 1, 200, 200, 32, 32
     /// enable collider gizmo 1
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Enable a thicker green outline in one call:
     /// <code>
     /// box collider 5, 100, 100, 32, 32
+    /// ` thickness 2, green opaque
     /// enable collider gizmo 5, 2, rgb(0, 255, 0)
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="colliderId">The collider to outline. Must have been created with <see cref="CreateBoxCollider">box collider</see>.</param>
@@ -371,8 +410,9 @@ public partial class FadeMonoGameCommands
     /// <code>
     /// box collider 1, 100, 100, 32, 32
     /// showing = 0
+    /// cKey = scanCode("C")
     /// DO
-    ///   IF key hit(scancode("C")) = 1
+    ///   IF new key down(cKey) = 1
     ///     IF showing = 0
     ///       enable collider gizmo 1
     ///       showing = 1
@@ -409,8 +449,9 @@ public partial class FadeMonoGameCommands
     /// Show or hide a collider's outline depending on whether it's currently visible:
     /// <code>
     /// box collider 1, 100, 100, 32, 32
+    /// cKey = scanCode("C")
     /// DO
-    ///   IF key hit(scancode("C")) = 1
+    ///   IF new key down(cKey) = 1
     ///     IF get collider gizmo enabled(1) = 1
     ///       disable collider gizmo 1
     ///     ELSE
@@ -448,7 +489,11 @@ public partial class FadeMonoGameCommands
     /// <code>
     /// box collider 5, 300, 200, 64, 16
     /// enable collider gizmo 5
+    /// ` tint the hazard hitbox red
     /// set collider gizmo color 5, rgb(255, 0, 0)
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="colliderId">The collider whose gizmo should change color.</param>
@@ -482,7 +527,11 @@ public partial class FadeMonoGameCommands
     /// <code>
     /// box collider 1, 100, 100, 32, 32
     /// enable collider gizmo 1
+    /// ` make this hitbox outline 3 pixels wide
     /// set collider gizmo thickness 1, 3.0
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="colliderId">The collider whose gizmo thickness should change.</param>
@@ -519,16 +568,25 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Outline some text so you can see where its bounds actually land:
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 100, 1, "hello"
+    /// font 1, "font"
+    /// text 1, 550, 280, 1, "hello"
+    /// ` outline the measured text bounds
     /// enable text gizmo 1
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Enable a thicker yellow outline in one call:
     /// <code>
-    /// text 2, 200, 200, 1, "warning"
+    /// font 1, "font"
+    /// text 2, 650, 380, 1, "warning"
+    /// ` thickness 2, yellow opaque
     /// enable text gizmo 2, 2, rgb(255, 255, 0)
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite to outline. Must have been created with the <c>text</c> command.</param>
@@ -564,11 +622,12 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Toggle a text gizmo with a key press:
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 100, 1, "hello"
+    /// font 1, "font"
+    /// text 1, 550, 280, 1, "hello"
     /// showing = 0
+    /// tKey = scanCode("T")
     /// DO
-    ///   IF key hit(scancode("T")) = 1
+    ///   IF new key down(tKey) = 1
     ///     IF showing = 0
     ///       enable text gizmo 1
     ///       showing = 1
@@ -604,10 +663,11 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Toggle a text label's outline without tracking the on/off state yourself:
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 100, 1, "hello"
+    /// font 1, "font"
+    /// text 1, 550, 280, 1, "hello"
+    /// tKey = scanCode("T")
     /// DO
-    ///   IF key hit(scancode("T")) = 1
+    ///   IF new key down(tKey) = 1
     ///     IF get text gizmo enabled(1) = 1
     ///       disable text gizmo 1
     ///     ELSE
@@ -643,10 +703,14 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Tint a debug label's outline cyan:
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 100, 1, "score: 0"
+    /// font 1, "font"
+    /// text 1, 550, 280, 1, "score: 0"
     /// enable text gizmo 1
+    /// ` tint the label outline cyan
     /// set text gizmo color 1, rgb(0, 255, 255)
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite whose gizmo should change color.</param>
@@ -678,10 +742,14 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Give a header label a thicker outline:
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 100, 1, "level 1"
+    /// font 1, "font"
+    /// text 1, 550, 280, 1, "level 1"
     /// enable text gizmo 1
+    /// ` make the header outline 2 pixels wide
     /// set text gizmo thickness 1, 2.0
+    /// DO
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite whose gizmo thickness should change.</param>
@@ -725,11 +793,12 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Draw a line from the player to the mouse cursor every frame:
     /// <code>
-    /// texture 1, "Images/Player"
+    /// texture 1, "ghost"
     /// sprite 1, 200, 200, 1
     /// DO
     ///   px = sprite x(1)
     ///   py = sprite y(1)
+    ///   ` draw a line from the ghost to the mouse cursor
     ///   gizmo line px, py, mouse x(), mouse y()
     ///   sync
     /// LOOP

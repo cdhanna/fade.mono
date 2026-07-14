@@ -27,8 +27,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Track the mouse and position a cursor sprite on it each frame:
     /// <code>
-    /// ` load a cursor texture and create a sprite for it
-    /// texture 1, "Images/Cursor"
+    /// ` load the ghost texture and create a cursor sprite for it
+    /// texture 1, "ghost"
     /// sprite 1, 0, 0, 1
     ///
     /// DO
@@ -75,7 +75,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Check if the mouse is inside a rectangular region:
     /// <code>
-    /// ` define a button area
+    /// ` load a font so we can show a label, and define a button area
+    /// font 1, "font"
     /// btnX = 100
     /// btnY = 200
     /// btnW = 120
@@ -85,10 +86,13 @@ public partial class FadeMonoGameCommands
     ///   mx = mouse x()
     ///   my = mouse y()
     ///
-    ///   ` check if mouse is inside the button
+    ///   ` always show the button label
+    ///   text 1, btnX, btnY, 1, "BUTTON"
+    ///
+    ///   ` check if mouse is inside the button using mouse y
     ///   IF mx &gt;= btnX AND mx &lt;= btnX + btnW
     ///     IF my &gt;= btnY AND my &lt;= btnY + btnH
-    ///       text 10, 10, "Hovering over button!"
+    ///       text 2, 460, 190, 1, "Hovering over button!"
     ///     ENDIF
     ///   ENDIF
     ///
@@ -130,12 +134,19 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Draw a trail of dots while the player holds the left mouse button:
     /// <code>
+    /// ` load the ghost texture and create a sprite that follows drags
+    /// texture 1, "ghost"
+    /// sprite 1, 160, 120, 1
+    /// x = 160
+    /// y = 120
+    ///
     /// DO
+    ///   ` while the left button is held, drag the ghost to the cursor
     ///   IF left click() = 1
-    ///     mx = mouse x()
-    ///     my = mouse y()
-    ///     dot mx, my
+    ///     x = mouse x()
+    ///     y = mouse y()
     ///   ENDIF
+    ///   sprite 1, x, y, 1
     ///   sync
     /// LOOP
     /// </code>
@@ -143,10 +154,13 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Hold the left button to charge a power meter:
     /// <code>
+    /// ` load a font so we can show the power meter
+    /// font 1, "font"
     /// power = 0
     /// maxPower = 100
     ///
     /// DO
+    ///   ` hold the left button to charge, release to reset
     ///   IF left click() = 1
     ///     IF power &lt; maxPower
     ///       power = power + 1
@@ -155,7 +169,7 @@ public partial class FadeMonoGameCommands
     ///     power = 0
     ///   ENDIF
     ///
-    ///   text 10, 10, "Power: " + str$(power)
+    ///   text 1, 460, 190, 1, "Power: " + str$(power)
     ///   sync
     /// LOOP
     /// </code>
@@ -186,6 +200,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Click a button to start the game:
     /// <code>
+    /// ` load a font for the button and status labels
+    /// font 1, "font"
     /// btnX = 100
     /// btnY = 200
     /// btnW = 120
@@ -197,7 +213,7 @@ public partial class FadeMonoGameCommands
     ///   my = mouse y()
     ///
     ///   IF started = 0
-    ///     text btnX + 10, btnY + 10, "Start Game"
+    ///     text 1, btnX + 10, btnY + 10, 1, "Start Game"
     ///
     ///     ` only fires once per click, so we won't skip frames
     ///     IF new left click() = 1
@@ -208,7 +224,7 @@ public partial class FadeMonoGameCommands
     ///       ENDIF
     ///     ENDIF
     ///   ELSE
-    ///     text 10, 10, "Game is running!"
+    ///     text 1, 460, 190, 1, "Game is running!"
     ///   ENDIF
     ///
     ///   sync
@@ -247,6 +263,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Use right click to place a waypoint at the mouse position:
     /// <code>
+    /// ` load a font so we can mark the waypoint
+    /// font 1, "font"
     /// wpX = 0
     /// wpY = 0
     /// hasWaypoint = 0
@@ -259,7 +277,7 @@ public partial class FadeMonoGameCommands
     ///   ENDIF
     ///
     ///   IF hasWaypoint = 1
-    ///     text wpX, wpY, "X"
+    ///     text 1, wpX, wpY, 1, "X"
     ///   ENDIF
     ///
     ///   sync
@@ -292,8 +310,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Move a sprite up and down with the arrow keys:
     /// <code>
-    /// ` load a player texture and create a sprite for it
-    /// texture 1, "Images/Player"
+    /// ` load the ghost texture and create a sprite for it
+    /// texture 1, "ghost"
     /// sprite 1, 160, 120, 1
     /// px = 160
     /// py = 120
@@ -335,6 +353,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Scroll a camera offset down while the key is held:
     /// <code>
+    /// ` load a font so we can show the camera offset
+    /// font 1, "font"
     /// camY = 0
     /// scrollSpeed = 2
     ///
@@ -342,7 +362,7 @@ public partial class FadeMonoGameCommands
     ///   camY = camY + downkey() * scrollSpeed
     ///   camY = camY - upkey() * scrollSpeed
     ///
-    ///   text 10, 10, "Camera Y: " + str$(camY)
+    ///   text 1, 460, 190, 1, "Camera Y: " + str$(camY)
     ///   sync
     /// LOOP
     /// </code>
@@ -373,6 +393,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Move a character left and right with arrow keys:
     /// <code>
+    /// ` load a font so we can draw the character
+    /// font 1, "font"
     /// px = 160
     /// speed = 4
     ///
@@ -380,7 +402,7 @@ public partial class FadeMonoGameCommands
     ///   px = px + rightKey() * speed
     ///   px = px - leftKey() * speed
     ///
-    ///   text px, 120, "@"
+    ///   text 1, px, 120, 1, "@"
     ///   sync
     /// LOOP
     /// </code>
@@ -411,8 +433,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Full four-direction movement using all arrow keys:
     /// <code>
-    /// ` load a player texture and create a sprite for it
-    /// texture 1, "Images/Player"
+    /// ` load the ghost texture and create a sprite for it
+    /// texture 1, "ghost"
     /// sprite 1, 160, 120, 1
     /// px = 160
     /// py = 120
@@ -459,6 +481,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Hold space to boost speed:
     /// <code>
+    /// ` load a font so we can draw the arrow
+    /// font 1, "font"
     /// px = 0
     /// baseSpeed = 2
     /// boostSpeed = 6
@@ -474,7 +498,7 @@ public partial class FadeMonoGameCommands
     ///   px = px + rightKey() * speed
     ///   px = px - leftKey() * speed
     ///
-    ///   text px, 120, ">"
+    ///   text 1, px, 120, 1, ">"
     ///   sync
     /// LOOP
     /// </code>
@@ -508,6 +532,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Navigate a menu with up and down arrow keys (one step per press):
     /// <code>
+    /// ` load a font so we can draw the menu
+    /// font 1, "font"
     /// menuIndex = 0
     /// menuCount = 3
     ///
@@ -531,9 +557,9 @@ public partial class FadeMonoGameCommands
     ///   ` draw menu items
     ///   FOR i = 0 TO menuCount - 1
     ///     IF i = menuIndex
-    ///       text 20, 40 + i * 20, "> Option " + str$(i)
+    ///       text i + 1, 20, 40 + i * 20, 1, "> Option " + str$(i)
     ///     ELSE
-    ///       text 20, 40 + i * 20, "  Option " + str$(i)
+    ///       text i + 1, 20, 40 + i * 20, 1, "  Option " + str$(i)
     ///     ENDIF
     ///   NEXT i
     ///
@@ -564,6 +590,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Step through a list of items one at a time:
     /// <code>
+    /// ` load a font so we can show the selection
+    /// font 1, "font"
     /// selected = 0
     /// total = 5
     ///
@@ -574,7 +602,7 @@ public partial class FadeMonoGameCommands
     ///     ENDIF
     ///   ENDIF
     ///
-    ///   text 10, 10, "Selected: " + str$(selected) + " of " + str$(total)
+    ///   text 1, 460, 190, 1, "Selected: " + str$(selected) + " of " + str$(total)
     ///   sync
     /// LOOP
     /// </code>
@@ -602,6 +630,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Cycle through tabs with left and right arrows:
     /// <code>
+    /// ` load a font so we can show the active tab
+    /// font 1, "font"
     /// tab = 0
     /// tabCount = 4
     ///
@@ -620,7 +650,7 @@ public partial class FadeMonoGameCommands
     ///     ENDIF
     ///   ENDIF
     ///
-    ///   text 10, 10, "Tab: " + str$(tab)
+    ///   text 1, 460, 190, 1, "Tab: " + str$(tab)
     ///   sync
     /// LOOP
     /// </code>
@@ -648,6 +678,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Go back one page in a book viewer:
     /// <code>
+    /// ` load a font so we can show the page number
+    /// font 1, "font"
     /// page = 0
     /// maxPage = 10
     ///
@@ -664,7 +696,7 @@ public partial class FadeMonoGameCommands
     ///     ENDIF
     ///   ENDIF
     ///
-    ///   text 10, 10, "Page " + str$(page) + " of " + str$(maxPage)
+    ///   text 1, 460, 190, 1, "Page " + str$(page) + " of " + str$(maxPage)
     ///   sync
     /// LOOP
     /// </code>
@@ -692,6 +724,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Press space to jump (one jump per press):
     /// <code>
+    /// ` load a font so we can draw the jumper
+    /// font 1, "font"
     /// py = 200
     /// vy = 0
     /// gravity = 1
@@ -715,7 +749,7 @@ public partial class FadeMonoGameCommands
     ///     vy = 0
     ///   ENDIF
     ///
-    ///   text 160, py, "O"
+    ///   text 1, 160, py, 1, "O"
     ///   sync
     /// LOOP
     /// </code>
@@ -749,12 +783,13 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Press E to interact with something:
     /// <code>
-    /// ` get the scan code for E once at startup
+    /// ` load a font, and get the scan code for E once at startup
+    /// font 1, "font"
     /// eKey = scanCode("E")
     ///
     /// DO
     ///   IF new key down(eKey) = 1
-    ///     text 10, 10, "Interacted!"
+    ///     text 1, 460, 190, 1, "Interacted!"
     ///   ENDIF
     ///   sync
     /// LOOP
@@ -763,6 +798,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Press Escape to toggle a pause menu:
     /// <code>
+    /// ` load a font so we can show the pause state
+    /// font 1, "font"
     /// escKey = scanCode("Escape")
     /// paused = 0
     ///
@@ -776,9 +813,9 @@ public partial class FadeMonoGameCommands
     ///   ENDIF
     ///
     ///   IF paused = 1
-    ///     text 100, 100, "PAUSED"
+    ///     text 1, 550, 280, 1, "PAUSED"
     ///   ELSE
-    ///     text 100, 100, "Playing..."
+    ///     text 1, 550, 280, 1, "Playing..."
     ///   ENDIF
     ///
     ///   sync
@@ -815,7 +852,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// WASD movement using scan codes:
     /// <code>
-    /// ` look up scan codes once at startup
+    /// ` load a font, then look up scan codes once at startup
+    /// font 1, "font"
     /// wKey = scanCode("W")
     /// aKey = scanCode("A")
     /// sKey = scanCode("S")
@@ -831,7 +869,7 @@ public partial class FadeMonoGameCommands
     ///   px = px - key down(aKey) * speed
     ///   px = px + key down(dKey) * speed
     ///
-    ///   text px, py, "@"
+    ///   text 1, px, py, 1, "@"
     ///   sync
     /// LOOP
     /// </code>
@@ -839,6 +877,8 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Hold shift to sprint:
     /// <code>
+    /// ` load a font so we can draw the runner
+    /// font 1, "font"
     /// shiftKey = scanCode("LeftShift")
     /// px = 0
     ///
@@ -852,7 +892,7 @@ public partial class FadeMonoGameCommands
     ///   px = px + rightKey() * speed
     ///   px = px - leftKey() * speed
     ///
-    ///   text px, 120, ">"
+    ///   text 1, px, 120, 1, ">"
     ///   sync
     /// LOOP
     /// </code>
@@ -889,22 +929,23 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Store scan codes at startup and use them in the game loop:
     /// <code>
-    /// ` resolve scan codes once
+    /// ` load a font, then resolve scan codes once
+    /// font 1, "font"
     /// jumpKey = scanCode("Space")
     /// shootKey = scanCode("Z")
     /// pauseKey = scanCode("Escape")
     ///
     /// DO
     ///   IF new key down(jumpKey) = 1
-    ///     text 10, 10, "Jump!"
+    ///     text 1, 460, 190, 1, "Jump!"
     ///   ENDIF
     ///
     ///   IF key down(shootKey) = 1
-    ///     text 10, 30, "Shooting..."
+    ///     text 2, 460, 210, 1, "Shooting..."
     ///   ENDIF
     ///
     ///   IF new key down(pauseKey) = 1
-    ///     text 10, 50, "Paused"
+    ///     text 3, 460, 230, 1, "Paused"
     ///   ENDIF
     ///
     ///   sync
@@ -914,6 +955,9 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Check number keys to select inventory slots:
     /// <code>
+    /// ` load a font, then resolve the number-key scan codes once
+    /// font 1, "font"
+    /// DIM slotKey(9)
     /// ` D1 through D9 are the number row keys
     /// FOR i = 1 TO 9
     ///   slotKey(i) = scanCode("D" + str$(i))
@@ -928,7 +972,7 @@ public partial class FadeMonoGameCommands
     ///     ENDIF
     ///   NEXT i
     ///
-    ///   text 10, 10, "Active slot: " + str$(slot)
+    ///   text 1, 460, 190, 1, "Active slot: " + str$(slot)
     ///   sync
     /// LOOP
     /// </code>
@@ -1012,13 +1056,14 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Highlight a button sprite while the mouse hovers it:
     /// <code>
-    /// texture 1, "Images/Button"
+    /// ` load the ghost texture and use it as a hoverable button
+    /// texture 1, "ghost"
     /// sprite 1, 100, 100, 1
     /// DO
     ///   IF mouse over sprite(1) = 1
-    ///     color sprite 1, 255, 255, 128
+    ///     color sprite 1, rgb(255, 255, 128)
     ///   ELSE
-    ///     color sprite 1, 255, 255, 255
+    ///     color sprite 1, rgb(255, 255, 255)
     ///   ENDIF
     ///   sync
     /// LOOP
@@ -1109,33 +1154,56 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Hit-test a touch point against several buttons:
     /// <code>
-    /// touchX = 200.0
-    /// touchY = 150.0
+    /// ` load the ghost texture and lay out five button sprites
+    /// texture 1, "ghost"
+    /// font 1, "font"
     /// FOR i = 1 TO 5
-    ///   IF point over sprite(i, touchX, touchY) = 1
-    ///     print "tapped button "; i
-    ///   ENDIF
+    ///   sprite i, i * 60, 100, 1
     /// NEXT i
+    ///
+    /// DO
+    ///   ` use the live cursor position as the test point
+    ///   touchX = mouse x()
+    ///   touchY = mouse y()
+    ///   FOR i = 1 TO 5
+    ///     IF point over sprite(i, touchX, touchY) = 1
+    ///       text i, i * 60, 60, 1, "tapped " + str$(i)
+    ///     ENDIF
+    ///   NEXT i
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// AI "can I see the player?" check by sampling a ray every few pixels:
     /// <code>
+    /// ` load the ghost texture and place a wall sprite to test against
+    /// texture 1, "ghost"
+    /// font 1, "font"
+    /// wallSpriteId = 1
+    /// sprite wallSpriteId, 300, 200, 1
+    ///
     /// rayX = 100.0
     /// rayY = 100.0
     /// targetX = 400.0
     /// targetY = 300.0
     /// dx = (targetX - rayX) / 20.0
     /// dy = (targetY - rayY) / 20.0
-    /// blocked = 0
-    /// FOR step = 1 TO 20
-    ///   px = rayX + dx * step
-    ///   py = rayY + dy * step
-    ///   IF point over sprite(wallSpriteId, px, py) = 1
-    ///     blocked = 1
-    ///     EXIT
-    ///   ENDIF
-    /// NEXT step
+    ///
+    /// DO
+    ///   blocked = 0
+    ///   FOR s = 1 TO 20
+    ///     px = rayX + dx * s
+    ///     py = rayY + dy * s
+    ///     IF point over sprite(wallSpriteId, px, py) = 1
+    ///       blocked = 1
+    ///       EXIT
+    ///     ENDIF
+    ///   NEXT s
+    ///
+    ///   text 2, 460, 190, 1, "blocked: " + str$(blocked)
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="spriteId">The sprite to test against.</param>
@@ -1174,10 +1242,14 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Detect clicks inside a free-floating button collider:
     /// <code>
-    /// make collider 1, 50, 50, 200, 80
+    /// ` load a font and make a free-floating button collider
+    /// font 1, "font"
+    /// box collider 1, 50, 50, 200, 80
     /// DO
+    ///   ` always label the button area
+    ///   text 1, 510, 260, 1, "CLICK ME"
     ///   IF mouse over collider(1) = 1 AND new left click() = 1
-    ///     print "clicked!"
+    ///     text 2, 510, 330, 1, "clicked!"
     ///   ENDIF
     ///   sync
     /// LOOP
@@ -1241,31 +1313,52 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Check whether a touch point lands on any of several pickup colliders:
     /// <code>
-    /// touchX = 200.0
-    /// touchY = 150.0
+    /// ` load a font and make five pickup colliders in a row
+    /// font 1, "font"
     /// FOR id = 1 TO 5
-    ///   IF point over collider(id, touchX, touchY) = 1
-    ///     print "tapped pickup "; id
-    ///   ENDIF
+    ///   box collider id, id * 60, 100, 40, 40
     /// NEXT id
+    ///
+    /// DO
+    ///   ` use the live cursor position as the test point
+    ///   touchX = mouse x()
+    ///   touchY = mouse y()
+    ///   FOR id = 1 TO 5
+    ///     IF point over collider(id, touchX, touchY) = 1
+    ///       text id, id * 60, 60, 1, "tapped " + str$(id)
+    ///     ENDIF
+    ///   NEXT id
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Walk a vector forward in small steps to find the first collider along the way:
     /// <code>
+    /// ` load a font and make a wall collider to test against
+    /// font 1, "font"
+    /// wallColliderId = 1
+    /// box collider wallColliderId, 200, 90, 40, 40
+    ///
     /// rayX = 100.0
     /// rayY = 100.0
     /// dx = 4.0
     /// dy = 0.0
-    /// hitId = 0
-    /// FOR step = 1 TO 80
-    ///   px = rayX + dx * step
-    ///   py = rayY + dy * step
-    ///   IF point over collider(wallColliderId, px, py) = 1
-    ///     hitId = wallColliderId
-    ///     EXIT
-    ///   ENDIF
-    /// NEXT step
+    ///
+    /// DO
+    ///   hitId = 0
+    ///   FOR s = 1 TO 80
+    ///     px = rayX + dx * s
+    ///     py = rayY + dy * s
+    ///     IF point over collider(wallColliderId, px, py) = 1
+    ///       hitId = wallColliderId
+    ///       EXIT
+    ///     ENDIF
+    ///   NEXT s
+    ///
+    ///   text 2, 460, 190, 1, "hitId: " + str$(hitId)
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="colliderId">The collider to test against.</param>

@@ -42,7 +42,12 @@ public static class GameReloader
     
     public static string? GetCsprojPath([CallerFilePath] string callerFilePath = "")
     {
-#if DEBUG && !BROWSER
+        // NOTE: gate only on !BROWSER, not DEBUG. This method ships in the engine
+        // package, which is packed -c Release, so a `#if DEBUG` here compiles the
+        // whole lookup out and the method becomes `return null` for every consumer
+        // (that's why the template uses GameReloader.GetRoot() instead). The caller
+        // decides when to invoke it (Debug-only via their FADE_CONTENT_HOTRELOAD).
+#if !BROWSER
         var dir = Path.GetDirectoryName(callerFilePath);
 
         while (dir != null && Directory.Exists(dir))

@@ -23,19 +23,33 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Print a simple message and a variable:
     /// <code>
-    /// ` print a greeting and the player's score
+    /// ` print writes each value to the console on its own line
     /// score = 42
     /// print "hello world"
     /// print score
+    /// ` load a font so we can also show the score on the game canvas
+    /// font 1, "font"
+    /// set sync rate 16
+    /// DO
+    ///   ` keep printing the score to the console every frame
+    ///   print score
+    ///   ` and draw a label on the canvas so something is visible
+    ///   text 1, 100, 100, 1, "SCORE 42"
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Timestamp debug output with <see cref="GameTime">game ms</see>:
     /// <code>
     /// set sync rate 16
+    /// ` load a font so the timestamp is visible on the canvas too
+    /// font 1, "font"
     /// DO
+    ///   ` game ms() gives a fresh timestamp every frame
     ///   t = game ms()
     ///   print t
+    ///   text 1, 100, 100, 1, "RUNNING"
     ///   sync
     /// LOOP
     /// </code>
@@ -74,7 +88,7 @@ public partial class FadeMonoGameCommands
     /// <code>
     /// ` move a sprite based on elapsed time
     /// set sync rate 16
-    /// texture 1, "Images/Ship"
+    /// texture 1, "ghost"
     /// sprite 1, 0, 100, 1
     /// DO
     ///   t = game ms()
@@ -89,12 +103,17 @@ public partial class FadeMonoGameCommands
     /// <code>
     /// ` count down from 5 seconds
     /// set sync rate 16
+    /// ` load a font so the countdown is visible on the canvas
+    /// font 1, "font"
     /// startTime = game ms()
     /// DO
     ///   elapsed = game ms() - startTime
     ///   remaining = 5000 - elapsed
-    ///   IF remaining &lt; 0 THEN remaining = 0
+    ///   IF remaining &lt; 0
+    ///     remaining = 0
+    ///   ENDIF
     ///   print remaining
+    ///   text 1, 100, 100, 1, "COUNTDOWN"
     ///   sync
     /// LOOP
     /// </code>
@@ -110,6 +129,12 @@ public partial class FadeMonoGameCommands
     public static double GameTime()
     {
         return GameSystem.latestTime.TotalGameTime.TotalMilliseconds;
+    }
+
+    [FadeBasicCommand("go kaboom")]
+    public static void Throw()
+    {
+        throw new InvalidOperationException("Kaboom!");
     }
     
 }

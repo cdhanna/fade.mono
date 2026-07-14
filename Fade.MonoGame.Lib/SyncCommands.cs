@@ -26,19 +26,33 @@ public partial class FadeMonoGameCommands
     /// <code>
     /// ` set up a 60 fps game loop
     /// set sync rate 16
+    /// ` load a texture and place a sprite to draw each frame
+    /// texture 1, "ghost"
+    /// sprite 1, 320, 240, 1
     /// DO
     ///   ` game logic goes here
+    ///   sprite 1, 320, 240, 1
+    ///   ` present this frame
     ///   sync
     /// LOOP
     /// </code>
     /// </example>
     /// <example>
-    /// Switch to a slower frame rate for a cutscene:
+    /// Switch to a slower frame rate for a cutscene, then back to normal:
     /// <code>
-    /// ` run at 30 fps during a cutscene, then switch back
+    /// ` load a texture so we have something on screen
+    /// texture 1, "ghost"
+    /// x = 0
+    /// ` start the cutscene at 30 fps
     /// set sync rate 33
-    /// ` ... play cutscene ...
-    /// set sync rate 16
+    /// DO
+    ///   x = x + 2
+    ///   ` after the ghost drifts past the middle, speed the loop back up
+    ///   IF x &gt; 320 THEN set sync rate 16
+    ///   sprite 1, x, 240, 1
+    ///   ` present this frame
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="rate">Target elapsed time per frame, in milliseconds. Common values: <c>16</c> (~60 fps), <c>33</c> (~30 fps).</param>
@@ -72,12 +86,13 @@ public partial class FadeMonoGameCommands
     /// <code>
     /// ` move a sprite to the right, one pixel per frame
     /// set sync rate 16
-    /// texture 1, "Images/Ball"
+    /// texture 1, "ghost"
     /// sprite 1, 0, 100, 1
     /// x = 0
     /// DO
     ///   x = x + 1
     ///   sprite 1, x, 100, 1
+    ///   ` present this frame so the movement is visible
     ///   sync
     /// LOOP
     /// </code>
@@ -123,29 +138,36 @@ public partial class FadeMonoGameCommands
     /// <see cref="GameTime">game ms</see>.
     /// </remarks>
     /// <example>
-    /// Cycle a sprite image every 10 frames:
+    /// Hop a sprite between two spots every 10 frames using the frame counter:
     /// <code>
-    /// ` swap between two images every 10 frames
+    /// ` load a texture to animate
     /// set sync rate 16
-    /// texture 1, "Images/Frame1"
-    /// texture 2, "Images/Frame2"
+    /// texture 1, "ghost"
     /// sprite 1, 100, 100, 1
     /// DO
     ///   f = frame number()
-    ///   ` switch image every 10 frames
-    ///   img = (f / 10) mod 2 + 1
-    ///   sprite 1, 100, 100, img
+    ///   ` switch position every 10 frames (alternates 0 then 1)
+    ///   s = (f / 10) mod 2
+    ///   x = 100 + s * 80
+    ///   sprite 1, x, 100, 1
+    ///   ` present this frame
     ///   sync
     /// LOOP
     /// </code>
     /// </example>
     /// <example>
-    /// Trigger an event after 120 frames:
+    /// Trigger an event after 120 frames, showing the result on screen:
     /// <code>
     /// set sync rate 16
+    /// ` load a font so we can draw a message
+    /// font 1, "font"
+    /// msg$ = "waiting..."
     /// DO
     ///   f = frame number()
-    ///   IF f = 120 THEN print "two seconds have passed!"
+    ///   ` after 120 frames (~2 seconds at 60 fps) change the message
+    ///   IF f = 120 THEN msg$ = "two seconds have passed!"
+    ///   text 1, 100, 100, 1, msg$
+    ///   ` present this frame
     ///   sync
     /// LOOP
     /// </code>

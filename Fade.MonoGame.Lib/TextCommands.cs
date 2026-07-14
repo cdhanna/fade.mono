@@ -21,9 +21,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Check what the next text ID will be before creating it.
     /// <code>
-    /// ` peek at the next available text ID
-    /// nextId = free text id()
-    /// print "Next text ID will be: " + str(nextId)
+    /// ` load a font so we can draw the result on screen
+    /// font 1, "font"
+    /// ` peek at the next available text ID (this does not reserve it)
+    /// free text id(nextId)
+    /// ` draw the peeked ID every frame
+    /// text 1, 550, 230, 1, "Next text ID: " + str$(nextId)
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">Receives the next available text ID.</param>
@@ -51,11 +57,15 @@ public partial class FadeMonoGameCommands
     /// Reserve a text ID ahead of time, then create the text later.
     /// <code>
     /// ` reserve the ID so nothing else grabs it
-    /// myTextId = reserve text id()
+    /// reserve text id(myTextId)
     ///
+    /// ` load a font before drawing text
+    /// font 1, "font"
     /// ` later, use the reserved ID to create the text
-    /// font 1, "Fonts/Arial"
     /// text myTextId, 100, 50, 1, "Hello!"
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">Receives the reserved text ID.</param>
@@ -86,23 +96,25 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Create a simple text sprite and display it.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 50, 1, "Hello World!"
-    /// DO
+    /// font 1, "font"
+    /// text 1, 550, 230, 1, "Hello World!"
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Update an existing text sprite by reusing the same ID.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 50, 1, "First message"
-    /// sync
-    /// wait 1000
-    /// ` reusing ID 1 updates the text in place
-    /// text 1, 100, 50, 1, "Updated message"
-    /// sync
+    /// font 1, "font"
+    /// text 1, 550, 230, 1, "First message"
+    /// frame = 0
+    /// do
+    ///   frame = frame + 1
+    ///   ` after a moment, reuse ID 1 to update the text in place
+    ///   IF frame = 90 THEN text 1, 100, 50, 1, "Updated message" ENDIF
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID. If it already exists, the sprite is updated.</param>
@@ -141,14 +153,14 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Update a score display every frame.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 10, 10, 1, "Score: 0"
+    /// font 1, "font"
+    /// text 1, 460, 190, 1, "Score: 0"
     /// score = 0
-    /// DO
+    /// do
     ///   score = score + 1
-    ///   set text 1, "Score: " + str(score)
+    ///   set text 1, "Score: " + str$(score)
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID to update.</param>
@@ -179,14 +191,14 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Animate a text sprite moving across the screen.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 0, 100, 1, "Moving text!"
+    /// font 1, "font"
+    /// text 1, 450, 280, 1, "Moving text!"
     /// xPos = 0
-    /// DO
+    /// do
     ///   xPos = xPos + 2
     ///   set text position 1, xPos, 100
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID to move.</param>
@@ -220,13 +232,13 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Color text red and display it.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 50, 1, "Warning!"
+    /// font 1, "font"
+    /// text 1, 550, 230, 1, "Warning!"
     /// ` red with full opacity
     /// color text 1, 0xFF0000FF
-    /// DO
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID to color.</param>
@@ -257,14 +269,14 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Change a drop shadow to a subtle blue after enabling it.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 50, 1, "Shadow text"
+    /// font 1, "font"
+    /// text 1, 550, 230, 1, "Shadow text"
     /// enable text drop shadow 1, 2, 2, 0x000000FF
     /// ` change the shadow color to dark blue with half opacity
     /// color text drop shadow 1, 0x000088AA
-    /// DO
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID whose shadow color to change.</param>
@@ -297,25 +309,25 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Add a black drop shadow offset by 2 pixels in each direction.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 50, 1, "Readable text"
+    /// font 1, "font"
+    /// text 1, 550, 230, 1, "Readable text"
     /// ` black shadow, 2 pixels down and right
     /// enable text drop shadow 1, 2, 2, 0x000000FF
-    /// DO
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Use a soft, semi-transparent shadow for a subtler effect.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 200, 100, 1, "Soft shadow"
+    /// font 1, "font"
+    /// text 1, 650, 280, 1, "Soft shadow"
     /// ` dark gray shadow with half opacity, offset 1 pixel
     /// enable text drop shadow 1, 1, 1, 0x33333388
-    /// DO
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID.</param>
@@ -350,18 +362,18 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Toggle a drop shadow on and off.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 50, 1, "Toggle shadow"
+    /// font 1, "font"
+    /// text 1, 550, 230, 1, "Toggle shadow"
     /// enable text drop shadow 1, 2, 2, 0x000000FF
-    /// sync
-    /// wait 2000
-    /// ` turn off the shadow; settings are preserved
-    /// disable text drop shadow 1
-    /// sync
-    /// wait 2000
-    /// ` re-enable with the same offset and color
-    /// enable text drop shadow 1, 2, 2, 0x000000FF
-    /// sync
+    /// frame = 0
+    /// do
+    ///   frame = frame + 1
+    ///   ` turn off the shadow; settings are preserved
+    ///   IF frame = 90 THEN disable text drop shadow 1 ENDIF
+    ///   ` re-enable with the same offset and color
+    ///   IF frame = 180 THEN enable text drop shadow 1, 2, 2, 0x000000FF ENDIF
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID whose shadow to disable.</param>
@@ -391,15 +403,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Fade text in from transparent to fully opaque.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 50, 1, "Fading in..."
+    /// font 1, "font"
+    /// text 1, 550, 230, 1, "Fading in..."
     /// a = 0
-    /// DO
+    /// do
     ///   set text alpha 1, a
     ///   IF a &lt; 255 THEN a = a + 5 ENDIF
     ///   IF a &gt; 255 THEN a = 255 ENDIF
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID.</param>
@@ -431,13 +443,13 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Double the size of a text sprite.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 50, 1, "Big text"
+    /// font 1, "font"
+    /// text 1, 550, 230, 1, "Big text"
     /// ` scale to twice the native font size
     /// scale text 1, 2.0, 2.0
-    /// DO
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID.</param>
@@ -467,15 +479,17 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Layer text on top of a sprite using z-order.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// ` create a sprite and a text label
-    /// sprite 1, 100, 100, loadImage("background.png")
+    /// font 1, "font"
+    /// ` load the ghost image and create a sprite from it
+    /// texture 1, "ghost"
+    /// sprite 1, 100, 100, 1
     /// order sprite 1, 5
-    /// text 1, 110, 110, 1, "On top!"
+    /// ` draw a text label on top of the sprite
+    /// text 1, 560, 290, 1, "On top!"
     /// order text 1, 10
-    /// DO
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID.</param>
@@ -508,15 +522,16 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Hide a text sprite and show it again after a delay.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 50, 1, "Now you see me"
-    /// sync
-    /// wait 2000
-    /// hide text 1
-    /// sync
-    /// wait 2000
-    /// show text 1
-    /// sync
+    /// font 1, "font"
+    /// text 1, 550, 230, 1, "Now you see me"
+    /// frame = 0
+    /// do
+    ///   frame = frame + 1
+    ///   ` hide it, then show it again a bit later
+    ///   IF frame = 90 THEN hide text 1 ENDIF
+    ///   IF frame = 180 THEN show text 1 ENDIF
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID to hide.</param>
@@ -543,16 +558,16 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Show a hidden text sprite.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 100, 50, 1, "Hidden at first"
+    /// font 1, "font"
+    /// text 1, 550, 230, 1, "Hidden at first"
     /// hide text 1
     /// sync
-    /// wait 1000
+    /// wait ms 1000
     /// ` make it visible again
     /// show text 1
-    /// DO
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID to show.</param>
@@ -583,15 +598,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Draw text onto a custom render target.
     /// <code>
-    /// font 1, "Fonts/Arial"
+    /// font 1, "font"
     /// ` create a 256x256 render target
     /// rtId = render target(256, 256)
-    /// text 1, 10, 10, 1, "On render target"
+    /// text 1, 460, 190, 1, "On render target"
     /// ` redirect text to the custom target
     /// set text render target 1, rtId
-    /// DO
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID.</param>
@@ -620,16 +635,16 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Move text back to the main screen after drawing to a custom render target.
     /// <code>
-    /// font 1, "Fonts/Arial"
+    /// font 1, "font"
     /// rtId = render target(256, 256)
-    /// text 1, 10, 10, 1, "Temporary"
+    /// text 1, 460, 190, 1, "Temporary"
     /// set text render target 1, rtId
     /// sync
     /// ` move it back to the main screen
     /// reset text render target 1
-    /// DO
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID to reset.</param>
@@ -655,15 +670,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Draw the same text on both the main screen and a custom render target.
     /// <code>
-    /// font 1, "Fonts/Arial"
+    /// font 1, "font"
     /// rtId = render target(256, 256)
-    /// text 1, 10, 10, 1, "Everywhere!"
+    /// text 1, 460, 190, 1, "Everywhere!"
     /// ` text already draws to the main screen by default;
     /// ` add it to the custom target as well
     /// add text render target 1, rtId
-    /// DO
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID.</param>
@@ -700,13 +715,13 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Scale text to fill a 200x50 pixel box.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 50, 50, 1, "Stretched to fit"
+    /// font 1, "font"
+    /// text 1, 500, 230, 1, "Stretched to fit"
     /// ` scale to exactly 200 wide by 50 tall (may stretch)
     /// size text 1, 200, 50
-    /// DO
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID.</param>
@@ -749,13 +764,13 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Scale text uniformly to fit a 300-pixel width.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 50, 50, 1, "Uniform scale"
+    /// font 1, "font"
+    /// text 1, 500, 230, 1, "Uniform scale"
     /// ` scale so the width is exactly 300 pixels; height adjusts proportionally
     /// size text x 1, 300
-    /// DO
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID.</param>
@@ -797,13 +812,13 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Size text to 200 pixels wide, but clamp the scale between 0.5 and 2.0.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 50, 50, 1, "Clamped scale"
+    /// font 1, "font"
+    /// text 1, 500, 230, 1, "Clamped scale"
     /// ` target 200px wide, but never shrink below 0.5 or grow above 2.0
     /// size text x 1, 200, 0.5, 2.0
-    /// DO
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID.</param>
@@ -849,13 +864,13 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Scale text to fit a 40-pixel tall row.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 50, 50, 1, "Fit the row"
+    /// font 1, "font"
+    /// text 1, 500, 230, 1, "Fit the row"
     /// ` scale so the height is exactly 40 pixels; width adjusts proportionally
     /// size text y 1, 40
-    /// DO
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID.</param>
@@ -896,20 +911,20 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Make a health label follow a character transform.
     /// <code>
-    /// font 1, "Fonts/Arial"
+    /// font 1, "font"
     /// ` create a transform for the character
-    /// tId = transform()
-    /// position transform tId, 200, 150
+    /// reserve transform id(tId)
+    /// transform tId, 200, 150
     ///
     /// ` create the label and attach it to the transform
     /// text 1, 0, -20, 1, "100 HP"
     /// attach text to transform 1, tId
     ///
     /// ` now moving the transform moves the text too
-    /// DO
-    ///   position transform tId, 200 + rnd(4), 150
+    /// do
+    ///   set transform position tId, 200 + rnd(4), 150
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID to attach.</param>
@@ -941,16 +956,16 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Spin text around its center.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 200, 150, 1, "Spinning!"
+    /// font 1, "font"
+    /// text 1, 650, 330, 1, "Spinning!"
     /// ` set the origin to center so it rotates in place
     /// set text offset 1, 0.5, 0.5
     /// angle# = 0.0
-    /// DO
+    /// do
     ///   angle# = angle# + 0.02
     ///   rotate text 1, angle#
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID.</param>
@@ -982,13 +997,13 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Center the text origin so it draws centered on its position.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 400, 300, 1, "Centered!"
+    /// font 1, "font"
+    /// text 1, 850, 480, 1, "Centered!"
     /// ` set origin to the center of the text
     /// set text offset 1, 0.5, 0.5
-    /// DO
+    /// do
     ///   sync
-    /// LOOP
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID.</param>
@@ -1019,10 +1034,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Read back the X position of a text sprite.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 150, 80, 1, "Hello"
+    /// font 1, "font"
+    /// text 1, 600, 260, 1, "Hello"
+    /// ` read back the X position of the text sprite
     /// xPos = text x(1)
-    /// print "Text X is: " + str(xPos)
+    /// ` draw the value so you can see it on the canvas
+    /// text 2, 600, 300, 1, "Text X is: " + str$(xPos)
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID.</param>
@@ -1050,10 +1070,15 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Read back the Y position of a text sprite.
     /// <code>
-    /// font 1, "Fonts/Arial"
-    /// text 1, 150, 80, 1, "Hello"
+    /// font 1, "font"
+    /// text 1, 600, 260, 1, "Hello"
+    /// ` read back the Y position of the text sprite
     /// yPos = text y(1)
-    /// print "Text Y is: " + str(yPos)
+    /// ` draw the value so you can see it on the canvas
+    /// text 2, 600, 300, 1, "Text Y is: " + str$(yPos)
+    /// do
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="textId">The text sprite ID.</param>

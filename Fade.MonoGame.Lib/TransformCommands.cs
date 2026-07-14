@@ -20,9 +20,23 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Peek at the next ID to size an array, then reserve and create transforms.
     /// <code>
-    /// ` find out what the next ID will be
-    /// nextId = free transform id()
+    /// ` load the ghost image and make a sprite from it
+    /// texture 1, "ghost"
+    /// sprite 1, 0, 0, 1
+    ///
+    /// ` find out what the next transform ID will be
+    /// nextId = free transform id(nextId)
     /// print nextId
+    ///
+    /// ` use that ID to build a transform and attach the sprite to it
+    /// transform nextId, 320, 240
+    /// attach sprite to transform 1, nextId
+    ///
+    /// set sync rate 16
+    /// DO
+    ///   ` the sprite is drawn at the transform's position each frame
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="transformId">Receives the next free transform ID.</param>
@@ -53,11 +67,22 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Reserve IDs for a batch of enemies, then create their transforms.
     /// <code>
-    /// ` reserve five enemy transform IDs
+    /// ` load the ghost image; each enemy will share this texture
+    /// texture 1, "ghost"
+    ///
+    /// ` reserve five enemy transform IDs and lay them out in a row
     /// FOR i = 1 TO 5
-    ///   id = reserve transform id()
+    ///   id = reserve transform id(id)
     ///   transform id, i * 64, 100
+    ///   sprite i, 0, 0, 1
+    ///   attach sprite to transform i, id
     /// NEXT i
+    ///
+    /// set sync rate 16
+    /// DO
+    ///   ` all five enemies are drawn through their transforms
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="transformId">Receives the reserved transform ID.</param>
@@ -95,20 +120,32 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Create a full game entity with a transform, sprite, and collider.
     /// <code>
+    /// ` load the ghost image and make a sprite from it
+    /// texture 1, "ghost"
+    ///
     /// ` build a player entity at the center of the screen
     /// playerId = 1
     /// transform playerId, 320, 240
     ///
-    /// ` attach a sprite and a collider
-    /// sprite playerId, 0, 0
+    /// ` attach a sprite and a collider so they move with the transform
+    /// sprite playerId, 0, 0, 1
     /// attach sprite to transform playerId, playerId
     /// box collider playerId, -16, -16, 32, 32
     /// attach collider to transform playerId, playerId
+    ///
+    /// set sync rate 16
+    /// DO
+    ///   ` the sprite is drawn at the transform's position each frame
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Create a parent transform and a child that follows it.
     /// <code>
+    /// ` load the ghost image for both sprites
+    /// texture 1, "ghost"
+    ///
     /// ` create a ship and an orbiting shield
     /// shipId = 1
     /// shieldId = 2
@@ -116,8 +153,20 @@ public partial class FadeMonoGameCommands
     /// transform shieldId, 30, 0
     /// set transform parent shieldId, shipId
     ///
-    /// ` moving the ship moves the shield too
-    /// set transform position shipId, 400, 240
+    /// ` give each transform a sprite so we can see them
+    /// sprite 1, 0, 0, 1
+    /// attach sprite to transform 1, shipId
+    /// sprite 2, 0, 0, 1
+    /// attach sprite to transform 2, shieldId
+    ///
+    /// set sync rate 16
+    /// sx = 320
+    /// DO
+    ///   ` moving the ship moves the shield too
+    ///   sx = sx + 1
+    ///   set transform position shipId, sx, 240
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="transformId">The ID to assign to this transform.</param>
@@ -154,9 +203,14 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Move a player to the right each frame.
     /// <code>
-    /// ` set up the player
+    /// ` load the ghost image and make a sprite from it
+    /// texture 1, "ghost"
+    ///
+    /// ` set up the player and attach its sprite
     /// playerId = 1
     /// transform playerId, 0, 240
+    /// sprite 1, 0, 0, 1
+    /// attach sprite to transform 1, playerId
     /// px = 0
     ///
     /// set sync rate 16
@@ -197,14 +251,23 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Read the player's X position and print it each frame.
     /// <code>
+    /// ` load the ghost image and make a sprite from it
+    /// texture 1, "ghost"
+    ///
     /// ` track the player's horizontal position
     /// playerId = 1
     /// transform playerId, 100, 200
+    /// sprite 1, 0, 0, 1
+    /// attach sprite to transform 1, playerId
+    /// px = 100
     ///
     /// set sync rate 16
     /// DO
-    ///   px = get local transform x(playerId)
-    ///   print px
+    ///   ` move the player, then read its X back with the getter
+    ///   px = px + 1
+    ///   set transform position playerId, px, 200
+    ///   readX = get local transform x(playerId)
+    ///   print readX
     ///   sync
     /// LOOP
     /// </code>
@@ -236,12 +299,24 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Read both X and Y to compute distance from origin.
     /// <code>
-    /// ` check how far the player is from the top-left corner
+    /// ` load the ghost image and make a sprite from it
+    /// texture 1, "ghost"
+    ///
+    /// ` place the player and attach its sprite
     /// playerId = 1
-    /// px = get local transform x(playerId)
-    /// py = get local transform y(playerId)
-    /// dist = sqrt(px * px + py * py)
-    /// print dist
+    /// transform playerId, 300, 200
+    /// sprite 1, 0, 0, 1
+    /// attach sprite to transform 1, playerId
+    ///
+    /// set sync rate 16
+    /// DO
+    ///   ` check how far the player is from the top-left corner
+    ///   px = get local transform x(playerId)
+    ///   py = get local transform y(playerId)
+    ///   dist = sqrt(px * px + py * py)
+    ///   print dist
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="transformId">The ID of the transform.</param>
@@ -269,11 +344,25 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Check if a transform has been flipped horizontally.
     /// <code>
-    /// ` read the X scale to see if the entity is facing left
-    /// sx = get local transform scale x(playerId)
-    /// IF sx &lt; 0 THEN
-    ///   print "facing left"
-    /// ENDIF
+    /// ` load the ghost image and make a sprite from it
+    /// texture 1, "ghost"
+    ///
+    /// ` set up a player that faces left (negative X scale)
+    /// playerId = 1
+    /// transform playerId, 320, 240
+    /// sprite 1, 0, 0, 1
+    /// attach sprite to transform 1, playerId
+    /// set transform scale playerId, -1.0, 1.0
+    ///
+    /// set sync rate 16
+    /// DO
+    ///   ` read the X scale to see which way the entity is facing
+    ///   sx = get local transform scale x(playerId)
+    ///   IF sx &lt; 0
+    ///     print "facing left"
+    ///   ENDIF
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="transformId">The ID of the transform.</param>
@@ -300,11 +389,25 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Read both scale axes and print them.
     /// <code>
-    /// ` inspect the current scale of an entity
-    /// sx = get local transform scale x(entityId)
-    /// sy = get local transform scale y(entityId)
-    /// print sx
-    /// print sy
+    /// ` load the ghost image and make a sprite from it
+    /// texture 1, "ghost"
+    ///
+    /// ` set up an entity with a custom scale
+    /// entityId = 1
+    /// transform entityId, 320, 240
+    /// sprite 1, 0, 0, 1
+    /// attach sprite to transform 1, entityId
+    /// set transform scale entityId, 2.0, 3.0
+    ///
+    /// set sync rate 16
+    /// DO
+    ///   ` inspect the current scale of the entity
+    ///   sx = get local transform scale x(entityId)
+    ///   sy = get local transform scale y(entityId)
+    ///   print sx
+    ///   print sy
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="transformId">The ID of the transform.</param>
@@ -336,17 +439,41 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Double the size of an entity uniformly.
     /// <code>
+    /// ` load the ghost image and make a sprite from it
+    /// texture 1, "ghost"
+    ///
     /// ` make the boss twice as big
     /// bossId = 10
     /// transform bossId, 320, 240
+    /// sprite 1, 0, 0, 1
+    /// attach sprite to transform 1, bossId
     /// set transform scale bossId, 2.0, 2.0
+    ///
+    /// set sync rate 16
+    /// DO
+    ///   ` the boss sprite is drawn at double size each frame
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Flip a character horizontally when they change direction.
     /// <code>
-    /// ` flip the sprite to face left by using negative X scale
-    /// set transform scale playerId, -1.0, 1.0
+    /// ` load the ghost image and make a sprite from it
+    /// texture 1, "ghost"
+    ///
+    /// ` set up the player
+    /// playerId = 1
+    /// transform playerId, 320, 240
+    /// sprite 1, 0, 0, 1
+    /// attach sprite to transform 1, playerId
+    ///
+    /// set sync rate 16
+    /// DO
+    ///   ` flip the sprite to face left by using negative X scale
+    ///   set transform scale playerId, -1.0, 1.0
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="x">The X scale factor. <c>1.0</c> is no change, <c>2.0</c> is double size.</param>
@@ -379,9 +506,14 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Spin an entity continuously each frame.
     /// <code>
+    /// ` load the ghost image and make a sprite from it
+    /// texture 1, "ghost"
+    ///
     /// ` rotate a spinning coin
     /// coinId = 3
     /// transform coinId, 320, 240
+    /// sprite 1, 0, 0, 1
+    /// attach sprite to transform 1, coinId
     /// angle = 0.0
     ///
     /// set sync rate 16
@@ -395,8 +527,23 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Set a fixed rotation using degrees.
     /// <code>
-    /// ` tilt an entity 45 degrees
+    /// ` load the ghost image and make a sprite from it
+    /// texture 1, "ghost"
+    ///
+    /// ` set up an entity
+    /// entityId = 1
+    /// transform entityId, 320, 240
+    /// sprite 1, 0, 0, 1
+    /// attach sprite to transform 1, entityId
+    ///
+    /// ` tilt the entity 45 degrees
     /// set transform rotation entityId, rad(45)
+    ///
+    /// set sync rate 16
+    /// DO
+    ///   ` the tilted sprite is drawn each frame
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="transformId">The ID of the transform.</param>
@@ -432,11 +579,20 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Create a character with a weapon that follows it.
     /// <code>
+    /// ` load the ghost image for both sprites
+    /// texture 1, "ghost"
+    ///
     /// ` set up a character and a weapon
     /// charId = 1
     /// weaponId = 2
     /// transform charId, 200, 300
     /// transform weaponId, 20, -10
+    ///
+    /// ` give each transform a sprite so we can see them
+    /// sprite 1, 0, 0, 1
+    /// attach sprite to transform 1, charId
+    /// sprite 2, 0, 0, 1
+    /// attach sprite to transform 2, weaponId
     ///
     /// ` parent the weapon to the character
     /// set transform parent weaponId, charId
@@ -454,6 +610,9 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Build a three-level hierarchy: ship, turret, and barrel.
     /// <code>
+    /// ` load the ghost image for all three sprites
+    /// texture 1, "ghost"
+    ///
     /// ` the barrel is offset from the turret, which is offset from the ship
     /// shipId = 1
     /// turretId = 2
@@ -462,11 +621,25 @@ public partial class FadeMonoGameCommands
     /// transform turretId, 0, -20
     /// transform barrelId, 10, -15
     ///
+    /// ` attach a sprite to each transform so the hierarchy is visible
+    /// sprite 1, 0, 0, 1
+    /// attach sprite to transform 1, shipId
+    /// sprite 2, 0, 0, 1
+    /// attach sprite to transform 2, turretId
+    /// sprite 3, 0, 0, 1
+    /// attach sprite to transform 3, barrelId
+    ///
     /// set transform parent turretId, shipId
     /// set transform parent barrelId, turretId
     ///
-    /// ` rotating the ship rotates everything
-    /// set transform rotation shipId, rad(30)
+    /// set sync rate 16
+    /// angle = 0.0
+    /// DO
+    ///   ` rotating the ship rotates everything attached below it
+    ///   angle = angle + 0.02
+    ///   set transform rotation shipId, angle
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="transformId">The ID of the child transform.</param>

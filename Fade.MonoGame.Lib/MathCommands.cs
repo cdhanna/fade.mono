@@ -21,28 +21,36 @@ public partial class FadeMonoGameCommands
     /// Move a sprite up and down in a wave pattern using <see cref="Sin">sin</see>.
     /// <code>
     /// ` bob a sprite up and down over time
+    /// texture 1, "ghost"
     /// t = 0
     /// baseY = 200
     /// DO
+    ///   set background color rgb(20, 20, 40)
     ///   t = t + 0.05
+    ///   ` sin(t) swings between -1 and 1, so y oscillates around baseY
     ///   y = baseY + sin(t) * 30
-    ///   draw_sprite 1, 100, y
+    ///   sprite 1, 100, y, 1
+    ///   sync
     /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Move in a circle using both <see cref="Sin">sin</see> and <see cref="Cos">cos</see>.
     /// <code>
-    /// ` orbit a point around a center
+    /// ` orbit a sprite around a center point
+    /// texture 1, "ghost"
     /// angle = 0
     /// cx = 320
     /// cy = 240
     /// radius = 80
     /// DO
+    ///   set background color rgb(20, 20, 40)
     ///   angle = angle + 0.02
+    ///   ` cos drives x and sin drives y to trace a circle
     ///   x = cx + cos(angle) * radius
     ///   y = cy + sin(angle) * radius
-    ///   draw_sprite 1, x, y
+    ///   sprite 1, x, y, 1
+    ///   sync
     /// LOOP
     /// </code>
     /// </example>
@@ -72,27 +80,42 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Place 8 items evenly around a circle.
     /// <code>
-    /// ` arrange 8 sprites in a ring
+    /// ` arrange 8 sprites evenly in a ring
+    /// texture 1, "ghost"
     /// cx = 320
     /// cy = 240
     /// radius = 100
     /// count = 8
-    /// FOR i = 0 TO count - 1
-    ///   angle = rad(360 / count * i)
-    ///   x = cx + cos(angle) * radius
-    ///   y = cy + sin(angle) * radius
-    ///   draw_sprite i + 1, x, y
-    /// NEXT i
+    /// DO
+    ///   set background color rgb(20, 20, 40)
+    ///   FOR i = 0 TO count - 1
+    ///     angle = rad(360 / count * i)
+    ///     ` cos gives the horizontal position on the circle
+    ///     x = cx + cos(angle) * radius
+    ///     y = cy + sin(angle) * radius
+    ///     sprite i + 1, x, y, 1
+    ///   NEXT i
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Scale movement speed by facing direction.
     /// <code>
-    /// ` move forward in the direction the player is facing
+    /// ` move a sprite forward along the direction it is facing
+    /// texture 1, "ghost"
     /// facing = rad(45)
     /// speed = 3
-    /// px = px + cos(facing) * speed
-    /// py = py + sin(facing) * speed
+    /// px = 100
+    /// py = 100
+    /// DO
+    ///   set background color rgb(20, 20, 40)
+    ///   ` cos of the facing angle is the horizontal step each frame
+    ///   px = px + cos(facing) * speed
+    ///   py = py + sin(facing) * speed
+    ///   sprite 1, px, py, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="x">The angle in radians.</param>
@@ -122,23 +145,41 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Point a turret sprite toward the mouse cursor.
     /// <code>
-    /// ` calculate angle from turret to mouse
-    /// dx = mouseX - turretX
-    /// dy = mouseY - turretY
-    /// angle = atan2(dy, dx)
-    /// rotate_sprite 1, deg(angle)
+    /// ` rotate a turret sprite to point at the mouse
+    /// texture 1, "ghost"
+    /// turretX = 320
+    /// turretY = 240
+    /// DO
+    ///   set background color rgb(20, 20, 40)
+    ///   dx = mouse x() - turretX
+    ///   dy = mouse y() - turretY
+    ///   ` atan2 returns the correct-quadrant angle (radians) toward the cursor
+    ///   angle = atan2(dy, dx)
+    ///   sprite 1, turretX, turretY, 1
+    ///   rotate sprite 1, angle
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Move an enemy toward the player at a fixed speed.
     /// <code>
-    /// ` chase the player
-    /// dx = playerX - enemyX
-    /// dy = playerY - enemyY
-    /// angle = atan2(dy, dx)
+    /// ` chase the mouse cursor at a fixed speed
+    /// texture 1, "ghost"
+    /// enemyX = 100
+    /// enemyY = 100
     /// speed = 2
-    /// enemyX = enemyX + cos(angle) * speed
-    /// enemyY = enemyY + sin(angle) * speed
+    /// DO
+    ///   set background color rgb(20, 20, 40)
+    ///   dx = mouse x() - enemyX
+    ///   dy = mouse y() - enemyY
+    ///   ` atan2 gives the heading; cos/sin step along it
+    ///   angle = atan2(dy, dx)
+    ///   enemyX = enemyX + cos(angle) * speed
+    ///   enemyY = enemyY + sin(angle) * speed
+    ///   sprite 1, enemyX, enemyY, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="y">The y component of the direction vector.</param>
@@ -167,13 +208,19 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Find the angle of a slope from rise over run.
     /// <code>
-    /// ` calculate the angle of a ramp
+    /// ` find a ramp angle from rise over run and tilt a sprite to match
+    /// texture 1, "ghost"
     /// rise = 3
     /// run = 4
     /// slope = rise / run
+    /// ` atan turns the slope into an angle in radians (about 0.6435)
     /// angle = atan(slope)
-    /// angleDeg = deg(angle)
-    /// ` angleDeg is about 36.87
+    /// DO
+    ///   set background color rgb(20, 20, 40)
+    ///   sprite 1, 320, 240, 1
+    ///   rotate sprite 1, angle
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="x">The tangent value to find the angle for.</param>
@@ -202,27 +249,48 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Check if two sprites are within range of each other.
     /// <code>
-    /// ` calculate distance between player and enemy
-    /// dx = playerX - enemyX
-    /// dy = playerY - enemyY
-    /// dist = sqrt(dx * dx + dy * dy)
-    /// IF dist &lt; 50
-    ///   ` enemy is close enough to attack
-    ///   take_damage 10
-    /// ENDIF
+    /// ` light up the background when the ghost is near the mouse
+    /// texture 1, "ghost"
+    /// px = 320
+    /// py = 240
+    /// DO
+    ///   set background color rgb(20, 20, 40)
+    ///   dx = px - mouse x()
+    ///   dy = py - mouse y()
+    ///   ` sqrt turns the squared offsets into a real distance
+    ///   dist = sqrt(dx * dx + dy * dy)
+    ///   IF dist &lt; 50
+    ///     ` cursor is close enough to react
+    ///     set background color rgb(80, 20, 20)
+    ///   ENDIF
+    ///   sprite 1, px, py, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Normalize a direction vector to unit length.
     /// <code>
-    /// ` turn a direction into a unit vector
-    /// dx = targetX - startX
-    /// dy = targetY - startY
-    /// length = sqrt(dx * dx + dy * dy)
-    /// IF length &gt; 0
-    ///   nx = dx / length
-    ///   ny = dy / length
-    /// ENDIF
+    /// ` move a sprite toward the mouse at constant speed using a unit vector
+    /// texture 1, "ghost"
+    /// x = 100
+    /// y = 100
+    /// speed = 3
+    /// DO
+    ///   set background color rgb(20, 20, 40)
+    ///   dx = mouse x() - x
+    ///   dy = mouse y() - y
+    ///   length = sqrt(dx * dx + dy * dy)
+    ///   IF length &gt; 0
+    ///     ` divide by length to get a unit vector, then scale by speed
+    ///     nx = dx / length
+    ///     ny = dy / length
+    ///     x = x + nx * speed
+    ///     y = y + ny * speed
+    ///   ENDIF
+    ///   sprite 1, x, y, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="x">A non-negative value to take the square root of.</param>
@@ -258,22 +326,50 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Display the angle to a target in degrees.
     /// <code>
-    /// ` show the player what direction the objective is
-    /// dx = objectiveX - playerX
-    /// dy = objectiveY - playerY
-    /// angleRad = atan2(dy, dx)
-    /// angleDeg = deg(angleRad)
-    /// ` angleDeg is now in 0..360 range for display
+    /// ` show a compass label from the angle to the mouse, using deg
+    /// texture 1, "ghost"
+    /// font 1, "font"
+    /// cx = 320
+    /// cy = 240
+    /// DO
+    ///   set background color rgb(20, 20, 40)
+    ///   dx = mouse x() - cx
+    ///   dy = mouse y() - cy
+    ///   ` atan2 returns radians; deg makes it easy to read in degrees
+    ///   angleDeg = deg(atan2(dy, dx))
+    ///   sprite 1, cx, cy, 1
+    ///   ` the east half is within 90 degrees of straight right
+    ///   IF abs(angleDeg) &lt; 90
+    ///     text 1, 20, 20, 1, "EAST"
+    ///   ELSE
+    ///     text 1, 20, 20, 1, "WEST"
+    ///   ENDIF
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Convert an <see cref="Atan2">atan2</see> result to rotate a sprite.
     /// <code>
-    /// ` rotate arrow sprite toward the mouse
-    /// dx = mouseX - arrowX
-    /// dy = mouseY - arrowY
-    /// angle = deg(atan2(dy, dx))
-    /// rotate_sprite 1, angle
+    /// ` rotate a sprite toward the mouse, and read the angle with deg
+    /// texture 1, "ghost"
+    /// ax = 320
+    /// ay = 240
+    /// DO
+    ///   set background color rgb(20, 20, 40)
+    ///   dx = mouse x() - ax
+    ///   dy = mouse y() - ay
+    ///   angle = atan2(dy, dx)
+    ///   sprite 1, ax, ay, 1
+    ///   ` rotate sprite wants radians; deg gives the same angle in degrees
+    ///   rotate sprite 1, angle
+    ///   angleDeg = deg(angle)
+    ///   IF abs(angleDeg) &lt; 10
+    ///     ` pointing roughly east
+    ///     set background color rgb(20, 60, 20)
+    ///   ENDIF
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <param name="radians">The angle in radians to convert.</param>
@@ -300,24 +396,39 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Fire a bullet at a 45-degree angle.
     /// <code>
-    /// ` launch a projectile at 45 degrees
+    /// ` launch a projectile at 45 degrees using rad
+    /// texture 1, "ghost"
     /// angleDeg = 45
+    /// ` rad converts degrees into the radians cos/sin expect
     /// angleRad = rad(angleDeg)
-    /// speed = 10
+    /// speed = 4
     /// velX = cos(angleRad) * speed
     /// velY = sin(angleRad) * speed
+    /// bx = 50
+    /// by = 50
+    /// DO
+    ///   set background color rgb(20, 20, 40)
+    ///   bx = bx + velX
+    ///   by = by + velY
+    ///   sprite 1, bx, by, 1
+    ///   sync
+    /// LOOP
     /// </code>
     /// </example>
     /// <example>
     /// Rotate something by a fixed number of degrees each frame.
     /// <code>
-    /// ` spin a sprite 2 degrees per frame
+    /// ` spin a sprite around a center, 2 degrees per frame
+    /// texture 1, "ghost"
     /// angleDeg = 0
     /// DO
+    ///   set background color rgb(20, 20, 40)
     ///   angleDeg = angleDeg + 2
+    ///   ` rad converts the running degree count for cos/sin
     ///   x = 320 + cos(rad(angleDeg)) * 100
     ///   y = 240 + sin(rad(angleDeg)) * 100
-    ///   draw_sprite 1, x, y
+    ///   sprite 1, x, y, 1
+    ///   sync
     /// LOOP
     /// </code>
     /// </example>

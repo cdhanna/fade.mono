@@ -33,7 +33,7 @@ public partial class FadeMonoGameCommands
     ///   IF debug button("reset score") = 1
     ///     score = 0
     ///   ENDIF
-    ///   debug int slider "speed", speed, 0, 100
+    ///   changed = debug int slider("speed", speed, 0, 100)
     ///   end debug window
     ///   sync
     /// LOOP
@@ -83,13 +83,14 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Two windows in a single frame, each properly closed:
     /// <code>
+    /// showGrid = 0
     /// DO
     ///   begin debug window "Stats"
-    ///   debug label "fps", str$(screen fps())
+    ///   debug label "mouse x", str$(mouse x())
     ///   end debug window
     ///
     ///   begin debug window "Tweaks"
-    ///   debug toggle "show grid", showGrid
+    ///   changed = debug toggle("show grid", showGrid)
     ///   end debug window
     ///
     ///   sync
@@ -159,15 +160,18 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Split a debug window into visual sections:
     /// <code>
+    /// speed = 100
+    /// accel = 50
+    /// showGrid = 0
     /// DO
     ///   begin debug window "Tuning"
     ///   debug text "movement"
-    ///   debug int slider "speed", speed, 0, 200
-    ///   debug int slider "accel", accel, 0, 200
+    ///   changed = debug int slider("speed", speed, 0, 200)
+    ///   changed = debug int slider("accel", accel, 0, 200)
     ///
     ///   debug separator
     ///   debug text "rendering"
-    ///   debug toggle "show grid", showGrid
+    ///   changed = debug toggle("show grid", showGrid)
     ///   end debug window
     ///   sync
     /// LOOP
@@ -204,8 +208,8 @@ public partial class FadeMonoGameCommands
     /// DO
     ///   begin debug window "Tuning"
     ///   IF begin debug tree("movement") = 1
-    ///     debug int slider "speed", speed, 0, 200
-    ///     debug int slider "accel", accel, 0, 200
+    ///     changed = debug int slider("speed", speed, 0, 200)
+    ///     changed = debug int slider("accel", accel, 0, 200)
     ///     end debug tree
     ///   ENDIF
     ///   end debug window
@@ -242,14 +246,16 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Two nested trees — note each end matches the inner-most still-open begin:
     /// <code>
+    /// bloomOn = 1
+    /// vsync = 1
     /// DO
     ///   begin debug window "Settings"
     ///   IF begin debug tree("graphics") = 1
     ///     IF begin debug tree("post-fx") = 1
-    ///       debug toggle "bloom", bloomOn
+    ///       changed = debug toggle("bloom", bloomOn)
     ///       end debug tree
     ///     ENDIF
-    ///     debug toggle "vsync", vsync
+    ///     changed = debug toggle("vsync", vsync)
     ///     end debug tree
     ///   ENDIF
     ///   end debug window
@@ -280,15 +286,17 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Two-tab settings window:
     /// <code>
+    /// volume# = 0.5
+    /// invertMouse = 0
     /// DO
     ///   begin debug window "Settings"
     ///   IF begin debug tab bar("settings_tabs") = 1
     ///     IF begin debug tab("audio") = 1
-    ///       debug float slider "volume", volume, 0.0, 1.0
+    ///       changed = debug float slider("volume", volume#, 0.0, 1.0)
     ///       end debug tab
     ///     ENDIF
     ///     IF begin debug tab("input") = 1
-    ///       debug toggle "invert mouse", invertMouse
+    ///       changed = debug toggle("invert mouse", invertMouse)
     ///       end debug tab
     ///     ENDIF
     ///     end debug tab bar
@@ -405,7 +413,7 @@ public partial class FadeMonoGameCommands
     ///   begin debug window "Status"
     ///   debug label "x", str$(px)
     ///   debug label "y", str$(py)
-    ///   debug label "fps", str$(screen fps())
+    ///   debug label "mouse x", str$(mouse x())
     ///   end debug window
     ///   sync
     /// LOOP
@@ -440,11 +448,13 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Use debug text as a section header above some sliders:
     /// <code>
+    /// gravity# = 9.8
+    /// friction# = 0.5
     /// DO
     ///   begin debug window "Tuning"
     ///   debug text "physics"
-    ///   debug float slider "gravity", gravity, 0.0, 50.0
-    ///   debug float slider "friction", friction, 0.0, 1.0
+    ///   changed = debug float slider("gravity", gravity#, 0.0, 50.0)
+    ///   changed = debug float slider("friction", friction#, 0.0, 1.0)
     ///   end debug window
     ///   sync
     /// LOOP
@@ -543,7 +553,7 @@ public partial class FadeMonoGameCommands
     /// showHitboxes = 0
     /// DO
     ///   begin debug window "Debug"
-    ///   debug toggle "show hitboxes", showHitboxes
+    ///   changed = debug toggle("show hitboxes", showHitboxes)
     ///   end debug window
     ///
     ///   IF showHitboxes = 1
@@ -594,7 +604,7 @@ public partial class FadeMonoGameCommands
     /// greeting$ = ""
     /// DO
     ///   begin debug window "Greeter"
-    ///   debug textbox "name", nameStr$, "type a name", 64
+    ///   changed = debug textbox("name", nameStr$, "type a name", 64)
     ///   IF debug button("greet") = 1
     ///     greeting$ = "hello, " + nameStr$
     ///   ENDIF
@@ -649,8 +659,8 @@ public partial class FadeMonoGameCommands
     /// enemyCount = 5
     /// DO
     ///   begin debug window "Spawner"
-    ///   debug int slider "spawn rate", spawnRate, 1, 240
-    ///   debug int slider "enemy count", enemyCount, 1, 50
+    ///   changed = debug int slider("spawn rate", spawnRate, 1, 240)
+    ///   changed = debug int slider("enemy count", enemyCount, 1, 50)
     ///   end debug window
     ///   sync
     /// LOOP
@@ -701,8 +711,8 @@ public partial class FadeMonoGameCommands
     /// friction# = 0.05
     /// DO
     ///   begin debug window "Physics"
-    ///   debug float slider "gravity", gravity#, 0.0, 50.0
-    ///   debug float slider "friction", friction#, 0.0, 1.0
+    ///   changed = debug float slider("gravity", gravity#, 0.0, 50.0)
+    ///   changed = debug float slider("friction", friction#, 0.0, 1.0)
     ///   end debug window
     ///   sync
     /// LOOP
@@ -751,7 +761,7 @@ public partial class FadeMonoGameCommands
     /// frame = 0
     /// DO
     ///   begin debug window "Stepper"
-    ///   debug drag int "frame", frame
+    ///   changed = debug drag int("frame", frame)
     ///   end debug window
     ///   sync
     /// LOOP
@@ -797,8 +807,8 @@ public partial class FadeMonoGameCommands
     /// targetY# = 0.0
     /// DO
     ///   begin debug window "Target"
-    ///   debug drag float "x", targetX#
-    ///   debug drag float "y", targetY#
+    ///   changed = debug drag float("x", targetX#)
+    ///   changed = debug drag float("y", targetY#)
     ///   end debug window
     ///   sync
     /// LOOP
@@ -844,13 +854,12 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Tune a text-sprite's color live:
     /// <code>
-    /// texture 1, "Fonts/Arial"
-    /// font 1, "Fonts/Arial"
-    /// text 1, 200, 200, 1, "hello"
+    /// font 1, "font"
+    /// text 1, 650, 380, 1, "HELLO"
     /// shade = rgb(255, 255, 255)
     /// DO
     ///   begin debug window "Text"
-    ///   debug color picker "color", shade
+    ///   changed = debug color picker("color", shade)
     ///   end debug window
     ///   color text 1, shade
     ///   sync
@@ -900,7 +909,7 @@ public partial class FadeMonoGameCommands
     /// <code>
     /// enable debug inspector
     ///
-    /// texture 1, "Images/Player"
+    /// texture 1, "ghost"
     /// sprite 1, 200, 200, 1
     /// DO
     ///   position sprite 1, mouse x(), mouse y()
@@ -929,9 +938,10 @@ public partial class FadeMonoGameCommands
     /// Toggle the inspector with a key press:
     /// <code>
     /// inspectorOn = 1
+    /// iKey = scanCode("I")
     /// enable debug inspector
     /// DO
-    ///   IF key hit(scancode("I")) = 1
+    ///   IF new key down(iKey) = 1
     ///     IF inspectorOn = 1
     ///       disable debug inspector
     ///       inspectorOn = 0
@@ -966,10 +976,12 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// A debug window that combines a sprite list with a manual reset button:
     /// <code>
+    /// texture 1, "ghost"
+    /// sprite 1, 200, 200, 1
     /// DO
     ///   begin debug window "Sprites"
-    ///   IF debug button("delete first") = 1
-    ///     delete sprite 1
+    ///   IF debug button("hide first") = 1
+    ///     hide sprite 1
     ///   ENDIF
     ///   debug separator
     ///   debug browse sprites
@@ -1198,7 +1210,7 @@ public partial class FadeMonoGameCommands
     /// DO
     ///   begin debug window "Dev Panel"
     ///   debug text "tuning"
-    ///   debug float slider "gravity", gravity#, 0.0, 50.0
+    ///   changed = debug float slider("gravity", gravity#, 0.0, 50.0)
     ///   debug separator
     ///   debug inspector
     ///   end debug window
@@ -1230,11 +1242,12 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// A debug window that combines metadata with a tweak:
     /// <code>
+    /// showGrid = 0
     /// DO
     ///   begin debug window "Dev"
     ///   debug metadata
     ///   debug separator
-    ///   debug toggle "show grid", showGrid
+    ///   changed = debug toggle("show grid", showGrid)
     ///   end debug window
     ///   sync
     /// LOOP
@@ -1267,7 +1280,7 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Pin the player sprite's inspector in a dev window:
     /// <code>
-    /// texture 1, "Images/Player"
+    /// texture 1, "ghost"
     /// sprite 1, 200, 200, 1
     /// DO
     ///   begin debug window "Player"

@@ -20,8 +20,20 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Peek at the next clip ID to see what it would be:
     /// <code>
-    /// ` check what ID would be assigned next
+    /// ` load a font so we can display the peeked ID
+    /// font 1, "font"
+    ///
+    /// ` load one clip so a clip ID is already in use
+    /// load sfx clip 1, "coin"
+    ///
+    /// ` peek at what clip ID would be handed out next (does not reserve it)
     /// nextClipId = free sfx clip id(nextClipId)
+    ///
+    /// do
+    ///   ` draw the peeked ID every frame so we can see it
+    ///   text 1, 470, 200, 1, "next free clip id: " + str$(nextClipId)
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxClipId">Receives the next free clip ID.</param>
@@ -51,9 +63,22 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Reserve a clip ID, then load audio into it:
     /// <code>
-    /// ` reserve a slot and load a sound effect clip
+    /// ` load a font so we can report the reserved ID
+    /// font 1, "font"
+    ///
+    /// ` reserve a clip slot, then load a real sound into it
     /// clipId = reserve sfx clip id(clipId)
-    /// load sfx clip clipId, "audio/laser"
+    /// load sfx clip clipId, "laser"
+    ///
+    /// ` create an instance from that clip so we can hear it
+    /// sfx 1, clipId
+    /// play sfx 1
+    ///
+    /// do
+    ///   ` keep the program running and show the reserved ID
+    ///   text 1, 470, 200, 1, "reserved clip id: " + str$(clipId)
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxClipId">Receives the reserved clip ID.</param>
@@ -85,8 +110,21 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Peek at the next instance ID:
     /// <code>
-    /// ` check what instance ID would be assigned next
+    /// ` load a font so we can display the peeked ID
+    /// font 1, "font"
+    ///
+    /// ` create one instance so an instance ID is already in use
+    /// load sfx clip 1, "coin"
+    /// sfx 1, 1
+    ///
+    /// ` peek at what instance ID would be handed out next (does not reserve it)
     /// nextSfxId = free sfx id(nextSfxId)
+    ///
+    /// do
+    ///   ` draw the peeked instance ID every frame
+    ///   text 1, 470, 200, 1, "next free sfx id: " + str$(nextSfxId)
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxId">Receives the next free instance ID.</param>
@@ -116,9 +154,23 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Reserve an instance ID, then create the instance from a loaded clip:
     /// <code>
-    /// ` reserve the instance slot first, then create it
+    /// ` load a font so we can report the reserved ID
+    /// font 1, "font"
+    ///
+    /// ` load a clip we can build an instance from
+    /// clipId = 1
+    /// load sfx clip clipId, "coin"
+    ///
+    /// ` reserve the instance slot first, then create it from the clip
     /// mysfxId = reserve sfx id(mysfxId)
     /// sfx mysfxId, clipId
+    /// play sfx mysfxId
+    ///
+    /// do
+    ///   ` keep running and show the reserved instance ID
+    ///   text 1, 470, 200, 1, "reserved sfx id: " + str$(mysfxId)
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxId">Receives the reserved instance ID.</param>
@@ -157,25 +209,48 @@ public partial class FadeMonoGameCommands
     /// <code>
     /// ` load the explosion sound clip
     /// clipId = 1
-    /// load sfx clip clipId, "audio/explosion"
+    /// load sfx clip clipId, "explosion"
     ///
     /// ` create an instance so we can play it
     /// sfxId = 1
     /// sfx sfxId, clipId
     /// play sfx sfxId
+    ///
+    /// ` load a font so we can label what is happening
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` keep the program running so the sound can play out
+    ///   text 1, 470, 200, 1, "boom!"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Load one clip and create multiple instances for overlapping playback:
     /// <code>
-    /// ` load the gunshot clip once
-    /// gunClip = 1
-    /// load sfx clip gunClip, "audio/gunshot"
+    /// ` load the laser clip once
+    /// laserClip = 1
+    /// load sfx clip laserClip, "laser"
     ///
     /// ` create three instances so up to three can overlap
-    /// sfx 1, gunClip
-    /// sfx 2, gunClip
-    /// sfx 3, gunClip
+    /// sfx 1, laserClip
+    /// sfx 2, laserClip
+    /// sfx 3, laserClip
+    ///
+    /// ` fire all three so they layer on top of each other
+    /// play sfx 1
+    /// play sfx 2
+    /// play sfx 3
+    ///
+    /// ` load a font so we can show a label
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` keep running so the overlapping shots can be heard
+    ///   text 1, 470, 200, 1, "pew pew pew"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="clipId">The clip ID to assign to the loaded sound.</param>
@@ -218,7 +293,7 @@ public partial class FadeMonoGameCommands
     /// <code>
     /// ` load the clip
     /// clipId = 1
-    /// load sfx clip clipId, "audio/laser"
+    /// load sfx clip clipId, "laser"
     ///
     /// ` create an instance and configure it
     /// sfxId = 1
@@ -228,6 +303,15 @@ public partial class FadeMonoGameCommands
     ///
     /// ` fire!
     /// play sfx sfxId
+    ///
+    /// ` load a font so we can show a label
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` keep the program running so the shot can be heard
+    ///   text 1, 470, 200, 1, "fire!"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
@@ -235,7 +319,7 @@ public partial class FadeMonoGameCommands
     /// <code>
     /// ` one clip, three instances
     /// clipId = 1
-    /// load sfx clip clipId, "audio/footstep"
+    /// load sfx clip clipId, "jump"
     ///
     /// sfx 10, clipId
     /// sfx 11, clipId
@@ -245,6 +329,20 @@ public partial class FadeMonoGameCommands
     /// set sfx pitch 10, -0.1
     /// set sfx pitch 11, 0.0
     /// set sfx pitch 12, 0.1
+    ///
+    /// ` play each one so you can hear the variety
+    /// play sfx 10
+    /// play sfx 11
+    /// play sfx 12
+    ///
+    /// ` load a font so we can show a label
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` keep running so the varied jumps can be heard
+    ///   text 1, 470, 200, 1, "hop hop hop"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxId">The instance ID to assign to the new sound effect.</param>
@@ -302,19 +400,33 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Pause a looping ambient sound when the game pauses:
     /// <code>
-    /// ` set up a looping wind sound
+    /// ` set up a looping ambient sound
     /// clipId = 1
-    /// load sfx clip clipId, "audio/wind"
+    /// load sfx clip clipId, "powerup"
     /// windSfx = 1
     /// sfx windSfx, clipId
     /// set sfx loop windSfx, 1
     /// play sfx windSfx
     ///
-    /// ` later, when the game pauses
-    /// pause sfx windSfx
+    /// ` load a font so we can show the current state
+    /// font 1, "font"
     ///
-    /// ` to resume, call play sfx again (restarts from beginning)
-    /// play sfx windSfx
+    /// frame = 0
+    /// paused = 0
+    /// do
+    ///   frame = frame + 1
+    ///   ` after about 2 seconds, pause the looping sound once
+    ///   IF frame = 120
+    ///     pause sfx windSfx
+    ///     paused = 1
+    ///   ENDIF
+    ///   IF paused = 1
+    ///     text 1, 470, 200, 1, "paused"
+    ///   ELSE
+    ///     text 1, 470, 200, 1, "playing"
+    ///   ENDIF
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxId">The instance ID of the sound effect to pause.</param>
@@ -353,22 +465,54 @@ public partial class FadeMonoGameCommands
     /// <code>
     /// ` load and create
     /// clipId = 1
-    /// load sfx clip clipId, "audio/coin"
+    /// load sfx clip clipId, "coin"
     /// coinSfx = 1
     /// sfx coinSfx, clipId
     ///
     /// ` play the sound
     /// play sfx coinSfx
+    ///
+    /// ` load a font so we can show a label
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` keep running so the coin sound can play
+    ///   text 1, 470, 200, 1, "coin collected!"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Wait for a sound to finish before playing the next one:
     /// <code>
+    /// ` load two clips: an intro and the main theme
+    /// load sfx clip 1, "select"
+    /// load sfx clip 2, "powerup"
+    /// introSfx = 1
+    /// mainThemeSfx = 2
+    /// sfx introSfx, 1
+    /// sfx mainThemeSfx, 2
+    ///
+    /// ` start the intro
     /// play sfx introSfx
-    /// DO
-    ///   ` wait each frame until the sound is done
-    /// LOOP UNTIL is sfx done(introSfx) = 1
-    /// play sfx mainThemeSfx
+    /// startedMain = 0
+    ///
+    /// ` load a font so we can show the state
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` once the intro finishes, start the main theme (only once)
+    ///   IF is sfx done(introSfx) = 1
+    ///     IF startedMain = 0
+    ///       play sfx mainThemeSfx
+    ///       startedMain = 1
+    ///     ENDIF
+    ///     text 1, 470, 200, 1, "main theme"
+    ///   ELSE
+    ///     text 1, 470, 200, 1, "intro..."
+    ///   ENDIF
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxId">The instance ID of the sound effect to play.</param>
@@ -424,17 +568,49 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Stagger three impact sounds for a more natural collision:
     /// <code>
+    /// ` load one impact clip and make three instances from it
+    /// load sfx clip 1, "explosion"
+    /// impactSfx1 = 1
+    /// impactSfx2 = 2
+    /// impactSfx3 = 3
+    /// sfx impactSfx1, 1
+    /// sfx impactSfx2, 1
+    /// sfx impactSfx3, 1
+    ///
     /// ` play three impact sounds with slight offsets
     /// delay play sfx impactSfx1, 0
     /// delay play sfx impactSfx2, 50
     /// delay play sfx impactSfx3, 120
+    ///
+    /// ` load a font so we can show a label
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` keep running so the staggered impacts can be heard
+    ///   text 1, 470, 200, 1, "crash!"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Play a warning beep one second from now:
     /// <code>
+    /// ` load a warning sound and create an instance
+    /// load sfx clip 1, "laser"
+    /// warningSfx = 1
+    /// sfx warningSfx, 1
+    ///
     /// ` schedule the beep for 1000 milliseconds in the future
     /// delay play sfx warningSfx, 1000
+    ///
+    /// ` load a font so we can show a label
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` keep running so the delayed beep actually fires
+    ///   text 1, 470, 200, 1, "warning incoming..."
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxId">The instance ID of the sound effect to play.</param>
@@ -473,18 +649,52 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Randomize pitch each time you play a footstep:
     /// <code>
-    /// ` give each footstep a slightly different pitch
-    /// randomPitch = rnd(60) - 30
-    /// randomPitch = randomPitch / 100.0
-    /// set sfx pitch footstepSfx, randomPitch
-    /// play sfx footstepSfx
+    /// ` load a footstep sound and create an instance
+    /// load sfx clip 1, "jump"
+    /// footstepSfx = 1
+    /// sfx footstepSfx, 1
+    ///
+    /// ` load a font so we can show the chosen pitch
+    /// font 1, "font"
+    ///
+    /// frame = 0
+    /// randomPitch = 0
+    /// do
+    ///   frame = frame + 1
+    ///   ` about twice a second, play a footstep at a new random pitch
+    ///   IF frame &gt;= 30
+    ///     frame = 0
+    ///     ` give each footstep a slightly different pitch
+    ///     randomPitch = rnd(60) - 30
+    ///     randomPitch = randomPitch / 100.0
+    ///     set sfx pitch footstepSfx, randomPitch
+    ///     play sfx footstepSfx
+    ///   ENDIF
+    ///   text 1, 470, 200, 1, "footstep pitch: " + str$(randomPitch)
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Pitch down an explosion for a heavy feel:
     /// <code>
+    /// ` load an explosion and create an instance
+    /// load sfx clip 1, "explosion"
+    /// explosionSfx = 1
+    /// sfx explosionSfx, 1
+    ///
+    /// ` pitch it down for a heavier feel, then play it
     /// set sfx pitch explosionSfx, -0.5
     /// play sfx explosionSfx
+    ///
+    /// ` load a font so we can show a label
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` keep running so the deep explosion can be heard
+    ///   text 1, 470, 200, 1, "heavy boom"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxId">The instance ID of the sound effect.</param>
@@ -518,11 +728,25 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Gradually raise the pitch of a rising siren each frame:
     /// <code>
-    /// ` read current pitch and nudge it upward
-    /// currentPitch = sfx pitch(sirenSfx)
-    /// currentPitch = currentPitch + 0.01
-    /// IF currentPitch &gt; 1.0 THEN currentPitch = -1.0
-    /// set sfx pitch sirenSfx, currentPitch
+    /// ` load a looping siren sound and start it
+    /// load sfx clip 1, "laser"
+    /// sirenSfx = 1
+    /// sfx sirenSfx, 1
+    /// set sfx loop sirenSfx, 1
+    /// play sfx sirenSfx
+    ///
+    /// ` load a font so we can show the current pitch
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` read current pitch and nudge it upward
+    ///   currentPitch = sfx pitch(sirenSfx)
+    ///   currentPitch = currentPitch + 0.01
+    ///   IF currentPitch &gt; 1.0 THEN currentPitch = -1.0
+    ///   set sfx pitch sirenSfx, currentPitch
+    ///   text 1, 470, 200, 1, "pitch: " + str$(currentPitch)
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxId">The instance ID of the sound effect.</param>
@@ -560,17 +784,51 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Pan a sound based on an enemy's screen position:
     /// <code>
-    /// ` calculate pan from enemy X relative to screen center
-    /// screenW = screen width()
-    /// panValue = (enemyX - (screenW / 2)) / (screenW / 2)
-    /// set sfx pan enemySfx, panValue
+    /// ` load a sound and loop it so we can hear the panning
+    /// load sfx clip 1, "laser"
+    /// enemySfx = 1
+    /// sfx enemySfx, 1
+    /// set sfx loop enemySfx, 1
+    /// play sfx enemySfx
+    ///
+    /// ` load the ghost so we can see the moving "enemy"
+    /// texture 1, "ghost"
+    ///
+    /// enemyX = 0
+    /// do
+    ///   ` move the enemy across the screen and draw it
+    ///   enemyX = enemyX + 4
+    ///   IF enemyX &gt; screen width() THEN enemyX = 0
+    ///   sprite 1, enemyX, 200, 1
+    ///
+    ///   ` calculate pan from enemy X relative to screen center
+    ///   screenW = screen width()
+    ///   panValue = (enemyX - (screenW / 2)) / (screenW / 2)
+    ///   set sfx pan enemySfx, panValue
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Hard-pan a sound to the left speaker:
     /// <code>
+    /// ` load a sound and create an instance
+    /// load sfx clip 1, "coin"
+    /// leftChannelSfx = 1
+    /// sfx leftChannelSfx, 1
+    ///
+    /// ` hard-pan it to the left speaker, then play it
     /// set sfx pan leftChannelSfx, -1.0
     /// play sfx leftChannelSfx
+    ///
+    /// ` load a font so we can show a label
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` keep running so the left-panned sound can be heard
+    ///   text 1, 470, 200, 1, "left channel"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxId">The instance ID of the sound effect.</param>
@@ -603,10 +861,27 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Smoothly blend pan toward a target position each frame:
     /// <code>
-    /// ` lerp the pan toward the target by 10% each frame
-    /// currentPan = sfx pan(engineSfx)
-    /// currentPan = currentPan + (targetPan - currentPan) * 0.1
-    /// set sfx pan engineSfx, currentPan
+    /// ` load a looping engine sound and start it
+    /// load sfx clip 1, "powerup"
+    /// engineSfx = 1
+    /// sfx engineSfx, 1
+    /// set sfx loop engineSfx, 1
+    /// play sfx engineSfx
+    ///
+    /// ` we want the engine to settle on the right side
+    /// targetPan = 1.0
+    ///
+    /// ` load a font so we can show the current pan
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` lerp the pan toward the target by 10% each frame
+    ///   currentPan = sfx pan(engineSfx)
+    ///   currentPan = currentPan + (targetPan - currentPan) * 0.1
+    ///   set sfx pan engineSfx, currentPan
+    ///   text 1, 470, 200, 1, "pan: " + str$(currentPan)
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxId">The instance ID of the sound effect.</param>
@@ -642,19 +917,49 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Fade out a sound over time each frame:
     /// <code>
-    /// ` reduce volume by a small amount each frame
-    /// vol = sfx volume(mySfx)
-    /// vol = vol - 0.02
-    /// IF vol &lt; 0.0 THEN vol = 0.0
-    /// set sfx volume mySfx, vol
+    /// ` load a looping sound and start it at full volume
+    /// load sfx clip 1, "powerup"
+    /// mySfx = 1
+    /// sfx mySfx, 1
+    /// set sfx loop mySfx, 1
+    /// set sfx volume mySfx, 1.0
+    /// play sfx mySfx
+    ///
+    /// ` load a font so we can show the current volume
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` reduce volume by a small amount each frame
+    ///   vol = sfx volume(mySfx)
+    ///   vol = vol - 0.02
+    ///   IF vol &lt; 0.0 THEN vol = 0.0
+    ///   set sfx volume mySfx, vol
+    ///   text 1, 470, 200, 1, "volume: " + str$(vol)
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Set a quiet background ambience at half volume:
     /// <code>
+    /// ` load an ambient sound and create an instance
+    /// load sfx clip 1, "powerup"
+    /// ambientSfx = 1
+    /// sfx ambientSfx, 1
+    ///
+    /// ` play it quietly on a loop as background ambience
     /// set sfx volume ambientSfx, 0.5
     /// set sfx loop ambientSfx, 1
     /// play sfx ambientSfx
+    ///
+    /// ` load a font so we can show a label
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` keep running so the ambience keeps looping
+    ///   text 1, 470, 200, 1, "ambience at half volume"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxId">The instance ID of the sound effect.</param>
@@ -687,12 +992,27 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Fade in a sound from silence to full volume:
     /// <code>
-    /// ` increase volume toward 1.0 each frame
-    /// vol = sfx volume(mySfx)
-    /// IF vol &lt; 1.0
-    ///   vol = vol + 0.01
-    ///   set sfx volume mySfx, vol
-    /// ENDIF
+    /// ` load a looping sound and start it silent
+    /// load sfx clip 1, "powerup"
+    /// mySfx = 1
+    /// sfx mySfx, 1
+    /// set sfx loop mySfx, 1
+    /// set sfx volume mySfx, 0.0
+    /// play sfx mySfx
+    ///
+    /// ` load a font so we can show the current volume
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` increase volume toward 1.0 each frame
+    ///   vol = sfx volume(mySfx)
+    ///   IF vol &lt; 1.0
+    ///     vol = vol + 0.01
+    ///     set sfx volume mySfx, vol
+    ///   ENDIF
+    ///   text 1, 470, 200, 1, "volume: " + str$(vol)
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxId">The instance ID of the sound effect.</param>
@@ -731,7 +1051,7 @@ public partial class FadeMonoGameCommands
     /// <code>
     /// ` load and create the ambient loop
     /// clipId = 1
-    /// load sfx clip clipId, "audio/forest_ambience"
+    /// load sfx clip clipId, "powerup"
     /// ambSfx = 1
     /// sfx ambSfx, clipId
     ///
@@ -739,13 +1059,47 @@ public partial class FadeMonoGameCommands
     /// set sfx loop ambSfx, 1
     /// set sfx volume ambSfx, 0.5
     /// play sfx ambSfx
+    ///
+    /// ` load a font so we can show a label
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` keep running so the loop keeps repeating
+    ///   text 1, 470, 200, 1, "looping ambience"
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Stop a looping sound gracefully by letting it finish its current pass:
     /// <code>
-    /// ` turn off looping so the sound plays to the end and stops
-    /// set sfx loop ambSfx, 0
+    /// ` set up a looping sound
+    /// load sfx clip 1, "powerup"
+    /// ambSfx = 1
+    /// sfx ambSfx, 1
+    /// set sfx loop ambSfx, 1
+    /// play sfx ambSfx
+    ///
+    /// ` load a font so we can show the current state
+    /// font 1, "font"
+    ///
+    /// frame = 0
+    /// stopped = 0
+    /// do
+    ///   frame = frame + 1
+    ///   ` after about 3 seconds, stop looping so it finishes and ends
+    ///   IF frame = 180
+    ///     ` turn off looping so the sound plays to the end and stops
+    ///     set sfx loop ambSfx, 0
+    ///     stopped = 1
+    ///   ENDIF
+    ///   IF stopped = 1
+    ///     text 1, 470, 200, 1, "loop off - will finish"
+    ///   ELSE
+    ///     text 1, 470, 200, 1, "looping"
+    ///   ENDIF
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxId">The instance ID of the sound effect.</param>
@@ -786,23 +1140,68 @@ public partial class FadeMonoGameCommands
     /// <example>
     /// Wait for an intro jingle to finish, then start gameplay music:
     /// <code>
-    /// play sfx jingleSfx
-    /// DO
-    ///   ` keep looping until the jingle finishes
-    /// LOOP UNTIL is sfx done(jingleSfx) = 1
+    /// ` load an intro jingle and the gameplay music
+    /// load sfx clip 1, "select"
+    /// load sfx clip 2, "powerup"
+    /// jingleSfx = 1
+    /// musicSfx = 2
+    /// sfx jingleSfx, 1
+    /// sfx musicSfx, 2
     ///
-    /// ` now start the looping gameplay music
-    /// set sfx loop musicSfx, 1
-    /// play sfx musicSfx
+    /// ` start the jingle
+    /// play sfx jingleSfx
+    /// startedMusic = 0
+    ///
+    /// ` load a font so we can show the state
+    /// font 1, "font"
+    ///
+    /// do
+    ///   ` when the jingle finishes, start the looping gameplay music once
+    ///   IF is sfx done(jingleSfx) = 1
+    ///     IF startedMusic = 0
+    ///       set sfx loop musicSfx, 1
+    ///       play sfx musicSfx
+    ///       startedMusic = 1
+    ///     ENDIF
+    ///     text 1, 470, 200, 1, "music"
+    ///   ELSE
+    ///     text 1, 470, 200, 1, "jingle..."
+    ///   ENDIF
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <example>
     /// Trigger a visual effect when a sound finishes (called each frame):
     /// <code>
-    /// IF is sfx done(chargeSfx) = 1
-    ///   ` the charge-up sound finished, fire the laser!
-    ///   play sfx laserSfx
-    /// ENDIF
+    /// ` load a charge-up sound and a laser sound
+    /// load sfx clip 1, "powerup"
+    /// load sfx clip 2, "laser"
+    /// chargeSfx = 1
+    /// laserSfx = 2
+    /// sfx chargeSfx, 1
+    /// sfx laserSfx, 2
+    ///
+    /// ` start the charge-up
+    /// play sfx chargeSfx
+    /// fired = 0
+    ///
+    /// ` load a font so we can show the state
+    /// font 1, "font"
+    ///
+    /// do
+    ///   IF is sfx done(chargeSfx) = 1
+    ///     IF fired = 0
+    ///       ` the charge-up sound finished, fire the laser!
+    ///       play sfx laserSfx
+    ///       fired = 1
+    ///     ENDIF
+    ///     text 1, 470, 200, 1, "fired!"
+    ///   ELSE
+    ///     text 1, 470, 200, 1, "charging..."
+    ///   ENDIF
+    ///   sync
+    /// loop
     /// </code>
     /// </example>
     /// <param name="sfxId">The instance ID of the sound effect to check.</param>
