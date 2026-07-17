@@ -37,6 +37,28 @@ public sealed class BrowserDebugSession : DebugSession
         debuggerReset = 0;
     }
 
+    // State-preserving hot-reload rebind for the browser. Reuses Restart (rebind
+    // to the new program + REV_REQUEST_RESTART so the page re-sends breakpoints)
+    // but KEEPS the paused/running state: a reload accepted while paused must stay
+    // paused, not resume. Restart resets the pause counters (for F1's fresh-start
+    // semantics), so we snapshot IsPaused and re-assert it, then re-mark connected.
+    public void RestartPreservingPause(VirtualMachine vm, DebugData dbg, CommandCollection commands)
+    {
+        var wasPaused = IsPaused;
+        Restart(vm, dbg, commands);
+        if (wasPaused)
+        {
+            // IsPaused => pauseRequestedByMessageId > resumeRequestedByMessageId
+            pauseRequestedByMessageId = resumeRequestedByMessageId + 1;
+            // Mark the paused breakpoint line as already-hit (Restart cleared it)
+            // so the next continue EXECUTES this line and advances, instead of
+            // immediately re-firing the same breakpoint at the same spot.
+            if (instructionMap != null && instructionMap.TryFindClosestTokenBeforeIndex(vm.instructionIndex, out var tok))
+                hitBreakpointToken = tok;
+        }
+        MarkConnected();
+    }
+
     // Enqueue an inbound (page → VM) message. The base class's
     // receivedMessages is protected; expose a public wrapper.
     public void Enqueue(DebugMessage msg) => receivedMessages.Enqueue(msg);

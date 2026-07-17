@@ -1566,6 +1566,14 @@
                         case 'get-content-build-plan':
                             await invokeAndReply('get-content-build-plan-result', m.id, 'GetContentBuildPlan');
                             return;
+                        // ── Hot reload (state-preserving) ──────────────────
+                        // Arm the new source against the LIVE VM; the frame
+                        // safepoint applies the diff (preserving state) or the
+                        // verdict comes back PermanentlyRude → the parent Runs to
+                        // restart. Same wire shape as the web runtime's reload-arm.
+                        case 'reload-arm':
+                            await invokeAndReply('reload-arm-result', m.id, 'ReloadArm', m.source);
+                            return;
                         case 'begin-pending-program':
                             // Mirrors run-start-source's tickHalted + splash
                             // bookkeeping so the second phase finishes the

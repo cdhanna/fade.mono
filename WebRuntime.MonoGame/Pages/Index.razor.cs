@@ -458,6 +458,58 @@ loop
             return LoadProgramInternal(source, initialBoot: false);
         }
 
+        // State-preserving hot reload (Playground iframe Reload button). Unlike
+        // LoadProgram — which does a FULL swap that rebuilds the VM and resets
+        // all state — this arms the new source against the LIVE VM and applies
+        // the diff at the next frame safepoint, preserving globals/heap. Returns
+        // a verdict envelope shaped like the web runtime's PumpStartResult so the
+        // Playground's runner.armReload parses both identically:
+        //   { ok, verdict, rudeReason, compileError, error }
+        // ApplicableNow/PendingTransient → applies live; PermanentlyRude → the
+        // editor must Run to restart. (MonoGame runtime is PublishTrimmed=false,
+        // so the anonymous-type JSON here is safe — see the web runtime's
+        // hand-rolled JSON note, which does NOT apply to this project.)
+        [JSInvokable]
+        public string ReloadArm(string source)
+        {
+            try
+            {
+                if (_game == null)
+                    return JsonSerializer.Serialize(new
+                    {
+                        ok = false,
+                        error = "reload unavailable (no running program)",
+                    }, _contentPlanJsonOpts);
+
+                var commands = _currentCommands ?? new CommandCollection(
+                    new FadeMonoGameCommands(), new StandardCommands());
+
+                if (!FadeSdk.TryCreateFromString(source, commands, out var ctx, out var errors))
+                    return JsonSerializer.Serialize(new
+                    {
+                        ok = false,
+                        compileError = errors.ToDisplay(),
+                    }, _contentPlanJsonOpts);
+
+                var verdict = _game.ArmModuleReload(ctx, source, out var rudeReason);
+                return JsonSerializer.Serialize(new
+                {
+                    ok = true,
+                    verdict = verdict.ToString(),
+                    rudeReason,
+                }, _contentPlanJsonOpts);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("ReloadArm error: " + ex);
+                return JsonSerializer.Serialize(new
+                {
+                    ok = false,
+                    error = "ReloadArm exception: " + ex.Message,
+                }, _contentPlanJsonOpts);
+            }
+        }
+
         // Two-phase compile/run used by the playground's asset pipeline:
         //
         //   1. CompileForRun(source)

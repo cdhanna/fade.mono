@@ -98,6 +98,15 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private Texture2D _pixel;
     private bool _autoAcceptNewBuilds;
     private bool _reloadRequestedFromUi;
+    // State-preserving "module reload" (F2 / blue bar), distinct from F1's full
+    // restart (red bar). See ModuleReloader.
+    private readonly ModuleReloader _moduleReloader = new ModuleReloader();
+    private bool _f2WasDown;
+    // Parent-driven (Playground iframe) state-preserving reload. The editor's
+    // Reload button arms a build via ReloadArm → ArmModuleReload; unlike the F2
+    // path we auto-accept, so the frame safepoint applies it without a keypress.
+    private FadeRuntimeContext _pendingWebReload;
+    private bool _webReloadAutoAccept;
 
  
     public Game1(ILaunchable fadeProgram, bool autoAcceptNewBuilds=false, bool testMode=false)
@@ -236,6 +245,34 @@ public class Game1 : Microsoft.Xna.Framework.Game
         _reloadRequestedFromUi = true;
     }
 
+    // Parent-driven state-preserving reload (Playground iframe Reload button).
+    // Classifies the supplied build against the LIVE VM right now and, unless
+    // it's PermanentlyRude, stashes it for the next frame safepoint to apply
+    // live (state preserved). Distinct from LoadProgram, which does a FULL swap
+    // (rebuilds the VM, resets state). Returns the verdict; rudeReason is set
+    // when the edit can't apply live (the caller should offer a full Run).
+    public FadeBasic.Virtual.HotReload.Verdict ArmModuleReload(FadeRuntimeContext ctx, string source, out string rudeReason)
+    {
+        var verdict = _moduleReloader.ArmAndClassify(ctx, source);
+        rudeReason = _moduleReloader.RudeReason;
+        Console.WriteLine($"[module-reload:web] arm verdict={verdict} enabled={_moduleReloader.IsEnabled}"
+            + (verdict == FadeBasic.Virtual.HotReload.Verdict.PermanentlyRude ? $" rude={rudeReason}" : "")
+            + " — commit is driven per-frame via TryCommitPending until it lands");
+        if (verdict == FadeBasic.Virtual.HotReload.Verdict.PermanentlyRude)
+        {
+            // Never applies live — don't leave it pending (no blue bar, no
+            // wasted per-frame reclassify). The caller restarts via Run.
+            _pendingWebReload = null;
+            _webReloadAutoAccept = false;
+        }
+        else
+        {
+            _pendingWebReload = ctx;
+            _webReloadAutoAccept = true;
+        }
+        return verdict;
+    }
+
 #if BROWSER
     // Flip the game in/out of test mode at runtime. Desktop sets these via
     // ctor + LaunchOptions env vars at boot; the browser doesn't have that
@@ -295,6 +332,11 @@ public class Game1 : Microsoft.Xna.Framework.Game
             };
         }
         customize?.Invoke(_vm);
+
+        // Bind the module reloader to the newly-built VM. Baseline source comes
+        // from the running program's SourceMap (desktop runtime context); a
+        // no-op if the program can't provide source.
+        _moduleReloader.Bind(_vm, _fadeProgram.CommandCollection, _fadeProgram as FadeRuntimeContext);
 
         // LaunchOptions had a static initializer that allocated a TCP port
         // for DAP — System.Net.Sockets is unavailable in WASM, so touching
@@ -731,6 +773,73 @@ public class Game1 : Microsoft.Xna.Framework.Game
                         }
                     }
                 }
+
+                // Frame safepoint — runs after EITHER the debug or non-debug tick.
+                // (The fish game runs with _options.debug = true, so the module
+                // reload MUST live outside the non-debug branch.) Arm/classify a
+                // newer build; F2 applies the state-preserving reload live.
+                {
+                    var f2Now = Keyboard.GetState().IsKeyDown(Keys.F2);
+                    var reloadCommitted = false;
+                    // A parent-armed web reload (Playground) is driven EVERY frame
+                    // via TryCommitPending — it re-classifies + applies as soon as
+                    // the VM leaves the edited statement (drains like the web path),
+                    // instead of relying on SyncPoint's one-shot arm-time verdict.
+                    if (_webReloadAutoAccept && _pendingWebReload != null)
+                    {
+                        if (_moduleReloader.TryCommitPending())
+                        {
+                            // Committed live — realign the "current program" AND
+                            // GameReloader's latest-build pointers to the reloaded
+                            // build. Without syncing GameReloader, IsNewBuildAvailable()
+                            // stays true (LatestBuild != _fadeProgram) → a spurious RED
+                            // "press F1 to restart" border, and the F2 fallback branch
+                            // below would re-arm the pre-reload build.
+                            _fadeProgram = _pendingWebReload;
+                            GameReloader.SetBuild(_pendingWebReload);
+                            _pendingWebReload = null;
+                            _webReloadAutoAccept = false;
+                            reloadCommitted = true;
+                        }
+                        else if (!_moduleReloader.HasPendingReload)
+                        {
+                            // Resolved without a commit (no-op diff / dropped) —
+                            // stop retrying every frame.
+                            _pendingWebReload = null;
+                            _webReloadAutoAccept = false;
+                        }
+                    }
+                    // F2 file-watcher path (desktop / standalone) — unchanged.
+                    else if (_moduleReloader.SyncPoint(GameReloader.LatestRuntime, f2Now && !_f2WasDown)
+                             && GameReloader.LatestBuild != null)
+                    {
+                        _fadeProgram = GameReloader.LatestBuild;
+                        reloadCommitted = true;
+                    }
+                    _f2WasDown = f2Now;
+
+                    // Keep an attached debugger alive across the reload: rebind it
+                    // to the new program on the SAME (reloaded-in-place) VM, so
+                    // state is preserved and breakpoints re-verify — the exact
+                    // Restart handshake F1 uses (see ResetFade), minus the VM
+                    // rebuild. REV_REQUEST_RESTART drives the client to re-send
+                    // breakpoints; MarkConnected clears the re-HELLO gate in-browser.
+                    if (reloadCommitted && _options.debug && _debugSession != null)
+                    {
+                        var newDbg = _moduleReloader.CurrentDebugData ?? _fadeProgram.DebugData;
+#if BROWSER
+                        // Browser (Playground): rebind AND preserve the paused state
+                        // so an accepted reload doesn't resume a paused program.
+                        ((BrowserDebugSession)_debugSession).RestartPreservingPause(_vm, newDbg, _fadeProgram.CommandCollection);
+#else
+                        // Desktop: F2 reload is used while running; plain Restart
+                        // (resets to running) is fine. Pause-preservation on desktop
+                        // would need RestartAfterReload from a newer Lang.Core.
+                        _debugSession.Restart(_vm, newDbg, _fadeProgram.CommandCollection);
+#endif
+                        Console.WriteLine("[module-reload] debug session rebound (attached, breakpoints re-verifying)");
+                    }
+                }
             }
             catch (VirtualRuntimeException ex)
             {
@@ -798,17 +907,27 @@ public class Game1 : Microsoft.Xna.Framework.Game
 #if !BROWSER
         DebugUISystem.Render();
 #endif
-        if (IsNewBuildAvailable())
+#if !BROWSER
+        // Blue border = a state-preserving module reload is ready (press F2).
+        // Red border  = a new build is available but can't apply live (rude edit
+        //               / not source-carrying) — press F1 for a full restart.
+        // Desktop/standalone only: these are F1/F2 key affordances. In the
+        // browser (Playground) reload is driven by the editor's Reload button —
+        // the border would just be meaningless chrome around the canvas.
+        Color? borderColor =
+            _moduleReloader.IsModuleReloadReady ? Color.Blue :
+            IsNewBuildAvailable() ? Color.Red :
+            (Color?)null;
+        if (borderColor.HasValue)
         {
-            // a silly indicator that a new build is ready
-            _spriteBatch.Draw(_pixel, Vector2.Zero, null, Color.Red, 0f, Vector2.Zero, 20, SpriteEffects.None, 0);
-            
-            _spriteBatch.Draw(_pixel, new Rectangle(0, 0, GraphicsDevice.Viewport.Width, 20), Color.Red);
-            _spriteBatch.Draw(_pixel, new Rectangle(0, 20, 20, GraphicsDevice.Viewport.Height - 40), Color.Red);
-            _spriteBatch.Draw(_pixel, new Rectangle(GraphicsDevice.Viewport.Width - 20, 20, 20, GraphicsDevice.Viewport.Height - 40), Color.Red);
-            _spriteBatch.Draw(_pixel, new Rectangle(0, GraphicsDevice.Viewport.Height - 20, GraphicsDevice.Viewport.Width, 20), Color.Red);
+            var c = borderColor.Value;
+            _spriteBatch.Draw(_pixel, new Rectangle(0, 0, GraphicsDevice.Viewport.Width, 20), c);
+            _spriteBatch.Draw(_pixel, new Rectangle(0, 20, 20, GraphicsDevice.Viewport.Height - 40), c);
+            _spriteBatch.Draw(_pixel, new Rectangle(GraphicsDevice.Viewport.Width - 20, 20, 20, GraphicsDevice.Viewport.Height - 40), c);
+            _spriteBatch.Draw(_pixel, new Rectangle(0, GraphicsDevice.Viewport.Height - 20, GraphicsDevice.Viewport.Width, 20), c);
         }
-        
+#endif
+
         _spriteBatch.End();
         base.Draw(gameTime);
     }
