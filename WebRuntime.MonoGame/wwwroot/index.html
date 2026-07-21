@@ -1828,6 +1828,30 @@
                         }
                     }
 
+                    // Audio assets. In the Playground the page decodes each
+                    // clip and pushes it via a `register-audio` postMessage;
+                    // a standalone export has no page, so we fetch + register
+                    // the bundled source files here. Without this loop the
+                    // exported game runs silently — `load sfx clip` resolves
+                    // against window.fadeAudio, which was never populated.
+                    // Files live under audio/<file>; catalog-import paths
+                    // contain spaces and brackets, so encode each segment.
+                    const audio = Array.isArray(manifest.audio) ? manifest.audio : [];
+                    for (const entry of audio) {
+                        const audioName = entry && entry.name;
+                        const audioFile = entry && entry.file;
+                        if (!audioName || !audioFile) continue;
+                        try {
+                            if (splash) splash.setStatus(`Loading audio: ${audioName.split('/').pop()}…`);
+                            const url = 'audio/' + audioFile.split('/').map(encodeURIComponent).join('/');
+                            const buf = await fetch(url).then((r) => r.arrayBuffer());
+                            const ok = await window.fadeAudio.register(audioName, new Uint8Array(buf));
+                            if (!ok) console.error('[fade-monogame] audio decode failed for', audioName);
+                        } catch (e) {
+                            console.error('[fade-monogame] audio load failed for', audioName, e);
+                        }
+                    }
+
                     if (splash) splash.setStatus('Starting game…');
                     const source = await fetch(`game/${sourceFile}`).then((r) => r.text());
                     const ok = await window.theInstance.invokeMethodAsync('LoadProgram', source);
