@@ -314,6 +314,12 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("min")]
     public static float Min(float a, float b) => Math.Min(a, b);
 
+    [FadeBasicCommand("pow")]
+    public static float Pow(float a, float b) => MathF.Pow(a, b);
+    
+    [FadeBasicCommand("log")]
+    public static float Log(float a, float b) => MathF.Log(a, b);
+
     /// <summary>
     /// <para>Converts an angle from radians to degrees.</para>
     /// <para>All trig functions (<see cref="Sin">sin</see>, <see cref="Cos">cos</see>, <see cref="Atan2">atan2</see>, etc.) work in radians, so use this when you need degrees for display or human-friendly output.</para>
