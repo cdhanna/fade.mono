@@ -516,6 +516,17 @@ public partial class FadeMonoGameCommands
         return InputSystem.keyboardState.IsKeyDown(Keys.Space) ? 1 : 0;
     }
 
+    [FadeBasicCommand("left shiftKey")]
+    public static int shiftKey()
+    {
+        return InputSystem.keyboardState.IsKeyDown(Keys.LeftShift) ? 1 : 0;
+    }
+    
+    [FadeBasicCommand("new left shiftKey")]
+    public static int shiftKeyNew()
+    {
+        return IsNewKeyPressed((int)Keys.LeftShift) ? 1 : 0;
+    }
 
 
     /// <summary>
@@ -985,7 +996,19 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("scanCode")]
     public static int ScanCode(string key)
     {
-        var code = Enum.Parse<Keys>(key);
+        Keys code = 0;
+        switch (key)
+        {
+            case ".":
+                code = Keys.OemPeriod;
+                break;
+            case ";":
+                code = Keys.OemSemicolon;
+                break;
+            default:
+                code = Enum.Parse<Keys>(key);
+                break;
+        }
         return (int)code;
     }
 
