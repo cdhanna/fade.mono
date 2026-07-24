@@ -1263,6 +1263,11 @@
             // Disable browser context menu so right-click is available to the game.
             canvas.addEventListener('contextmenu', e => e.preventDefault());
 
+            // Keys should not affect anything else on the page when we are focuse din the game.
+            window.addEventListener('keydown', e => {
+                e.preventDefault();
+            }, true);
+            
             // Push the initial canvas size into .NET *before* the user's
             // program runs. Without this, GraphicsDeviceManager keeps its
             // KNI default (e.g. 800x480) at boot, so SetMainRenderSize
