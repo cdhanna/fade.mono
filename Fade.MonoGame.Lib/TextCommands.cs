@@ -619,7 +619,7 @@ public partial class FadeMonoGameCommands
     public static void SetSpriteTextRenderTarget(int textId, int outputId)
     {
         TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
-        RenderSystem.SetSpriteTextToOutput(textId, outputId, textSprite.sprite.outputIdFlags);
+        RenderSystem.SetSpriteTextToOutput(index, outputId, textSprite.sprite.outputIdFlags);
         textSprite.sprite.outputIdFlags = outputId;
         TextSystem.textSprites[index] = textSprite;
     }
