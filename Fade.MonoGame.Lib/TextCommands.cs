@@ -894,7 +894,7 @@ public partial class FadeMonoGameCommands
         TextSystem.textSprites[index] = textSprite;
     }
 
-    [FadeBasicCommand("get text size y")]
+    [FadeBasicCommand("get text size x")]
     public static float GetTextSizeX(int textId)
     {
         TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
@@ -904,10 +904,10 @@ public partial class FadeMonoGameCommands
             return 0;
         }
 
-        return runtimeFont.font.MeasureString(textSprite.text).X;
+        return runtimeFont.font.MeasureString(textSprite.text).X * textSprite.sprite.scale.X;
     }
     
-    [FadeBasicCommand("get text size x")]
+    [FadeBasicCommand("get text size y")]
     public static float GetTextSizeY(int textId)
     {
         TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
@@ -917,7 +917,7 @@ public partial class FadeMonoGameCommands
             return 0;
         }
 
-        return runtimeFont.font.MeasureString(textSprite.text).Y;
+        return runtimeFont.font.MeasureString(textSprite.text).Y * textSprite.sprite.scale.Y;
     }
 
 
