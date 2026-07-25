@@ -388,9 +388,9 @@ public partial class FadeMonoGameCommands
 
     /// <summary>
     /// <para>Pauses a playing sound effect.</para>
-    /// <para>The sound stops where it is and can be resumed from that point by calling
-    /// <see cref="PlaySfx(int)">play sfx</see> again. Note that <see cref="PlaySfx(int)">play sfx</see> restarts
-    /// from the beginning, so pausing is mainly useful for stopping a sound temporarily.</para>
+    /// <para>The sound stops where it is and can be resumed from that point with
+    /// <see cref="ResumeSfx">resume sfx</see>. Use <see cref="PlaySfx(int)">play sfx</see>
+    /// instead if you want to restart the sound from the beginning.</para>
     /// </summary>
     /// <remarks>
     /// A paused sound is different from a stopped one. <see cref="IsSfxDone">is sfx done</see>
@@ -430,6 +430,7 @@ public partial class FadeMonoGameCommands
     /// </code>
     /// </example>
     /// <param name="sfxId">The instance ID of the sound effect to pause.</param>
+    /// <seealso cref="ResumeSfx">resume sfx</seealso>
     /// <seealso cref="PlaySfx(int)">play sfx</seealso>
     /// <seealso cref="IsSfxDone">is sfx done</seealso>
     /// <seealso cref="LoadSoundEffect">load sfx clip</seealso>
@@ -443,6 +444,71 @@ public partial class FadeMonoGameCommands
 #else
         AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
         AudioInstanceSystem.audioEffects[index].instance.Pause();
+#endif
+    }
+
+    /// <summary>
+    /// <para>Resumes a sound effect that was paused with <see cref="PauseSfx">pause sfx</see>,
+    /// continuing from the point where it was paused.</para>
+    /// <para>Unlike <see cref="PlaySfx(int)">play sfx</see>, which always restarts from the
+    /// beginning, this picks up where the sound left off. If the instance isn't paused
+    /// (it's stopped, finished, or already playing) this does nothing — use
+    /// <see cref="PlaySfx(int)">play sfx</see> to start a stopped sound from the top.</para>
+    /// </summary>
+    /// <remarks>
+    /// The typical pattern is a pause/resume pair around a game-pause state: call
+    /// <see cref="PauseSfx">pause sfx</see> when the game pauses and <c>resume sfx</c>
+    /// when it un-pauses, so looping music or ambience continues seamlessly instead of
+    /// snapping back to the start.
+    /// </remarks>
+    /// <example>
+    /// Pause a looping sound, then resume it from the same spot:
+    /// <code>
+    /// ` set up a looping ambient sound
+    /// clipId = 1
+    /// load sfx clip clipId, "powerup"
+    /// ambSfx = 1
+    /// sfx ambSfx, clipId
+    /// set sfx loop ambSfx, 1
+    /// play sfx ambSfx
+    ///
+    /// ` load a font so we can show the current state
+    /// font 1, "font"
+    ///
+    /// frame = 0
+    /// paused = 0
+    /// do
+    ///   frame = frame + 1
+    ///   ` pause at ~1s, resume at ~2s — the sound continues, it does not restart
+    ///   IF frame = 60
+    ///     pause sfx ambSfx
+    ///     paused = 1
+    ///   ENDIF
+    ///   IF frame = 120
+    ///     resume sfx ambSfx
+    ///     paused = 0
+    ///   ENDIF
+    ///   IF paused = 1
+    ///     text 1, 470, 200, 1, "paused"
+    ///   ELSE
+    ///     text 1, 470, 200, 1, "playing"
+    ///   ENDIF
+    ///   sync
+    /// loop
+    /// </code>
+    /// </example>
+    /// <param name="sfxId">The instance ID of the sound effect to resume.</param>
+    /// <seealso cref="PauseSfx">pause sfx</seealso>
+    /// <seealso cref="PlaySfx(int)">play sfx</seealso>
+    /// <seealso cref="IsSfxDone">is sfx done</seealso>
+    [FadeBasicCommand("resume sfx")]
+    public static void ResumeSfx(int sfxId)
+    {
+#if BROWSER
+        BrowserAudioBridge.Resume(sfxId);
+#else
+        AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
+        AudioInstanceSystem.audioEffects[index].instance.Resume();
 #endif
     }
 

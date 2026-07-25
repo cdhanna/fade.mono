@@ -1113,6 +1113,23 @@
                     inst.pauseOffset = offset;
                     return true;
                 },
+                // Resume a paused instance from where pause() left off.
+                // pause() stashed the elapsed offset in inst.pauseOffset;
+                // startSource re-arms a fresh BufferSourceNode at that
+                // offset (source nodes are single-use, so we can't literally
+                // un-pause the old one). play() ignores this and restarts at 0.
+                resume(sfxId) {
+                    const inst = _instanceById.get(sfxId);
+                    if (!inst) return false;
+                    if (inst.isPlaying) return true;   // already going — no-op
+                    if (!inst.isPaused) return false;  // stopped/never-played — use play()
+                    let off = inst.pauseOffset || 0;
+                    // A looped sound's offset can exceed one pass; wrap it so
+                    // src.start's offset stays within the buffer.
+                    const dur = inst.buffer ? inst.buffer.duration : 0;
+                    if (inst.loop && dur > 0) off = off % dur;
+                    return startSource(inst, off);
+                },
                 stop(sfxId) {
                     const inst = _instanceById.get(sfxId);
                     if (!inst) return false;

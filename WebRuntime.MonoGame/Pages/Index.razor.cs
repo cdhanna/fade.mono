@@ -159,6 +159,8 @@ loop
                     js.InvokeVoid("fadeAudio.playWithDelay", sfxId, ms);
                 BrowserAudioBridge.Pause = sfxId =>
                     js.InvokeVoid("fadeAudio.pause", sfxId);
+                BrowserAudioBridge.Resume = sfxId =>
+                    js.InvokeVoid("fadeAudio.resume", sfxId);
                 BrowserAudioBridge.Stop = sfxId =>
                     js.InvokeVoid("fadeAudio.stop", sfxId);
 

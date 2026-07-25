@@ -47,6 +47,9 @@ public static class BrowserAudioBridge
     public static Action<int> Play = _ => { };
     public static Action<int, int> PlayWithDelay = (_, _) => { };
     public static Action<int> Pause = _ => { };
+    /// <summary>Resumes a paused instance from its stored pause offset.
+    /// No-op if the instance is stopped or already playing.</summary>
+    public static Action<int> Resume = _ => { };
     public static Action<int> Stop = _ => { };
 
     // ── Settings ─────────────────────────────────────────────────────
