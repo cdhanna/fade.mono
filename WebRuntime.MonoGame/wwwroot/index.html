@@ -706,7 +706,43 @@
         } catch { /* ignore — bad location/URL is non-fatal */ }
 
         // Boot Blazor manually so we can hook before/after the runtime starts.
-        Blazor.start();
+        //
+        // loadBootResource lets us observe the .NET WASM download — the very
+        // first phase, before initRenderJS or our self-boot JS runs — which
+        // otherwise sat on the static "Booting Fade Basic" text with no sign of
+        // progress on a cold cache. We wrap each resource fetch to count files
+        // and accumulate downloaded bytes, then feed a live readout into the
+        // splash. Returning the same Response we only read *headers* from keeps
+        // the body stream intact for Blazor, and passing `integrity` through
+        // preserves SRI. `dotnetjs` (the module script) can't be satisfied with
+        // a Response in Blazor's loader, so we defer it to the default path.
+        (function () {
+            if (window.__fadeSplash) window.__fadeSplash.setStatus('Downloading runtime…');
+            let bootFiles = 0;
+            let bootBytes = 0;
+            const fmtSize = (b) => b >= 1048576
+                ? (b / 1048576).toFixed(1) + ' MB'
+                : Math.max(1, Math.round(b / 1024)) + ' KB';
+            const report = () => {
+                const s = window.__fadeSplash;
+                if (!s || s.isHidden()) return;
+                const size = bootBytes > 0 ? `, ${fmtSize(bootBytes)}` : '';
+                s.setStatus(`Downloading runtime… (${bootFiles} files${size})`);
+            };
+            Blazor.start({
+                loadBootResource: function (type, name, defaultUri, integrity) {
+                    if (type === 'dotnetjs') return undefined; // default loader
+                    const opts = integrity ? { integrity, cache: 'default' } : undefined;
+                    return fetch(defaultUri, opts).then((resp) => {
+                        bootFiles++;
+                        const len = Number(resp.headers.get('content-length'));
+                        if (len > 0) bootBytes += len;
+                        report();
+                        return resp;
+                    });
+                },
+            });
+        })();
     </script>
 
     <!--
@@ -1255,12 +1291,19 @@
 
             if (window.__fadeSplash) window.__fadeSplash.setStatus('Runtime ready…');
 
-            // Fade out the boot splash now that Blazor + KNI are fully mounted.
-            // A short delay lets the status message read "Runtime ready…" briefly
-            // before disappearing, then reveals the black canvas waiting for Run.
+            // Fade out the boot splash now that Blazor + KNI are fully mounted —
+            // but ONLY in preview mode, where the runtime then idles waiting for
+            // the parent's Run. In a STANDALONE export the self-boot flow still
+            // has to fetch assets and compile the program (LoadProgram) after
+            // this point; hiding here dropped the ghost splash and left the user
+            // staring at a black canvas during that gap. There, the standalone
+            // boot IIFE owns the hide (after LoadProgram succeeds).
             // Any subsequent run-start-source / debug-start hide() calls are
             // no-ops (the hidden flag prevents double-hiding).
-            setTimeout(() => { if (window.__fadeSplash) window.__fadeSplash.hide(); }, 400);
+            const inPreviewMode = new URLSearchParams(location.search).has('preview');
+            if (inPreviewMode) {
+                setTimeout(() => { if (window.__fadeSplash) window.__fadeSplash.hide(); }, 400);
+            }
 
             // Hide the boot splash now that KNI + Game1 are alive. The Blazor
             // mount lives in a separate #mg-blazor-root so the splash sat
@@ -1841,12 +1884,29 @@
                     const sourceFile = manifest.source || 'program.fbasic';
                     const assets = Array.isArray(manifest.assets) ? manifest.assets : [];
 
-                    for (const name of assets) {
+                    // Fetch every .xnb in parallel (N serial round-trips was a
+                    // big chunk of the post-boot stall), then register them in
+                    // order. Progress counts completed fetches so the splash
+                    // shows forward motion instead of one frozen line.
+                    let assetsDone = 0;
+                    const reportAssets = () => {
+                        if (splash && assets.length) {
+                            splash.setStatus(`Loading game assets… (${assetsDone}/${assets.length})`);
+                        }
+                    };
+                    reportAssets();
+                    const assetBuffers = await Promise.all(assets.map((name) =>
+                        fetch(`game/${name}.xnb`)
+                            .then((r) => r.arrayBuffer())
+                            .then((buf) => { assetsDone++; reportAssets(); return { name, buf }; })
+                            .catch((e) => { console.error('[fade-monogame] asset load failed for', name, e); return null; })
+                    ));
+                    for (const entry of assetBuffers) {
+                        if (!entry) continue;
                         try {
-                            const buf = await fetch(`game/${name}.xnb`).then((r) => r.arrayBuffer());
-                            await window.theInstance.invokeMethodAsync('RegisterAsset', name, new Uint8Array(buf));
+                            await window.theInstance.invokeMethodAsync('RegisterAsset', entry.name, new Uint8Array(entry.buf));
                         } catch (e) {
-                            console.error('[fade-monogame] asset load failed for', name, e);
+                            console.error('[fade-monogame] asset register failed for', entry.name, e);
                         }
                     }
 
@@ -1874,8 +1934,14 @@
                         }
                     }
 
-                    if (splash) splash.setStatus('Starting game…');
+                    // LoadProgram compiles the bundled source inside the WASM
+                    // VM — for a large program this is the longest single step
+                    // after boot, so label it explicitly rather than a vague
+                    // "Starting game…". Yield a frame first so the splash text
+                    // actually paints before the compile hogs the thread.
+                    if (splash) splash.setStatus('Compiling program…');
                     const source = await fetch(`game/${sourceFile}`).then((r) => r.text());
+                    await new Promise((r) => requestAnimationFrame(() => r()));
                     const ok = await window.theInstance.invokeMethodAsync('LoadProgram', source);
                     if (!ok) {
                         if (splash) splash.setStatus('Failed to start — see browser console.', true);
