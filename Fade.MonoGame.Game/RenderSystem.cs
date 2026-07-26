@@ -343,10 +343,18 @@ public static class RenderSystem
 
 
     public static bool flip = false;
+    public static Matrix shakeMat;
+
     public static void RenderAll2(SpriteBatch sb)
     {
         var localOutputs = outputs.ToList().OrderBy(x => x.order).ToList();
 
+        screenShakeOffsetTarget.X = (Random.Shared.NextSingle()-.5f) * screenShakeMag;
+        screenShakeOffsetTarget.Y = (Random.Shared.NextSingle()-.5f) * screenShakeMag;
+        var screenDelta = screenShakeOffsetTarget - screenShakeOffset;
+        screenShakeOffset += screenDelta * screenShakeElastic;
+        shakeMat = Matrix.Identity * Matrix.CreateTranslation(new Vector3(screenShakeOffset.X, screenShakeOffset.Y, 0));
+        
         for (var i = 0; i < localOutputs.Count; i++)
         {
             var output = localOutputs[i];

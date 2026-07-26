@@ -885,6 +885,12 @@ public class Game1 : Microsoft.Xna.Framework.Game
         GraphicsDevice.SetRenderTarget(null);
         GraphicsDevice.Clear(Color.Black);
 
+        // screenShakeOffsetTarget.X = (Random.Shared.NextSingle()-.5f) * screenShakeMag;
+        // screenShakeOffsetTarget.Y = (Random.Shared.NextSingle()-.5f) * screenShakeMag;
+        // var screenDelta = screenShakeOffsetTarget - screenShakeOffset;
+        // screenShakeOffset += screenDelta * screenShakeElastic;
+        // var mat2 = Matrix.Identity * Matrix.CreateTranslation(new Vector3(screenShakeOffset.X, screenShakeOffset.Y, 0));
+        //
         var screenEffect = RenderSystem.screenEffectIndex > -1
             ? RenderSystem.effects[RenderSystem.screenEffectIndex].effect
             : null;
@@ -892,6 +898,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
             sortMode: SpriteSortMode.Immediate,
             blendState: BlendState.Opaque,
             samplerState: SamplerState.PointClamp,
+            transformMatrix: RenderSystem.shakeMat,
             effect: screenEffect
             );
         
