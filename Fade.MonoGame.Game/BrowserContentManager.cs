@@ -29,6 +29,13 @@ public sealed class BrowserContentManager : ContentManager
     private readonly Dictionary<string, byte[]> _assets =
         new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
 
+    // Asset name → content hash (the page's sha256 of the registered bytes).
+    // Lets the editor's manifest-reconcile ask "do you already hold this exact
+    // asset?" instead of the page keeping a fragile local belief that desyncs
+    // when this manager is rebuilt empty (the old "Registered: []" hazard).
+    private readonly Dictionary<string, string> _hashes =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
     public BrowserContentManager(IServiceProvider services) : base(services)
     {
     }
@@ -55,7 +62,9 @@ public sealed class BrowserContentManager : ContentManager
     private readonly HashSet<string> _recentlyUnregistered =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-    public void RegisterAsset(string name, byte[] bytes)
+    public void RegisterAsset(string name, byte[] bytes) => RegisterAsset(name, bytes, null);
+
+    public void RegisterAsset(string name, byte[] bytes, string hash)
     {
         if (string.IsNullOrEmpty(name)) return;
         // ContentManager strips its own .xnb extension before calling
@@ -65,9 +74,37 @@ public sealed class BrowserContentManager : ContentManager
         {
             name = name.Substring(0, name.Length - 4);
         }
+        // Replacing an existing asset whose content changed: evict the cached
+        // loaded instance (Texture2D/SpriteFont/…) so the next Content.Load pulls
+        // fresh bytes. The old page path sent an explicit unregister+register
+        // pair for this; the manifest-reconcile path sends only register, so do
+        // the eviction here when the hash differs from what we hold.
+        if (!string.IsNullOrEmpty(hash) && _assets.ContainsKey(name)
+            && (!_hashes.TryGetValue(name, out var prevHash) || prevHash != hash))
+        {
+            UnregisterAsset(name);
+        }
         bool isReload = _recentlyUnregistered.Remove(name) || _assets.ContainsKey(name);
         _assets[name] = bytes;
+        if (!string.IsNullOrEmpty(hash)) _hashes[name] = hash;
         if (isReload) _reloadedSinceDrain.Add(name);
+    }
+
+    /// <summary>
+    /// True when this manager already holds <paramref name="name"/> registered
+    /// with exactly the given content hash. The editor uses this during
+    /// manifest-reconcile to skip re-sending assets the runtime already has.
+    /// </summary>
+    public bool HasAssetWithHash(string name, string hash)
+    {
+        if (string.IsNullOrEmpty(name)) return false;
+        if (name.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase))
+        {
+            name = name.Substring(0, name.Length - 4);
+        }
+        return _assets.ContainsKey(name)
+               && _hashes.TryGetValue(name, out var h)
+               && string.Equals(h, hash, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -139,6 +176,7 @@ public sealed class BrowserContentManager : ContentManager
         // name is a hot-reload, not a first-time register.
         if (_assets.ContainsKey(name)) _recentlyUnregistered.Add(name);
         _assets.Remove(name);
+        _hashes.Remove(name);
 
         // Per-name eviction via reflection into KNI's private loadedAssets
         // dictionary. When this succeeds, the next Content.Load<T>(name)
@@ -175,6 +213,7 @@ public sealed class BrowserContentManager : ContentManager
     public void ClearAssets()
     {
         _assets.Clear();
+        _hashes.Clear();
         _recentlyUnregistered.Clear();
         _reloadedSinceDrain.Clear();
         // Also flush the base ContentManager's cache of loaded objects

@@ -35,6 +35,12 @@ public sealed class BrowserDebugSession : DebugSession
         hasConnectedDebugger = 1;
         debuggerSaidHello = 1;
         debuggerReset = 0;
+        // No TCP socket in the browser, so the post-Restart PROTO_HELLO gate in
+        // StartDebugging can never clear and would spin Thread.Sleep forever —
+        // deadlocking the single WASM thread the game tick runs on. Skip that
+        // wait unconditionally; this is immune to reset paths that forget to
+        // re-call MarkConnected (the step→continue→stop→re-debug wedge).
+        suppressHelloWait = true;
     }
 
     // State-preserving hot-reload rebind for the browser. Reuses Restart (rebind

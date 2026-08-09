@@ -96,6 +96,15 @@ public class Game1 : Microsoft.Xna.Framework.Game
 #endif
 
     private Texture2D _pixel;
+
+    // GC knobs funneled from fade.json's `settings.gc` block via SetGcSettings
+    // (the Playground sends them; standalone exports read fade-manifest.json).
+    // Applied to each VM in ResetFade. sweepInterval 0 → keep the VM default;
+    // paranoid poisons freed memory + disables reuse so a use-after-free
+    // surfaces immediately (diagnostic for GC-liveness bugs).
+    private int _gcSweepInterval;
+    private bool _gcParanoid;
+
     private bool _autoAcceptNewBuilds;
     private bool _reloadRequestedFromUi;
     // State-preserving "module reload" (F2 / blue bar), distinct from F1's full
@@ -235,6 +244,45 @@ public class Game1 : Microsoft.Xna.Framework.Game
     // runtime (browser hot-reload, desktop test runner). Sets the new
     // ILaunchable and flags a reload — the Update loop picks it up on the
     // next tick, mirroring how F1 reload + `requestReload` flow today.
+    // Funnel for fade.json's `settings.gc` block. The Playground reads the
+    // manifest and calls this (through the JS bridge / [JSInvokable]) before/at
+    // run time; standalone exports call it from their self-boot. Stored on the
+    // game so it survives ResetFade's `_options` reassignment, and applied to
+    // the live VM immediately so toggling paranoid mid-session takes effect on
+    // the next collection.
+    public void SetGcSettings(int sweepInterval, bool paranoid)
+    {
+        _gcSweepInterval = sweepInterval;
+        _gcParanoid = paranoid;
+        if (_vm != null)
+        {
+            if (sweepInterval > 0) _vm.sweepInterval = sweepInterval;
+            ApplyParanoidGc(_vm, paranoid);
+        }
+    }
+
+    // `VmHeap.paranoid` (poison freed memory + no reuse) is a newer engine
+    // field. This project builds against the PUBLISHED FadeBasic.Lang.Core,
+    // which may predate it — so set it via reflection: a no-op on an older
+    // engine, live once FadeBasic is republished with the field. `sweepInterval`
+    // is long-standing and set directly. Reflection cost is irrelevant (called
+    // once per program load), and boxing the heap struct is required to write a
+    // struct field that lives on the VM.
+    private static void ApplyParanoidGc(VirtualMachine vm, bool paranoid)
+    {
+        try
+        {
+            var heapField = typeof(VirtualMachine).GetField("heap");
+            if (heapField == null) return;
+            var heapBox = heapField.GetValue(vm);
+            var paranoidField = heapBox?.GetType().GetField("paranoid");
+            if (paranoidField == null) return; // older engine without the diagnostic
+            paranoidField.SetValue(heapBox, paranoid);
+            heapField.SetValue(vm, heapBox); // write the mutated struct back
+        }
+        catch { /* diagnostic knob only — never break a run over it */ }
+    }
+
     public void LoadProgram(ILaunchable program)
     {
         _fadeProgram = program;
@@ -331,6 +379,10 @@ public class Game1 : Microsoft.Xna.Framework.Game
                 hostMethods = HostMethodTable.FromCommandCollection(_fadeProgram.CommandCollection)
             };
         }
+        // Apply GC knobs from fade.json settings (funneled in via SetGcSettings)
+        // to the freshly-built VM. sweepInterval 0 → keep the VM default.
+        if (_gcSweepInterval > 0) _vm.sweepInterval = _gcSweepInterval;
+        ApplyParanoidGc(_vm, _gcParanoid);
         customize?.Invoke(_vm);
 
         // Bind the module reloader to the newly-built VM. Baseline source comes

@@ -460,6 +460,16 @@ loop
             return LoadProgramInternal(source, initialBoot: false);
         }
 
+        // fade.json `settings.gc` → the VM. The Playground sends this before
+        // run-start-source; the game stores it and applies to the current VM
+        // and every VM it (re)builds. sweepInterval 0 → keep the VM default;
+        // paranoid enables the poison-on-free GC diagnostic.
+        [JSInvokable]
+        public void SetGcSettings(int sweepInterval, bool paranoid)
+        {
+            _game?.SetGcSettings(sweepInterval, paranoid);
+        }
+
         // State-preserving hot reload (Playground iframe Reload button). Unlike
         // LoadProgram — which does a FULL swap that rebuilds the VM and resets
         // all state — this arms the new source against the LIVE VM and applies
@@ -693,6 +703,48 @@ loop
         {
             if (_game == null) return;
             _game.RegisterAsset(name, bytes);
+        }
+
+        // Register with the page's content hash so the runtime can later answer
+        // "do you already hold this exact asset?" during manifest-reconcile.
+        [JSInvokable]
+        public void RegisterAssetHashed(string name, byte[] bytes, string hash)
+        {
+            _game?.BrowserContent?.RegisterAsset(name, bytes, hash);
+        }
+
+        private static readonly JsonSerializerOptions _manifestJsonOpts = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            PropertyNameCaseInsensitive = true,
+            IncludeFields = true,
+        };
+
+        public sealed class AssetHashEntry
+        {
+            public string name { get; set; }
+            public string hash { get; set; }
+        }
+
+        // Manifest-reconcile (batched): given the editor's texture/font manifest
+        // (JSON [{name,hash}]), return the subset this runtime does NOT already
+        // hold with a matching hash. One round-trip instead of one per asset, so
+        // a warm reconcile (everything already registered) is effectively free.
+        // Audio is checked JS-side (window.fadeAudio), and IndexedDB is checked
+        // JS-side too — this only answers the in-memory content-manager part.
+        [JSInvokable]
+        public string FilterAssetsNotInMemory(string manifestJson)
+        {
+            var cm = _game?.BrowserContent;
+            List<AssetHashEntry> entries;
+            try { entries = JsonSerializer.Deserialize<List<AssetHashEntry>>(manifestJson, _manifestJsonOpts) ?? new(); }
+            catch { return manifestJson; } // on parse failure, treat all as missing
+            var missing = new List<AssetHashEntry>(entries.Count);
+            foreach (var e in entries)
+            {
+                if (cm == null || !cm.HasAssetWithHash(e.name, e.hash)) missing.Add(e);
+            }
+            return JsonSerializer.Serialize(missing, _manifestJsonOpts);
         }
 
         // Wipe the registered asset dict — used when the editor switches

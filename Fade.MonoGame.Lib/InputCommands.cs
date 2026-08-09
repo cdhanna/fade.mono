@@ -515,17 +515,66 @@ public partial class FadeMonoGameCommands
     {
         return InputSystem.keyboardState.IsKeyDown(Keys.Space) ? 1 : 0;
     }
+    
+    
+    [FadeBasicCommand("returnKey")]
+    public static int returnKey()
+    {
+        return InputSystem.keyboardState.IsKeyDown(Keys.Enter) ? 1 : 0;
+    }
+    
+    [FadeBasicCommand("new returnKey")]
+    public static int returnKeyNew()
+    {
+        return IsNewKeyPressed((int)Keys.Enter) ? 1 : 0;
+    }
+    
+    [FadeBasicCommand("escapeKey")]
+    public static int escKey()
+    {
+        return InputSystem.keyboardState.IsKeyDown(Keys.Escape) ? 1 : 0;
+    }
+    
+    [FadeBasicCommand("new escapeKey")]
+    public static int escKeyNew()
+    {
+        return IsNewKeyPressed((int)Keys.Escape) ? 1 : 0;
+    }
 
     [FadeBasicCommand("left shiftKey")]
-    public static int shiftKey()
+    public static int shiftLeftKey()
     {
         return InputSystem.keyboardState.IsKeyDown(Keys.LeftShift) ? 1 : 0;
     }
     
     [FadeBasicCommand("new left shiftKey")]
-    public static int shiftKeyNew()
+    public static int shiftLeftKeyNew()
     {
         return IsNewKeyPressed((int)Keys.LeftShift) ? 1 : 0;
+    }
+
+    [FadeBasicCommand("right shiftKey")]
+    public static int shiftRightKey()
+    {
+        return InputSystem.keyboardState.IsKeyDown(Keys.RightShift) ? 1 : 0;
+    }
+    
+    [FadeBasicCommand("new right shiftKey")]
+    public static int shiftRightKeyNew()
+    {
+        return IsNewKeyPressed((int)Keys.RightShift) ? 1 : 0;
+    }
+    
+    [FadeBasicCommand("shiftKey")]
+    public static int shiftKey()
+    {
+        return (InputSystem.keyboardState.IsKeyDown(Keys.LeftShift) || InputSystem.keyboardState.IsKeyDown(Keys.RightShift)) ? 1 : 0;
+    }
+    
+    [FadeBasicCommand("new shiftKey")]
+    public static int shiftKeyNew()
+    {
+        return (IsNewKeyPressed((int)Keys.LeftShift) || IsNewKeyPressed((int)Keys.RightShift)) ? 1 : 0;
     }
 
 

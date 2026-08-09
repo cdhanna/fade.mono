@@ -1129,6 +1129,14 @@ public partial class FadeMonoGameCommands
         sprite.currentFrame = frameId;
         SpriteSystem.sprites[index] = sprite;
     }
+    
+    [FadeBasicCommand("sprite frame")]
+    public static int GetSpriteFrame(int spriteId)
+    {
+        SpriteSystem.GetSpriteIndex(spriteId, out var index, out var sprite);
+        return sprite.currentFrame;
+    }
+
 
     /// <summary>
     /// <para>Flips a sprite horizontally, vertically, or both.</para>

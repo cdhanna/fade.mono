@@ -838,6 +838,13 @@
                 }
 
                 if (tickMs > WATCHDOG_FRAME_MS) {
+                    // Diagnostic: the watchdog dropping the game is the prime
+                    // suspect for "why did a same-session re-debug re-register all
+                    // assets?" — a dropped game means a fresh, empty content
+                    // manager next launch. If you see this during a debug session
+                    // (e.g. a long pause at a breakpoint counted as a blocked
+                    // frame), that's the cause.
+                    console.warn(`[fade-watchdog] tick blocked ${Math.round(tickMs)}ms > ${WATCHDOG_FRAME_MS}ms — dropping game; assets re-register on next launch`);
                     window.theInstance.invokeMethod('OnGameTimedOut', tickMs);
                 }
             }
@@ -881,6 +888,117 @@
         // IJSInProcessRuntime.InvokeVoid — synchronous, single-thread, no
         // round-trip needed because every method is local to the iframe.
         //
+        // Persistent, content-addressed asset cache (hash → { bytes, kind }) in
+        // IndexedDB. Lets a Game1 rebuild — or even a fresh page load —
+        // reconstitute registered assets locally instead of re-requesting their
+        // bytes from the editor. The editor's manifest-reconcile checks this
+        // store (see the 'reconcile-assets' handler) before asking for bytes.
+        window.__fadeAssetStore = (function () {
+            const DB = 'fade-assets', STORE = 'blobs';
+            let _dbp = null;
+            function db() {
+                if (_dbp) return _dbp;
+                _dbp = new Promise((resolve, reject) => {
+                    let req;
+                    try { req = indexedDB.open(DB, 1); } catch (e) { reject(e); return; }
+                    req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                }).catch((e) => { console.warn('[fade-assets] idb open failed', e); return null; });
+                return _dbp;
+            }
+            // Entries are namespaced per project so pruning one project's
+            // stale assets never touches another's. NUL separates the project
+            // id from the hash — it can't appear in either, so the prefix range
+            // below can't bleed across projects even if a project id is a
+            // prefix of another. (Trade-off: the same asset in two projects is
+            // stored twice — projects rarely share assets, and this buys clean,
+            // non-interfering eviction.)
+            const SEP = '\u0000';
+            const key = (projectId, hash) => `${projectId || 'default'}${SEP}${hash}`;
+            return {
+                // → { bytes: ArrayBuffer, kind } or null.
+                async get(projectId, hash) {
+                    const d = await db(); if (!d) return null;
+                    return await new Promise((resolve) => {
+                        try {
+                            const r = d.transaction(STORE, 'readonly').objectStore(STORE).get(key(projectId, hash));
+                            r.onsuccess = () => resolve(r.result || null);
+                            r.onerror = () => resolve(null);
+                        } catch { resolve(null); }
+                    });
+                },
+                // Batched read: fetch many hashes in ONE transaction instead of
+                // one transaction per hash. Returns Map<hash, {bytes, kind}> for
+                // the hashes that were present. Repopulating the runtime after a
+                // stop→restart used to open 76 separate transactions here — the
+                // dominant cost of the reconcile round-trip.
+                async getMany(projectId, hashes) {
+                    const out = new Map();
+                    const d = await db(); if (!d || !hashes.length) return out;
+                    await new Promise((resolve) => {
+                        try {
+                            const tx = d.transaction(STORE, 'readonly');
+                            const store = tx.objectStore(STORE);
+                            for (const h of hashes) {
+                                const r = store.get(key(projectId, h));
+                                r.onsuccess = () => { if (r.result) out.set(h, r.result); };
+                                r.onerror = () => {};
+                            }
+                            tx.oncomplete = () => resolve();
+                            tx.onerror = () => resolve();
+                            tx.onabort = () => resolve();
+                        } catch { resolve(); }
+                    });
+                    return out;
+                },
+                // `bytes` MUST be an exact-fit Uint8Array (its whole buffer is stored).
+                async put(projectId, hash, bytes, kind) {
+                    const d = await db(); if (!d || !hash) return;
+                    await new Promise((resolve) => {
+                        try {
+                            const tx = d.transaction(STORE, 'readwrite');
+                            tx.objectStore(STORE).put({ bytes: bytes.buffer, kind }, key(projectId, hash));
+                            tx.oncomplete = () => resolve();
+                            tx.onerror = () => resolve();
+                            tx.onabort = () => resolve();
+                        } catch { resolve(); }
+                    });
+                },
+                // Reference-count drain: delete every entry for this project
+                // whose hash is NOT in the live set (the current manifest). Runs
+                // on each reconcile, so the project's cache exactly mirrors its
+                // live assets — changed-asset old hashes and deleted assets go.
+                async prune(projectId, liveHashes) {
+                    const d = await db(); if (!d) return;
+                    const prefix = `${projectId || 'default'}${SEP}`;
+                    await new Promise((resolve) => {
+                        try {
+                            const tx = d.transaction(STORE, 'readwrite');
+                            const store = tx.objectStore(STORE);
+                            const range = IDBKeyRange.bound(prefix, prefix + '\uffff');
+                            // openKeyCursor (NOT openCursor): iterate KEYS ONLY so
+                            // we don't deserialize every entry's (large) bytes just
+                            // to check its hash \u2014 that made the prune read the whole
+                            // cache. Collect stale keys, then delete them.
+                            const stale = [];
+                            const req = store.openKeyCursor(range);
+                            req.onsuccess = () => {
+                                const cur = req.result;
+                                if (!cur) { for (const k of stale) store.delete(k); return; }
+                                const h = String(cur.key).slice(prefix.length);
+                                if (!liveHashes.has(h)) stale.push(cur.key);
+                                cur.continue();
+                            };
+                            tx.oncomplete = () => resolve();
+                            tx.onerror = () => resolve();
+                            tx.onabort = () => resolve();
+                        } catch { resolve(); }
+                    });
+                },
+            };
+        })();
+
         // Instance model: each fade `sfx N` allocates one InstanceState
         // (gain + panner + persistent settings). play/stop swap out a
         // BufferSourceNode beneath those graph nodes — sources are
@@ -891,6 +1009,8 @@
             let _master = null;
             // name → AudioBuffer (decoded sources)
             const _bufferByName = new Map();
+            // name → content hash (for manifest-reconcile "do you hold this?")
+            const _hashByName = new Map();
             // name → Promise<AudioBuffer> while decode is in flight
             const _decodingByName = new Map();
             // clipId (int) → name (string) — what `load sfx clip` associates
@@ -966,9 +1086,10 @@
                 // Decodes bytes once, holds the AudioBuffer for the rest
                 // of the session. Returns the promise so the playground
                 // can await it before unblocking BeginPendingProgram.
-                async register(name, bytes) {
+                async register(name, bytes, hash) {
                     const ctx = ensureCtx();
                     if (!ctx) return false;
+                    if (hash) _hashByName.set(name, hash);
                     if (_decodingByName.has(name)) return _decodingByName.get(name);
                     // decodeAudioData detaches the ArrayBuffer it receives;
                     // copy to a fresh one so callers can keep their bytes.
@@ -989,6 +1110,13 @@
                     return p;
                 },
 
+                // Manifest-reconcile: do we already hold this clip at this hash?
+                // AudioBuffers live in JS and survive Game1 rebuilds, so a warm
+                // reconcile skips re-decoding unchanged audio.
+                hasHash(name, hash) {
+                    return _bufferByName.has(name) && _hashByName.get(name) === hash;
+                },
+
                 // Wipe everything — called only on explicit "clear"
                 // (project switch, forceAssetCacheClear). NOT called
                 // between Runs anymore; the playground does a diff-based
@@ -1003,6 +1131,7 @@
                     _instanceById.clear();
                     _clipNameById.clear();
                     _bufferByName.clear();
+                    _hashByName.clear();
                     _decodingByName.clear();
                     _highestClipId = 0;
                     _highestInstanceId = 0;
@@ -1014,6 +1143,7 @@
                 // unrelated buffers stay decoded and ready to play.
                 unregister(name) {
                     _bufferByName.delete(name);
+                    _hashByName.delete(name);
                     _decodingByName.delete(name);
                     // Any instances built from a clip that pointed at
                     // this name are now orphaned — stop them so the
@@ -1495,6 +1625,12 @@
                         case 'stop-run':
                             await window.theInstance.invokeMethodAsync('StopGame');
                             return;
+                        case 'set-gc-settings':
+                            // fade.json settings.gc → VM. Fire-and-forget; the
+                            // runtime records it and applies to the next (and
+                            // live) VM. Sent before run-start-source.
+                            await window.theInstance.invokeMethodAsync('SetGcSettings', m.sweepInterval | 0, !!m.paranoid);
+                            return;
                         case 'get-version-info':
                             await invokeAndReply('get-version-info-result', m.id, 'GetVersionInfo');
                             return;
@@ -1510,8 +1646,102 @@
                                 // call it "asset" so both look right.
                                 window.__fadeSplash.setStatus(`Loading asset: ${m.name}…`);
                             }
-                            await window.theInstance.invokeMethodAsync('RegisterAsset', m.name, m.bytes);
+                            {
+                                const hash = m.hash || '';
+                                // Copy synchronously BEFORE the invoke (Blazor may
+                                // detach the transferred buffer) so we can persist
+                                // to the content-addressed cache for local rebuilds.
+                                const persist = hash ? m.bytes.slice() : null;
+                                await window.theInstance.invokeMethodAsync('RegisterAssetHashed', m.name, m.bytes, hash);
+                                if (persist) window.__fadeAssetStore.put(m.projectId, hash, persist, 'asset');
+                            }
                             return;
+                        case 'reconcile-assets': {
+                            // The editor sends its manifest ([{name,hash,kind}]);
+                            // we reply with just the names we DON'T already hold
+                            // (in the live content manager / fadeAudio, or in the
+                            // IndexedDB cache — from which we re-register locally,
+                            // no editor round-trip). Makes warm/rebuilt starts free.
+                            //
+                            // Timing (gated by localStorage 'fade.assetTiming', shared
+                            // with the same-origin editor via fadeAssetTiming(true)):
+                            //   queue  = how long the msg sat before this handler ran
+                            //            (i.e. WASM main thread was busy) — the prime
+                            //            suspect when 'sending 0' still takes seconds.
+                            //   filter = FilterAssetsNotInMemory JS→WASM interop.
+                            //   gets   = IndexedDB re-registration of missing assets.
+                            //   prune  = IndexedDB reference prune.
+                            const _timing = (() => { try { return localStorage.getItem('fade.assetTiming') === '1'; } catch (e) { return false; } })();
+                            const _queueMs = (typeof m.sentAt === 'number') ? (Date.now() - m.sentAt) : -1;
+                            const _t0 = performance.now();
+                            const manifest = m.manifest || [];
+                            const need = [];
+                            const texEntries = manifest
+                                .filter((e) => e.kind !== 'audio')
+                                .map((e) => ({ name: e.name, hash: e.hash }));
+                            let missingTex = texEntries;
+                            try {
+                                const j = await window.theInstance.invokeMethodAsync(
+                                    'FilterAssetsNotInMemory', JSON.stringify(texEntries));
+                                missingTex = JSON.parse(j);
+                            } catch (e) { console.warn('[reconcile] in-memory filter failed', e); }
+                            const _tFilter = performance.now();
+                            const missing = [
+                                ...missingTex.map((e) => ({ name: e.name, hash: e.hash, kind: 'asset' })),
+                                ...manifest.filter((e) => e.kind === 'audio'
+                                    && !window.fadeAudio.hasHash(e.name, e.hash)),
+                            ];
+                            // Batch the IndexedDB reads into ONE transaction, then
+                            // re-register in parallel (the per-asset interop calls
+                            // still run serially on the WASM thread, but we drop
+                            // the JS-side sequential await overhead). This is the
+                            // repopulate-after-stop path — the reconcile hot spot.
+                            const cachedMap = await window.__fadeAssetStore.getMany(
+                                m.projectId, missing.map((e) => e.hash));
+                            // Show a loading state on the canvas while we repopulate
+                            // the runtime from IndexedDB (the after-content-loss
+                            // path — e.g. a fresh page, or the watchdog dropped the
+                            // game). If the game was already running (splash hidden)
+                            // we re-hide afterward so we don't leave it up.
+                            const _splashN = missing.length;
+                            const _splashOn = _splashN >= 4 && window.__fadeSplash;
+                            const _splashWasHidden = _splashOn ? window.__fadeSplash.isHidden() : true;
+                            if (_splashOn) { window.__fadeSplash.show(); window.__fadeSplash.setStatus(`Loading assets… 0/${_splashN}`); }
+                            let _splashDone = 0;
+                            await Promise.all(missing.map(async (e) => {
+                                const cached = cachedMap.get(e.hash);
+                                if (cached && cached.bytes) {
+                                    try {
+                                        const bytes = new Uint8Array(cached.bytes);
+                                        if (e.kind === 'audio') await window.fadeAudio.register(e.name, bytes, e.hash);
+                                        else await window.theInstance.invokeMethodAsync('RegisterAssetHashed', e.name, bytes, e.hash);
+                                        if (_splashOn) window.__fadeSplash.setStatus(`Loading assets… ${++_splashDone}/${_splashN}`);
+                                        return;
+                                    } catch (err) { console.warn('[reconcile] local re-register failed', e.name, err); }
+                                }
+                                need.push(e.name);
+                            }));
+                            if (_splashOn && _splashWasHidden) window.__fadeSplash.hide();
+                            const _tGets = performance.now();
+                            // Reply NOW — the launch only needs `need`. The prune
+                            // below is pure IndexedDB housekeeping; running it
+                            // before the reply just delayed every launch by its
+                            // duration. Fire it after and don't await it.
+                            window.parent.postMessage({ type: 'reconcile-assets-result', id: m.id, result: need }, '*');
+                            // Reference prune (deferred): drop any cached entry for
+                            // this project whose hash is no longer in the manifest
+                            // (changed or deleted asset). Best-effort, off the
+                            // launch critical path.
+                            Promise.resolve().then(() =>
+                                window.__fadeAssetStore.prune(m.projectId, new Set(manifest.map((e) => e.hash)))
+                            ).then(() => {
+                                if (_timing) console.log(`[fade-timing:iframe] reconcile prune (deferred): ${Math.round(performance.now() - _tGets)}ms`);
+                            }).catch((err) => console.warn('[reconcile] prune failed', err));
+                            if (_timing) {
+                                console.log(`[fade-timing:iframe] reconcile: queue ${_queueMs}ms · filter ${Math.round(_tFilter - _t0)}ms · gets ${Math.round(_tGets - _tFilter)}ms · reply ${Math.round(_tGets - _t0)}ms (manifest ${manifest.length}, need ${need.length}, prune deferred)`);
+                            }
+                            return;
+                        }
                         case 'clear-assets':
                             await window.theInstance.invokeMethodAsync('ClearAssets');
                             // Also wipe the Web Audio host — the audio path
@@ -1555,12 +1785,15 @@
                             if (window.__fadeSplash) {
                                 window.__fadeSplash.setStatus(`Loading audio: ${m.name}…`);
                             }
+                            const audioHash = m.hash || '';
+                            const audioPersist = audioHash ? m.bytes.slice() : null;
                             let ok = false;
                             try {
-                                ok = await window.fadeAudio.register(m.name, m.bytes);
+                                ok = await window.fadeAudio.register(m.name, m.bytes, audioHash);
                             } catch (e) {
                                 console.error('[fade-audio] register threw:', e);
                             }
+                            if (ok && audioPersist) window.__fadeAssetStore.put(m.projectId, audioHash, audioPersist, 'audio');
                             window.parent.postMessage(
                                 { type: 'register-audio-result', id: m.id, result: !!ok },
                                 '*',
@@ -1585,9 +1818,12 @@
                         // surface stays uniform with Export.Web's
                         // debug-start.
                         case 'debug-start': {
+                            const _dbgTiming = (() => { try { return localStorage.getItem('fade.assetTiming') === '1'; } catch (e) { return false; } })();
                             if (window.__fadeSplash && !window.__fadeSplash.isHidden())
                                 window.__fadeSplash.setStatus('Loading program…');
+                            const _dt0 = performance.now();
                             const compileOk = await window.theInstance.invokeMethodAsync('LoadProgram', m.source);
+                            const _dt1 = performance.now();
                             if (compileOk && tickHalted) {
                                 tickHalted = false;
                                 window.requestAnimationFrame(tickJS);
@@ -1598,6 +1834,7 @@
                             const result = compileOk
                                 ? await window.theInstance.invokeMethodAsync('DebugStart')
                                 : JSON.stringify({ ok: false, error: 'compile failed', statementLines: [] });
+                            if (_dbgTiming) console.log(`[fade-timing:iframe] debug-start: LoadProgram(compile) ${Math.round(_dt1 - _dt0)}ms · DebugStart ${Math.round(performance.now() - _dt1)}ms`);
                             window.parent.postMessage({
                                 type: 'debug-start-result',
                                 id: m.id,
@@ -1617,7 +1854,7 @@
                         // The playground uses these in place of run-start-source
                         // when it needs to register PNG-compiled XNBs from the
                         // macro pass's plan before the program ticks.
-                        case 'compile-for-run':
+                        case 'compile-for-run': {
                             // Re-display the splash on every Run so the
                             // asset-loading window (decode MP3s, register
                             // textures) is visible inside the game canvas
@@ -1626,8 +1863,12 @@
                                 window.__fadeSplash.show();
                                 window.__fadeSplash.setStatus('Compiling…');
                             }
+                            const _crTiming = (() => { try { return localStorage.getItem('fade.assetTiming') === '1'; } catch (e) { return false; } })();
+                            const _cr0 = performance.now();
                             await invokeAndReply('compile-for-run-result', m.id, 'CompileForRun', m.source);
+                            if (_crTiming) console.log(`[fade-timing:iframe] compile-for-run: CompileForRun ${Math.round(performance.now() - _cr0)}ms`);
                             return;
+                        }
                         case 'get-content-build-plan':
                             await invokeAndReply('get-content-build-plan-result', m.id, 'GetContentBuildPlan');
                             return;
@@ -1704,6 +1945,21 @@
                         // master gain — fadeAudio.setMuted is idempotent
                         // and tolerates being called before the context
                         // is built.
+                        // Editor-driven loading overlay on the game canvas. The
+                        // editor shows this while it registers assets on a launch
+                        // (first load / after a project change) so the canvas
+                        // reads "Loading assets… N/M" instead of a frozen frame —
+                        // same feel as a standalone export's boot load. `hide`
+                        // tears it down; the normal debug-start/begin-program
+                        // hide also covers this.
+                        case 'set-splash':
+                            try {
+                                if (window.__fadeSplash) {
+                                    if (m.hide) { window.__fadeSplash.hide(); }
+                                    else { window.__fadeSplash.show(); window.__fadeSplash.setStatus(m.text || 'Loading…', !!m.error); }
+                                }
+                            } catch (e) { /* splash is best-effort */ }
+                            return;
                         case 'pause-tick':
                             tickHalted = true;
                             return;
@@ -1883,6 +2139,14 @@
                     }
                     const sourceFile = manifest.source || 'program.fbasic';
                     const assets = Array.isArray(manifest.assets) ? manifest.assets : [];
+
+                    // fade.json settings.gc, carried in the export manifest → VM,
+                    // applied before the LoadProgram below builds the VM.
+                    const gc = manifest.settings && manifest.settings.gc;
+                    if (gc) {
+                        try { await window.theInstance.invokeMethodAsync('SetGcSettings', (gc.sweepInterval | 0), !!gc.paranoid); }
+                        catch (e) { console.warn('[fade-monogame] SetGcSettings failed:', e); }
+                    }
 
                     // Fetch every .xnb in parallel (N serial round-trips was a
                     // big chunk of the post-boot stall), then register them in
