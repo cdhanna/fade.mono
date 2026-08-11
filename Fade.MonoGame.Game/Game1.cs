@@ -107,6 +107,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
     private bool _autoAcceptNewBuilds;
     private bool _reloadRequestedFromUi;
+    // Non-null while a host system is refusing reloads; surfaced in the debug UI so
+    // an inert F1 has a visible explanation.
+    private string _hostReloadBlockedReason;
     // State-preserving "module reload" (F2 / blue bar), distinct from F1's full
     // restart (red bar). See ModuleReloader.
     private readonly ModuleReloader _moduleReloader = new ModuleReloader();
@@ -166,6 +169,10 @@ public class Game1 : Microsoft.Xna.Framework.Game
         // Game.Services (the template does this in Debug desktop builds) so
         // ContentSystem can build/hot-reload assets in-process. Null otherwise.
         ContentSystem.ResolveContentBuilder(Services);
+
+        // Optional host-supplied systems (netcode, custom overlays), same
+        // Game.Services seam as the content builder above. See IFadeHostSystem.
+        HostSystemRegistry.Resolve(this);
 
         ResetFade();
 
@@ -478,6 +485,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
 #if !BROWSER
     protected override void OnExiting(object sender, ExitingEventArgs args)
     {
+        HostSystemRegistry.Shutdown();
         Content.Dispose();
         // In test mode the debug session's auto-EXITED at end-of-program is
         // suppressed (so individual tests don't drop the debugger), so emit
@@ -640,6 +648,23 @@ public class Game1 : Microsoft.Xna.Framework.Game
         var f1Down = Keyboard.GetState().IsKeyDown(Keys.F1);
         if ((!_justReloaded && f1Down) || _reloadRequestedFromUi)
         {
+            // A host system may hold state a restart would invalidate -- a live
+            // lockstep session being the motivating case, where reloading only our
+            // copy of the program desyncs us from every peer. Bail out entirely
+            // rather than falling through to Restart().
+            if (!HostSystemRegistry.CanReload(Fade.MonoGame.Contracts.ReloadKind.FullRestart, out var blockReason))
+            {
+                _reloadRequestedFromUi = false;
+                _justReloaded = true;   // debounce, so this doesn't retry every frame
+                if (_hostReloadBlockedReason != blockReason)
+                {
+                    _hostReloadBlockedReason = blockReason;
+                    Console.WriteLine("[host-system] reload blocked: " + blockReason);
+                }
+                return;
+            }
+            _hostReloadBlockedReason = null;
+
             if (GameReloader.LatestBuild != null)
             {
                 _fadeProgram = GameReloader.LatestBuild;
@@ -768,6 +793,10 @@ public class Game1 : Microsoft.Xna.Framework.Game
         {
 
 
+            // Fixed-rate host work runs BEFORE the Fade program's frame, so anything
+            // it publishes is visible to commands the program calls this same frame.
+            HostSystemRegistry.BeforeVmTick(gameTime);
+
             try
             {
                 // Both desktop and browser route through DebugSession now.
@@ -861,8 +890,15 @@ public class Game1 : Microsoft.Xna.Framework.Game
                             _webReloadAutoAccept = false;
                         }
                     }
-                    // F2 file-watcher path (desktop / standalone) — unchanged.
-                    else if (_moduleReloader.SyncPoint(GameReloader.LatestRuntime, f2Now && !_f2WasDown)
+                    // F2 file-watcher path (desktop / standalone). The accept
+                    // keypress is gated on host systems: a module reload still
+                    // swaps the running program, which is exactly what a live
+                    // lockstep session cannot survive. SyncPoint is still called so
+                    // classification (blue/red bar) keeps working while blocked.
+                    else if (_moduleReloader.SyncPoint(
+                                 GameReloader.LatestRuntime,
+                                 f2Now && !_f2WasDown && HostSystemRegistry.CanReload(
+                                     Fade.MonoGame.Contracts.ReloadKind.ModuleReload, out _))
                              && GameReloader.LatestBuild != null)
                     {
                         _fadeProgram = GameReloader.LatestBuild;
@@ -964,6 +1000,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
         _spriteBatch.Begin(blendState: BlendState.NonPremultiplied);
 #if !BROWSER
+        // Renders the debug UI and, inside the same ImGui frame, any host-supplied
+        // system overlays. See DebugUISystem.Render.
         DebugUISystem.Render();
 #endif
 #if !BROWSER

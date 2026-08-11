@@ -367,6 +367,11 @@ public static class DebugUISystem
             }
         }
 
+        // Host-supplied systems draw their own ImGui inside this frame. Invoking them
+        // from Game1.Draw instead put ImGui.Begin outside BeforeLayout/AfterLayout,
+        // which trips the "WithinFrameScope" assertion and kills the process.
+        HostSystemRegistry.Draw(GameSystem.latestTime);
+
         renderer.AfterLayout();
     }
 
