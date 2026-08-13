@@ -580,11 +580,7 @@ public partial class FadeMonoGameCommands
             argInt = value,
         };
         DebugUISystem.Push(command);
-        if (DebugUISystem.TryGetPreviousInt(command, out var val))
-        {
-            value = val;
-        }
-        return DebugUISystem.TryGetPreviousBool(command) ? 1 : 0;
+        return DebugUISystem.TryTakeChanged(command, ref value) ? 1 : 0;
     }
 
     /// <summary>
@@ -635,11 +631,7 @@ public partial class FadeMonoGameCommands
         DebugUISystem.Push(new DebugUICommand { type = DebugControlType.ARG_STRING, argString = placeholder });
         DebugUISystem.Push(new DebugUICommand { type = DebugControlType.ARG_INT, argInt = maxLength });
 
-        if (DebugUISystem.TryGetPreviousString(ctrl, out var val))
-        {
-            value = val;
-        }
-        return DebugUISystem.TryGetPreviousBool(ctrl) ? 1 : 0;
+        return DebugUISystem.TryTakeChanged(ctrl, ref value) ? 1 : 0;
     }
 
     /// <summary>
@@ -687,11 +679,7 @@ public partial class FadeMonoGameCommands
         DebugUISystem.Push(command);
         DebugUISystem.Push(new DebugUICommand { type = DebugControlType.ARG_INT, argInt = min });
         DebugUISystem.Push(new DebugUICommand { type = DebugControlType.ARG_INT, argInt = max });
-        if (DebugUISystem.TryGetPreviousInt(command, out var val))
-        {
-            value = val;
-        }
-        return DebugUISystem.TryGetPreviousBool(command) ? 1 : 0;
+        return DebugUISystem.TryTakeChanged(command, ref value) ? 1 : 0;
     }
 
     /// <summary>
@@ -738,11 +726,7 @@ public partial class FadeMonoGameCommands
         DebugUISystem.Push(command);
         DebugUISystem.Push(new DebugUICommand { type = DebugControlType.ARG_FLOAT, argFloat = min });
         DebugUISystem.Push(new DebugUICommand { type = DebugControlType.ARG_FLOAT, argFloat = max });
-        if (DebugUISystem.TryGetPreviousFloat(command, out var val))
-        {
-            value = val;
-        }
-        return DebugUISystem.TryGetPreviousBool(command) ? 1 : 0;
+        return DebugUISystem.TryTakeChanged(command, ref value) ? 1 : 0;
     }
 
     /// <summary>
@@ -783,11 +767,7 @@ public partial class FadeMonoGameCommands
             argInt = value,
         };
         DebugUISystem.Push(command);
-        if (DebugUISystem.TryGetPreviousInt(command, out var val))
-        {
-            value = val;
-        }
-        return DebugUISystem.TryGetPreviousBool(command) ? 1 : 0;
+        return DebugUISystem.TryTakeChanged(command, ref value) ? 1 : 0;
     }
 
     /// <summary>
@@ -830,11 +810,7 @@ public partial class FadeMonoGameCommands
             argFloat = value,
         };
         DebugUISystem.Push(command);
-        if (DebugUISystem.TryGetPreviousFloat(command, out var val))
-        {
-            value = val;
-        }
-        return DebugUISystem.TryGetPreviousBool(command) ? 1 : 0;
+        return DebugUISystem.TryTakeChanged(command, ref value) ? 1 : 0;
     }
 
     /// <summary>
@@ -883,11 +859,7 @@ public partial class FadeMonoGameCommands
             argInt = colorCode,
         };
         DebugUISystem.Push(command);
-        if (DebugUISystem.TryGetPreviousInt(command, out var val))
-        {
-            colorCode = val;
-        }
-        return DebugUISystem.TryGetPreviousBool(command) ? 1 : 0;
+        return DebugUISystem.TryTakeChanged(command, ref colorCode) ? 1 : 0;
     }
 
     // ── auto inspector ───────────────────────────────────────

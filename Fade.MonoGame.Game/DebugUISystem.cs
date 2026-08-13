@@ -134,6 +134,45 @@ public static class DebugUISystem
     {
     }
 
+    /// <summary>
+    /// Takes a control's value back into the caller's variable, but ONLY on the frame the
+    /// control reports the user changed it. Returns whether it did.
+    ///
+    /// The guard is the whole point, and leaving it out is a subtle bug rather than an
+    /// inefficiency. These dictionaries are filled by <see cref="Render"/> during Draw and
+    /// cleared by <see cref="EndDebug"/> during Update, so what a control hands back is always
+    /// a frame old and is sometimes absent entirely -- an Update that runs without an
+    /// intervening Draw finds nothing there. A control that wrote back unconditionally would
+    /// therefore overwrite the game's variable with a stale value on those frames, and any code
+    /// that also writes that variable ends up fighting the widget at frame rate. It shows up as
+    /// a checkbox that flickers in and out once clicked.
+    ///
+    /// Reading the change flag from the same render pass as the value is what makes this safe:
+    /// the two always agree with each other, even when both are stale.
+    /// </summary>
+    public static bool TryTakeChanged(DebugUICommand command, ref int value)
+    {
+        if (!TryGetPreviousBool(command)) return false;
+        if (TryGetPreviousInt(command, out var val)) value = val;
+        return true;
+    }
+
+    /// <inheritdoc cref="TryTakeChanged(DebugUICommand, ref int)"/>
+    public static bool TryTakeChanged(DebugUICommand command, ref float value)
+    {
+        if (!TryGetPreviousBool(command)) return false;
+        if (TryGetPreviousFloat(command, out var val)) value = val;
+        return true;
+    }
+
+    /// <inheritdoc cref="TryTakeChanged(DebugUICommand, ref int)"/>
+    public static bool TryTakeChanged(DebugUICommand command, ref string value)
+    {
+        if (!TryGetPreviousBool(command)) return false;
+        if (TryGetPreviousString(command, out var val)) value = val;
+        return true;
+    }
+
     public static bool TryGetPreviousBool(DebugUICommand command)
     {
         if (controlIdToBool.TryGetValue(command.ControlId, out var val))
@@ -187,6 +226,31 @@ public static class DebugUISystem
         {
             _styleDirty = false;
             SaveStyle();
+        }
+    }
+
+    /// <summary>
+    /// Discards queued commands up to and including the TREE_END matching a tree that was just
+    /// found collapsed. Counts depth rather than stopping at the first end, so a nested tree
+    /// inside a collapsed one does not terminate the skip early.
+    /// </summary>
+    static void SkipToMatchingTreeEnd()
+    {
+        var depth = 1;
+
+        while (controls.Count > 0)
+        {
+            var ctrl = controls.Dequeue();
+
+            if (ctrl.type == DebugControlType.TREE_START)
+            {
+                depth++;
+            }
+            else if (ctrl.type == DebugControlType.TREE_END)
+            {
+                depth--;
+                if (depth == 0) return;
+            }
         }
     }
 
@@ -257,6 +321,18 @@ public static class DebugUISystem
                 case DebugControlType.TREE_START:
                     var treeOpen = ImGui.TreeNodeEx(ctrl.label, ImGuiTreeNodeFlags.DefaultOpen);
                     controlIdToBool[ctrlId] = treeOpen;
+
+                    // TreeNodeEx only PUSHES a node when it is open, while TREE_END below pops
+                    // unconditionally -- so a collapsed tree has to have its whole body,
+                    // matching end included, dropped here. Without this there was no correct
+                    // way to call the tree commands from Fade at all: emitting the pair
+                    // asserted "TreePop without TreeNode" once the user collapsed it, and
+                    // skipping the end asserted "Missing TreePop()" while it was open.
+                    //
+                    // Callers therefore always emit both, and this decides whether the body
+                    // renders. Controls inside a collapsed tree record no values, so buttons
+                    // read as unclicked and by-ref controls keep whatever the game last set.
+                    if (!treeOpen) SkipToMatchingTreeEnd();
                     break;
                 case DebugControlType.TREE_END:
                     ImGui.TreePop();
