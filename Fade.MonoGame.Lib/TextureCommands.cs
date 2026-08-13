@@ -1,5 +1,9 @@
+using System;
+using System.Collections.Generic;
 using Fade.MonoGame.Core;
 using FadeBasic.SourceGenerators;
+using FadeBasic.Virtual;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace Fade.MonoGame.Lib;
 
@@ -496,5 +500,205 @@ public partial class FadeMonoGameCommands
     {
         TextureSystem.GetTextureIndex(textureId, out _, out var tex);
         return tex.texture.Height / (float)tex.texture.Width;
+    }
+
+    public static bool TryGetSurfaceFormat(int index, out SurfaceFormat format)
+    {
+        format = SurfaceFormat.Color;
+        switch (index)
+        {
+            case 0:
+                return true;
+            
+            case 1:
+                format = SurfaceFormat.HalfSingle;
+                return true;
+            
+            case 2:
+                format = SurfaceFormat.Single;
+                return true;
+            
+            case 3:
+                format = SurfaceFormat.Rg32;
+                return true;
+                        
+            case 4:
+                format = SurfaceFormat.HdrBlendable;
+                return true;
+            
+            case 5:
+                format = SurfaceFormat.HalfVector2;
+                return true;
+            
+            case 6:
+                format = SurfaceFormat.Vector2;
+                return true;
+            
+            case 7:
+                format = SurfaceFormat.HalfVector4;
+                return true;
+            
+            case 8:
+                format = SurfaceFormat.Vector4;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    [FadeBasicCommand("get surface format count")]
+    public static int GetSurfaceFormatCount()
+    {
+        return 9;
+    }
+    
+    [FadeBasicCommand("get surface format name$")]
+    public static string GetSurfaceFormatName([FromVm]VirtualMachine _, int surfaceFormatIndex)
+    {
+        if (TryGetSurfaceFormat(surfaceFormatIndex, out var format))
+        {
+            return format.ToString();
+        }
+
+        throw new Exception("TODO: Change this to a VM exception, using the VirtualMachine arg");
+    }
+    
+    
+    public static bool TryGetDepthFormat(int index, out DepthFormat format)
+    {
+        format = DepthFormat.None;
+        switch (index)
+        {
+            case 0:
+                return true;
+            
+            case 1:
+                format = DepthFormat.Depth16;
+                return true;
+            
+            case 2:
+                format = DepthFormat.Depth24;
+                return true;
+            
+            case 3:
+                format = DepthFormat.Depth24Stencil8;
+                return true;
+                    
+            default:
+                return false;
+        }
+    }
+
+    [FadeBasicCommand("get depth format count")]
+    public static int GetDepthFormatCount()
+    {
+        return 4;
+    }
+    
+    [FadeBasicCommand("get depth format name$")]
+    public static string GetDepthFormatName([FromVm]VirtualMachine _, int depthFormatIndex)
+    {
+        if (TryGetDepthFormat(depthFormatIndex, out var format))
+        {
+            return format.ToString();
+        }
+
+        throw new Exception("TODO: Change this to a VM exception, using the VirtualMachine arg");
+    }
+
+    
+    /// <summary>
+    /// <para>Returns the surface format a texture ACTUALLY has, as a string.</para>
+    /// </summary>
+    /// <remarks>
+    /// Worth checking rather than assuming, because the format asked for in
+    /// <see cref="CreateRenderTarget">create texture target</see> is only a PREFERENCE. When a
+    /// device cannot use it as a render target, the driver silently substitutes one it can --
+    /// no error, no warning. A float target quietly downgraded to Color still works, it just
+    /// bands, and hunting that from the symptom costs a lot more than printing this once at
+    /// startup.
+    ///
+    /// The single- and two-channel float formats are the likeliest to be substituted.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// create texture target 100, 1280, 720, 7  ` HalfVector4
+    /// print "world target is " + texture format$(100)
+    /// </code>
+    /// </example>
+    /// <param name="textureId">The ID of the texture to inspect.</param>
+    /// <returns>The name of the texture's surface format, or an empty string if it has no texture yet.</returns>
+    /// <seealso cref="GetTextureDepthFormat">texture depth format$</seealso>
+    /// <seealso cref="CreateRenderTarget">create texture target</seealso>
+    /// <seealso cref="GetSurfaceFormatName">get surface format name$</seealso>
+    [FadeBasicCommand("texture format$")]
+    public static string GetTextureFormat(int textureId)
+    {
+        TextureSystem.GetTextureIndex(textureId, out _, out var tex);
+        if (tex.texture == null)
+        {
+            return "";
+        }
+
+        return tex.texture.Format.ToString();
+    }
+
+    /// <summary>
+    /// <para>Returns the depth format a render target texture ACTUALLY has, as a string.</para>
+    /// </summary>
+    /// <remarks>
+    /// Same caveat as <see cref="GetTextureFormat">texture format$</see>: the depth format is a
+    /// preference too. Returns an empty string for a texture that is not a render target, which
+    /// is also how to tell the two apart.
+    ///
+    /// Note that when several textures are bound to one output, only the FIRST one's depth
+    /// buffer is used -- so a depth format on any of the others is inert.
+    /// </remarks>
+    /// <param name="textureId">The ID of the texture to inspect.</param>
+    /// <returns>The name of the depth format, or an empty string if the texture is not a render target.</returns>
+    /// <seealso cref="GetTextureFormat">texture format$</seealso>
+    /// <seealso cref="CreateRenderTarget">create texture target</seealso>
+    [FadeBasicCommand("texture depth format$")]
+    public static string GetTextureDepthFormat(int textureId)
+    {
+        TextureSystem.GetTextureIndex(textureId, out _, out var tex);
+        if (tex.texture is RenderTarget2D target)
+        {
+            return target.DepthStencilFormat.ToString();
+        }
+
+        return "";
+    }
+
+    [FadeBasicCommand("create texture target")]
+    public static void CreateRenderTarget([FromVm]VirtualMachine vm, int textureId, int width, int height, int surfaceFormatIndex=0, int depthFormatIndex=0)
+    {
+        if (!TryGetSurfaceFormat(surfaceFormatIndex, out var surfaceFormat))
+        {
+            throw new Exception("TODO: Change this to a VM exception, using the VirtualMachine arg");
+        }
+        if (!TryGetDepthFormat(depthFormatIndex, out var depthFormat))
+        {
+            throw new Exception("TODO: Change this to a VM exception, using the VirtualMachine arg");
+        }
+        
+        TextureSystem.GetTextureIndex(textureId, out var index, out var tex);
+        var target = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
+            width: width,
+            height: height,
+            mipMap: false,
+            preferredFormat: surfaceFormat,
+            preferredDepthFormat: depthFormat);
+
+        tex.SetComputedTexture(target);
+
+        TextureSystem.textures[index] = tex;
+
+        // If this id is already bound to an output, that output is still holding the previous
+        // target. Point it at the new one, or it would keep drawing into the old buffer while
+        // every sampler read the new blank one -- silently, with nothing to blame.
+        //
+        // This makes it safe to call in either order relative to `render target`.
+        RenderSystem.RebindOutputsToTarget(textureId, target);
     }
 }

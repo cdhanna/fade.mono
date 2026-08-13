@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using Fade.MonoGame.Core;
 using FadeBasic.Lib.Standard.Util;
@@ -1185,6 +1186,101 @@ public partial class FadeMonoGameCommands
     }
 
     /// <summary>
+    /// <para>Associates a depth-stencil state with a render output, or 0 to remove it.</para>
+    /// </summary>
+    /// <remarks>
+    /// The output stores the ID, not the state, so editing the state afterwards takes effect on
+    /// the next frame -- there is no need to re-associate it.
+    ///
+    /// Both depth and stencil testing require the output to HAVE a depth buffer. Outputs
+    /// rendering into textures get one only if the FIRST binding was made by
+    /// <see cref="CreateRenderTarget">create texture target</see> with a non-zero depth format;
+    /// the depth format of any later binding is ignored. Without one, the tests silently do
+    /// nothing rather than failing.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// stencil 1, 3, 4, 0, 0
+    /// set render target stencil 2, 1
+    /// </code>
+    /// </example>
+    /// <param name="outputId">The render output to change. 1 is the default output.</param>
+    /// <param name="stencilId">The depth-stencil state's ID, or 0 for the default.</param>
+    /// <seealso cref="CreateStencil">stencil</seealso>
+    /// <seealso cref="SetRenderTargetRasterizer">set render target rasterizer</seealso>
+    [FadeBasicCommand("set render target stencil")]
+    public static void SetRenderTargetStencil(int outputId, int stencilId)
+    {
+        RenderSystem.GetOutputIndex(outputId, out _, out var output);
+        output.depthStencilId = stencilId;
+    }
+
+    /// <summary>
+    /// <para>Associates a rasterizer state with a render output, or 0 to remove it.</para>
+    /// </summary>
+    /// <remarks>
+    /// As with the stencil, the output stores the ID rather than the state, so later edits to
+    /// the state apply without re-associating.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// rasterizer 1, 0, 1        ` cull nothing, wireframe
+    /// set render target rasterizer 2, 1
+    /// </code>
+    /// </example>
+    /// <param name="outputId">The render output to change. 1 is the default output.</param>
+    /// <param name="rasterizerId">The rasterizer state's ID, or 0 for the default.</param>
+    /// <seealso cref="CreateRasterizer">rasterizer</seealso>
+    /// <seealso cref="SetRenderTargetStencil">set render target stencil</seealso>
+    [FadeBasicCommand("set render target rasterizer")]
+    public static void SetRenderTargetRasterizer(int outputId, int rasterizerId)
+    {
+        RenderSystem.GetOutputIndex(outputId, out _, out var output);
+        output.rasterizerId = rasterizerId;
+    }
+
+    /// <summary>
+    /// <para>Sets how a render output's sprites blend with what is already in the target.</para>
+    /// <para>Modes: <c>0</c> alpha (the default), <c>1</c> additive, <c>2</c> opaque,
+    /// <c>3</c> premultiplied alpha.</para>
+    /// </summary>
+    /// <remarks>
+    /// Additive is what makes light accumulation possible: a shader cannot add to its own
+    /// destination, because blending is fixed-function, so without this several lights drawn
+    /// to one target do not sum -- the last one simply wins.
+    ///
+    /// Blending is a property of the batch rather than of a sprite, which is why this is per
+    /// output. Give light accumulation its own output and set it additive there; everything
+    /// else keeps the alpha blending it had before this command existed.
+    ///
+    /// Note additive uses the source ALPHA as its colour factor, so a shader writing to an
+    /// additive target should output alpha 1 unless it means to scale itself down.
+    /// </remarks>
+    /// <param name="outputId">The render output to change. 1 is the default output.</param>
+    /// <param name="mode">0 alpha, 1 additive, 2 opaque, 3 premultiplied.</param>
+    /// <seealso cref="SetRenderTargetBackground">set render target background color</seealso>
+    [FadeBasicCommand("set render target blend")]
+    public static void SetRenderTargetBlend(int outputId, int mode)
+    {
+        RenderSystem.GetOutputIndex(outputId, out _, out var output);
+        switch (mode)
+        {
+            case 1:
+                output.blendState = BlendState.Additive;
+                break;
+            case 2:
+                output.blendState = BlendState.Opaque;
+                break;
+            case 3:
+                output.blendState = BlendState.AlphaBlend;
+                break;
+            default:
+                output.blendState = BlendState.NonPremultiplied;
+                break;
+        }
+    }
+
+    /// <summary>
     /// <para>Controls whether a render target is cleared each frame before drawing.</para>
     ///
     /// <para>Pass any value greater than <c>0</c> to enable clearing, or <c>0</c> to
@@ -1524,33 +1620,94 @@ public partial class FadeMonoGameCommands
         }
         output.bindingTextureIds = new int[textureIds.Length];
         output.targets = new RenderTarget2D[textureIds.Length];
-        
+
         // now, all texture ids need to be filled in
         for (var i = 0; i < textureIds.Length; i++)
         {
             if (textureIds[i] == 0)
             {
+                // A zero always means "give me a fresh one", including on a repeat call. So
+                // `render target 2` twice reserves two ids and builds two targets; use explicit
+                // ids if you want the call to be a no-op.
                 ReserveTextureNextId(ref textureIds[i]);
             }
-            
-            
-            TextureSystem.GetTextureIndex(textureIds[i], out var textureIndex, out var runtimeTexture);
-            RenderTarget2D target;
-            if (output.bindingTextureIds[i] != textureIds[i])
+
+            // One resource cannot occupy two slots of the same SetRenderTargets call.
+            for (var j = 0; j < i; j++)
             {
-                output.targets[i] = target = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
+                if (textureIds[j] != textureIds[i]) continue;
+
+                throw new Exception(
+                    "TODO: Change this to a VM exception, using the VirtualMachine arg. " +
+                    $"render target {outputId} binds texture {textureIds[i]} at both binding " +
+                    $"{j} and binding {i}. Each binding needs its own texture.");
+            }
+
+            TextureSystem.GetTextureIndex(textureIds[i], out var textureIndex, out var runtimeTexture);
+
+            var current = runtimeTexture.texture;
+
+            // A texture holding a loaded IMAGE is almost always a mistyped id. Refusing is much
+            // kinder than the alternative: quietly replacing the image with a blank target, so
+            // every sprite drawn from it turns blank with nothing reported anywhere.
+            if (current != null && !(current is RenderTarget2D))
+            {
+                throw new Exception(
+                    "TODO: Change this to a VM exception, using the VirtualMachine arg. " +
+                    $"render target {outputId} binding {i} was given texture {textureIds[i]}, " +
+                    "which holds a loaded image rather than a render target. Use an unused " +
+                    "texture id, or one made with `create texture target`.");
+            }
+
+            var currentTarget = current as RenderTarget2D;
+
+            if (currentTarget != null && !currentTarget.IsDisposed)
+            {
+                // Already a render target, whether from an earlier `render target` call or from
+                // `create texture target`. Adopting it is what makes this command idempotent
+                // AND what lets a caller choose the surface format, size and depth format --
+                // the defaults below are only the fallback for an empty slot.
+                output.targets[i] = currentTarget;
+            }
+            else
+            {
+                output.targets[i] = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
                     width: (int)(RenderSystem.mainBuffer.Width),
                     height: (int)(RenderSystem.mainBuffer.Height),
                     mipMap: false,
                     preferredFormat: SurfaceFormat.Color,
                     preferredDepthFormat: DepthFormat.None);
             }
-            
+
             output.bindingTextureIds[i] = textureIds[i];
             // runtimeTex.texture = output.target;
             runtimeTexture.SetComputedTexture(output.targets[i]);
             TextureSystem.textures[textureIndex] = runtimeTexture;
-            
+
+        }
+
+        // Every target bound to one output has to be the same size. SetRenderTargets rejects a
+        // mismatched set outright, and an output's camera matrix is derived from targets[0], so
+        // even where a driver tolerated it the view would be wrong for every other binding.
+        //
+        // Compared against binding 0 rather than against mainBuffer, deliberately: an output
+        // whose targets are ALL smaller than the main buffer is legitimate and useful -- a
+        // half-resolution light or blur buffer -- and CameraSystem.GetMatrix already takes the
+        // output's own dimensions, so such an output still describes the same world view.
+        for (var i = 1; i < output.targets.Length; i++)
+        {
+            if (output.targets[i].Width == output.targets[0].Width
+                && output.targets[i].Height == output.targets[0].Height)
+            {
+                continue;
+            }
+
+            throw new Exception(
+                "TODO: Change this to a VM exception, using the VirtualMachine arg. " +
+                $"render target {outputId} binding {i} (texture {textureIds[i]}) is " +
+                $"{output.targets[i].Width}x{output.targets[i].Height}, but binding 0 " +
+                $"(texture {textureIds[0]}) is {output.targets[0].Width}x{output.targets[0].Height}. " +
+                "All textures bound to one render target must be the same size.");
         }
         
         // if (textureId == 0 && output.targetTextureId <= 0)

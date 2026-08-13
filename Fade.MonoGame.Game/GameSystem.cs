@@ -26,10 +26,13 @@ public class GameSystem
         
         AudioSystem.Reset();
         AudioInstanceSystem.Reset();
+        CameraSystem.Reset();
         CollisionSystem.Reset();
         SpriteSystem.Reset();
         InputSystem.Reset();
         RenderSystem.Reset();
+        DepthStencilSystem.Reset();
+        RasterizerSystem.Reset();
         SpriteSystem.Reset();
         TextSystem.Reset();
         TextureSystem.Reset();

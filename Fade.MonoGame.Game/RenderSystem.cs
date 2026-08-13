@@ -16,6 +16,41 @@ public class RenderOutput
     public int id;
     public int order;
 
+    /// <summary>
+    /// The camera this output views the world through, or 0 for none. The association lives on
+    /// the output rather than on each binding because every binding in an MRT set is filled by
+    /// the same draw call through one vertex transform -- a per-binding camera is not merely
+    /// undesirable, it is unimplementable.
+    /// </summary>
+    public int cameraId;
+
+    /// <summary>
+    /// How this output's sprites blend with what is already in the target.
+    ///
+    /// Per output rather than per sprite because blending is a property of the batch: every
+    /// sprite on a light-accumulation target wants Additive, and letting individual sprites
+    /// disagree would fragment the batch for no gain. Defaults to NonPremultiplied, which is
+    /// what every output did before this field existed.
+    /// </summary>
+    public BlendState blendState;
+
+    /// <summary>
+    /// The depth-stencil state this output draws with, or 0 for the sprite batch's default
+    /// (DepthStencilState.None).
+    ///
+    /// An ID rather than the state object, deliberately: the state is resolved fresh each
+    /// frame, so editing it after associating it with an output takes effect. Holding the
+    /// object would freeze whatever it looked like at the moment of association.
+    /// </summary>
+    public int depthStencilId;
+
+    /// <summary>
+    /// The rasterizer state this output draws with, or 0 for the sprite batch's default
+    /// (RasterizerState.CullCounterClockwise). ID rather than object, for the same reason as
+    /// <see cref="depthStencilId"/>.
+    /// </summary>
+    public int rasterizerId;
+
     public RenderTarget2D[] targets;
     public int[] bindingTextureIds;
     
@@ -96,6 +131,41 @@ public static class RenderSystem
     public static float screenShakeMag, screenShakeElastic;
 
     public static List<RenderOutput> outputs = new List<RenderOutput>();
+
+    /// <summary>
+    /// Re-points every output binding that renders into <paramref name="textureId"/> at
+    /// <paramref name="target"/>.
+    ///
+    /// Needed because a texture id and an output binding are two references to the same
+    /// RenderTarget2D, and replacing the texture's asset on its own leaves the output still
+    /// drawing into the OLD target while everything sampling the texture reads the new one.
+    /// Nothing errors; the buffer simply goes blank and stays blank.
+    ///
+    /// The replaced target is deliberately NOT disposed. Effects hold their texture parameters
+    /// as plain references, so a bound target could still be sitting in an Effect from an
+    /// earlier `set effect param texture`, and disposing it would fault on the next draw
+    /// instead of merely wasting memory. Creating targets is a setup-time operation, so the
+    /// bounded leak is the cheaper mistake.
+    /// </summary>
+    public static void RebindOutputsToTarget(int textureId, RenderTarget2D target)
+    {
+        foreach (var output in outputs)
+        {
+            if (output.bindingTextureIds == null || output.targets == null)
+            {
+                continue;
+            }
+
+            var count = Math.Min(output.bindingTextureIds.Length, output.targets.Length);
+            for (var i = 0; i < count; i++)
+            {
+                if (output.bindingTextureIds[i] == textureId)
+                {
+                    output.targets[i] = target;
+                }
+            }
+        }
+    }
     private static Dictionary<int, int> _outputMap = new Dictionary<int, int>();
 
     public static List<RuntimeEffect> effects = new List<RuntimeEffect>();
@@ -160,6 +230,8 @@ public static class RenderSystem
             output = new RenderOutput
             {
                 id = outputId,
+                cameraId = CameraSystem.CAMERA_ID_NONE, // identity view, so existing games are untouched
+                blendState = BlendState.NonPremultiplied, // what every output did before this was settable
                 targets = null, // null is magic, and defaults to drawing on the screen
                 // target = null, // default to drawing to the screen
                 // targetTextureId = -1,
@@ -378,7 +450,24 @@ public static class RenderSystem
                 }
                 sb.GraphicsDevice.SetRenderTargets(bindings);
             }
-            
+
+            // The output's view matrix, derived ONCE here rather than inside the item loop:
+            // that loop re-Begins whenever the effect changes, and every one of those batches
+            // has to be handed the same matrix or the scene tears along effect boundaries.
+            //
+            // Derived from this output's own dimensions, so a camera shared with a
+            // differently-sized target still describes the same world view.
+            var cameraTargetWidth = output.targets == null ? mainBuffer.Width : output.targets[0].Width;
+            var cameraTargetHeight = output.targets == null ? mainBuffer.Height : output.targets[0].Height;
+            var outputMatrix = CameraSystem.GetMatrix(output.cameraId, cameraTargetWidth, cameraTargetHeight);
+
+            // Resolved once here for the same reason as the matrix above: the item loop
+            // re-Begins on every effect change, and each of those batches needs the same
+            // state. Both return null for id 0, which the sprite batch reads as its own
+            // default -- so an output that was never given either behaves as it always did.
+            var outputDepthStencil = DepthStencilSystem.Resolve(output.depthStencilId);
+            var outputRasterizer = RasterizerSystem.Resolve(output.rasterizerId);
+
             if (output.clearTarget)
             {
                 sb.GraphicsDevice.Clear(output.clearColor);
@@ -449,12 +538,15 @@ public static class RenderSystem
                         // need to end the old batch.
                         sb.End();
                     }
-                    
+
                     sb.Begin(
-                        sortMode: SpriteSortMode.BackToFront, 
-                        blendState: BlendState.NonPremultiplied, // TODO: allow sprites to set their own blend mode. 
+                        sortMode: SpriteSortMode.BackToFront,
+                        blendState: output.blendState ?? BlendState.NonPremultiplied,
                         samplerState: SamplerState.PointClamp, // TODO: allow sprites to set their own sampler state
-                        effect: effect);
+                        depthStencilState: outputDepthStencil,
+                        rasterizerState: outputRasterizer,
+                        effect: effect,
+                        transformMatrix: outputMatrix);
                     hasBatch = true;
                     needBatch = false;
                 }
