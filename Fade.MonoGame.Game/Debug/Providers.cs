@@ -428,59 +428,59 @@ public sealed class TextureDebugProvider : IDebugProvider
 
 // ── Render output ─────────────────────────────────────────────────────
 
-public sealed class RenderOutputDebugProvider : IDebugProvider
-{
-    public string TypeName => "renderOutput";
-
-    public IReadOnlyList<DebugField> Schema { get; } = new[]
-    {
-        // Render-target preview at the top so the user can SEE what
-        // the output is drawing each frame. Refreshes through the
-        // entity-folder poll while the folder is expanded.
-        new DebugField { Path = "preview",     Type = "image", Label = "preview", ReadOnly = true },
-        new DebugField { Path = "clearColor",  Type = "color", Label = "clearColor" },
-        new DebugField { Path = "clearTarget", Type = "bool",  Label = "clearTarget" },
-        new DebugField { Path = "itemCount",   Type = "int",   Label = "items",       ReadOnly = true },
-        new DebugField { Path = "targetTextureId", Type = "int", Label = "targetTexture", ReadOnly = true,
-                         ReferenceType = "texture" },
-        new DebugField { Path = "width",       Type = "int",   Label = "width",       ReadOnly = true },
-        new DebugField { Path = "height",      Type = "int",   Label = "height",      ReadOnly = true },
-    };
-
-    public IEnumerable<int> ListIds()
-    {
-        foreach (var o in RenderSystem.outputs) yield return o.id;
-    }
-
-    public object Snapshot(int id)
-    {
-        RenderSystem.GetOutputIndex(id, out _, out var o);
-        var hasTarget = o.target != null;
-        return new Dictionary<string, object>
-        {
-            ["preview"]         = hasTarget ? (TexturePreview.TryEncode(o.target) ?? "") : "",
-            ["clearColor"]      = DebugColor.Pack(o.clearColor),
-            ["clearTarget"]     = o.clearTarget,
-            ["itemCount"]       = o.orderedItems.Count,
-            ["targetTextureId"] = o.targetTextureId,
-            ["width"]           = hasTarget ? o.target.Width  : 0,
-            ["height"]          = hasTarget ? o.target.Height : 0,
-        };
-    }
-
-    public bool Apply(int id, string path, JsonElement value)
-    {
-        RenderSystem.GetOutputIndex(id, out var idx, out var o);
-        switch (path)
-        {
-            case "clearTarget": o.clearTarget = value.GetBoolean(); break;
-            case "clearColor":   o.clearColor = DebugColor.Unpack(value.GetInt32()); break;
-            default: return false;
-        }
-        RenderSystem.outputs[idx] = o;
-        return true;
-    }
-}
+// public sealed class RenderOutputDebugProvider : IDebugProvider
+// {
+//     public string TypeName => "renderOutput";
+//
+//     public IReadOnlyList<DebugField> Schema { get; } = new[]
+//     {
+//         // Render-target preview at the top so the user can SEE what
+//         // the output is drawing each frame. Refreshes through the
+//         // entity-folder poll while the folder is expanded.
+//         new DebugField { Path = "preview",     Type = "image", Label = "preview", ReadOnly = true },
+//         new DebugField { Path = "clearColor",  Type = "color", Label = "clearColor" },
+//         new DebugField { Path = "clearTarget", Type = "bool",  Label = "clearTarget" },
+//         new DebugField { Path = "itemCount",   Type = "int",   Label = "items",       ReadOnly = true },
+//         new DebugField { Path = "targetTextureId", Type = "int", Label = "targetTexture", ReadOnly = true,
+//                          ReferenceType = "texture" },
+//         new DebugField { Path = "width",       Type = "int",   Label = "width",       ReadOnly = true },
+//         new DebugField { Path = "height",      Type = "int",   Label = "height",      ReadOnly = true },
+//     };
+//
+//     public IEnumerable<int> ListIds()
+//     {
+//         foreach (var o in RenderSystem.outputs) yield return o.id;
+//     }
+//
+//     public object Snapshot(int id)
+//     {
+//         RenderSystem.GetOutputIndex(id, out _, out var o);
+//         var hasTarget = o.target != null;
+//         return new Dictionary<string, object>
+//         {
+//             ["preview"]         = hasTarget ? (TexturePreview.TryEncode(o.target) ?? "") : "",
+//             ["clearColor"]      = DebugColor.Pack(o.clearColor),
+//             ["clearTarget"]     = o.clearTarget,
+//             ["itemCount"]       = o.orderedItems.Count,
+//             ["targetTextureId"] = o.targetTextureId,
+//             ["width"]           = hasTarget ? o.target.Width  : 0,
+//             ["height"]          = hasTarget ? o.target.Height : 0,
+//         };
+//     }
+//
+//     public bool Apply(int id, string path, JsonElement value)
+//     {
+//         RenderSystem.GetOutputIndex(id, out var idx, out var o);
+//         switch (path)
+//         {
+//             case "clearTarget": o.clearTarget = value.GetBoolean(); break;
+//             case "clearColor":   o.clearColor = DebugColor.Unpack(value.GetInt32()); break;
+//             default: return false;
+//         }
+//         RenderSystem.outputs[idx] = o;
+//         return true;
+//     }
+// }
 
 // ── Effect (shader) — read-only parameter dump ────────────────────────
 

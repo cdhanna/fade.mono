@@ -1,9 +1,8 @@
-using System.Security.Cryptography;
+using System.IO;
 using Fade.MonoGame.Core;
 using FadeBasic.Lib.Standard.Util;
 using FadeBasic.SourceGenerators;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Content.Pipeline.Extra;
 using Microsoft.Xna.Framework.Graphics;
 
 namespace Fade.MonoGame.Lib;
@@ -1304,6 +1303,7 @@ public partial class FadeMonoGameCommands
     /// </code>
     /// </example>
     /// <param name="outputId">The render target ID to query.</param>
+    /// <param name="bindingIndex">The binding target index, only used when the output is using multi-output targets</param>
     /// <returns>The texture ID holding this render target's contents. Use it like any other texture ID.</returns>
     /// <seealso cref="SetRenderTargetTexture">render target</seealso>
     /// <seealso cref="ReserveOutputNextId">reserve render target id</seealso>
@@ -1311,10 +1311,10 @@ public partial class FadeMonoGameCommands
     /// <seealso cref="Sprite">sprite</seealso>
     /// <seealso cref="SetSpriteTarget">set sprite render target</seealso>
     [FadeBasicCommand("render target texture")]
-    public static int GetRenderTargetTexture(int outputId)
+    public static int GetRenderTargetTexture(int outputId, int bindingIndex=0)
     {
         RenderSystem.GetOutputIndex(outputId, out _, out var output);
-        return output.targetTextureId;
+        return output.bindingTextureIds[bindingIndex];
     }
 
     /// <summary>
@@ -1508,39 +1508,71 @@ public partial class FadeMonoGameCommands
     /// <seealso cref="SetRenderSize">set render size</seealso>
     /// <seealso cref="SetEffectParameter_Texture">set effect param texture</seealso>
     [FadeBasicCommand("render target")]
-    public static void SetRenderTargetTexture(int outputId, int textureId=0)
+    public static void SetRenderTargetTexture(int outputId, params int[] textureIds)
     {
         RenderSystem.GetOutputIndex(outputId, out _, out var output);
-        if (textureId < 0)
+        // if (textureId < 0)
+        // {
+        //     output.targetTextureId = -1;
+        //     output.target = null;
+        //     return;
+        // }
+        if (textureIds.Length == 0)
         {
-            output.targetTextureId = -1;
-            output.target = null;
-            return;
+            // there are no given texture ids, so we need to make at least one.
+            textureIds = new int[] { 0 };
         }
-
-        if (textureId == 0 && output.targetTextureId <= 0)
+        output.bindingTextureIds = new int[textureIds.Length];
+        output.targets = new RenderTarget2D[textureIds.Length];
+        
+        // now, all texture ids need to be filled in
+        for (var i = 0; i < textureIds.Length; i++)
         {
-            ReserveTextureNextId(ref textureId);
+            if (textureIds[i] == 0)
+            {
+                ReserveTextureNextId(ref textureIds[i]);
+            }
+            
+            
+            TextureSystem.GetTextureIndex(textureIds[i], out var textureIndex, out var runtimeTexture);
+            RenderTarget2D target;
+            if (output.bindingTextureIds[i] != textureIds[i])
+            {
+                output.targets[i] = target = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
+                    width: (int)(RenderSystem.mainBuffer.Width),
+                    height: (int)(RenderSystem.mainBuffer.Height),
+                    mipMap: false,
+                    preferredFormat: SurfaceFormat.Color,
+                    preferredDepthFormat: DepthFormat.None);
+            }
+            
+            output.bindingTextureIds[i] = textureIds[i];
+            // runtimeTex.texture = output.target;
+            runtimeTexture.SetComputedTexture(output.targets[i]);
+            TextureSystem.textures[textureIndex] = runtimeTexture;
+            
         }
+        
+        // if (textureId == 0 && output.targetTextureId <= 0)
+        // {
+        //     ReserveTextureNextId(ref textureId);
+        // }
 
-        TextureSystem.GetTextureIndex(textureId, out var index, out var runtimeTex);
-        if (output.targetTextureId != textureId)
-        {
-            output.target = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
-                width: (int)(RenderSystem.mainBuffer.Width),
-                height: (int)(RenderSystem.mainBuffer.Height),
-                mipMap: false,
-                preferredFormat: SurfaceFormat.Color,
-                preferredDepthFormat: DepthFormat.None);
-            // output.target = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
-            //     width: (int)(GameSystem.graphicsDeviceManager.GraphicsDevice.Viewport.Width * 1),
-            //     height: (int)(GameSystem.graphicsDeviceManager.GraphicsDevice.Viewport.Height * 1));
-        }
-
-        output.targetTextureId = textureId;
-        // runtimeTex.texture = output.target;
-        runtimeTex.SetComputedTexture(output.target);
-        TextureSystem.textures[index] = runtimeTex;
+        // TextureSystem.GetTextureIndex(textureId, out var index, out var runtimeTex);
+        // if (output.targetTextureId != textureId)
+        // {
+        //     output.target = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
+        //         width: (int)(RenderSystem.mainBuffer.Width),
+        //         height: (int)(RenderSystem.mainBuffer.Height),
+        //         mipMap: false,
+        //         preferredFormat: SurfaceFormat.Color,
+        //         preferredDepthFormat: DepthFormat.None);
+        //     
+        // }
+        //
+        // output.targetTextureId = textureId;
+        // // runtimeTex.texture = output.target;
+        // runtimeTex.SetComputedTexture(output.target);
+        // TextureSystem.textures[index] = runtimeTex;
     }
-
 }

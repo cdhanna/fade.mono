@@ -15,9 +15,12 @@ public class RenderOutput
 {
     public int id;
     public int order;
+
+    public RenderTarget2D[] targets;
+    public int[] bindingTextureIds;
     
-    public RenderTarget2D target;
-    public int targetTextureId; // is there a reserved texture id? 
+    // public RenderTarget2D target;
+    // public int targetTextureId; // is there a reserved texture id? 
     public Color clearColor;
     public bool clearTarget;
 
@@ -157,8 +160,9 @@ public static class RenderSystem
             output = new RenderOutput
             {
                 id = outputId,
-                target = null, // default to drawing to the screen
-                targetTextureId = -1,
+                targets = null, // null is magic, and defaults to drawing on the screen
+                // target = null, // default to drawing to the screen
+                // targetTextureId = -1,
                 clearTarget = true,
                 clearColor = Color.Black,
                 orderedItems = new List<RenderOutputItem>(),
@@ -360,12 +364,21 @@ public static class RenderSystem
             var output = localOutputs[i];
             
             // initialize the output.
-            var targetBuffer = output.target;
-            if (targetBuffer == null)
+            if (output.targets == null)
             {
-                targetBuffer = mainBuffer;
+                sb.GraphicsDevice.SetRenderTarget(mainBuffer);
             }
-            sb.GraphicsDevice.SetRenderTarget(targetBuffer);
+            else
+            {
+                // TODO pull this out of the hot loop- no need to allocate an array every time; we could just use a pool. 
+                var bindings = new RenderTargetBinding[output.targets.Length];
+                for (var b = 0; b < output.targets.Length; b++)
+                {
+                    bindings[b] = output.targets[b];
+                }
+                sb.GraphicsDevice.SetRenderTargets(bindings);
+            }
+            
             if (output.clearTarget)
             {
                 sb.GraphicsDevice.Clear(output.clearColor);

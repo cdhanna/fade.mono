@@ -321,9 +321,9 @@ public static class DebugUISystem
                 case DebugControlType.COMPONENT_TEXTURE:
                     RenderTexture(ctrl);
                     break;
-                case DebugControlType.COMPONENT_RENDER_OUTPUT:
-                    RenderRenderOutput(ctrl);
-                    break;
+                // case DebugControlType.COMPONENT_RENDER_OUTPUT:
+                //     RenderRenderOutput(ctrl);
+                //     break;
                 case DebugControlType.COMPONENT_METADATA:
                     RenderMetadata(ctrl);
                     break;
@@ -361,9 +361,9 @@ public static class DebugUISystem
                 case DebugControlType.BROWSER_TEXTURE:
                     BrowseTextures(ctrl);
                     break;
-                case DebugControlType.BROWSER_RENDER_OUTPUT:
-                    BrowseRenderOutputs(ctrl);
-                    break;
+                // case DebugControlType.BROWSER_RENDER_OUTPUT:
+                //     BrowseRenderOutputs(ctrl);
+                //     break;
             }
         }
 
@@ -437,14 +437,14 @@ public static class DebugUISystem
             }
 
             // render output dropdown
-            CollectRenderOutputIds();
-            var outputId = sprite.outputIdFlags;
-            if (ResourceIdCombo("renderTarget", ref outputId, _idScratch, "spr_out" + spriteId))
-            {
-                RenderSystem.SetSpriteToOutput(index, outputId, sprite.outputIdFlags);
-                sprite.outputIdFlags = outputId;
-                changed = true;
-            }
+            // CollectRenderOutputIds();
+            // var outputId = sprite.outputIdFlags;
+            // if (ResourceIdCombo("renderTarget", ref outputId, _idScratch, "spr_out" + spriteId))
+            // {
+            //     RenderSystem.SetSpriteToOutput(index, outputId, sprite.outputIdFlags);
+            //     sprite.outputIdFlags = outputId;
+            //     changed = true;
+            // }
 
             if (changed)
             {
@@ -805,50 +805,50 @@ public static class DebugUISystem
         }
     }
 
-    static void RenderRenderOutput(DebugUICommand ctrl, bool useTree = true)
-    {
-        var outputId = ctrl.argInt;
-        RenderSystem.GetOutputIndex(outputId, out var index, out var output);
-
-        var hasTarget = output.target != null;
-        var header = hasTarget
-            ? "output(" + outputId + ") " + output.target.Width + "x" + output.target.Height
-            : "output(" + outputId + ") screen";
-
-        var open = !useTree || ImGui.TreeNodeEx(header, ImGuiTreeNodeFlags.DefaultOpen);
-        if (open)
-        {
-            var changed = false;
-
-            changed |= Color("clearColor", ref output.clearColor);
-
-            var clearTarget = output.clearTarget;
-            if (ImGui.Checkbox("clearTarget", ref clearTarget))
-            {
-                output.clearTarget = clearTarget;
-                changed = true;
-            }
-
-            ImGui.TextDisabled("items: " + output.orderedItems.Count);
-
-            // texture reference
-            if (output.targetTextureId > 0)
-            {
-                ImGui.TextDisabled("targetTextureId: " + output.targetTextureId);
-            }
-
-            // preview the render target if one exists
-            if (hasTarget)
-            {
-                var ptr = GetOrBindRenderTarget(outputId, output.target);
-                var previewSize = FitSize(output.target.Width, output.target.Height, 128);
-                ImGui.Image(ptr, previewSize);
-            }
-
-            controlIdToBool[ctrl.ControlId] = changed;
-            if (useTree) ImGui.TreePop();
-        }
-    }
+    // static void RenderRenderOutput(DebugUICommand ctrl, bool useTree = true)
+    // {
+    //     var outputId = ctrl.argInt;
+    //     RenderSystem.GetOutputIndex(outputId, out var index, out var output);
+    //
+    //     var hasTarget = output.target != null;
+    //     var header = hasTarget
+    //         ? "output(" + outputId + ") " + output.target.Width + "x" + output.target.Height
+    //         : "output(" + outputId + ") screen";
+    //
+    //     var open = !useTree || ImGui.TreeNodeEx(header, ImGuiTreeNodeFlags.DefaultOpen);
+    //     if (open)
+    //     {
+    //         var changed = false;
+    //
+    //         changed |= Color("clearColor", ref output.clearColor);
+    //
+    //         var clearTarget = output.clearTarget;
+    //         if (ImGui.Checkbox("clearTarget", ref clearTarget))
+    //         {
+    //             output.clearTarget = clearTarget;
+    //             changed = true;
+    //         }
+    //
+    //         ImGui.TextDisabled("items: " + output.orderedItems.Count);
+    //
+    //         // texture reference
+    //         if (output.targetTextureId > 0)
+    //         {
+    //             ImGui.TextDisabled("targetTextureId: " + output.targetTextureId);
+    //         }
+    //
+    //         // preview the render target if one exists
+    //         if (hasTarget)
+    //         {
+    //             var ptr = GetOrBindRenderTarget(outputId, output.target);
+    //             var previewSize = FitSize(output.target.Width, output.target.Height, 128);
+    //             ImGui.Image(ptr, previewSize);
+    //         }
+    //
+    //         controlIdToBool[ctrl.ControlId] = changed;
+    //         if (useTree) ImGui.TreePop();
+    //     }
+    // }
 
     static void RenderMetadata(DebugUICommand ctrl)
     {
@@ -1222,11 +1222,11 @@ public static class DebugUISystem
                 BrowseSfxInstances(ctrl with { label = "browse_sfx_tab" }, useTree: false);
                 ImGui.EndTabItem();
             }
-            if (ImGui.BeginTabItem("Outputs"))
-            {
-                BrowseRenderOutputs(ctrl with { label = "browse_outputs_tab" }, useTree: false);
-                ImGui.EndTabItem();
-            }
+            // if (ImGui.BeginTabItem("Outputs"))
+            // {
+            //     BrowseRenderOutputs(ctrl with { label = "browse_outputs_tab" }, useTree: false);
+            //     ImGui.EndTabItem();
+            // }
             ImGui.EndTabBar();
         }
     }
@@ -1451,18 +1451,18 @@ public static class DebugUISystem
         BrowserEnd(useTree);
     }
 
-    static void BrowseRenderOutputs(DebugUICommand ctrl, bool useTree = true)
-    {
-        CollectRenderOutputIds();
-        var id = BrowserIdPicker(ctrl, "Render Outputs", _idScratch, useTree);
-        if (id < 0) return;
-        RenderRenderOutput(new DebugUICommand
-        {
-            label = "output_browse", type = DebugControlType.COMPONENT_RENDER_OUTPUT,
-            vmInstructionIndex = ctrl.vmInstructionIndex, argInt = id
-        }, useTree);
-        BrowserEnd(useTree);
-    }
+    // static void BrowseRenderOutputs(DebugUICommand ctrl, bool useTree = true)
+    // {
+    //     CollectRenderOutputIds();
+    //     var id = BrowserIdPicker(ctrl, "Render Outputs", _idScratch, useTree);
+    //     if (id < 0) return;
+    //     RenderRenderOutput(new DebugUICommand
+    //     {
+    //         label = "output_browse", type = DebugControlType.COMPONENT_RENDER_OUTPUT,
+    //         vmInstructionIndex = ctrl.vmInstructionIndex, argInt = id
+    //     }, useTree);
+    //     BrowserEnd(useTree);
+    // }
 
     // ── id collectors (populate _idScratch + _idLabelScratch) ──
 
@@ -1487,12 +1487,12 @@ public static class DebugUISystem
     {
         // build a quick reverse lookup: textureId -> render output id
         _rtLookup.Clear();
-        for (var i = 0; i < RenderSystem.outputs.Count; i++)
-        {
-            var o = RenderSystem.outputs[i];
-            if (o.targetTextureId > 0)
-                _rtLookup[o.targetTextureId] = o.id;
-        }
+        // for (var i = 0; i < RenderSystem.outputs.Count; i++)
+        // {
+        //     var o = RenderSystem.outputs[i];
+        //     if (o.targetTextureId > 0)
+        //         _rtLookup[o.targetTextureId] = o.id;
+        // }
 
         ClearScratch();
         for (var i = 0; i < TextureSystem.textures.Count; i++)
@@ -1549,19 +1549,19 @@ public static class DebugUISystem
         }
     }
 
-    static void CollectRenderOutputIds()
-    {
-        ClearScratch();
-        for (var i = 0; i < RenderSystem.outputs.Count; i++)
-        {
-            var o = RenderSystem.outputs[i];
-            _idScratch.Add(o.id);
-            var hasTarget = o.target != null;
-            _idLabelScratch.Add(hasTarget
-                ? o.id + " - " + o.target.Width + "x" + o.target.Height
-                : o.id + " - screen");
-        }
-    }
+    // static void CollectRenderOutputIds()
+    // {
+    //     ClearScratch();
+    //     for (var i = 0; i < RenderSystem.outputs.Count; i++)
+    //     {
+    //         var o = RenderSystem.outputs[i];
+    //         _idScratch.Add(o.id);
+    //         var hasTarget = o.target != null;
+    //         _idLabelScratch.Add(hasTarget
+    //             ? o.id + " - " + o.target.Width + "x" + o.target.Height
+    //             : o.id + " - screen");
+    //     }
+    // }
 
     // ── helpers ──────────────────────────────────────────────
 

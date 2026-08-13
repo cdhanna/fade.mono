@@ -17,7 +17,11 @@ namespace Fade.MonoGame.Core;
 public static class GameReloader
 {
 #if !BROWSER
-    private static FileSystemWatcher _fadeScriptWatcher;
+    // One per directory that actually contains a .fbasic, which is NOT necessarily the
+    // project directory: <FadeSource Include="../Shared/foo.fbasic" /> is legal and common
+    // once a solution has two Fade programs sharing code. Watching only the project dir made
+    // every such file silently unwatched, so editing it never armed a reload.
+    private static readonly List<FileSystemWatcher> _fadeScriptWatchers = new List<FileSystemWatcher>();
     private static FileSystemWatcher _assetWatcher;
     static Timer? debounceTimer;
     static Timer? effectTimer;
@@ -81,14 +85,41 @@ public static class GameReloader
         var changeFiles = new HashSet<string>();
         
         Console.WriteLine("Watching files...");
-        _fadeScriptWatcher = new FileSystemWatcher
+        // Watch every directory the program's sources actually live in, not just the one the
+        // csproj is in. `files` above already resolved them; before this it was computed and
+        // thrown away, so a source outside the project tree was never watched.
+        //
+        // Ancestors are dropped because IncludeSubdirectories already covers them, which
+        // stops one edit firing several times and rebuilding more than once.
+        var watchDirs = files
+            .Select(Path.GetDirectoryName)
+            .Append(projectDir)
+            .Where(d => !string.IsNullOrEmpty(d) && Directory.Exists(d))
+            .Select(d => Path.GetFullPath(d!).TrimEnd(Path.DirectorySeparatorChar))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var roots = watchDirs
+            .Where(d => !watchDirs.Any(other =>
+                !string.Equals(other, d, StringComparison.OrdinalIgnoreCase) &&
+                d.StartsWith(other + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        foreach (var dir in roots)
         {
-            Path = projectDir,
-            Filter = "*.fbasic",
-            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
-            IncludeSubdirectories = true,
-            EnableRaisingEvents = true
-        };
+            _fadeScriptWatchers.Add(new FileSystemWatcher
+            {
+                Path = dir,
+                Filter = "*.fbasic",
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+                IncludeSubdirectories = true,
+                EnableRaisingEvents = true
+            });
+        }
+
+        Console.WriteLine($"[fade-watch] {roots.Count} director{(roots.Count == 1 ? "y" : "ies")}: "
+                          + string.Join(", ", roots));
+
         _assetWatcher = new FileSystemWatcher
         {
             Path = projectDir,
@@ -99,18 +130,12 @@ public static class GameReloader
         };
         Build(csProjPath, commands);
         
-        _fadeScriptWatcher.Changed += (sender, args) =>
+        foreach (var watcher in _fadeScriptWatchers)
         {
-            HandleUpdate();
-        };
-        _fadeScriptWatcher.Created += (sender, args) =>
-        {
-            HandleUpdate();
-        };
-        _fadeScriptWatcher.Renamed += (sender, args) =>
-        {
-            HandleUpdate();
-        };
+            watcher.Changed += (sender, args) => HandleUpdate();
+            watcher.Created += (sender, args) => HandleUpdate();
+            watcher.Renamed += (sender, args) => HandleUpdate();
+        }
 
         _assetWatcher.Created += (sender, args) =>
         {

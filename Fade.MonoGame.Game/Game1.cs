@@ -225,7 +225,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         Core.Debug.DebugRegistry.Register(new Core.Debug.TextDebugProvider());
         Core.Debug.DebugRegistry.Register(new Core.Debug.SfxDebugProvider());
         Core.Debug.DebugRegistry.Register(new Core.Debug.TextureDebugProvider());
-        Core.Debug.DebugRegistry.Register(new Core.Debug.RenderOutputDebugProvider());
+        // Core.Debug.DebugRegistry.Register(new Core.Debug.RenderOutputDebugProvider());
         Core.Debug.DebugRegistry.Register(new Core.Debug.EffectDebugProvider());
     }
 
