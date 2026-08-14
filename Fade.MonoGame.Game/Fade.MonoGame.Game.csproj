@@ -142,17 +142,41 @@
 
     <!-- Which shader variants this build bakes and embeds.
          ────────────────────────────────────────────────────────────────────────
-         Desktop embeds BOTH, because this assembly is backend-agnostic: the app
-         decides whether MonoGame.Framework is DesktopGL or Native, and Game1 picks
-         the matching resource at runtime. Baking only one would put the backend
-         back into this project's build, and that value would have to arrive from a
-         consuming repo — which NuGet restore cannot do (see CLAUDE.md in BeatBoys).
+         Desktop embeds BOTH by default, because this assembly is backend-agnostic:
+         the app decides whether MonoGame.Framework is DesktopGL or Native, and
+         Game1 picks the matching resource at runtime. A package built from here has
+         to carry both, since its consumers have not chosen yet.
+
+         $(FadeEngineShaderVariants) narrows that for a game consuming this by
+         SOURCE, which has chosen — and the reason to bother is the toolchain, not
+         the ~3KB. The OpenGL variant compiles through MGFXC, which shells out to
+         the Windows fxc.exe and therefore needs a Wine prefix on Linux and macOS;
+         the Vulkan variant uses DXC, a native binary. So a Vulkan-only game that
+         bakes both still drags Wine into its build:
+
+             dotnet publish … -p:FadeEngineShaderVariants=DesktopVK
+
+         Narrowing it cannot silently ship the wrong shader — Game1 asks for the
+         variant matching the loaded MonoGame by name, and a missing one throws
+         `Baked content 'FadeSpriteBatchEffect' not found … (wanted the ogl.xnb
+         variant)` at startup rather than rendering incorrectly.
 
          Web is a genuinely different framework (KNI, not MonoGame.Framework), so it
          is its own build and bakes only its own KNI-patched variant. -->
+    <PropertyGroup Condition="'$(FadeEngineShaderVariants)' == ''">
+        <FadeEngineShaderVariants>Desktop;DesktopVK</FadeEngineShaderVariants>
+    </PropertyGroup>
+    <!-- Padded with delimiters so "Desktop" does not match inside "DesktopVK".
+         Properties are evaluated before items, so this cannot be derived from
+         @(_EngineShaderVariant) below — it has to come off the string. -->
+    <PropertyGroup>
+        <_EngineBakeOgl>$([System.String]::Copy(';$(FadeEngineShaderVariants);').Contains(';Desktop;'))</_EngineBakeOgl>
+        <_EngineBakeVk>$([System.String]::Copy(';$(FadeEngineShaderVariants);').Contains(';DesktopVK;'))</_EngineBakeVk>
+    </PropertyGroup>
     <ItemGroup Condition="'$(BakeEngineSpriteEffect)' == 'true' AND '$(FadeMonoGamePlatform)' != 'Web'">
-        <_EngineShaderVariant Include="Desktop"   Suffix="ogl" />
-        <_EngineShaderVariant Include="DesktopVK" Suffix="vk" />
+        <_EngineShaderVariant Include="$(FadeEngineShaderVariants)" />
+        <_EngineShaderVariant Update="Desktop"   Suffix="ogl" />
+        <_EngineShaderVariant Update="DesktopVK" Suffix="vk" />
     </ItemGroup>
     <ItemGroup Condition="'$(BakeEngineSpriteEffect)' == 'true' AND '$(FadeMonoGamePlatform)' == 'Web'">
         <_EngineShaderVariant Include="Web" Suffix="ogl" />
@@ -162,11 +186,13 @@
          reads (adding them from a BeforeCompile target is too late). The files
          themselves are produced by BakeEngineSpriteEffect before csc runs.
          LogicalName carries the suffix; Game1 resolves it at runtime. -->
-    <ItemGroup Condition="'$(BakeEngineSpriteEffect)' == 'true' AND '$(FadeMonoGamePlatform)' != 'Web'">
+    <ItemGroup Condition="'$(BakeEngineSpriteEffect)' == 'true' AND '$(FadeMonoGamePlatform)' != 'Web' AND '$(_EngineBakeOgl)' == 'true'">
         <EmbeddedResource Include="$(_EngineShaderObjRoot)Desktop\Content\FadeSpriteBatchEffect.xnb">
             <LogicalName>FadeSpriteBatchEffect.ogl.xnb</LogicalName>
             <Visible>false</Visible>
         </EmbeddedResource>
+    </ItemGroup>
+    <ItemGroup Condition="'$(BakeEngineSpriteEffect)' == 'true' AND '$(FadeMonoGamePlatform)' != 'Web' AND '$(_EngineBakeVk)' == 'true'">
         <EmbeddedResource Include="$(_EngineShaderObjRoot)DesktopVK\Content\FadeSpriteBatchEffect.xnb">
             <LogicalName>FadeSpriteBatchEffect.vk.xnb</LogicalName>
             <Visible>false</Visible>
