@@ -5,12 +5,14 @@
 // engine's baked FadeSpriteBatchEffect — can compile raw assets to XNBs via a
 // single canonical path instead of raw `dotnet mgcb`.
 //
-//   fadecontent --platform <Desktop|Web> --source <assetsDir>
+//   fadecontent --platform <Desktop|DesktopVK|Web> --source <assetsDir>
 //               --output <xnbDir> --intermediate <objDir>
 //
-// Platform semantics match FadeContentSystem.Build: XNBs are always produced
-// with the DesktopGL pipeline; "Web" additionally patches them in place for
-// KNI BlazorGL (MGFX v11->v10, SoundEffect loopLength).
+// Platform semantics match FadeContentSystem.Build:
+//   Desktop    DesktopGL pipeline — GLSL via MGFXC (Wine off Windows), SM 3.0
+//   DesktopVK  DesktopVK pipeline — SPIR-V via DXC (no Wine), SM 6.0
+//   Web        DesktopGL pipeline, then patched in place for KNI BlazorGL
+//              (MGFX v11->v10, SoundEffect loopLength)
 
 string platform = "Desktop";
 string source = "";
@@ -34,6 +36,17 @@ for (int i = 0; i < args.Length; i++)
 if (string.IsNullOrEmpty(source))
 {
     Console.Error.WriteLine("[E] --source <assetsDir> is required");
+    return 2;
+}
+
+// Rejected rather than defaulted: an unrecognised platform used to fall through
+// to DesktopGL, so a typo'd -p:FadeMonoGamePlatform produced GL shaders that a
+// Vulkan build loads and fails on at runtime, with nothing said at build time.
+if (!(string.Equals(platform, "Desktop", StringComparison.OrdinalIgnoreCase)
+   || string.Equals(platform, "DesktopVK", StringComparison.OrdinalIgnoreCase)
+   || string.Equals(platform, "Web", StringComparison.OrdinalIgnoreCase)))
+{
+    Console.Error.WriteLine($"[E] unknown --platform '{platform}'; expected Desktop, DesktopVK or Web");
     return 2;
 }
 

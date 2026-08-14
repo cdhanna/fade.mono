@@ -9,18 +9,39 @@ public static class FadeContentSystem
 {
     // ── Platform-aware build (used by CLI and export pipeline) ───────────────
 
-    // Builds all assets in assetsFolder. Always emits DesktopGL XNBs via the
-    // MonoGame content pipeline. When platform="Web", the output XNBs are
-    // post-processed in place for KNI BlazorGL (sound loopLength + MGFX v11→v10).
+    // Maps a $(FadeMonoGamePlatform) value onto the MonoGame pipeline target.
+    //
+    //   Desktop / Web → DesktopGL: GLSL via MGFXC (needs Wine off Windows), SM 3.0.
+    //                   Web then patches the XNBs in place for KNI (below).
+    //   DesktopVK     → DesktopVK: SPIR-V via DXC (native binaries, no Wine), SM 6.0.
+    //
+    // Web rides the DesktopGL pipeline deliberately — KNI is a WebGL runtime and
+    // has no idea what SPIR-V is.
+    public static TargetPlatform TargetFor(string platform) =>
+        string.Equals(platform, "DesktopVK", StringComparison.OrdinalIgnoreCase)
+            ? TargetPlatform.DesktopVK
+            : TargetPlatform.DesktopGL;
+
+    // Builds all assets in assetsFolder for the given platform. When
+    // platform="Web", the DesktopGL output is post-processed in place for KNI
+    // BlazorGL (sound loopLength + MGFX v11→v10).
     public static void Build(string assetsFolder, string platform, string outputDir = "", string intermediateDir = "")
     {
+        // Callers today hand this a per-backend output directory, so this is belt and
+        // braces — but pointing two platforms at one directory is exactly the mistake
+        // that produced silently-wrong shaders on the live-reload path below, and the
+        // platform STRING is what is stamped here because Desktop and Web share a
+        // TargetPlatform while producing different bytes (Web is patched for KNI).
+        DiscardContentBuiltForAnotherTarget(
+            string.IsNullOrEmpty(outputDir) ? AppContext.BaseDirectory : outputDir, platform);
+
         var contentBuilderParams = new ContentBuilderParams
         {
             Mode             = ContentBuilderMode.Builder,
             WorkingDirectory = AppContext.BaseDirectory,
             OutputDirectory  = outputDir,
             SourceDirectory  = assetsFolder,
-            Platform         = TargetPlatform.DesktopGL,
+            Platform         = TargetFor(platform),
         };
 
         var builder = new FadeContentBuilder(Array.Empty<ContentEntry>(), -1);
@@ -31,6 +52,41 @@ public static class FadeContentSystem
     }
 
     // ── Debug live-reload build (used by Game project in Debug/Desktop) ──────
+    //
+    // This path runs in-process behind IContentBuilder and gets no platform
+    // argument, so it asks the MonoGame assembly ACTUALLY LOADED in this process
+    // which backend it is. That is the one source that cannot be wrong: whatever
+    // shaders this compiles are handed straight to that device.
+    //
+    // It used to be an MSBuild define instead, which meant the answer depended on
+    // $(FadeMonoGamePlatform) reaching THIS project — and it does not reliably.
+    // Forwarding it as AdditionalProperties on the ProjectReference builds fine but
+    // breaks `dotnet publish -r <rid>`: NuGet's restore walks a different graph and
+    // never generates project.assets.json for that property set (NETSDK1004/1047).
+    // Leaving it off instead made an IDE build compile OpenGL shaders for a Vulkan
+    // runtime. Detection sidesteps the whole propagation question.
+    //
+    // The tell is embedded effect resources: DesktopGL carries the stock effects as
+    // *.ogl.mgfxo, while Native compiles them into its native runtime library and
+    // embeds nothing. (Desktop only — KNI/Browser never reaches this code.)
+    public static readonly TargetPlatform LiveReloadTarget = DetectRuntimeTarget();
+
+    static TargetPlatform DetectRuntimeTarget()
+    {
+        try
+        {
+            var monoGame = typeof(Microsoft.Xna.Framework.Graphics.GraphicsDevice).Assembly;
+            var isOpenGl = monoGame.GetManifestResourceNames()
+                                   .Any(n => n.EndsWith(".ogl.mgfxo", StringComparison.OrdinalIgnoreCase));
+            return isOpenGl ? TargetPlatform.DesktopGL : TargetPlatform.DesktopVK;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[fadecontent] could not identify the MonoGame backend " +
+                                    $"({ex.Message}); assuming DesktopGL");
+            return TargetPlatform.DesktopGL;
+        }
+    }
 
     public static void Build(string assetsFolder, ContentEntry[] entries, int entriesCount)
     {
@@ -39,17 +95,70 @@ public static class FadeContentSystem
 
     public static void Build(string assetsFolder, ContentEntry[] entries, int entriesCount, List<string>? onlyPaths)
     {
+        DiscardContentBuiltForAnotherTarget(AppContext.BaseDirectory, LiveReloadTarget.ToString());
+
         var contentBuilderParams = new ContentBuilderParams
         {
             Mode             = ContentBuilderMode.Builder,
             WorkingDirectory = AppContext.BaseDirectory,
             OutputDirectory  = "",
             SourceDirectory  = assetsFolder,
-            Platform         = TargetPlatform.DesktopGL,
+            Platform         = LiveReloadTarget,
         };
 
         var builder = new FadeContentBuilder(entries, entriesCount);
         builder.Run(contentBuilderParams);
+    }
+
+    // The name of the target the XNBs beside the executable were built for.
+    const string TargetStampFile = ".fade-content-target";
+
+    /// <summary>
+    /// Throws away content compiled for a different graphics backend.
+    ///
+    /// This build writes its XNBs — and keeps its incremental state — next to the
+    /// executable, in bin/, which is deliberately SHARED between backends so the
+    /// packaging and peer scripts keep one path. The pipeline decides what to
+    /// rebuild from source-vs-output timestamps, and switching backend changes
+    /// neither: it reports every asset as up to date and leaves the previous
+    /// backend's shaders sitting there.
+    ///
+    /// What that looks like is not an error. The effect fails to load, `load effect`
+    /// logs and continues, and the g-buffer pass falls back to the default sprite
+    /// shader — which under OpenGL writes one colour to EVERY attached target, so
+    /// the normal, height and world buffers all come back holding the albedo and the
+    /// scene simply renders unlit. Release never hit it because its content output
+    /// and intermediate both live under the per-backend obj/.
+    ///
+    /// So the stamp is the only thing that can tell these apart, and a mismatch has
+    /// to invalidate the whole Content tree rather than just the shaders: the
+    /// pipeline's own up-to-date records live in there too.
+    /// </summary>
+    static void DiscardContentBuiltForAnotherTarget(string outputRoot, string want)
+    {
+        var stampPath = Path.Combine(outputRoot, TargetStampFile);
+
+        string? have = null;
+        try { if (File.Exists(stampPath)) have = File.ReadAllText(stampPath).Trim(); }
+        catch { /* unreadable stamp is treated as a mismatch below */ }
+
+        if (have == want) return;
+
+        var contentDir = Path.Combine(outputRoot, "Content");
+        if (have != null && Directory.Exists(contentDir))
+            Console.WriteLine($"[fadecontent] content in {contentDir} was built for {have}, " +
+                              $"rebuilding for {want}");
+
+        try
+        {
+            if (Directory.Exists(contentDir)) Directory.Delete(contentDir, recursive: true);
+            File.WriteAllText(stampPath, want);
+        }
+        catch (Exception ex)
+        {
+            // Better to rebuild noisily every launch than to load the wrong bytes.
+            Console.Error.WriteLine($"[fadecontent] could not reset content for {want}: {ex.Message}");
+        }
     }
 
     // ── KNI XNB patchers ──────────────────────────────────────────────────────

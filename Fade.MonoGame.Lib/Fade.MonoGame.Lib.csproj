@@ -34,10 +34,25 @@
       <ProjectReference Include="..\Fade.MonoGame.Game\Fade.MonoGame.Game.csproj" />
     </ItemGroup>
 
-    <!-- Desktop deps: MonoGame DesktopGL + ImGui. -->
-    <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Desktop'">
+    <!-- Desktop deps: MonoGame + ImGui.
+         ────────────────────────────────────────────────────────────────────────
+         MonoGame is referenced COMPILE-ONLY, and which desktop backend package
+         provides it does not matter. DesktopGL and Native ship the same assembly
+         identity (MonoGame.Framework 3.8.5.0, unsigned) and — checked member by
+         member against 3.8.5 — the same public API. The engine's own reference
+         assembly comes out BYTE-IDENTICAL either way, so there is nothing here to
+         build twice and no reason for this project to know the backend.
+
+         ExcludeAssets="runtime" is what makes that safe. Both packages produce a
+         file called MonoGame.Framework.dll, so if this project also contributed
+         one, whichever copy won the race into the app's bin/ would be the one that
+         ran — a game could ship Vulkan shaders on an OpenGL runtime and only find
+         out at launch. Compile against it here; let the APP own the copy that
+         ships, by referencing the backend package it wants. -->
+    <ItemGroup Condition="'$(FadeMonoGamePlatform)' != 'Web'">
         <PackageReference Include="ImGui.NET" Version="$(ImGuiVersion)" PrivateAssets="all" />
-        <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)" PrivateAssets="all" />
+        <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)"
+                          PrivateAssets="all" IncludeAssets="compile" />
     </ItemGroup>
 
     <!-- Browser deps: KNI BlazorGL. No ImGui (cimgui has no WASM build). -->

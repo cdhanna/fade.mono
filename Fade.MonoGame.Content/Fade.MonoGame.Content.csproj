@@ -17,18 +17,31 @@
         <IsPackable>true</IsPackable>
     </PropertyGroup>
 
+    <!-- No backend define here on purpose. This assembly is a platform-agnostic tool:
+         the CLI takes the platform as an argument, and the in-process live-reload build
+         detects the loaded MonoGame at runtime. A compile-time define would depend on
+         $(FadeMonoGamePlatform) reaching this project, which cannot be done reliably
+         without breaking RID-specific publish. See Builder.cs. -->
+
     <ItemGroup>
         <PackageReference Include="MonoGame.Framework.Content.Pipeline" Version="$(MonogameVersion)"/>
         <PackageReference Include="MonoGame.Framework.Native" Version="$(MonogameVersion)">
             <PrivateAssets>All</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="MonoGame.Library.FreeType"  Version="2.13.2.2"/>
-        <PackageReference Include="MonoGame.Library.MojoShader" Version="1.0.0.3"/>
-        <PackageReference Include="MonoGame.Tool.Basisu"  Version="1.60.0.3"/>
-        <PackageReference Include="MonoGame.Tool.Crunch"  Version="1.0.4.5"/>
-        <PackageReference Include="MonoGame.Tool.Dxc"     Version="1.8.2505.10"/>
-        <PackageReference Include="MonoGame.Tool.FFmpeg"  Version="7.0.0.9"/>
-        <PackageReference Include="MonoGame.Tool.FFprobe" Version="7.0.0.9"/>
+        <!-- Pinned to exactly what MonoGame.Framework.Content.Pipeline $(MonogameVersion)
+             depends on. They are listed explicitly (rather than left transitive) so a
+             pipeline bump fails the build with NU1605 instead of silently sliding the
+             shader compilers underneath us; when it does, read the new pipeline's
+             nuspec and move these together. Dxc is the SPIR-V compiler the DesktopVK
+             profile shells out to, and it ships native osx/linux/win binaries, which
+             is why the Vulkan path needs no Wine. -->
+        <PackageReference Include="MonoGame.Library.FreeType"  Version="2.13.2.3"/>
+        <PackageReference Include="MonoGame.Library.MojoShader" Version="1.0.0.5"/>
+        <PackageReference Include="MonoGame.Tool.Basisu"  Version="2.0.2.1"/>
+        <PackageReference Include="MonoGame.Tool.Crunch"  Version="1.0.4.7"/>
+        <PackageReference Include="MonoGame.Tool.Dxc"     Version="1.8.2505.11"/>
+        <PackageReference Include="MonoGame.Tool.FFmpeg"  Version="7.0.0.10"/>
+        <PackageReference Include="MonoGame.Tool.FFprobe" Version="7.0.0.10"/>
     </ItemGroup>
 
     <ItemGroup>

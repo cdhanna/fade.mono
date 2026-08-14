@@ -366,6 +366,12 @@ public static class RenderSystem
         for (var i = 0 ; i < effects.Count; i ++)
         {
             var fx = effects[i];
+            // Effect ids are sparse, so this list has default-valued holes between
+            // the slots a program actually filled, and a hole has no asset name.
+            // TryRefreshAsset would Path.Combine(root, null) and take the process
+            // down from Update with an ArgumentNullException naming only 'path2'.
+            // The browser branch below has always had this guard; desktop did not.
+            if (string.IsNullOrEmpty(fx.watchedEffect.assetName)) continue;
             if (GameSystem.game.ContentWatcher.TryRefreshAsset(ref fx.watchedEffect))
             {
                 effects[i] = fx;
@@ -407,7 +413,10 @@ public static class RenderSystem
 
         foreach (var fx in effects)
         {
-            
+            // Same sparse-slot hole as the refresh loop above: an id the program
+            // never loaded leaves a default entry whose Asset is null.
+            if (fx.effect == null) continue;
+
             if (fx.effect.Parameters.ContainsParameter("Time"))
                 fx.effect.Parameters["Time"].SetValue((float)GameSystem.latestTime.TotalGameTime.TotalSeconds);
             

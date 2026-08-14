@@ -27,10 +27,14 @@
          package's build props cannot inject a restorable PackageReference; see
          build/FadeBasic.MonoGame.Game.props). -->
 
-    <!-- Desktop deps: MonoGame DesktopGL + ImGui. -->
-    <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Desktop'">
+    <!-- Desktop deps: MonoGame + ImGui. Compile-only, backend-agnostic — see the
+         long note in Fade.MonoGame.Lib.csproj. The app picks and ships the backend;
+         this assembly is identical either way apart from the baked shader below,
+         which is why BOTH variants of that shader are embedded. -->
+    <ItemGroup Condition="'$(FadeMonoGamePlatform)' != 'Web'">
         <PackageReference Include="ImGui.NET" Version="$(ImGuiVersion)" PrivateAssets="all" />
-        <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)" PrivateAssets="all" />
+        <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)"
+                          PrivateAssets="all" IncludeAssets="compile" />
     </ItemGroup>
 
     <!-- Browser deps: KNI BlazorGL. No ImGui (cimgui has no WASM build);
@@ -133,16 +137,44 @@
         <!-- Use BaseIntermediateOutputPath ("obj/", set in props and available
              at evaluation); IntermediateOutputPath is set later (after the TFM
              is known) and would be empty here, writing outside obj. -->
-        <_EngineShaderObjDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'engineshader', '$(FadeMonoGamePlatform)'))</_EngineShaderObjDir>
-        <_EngineShaderXnb>$(_EngineShaderObjDir)Content$([System.IO.Path]::DirectorySeparatorChar)FadeSpriteBatchEffect.xnb</_EngineShaderXnb>
+        <_EngineShaderObjRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'engineshader'))</_EngineShaderObjRoot>
     </PropertyGroup>
 
-    <!-- Declared statically so the resource is in the snapshot CoreCompile
-         reads (adding it from a BeforeCompile target is too late). The file
-         itself is produced by BakeEngineSpriteEffect before csc runs. -->
-    <ItemGroup Condition="'$(BakeEngineSpriteEffect)' == 'true'">
-        <EmbeddedResource Include="$(_EngineShaderXnb)">
-            <LogicalName>FadeSpriteBatchEffect.xnb</LogicalName>
+    <!-- Which shader variants this build bakes and embeds.
+         ────────────────────────────────────────────────────────────────────────
+         Desktop embeds BOTH, because this assembly is backend-agnostic: the app
+         decides whether MonoGame.Framework is DesktopGL or Native, and Game1 picks
+         the matching resource at runtime. Baking only one would put the backend
+         back into this project's build, and that value would have to arrive from a
+         consuming repo — which NuGet restore cannot do (see CLAUDE.md in BeatBoys).
+
+         Web is a genuinely different framework (KNI, not MonoGame.Framework), so it
+         is its own build and bakes only its own KNI-patched variant. -->
+    <ItemGroup Condition="'$(BakeEngineSpriteEffect)' == 'true' AND '$(FadeMonoGamePlatform)' != 'Web'">
+        <_EngineShaderVariant Include="Desktop"   Suffix="ogl" />
+        <_EngineShaderVariant Include="DesktopVK" Suffix="vk" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(BakeEngineSpriteEffect)' == 'true' AND '$(FadeMonoGamePlatform)' == 'Web'">
+        <_EngineShaderVariant Include="Web" Suffix="ogl" />
+    </ItemGroup>
+
+    <!-- Declared statically so the resources are in the snapshot CoreCompile
+         reads (adding them from a BeforeCompile target is too late). The files
+         themselves are produced by BakeEngineSpriteEffect before csc runs.
+         LogicalName carries the suffix; Game1 resolves it at runtime. -->
+    <ItemGroup Condition="'$(BakeEngineSpriteEffect)' == 'true' AND '$(FadeMonoGamePlatform)' != 'Web'">
+        <EmbeddedResource Include="$(_EngineShaderObjRoot)Desktop\Content\FadeSpriteBatchEffect.xnb">
+            <LogicalName>FadeSpriteBatchEffect.ogl.xnb</LogicalName>
+            <Visible>false</Visible>
+        </EmbeddedResource>
+        <EmbeddedResource Include="$(_EngineShaderObjRoot)DesktopVK\Content\FadeSpriteBatchEffect.xnb">
+            <LogicalName>FadeSpriteBatchEffect.vk.xnb</LogicalName>
+            <Visible>false</Visible>
+        </EmbeddedResource>
+    </ItemGroup>
+    <ItemGroup Condition="'$(BakeEngineSpriteEffect)' == 'true' AND '$(FadeMonoGamePlatform)' == 'Web'">
+        <EmbeddedResource Include="$(_EngineShaderObjRoot)Web\Content\FadeSpriteBatchEffect.xnb">
+            <LogicalName>FadeSpriteBatchEffect.ogl.xnb</LogicalName>
             <Visible>false</Visible>
         </EmbeddedResource>
     </ItemGroup>
@@ -150,10 +182,10 @@
     <Target Name="BakeEngineSpriteEffect"
             BeforeTargets="BeforeCompile;CoreCompile"
             Condition="'$(BakeEngineSpriteEffect)' == 'true'"
-            Inputs="$(_EngineShaderSrcDir)FadeSpriteBatchEffect.fx"
-            Outputs="$(_EngineShaderXnb)">
-        <Message Importance="high" Text="Baking engine sprite shader for $(FadeMonoGamePlatform)…" />
-        <MakeDir Directories="$(_EngineShaderObjDir)" />
+            Inputs="$(_EngineShaderSrcDir)FadeSpriteBatchEffect.fx;$(_EngineShaderSrcDir)FadeMacros.fxh"
+            Outputs="@(_EngineShaderVariant->'$(_EngineShaderObjRoot)%(Identity)\Content\FadeSpriteBatchEffect.xnb')">
+        <Message Importance="high" Text="Baking engine sprite shader: @(_EngineShaderVariant, ', ')" />
+        <MakeDir Directories="@(_EngineShaderVariant->'$(_EngineShaderObjRoot)%(Identity)')" />
         <!-- Restore in its own <MSBuild> call first. In a Release build the
              Content project is NOT a ProjectReference of this project (that's
              Debug-only), so on a clean checkout it has never been restored and
@@ -168,7 +200,8 @@
                  RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;FadeMonoGamePlatform;SelfContained;PublishTrimmed;PublishReadyToRun">
             <Output TaskParameter="TargetOutputs" ItemName="_FadeContentCli" />
         </MSBuild>
-        <Exec Command="dotnet &quot;@(_FadeContentCli)&quot; --platform $(FadeMonoGamePlatform) --source &quot;$(_EngineShaderSrcDir)&quot; --output &quot;$(_EngineShaderObjDir)&quot; --intermediate &quot;$(_EngineShaderObjDir)obj&quot;"
+        <!-- Batches over the variants: one CLI run each, into its own directory. -->
+        <Exec Command="dotnet &quot;@(_FadeContentCli)&quot; --platform %(_EngineShaderVariant.Identity) --source &quot;$(_EngineShaderSrcDir)&quot; --output &quot;$(_EngineShaderObjRoot)%(_EngineShaderVariant.Identity)&quot; --intermediate &quot;$(_EngineShaderObjRoot)%(_EngineShaderVariant.Identity)\obj&quot;"
               CustomErrorRegularExpression="\[E\] .+" />
     </Target>
 

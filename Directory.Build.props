@@ -7,16 +7,53 @@
              PackageReference AND the generator bundled into
              FadeBasic.MonoGame.Game, so the build-time compiler and the runtime
              VM always match. -->
-        <FadeVersion Condition="'$(FadeVersion)' == ''">0.2.5.1</FadeVersion>
-        <MonogameVersion>3.8.5-preview.4</MonogameVersion>
+        <FadeVersion Condition="'$(FadeVersion)' == ''">0.2.6.1</FadeVersion>
+        <MonogameVersion>3.8.5</MonogameVersion>
         <ImGuiVersion>1.91.6.1</ImGuiVersion>
         <!-- KNI content pipeline — version-locked to the KNI runtime. -->
         <KniContentVersion>4.2.9001.2</KniContentVersion>
         <KniPlatformBlazorGLVersion>4.2.9001.2</KniPlatformBlazorGLVersion>
     </PropertyGroup>
 
-    <!-- Desktop unless the consumer opts in with FadeMonoGamePlatform=Web. -->
+    <!-- Desktop unless the consumer opts in with FadeMonoGamePlatform=Web.
+
+         Three values:
+             Desktop    MonoGame DesktopGL   — OpenGL, SM 3.0 shaders via MGFXC
+             DesktopVK  MonoGame Native      — Vulkan, SM 6.0 shaders via DXC
+             Web        KNI BlazorGL         — WebGL, SM 3.0 shaders + KNI XNB patches
+
+         DesktopVK is a global property, so `-p:FadeMonoGamePlatform=DesktopVK`
+         on the command line flows across every ProjectReference. It must NOT be
+         set in a csproj PropertyGroup — those do not flow, and half the graph
+         would build for the other backend. -->
     <PropertyGroup Condition="'$(FadeMonoGamePlatform)' == ''">
         <FadeMonoGamePlatform>Desktop</FadeMonoGamePlatform>
+    </PropertyGroup>
+
+    <!-- Shorthand for "one of the two desktop backends", so the many ItemGroups
+         and defines that do not care which one stay single-condition. -->
+    <PropertyGroup>
+        <FadeMonoGameIsDesktop Condition="'$(FadeMonoGamePlatform)' == 'Desktop' OR '$(FadeMonoGamePlatform)' == 'DesktopVK'">true</FadeMonoGameIsDesktop>
+    </PropertyGroup>
+
+    <!-- Per-platform intermediates. Backend choice is a PROPERTY, and MSBuild's
+         up-to-date check is timestamp-based: it cannot see that the property
+         changed, so a shared obj/ hands a Vulkan build the OpenGL-compiled
+         FadeSpriteBatchEffect baked into Fade.MonoGame.Game.dll — silently, at
+         runtime, not at build. Same failure shape as -p:BakeEngineSpriteEffect=false.
+         Must be set here: BaseIntermediateOutputPath is consumed by the SDK's
+         common props, which import after this file. bin/ stays shared so
+         existing scripts keep their paths; the copy step refreshes it. -->
+    <PropertyGroup Condition="'$(FadeMonoGamePlatform)' != 'Desktop'">
+        <BaseIntermediateOutputPath>obj\$(FadeMonoGamePlatform)\</BaseIntermediateOutputPath>
+    </PropertyGroup>
+
+    <!-- The SDK excludes exactly $(BaseIntermediateOutputPath) from the default
+         **/*.cs glob, so moving that under obj/<backend>/ un-excludes plain obj/
+         and every AssemblyInfo.cs the other backend already generated is compiled
+         in — a wall of CS0579 duplicate-attribute errors naming obj/ paths. A no-op
+         for the default layout. -->
+    <PropertyGroup>
+        <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
     </PropertyGroup>
 </Project>

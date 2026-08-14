@@ -540,21 +540,60 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private Effect LoadEmbeddedEffect(string assetName)
     {
         var asm = typeof(Game1).Assembly;
-        var resourceName = assetName + ".xnb";
-        if (asm.GetManifestResourceInfo(resourceName) == null)
-        {
-            resourceName = asm.GetManifestResourceNames()
-                .FirstOrDefault(n => n == assetName + ".xnb"
-                                  || n.EndsWith("." + assetName + ".xnb", StringComparison.Ordinal))
-                ?? throw new InvalidOperationException(
-                    $"Baked content '{assetName}.xnb' not found in {asm.GetName().Name}. " +
+
+        // This assembly is backend-agnostic and carries a baked shader for EACH
+        // desktop backend, because which one is loaded is the app's choice and is
+        // not knowable when this assembly is compiled. Ask the MonoGame that is
+        // actually running: DesktopGL embeds its stock effects as *.ogl.mgfxo,
+        // Native compiles them into its native runtime library and embeds none.
+        //
+        // Preferred first, then any variant — a Web build bakes only the one, and
+        // an older single-variant assembly still resolves through the fallback.
+        var preferred = MonoGameBackendSuffix() + ".xnb";
+        var resourceName =
+            FindResource(asm, assetName + "." + preferred)
+            ?? FindResource(asm, assetName + ".xnb")
+            ?? asm.GetManifestResourceNames()
+                  .FirstOrDefault(n => n.Contains("." + assetName + ".", StringComparison.Ordinal)
+                                    && n.EndsWith(".xnb", StringComparison.Ordinal))
+            ?? throw new InvalidOperationException(
+                    $"Baked content '{assetName}' not found in {asm.GetName().Name} " +
+                    $"(wanted the {preferred} variant). " +
                     "Ensure the BakeEngineSpriteEffect build target ran.");
-        }
 
         var manager = (EmbeddedResourceContentManager)(_embeddedContentManager ??=
             new EmbeddedResourceContentManager(Services, asm));
         manager.Map(assetName, resourceName);
         return manager.Load<Effect>(assetName);
+    }
+
+    // Exact match, or a name ending in ".<wanted>" for a namespace-qualified resource.
+    private static string FindResource(Assembly asm, string wanted) =>
+        asm.GetManifestResourceInfo(wanted) != null
+            ? wanted
+            : asm.GetManifestResourceNames()
+                 .FirstOrDefault(n => n.EndsWith("." + wanted, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Which baked shader variant matches the MonoGame currently loaded. The
+    /// stock effects give it away: DesktopGL embeds them as *.ogl.mgfxo, the
+    /// Native (Vulkan / DX12) build compiles them into its native runtime and
+    /// embeds nothing. KNI has no such resources either, but a Web build only
+    /// ever bakes the "ogl" variant, so its fallback lands correctly anyway.
+    /// </summary>
+    private static string MonoGameBackendSuffix()
+    {
+        try
+        {
+            var monoGame = typeof(GraphicsDevice).Assembly;
+            var isOpenGl = monoGame.GetManifestResourceNames()
+                                   .Any(n => n.EndsWith(".ogl.mgfxo", StringComparison.OrdinalIgnoreCase));
+            return isOpenGl ? "ogl" : "vk";
+        }
+        catch
+        {
+            return "ogl";
+        }
     }
 
     // ContentManager that serves Load<T>(assetName) from embedded-resource
