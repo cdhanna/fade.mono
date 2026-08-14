@@ -186,15 +186,25 @@
             Outputs="@(_EngineShaderVariant->'$(_EngineShaderObjRoot)%(Identity)\Content\FadeSpriteBatchEffect.xnb')">
         <Message Importance="high" Text="Baking engine sprite shader: @(_EngineShaderVariant, ', ')" />
         <MakeDir Directories="@(_EngineShaderVariant->'$(_EngineShaderObjRoot)%(Identity)')" />
-        <!-- Restore in its own <MSBuild> call first. In a Release build the
-             Content project is NOT a ProjectReference of this project (that's
-             Debug-only), so on a clean checkout it has never been restored and
-             the Build below would fail with NETSDK1004 (no project.assets.json).
-             A separate invocation guarantees Build re-evaluates with the freshly
-             written assets. -->
-        <MSBuild Projects="$(MSBuildProjectDirectory)/../Fade.MonoGame.Content/Fade.MonoGame.Content.csproj"
-                 Targets="Restore"
-                 RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;FadeMonoGamePlatform;SelfContained;PublishTrimmed;PublishReadyToRun" />
+        <!-- Restore in a separate PROCESS, not an <MSBuild> task. In a Release build
+             the Content project is NOT a ProjectReference of this project (that's
+             Debug-only), so on a clean checkout it has never been restored and the
+             Build below would fail with NETSDK1004 (no project.assets.json).
+
+             It has to be a process because an <MSBuild Targets="Restore"> call
+             EVALUATES the project first, and the <MSBuild Targets="Build"> after it
+             reuses that cached evaluation — from before restore wrote
+             obj/*.nuget.g.props. Package `build/` targets are imported at evaluation,
+             so they were simply absent: MonoGame.Tool.Dxc's targets are what copy the
+             dxc binaries next to the CLI, and without them the Vulkan bake dies with
+             `An error occurred trying to start process 'dxc' ... No such file or
+             directory` — the tool falls back to a bare command name when it cannot
+             find its own binary. It reproduces only with a COLD obj/ (nuget.g.props
+             is not under obj/<Configuration>/, so a previous build of any
+             configuration hides it), which is why it passed locally and failed on a
+             fresh CI runner. -->
+        <Exec Command="dotnet restore &quot;$(MSBuildProjectDirectory)/../Fade.MonoGame.Content/Fade.MonoGame.Content.csproj&quot;"
+              StandardOutputImportance="low" />
         <MSBuild Projects="$(MSBuildProjectDirectory)/../Fade.MonoGame.Content/Fade.MonoGame.Content.csproj"
                  Targets="Build"
                  RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;FadeMonoGamePlatform;SelfContained;PublishTrimmed;PublishReadyToRun">

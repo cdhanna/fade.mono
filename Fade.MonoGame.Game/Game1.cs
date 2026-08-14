@@ -549,7 +549,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         //
         // Preferred first, then any variant — a Web build bakes only the one, and
         // an older single-variant assembly still resolves through the fallback.
-        var preferred = MonoGameBackendSuffix() + ".xnb";
+        var preferred = GraphicsBackend.Suffix + ".xnb";
         var resourceName =
             FindResource(asm, assetName + "." + preferred)
             ?? FindResource(asm, assetName + ".xnb")
@@ -574,27 +574,6 @@ public class Game1 : Microsoft.Xna.Framework.Game
             : asm.GetManifestResourceNames()
                  .FirstOrDefault(n => n.EndsWith("." + wanted, StringComparison.Ordinal));
 
-    /// <summary>
-    /// Which baked shader variant matches the MonoGame currently loaded. The
-    /// stock effects give it away: DesktopGL embeds them as *.ogl.mgfxo, the
-    /// Native (Vulkan / DX12) build compiles them into its native runtime and
-    /// embeds nothing. KNI has no such resources either, but a Web build only
-    /// ever bakes the "ogl" variant, so its fallback lands correctly anyway.
-    /// </summary>
-    private static string MonoGameBackendSuffix()
-    {
-        try
-        {
-            var monoGame = typeof(GraphicsDevice).Assembly;
-            var isOpenGl = monoGame.GetManifestResourceNames()
-                                   .Any(n => n.EndsWith(".ogl.mgfxo", StringComparison.OrdinalIgnoreCase));
-            return isOpenGl ? "ogl" : "vk";
-        }
-        catch
-        {
-            return "ogl";
-        }
-    }
 
     // ContentManager that serves Load<T>(assetName) from embedded-resource
     // streams instead of files. Never disposed (see _embeddedContentManager).

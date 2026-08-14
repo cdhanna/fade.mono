@@ -7,6 +7,30 @@ namespace Fade.MonoGame.Lib;
 public partial class FadeMonoGameCommands
 {
     /// <summary>
+    /// <para>The graphics backend this build is actually running on: "OpenGL" or "Vulkan".</para>
+    /// </summary>
+    /// <remarks>
+    /// Read at runtime from the MonoGame assembly that is loaded, not from a build
+    /// flag, so it cannot disagree with reality — which is the point. The backend is
+    /// chosen by which MonoGame package the game references, and the two produce an
+    /// identically named assembly, so "which one am I running" is otherwise very hard
+    /// to answer by eye. Show it in a debug panel when you want to be sure.
+    /// </remarks>
+    /// <example>
+    /// Show it in the debug window:
+    /// <code>
+    /// begin debug window "Render"
+    ///     debug label "backend", graphics backend$()
+    /// end debug window
+    /// </code>
+    /// </example>
+    [FadeBasicCommand("graphics backend$")]
+    public static string GetGraphicsBackend()
+    {
+        return GraphicsBackend.Name;
+    }
+
+    /// <summary>
     /// <para>Prints one or more values to the console output.</para>
     /// <para>Each value is printed on its own line, so passing three values gives you three lines of output.</para>
     /// </summary>
