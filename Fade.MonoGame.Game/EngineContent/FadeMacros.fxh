@@ -50,6 +50,11 @@
 		technique name { pass P0 { PixelShader = compile ps_6_0 psname(); } }
 
 	#define POSITION_OUT   SV_Position
+
+	// Per-pixel depth out of the pixel shader. Writing it disables early-Z, so only reach for
+	// it when the depth a sprite needs is not the flat one its quad was rasterised at.
+	#define DEPTH_OUT      SV_Depth
+
 	#define TARGET0        SV_Target0
 	#define TARGET1        SV_Target1
 	#define TARGET2        SV_Target2
@@ -98,6 +103,10 @@
 		technique name { pass P0 { PixelShader = compile ps_3_0 psname(); } }
 
 	#define POSITION_OUT   POSITION
+
+	// SM 3.0 spells it DEPTH; SM 6.0 spells it SV_Depth. Same thing.
+	#define DEPTH_OUT      DEPTH
+
 	#define TARGET0        COLOR0
 	#define TARGET1        COLOR1
 	#define TARGET2        COLOR2

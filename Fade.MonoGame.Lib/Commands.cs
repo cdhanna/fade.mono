@@ -155,6 +155,32 @@ public partial class FadeMonoGameCommands
         return GameSystem.latestTime.TotalGameTime.TotalMilliseconds;
     }
 
+    /// <summary>
+    /// <para>Wall-clock milliseconds from a high-resolution monotonic clock. Use it to measure
+    /// how long a section of your own code takes.</para>
+    /// </summary>
+    /// <remarks>
+    /// <see cref="GameTime">game ms</see> cannot do this, and the reason is worth knowing: it
+    /// reads the GameTime SNAPSHOT taken when the frame began, so it returns the SAME value
+    /// everywhere inside one frame and a difference across a section is always exactly zero.
+    /// Under a fixed timestep it is worse than useless for timing -- it advances by the target
+    /// frame interval whatever the frame actually cost.
+    ///
+    /// This is Stopwatch, so it is monotonic and sub-microsecond, and the origin is arbitrary:
+    /// only DIFFERENCES between two readings mean anything.
+    ///
+    /// Store it in a FLOAT (`ms# = wall ms()`). An unsuffixed variable is a 32-bit int, so it
+    /// would truncate away exactly the fractional milliseconds worth measuring.
+    /// </remarks>
+    /// <returns>Milliseconds since an arbitrary origin, as a fractional value.</returns>
+    /// <seealso cref="GameTime">game ms</seealso>
+    [FadeBasicCommand("wall ms")]
+    public static double WallMs()
+    {
+        return System.Diagnostics.Stopwatch.GetTimestamp()
+             * (1000.0 / System.Diagnostics.Stopwatch.Frequency);
+    }
+
     [FadeBasicCommand("go kaboom")]
     public static void Throw()
     {

@@ -62,6 +62,112 @@ public partial class FadeMonoGameCommands
     {
         GameSystem.game.TargetElapsedTime = TimeSpan.FromMilliseconds(rate);
     }
+
+    /// <summary>
+    /// <para>Turns the fixed timestep on (<c>1</c>, the default) or off (<c>0</c>).</para>
+    /// <para>On, the engine paces frames to <see cref="SetSyncRate">set sync rate</see> and reports
+    /// that rate as the elapsed time whether or not it kept up. Off, frames run as fast as they
+    /// can and elapsed time is what actually passed.</para>
+    /// </summary>
+    /// <remarks>
+    /// <para>Reach for this when PROFILING, and put it back afterwards.</para>
+    /// <para>
+    /// The reason it exists is that a fixed timestep makes frame timing unmeasurable from inside
+    /// the game. MonoGame sets <c>GameTime.ElapsedGameTime</c> to the TARGET under a fixed
+    /// timestep, not to the time the frame took, so anything deriving a frame rate from it -- the
+    /// debug inspector's FPS readout and history graph included -- reads a flat 60 no matter how
+    /// far behind the game has fallen. It sets <c>IsRunningSlowly</c> instead, which is a boolean
+    /// and tells you nothing about by how much.
+    /// </para>
+    /// <para>
+    /// Turning the rate up instead does NOT work and is worse than doing nothing: a fixed timestep
+    /// with a 1 ms target makes the engine run Update repeatedly trying to catch up to a rate it
+    /// cannot hit, so the game gets dramatically slower rather than faster.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// Measure the real frame rate while stress-testing, then restore normal pacing:
+    /// <code>
+    /// ` free-running, so the FPS readout means something
+    /// set fixed timestep 0
+    /// ` ... watch the graph ...
+    /// set fixed timestep 1
+    /// set sync rate 16
+    /// </code>
+    /// </example>
+    /// <param name="enabled"><c>1</c> to pace frames to the sync rate, <c>0</c> to run free.</param>
+    /// <seealso cref="SetSyncRate">set sync rate</seealso>
+    [FadeBasicCommand("set fixed timestep")]
+    public static void SetFixedTimeStep(int enabled)
+    {
+        GameSystem.game.IsFixedTimeStep = enabled != 0;
+    }
+
+    /// <summary>
+    /// <para>Turns vertical sync on (<c>1</c>, the default) or off (<c>0</c>).</para>
+    /// <para>On, frames are held until the display is ready. Off, they are presented as soon as
+    /// they are finished.</para>
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The companion to <see cref="SetFixedTimeStep">set fixed timestep</see>, and PROFILING needs
+    /// both off. Turning off the fixed timestep makes elapsed time real; vsync then quantises that
+    /// real time to whole refresh intervals, so on a 120 Hz display every frame measures 8.3, 16.7,
+    /// 25.0, 33.3 ms and nothing in between. A cost that genuinely rose by 10% shows up as either
+    /// no change at all or a jump to the next step, which reads as a renderer that has plateaued.
+    /// </para>
+    /// <para>Leave it ON for play: without it the machine renders frames nobody sees, and tearing
+    /// is the visible cost.</para>
+    /// </remarks>
+    /// <param name="enabled"><c>1</c> to sync to the display, <c>0</c> to present immediately.</param>
+    /// <seealso cref="SetFixedTimeStep">set fixed timestep</seealso>
+    [FadeBasicCommand("set vsync")]
+    public static void SetVSync(int enabled)
+    {
+        var gfx = GameSystem.graphicsDeviceManager;
+        if (gfx == null) return;
+
+        gfx.SynchronizeWithVerticalRetrace = enabled != 0;
+
+        // PIN THE BACK BUFFER TO WHAT IT ALREADY IS before applying.
+        //
+        // ApplyChanges is not "apply the thing I just set" -- it applies EVERY preferred setting
+        // on the manager, and PreferredBackBufferWidth/Height are whatever they were left at.
+        // A game that never assigned them (the normal case; Game1 does not) still carries
+        // MonoGame's construction-time defaults, so the first ApplyChanges of the process
+        // silently resizes the window to those.
+        //
+        // The damage is not just cosmetic and does not look like a graphics bug: ImGuiRenderer
+        // takes io.DisplaySize from PresentationParameters.BackBufferWidth/Height, so imgui
+        // immediately lays out for the new size while the mouse is still being reported against
+        // the old one. Every click then lands somewhere other than where it was aimed, which
+        // reads as "the debug UI stopped responding" with nothing pointing at vsync.
+        //
+        // Copying the CURRENT size in first makes ApplyChanges a no-op for everything except
+        // the presentation interval, which is the only thing this command is allowed to change.
+        // SAVED AND RESTORED, not just overwritten. PreferredBackBufferWidth/Height are not
+        // private to ApplyChanges -- `mouse x` and `mouse y` divide by them to map a back-buffer
+        // cursor position into render space (InputCommands.cs). Leaving them changed rescales the
+        // mouse for the rest of the process, which shows up as the cursor light and every imgui
+        // click landing somewhere other than the pointer. Overwriting them permanently was a bug
+        // introduced by the first version of this fix.
+        var device = gfx.GraphicsDevice;
+        var savedW = gfx.PreferredBackBufferWidth;
+        var savedH = gfx.PreferredBackBufferHeight;
+
+        if (device != null)
+        {
+            gfx.PreferredBackBufferWidth = device.PresentationParameters.BackBufferWidth;
+            gfx.PreferredBackBufferHeight = device.PresentationParameters.BackBufferHeight;
+        }
+
+        // The flag lives on the manager and only reaches the presentation parameters on a
+        // device reset, so this call is still required.
+        gfx.ApplyChanges();
+
+        gfx.PreferredBackBufferWidth = savedW;
+        gfx.PreferredBackBufferHeight = savedH;
+    }
     
     /// <summary>
     /// <para>Suspends script execution and lets a render frame happen.</para>

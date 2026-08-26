@@ -35,6 +35,22 @@ public class RenderOutput
     public BlendState blendState;
 
     /// <summary>
+    /// The mode <c>set render target blend</c> was last given, kept so a later per-attachment
+    /// override can rebuild <see cref="blendState"/> around it. The built state cannot be
+    /// interrogated for this: BlendState.Additive and friends are shared singletons.
+    /// </summary>
+    public int blendMode;
+
+    /// <summary>
+    /// Per-attachment blend mode overrides, or null when every attachment shares
+    /// <see cref="blendMode"/>. An entry of -1 means "no override, use the output's mode".
+    ///
+    /// Null rather than an array of -1 so the common case builds no independent blend state at
+    /// all, and so an output that never asks for one keeps the shared BlendState singletons.
+    /// </summary>
+    public int[] attachmentBlendModes;
+
+    /// <summary>
     /// The depth-stencil state this output draws with, or 0 for the sprite batch's default
     /// (DepthStencilState.None).
     ///
@@ -174,8 +190,119 @@ public static class RenderSystem
     public static int screenEffectIndex = -1;
     public static int highestEffectId;
     public static int highestOutputId = 1;
-    
-    
+
+    /// <summary>
+    /// How many attachments a blend state can describe independently. Four is the hardware
+    /// number, and it is also the width of MonoGame's BlendState.
+    /// </summary>
+    public const int MAX_BLEND_ATTACHMENTS = 4;
+
+    /// <summary>
+    /// Rebuilds <see cref="RenderOutput.blendState"/> from the output's own mode plus any
+    /// per-attachment overrides. Called by both blend commands, so the two compose in either
+    /// order rather than the later one erasing the earlier.
+    /// </summary>
+    public static void RebuildOutputBlend(RenderOutput output)
+    {
+        // No overrides means the shared singletons, which is what every output had before
+        // per-attachment blending existed. Worth keeping: an independent blend state is a fresh
+        // object, so building one unconditionally would defeat the batcher's state comparison.
+        if (output.attachmentBlendModes == null)
+        {
+            output.blendState = SharedBlendState(output.blendMode);
+            return;
+        }
+
+        var built = new BlendState { IndependentBlendEnable = true };
+        for (var i = 0; i < MAX_BLEND_ATTACHMENTS; i++)
+        {
+            var mode = output.attachmentBlendModes[i];
+            if (mode < 0) mode = output.blendMode;
+            ApplyBlendMode(built[i], mode);
+        }
+
+        output.blendState = built;
+    }
+
+    private static BlendState SharedBlendState(int mode) => mode switch
+    {
+        1 => BlendState.Additive,
+        2 => BlendState.Opaque,
+        3 => BlendState.AlphaBlend,
+        // Mode 4 has no singleton, and cannot share one: BlendState is mutable, so handing back a
+        // cached instance would let a later output edit every earlier one's.
+        4 => MaxBlendState(),
+        _ => BlendState.NonPremultiplied
+    };
+
+    private static BlendState MaxBlendState()
+    {
+        var bs = new BlendState();
+        ApplyBlendMode(bs[0], 4);
+        return bs;
+    }
+
+    private static void ApplyBlendMode(TargetBlendState target, int mode)
+    {
+        target.ColorWriteChannels = ColorWriteChannels.All;
+
+        switch (mode)
+        {
+            case 1: // additive
+                target.ColorBlendFunction = BlendFunction.Add;
+                target.ColorSourceBlend = Blend.SourceAlpha;
+                target.ColorDestinationBlend = Blend.One;
+                target.AlphaBlendFunction = BlendFunction.Add;
+                target.AlphaSourceBlend = Blend.SourceAlpha;
+                target.AlphaDestinationBlend = Blend.One;
+                break;
+
+            case 2: // opaque
+                target.ColorBlendFunction = BlendFunction.Add;
+                target.ColorSourceBlend = Blend.One;
+                target.ColorDestinationBlend = Blend.Zero;
+                target.AlphaBlendFunction = BlendFunction.Add;
+                target.AlphaSourceBlend = Blend.One;
+                target.AlphaDestinationBlend = Blend.Zero;
+                break;
+
+            case 3: // premultiplied alpha
+                target.ColorBlendFunction = BlendFunction.Add;
+                target.ColorSourceBlend = Blend.One;
+                target.ColorDestinationBlend = Blend.InverseSourceAlpha;
+                target.AlphaBlendFunction = BlendFunction.Add;
+                target.AlphaSourceBlend = Blend.One;
+                target.AlphaDestinationBlend = Blend.InverseSourceAlpha;
+                break;
+
+            case 4: // maximum
+                // Both factors One: Max ignores them on most hardware, but leaving them at a
+                // default that scales by alpha would be a trap the day someone switches this
+                // attachment back to Add.
+                target.ColorBlendFunction = BlendFunction.Max;
+                target.ColorSourceBlend = Blend.One;
+                target.ColorDestinationBlend = Blend.One;
+
+                // Alpha OVERWRITES rather than taking a max, so an attachment using this mode can
+                // still carry one ordinary frontmost-wins value alongside the three combining
+                // ones. All three colour channels share one function; alpha has its own.
+                target.AlphaBlendFunction = BlendFunction.Add;
+                target.AlphaSourceBlend = Blend.One;
+                target.AlphaDestinationBlend = Blend.Zero;
+                break;
+
+            default: // non-premultiplied alpha
+                target.ColorBlendFunction = BlendFunction.Add;
+                target.ColorSourceBlend = Blend.SourceAlpha;
+                target.ColorDestinationBlend = Blend.InverseSourceAlpha;
+                target.AlphaBlendFunction = BlendFunction.Add;
+                target.AlphaSourceBlend = Blend.SourceAlpha;
+                target.AlphaDestinationBlend = Blend.InverseSourceAlpha;
+                break;
+        }
+    }
+
+
     public static void Reset()
     {
         backgroundColor = Color.CornflowerBlue;
@@ -232,6 +359,7 @@ public static class RenderSystem
                 id = outputId,
                 cameraId = CameraSystem.CAMERA_ID_NONE, // identity view, so existing games are untouched
                 blendState = BlendState.NonPremultiplied, // what every output did before this was settable
+                blendMode = 0,                            // and the mode that produced it
                 targets = null, // null is magic, and defaults to drawing on the screen
                 // target = null, // default to drawing to the screen
                 // targetTextureId = -1,

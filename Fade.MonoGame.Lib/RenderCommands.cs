@@ -1263,21 +1263,51 @@ public partial class FadeMonoGameCommands
     public static void SetRenderTargetBlend(int outputId, int mode)
     {
         RenderSystem.GetOutputIndex(outputId, out _, out var output);
-        switch (mode)
-        {
-            case 1:
-                output.blendState = BlendState.Additive;
-                break;
-            case 2:
-                output.blendState = BlendState.Opaque;
-                break;
-            case 3:
-                output.blendState = BlendState.AlphaBlend;
-                break;
-            default:
-                output.blendState = BlendState.NonPremultiplied;
-                break;
-        }
+        output.blendMode = mode;
+        RenderSystem.RebuildOutputBlend(output);
+    }
+
+    /// <summary>
+    /// <para>Sets the blend mode of ONE attachment of a multiple-render-target output,
+    /// leaving the others on whatever <see cref="SetRenderTargetBlend">set render target
+    /// blend</see> gave the output as a whole.</para>
+    /// <para>Modes are the same as that command's, plus <c>4</c> maximum: the destination
+    /// keeps whichever of the two values is larger, per channel.</para>
+    /// </summary>
+    /// <remarks>
+    /// Blending is otherwise one state for the whole draw call, so an MRT set has to agree --
+    /// which is a problem when one attachment holds something that should COMBINE across
+    /// overlapping sprites while the others hold something where the frontmost must simply
+    /// win. A deferred renderer's albedo and normals want the latter; a buffer holding the
+    /// extent of solid along the view ray wants the former, because two overlapping shapes
+    /// occupy the union of their extents rather than only the nearer one's.
+    ///
+    /// Mode 4 is the one this exists for, and it needs a NORMALISED or float target to be
+    /// useful: it is a genuine per-channel maximum, not a saturating add, so unlike additive
+    /// it does not turn into OR on an 8-bit target.
+    ///
+    /// Taking a MINIMUM is the same command with the value stored inverted -- write
+    /// <c>range - v</c> and decode it back, so the larger stored value is the smaller v.
+    /// There is deliberately no min mode: with one blend function for all three colour
+    /// channels, a target that wants a max on one channel and a min on another can only get
+    /// it that way, so the inversion is unavoidable and a min mode would not help.
+    ///
+    /// Attachments are indexed in the order they were given to
+    /// <see cref="SetRenderTargetTexture">render target</see>, from 0.
+    /// </remarks>
+    /// <param name="outputId">The render output to change. 1 is the default output.</param>
+    /// <param name="attachment">Which attachment, from 0. Out-of-range values are ignored.</param>
+    /// <param name="mode">0 alpha, 1 additive, 2 opaque, 3 premultiplied, 4 maximum.</param>
+    /// <seealso cref="SetRenderTargetBlend">set render target blend</seealso>
+    [FadeBasicCommand("set render target attachment blend")]
+    public static void SetRenderTargetAttachmentBlend(int outputId, int attachment, int mode)
+    {
+        if (attachment < 0 || attachment >= RenderSystem.MAX_BLEND_ATTACHMENTS) return;
+
+        RenderSystem.GetOutputIndex(outputId, out _, out var output);
+        output.attachmentBlendModes ??= new[] { -1, -1, -1, -1 };
+        output.attachmentBlendModes[attachment] = mode;
+        RenderSystem.RebuildOutputBlend(output);
     }
 
     /// <summary>
