@@ -72,10 +72,19 @@
 <!--        <PackageReference Include="MonoGame.Content.Builder.Task" Version="$(MonogameVersion)" />-->
     </ItemGroup>
 
-    <!-- Desktop deps: MonoGame DesktopGL + ImGui. -->
-    <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Desktop'">
+    <!-- Desktop deps: MonoGame + ImGui. The runtime packages carry the native
+         Vulkan/MoltenVK binaries per RID; Native itself is managed-only. -->
+    <ItemGroup Condition="'$(FadeMonoGameIsDesktop)' == 'true'">
         <PackageReference Include="ImGui.NET" Version="1.91.6.1" PrivateAssets="all" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Desktop'">
         <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)" PrivateAssets="all" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'DesktopVK'">
+        <PackageReference Include="MonoGame.Framework.Native" Version="$(MonogameVersion)" PrivateAssets="all" />
+        <PackageReference Include="MonoGame.Runtime.Mac.Vulkan" Version="$(MonogameVersion)" PrivateAssets="all" />
+        <PackageReference Include="MonoGame.Runtime.Linux.Vulkan" Version="$(MonogameVersion)" PrivateAssets="all" />
+        <PackageReference Include="MonoGame.Runtime.Windows.Vulkan" Version="$(MonogameVersion)" PrivateAssets="all" />
     </ItemGroup>
 
     <!-- Browser deps: KNI BlazorGL. No ImGui (cimgui has no WASM build). -->
