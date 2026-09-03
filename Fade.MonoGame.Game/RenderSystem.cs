@@ -344,6 +344,21 @@ public static class RenderSystem
     }
     
     
+    /// <summary>
+    /// Mark every output the sprite/text draws to for a re-sort. `outputIdFlags` is a SET of
+    /// output ids (see SpriteSystem.AddIdToFlags), so a multi-output sprite -- one that used
+    /// `add sprite render target` -- must dirty all of them, not `GetOutputIndex(theWholeMask)`
+    /// which would either throw (mask &gt; 63) or fabricate a phantom output with that id.
+    /// </summary>
+    public static void MarkOutputsDirtyForFlags(int outputIdFlags)
+    {
+        for (var s = 0; s < outputs.Count; s++)
+        {
+            if (SpriteSystem.DoesFlagContainId(outputs[s].id, outputIdFlags))
+                outputs[s].spritesOrderDirty = true;
+        }
+    }
+
     public static void GetOutputIndex(int outputId, out int index, out RenderOutput output)
     {
         if (outputId > 63) throw new ArgumentException("the outputId must be less than 63. Sprites use a single int with 64 bits to track which outputs it is rendering on.");

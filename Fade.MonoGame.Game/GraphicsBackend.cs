@@ -18,16 +18,25 @@ namespace Fade.MonoGame.Core;
 /// *.ogl.mgfxo; the Native build (Vulkan / DX12) compiles them into its native
 /// runtime library and embeds none.
 ///
-/// KNI has no such resources either and would read as Vulkan here, but the Web
-/// build never reaches this code — it bakes and loads a single "ogl" variant.
+/// The Web build is a genuinely different framework (KNI BlazorGL) that bakes
+/// and ships only the OpenGL variant, so the answer there is pinned at compile
+/// time via the BROWSER define rather than detected.
 /// </summary>
 public static class GraphicsBackend
 {
+#if BROWSER
+    /// <summary>"ogl" — a Web/KNI build bakes and ships only the ogl variant.</summary>
+    public static string Suffix { get; } = "ogl";
+
+    /// <summary>Human-readable name: "OpenGL".</summary>
+    public static string Name { get; } = "OpenGL";
+#else
     /// <summary>"ogl" or "vk" — the suffix of the baked shader variant to load.</summary>
     public static string Suffix { get; } = IsOpenGl() ? "ogl" : "vk";
 
     /// <summary>Human-readable name, for debug UI: "OpenGL" or "Vulkan".</summary>
     public static string Name { get; } = IsOpenGl() ? "OpenGL" : "Vulkan";
+#endif
 
     static bool IsOpenGl()
     {

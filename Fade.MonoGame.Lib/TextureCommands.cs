@@ -319,6 +319,73 @@ public partial class FadeMonoGameCommands
     }
 
     /// <summary>
+    /// <para>Reserve a texture's frame list so individual frames can be set with
+    /// <see cref="SetTextureFrameRect">set texture frame rect</see>.</para>
+    /// </summary>
+    /// <remarks>
+    /// <para>Pair with <c>set texture frame rect</c> to describe an atlas whose frames are NOT a
+    /// uniform grid. That matters for a tightly packed sheet: trimming each frame to its own
+    /// bounding box and packing the results is dramatically smaller than a grid, because a grid
+    /// cell has to be big enough for the UNION of every frame's position, not the largest single
+    /// frame. On a 160-frame character sheet that difference was 5.9 Mpx against 0.9 Mpx.</para>
+    /// <para>Every frame starts as the whole texture; set them all before drawing.</para>
+    /// </remarks>
+    /// <param name="textureId">The texture to configure.</param>
+    /// <param name="count">How many frames the sheet holds.</param>
+    [FadeBasicCommand("set texture frame count")]
+    public static void SetTextureFrameCount(int textureId, int count)
+    {
+        TextureSystem.GetTextureIndex(textureId, out var index, out var tex);
+        if (count < 0) count = 0;
+        var frames = tex.descriptor.frames = new List<TextureFrame>(count);
+        for (var i = 0; i < count; i++)
+        {
+            frames.Add(new TextureFrame
+            {
+                index = i,
+                xOffset = 0, yOffset = 0,
+                xSize = tex.texture.Width, ySize = tex.texture.Height,
+            });
+        }
+        TextureSystem.textures[index] = tex;
+    }
+
+    /// <summary>
+    /// <para>Set one frame's source rectangle in pixels, for a non-uniform atlas.</para>
+    /// </summary>
+    /// <remarks>
+    /// <para>Call <see cref="SetTextureFrameCount">set texture frame count</see> first. Frames not
+    /// set keep the whole texture as their rect, which draws visibly wrong rather than silently,
+    /// so a missing frame is easy to spot.</para>
+    /// <para>Note that <c>size sprite</c> derives its scale from the CURRENT frame's rect, so on a
+    /// sheet with varying frame sizes it goes stale the moment the frame changes. Use
+    /// <c>scale sprite</c> instead, which sets the ratio directly and stays correct.</para>
+    /// <para>The sprite's own offset is a RATIO of the frame, so a tightly packed sheet needs a
+    /// per-frame offset too: trimming moves each frame's content relative to its box, and pinning
+    /// every frame at one ratio makes the art jitter as it animates.</para>
+    /// </remarks>
+    /// <param name="textureId">The texture to configure.</param>
+    /// <param name="frameIndex">Which frame, from 0.</param>
+    /// <param name="x">Left edge in texture pixels.</param>
+    /// <param name="y">Top edge in texture pixels.</param>
+    /// <param name="width">Frame width in pixels.</param>
+    /// <param name="height">Frame height in pixels.</param>
+    [FadeBasicCommand("set texture frame rect")]
+    public static void SetTextureFrameRect(int textureId, int frameIndex,
+                                           int x, int y, int width, int height)
+    {
+        TextureSystem.GetTextureIndex(textureId, out var index, out var tex);
+        var frames = tex.descriptor.frames;
+        if (frames == null || frameIndex < 0 || frameIndex >= frames.Count) return;
+        frames[frameIndex] = new TextureFrame
+        {
+            index = frameIndex,
+            xOffset = x, yOffset = y, xSize = width, ySize = height,
+        };
+        TextureSystem.textures[index] = tex;
+    }
+
+    /// <summary>
     /// <para>Returns the total number of frames in a texture's frame grid.</para>
     /// <para>Only meaningful after you have called
     /// <see cref="SetTextureFramesByRowCol">set texture frame grid</see> on the texture.</para>

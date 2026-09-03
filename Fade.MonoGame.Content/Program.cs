@@ -1,3 +1,4 @@
+using System.Linq;
 // CLI entrypoint for the Fade content pipeline.
 //
 // Drives FadeContentSystem.Build (the same in-process builder the Game uses
@@ -19,6 +20,11 @@ string source = "";
 string output = "";
 string intermediate = "";
 
+// A game's own content rules, loaded by path. See IContentRules for why it is a path and not a
+// project reference: this CLI runs during the game project's compilation and cannot reference it,
+// and the game must not reference the pipeline or its publish carries MGCB's tool binaries.
+string? rulesPath = null;
+
 for (int i = 0; i < args.Length; i++)
 {
     switch (args[i])
@@ -27,6 +33,7 @@ for (int i = 0; i < args.Length; i++)
         case "--source"       when i + 1 < args.Length: source       = args[++i]; break;
         case "--output"       when i + 1 < args.Length: output       = args[++i]; break;
         case "--intermediate" when i + 1 < args.Length: intermediate = args[++i]; break;
+        case "--rules"        when i + 1 < args.Length: rulesPath    = args[++i]; break;
         default:
             Console.Error.WriteLine($"[E] unknown or incomplete argument: {args[i]}");
             return 2;
@@ -59,7 +66,30 @@ if (!Directory.Exists(source))
 try
 {
     Console.WriteLine($"[fadecontent] platform={platform} source={source} output={output} intermediate={intermediate}");
-    FadeContentSystem.Build(source, platform, output, intermediate);
+    Fade.MonoGame.Content.IContentRules? rules = null;
+    if (!string.IsNullOrEmpty(rulesPath))
+    {
+        // Fail loudly. A typo here would otherwise build content with the engine defaults and
+        // ship subtly wrong art -- exactly what the rules exist to prevent.
+        if (!File.Exists(rulesPath))
+        {
+            Console.Error.WriteLine($"[E] --rules assembly not found: {rulesPath}");
+            return 1;
+        }
+        var asm  = System.Reflection.Assembly.LoadFrom(Path.GetFullPath(rulesPath));
+        var type = asm.GetTypes().FirstOrDefault(t =>
+            typeof(Fade.MonoGame.Content.IContentRules).IsAssignableFrom(t)
+            && !t.IsAbstract && !t.IsInterface);
+        if (type == null)
+        {
+            Console.Error.WriteLine($"[E] no IContentRules implementation in {rulesPath}");
+            return 1;
+        }
+        rules = (Fade.MonoGame.Content.IContentRules?)Activator.CreateInstance(type);
+        Console.WriteLine($"[fadecontent] content rules: {type.FullName}");
+    }
+
+    FadeContentSystem.Build(source, platform, output, intermediate, rules);
     return 0;
 }
 catch (Exception ex)

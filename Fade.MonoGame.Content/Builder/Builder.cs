@@ -25,7 +25,8 @@ public static class FadeContentSystem
     // Builds all assets in assetsFolder for the given platform. When
     // platform="Web", the DesktopGL output is post-processed in place for KNI
     // BlazorGL (sound loopLength + MGFX v11→v10).
-    public static void Build(string assetsFolder, string platform, string outputDir = "", string intermediateDir = "")
+    public static void Build(string assetsFolder, string platform, string outputDir = "",
+                             string intermediateDir = "", IContentRules? rules = null)
     {
         // Callers today hand this a per-backend output directory, so this is belt and
         // braces — but pointing two platforms at one directory is exactly the mistake
@@ -35,6 +36,42 @@ public static class FadeContentSystem
         DiscardContentBuiltForAnotherTarget(
             string.IsNullOrEmpty(outputDir) ? AppContext.BaseDirectory : outputDir, platform);
 
+        // ── XNB COMPRESSION: WIRED, MEASURED, AND DELIBERATELY OFF ──────────────────────────
+        //
+        // ContentBuilderParams.CompressContent turns on the XNB format's own lossless, file-level
+        // compression (LZ4, header bit 0x40). It is NOT the `texture compression` macro, which
+        // picks a DXT/BC pixel format and is lossy.
+        //
+        // The prize is real: content here is mostly sprite atlases, and even a trimmed atlas is
+        // largely transparent. Measured on a 160-frame character sheet, 70 MB of raw RGBA went to
+        // 2 MB with zlib, and the built Content/ folder went 76 MB -> 2.1 MB with this flag on.
+        // It buys nothing in VRAM -- textures are decompressed on the way to the GPU either way.
+        //
+        // IT DOES NOT LOAD. With CompressContent = true the files are written correctly
+        // (flags = 0x41, i.e. LZ4 | HiDef) and MonoGame.Framework does carry a decoder
+        // (Lz4DecoderStream and ContentCompressedLz4 are both present in the assembly), but the
+        // game then dies at the first Draw:
+        //
+        //     System.NullReferenceException
+        //       at RenderSystem.RenderAll2  -> TextureSystem.GetSourceRect
+        //
+        // which is a NULL texture: the asset silently failed to load. Verified by isolation --
+        // identical build with the flag off passes the packaged smoke test, with it on it aborts.
+        // Nothing is logged on the failing path, which is why it presents as a rendering crash
+        // rather than a content error.
+        //
+        // So this stays FALSE until someone works out whether the reader is broken on
+        // MonoGame.Framework.Native or the writer emits a stream it will not take. Left wired
+        // rather than deleted so the next person does not rediscover the same dead end.
+        //
+        // If it is ever enabled: NOT FOR WEB. PatchXnbsForKni below rewrites the MGFX version
+        // byte in place and TryReadXnbObjectStart bails on a compressed file
+        // (`if ((bytes[5] & 0xC0) != 0) return false`), so compressing the Web output would make
+        // every patch a silent no-op and ship v11 MGFX that KNI rejects -- green build, broken
+        // browser. Hence the `&& !web` below rather than a bare toggle.
+        const bool EnableXnbCompression = false;
+        var web = string.Equals(platform, "Web", StringComparison.OrdinalIgnoreCase);
+
         var contentBuilderParams = new ContentBuilderParams
         {
             Mode             = ContentBuilderMode.Builder,
@@ -42,12 +79,13 @@ public static class FadeContentSystem
             OutputDirectory  = outputDir,
             SourceDirectory  = assetsFolder,
             Platform         = TargetFor(platform),
+            CompressContent  = EnableXnbCompression && !web,
         };
 
-        var builder = new FadeContentBuilder(Array.Empty<ContentEntry>(), -1);
+        var builder = new FadeContentBuilder(Array.Empty<ContentEntry>(), -1, rules);
         builder.Run(contentBuilderParams);
 
-        if (string.Equals(platform, "Web", StringComparison.OrdinalIgnoreCase))
+        if (web)
             PatchXnbsForKni(string.IsNullOrEmpty(outputDir) ? AppContext.BaseDirectory : outputDir);
     }
 
@@ -90,13 +128,17 @@ public static class FadeContentSystem
 
     public static void Build(string assetsFolder, ContentEntry[] entries, int entriesCount)
     {
-        Build(assetsFolder, entries, entriesCount, null);
+        Build(assetsFolder, entries, entriesCount, null, null);
     }
 
-    public static void Build(string assetsFolder, ContentEntry[] entries, int entriesCount, List<string>? onlyPaths)
+    public static void Build(string assetsFolder, ContentEntry[] entries, int entriesCount,
+                             List<string>? onlyPaths, IContentRules? rules = null)
     {
         DiscardContentBuiltForAnotherTarget(AppContext.BaseDirectory, LiveReloadTarget.ToString());
 
+        // Deliberately UNCOMPRESSED on this path. It runs in-process at startup on every Debug
+        // run and rebuilds whatever changed, so compression would be paid on every iteration to
+        // shrink files that never ship. Release, which is what ships, compresses above.
         var contentBuilderParams = new ContentBuilderParams
         {
             Mode             = ContentBuilderMode.Builder,
@@ -104,9 +146,10 @@ public static class FadeContentSystem
             OutputDirectory  = "",
             SourceDirectory  = assetsFolder,
             Platform         = LiveReloadTarget,
+            CompressContent  = false,
         };
 
-        var builder = new FadeContentBuilder(entries, entriesCount);
+        var builder = new FadeContentBuilder(entries, entriesCount, rules);
         builder.Run(contentBuilderParams);
     }
 
@@ -390,11 +433,13 @@ public class FadeContentBuilder : ContentBuilder
 {
     private readonly int            _entryCount;
     private readonly ContentEntry[] _entries;
+    private readonly IContentRules? _rules;
 
-    public FadeContentBuilder(ContentEntry[] entries, int entryCount)
+    public FadeContentBuilder(ContentEntry[] entries, int entryCount, IContentRules? rules = null)
     {
         _entries    = entries;
         _entryCount = entryCount;
+        _rules      = rules;
     }
 
     public override IContentCollection GetContentCollection()
@@ -405,6 +450,7 @@ public class FadeContentBuilder : ContentBuilder
         contentCollection.Include<WildcardRule>("*.mp3", contentProcessor: new SoundEffectProcessor());
         contentCollection.Exclude<WildcardRule>("*.ttf");
 
+
         // Per-entry overrides supplied by the caller (e.g. live-reload from Game).
         for (var i = _entryCount; i >= 0; i--)
         {
@@ -413,6 +459,11 @@ public class FadeContentBuilder : ContentBuilder
             var importer  = GetImporter(ref entry);
             contentCollection.Include(entry.path, entry.name, importer, processor);
         }
+
+        // The GAME's rules, last, so they win over anything above. This is where a project states
+        // conventions the engine has no business knowing -- for example that its packed atlases
+        // keep normal data in alpha and must not be premultiplied.
+        _rules?.Configure(contentCollection);
 
         return contentCollection;
     }

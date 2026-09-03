@@ -554,7 +554,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
             FindResource(asm, assetName + "." + preferred)
             ?? FindResource(asm, assetName + ".xnb")
             ?? asm.GetManifestResourceNames()
-                  .FirstOrDefault(n => n.Contains("." + assetName + ".", StringComparison.Ordinal)
+                  .FirstOrDefault(n => n.Contains(assetName + ".", StringComparison.Ordinal)
                                     && n.EndsWith(".xnb", StringComparison.Ordinal))
             ?? throw new InvalidOperationException(
                     $"Baked content '{assetName}' not found in {asm.GetName().Name} " +

@@ -141,6 +141,29 @@ namespace Fade.MonoGame.Core
             return controlIdToFloat.TryGetValue(command.ControlId, out val);
         }
 
+        public static bool TryTakeChanged(DebugUICommand command, ref int value)
+        {
+            if (!TryGetPreviousBool(command)) return false;
+            if (TryGetPreviousInt(command, out var val)) value = val;
+            return true;
+        }
+
+        /// <inheritdoc cref="TryTakeChanged(DebugUICommand, ref int)"/>
+        public static bool TryTakeChanged(DebugUICommand command, ref float value)
+        {
+            if (!TryGetPreviousBool(command)) return false;
+            if (TryGetPreviousFloat(command, out var val)) value = val;
+            return true;
+        }
+
+        /// <inheritdoc cref="TryTakeChanged(DebugUICommand, ref int)"/>
+        public static bool TryTakeChanged(DebugUICommand command, ref string value)
+        {
+            if (!TryGetPreviousBool(command)) return false;
+            if (TryGetPreviousString(command, out var val)) value = val;
+            return true;
+        }
+
         public static void StartDebug()
         {
             controls.Clear();

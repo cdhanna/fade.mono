@@ -504,8 +504,7 @@ public partial class FadeMonoGameCommands
         TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
         textSprite.sprite.zOrder = order;
         TextSystem.textSprites[index] = textSprite;
-        RenderSystem.GetOutputIndex(textSprite.sprite.outputIdFlags, out _, out var output);
-        output.spritesOrderDirty = true;
+        RenderSystem.MarkOutputsDirtyForFlags(textSprite.sprite.outputIdFlags);
     }
 
 

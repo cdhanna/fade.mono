@@ -40,6 +40,19 @@ public static class ContentParameterKeys
     /// look blurry when scaled up.
     /// </summary>
     public const string FontSize = "FontSize";
+
+    /// <summary>
+    /// Whether the texture processor multiplies RGB by alpha. "true"/"false"; the processor's
+    /// own default is TRUE.
+    /// </summary>
+    /// <remarks>
+    /// Set this to false for any texture whose alpha carries DATA rather than coverage. Premultiply
+    /// does RGB *= A/255, so a packed atlas that keeps, say, part of a normal in alpha has its
+    /// other three channels silently scaled by an unrelated value. That corrupts the data with no
+    /// error anywhere: it presents as missing shadows and wrong shading, because the elevation and
+    /// normal channels come out multiplied by noise.
+    /// </remarks>
+    public const string PremultiplyAlpha = "PremultiplyAlpha";
 }
 
 public enum ContentProcessorType

@@ -77,7 +77,11 @@ public static class SpriteSystem
 
     public static int AddIdToFlags(int id, int flags)
     {
-        return flags & id;
+        // OR, not AND: adding an output to the set turns its bit ON. `flags & id` cleared the
+        // set to 0 for any id whose bits did not already all appear in flags -- which is every
+        // real second output -- so `add sprite render target` silently put the sprite in NO
+        // output and left `order sprite` chasing outputIdFlags 0.
+        return flags | id;
     }
 
     public static int RemoveIdFromFlags(int id, int flags)

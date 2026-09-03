@@ -275,8 +275,7 @@ public partial class FadeMonoGameCommands
     {
         SpriteSystem.GetSpriteIndex(spriteId, out var index, out var sprite);
         sprite.zOrder = order;
-        RenderSystem.GetOutputIndex(sprite.outputIdFlags, out _, out var output);
-        output.spritesOrderDirty = true;
+        RenderSystem.MarkOutputsDirtyForFlags(sprite.outputIdFlags);
 
         SpriteSystem.sprites[index] = sprite;
     }

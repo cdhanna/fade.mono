@@ -1674,6 +1674,7 @@
                             const _timing = (() => { try { return localStorage.getItem('fade.assetTiming') === '1'; } catch (e) { return false; } })();
                             const _queueMs = (typeof m.sentAt === 'number') ? (Date.now() - m.sentAt) : -1;
                             const _t0 = performance.now();
+                            if (_timing) { try { window.theInstance.invokeMethodAsync('SetAssetTiming', true); } catch (e) {} }
                             const manifest = m.manifest || [];
                             const need = [];
                             const texEntries = manifest
@@ -1707,20 +1708,48 @@
                             const _splashOn = _splashN >= 4 && window.__fadeSplash;
                             const _splashWasHidden = _splashOn ? window.__fadeSplash.isHidden() : true;
                             if (_splashOn) { window.__fadeSplash.show(); window.__fadeSplash.setStatus(`Loading assets… 0/${_splashN}`); }
-                            let _splashDone = 0;
-                            await Promise.all(missing.map(async (e) => {
+                            // Promote non-audio assets that are cached locally into
+                            // one batched interop call (RegisterAssetsBatched with
+                            // byte[][]). This is the reconcile hot spot: serial
+                            // per-asset RegisterAssetHashed calls cost ~29ms each on
+                            // real textures (=2.2s for 76). The batch marshals all
+                            // blobs through the shared WASM buffer in one round-trip.
+                            const tex = [];
+                            const audio = [];
+                            for (const e of missing) {
                                 const cached = cachedMap.get(e.hash);
                                 if (cached && cached.bytes) {
-                                    try {
-                                        const bytes = new Uint8Array(cached.bytes);
-                                        if (e.kind === 'audio') await window.fadeAudio.register(e.name, bytes, e.hash);
-                                        else await window.theInstance.invokeMethodAsync('RegisterAssetHashed', e.name, bytes, e.hash);
-                                        if (_splashOn) window.__fadeSplash.setStatus(`Loading assets… ${++_splashDone}/${_splashN}`);
-                                        return;
-                                    } catch (err) { console.warn('[reconcile] local re-register failed', e.name, err); }
+                                    if (e.kind === 'audio') audio.push([e, cached]);
+                                    else tex.push([e, cached]);
+                                } else {
+                                    need.push(e.name);
                                 }
-                                need.push(e.name);
-                            }));
+                            }
+                            if (tex.length > 0) {
+                                const names = tex.map(([e]) => e.name);
+                                const blobs = tex.map(([, c]) => new Uint8Array(c.bytes));
+                                const hashes = tex.map(([e]) => e.hash);
+                                let registered = 0;
+                                let batchErr = null;
+                                try {
+                                    const r = await window.theInstance.invokeMethodAsync('RegisterAssetsBatched', names, blobs, hashes);
+                                    if (typeof r === 'number') registered = r;
+                                } catch (err) { batchErr = err; }
+                                if (batchErr || registered < tex.length) {
+                                    if (batchErr) console.warn('[reconcile] batch failed, falling back per-asset', batchErr);
+                                    else if (registered < tex.length) console.warn(`[reconcile] batch registered ${registered}/${tex.length}, falling back remainder`);
+                                    const done = new Set(names.slice(0, registered));
+                                    for (const [e, c] of tex) {
+                                        if (done.has(e.name)) continue;
+                                        try { await window.theInstance.invokeMethodAsync('RegisterAssetHashed', e.name, new Uint8Array(c.bytes), e.hash); }
+                                        catch (err) { console.warn('[reconcile] asset re-register failed', e.name, err); }
+                                    }
+                                }
+                            }
+                            for (const [e, c] of audio) {
+                                try { await window.fadeAudio.register(e.name, new Uint8Array(c.bytes), e.hash); }
+                                catch (err) { console.warn('[reconcile] audio re-register failed', e.name, err); }
+                            }
                             if (_splashOn && _splashWasHidden) window.__fadeSplash.hide();
                             const _tGets = performance.now();
                             // Reply NOW — the launch only needs `need`. The prune
@@ -1821,6 +1850,7 @@
                             const _dbgTiming = (() => { try { return localStorage.getItem('fade.assetTiming') === '1'; } catch (e) { return false; } })();
                             if (window.__fadeSplash && !window.__fadeSplash.isHidden())
                                 window.__fadeSplash.setStatus('Loading program…');
+                            if (_dbgTiming) { try { window.theInstance.invokeMethodAsync('SetAssetTiming', true); } catch (e) {} }
                             const _dt0 = performance.now();
                             const compileOk = await window.theInstance.invokeMethodAsync('LoadProgram', m.source);
                             const _dt1 = performance.now();

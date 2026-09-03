@@ -4,6 +4,7 @@ using Fade.MonoGame.Core;
 using FadeBasic.Lib.Standard.Util;
 using FadeBasic.SourceGenerators;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Content.Pipeline.Extra;
 using Microsoft.Xna.Framework.Graphics;
 
 namespace Fade.MonoGame.Lib;

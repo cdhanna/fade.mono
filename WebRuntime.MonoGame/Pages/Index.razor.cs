@@ -63,6 +63,20 @@ loop
         // Latched after first OnAfterRender so the HostBridge / WaitImpl
         // wire-up only happens once.
         private static bool _cooperativeWired;
+        // Asset-timing diagnostic flag. Mirrors the page's fade.assetTiming
+        // localStorage key (the JS side only; C# can't read localStorage
+        // synchronously here). JS sets this via SetAssetTiming(true) at the
+        // start of the reconcile / debug-start handlers. When on, the C#
+        // reconcile + compile paths log WHY assets are missing and how the
+        // compile time splits, so we can tell a cold content-manager apart
+        // from a hash-mismatch and a real slow compile apart from queueing.
+        private static bool _assetTiming;
+
+        // Boot anchor (ms since iframe start at the first _game creation).
+        // Lets the reconcile debug log say "Game1 alive for X ms" so a fresh
+        // WASM boot (cold content manager) is distinguishable from a hash bug.
+        private static long _gameCreatedMs = -1;
+
         // Pause flag toggled by Stop / LoadProgram. The JS rAF still fires
         // TickDotNet every frame; this just makes the call a no-op so the
         // game freezes in place (canvas keeps whatever the last frame
@@ -470,6 +484,15 @@ loop
             _game?.SetGcSettings(sweepInterval, paranoid);
         }
 
+        // Enable/disable the gated asset-timing diagnostics from JS (mirrors
+        // the page's fade.assetTiming key). No-op toggling is cheap, so call
+        // it unconditionally from the JS reconcile/debug-start handlers.
+        [JSInvokable]
+        public void SetAssetTiming(bool on)
+        {
+            _assetTiming = on;
+        }
+
         // State-preserving hot reload (Playground iframe Reload button). Unlike
         // LoadProgram — which does a FULL swap that rebuilds the VM and resets
         // all state — this arms the new source against the LIVE VM and applies
@@ -713,6 +736,33 @@ loop
             _game?.BrowserContent?.RegisterAsset(name, bytes, hash);
         }
 
+        // Batched register: register many texture/font assets in a single
+        // JS→.NET interop round-trip. Blazor marshals byte[][] through the shared
+        // WASM buffer (not JSON/base64), so this avoids the per-call overhead of
+        // N serial RegisterAssetHashed calls (~2.2s for 76 real textures). Parallel
+        // arrays (names, blobs, hashes) dodge Blazor's lack of a complex-object
+        // array overload. Falls back: if the marshalled blob is null/mismatched,
+        // skip (callback leaves it to the per-asset fallback JS-side).
+        [JSInvokable]
+        public int RegisterAssetsBatched(string[] names, byte[][] blobs, string[] hashes)
+        {
+            var cm = _game?.BrowserContent;
+            if (cm == null || names == null || blobs == null || hashes == null) return 0;
+            int n = Math.Min(names.Length, Math.Min(blobs.Length, hashes.Length));
+            int registered = 0;
+            for (int i = 0; i < n; i++)
+            {
+                if (string.IsNullOrEmpty(names[i]) || blobs[i] == null || string.IsNullOrEmpty(hashes[i])) continue;
+                try
+                {
+                    cm.RegisterAsset(names[i], blobs[i], hashes[i]);
+                    registered++;
+                }
+                catch { /* skip malformed */ }
+            }
+            return registered;
+        }
+
         private static readonly JsonSerializerOptions _manifestJsonOpts = new()
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -743,6 +793,22 @@ loop
             foreach (var e in entries)
             {
                 if (cm == null || !cm.HasAssetWithHash(e.name, e.hash)) missing.Add(e);
+            }
+            // Diagnostics (gated by fade.assetTiming): if EVERYTHING is coming
+            // back missing on a warm relaunch, we need to know whether the
+            // content manager is empty (cm==null / was recreated → runtime
+            // restarted) or whether the manifest hashes just don't match what
+            // was registered (hash/name comparison bug). This splits the two.
+            if (_assetTiming)
+            {
+                var held = new List<string>();
+                foreach (var e in entries)
+                {
+                    bool inMem = cm != null && cm.HasAsset(e.name);
+                    bool hashOk = cm != null && cm.HasAssetWithHash(e.name, e.hash);
+                    held.Add($"{e.name} mem={inMem} hash={hashOk}");
+                }
+                Console.WriteLine($"[fade-reconcile:c#] gameNull={(cm == null)} assetsHeld={((cm?.RegisteredNames is { } r) ? System.Linq.Enumerable.Count(r) : -1)} manifest={entries.Count} missing={missing.Count} :: {string.Join(" | ", held)}");
             }
             return JsonSerializer.Serialize(missing, _manifestJsonOpts);
         }
@@ -834,6 +900,7 @@ loop
 
         private bool LoadProgramInternal(string source, bool initialBoot)
         {
+            var _sw0 = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 // CommandCollection: Fade.MonoGame.Lib first so its `print`
@@ -843,48 +910,52 @@ loop
                     new FadeMonoGameCommands(),
                     new StandardCommands());
 
-                if (!FadeSdk.TryCreateFromString(source, commands, out var ctx, out var errors))
+                bool ok;
+                try
                 {
-                    var msg = "compile error:\n" + errors.ToDisplay();
-                    _status = "compile error";
-                    Console.Error.WriteLine(msg);
+                    ok = FadeSdk.TryCreateFromString(source, commands, out var ctx, out var errors);
+                    if (!ok)
+                    {
+                        var msg = "compile error:\n" + errors.ToDisplay();
+                        _status = "compile error";
+                        Console.Error.WriteLine(msg);
+                        if (!initialBoot) StateHasChanged();
+                        return false;
+                    }
+                    _currentCommands = commands;
+                    // Reset DebugUI state for the new program (matches desktop
+                    // semantics: autoInspector has to be re-enabled by the
+                    // fbasic source). Skip on the boot stub since there's no
+                    // prior state to invalidate.
+                    if (!initialBoot) DebugUISystem.NotifyProgramReset();
+                    CooperativePump.RunStartWithVm(ctx.Machine);
+
+                    if (_game == null)
+                    {
+                        if (_gameCreatedMs < 0) _gameCreatedMs = Environment.TickCount64;
+                        _game = new Game1(ctx);
+                        _game.Run();
+                        _status = initialBoot ? "running (boot stub)" : "running";
+                    }
+                    else
+                    {
+                        _game.LoadProgram(ctx);
+                        _status = "reloaded";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _status = "load error: " + ex.Message;
+                    Console.Error.WriteLine("LoadProgram error: " + ex);
                     if (!initialBoot) StateHasChanged();
                     return false;
-                }
-
-                // Hand the freshly-compiled commands + VM to the
-                // cooperative pump. Library commands routed through
-                // HostBridge (prompt$, future async ops) will reach
-                // the right VM via SuspendVm → CooperativePump.RunVm.
-                // Game1's per-frame Update still drives the actual
-                // tick; once that's pump-aware, the integration is
-                // complete. Until then, the wiring is correct but
-                // SuspendVm-induced waits don't yet resume on their
-                // own — see mg-export-3.md phase 2 remaining work.
-                _currentCommands = commands;
-                // Reset DebugUI state for the new program (matches desktop
-                // semantics: autoInspector has to be re-enabled by the
-                // fbasic source). Skip on the boot stub since there's no
-                // prior state to invalidate.
-                if (!initialBoot) DebugUISystem.NotifyProgramReset();
-                CooperativePump.RunStartWithVm(ctx.Machine);
-
-                if (_game == null)
-                {
-                    _game = new Game1(ctx);
-                    _game.Run();
-                    _status = initialBoot ? "running (boot stub)" : "running";
-                }
-                else
-                {
-                    _game.LoadProgram(ctx);
-                    _status = "reloaded";
                 }
                 // Un-pause so subsequent ticks resume rendering. A user
                 // can Stop → edit → Run flow and we pick up smoothly.
                 _paused = false;
 
                 if (!initialBoot) StateHasChanged();
+                if (_assetTiming) Console.WriteLine($"[fade-timing:c#] LoadProgram (compile+swap) {_sw0.ElapsedMilliseconds}ms (source {source.Length}B) gameRecreated={(initialBoot || _game == null)} gameAgeMs={((initialBoot || _gameCreatedMs < 0) ? -1 : (Environment.TickCount64 - _gameCreatedMs))}");
                 return true;
             }
             catch (Exception ex)

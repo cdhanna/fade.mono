@@ -229,6 +229,61 @@ public partial class FadeMonoGameCommands
     }
 
     /// <summary>
+    /// <para>Turns alpha premultiplication on or off for one texture.</para>
+    /// <para>This is a macro-time command. It runs during compilation, not at game runtime.</para>
+    /// </summary>
+    /// <remarks>
+    /// <para>Turn it OFF for any texture whose alpha carries DATA rather than coverage.
+    /// Premultiplication does <c>RGB *= A/255</c>, so a packed atlas keeping part of a normal in
+    /// alpha gets its other three channels scaled by an unrelated value.</para>
+    /// <para>It fails silently and it does not look like a data problem. The symptoms are missing
+    /// shadows, shading that is subtly wrong, and sprites sitting at the wrong height -- because
+    /// the elevation channels came out multiplied by noise, and elevation feeds both the shadow
+    /// march and the depth sort.</para>
+    /// <para>Harmless to leave ON for ordinary art: a cutout mask is 0 or 255, so the multiply is
+    /// either a no-op or zeroes an already-invisible pixel.</para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// # push asset "Assets/Textures/hero_packed.png"
+    /// # texture premultiply "Assets/Textures/hero_packed.png" off
+    /// </code>
+    /// </example>
+    /// <param name="assetName">The asset, by push path or renamed name.</param>
+    /// <param name="onOff"><c>on</c>/<c>true</c> to premultiply, <c>off</c>/<c>false</c> not to.</param>
+    /// <seealso cref="SetTextureCompression">texture compression</seealso>
+    [FadeBasicCommand("texture premultiply", FadeBasicCommandUsage.Macro)]
+    public static void SetTexturePremultiply(string assetName, string onOff)
+    {
+        var v = onOff?.Trim().ToLowerInvariant();
+        string val;
+        switch (v)
+        {
+            case "on":  case "true":  case "yes": case "1": val = "true";  break;
+            case "off": case "false": case "no":  case "0": val = "false"; break;
+            default: return;
+        }
+
+        var found = false;
+        for (var i = 0; i < ContentSystem.entries.ptr; i++)
+        {
+            ref var e = ref ContentSystem.entries.buffer[i];
+            if (e.name == assetName || e.path == assetName)
+            {
+                if (e.parameters == null) e.parameters = new Dictionary<string, string>();
+                e.parameters[ContentParameterKeys.PremultiplyAlpha] = val;
+                found = true;
+            }
+        }
+        if (!found)
+        {
+            ref var e = ref ContentSystem.Push(assetName);
+            if (e.parameters == null) e.parameters = new Dictionary<string, string>();
+            e.parameters[ContentParameterKeys.PremultiplyAlpha] = val;
+        }
+    }
+
+    /// <summary>
     /// <para>Sets the default texture compression for every subsequent <c>push asset</c>.</para>
     /// <para>This is a macro-time command. It runs during compilation, not at game runtime.</para>
     /// </summary>
