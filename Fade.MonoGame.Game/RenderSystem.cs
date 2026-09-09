@@ -667,9 +667,8 @@ public static class RenderSystem
                         break;
                 }
                 
-                // var spriteIndex = output.orderedSpriteIds[j];
-                // var sprite = SpriteSystem.sprites[spriteIndex];
-
+                if (sprite.hidden) continue;
+                
                 Effect spriteEffect = default; // start by assuming the sprite has no effect.
                 if (_effectMap.TryGetValue(sprite.effectId, out var effectIndex))
                 {
@@ -707,8 +706,6 @@ public static class RenderSystem
                 {
                     case RenderOutputItem.TYPE_TEXT:
                     {
-
-                        if (text.sprite.hidden) continue;
 
                         TextureSystem.GetSpriteFontIndex(text.sprite.imageId, out _, out var runtimeFont);
                         var font = runtimeFont.font;
@@ -770,8 +767,6 @@ public static class RenderSystem
                     }
                     case RenderOutputItem.TYPE_SPRITE:
                     {
-                        if (sprite.hidden) continue;
-
                         TextureSystem.GetTextureIndex(sprite.imageId, out _, out var runtimeTex);
 
                         var tex = runtimeTex.texture;
