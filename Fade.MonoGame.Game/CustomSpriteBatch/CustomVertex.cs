@@ -17,6 +17,7 @@ public struct FadeSpriteVertex : IVertexType
     public Vector2 TextureCoordinate;
 
     public Vector4 TexCoord1;
+    public Vector4 TexCoord2;
     
     /// <inheritdoc cref="IVertexType.VertexDeclaration"/>
     public static readonly VertexDeclaration VertexDeclaration;
@@ -28,11 +29,20 @@ public struct FadeSpriteVertex : IVertexType
     /// <param name="color">Color of the vertex.</param>
     /// <param name="textureCoordinate">Texture coordinate of the vertex.</param>
     public FadeSpriteVertex(Vector3 position, Color color, Vector2 textureCoordinate, Vector4 texCoord1)
+        : this(position, color, textureCoordinate, texCoord1, Vector4.Zero)
+    {
+    }
+
+    /// <inheritdoc cref="FadeSpriteVertex(Vector3, Color, Vector2, Vector4)"/>
+    /// <param name="texCoord2">The second custom float4.</param>
+    public FadeSpriteVertex(Vector3 position, Color color, Vector2 textureCoordinate, Vector4 texCoord1,
+                            Vector4 texCoord2)
     {
         Position = position;
         Color = color;
         TextureCoordinate = textureCoordinate;
         TexCoord1 = texCoord1;
+        TexCoord2 = texCoord2;
     }
 	
     VertexDeclaration IVertexType.VertexDeclaration
@@ -52,6 +62,7 @@ public struct FadeSpriteVertex : IVertexType
             hashCode = (hashCode * 397) ^ Color.GetHashCode();
             hashCode = (hashCode * 397) ^ TextureCoordinate.GetHashCode();
             hashCode = (hashCode * 397) ^ TexCoord1.GetHashCode();
+            hashCode = (hashCode * 397) ^ TexCoord2.GetHashCode();
             return hashCode;
         }
     }
@@ -72,7 +83,7 @@ public struct FadeSpriteVertex : IVertexType
     /// </returns>
     public static bool operator ==(FadeSpriteVertex left, FadeSpriteVertex right)
     {
-        return (((left.Position == right.Position) && (left.Color == right.Color)) && (left.TextureCoordinate == right.TextureCoordinate) && (left.TexCoord1 == right.TexCoord1));
+        return (((left.Position == right.Position) && (left.Color == right.Color)) && (left.TextureCoordinate == right.TextureCoordinate) && (left.TexCoord1 == right.TexCoord1) && (left.TexCoord2 == right.TexCoord2));
     }
 
     /// <summary>
@@ -107,7 +118,8 @@ public struct FadeSpriteVertex : IVertexType
             new VertexElement(0, VertexElementFormat.Vector3, VertexElementUsage.Position, 0), 
             new VertexElement(12, VertexElementFormat.Color, VertexElementUsage.Color, 0), 
             new VertexElement(16, VertexElementFormat.Vector2, VertexElementUsage.TextureCoordinate, 0) ,
-            new VertexElement(24, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 1) 
+            new VertexElement(24, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 1),
+            new VertexElement(40, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 2)
         };
         VertexDeclaration = new VertexDeclaration(elements);
     }

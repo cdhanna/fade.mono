@@ -119,14 +119,23 @@ public class TextureSystem
     public static Rectangle GetSourceRect(ref RuntimeTexture runtimeTex, ref Sprite sprite)
     {
         var tex = runtimeTex.texture;
-        var src = new Rectangle(0, 0, tex.Width, tex.Height);
-        if (sprite.currentFrame >= 0)
-        {
-            var frame = runtimeTex.descriptor.frames[sprite.currentFrame % runtimeTex.descriptor.frames.Count];
-            src = new Rectangle(frame.xOffset, frame.yOffset, frame.xSize, frame.ySize);
-        }
+        var frames = runtimeTex.descriptor.frames;
 
-        return src;
+        // No frame table: the sprite is the whole image, which is the ordinary simple case.
+        if (frames == null || frames.Count == 0)
+            return new Rectangle(0, 0, tex.Width, tex.Height);
+
+        // A frame table EXISTS, so the texture is a sheet and the whole-image rect is never the
+        // right answer -- not even for a sprite that never called `set sprite frame` and still
+        // carries the default currentFrame of -1. It used to fall through to the whole image,
+        // which is merely odd for a private sheet and actively wrong for a shared one: a runtime
+        // atlas points many texture ids at ONE page, so "the whole image" becomes the whole page
+        // and the sprite draws every material at once, dithered down to its own size. That looks
+        // like corruption, not like a missing frame index, which is what makes it expensive to
+        // diagnose.
+        var index = sprite.currentFrame < 0 ? 0 : sprite.currentFrame % frames.Count;
+        var frame = frames[index];
+        return new Rectangle(frame.xOffset, frame.yOffset, frame.xSize, frame.ySize);
     }
 
     public static void LoadTextureFromContent(int textureId, string path)

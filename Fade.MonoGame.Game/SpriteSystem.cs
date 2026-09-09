@@ -15,6 +15,7 @@ public struct Sprite
     public Vector2 scale;
     public Vector2 origin;
     public SpriteTexCoord1 texCoord1;
+    public SpriteTexCoord1 texCoord2;
     public float rotation;
     public Color color;
     public SpriteEffects effects;

@@ -888,6 +888,47 @@ public partial class FadeMonoGameCommands
     }
 
     /// <summary>
+    /// <para>Sets a SECOND per-vertex float4 (texcoord2) on every corner of a sprite, for custom
+    /// shader data that will not fit in
+    /// <see cref="SetSpriteTexcoord1(int, float, float, float, float)">set sprite all texcoord1</see>.</para>
+    /// <para>Read it in a shader as <c>TEXCOORD2</c> on the vertex input. Zero unless set.</para>
+    /// </summary>
+    /// <remarks>
+    /// <para>Reach for this when texcoord1's four channels are already spoken for. The alternative
+    /// -- giving a material its own Effect instance purely to carry one differing constant -- costs
+    /// a batch break every time that material interleaves with another in draw order, which in a
+    /// depth-sorted scene is once per depth band.</para>
+    /// <para>It is per-vertex data, so every sprite in the program pays 16 bytes a vertex for the
+    /// channel whether it uses it or not.</para>
+    /// </remarks>
+    /// <example>
+    /// Give a shader a per-sprite material scale and a flag.
+    /// <code>
+    /// texture 1, "wall"
+    /// sprite 1, 100, 100, 1
+    /// set sprite effect 1, 1
+    /// set sprite all texcoord2 1, 3.0, 1.5, 0, 0
+    /// do
+    ///   sync
+    /// loop
+    /// </code>
+    /// </example>
+    /// <param name="spriteId">The sprite to update.</param>
+    /// <param name="x">The X component of the texcoord2 vector.</param>
+    /// <param name="y">The Y component of the texcoord2 vector.</param>
+    /// <param name="z">The Z component of the texcoord2 vector.</param>
+    /// <param name="w">The W component of the texcoord2 vector.</param>
+    /// <seealso cref="SetSpriteTexcoord1(int, float, float, float, float)">set sprite all texcoord1</seealso>
+    /// <seealso cref="SetSpriteEffect">set sprite effect</seealso>
+    [FadeBasicCommand("set sprite all texcoord2")]
+    public static void SetSpriteTexcoord2(int spriteId, float x, float y, float z, float w)
+    {
+        SpriteSystem.GetSpriteIndex(spriteId, out var index, out var sprite);
+        sprite.texCoord2 = new SpriteTexCoord1(new Vector4(x, y, z, w));
+        SpriteSystem.sprites[index] = sprite;
+    }
+
+    /// <summary>
     /// <para>Sets the secondary texture coordinate (texcoord1) for a single corner vertex of a sprite.</para>
     /// <para>This is an advanced feature for passing per-vertex data to custom shaders. Most use cases only need <see cref="SetSpriteTexcoord1(int, float, float, float, float)">set sprite all texcoord1</see>.</para>
     /// </summary>

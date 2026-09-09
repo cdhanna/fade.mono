@@ -803,7 +803,7 @@ public static class RenderSystem
                                                   500f)); //TODO: Why doesn't deferred rendering work here????
 
                         sb.Draw(tex, position, src, sprite.color, angle, origin, scale, sprite.effects, order,
-                            sprite.texCoord1);
+                            sprite.texCoord1, sprite.texCoord2);
                         break;
                     }
                 }

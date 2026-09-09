@@ -30,6 +30,14 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
 			vertexTL.TexCoord1 = t1.tl;
 			vertexTR.TexCoord1 = t1.tr;
 		}
+
+		public void SetTexCoord2(SpriteTexCoord1 t2)
+		{
+			vertexBL.TexCoord2 = t2.bl;
+			vertexBR.TexCoord2 = t2.br;
+			vertexTL.TexCoord2 = t2.tl;
+			vertexTR.TexCoord2 = t2.tr;
+		}
 		
 		public void Set ( float x, float y, float dx, float dy, float w, float h, float sin, float cos, Color color, Vector2 texCoordTL, Vector2 texCoordBR, float depth)
 		{

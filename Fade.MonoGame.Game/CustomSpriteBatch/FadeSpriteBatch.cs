@@ -232,7 +232,8 @@ namespace Microsoft.Xna.Framework.Graphics.Fade
 				Vector2 scale,
 				SpriteEffects effects,
                 float layerDepth, 
-                SpriteTexCoord1 texCoord1)
+                SpriteTexCoord1 texCoord1,
+                SpriteTexCoord1 texCoord2 = default)
 		{
             CheckValid(texture);
 
@@ -316,6 +317,7 @@ case SpriteSortMode.Texture:
                         layerDepth);
             }
             item.SetTexCoord1(texCoord1);
+            item.SetTexCoord2(texCoord2);
             
             FlushIfNeeded();
 		}
