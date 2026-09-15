@@ -73,6 +73,48 @@ public partial class FadeMonoGameCommands
     }
 
     /// <summary>
+    /// <para>Reserves a strip of the window along each edge that the game image will not use.</para>
+    /// <para>The render target still fits and centres as usual, just inside a smaller area — so the
+    /// game shrinks and leaves you empty screen for debug panels, an editor sidebar, or anything
+    /// else drawn over the top.</para>
+    /// </summary>
+    /// <remarks>
+    /// <para>This does NOT change <c>set render size</c>. The render target
+    /// keeps its resolution and aspect ratio; only how much of the window it is scaled into
+    /// changes. Everything drawn in render-target coordinates is unaffected.</para>
+    ///
+    /// <para>Mouse coordinates follow automatically: <c>mouse x</c>
+    /// and friends map back through the same fitted rectangle, so a click still lands on the pixel
+    /// under the cursor with any padding.</para>
+    ///
+    /// <para>Padding on ONE side pushes the image toward the other, which is the point — a sidebar
+    /// wants an uneven gutter. Padding that would leave no room at all is ignored on that axis
+    /// rather than collapsing the image to nothing.</para>
+    ///
+    /// <para>Applies to the current window size and is re-applied on resize and fullscreen
+    /// changes.</para>
+    /// </remarks>
+    /// <example>
+    /// Leave 400px down the right-hand side for a tool panel.
+    /// <code>
+    /// set render size 1280, 720
+    /// set screen size 1920, 1080
+    /// set screen padding 0, 400, 0, 0
+    /// do
+    ///   sync
+    /// loop
+    /// </code>
+    /// </example>
+    /// <param name="left">Pixels to reserve on the left edge.</param>
+    /// <param name="right">Pixels to reserve on the right edge.</param>
+    /// <param name="top">Pixels to reserve on the top edge.</param>
+    /// <param name="bottom">Pixels to reserve on the bottom edge.</param>
+    /// <seealso cref="SetScreenResolution">set screen size</seealso>
+    [FadeBasicCommand("set screen padding")]
+    public static void SetScreenPadding(int left, int right, int top, int bottom)
+        => RenderSystem.SetScreenPadding(left, right, top, bottom);
+
+    /// <summary>
     /// <para>Sets the text that appears in your game window's title bar.</para>
     /// </summary>
     /// <remarks>
@@ -343,7 +385,7 @@ public partial class FadeMonoGameCommands
     /// <remarks>
     /// Call this during setup to establish your game's window size. This controls the actual pixel
     /// dimensions of the game window (the back buffer), which is different from the internal render
-    /// resolution you can set with <see cref="SetRenderSize">set render size</see>.
+    /// resolution you can set with <c>set render size</c>.
     /// Think of screen size as "how big is the window on the desktop" and render size as "how many
     /// pixels does the game actually draw at internally."
     ///
@@ -392,7 +434,6 @@ public partial class FadeMonoGameCommands
     /// <seealso cref="SetFullScreen">set fullscreen</seealso>
     /// <seealso cref="DisplayWidth">display width</seealso>
     /// <seealso cref="DisplayHeight">display height</seealso>
-    /// <seealso cref="SetRenderSize">set render size</seealso>
     [FadeBasicCommand("set screen size")]
     public static void SetScreenResolution(int width, int height)
     {

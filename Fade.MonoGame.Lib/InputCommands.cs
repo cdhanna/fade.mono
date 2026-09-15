@@ -51,7 +51,9 @@ public partial class FadeMonoGameCommands
 
         v -= RenderSystem.mainBufferPosition.X;
 
-        v /= GameSystem.graphicsDeviceManager.PreferredBackBufferWidth - RenderSystem.mainBufferPosition.X*2;
+        // The STORED on-screen size, not `backBuffer - position*2`: that re-derivation assumes the
+        // image is centred, which stops being true as soon as `set screen padding` is uneven.
+        v /= RenderSystem.mainBufferSize.X;
 
         v *= RenderSystem.mainBuffer.Width;
 
@@ -112,7 +114,7 @@ public partial class FadeMonoGameCommands
 
         v -= RenderSystem.mainBufferPosition.Y;
 
-        v /= GameSystem.graphicsDeviceManager.PreferredBackBufferHeight - RenderSystem.mainBufferPosition.Y*2;
+        v /= RenderSystem.mainBufferSize.Y;
 
         v *= RenderSystem.mainBuffer.Height;
 
@@ -1093,7 +1095,9 @@ public partial class FadeMonoGameCommands
     {
         var v = (float)InputSystem.mouseState.X;
         v -= RenderSystem.mainBufferPosition.X;
-        v /= GameSystem.graphicsDeviceManager.PreferredBackBufferWidth - RenderSystem.mainBufferPosition.X * 2;
+        // The STORED on-screen size, not `backBuffer - position*2`: that re-derivation assumes the
+        // image is centred, which stops being true as soon as `set screen padding` is uneven.
+        v /= RenderSystem.mainBufferSize.X;
         v *= RenderSystem.mainBuffer.Width;
         return v;
     }
@@ -1101,7 +1105,7 @@ public partial class FadeMonoGameCommands
     {
         var v = (float)InputSystem.mouseState.Y;
         v -= RenderSystem.mainBufferPosition.Y;
-        v /= GameSystem.graphicsDeviceManager.PreferredBackBufferHeight - RenderSystem.mainBufferPosition.Y * 2;
+        v /= RenderSystem.mainBufferSize.Y;
         v *= RenderSystem.mainBuffer.Height;
         return v;
     }

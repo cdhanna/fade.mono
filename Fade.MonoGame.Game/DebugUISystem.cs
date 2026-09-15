@@ -254,6 +254,38 @@ public static class DebugUISystem
         }
     }
 
+    /// <summary>
+    /// Discards queued commands up to and including the end matching a <paramref name="start"/>
+    /// that was just found closed -- the tab-bar and tab-item twin of
+    /// <see cref="SkipToMatchingTreeEnd"/>, and it exists for the same reason.
+    ///
+    /// <para>ImGui only wants the End call when the Begin returned true, but the value the Fade
+    /// side branches on is a FRAME OLD (<see cref="TryGetPreviousBool"/>). A tab bar's Begin
+    /// returns true from the very first frame while the stale value says false, so the caller
+    /// skips the end and ImGui asserts "Missing EndTabBar()" -- which made the tab commands
+    /// unusable from Fade under any spelling. Callers now always emit both and this decides
+    /// whether the body renders, exactly as trees do.</para>
+    /// </summary>
+    static void SkipToMatchingEnd(DebugControlType start, DebugControlType end)
+    {
+        var depth = 1;
+
+        while (controls.Count > 0)
+        {
+            var ctrl = controls.Dequeue();
+
+            if (ctrl.type == start)
+            {
+                depth++;
+            }
+            else if (ctrl.type == end)
+            {
+                depth--;
+                if (depth == 0) return;
+            }
+        }
+    }
+
     public static void Render()
     {
         if (!_styleLoaded)
@@ -265,6 +297,11 @@ public static class DebugUISystem
         if (GameSystem.latestTime == null) return;
 
         renderer.BeforeLayout(GameSystem.latestTime);
+
+        // A dockspace covering the whole viewport, so any window can be snapped to an edge or
+        // tabbed with another. PassthruCentralNode is what keeps the middle transparent: without
+        // it the dockspace paints over the game, and the only thing on screen is imgui.
+        ImGui.DockSpaceOverViewport(0, ImGui.GetMainViewport(), ImGuiDockNodeFlags.PassthruCentralNode);
 
         while (controls.Count > 0)
         {
@@ -360,13 +397,27 @@ public static class DebugUISystem
                     controlIdToFloat[ctrlId] = ctrl.argFloat;
                     break;
                 case DebugControlType.TAB_BAR_START:
-                    controlIdToBool[ctrlId] = ImGui.BeginTabBar(ctrl.label);
+                    var barOpen = ImGui.BeginTabBar(ctrl.label);
+                    controlIdToBool[ctrlId] = barOpen;
+
+                    // See SkipToMatchingEnd. EndTabBar is only legal when BeginTabBar returned
+                    // true, and the Fade caller cannot know that until the frame after -- so the
+                    // caller emits both unconditionally and the body is dropped here instead.
+                    if (!barOpen)
+                        SkipToMatchingEnd(DebugControlType.TAB_BAR_START, DebugControlType.TAB_BAR_END);
                     break;
                 case DebugControlType.TAB_BAR_END:
                     ImGui.EndTabBar();
                     break;
                 case DebugControlType.TAB_ITEM_START:
-                    controlIdToBool[ctrlId] = ImGui.BeginTabItem(ctrl.label);
+                    var tabOpen = ImGui.BeginTabItem(ctrl.label);
+                    controlIdToBool[ctrlId] = tabOpen;
+
+                    // Same again, and this one fires constantly rather than once: only the
+                    // SELECTED tab's Begin returns true, so every other tab's body has to be
+                    // dropped on every frame.
+                    if (!tabOpen)
+                        SkipToMatchingEnd(DebugControlType.TAB_ITEM_START, DebugControlType.TAB_ITEM_END);
                     break;
                 case DebugControlType.TAB_ITEM_END:
                     ImGui.EndTabItem();

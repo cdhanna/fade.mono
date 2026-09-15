@@ -892,4 +892,41 @@ public partial class FadeMonoGameCommands
             thickness = thickness,
         });
     }
+
+    /// <summary>
+    /// <para>Draws a one-frame text label in the gizmo layer, centred on a point.</para>
+    /// </summary>
+    /// <remarks>
+    /// <para>Use this rather than a text sprite when the label must read ABOVE other gizmos.
+    /// Gizmos draw to the back buffer AFTER the main render target composites, so an ordinary text
+    /// sprite is always underneath them however it is ordered — a debug label over a debug grid is
+    /// unreadable otherwise. Within the gizmo layer text draws last, so it is above lines and
+    /// rects.</para>
+    /// <para>Transient: call it every frame you want the label, like <c>gizmo line</c>.</para>
+    /// <para>DECLARED LAST IN THIS CLASS ON PURPOSE. The command source generator is order
+    /// sensitive: adding a command AHEAD of one that has optional parameters breaks that
+    /// command's overload resolution, and <c>gizmo rect</c> stopped compiling with
+    /// "[0301] cannot convert float to string" — an error pointing at the CALLER, naming neither
+    /// this command nor the real cause. Append new commands here rather than inserting them.</para>
+    /// </remarks>
+    /// <param name="x">Centre X in render-target pixels.</param>
+    /// <param name="y">Centre Y in render-target pixels.</param>
+    /// <param name="text">The string to draw.</param>
+    /// <param name="spriteFontId">A font loaded with <c>font</c>.</param>
+    /// <param name="packedColor">Packed RGBA. Build one with <c>rgb</c>.</param>
+    /// <param name="scale">Text scale.</param>
+    [FadeBasicCommand("gizmo text")]
+    public static void GizmoText(float x, float y, string text, int spriteFontId,
+        int packedColor, float scale)
+    {
+        GizmoSystem.transientTexts.Add(new GizmoTextShape
+        {
+            position = new Vector2(x, y),
+            text = text,
+            color = UnpackGizmoColor(packedColor),
+            scale = scale,
+            fontId = spriteFontId,
+        });
+    }
+
 }

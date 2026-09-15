@@ -33,6 +33,15 @@ public struct GizmoLineShape
     public float thickness;
 }
 
+public struct GizmoTextShape
+{
+    public Vector2 position;
+    public string text;
+    public Color color;
+    public float scale;
+    public int fontId;
+}
+
 public struct GizmoRectShape
 {
     public Vector2 position;
@@ -51,6 +60,7 @@ public static class GizmoSystem
     public static Dictionary<int, TextGizmo> textGizmos = new Dictionary<int, TextGizmo>();
     public static List<GizmoLineShape> transientLines = new List<GizmoLineShape>();
     public static List<GizmoRectShape> transientRects = new List<GizmoRectShape>();
+    public static List<GizmoTextShape> transientTexts = new List<GizmoTextShape>();
 
     // System-wide gizmo render switch. Default ON because gizmos are
     // a debug-time aid; a shipping build can call `disable gizmos`
@@ -91,10 +101,11 @@ public static class GizmoSystem
         {
             transientLines.Clear();
             transientRects.Clear();
+            transientTexts.Clear();
             return;
         }
         if (spriteGizmos.Count == 0 && colliderGizmos.Count == 0 && textGizmos.Count == 0
-            && transientLines.Count == 0 && transientRects.Count == 0)
+            && transientLines.Count == 0 && transientRects.Count == 0 && transientTexts.Count == 0)
         {
             return;
         }
@@ -137,8 +148,22 @@ public static class GizmoSystem
             DrawAabbOutline(sb, r.position, r.size, r.color, r.thickness);
         }
 
+        // TEXT LAST, so a label reads over the lines and boxes beneath it.
+        for (var i = 0; i < transientTexts.Count; i++)
+        {
+            var t = transientTexts[i];
+            if (string.IsNullOrEmpty(t.text)) continue;
+            TextureSystem.GetSpriteFontIndex(t.fontId, out _, out var runtimeFont);
+            var font = runtimeFont.font;
+            if (font?.Texture == null) continue;
+            var size = font.MeasureString(t.text) * t.scale;
+            sb.DrawString(font, t.text, t.position - size * 0.5f, t.color,
+                          0f, Vector2.Zero, new Vector2(t.scale), SpriteEffects.None, 0f);
+        }
+
         transientLines.Clear();
         transientRects.Clear();
+        transientTexts.Clear();
 
         sb.End();
     }

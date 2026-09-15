@@ -141,6 +141,22 @@ public static class RenderSystem
     public static RenderTarget2D mainBuffer;
     public static Vector2 mainBufferPosition;
     public static float mainBufferScale;
+
+    /// <summary>
+    /// The on-screen SIZE of the letterboxed main buffer, in back-buffer pixels.
+    ///
+    /// Stored rather than re-derived. Callers used to compute it as
+    /// <c>backBufferWidth - mainBufferPosition.X * 2</c>, which silently assumes the image is
+    /// CENTRED -- true for plain letterboxing, false the moment padding is uneven, and the failure
+    /// is every mouse coordinate drifting rather than anything visibly breaking.
+    /// </summary>
+    public static Vector2 mainBufferSize;
+
+    /// <summary>
+    /// Screen-edge padding in back-buffer pixels, kept out of the letterboxed image so panels can
+    /// sit beside it. Set by <c>set screen padding</c>.
+    /// </summary>
+    public static int screenPadLeft, screenPadRight, screenPadTop, screenPadBottom;
     
     public static Vector2 screenShakeOffset;
     public static Vector2 screenShakeOffsetTarget;
@@ -309,6 +325,8 @@ public static class RenderSystem
         mainBuffer = null;
         mainBufferPosition = default;
         mainBufferScale = default;
+        mainBufferSize = default;
+        screenPadLeft = screenPadRight = screenPadTop = screenPadBottom = 0;
         screenShakeOffset = default;
         screenShakeOffsetTarget = default;
         screenShakeMag = default;
@@ -467,17 +485,59 @@ public static class RenderSystem
         GetLetterboxTransform(
             GameSystem.graphicsDeviceManager.PreferredBackBufferWidth,
             GameSystem.graphicsDeviceManager.PreferredBackBufferHeight,
-            mainBuffer.Width, mainBuffer.Height, out mainBufferPosition, out mainBufferScale);
+            mainBuffer.Width, mainBuffer.Height,
+            out mainBufferPosition, out mainBufferScale, out mainBufferSize);
     }
-    
+
+    /// <summary>
+    /// Set the screen-edge padding and re-fit. Clamped so the padding can never consume the whole
+    /// back buffer: a zero-sized image would divide by zero in the mouse mapping and put every
+    /// click at infinity, which is a worse outcome than ignoring an absurd value.
+    /// </summary>
+    public static void SetScreenPadding(int left, int right, int top, int bottom)
+    {
+        var w = GameSystem.graphicsDeviceManager.PreferredBackBufferWidth;
+        var h = GameSystem.graphicsDeviceManager.PreferredBackBufferHeight;
+
+        screenPadLeft = Math.Max(0, left);
+        screenPadRight = Math.Max(0, right);
+        screenPadTop = Math.Max(0, top);
+        screenPadBottom = Math.Max(0, bottom);
+
+        if (screenPadLeft + screenPadRight >= w) screenPadLeft = screenPadRight = 0;
+        if (screenPadTop + screenPadBottom >= h) screenPadTop = screenPadBottom = 0;
+
+        ResetRenderPositioning();
+    }
+
     public static void GetLetterboxTransform(
         int screenWidth, int screenHeight,
         int renderTargetWidth, int renderTargetHeight,
         out Vector2 position, out float scale)
+        => GetLetterboxTransform(screenWidth, screenHeight, renderTargetWidth, renderTargetHeight,
+                                 out position, out scale, out _);
+
+    /// <summary>
+    /// Fit the render target inside the back buffer, honouring the screen padding.
+    /// </summary>
+    /// <remarks>
+    /// The image is centred within what the padding LEAVES, not within the whole back buffer, so
+    /// padding on one side pushes it to the other. That is the point -- a right-hand gutter for
+    /// docked panels is uneven by definition -- and it is exactly why the on-screen size is an
+    /// out-param now instead of something callers reconstruct from the offset.
+    /// </remarks>
+    public static void GetLetterboxTransform(
+        int screenWidth, int screenHeight,
+        int renderTargetWidth, int renderTargetHeight,
+        out Vector2 position, out float scale, out Vector2 size)
     {
-        // Compute scale factors to fit render target into screen
-        float scaleX = screenWidth / (float)renderTargetWidth;
-        float scaleY = screenHeight / (float)renderTargetHeight;
+        // What is left for the image once the padding is taken out.
+        var availableWidth = Math.Max(1, screenWidth - screenPadLeft - screenPadRight);
+        var availableHeight = Math.Max(1, screenHeight - screenPadTop - screenPadBottom);
+
+        // Compute scale factors to fit render target into the available area
+        float scaleX = availableWidth / (float)renderTargetWidth;
+        float scaleY = availableHeight / (float)renderTargetHeight;
 
         // Use the smaller scale to ensure the render target fits
         scale = MathF.Min(scaleX, scaleY);
@@ -485,10 +545,11 @@ public static class RenderSystem
         // Compute the size of the scaled render target
         float displayWidth = renderTargetWidth * scale;
         float displayHeight = renderTargetHeight * scale;
+        size = new Vector2(displayWidth, displayHeight);
 
-        // Center the render target on screen
-        float offsetX = (screenWidth - displayWidth) / 2f;
-        float offsetY = (screenHeight - displayHeight) / 2f;
+        // Centre within the AVAILABLE area, then shift past the leading padding.
+        float offsetX = screenPadLeft + (availableWidth - displayWidth) / 2f;
+        float offsetY = screenPadTop + (availableHeight - displayHeight) / 2f;
 
         position = new Vector2(offsetX, offsetY);
     }

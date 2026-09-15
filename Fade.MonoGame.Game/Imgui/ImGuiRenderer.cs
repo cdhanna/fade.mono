@@ -49,6 +49,16 @@ namespace Fade.MonoGame.Core
             var context = ImGui.CreateContext();
             ImGui.SetCurrentContext(context);
 
+            // DOCKING ON. ImGui.NET ships the docking branch, so windows can be dragged into tabs
+            // and snapped to the edges of the viewport instead of overlapping each other in the
+            // middle of the game. A tool program with more than about three panels is unusable
+            // without it.
+            //
+            // ViewportsEnable is deliberately NOT set: dragging a window out of the OS window needs
+            // a platform backend that creates real windows, and this renderer draws through
+            // MonoGame's single swapchain. Enabling it would compile and then misbehave at runtime.
+            ImGui.GetIO().ConfigFlags |= ImGuiConfigFlags.DockingEnable;
+
             _game = game ?? throw new ArgumentNullException(nameof(game));
             _graphicsDevice = game.GraphicsDevice;
 
