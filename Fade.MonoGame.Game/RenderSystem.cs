@@ -307,6 +307,20 @@ public static class RenderSystem
                 target.AlphaDestinationBlend = Blend.Zero;
                 break;
 
+            case 5: // maximum, ALPHA INCLUDED
+                // Mode 4 with the deliberate exception removed. Mode 4 keeps alpha as an ordinary
+                // frontmost-wins channel precisely so an attachment can carry one such value
+                // alongside three combining ones; this is for the case where the fourth value
+                // combines too, and an attachment needs FOUR channels of the same union rather
+                // than three plus a passenger.
+                target.ColorBlendFunction = BlendFunction.Max;
+                target.ColorSourceBlend = Blend.One;
+                target.ColorDestinationBlend = Blend.One;
+                target.AlphaBlendFunction = BlendFunction.Max;
+                target.AlphaSourceBlend = Blend.One;
+                target.AlphaDestinationBlend = Blend.One;
+                break;
+
             default: // non-premultiplied alpha
                 target.ColorBlendFunction = BlendFunction.Add;
                 target.ColorSourceBlend = Blend.SourceAlpha;

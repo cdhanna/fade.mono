@@ -121,7 +121,13 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private bool _webReloadAutoAccept;
 
  
-    public Game1(ILaunchable fadeProgram, bool autoAcceptNewBuilds=false, bool testMode=false)
+    /// <param name="windowWidth">
+    /// Optional initial window width, applied BEFORE the device is created. 0 keeps the
+    /// MonoGame default.
+    /// </param>
+    /// <param name="windowHeight">Optional initial window height. See <paramref name="windowWidth"/>.</param>
+    public Game1(ILaunchable fadeProgram, bool autoAcceptNewBuilds=false, bool testMode=false,
+        int windowWidth = 0, int windowHeight = 0)
     {
         _testMode = testMode;
         _autoAcceptNewBuilds = autoAcceptNewBuilds;
@@ -130,6 +136,18 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
 
         _graphics = new GraphicsDeviceManager(this);
+
+        // WINDOW SIZE BELONGS HERE, before the device exists. Setting PreferredBackBuffer*
+        // now makes the window be CREATED at that size; doing the same thing later means
+        // ApplyChanges, which repositions an existing window -- on macOS that left the window
+        // stuck and undraggable, and no amount of clamping or guarding the call fixed it.
+        // A game program (which always runs after the window exists) therefore cannot do this;
+        // it has to be handed in.
+        if (windowWidth > 0 && windowHeight > 0)
+        {
+            _graphics.PreferredBackBufferWidth = windowWidth;
+            _graphics.PreferredBackBufferHeight = windowHeight;
+        }
         Content.RootDirectory = "Content";
 #if BROWSER
         // Browser has no filesystem to serve XNBs from. Swap the default

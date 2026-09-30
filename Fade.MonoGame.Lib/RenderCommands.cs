@@ -1273,7 +1273,9 @@ public partial class FadeMonoGameCommands
     /// leaving the others on whatever <see cref="SetRenderTargetBlend">set render target
     /// blend</see> gave the output as a whole.</para>
     /// <para>Modes are the same as that command's, plus <c>4</c> maximum: the destination
-    /// keeps whichever of the two values is larger, per channel.</para>
+    /// keeps whichever of the two values is larger, per channel. <c>5</c> is the same but takes
+    /// the maximum on ALPHA as well, for an attachment that needs four combining channels rather
+    /// than three plus one frontmost-wins passenger.</para>
     /// </summary>
     /// <remarks>
     /// Blending is otherwise one state for the whole draw call, so an MRT set has to agree --
@@ -1298,7 +1300,8 @@ public partial class FadeMonoGameCommands
     /// </remarks>
     /// <param name="outputId">The render output to change. 1 is the default output.</param>
     /// <param name="attachment">Which attachment, from 0. Out-of-range values are ignored.</param>
-    /// <param name="mode">0 alpha, 1 additive, 2 opaque, 3 premultiplied, 4 maximum.</param>
+    /// <param name="mode">0 alpha, 1 additive, 2 opaque, 3 premultiplied, 4 maximum (alpha
+    /// overwrites), 5 maximum INCLUDING alpha.</param>
     /// <seealso cref="SetRenderTargetBlend">set render target blend</seealso>
     [FadeBasicCommand("set render target attachment blend")]
     public static void SetRenderTargetAttachmentBlend(int outputId, int attachment, int mode)
