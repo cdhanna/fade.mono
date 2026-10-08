@@ -1,0 +1,272 @@
+goto routines_save_exit
+
+remstart
+    THE SAVED GAME
+    the game in progress is saved so that it can be carried on with later. there is only ever one of them.
+    it is kept in the preferences, as a block of whole numbers that starts at SAVE_PREF, well away from the
+    numbers that the options use.
+
+    only the rules of the game are saved: which fish are on the board, the score, and the upgrades. nothing
+    about how any of it is drawn is saved. loading puts the game back to how it starts, with reset_game,
+    and then puts the saved numbers on top of that. everything on the screen follows from the numbers.
+
+    the game is saved when it is paused, and whenever the board has settled after something changed. so
+    closing the window in the middle of a game loses, at the very most, the move that was still playing out.
+
+    SAVE_VERSION has to go up whenever what is saved changes, so that an old save is thrown away instead of
+    being read as something that it is not.
+remend
+
+
+` write the game in progress into the preferences.
+save_game:
+
+    ` all of this is written to the file once, at the end, instead of once for every number
+    begin pref batch
+
+    set pref SAVE_PREF, SAVE_VERSION
+    set pref SAVE_PREF + 1, 1 `there is a saved game
+    set pref SAVE_PREF + 2, CELL_COLUMN_COUNT
+    set pref SAVE_PREF + 3, CELL_ROW_COUNT
+    set pref SAVE_PREF + 4, CURRENT_SCORE
+    set pref SAVE_PREF + 5, CURRENT_ROUND
+    set pref SAVE_PREF + 6, CURRENT_MOVE_COUNT
+    set pref SAVE_PREF + 7, PENDING_FREE_MOVES
+    set pref SAVE_PREF + 8, PENDING_BOARD_EXPANSIONS
+    set pref SAVE_PREF + 9, SCORE_BAR.startVal
+    set pref SAVE_PREF + 10, SCORE_BAR.endVal
+    set pref SAVE_PREF + 11, SELECTION_POS.x
+    set pref SAVE_PREF + 12, SELECTION_POS.y
+    set pref SAVE_PREF + 13, BELLY_UP_ROLL_DUE
+    set pref SAVE_PREF + 14, REQUEST_ABILITY_SELECTION
+    set pref SAVE_PREF + 15, PASSIVE_COUNT
+    set pref SAVE_PREF + 16, MOVE_ABILITY_COUNT
+
+    ` how many times every card has been taken
+    for saveI = 0 to CARD_LENGTH - 1
+        set pref SAVE_PREF_CARDS + saveI, CARDS(saveI).uses
+    next
+
+    ` the passives, in the order that they were taken, which is the order that they are listed in
+    for saveI = 0 to PASSIVE_BINDINGS_LENGTH - 1
+        if saveI < PASSIVE_COUNT
+            set pref SAVE_PREF_PASSIVES + saveI, PASSIVE_BINDINGS(saveI).abilityIndex
+        endif
+    next
+
+    ` the moves, in the order that they were taken, and how long each one has left to recharge
+    for saveI = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
+        if saveI < MOVE_ABILITY_COUNT
+            set pref SAVE_PREF_MOVES + saveI * 2, MOVE_ABILITY_BINDINGS(saveI).abilityIndex
+            set pref SAVE_PREF_MOVES + saveI * 2 + 1, MOVE_ABILITY_BINDINGS(saveI).movesLeft
+        endif
+    next
+
+    ` the board. everything about a cell is packed into one number: the kind of fish, then
+    ` how many are stacked behind it, then whether it is belly up.
+    for saveI = 0 to CELL_COUNT - 1
+        set pref SAVE_PREF_CELLS + saveI, CELLS(saveI).value + CELLS(saveI).stack * 100 + CELLS(saveI).bellyUp * 100000
+    next
+
+    end pref batch
+
+    SAVE_SIGNATURE = saveSignature()
+return
+
+
+` put the saved game on top of a game that has just been reset. reset_game has to be called first.
+load_game:
+
+    ` the board is the size that it was
+    resizeGrid(get pref(SAVE_PREF + 2, GRID_START_COUNT), get pref(SAVE_PREF + 3, GRID_START_COUNT))
+    scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+
+    for saveI = 0 to CARD_LENGTH - 1
+        CARDS(saveI).uses = get pref(SAVE_PREF_CARDS + saveI)
+    next
+
+    ` the passives are taken again, one at a time, the same way that the upgrade screen gives them out.
+    ` taking one counts a use, so the count starts again from nothing and is counted back up.
+    loadCount = get pref(SAVE_PREF + 15)
+    for saveI = 0 to PASSIVE_BINDINGS_LENGTH - 1
+        if saveI < loadCount
+            loadAbility = get pref(SAVE_PREF_PASSIVES + saveI)
+            loadUses = CARDS(loadAbility).uses
+            if loadUses < 1 then loadUses = 1
+            CARDS(loadAbility).uses = 0
+            for loadN = 1 to loadUses
+                grantPassive(loadAbility)
+            next
+        endif
+    next
+
+    ` and so are the moves. a move that was recharging still is.
+    loadCount = get pref(SAVE_PREF + 16)
+    for saveI = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
+        if saveI < loadCount
+            grantMove(get pref(SAVE_PREF_MOVES + saveI * 2))
+
+            loadLeft = get pref(SAVE_PREF_MOVES + saveI * 2 + 1)
+            MOVE_ABILITY_BINDINGS(saveI).movesLeft = loadLeft
+            if loadLeft > 0
+                set text MOVE_ABILITY_BINDINGS(saveI).timerTextId, str$(loadLeft)
+            endif
+        endif
+    next
+
+    ` the board. see save_game for how a cell is packed into one number.
+    for saveI = 0 to CELL_COUNT - 1
+        loadPacked = get pref(SAVE_PREF_CELLS + saveI, 1)
+        CELLS(saveI).value = loadPacked mod 100
+        CELLS(saveI).stack = (loadPacked / 100) mod 1000
+        CELLS(saveI).bellyUp = loadPacked / 100000
+        updateCell(CELLS(saveI))
+        set sprite alpha CELLS(saveI).spriteId, 255
+    next
+
+    SELECTION_POS.x = get pref(SAVE_PREF + 11)
+    SELECTION_POS.y = get pref(SAVE_PREF + 12)
+    gosub update_selection_position
+
+    ` the score, and the bar that it fills
+    CURRENT_SCORE = get pref(SAVE_PREF + 4)
+    CURRENT_ROUND = get pref(SAVE_PREF + 5)
+    CURRENT_MOVE_COUNT = get pref(SAVE_PREF + 6)
+    PENDING_FREE_MOVES = get pref(SAVE_PREF + 7)
+    PENDING_BOARD_EXPANSIONS = get pref(SAVE_PREF + 8)
+    BELLY_UP_ROLL_DUE = get pref(SAVE_PREF + 13)
+    REQUEST_ABILITY_SELECTION = get pref(SAVE_PREF + 14)
+
+    SCORE_BAR.startVal = get pref(SAVE_PREF + 9)
+    SCORE_BAR.endVal = get pref(SAVE_PREF + 10, 100)
+    PROGRESS_BARS(0) = SCORE_BAR
+    setProgressTween(SCORE_BAR, CURRENT_SCORE)
+
+    registerMove(0) `this writes the number of moves onto the screen
+    set text ROUND_COUNT_TEXT_ID, str$(getRoundsLeft())
+
+    ` what was just loaded is what is saved, so there is nothing new to save yet
+    SAVE_SIGNATURE = saveSignature()
+return
+
+
+` the main loop comes here on every frame of the game. it saves the game when something has changed.
+frame_autosave:
+    if MENU_MODE then return
+
+    ` not while fish are still popping and falling. the board is saved once it has settled.
+    if REQUEST_COMBO_CHECK then return
+
+    saveNow = saveSignature()
+    if saveNow <> SAVE_SIGNATURE
+        gosub save_game
+    endif
+return
+
+
+` a new game has been started, so the saved one is not there to go back to any more.
+forget_saved_game:
+    set pref SAVE_PREF + 1, 0
+    SAVE_SIGNATURE = -1
+return
+
+
+` the main menu's "Resume". put the saved game back, and then the bubbles take the menu away.
+menu_resume_game:
+    gosub reset_game
+    gosub load_game
+
+    TRANSITION_TO_MENU = 0
+    gosub menu_transition
+
+    MENU_MODE = MENU_MODE_CLOSED
+return
+
+
+routines_save_exit:
+
+
+` is there a saved game that this version of the game can read?
+function hasSavedGame()
+    found = 0
+    if get pref(SAVE_PREF + 1) = 1
+        if get pref(SAVE_PREF) = SAVE_VERSION
+            found = 1
+        endif
+    endif
+endfunction found
+
+
+` a number that changes whenever something that gets saved changes. the game is only saved when this
+` is different from what it was at the last save, so that it is not saved on every frame.
+function saveSignature()
+    signature = CURRENT_MOVE_COUNT * 7 + CURRENT_SCORE * 13 + CURRENT_ROUND * 101
+    signature = signature + CELL_COUNT * 3 + PASSIVE_COUNT * 17 + MOVE_ABILITY_COUNT * 19
+    signature = signature + PENDING_FREE_MOVES * 23 + PENDING_BOARD_EXPANSIONS * 29 + REQUEST_ABILITY_SELECTION * 31
+    for i = 0 to CARD_LENGTH - 1
+        signature = signature + CARDS(i).uses * (37 + i)
+    next
+endfunction signature
+
+
+` give the player a passive upgrade, and put it in the list at the side of the board.
+` a passive that can be taken more than once keeps the one row, which says how many times it has been taken.
+` the upgrade screen calls this when a passive is picked, and load_game calls it to put the passives back.
+function grantPassive(abilityIndex)
+    CARDS(abilityIndex).uses = CARDS(abilityIndex).uses + 1
+
+    if CARDS(abilityIndex).obtained
+        ` the row fades in again to show the change
+        for passiveI = 0 to PASSIVE_COUNT - 1
+            if PASSIVE_BINDINGS(passiveI).abilityIndex = abilityIndex
+                set text PASSIVE_BINDINGS(passiveI).titleTextId, CARDS(abilityIndex).name$ + " x" + str$(CARDS(abilityIndex).uses)
+                size text x PASSIVE_BINDINGS(passiveI).titleTextId, 100, .1, .3
+                create basic tween PASSIVE_BINDINGS(passiveI).fadeTweenId, 0, 1, 400, 0
+            endif
+        next
+    else
+        binding = PASSIVE_BINDINGS(PASSIVE_COUNT)
+        binding.assigned = 1
+        binding.abilityIndex = abilityIndex
+
+        set text binding.titleTextId, CARDS(abilityIndex).name$
+        size text x binding.titleTextId, 100, .1, .3 `fit the name to the column, so that a long one does not run off of the screen
+        PASSIVE_BINDINGS(PASSIVE_COUNT) = binding
+        PASSIVE_COUNT = PASSIVE_COUNT + 1
+        create basic tween binding.fadeTweenId, 0, 1, 400, 0
+        CARDS(abilityIndex).obtained = 1
+
+        ` the passive explains itself in info mode, instead of the empty space
+        setInfoBlobEnabled(INFO_INDEX_PASSIVES, 0)
+        infoIndex = allocateInfoBlob(WORLD_WIDTH - 124, ABILITY_ROWS_Y + 2 - (PASSIVE_COUNT - 1) * 18, 112, 18, CARDS(abilityIndex).name$, CARDS(abilityIndex).desc$)
+    endif
+endfunction
+
+
+` give the player a move upgrade, ready to use, and put it in the list at the side of the board.
+` the upgrade screen calls this when a move is picked, and load_game calls it to put the moves back.
+function grantMove(abilityIndex)
+    moveBinding = MOVE_ABILITY_BINDINGS(MOVE_ABILITY_COUNT)
+    moveBinding.assigned = 1
+    moveBinding.abilityIndex = abilityIndex
+    moveBinding.movesLeft = 0 `start ready
+    moveBinding.resetTimer = CARDS(abilityIndex).moveClock
+    moveBinding.moveValue = CARDS(abilityIndex).moveValue
+
+    ` the moves take the buttons in order. assign_ability_selection stops offering moves once the buttons run out.
+    moveBinding.actionId = ACT_ABILITY(MOVE_ABILITY_COUNT)
+    moveBinding.icon$ = "move" + str$(MOVE_ABILITY_COUNT + 1)
+
+    set text moveBinding.titleTextId, CARDS(abilityIndex).name$
+    size text x moveBinding.titleTextId, 100, .1, .3 `fit the name to the column, so that a long one does not run into the key
+    set text moveBinding.keyTextId, "{" + moveBinding.icon$ + "}"
+
+    MOVE_ABILITY_BINDINGS(MOVE_ABILITY_COUNT) = moveBinding
+    MOVE_ABILITY_COUNT = MOVE_ABILITY_COUNT + 1
+    create basic tween moveBinding.fadeTweenId, 0, 1, 400, 0
+    CARDS(abilityIndex).obtained = 1
+
+    ` the move explains itself in info mode, instead of the empty space
+    setInfoBlobEnabled(INFO_INDEX_MOVES, 0)
+    infoIndex = allocateInfoBlob(12, ABILITY_ROWS_Y + 2 - (MOVE_ABILITY_COUNT - 1) * 18, 140, 18, CARDS(abilityIndex).name$, CARDS(abilityIndex).desc$ + ". Hold {" + moveBinding.icon$ + "} and press {dir} to use it. It recharges after " + str$(moveBinding.resetTimer) + " moves.")
+endfunction

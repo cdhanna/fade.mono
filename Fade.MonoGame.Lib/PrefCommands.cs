@@ -169,6 +169,73 @@ public partial class FadeMonoGameCommands
     }
 
     /// <summary>
+    /// <para>Holds off writing the preferences file until <see cref="EndPrefBatch">end pref batch</see>.</para>
+    /// <para>Use it around a run of <see cref="SetPref">set pref</see> calls, so that the file is written once instead of once for each.</para>
+    /// </summary>
+    /// <remarks>
+    /// Every <see cref="SetPref">set pref</see> that changes something writes the whole file
+    /// again. That is fine for one setting, and slow for hundreds, like saving every square
+    /// of a board. Between this and <see cref="EndPrefBatch">end pref batch</see> the
+    /// changes are only kept in memory, and <see cref="GetPref(int)">get pref</see> sees
+    /// them straight away.
+    ///
+    /// Always end a batch that you begin. Until it is ended nothing reaches the file, so a
+    /// game that is closed in the middle of one loses those changes.
+    /// </remarks>
+    /// <example>
+    /// Save a hundred numbers with one write:
+    /// <code>
+    /// begin pref batch
+    /// FOR i = 0 TO 99
+    ///   set pref 100 + i, i * 2
+    /// NEXT
+    /// end pref batch
+    ///
+    /// font 1, "font"
+    /// text 1, 470, 200, 1, "saved. number 50 is " + str$(get pref(150))
+    ///
+    /// do
+    ///   sync
+    /// loop
+    /// </code>
+    /// </example>
+    /// <seealso cref="EndPrefBatch">end pref batch</seealso>
+    /// <seealso cref="SetPref">set pref</seealso>
+    [FadeBasicCommand("begin pref batch")]
+    public static void BeginPrefBatch()
+    {
+        PrefsSystem.BeginBatch();
+    }
+
+    /// <summary>
+    /// <para>Ends a batch started by <see cref="BeginPrefBatch">begin pref batch</see>, and writes the preferences file if anything changed.</para>
+    /// </summary>
+    /// <remarks>
+    /// Batches can be inside one another, and only the end of the outermost one writes the
+    /// file. Ending a batch that was never begun does nothing.
+    /// </remarks>
+    /// <example>
+    /// Save two settings with one write:
+    /// <code>
+    /// begin pref batch
+    /// set pref 1, 7
+    /// set pref 2, 3
+    /// end pref batch
+    ///
+    /// do
+    ///   sync
+    /// loop
+    /// </code>
+    /// </example>
+    /// <seealso cref="BeginPrefBatch">begin pref batch</seealso>
+    /// <seealso cref="SetPref">set pref</seealso>
+    [FadeBasicCommand("end pref batch")]
+    public static void EndPrefBatch()
+    {
+        PrefsSystem.EndBatch();
+    }
+
+    /// <summary>
     /// <para>Forgets every preference, and deletes the file they are saved in.</para>
     /// </summary>
     /// <remarks>

@@ -565,35 +565,9 @@ handle_ability_selection:
             select CARDS(selectedAbilityIndex).abilityType
 
                 ` when it is a passive, all we need to do is add it the bindings
+                ` grantPassive is in fish_routines_save, because loading a saved game gives the passives back the same way
                 case ABILITY_TYPE_PASSIVE
-                    CARDS(selectedAbilityIndex).uses = CARDS(selectedAbilityIndex).uses + 1
-
-                    if CARDS(selectedAbilityIndex).obtained
-                        ` a passive that can be taken more than once keeps the one row in the list.
-                        ` the row says how many times it has been taken, and fades in again to show the change.
-                        for passiveI = 0 to PASSIVE_COUNT - 1
-                            if PASSIVE_BINDINGS(passiveI).abilityIndex = selectedAbilityIndex
-                                set text PASSIVE_BINDINGS(passiveI).titleTextId, CARDS(selectedAbilityIndex).name$ + " x" + str$(CARDS(selectedAbilityIndex).uses)
-                                size text x PASSIVE_BINDINGS(passiveI).titleTextId, 100, .1, .3
-                                create basic tween PASSIVE_BINDINGS(passiveI).fadeTweenId, 0, 1, 400, 0
-                            endif
-                        next
-                    else
-                        binding = PASSIVE_BINDINGS(PASSIVE_COUNT)
-                        binding.assigned = 1
-                        binding.abilityIndex = ABILITY_CHOICES(ABILITY_SELECTION_INDEX).abilityIndex
-
-                        set text binding.titleTextId, CARDS(binding.abilityIndex).name$
-                        size text x binding.titleTextId, 100, .1, .3 `fit the name to the column, so that a long one does not run off of the screen
-                        PASSIVE_BINDINGS(PASSIVE_COUNT) = binding
-                        PASSIVE_COUNT = PASSIVE_COUNT + 1
-                        create basic tween binding.fadeTweenId, 0, 1, 400, 0
-                        CARDS(binding.abilityIndex).obtained = 1
-
-                        ` the passive explains itself in info mode, instead of the empty space
-                        setInfoBlobEnabled(INFO_INDEX_PASSIVES, 0)
-                        infoIndex = allocateInfoBlob(WORLD_WIDTH - 124, ABILITY_ROWS_Y + 2 - (PASSIVE_COUNT - 1) * 18, 112, 18, CARDS(binding.abilityIndex).name$, CARDS(binding.abilityIndex).desc$)
-                    endif
+                    grantPassive(selectedAbilityIndex)
                 endcase
 
                 ` when it is an instant, go handle it elsewhere, because it is a big old select statement itself...
@@ -604,29 +578,7 @@ handle_ability_selection:
 
                 ` similar to passive, we need to add it the move bindings
                 case ABILITY_TYPE_MOVE
-                    moveBinding = MOVE_ABILITY_BINDINGS(MOVE_ABILITY_COUNT)
-                    moveBinding.assigned = 1
-                    moveBinding.abilityIndex = ABILITY_CHOICES(ABILITY_SELECTION_INDEX).abilityIndex
-                    moveBinding.movesLeft = 0 `start ready
-                    moveBinding.resetTimer = CARDS(moveBinding.abilityIndex).moveClock
-                    moveBinding.moveValue = CARDS(moveBinding.abilityIndex).moveValue
-
-                    ` the moves take the buttons in order. assign_ability_selection stops offering moves once the buttons run out.
-                    moveBinding.actionId = ACT_ABILITY(MOVE_ABILITY_COUNT)
-                    moveBinding.icon$ = "move" + str$(MOVE_ABILITY_COUNT + 1)
-
-                    set text moveBinding.titleTextId, CARDS(moveBinding.abilityIndex).name$
-                    size text x moveBinding.titleTextId, 100, .1, .3 `fit the name to the column, so that a long one does not run into the key
-                    set text moveBinding.keyTextId, "{" + moveBinding.icon$ + "}"
-
-                    MOVE_ABILITY_BINDINGS(MOVE_ABILITY_COUNT) = moveBinding
-                    MOVE_ABILITY_COUNT = MOVE_ABILITY_COUNT + 1
-                    create basic tween moveBinding.fadeTweenId, 0, 1, 400, 0
-                    CARDS(moveBinding.abilityIndex).obtained = 1
-
-                    ` the move explains itself in info mode, instead of the empty space
-                    setInfoBlobEnabled(INFO_INDEX_MOVES, 0)
-                    infoIndex = allocateInfoBlob(12, ABILITY_ROWS_Y + 2 - (MOVE_ABILITY_COUNT - 1) * 18, 140, 18, CARDS(moveBinding.abilityIndex).name$, CARDS(moveBinding.abilityIndex).desc$ + ". Hold {" + moveBinding.icon$ + "} and press {dir} to use it. It recharges after " + str$(moveBinding.resetTimer) + " moves.")
+                    grantMove(selectedAbilityIndex)
                 endcase
             endselect
 

@@ -386,7 +386,12 @@ menu_pick:
 
     select menuPicked
         case MENU_ITEM_RESUME
-            gosub menu_close_pause
+            ` on the pause menu this goes back to the game. on the main menu it carries on with the saved game.
+            if MENU_MODE = MENU_MODE_PAUSE
+                gosub menu_close_pause
+            else
+                gosub menu_resume_game
+            endif
         endcase
 
         case MENU_ITEM_NEW_GAME
@@ -446,7 +451,7 @@ menu_pick:
                 selectMenuItem(MENU_ITEM_OPTIONS, 0)
             else
                 setMenuPage(MENU_PAGE_MAIN)
-                selectMenuItem(MENU_ITEM_OPTIONS - MENU_ITEM_NEW_GAME, 0)
+                selectMenuItem(MENU_ITEM_OPTIONS - MENU_PAGE_FIRST, 0)
             endif
         endcase
     endselect
@@ -473,6 +478,7 @@ return
 ` the main menu's "New Game". the bubbles take the menu away, and the game is underneath.
 menu_start_game:
     gosub reset_game
+    gosub forget_saved_game
 
     TRANSITION_TO_MENU = 0
     gosub menu_transition
@@ -483,6 +489,9 @@ return
 
 ` the pause key was pressed in the game
 menu_open_pause:
+    ` the game is saved as it is paused, in case the window gets closed from the pause menu
+    gosub save_game
+
     MENU_MODE = MENU_MODE_PAUSE
 
     hide sprite MENU_BG_SPRITE
@@ -565,6 +574,7 @@ menu_abandon_game:
     sync
 
     gosub reset_game
+    gosub forget_saved_game
     show text INFO_HINT_TEXT_ID
 
     ` and then the bubbles take the curtain away, the same as when the game starts from the main menu
@@ -899,6 +909,15 @@ function setMenuPage(page)
     MENU_WIDTH = 180
     MENU_ITEMS(MENU_ITEM_QUIT).desc$ = "Close the game."
 
+    ` when there is a saved game to go back to, the main menu starts with "Resume", the same as the pause menu does
+    if page = MENU_PAGE_MAIN
+        savedGame = hasSavedGame()
+        if savedGame
+            first = MENU_ITEM_RESUME
+            MENU_ITEMS(MENU_ITEM_RESUME).desc$ = "Carry on with the run you left."
+        endif
+    endif
+
     ` the options page can be opened from the main menu or from the pause menu, and looks the same from both.
     ` its lines are longer, because they have their settings on the end, so the panel is wider.
     if page = MENU_PAGE_OPTIONS
@@ -915,9 +934,11 @@ function setMenuPage(page)
         titleSize = 36
         hint$ = "{dir} choose    {confirm} select    {pause} resume"
         first = MENU_ITEM_RESUME
+        MENU_ITEMS(MENU_ITEM_RESUME).desc$ = "Back to the fish."
 
-        ` quitting from a game goes back to the main menu, which has the quit that closes the window
-        MENU_ITEMS(MENU_ITEM_QUIT).desc$ = "Give up on this run, and go to the title."
+        ` quitting from a game goes back to the main menu, which has the quit that closes the window.
+        ` the run is saved, and the main menu has a "Resume" that carries on with it.
+        MENU_ITEMS(MENU_ITEM_QUIT).desc$ = "Save this run, and go to the title."
     endif
 
     if page = MENU_PAGE_CONFIRM

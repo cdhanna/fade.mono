@@ -47,6 +47,8 @@ public static class PrefsSystem
     private static bool[] _taken = Array.Empty<bool>();
     private static bool _loaded;
     private static bool _reportedFailure;
+    private static int _batchDepth;
+    private static bool _batchDirty;
 
     public static string FilePath => Path.Combine(Environment.CurrentDirectory, FILE_NAME);
 
@@ -59,6 +61,10 @@ public static class PrefsSystem
         _values = Array.Empty<int>();
         _taken = Array.Empty<bool>();
         _loaded = false;
+
+        // A batch the old program never closed must not swallow the new program's writes.
+        _batchDepth = 0;
+        _batchDirty = false;
     }
 
     public static bool IsValidIndex(int index) => index >= 0 && index <= MAX_INDEX;
@@ -165,8 +171,34 @@ public static class PrefsSystem
 #endif
     }
 
+    /// <summary>
+    /// Hold off writing the file until the matching <see cref="EndBatch"/>. For a program
+    /// that sets many preferences in one go: without this every one of them rewrites the
+    /// whole file. Batches nest, and only the outermost end writes.
+    /// </summary>
+    public static void BeginBatch()
+    {
+        _batchDepth++;
+    }
+
+    public static void EndBatch()
+    {
+        if (_batchDepth <= 0) return;
+        _batchDepth--;
+        if (_batchDepth > 0 || !_batchDirty) return;
+
+        _batchDirty = false;
+        Save();
+    }
+
     private static void Save()
     {
+        if (_batchDepth > 0)
+        {
+            _batchDirty = true;
+            return;
+        }
+
 #if !BROWSER
         try
         {
