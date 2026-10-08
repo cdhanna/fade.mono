@@ -1,0 +1,217 @@
+goto routines_bubbles_exit
+
+remstart
+    FLOATING BUBBLES
+    little bubbles that puff out of a spot on the screen, float up, and pop. they are there to draw the
+    eye to something that just happened, like a fish popping.
+
+    call spawnBubbles() to make some. that is all a caller has to do.
+
+    there is a fixed number of them, and they are all made at setup. a new bubble takes the place of
+    the oldest one, so asking for more than there are is safe.
+
+    they are drawn with the same effect as the bubbles in the menu's wave, which draws a bubble onto
+    a plain square. so there is no bubble texture, and a bubble can be any size.
+
+    they are not tweens. every bubble has a position and a speed, and updateBubbles() moves all
+    of them a little bit on every frame.
+remend
+
+setup_float_bubbles:
+
+    for bubI = 0 to FLOAT_BUBBLE_COUNT - 1
+        reserve sprite id(FLOAT_BUBBLES(bubI).spriteId)
+        sprite FLOAT_BUBBLES(bubI).spriteId, 0, 0, TEX_PIXEL
+        set sprite effect FLOAT_BUBBLES(bubI).spriteId, BUBBLE_FX_ID
+        order sprite FLOAT_BUBBLES(bubI).spriteId, ORDER_FLOAT_BUBBLES
+        hide sprite FLOAT_BUBBLES(bubI).spriteId
+    next
+
+    ` only a few bubbles can be heard popping at once, and they take turns with these
+    for bubI = 0 to FLOAT_BUBBLE_SFX_COUNT - 1
+        reserve sfx id(FLOAT_BUBBLE_SFX(bubI))
+        sfx FLOAT_BUBBLE_SFX(bubI), EXPLODE_SOUNDS(0)
+    next
+
+    ` they pop with the same sounds that the fish do
+    for bubI = 0 to FLOAT_BUBBLE_CLIP_COUNT - 1
+        FLOAT_BUBBLE_CLIPS(bubI) = EXPLODE_SOUNDS(bubI)
+    next
+
+    FLOAT_BUBBLE_LAST_MS = game ms()
+
+return
+
+
+routines_bubbles_exit:
+
+
+` move every bubble along, and pop the ones that have run out of time.
+` anything that draws frames of its own has to call this on every one of them, or the bubbles
+` stand still. update_frame does, and so do the menu, the upgrade screen, and the moves.
+` it works out how much time has gone by on its own, so calling it twice on a frame does no harm.
+function updateBubbles()
+
+    ` how long it has been since the last frame. the game can stall, when a window is dragged for
+    ` example, and the bubbles should not all leap up the screen when it comes back.
+    bubNow = game ms()
+    bubElapsed = bubNow - FLOAT_BUBBLE_LAST_MS
+    FLOAT_BUBBLE_LAST_MS = bubNow
+    if bubElapsed > 50 then bubElapsed = 50
+
+    if FLOAT_BUBBLE_LIVE = 0 then exitfunction
+
+    bubSeconds# = bubElapsed * .001
+    bubWidth# = WORLD_WIDTH
+    bubLive = 0
+
+    for bubI = 0 to FLOAT_BUBBLE_COUNT - 1
+        if FLOAT_BUBBLES(bubI).active = 0 then skip
+
+        floaty = FLOAT_BUBBLES(bubI)
+        bubLive = bubLive + 1
+
+        ` it has not shown up yet
+        if floaty.delay > 0
+            floaty.delay = floaty.delay - bubElapsed
+            if floaty.delay <= 0
+                show sprite floaty.spriteId
+            endif
+            FLOAT_BUBBLES(bubI) = floaty
+            skip
+        endif
+
+        floaty.age = floaty.age + bubElapsed
+
+        ` the push that it started with dies away, and after that it only floats up
+        floaty.vx# = floaty.vx# * .9
+        floaty.vy# = floaty.vy# * .9
+        floaty.x# = floaty.x# + floaty.vx# * bubSeconds#
+        floaty.y# = floaty.y# + (floaty.vy# - floaty.rise) * bubSeconds#
+
+        if floaty.age >= floaty.life or floaty.y# < -20
+            ` pop
+            floaty.active = 0
+            hide sprite floaty.spriteId
+
+            ` most of them pop without a sound, and there is a wait between the ones that do make one.
+            ` otherwise a big burst would be a wall of noise.
+            if floaty.loud and floaty.y# > 0 and (bubNow - FLOAT_BUBBLE_SFX_LAST_MS) >= FLOAT_BUBBLE_SFX_GAP
+                FLOAT_BUBBLE_SFX_LAST_MS = bubNow
+                bubSfx = FLOAT_BUBBLE_SFX(FLOAT_BUBBLE_SFX_NEXT)
+                FLOAT_BUBBLE_SFX_NEXT = (FLOAT_BUBBLE_SFX_NEXT + 1) mod FLOAT_BUBBLE_SFX_COUNT
+
+                ` these are the same sounds that the fish make when they pop, but higher and quieter,
+                ` and off to the side that the bubble is on. a big bubble sounds a little lower.
+                sfx bubSfx, FLOAT_BUBBLE_CLIPS(rnd(FLOAT_BUBBLE_CLIP_COUNT))
+                set sfx volume bubSfx, .18 + rnd(10) * .01
+                set sfx pitch bubSfx, .75 + rnd(20) * .01 - floaty.size * .03
+                set sfx pan bubSfx, (floaty.x# * 2 - WORLD_WIDTH) * .6 / bubWidth#
+                play sfx bubSfx
+            endif
+        else
+            ` it grows in quickly at the start, and swells and fades right before it pops
+            bubScale# = 1
+            bubAlpha# = 1
+            if floaty.age < 90 then bubScale# = floaty.age * .0111
+            bubLeft = floaty.life - floaty.age
+            if bubLeft < 80
+                bubAlpha# = bubLeft * .0125
+                bubScale# = 1.6 - .6 * bubAlpha#
+            endif
+            bubSize# = floaty.size * bubScale#
+
+            ` it wobbles from side to side on the way up
+            position sprite floaty.spriteId, floaty.x# + sin(bubNow * .005 + floaty.phase * .01) * 2, floaty.y#
+            size sprite floaty.spriteId, bubSize#, bubSize#
+            set sprite all texcoord1 floaty.spriteId, bubSize#, 0, 0, 0
+            set sprite alpha floaty.spriteId, floaty.alpha * bubAlpha#
+        endif
+
+        FLOAT_BUBBLES(bubI) = floaty
+    next
+
+    FLOAT_BUBBLE_LIVE = bubLive
+
+endfunction
+
+
+` puff some bubbles out of a spot on the screen.
+` they start within `radius` pixels of the spot, and they show up `delay` milliseconds from now.
+` about half of them are the color `tint`, and the rest are the pale blue of the bubbles in the menu.
+` these are drawn on top of the fish, and they are the noisy kind.
+function spawnBubbles(x, y, radius, count, delay, tint)
+    spawnBubblesOnLayer(x, y, radius, count, delay, tint, ORDER_FLOAT_BUBBLES, FLOAT_BUBBLE_LOUD_ODDS, 255)
+endfunction
+
+
+` scatter some quiet, faint bubbles over a rectangle of the screen. this is the wake that a cursor leaves
+` behind when it moves away from somewhere.
+function spawnWakeBubbles(x, y, width, height, count, tint, drawOrder)
+    for n = 1 to count
+        spawnBubblesOnLayer(x + rnd(width + 1), y + rnd(height + 1), 0, 1, 0, tint, drawOrder, FLOAT_BUBBLE_WAKE_LOUD_ODDS, FLOAT_BUBBLE_WAKE_ALPHA)
+    next
+endfunction
+
+
+` the wake of the cursor on the board, which is one cell big
+function spawnCursorWake(column, row)
+    spawnWakeBubbles(getCellX(column) - CELL_SIZE / 3, getCellY(row) - CELL_SIZE / 3, (CELL_SIZE * 2) / 3, (CELL_SIZE * 2) / 3, 3, FLOAT_BUBBLE_WAKE_COLOR, ORDER_FLOAT_BUBBLES)
+endfunction
+
+
+` the same as spawnBubbles, but it also says what the bubbles are drawn on top of, and how noisy they are.
+` one bubble in `loudOdds` makes a sound when it pops. `alpha` is 255 for a solid bubble, and less for a faint one.
+function spawnBubblesOnLayer(x, y, radius, count, delay, tint, drawOrder, loudOdds, alpha)
+    for n = 1 to count
+        i = FLOAT_BUBBLE_NEXT
+        FLOAT_BUBBLE_NEXT = (FLOAT_BUBBLE_NEXT + 1) mod FLOAT_BUBBLE_COUNT
+
+        b = FLOAT_BUBBLES(i)
+        b.active = 1
+        b.age = 0
+        b.alpha = alpha
+        b.delay = 1 + delay + rnd(80)
+        b.life = 350 + rnd(1300)
+        b.phase = rnd(628)
+
+        ` most of them are tiny, and a few are not
+        b.size = 3 + rnd(5)
+        if rnd(6) = 0
+            b.size = 8 + rnd(7)
+        endif
+
+        b.x# = x + rnd(radius * 2 + 1) - radius
+        b.y# = y + rnd(radius * 2 + 1) - radius
+
+        ` a push outwards to start with, in pixels per second
+        b.vx# = rnd(141) - 70
+        b.vy# = rnd(121) - 80
+
+        ` the small ones float up faster than the big ones do
+        b.rise = 62 + rnd(30) - b.size * 3
+
+        b.loud = 0
+        if rnd(loudOdds) = 0 then b.loud = 1
+
+        bubbleColor = rgb(200, 230, 255)
+        if rnd(2) = 0 then bubbleColor = tint
+        color sprite b.spriteId, bubbleColor
+        order sprite b.spriteId, drawOrder
+        hide sprite b.spriteId
+
+        FLOAT_BUBBLES(i) = b
+    next
+
+    FLOAT_BUBBLE_LIVE = FLOAT_BUBBLE_LIVE + count
+endfunction
+
+
+` get rid of every bubble at once, without any of them popping
+function clearBubbles()
+    for i = 0 to FLOAT_BUBBLE_COUNT - 1
+        FLOAT_BUBBLES(i).active = 0
+        hide sprite FLOAT_BUBBLES(i).spriteId
+    next
+    FLOAT_BUBBLE_LIVE = 0
+endfunction

@@ -43,7 +43,7 @@ load_audio:
 
 
     sfx 100,100
-    `play sfx 100
+    play sfx 100
     set sfx loop 100, 1
 
 return
@@ -53,23 +53,18 @@ load_fonts:
     SCORE_FONT = 1
     font SCORE_FONT, "Fish/Fonts/ZeroCool"
 
-    ` key icons. any rich text that uses the font can draw these by writing the name in braces, like "press {z}".
-    ` the last number is the frame of the key in the key sheet. the sheet's xml file lists the rows from
-    ` the bottom up, so the frame is (15 - row) * 17 + column.
-    global KEY_ICON_COUNT = 7
-    font icon SCORE_FONT, 1, "z", TEX_KEYS, 44
-    font icon SCORE_FONT, 2, "x", TEX_KEYS, 40
-    font icon SCORE_FONT, 3, "c", TEX_KEYS, 189
-    font icon SCORE_FONT, 4, "v", TEX_KEYS, 34
-    font icon SCORE_FONT, 5, "i", TEX_KEYS, 119
-    font icon SCORE_FONT, 6, "space", TEX_KEYS, 51
-    font icon SCORE_FONT, 7, "arrows", TEX_KEYS, 224
+    ` input icons. any rich text that uses the font can draw these by writing the name in braces, like "hold {swap}".
+    ` they are pictures of keys, or of controller buttons, depending on what the player is using.
+    ` frame_input_icons, in fish_routines_input, is where each one gets its name and its picture.
+    gosub frame_input_icons
 
     ` an icon is as tall as a line of text by default. these are drawn a bit bigger, so that
-    ` text that is 16 pixels tall draws the 20 pixel keys at exactly their own size.
-    for i = 1 to KEY_ICON_COUNT
+    ` text that is 16 pixels tall draws the 20 pixel pictures at exactly their own size.
+    for i = 1 to 7
         set font icon scale SCORE_FONT, i, 1.25, 1.25
     next
+    set font icon scale SCORE_FONT, 11, 1.25, 1.25
+    set font icon scale SCORE_FONT, 12, 1.25, 1.25
 
     ` icons for the kinds of ability, like "{move} move"
     font icon SCORE_FONT, 8, "passive", TEX_TYPE_PASSIVE
@@ -170,6 +165,10 @@ load_textures:
     texture reserve texture id(TEX_KEYS), "Fish/Textures/Keys"
     set texture frame grid TEX_KEYS, 16 17 `rows, columns
 
+    ` and pictures of controller buttons, from the xbox series sheet of the same pack, shrunk the same way.
+    texture reserve texture id(TEX_PAD), "Fish/Textures/Pad"
+    set texture frame grid TEX_PAD, 10 10 `rows, columns
+
     ` the small pictures for each kind of ability. these are 16 pixels, to match 16 pixel text.
     texture reserve texture id(TEX_TYPE_PASSIVE), "Fish/Textures/Cards/type_passive"
     texture reserve texture id(TEX_TYPE_MOVE), "Fish/Textures/Cards/type_move"
@@ -179,10 +178,12 @@ load_textures:
     ` the art for each card. it is drawn tinted and faint in the background of the card, so only the shape
     ` of the picture matters. these are 48 pixels, and get drawn twice as big.
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_BUNDLE).artTexId), "Fish/Textures/Cards/free_moves"
+    texture reserve texture id(CARDS(ABILITY_INDEX_MIND_EXPANSION).artTexId), "Fish/Textures/Cards/mind_expansion"
     texture reserve texture id(CARDS(ABILITY_INDEX_WRAP).artTexId), "Fish/Textures/Cards/seamless"
     texture reserve texture id(CARDS(ABILITY_INDEX_CRABS).artTexId), "Fish/Textures/Cards/crabs"
     texture reserve texture id(CARDS(ABILITY_INDEX_BIRD_FEAST).artTexId), "Fish/Textures/Cards/bird_feast"
     texture reserve texture id(CARDS(ABILITY_INDEX_PASSIVE_STOCK_MARKET).artTexId), "Fish/Textures/Cards/stock_market"
+    texture reserve texture id(CARDS(ABILITY_INDEX_THINK_BIGGER).artTexId), "Fish/Textures/Cards/think_bigger"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_SHIFT).artTexId), "Fish/Textures/Cards/shift"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_CLONER).artTexId), "Fish/Textures/Cards/clone"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_BOMB3x3).artTexId), "Fish/Textures/Cards/bomb"
@@ -200,10 +201,30 @@ setup_grid:
     }
 
 
-    global CELL_COLUMN_COUNT = 9
-    global CELL_ROW_COUNT = 9
+    ` the board can grow, but it always fills the same square of the screen. so when it grows, the cells shrink.
+    ` these are how big everything is on the board that a game starts with.
+    global GRID_START_COUNT = 9
+    global CELL_START_SIZE = CELL_SIZE
+    global CELL_START_ART_SIZE = CELL_ART_SIZE
+    global GRID_SPAN = GRID_START_COUNT * CELL_START_SIZE
+    global GRID_CENTER as vec = {
+        x = GRID_POS.x + GRID_SPAN / 2 - CELL_START_SIZE / 2,
+        y = GRID_POS.y + GRID_SPAN / 2 - CELL_START_SIZE / 2
+    }
+
+    global CELL_COLUMN_COUNT = GRID_START_COUNT
+    global CELL_ROW_COUNT = GRID_START_COUNT
     global CELL_COUNT as int = CELL_COLUMN_COUNT * CELL_ROW_COUNT
-    global dim CELLS(CELL_COUNT) as cell
+
+    ` there are enough cells for the biggest board that there can be. the ones that are not on the board yet are hidden.
+    ` the board takes turns growing a column and a row, so half of the expansions go each way.
+    global GRID_MAX_COUNT = GRID_START_COUNT + (BOARD_EXPANSION_MAX + 1) / 2
+    global CELL_MAX_COUNT = GRID_MAX_COUNT * GRID_MAX_COUNT
+    global dim CELLS(CELL_MAX_COUNT) as cell
+
+    ` what kind of fish was in every cell, from before the board grew
+    global dim EXPAND_VALUES(CELL_MAX_COUNT)
+    reserve tween id(BOARD_EXPAND_TWEEN_ID)
 
     global DEBUG_COLOR_COUNT = 1000
     global dim DEBUG_COLORS(DEBUG_COLOR_COUNT)
@@ -251,8 +272,27 @@ setup_grid:
         next
     next
 
+    ` the rest of the cells wait, out of sight, for the board to grow
+    for cellId = CELL_COUNT to CELL_MAX_COUNT - 1
+        reserve sprite id(CELLS(cellId).spriteId)
+        reserve sprite id(CELLS(cellId).fxSpriteId)
+        reserve tween id(CELLS(cellId).comboDownShiftTweenId)
+        reserve tween id(CELLS(cellId).comboAlphaTweenId)
+        reserve tween id(CELLS(cellId).comboAnimTweenId)
+        reserve tween id(CELLS(cellId).scaleWaveTweenId)
+        reserve tween id(CELLS(cellId).shiftTweenId)
+        create basic tween CELLS(cellId).scaleWaveTweenId, 1, 1, 100, 0
+
+        reserve sfx id(CELLS(cellId).explodeSfxId)
+
+        order sprite CELLS(cellId).spriteId, ORDER_FISH
+        hide sprite CELLS(cellId).spriteId
+        hide sprite CELLS(cellId).fxSpriteId
+    next
+
     ` the sprites are centered on their cell position, so the grid starts half a cell early
-    infoIndex = allocateInfoBlob(GRID_POS.x - CELL_SIZE / 2, GRID_POS.y - CELL_SIZE / 2, CELL_COLUMN_COUNT * CELL_SIZE, CELL_ROW_COUNT * CELL_SIZE, "The Fish", "{arrows} moves the cursor. Hold {space} and press {arrows} to swap two fish. Connect three or more of the same kind to pop them.")
+    INFO_INDEX_GRID = INFO_LENGTH
+    infoIndex = allocateInfoBlob(GRID_POS.x - CELL_SIZE / 2, GRID_POS.y - CELL_SIZE / 2, CELL_COLUMN_COUNT * CELL_SIZE, CELL_ROW_COUNT * CELL_SIZE, "The Fish", "{dir} moves the cursor. Hold {swap} and press {dir} to swap two fish. Connect three or more of the same kind to pop them.")
 return
 
 setup_score:
@@ -384,6 +424,7 @@ update_frame:
     gosub frame_passive_render
     gosub frame_move_ability_render
     gosub frame_free_moves
+    updateBubbles()
     gosub frame_dbg
 
 `     for i = 0 to CELL_COUNT - 1
@@ -614,6 +655,7 @@ handle_combos:
     totalComboCount = 0
     explodePitch# = (rnd(4)*.02)
     explodeIndex = 0
+    requiredComboCount = getRequiredComboCount()
     for g = 0 to groupId
 
         ` need to check if this group is big enough
@@ -621,7 +663,7 @@ handle_combos:
         for i = 1 to CELL_COUNT
             cell = CELLS(i-1)
 
-            if comboCount > 2 then skip  ` once we know there are 3 or more, no need to check the rest of the group
+            if comboCount >= requiredComboCount then skip  ` once we know there are enough, no need to check the rest of the group
             if cell.comboFillId <> g then skip 
             if cell.comboForce > 0 
                 print "FORCE COMBO COUNT"
@@ -631,7 +673,7 @@ handle_combos:
             comboCount += 1
         next
 
-        if comboCount < 3 then skip `if this group is not big enough, then we can skip rendering the explosion
+        if comboCount < requiredComboCount then skip `if this group is not big enough, then we can skip rendering the explosion
         
         ` handle stock market ability
         if isAbility_Passive_StockMarket()
@@ -684,6 +726,8 @@ handle_combos:
             set sfx pitch cell.explodeSfxId, explodePitch#
             explodePitch# -= .02
 
+            ` a puff of bubbles, in the color of the fish
+            spawnBubbles(getCellX(cell.coord.x), getCellY(cell.coord.y), CELL_SIZE / 4, 5, delay, FISH_COLORS(getFishColorIndex(cell.value)))
 
             ` animate fade out
             create basic tween cell.comboDownShiftTweenId, 255, 0, 250, delay
@@ -883,6 +927,153 @@ handle_combos:
     until anyStillPlaying = 0
 
     set sfx volume SFX_DROP, 0
+
+return
+
+
+` grow the board by one column or one row, for the "mind expansion" card.
+` the board keeps the same square of the screen, so everything on it shrinks and slides over to
+` make room, as if the camera was pulling back. then the new fish drop in, the same way that
+` new fish drop in after a combo.
+handle_board_expansion:
+
+    if PENDING_BOARD_EXPANSIONS <= 0 then return
+    PENDING_BOARD_EXPANSIONS = PENDING_BOARD_EXPANSIONS - 1
+
+    ` the board is as big as it gets
+    if CELL_COLUMN_COUNT >= GRID_MAX_COUNT and CELL_ROW_COUNT >= GRID_MAX_COUNT then return
+
+    ` remember how the board is laid out now, so that the fish can slide from there
+    oldColumns = CELL_COLUMN_COUNT
+    oldCellSize = CELL_SIZE
+    oldArtSize = CELL_ART_SIZE
+    oldGridX = GRID_POS.x
+    oldGridY = GRID_POS.y
+    for i = 0 to CELL_COUNT - 1
+        EXPAND_VALUES(i) = CELLS(i).value
+    next
+
+    ` a square board gets a new column on the right. that leaves it wider than it is tall, so the
+    ` next time it gets a new row on the top, which makes it square again.
+    expandColumns = CELL_COLUMN_COUNT
+    expandRows = CELL_ROW_COUNT
+    rowShift = 0
+    addColumn = 0
+    if CELL_COLUMN_COUNT <= CELL_ROW_COUNT
+        addColumn = 1
+        expandColumns = expandColumns + 1
+    else
+        expandRows = expandRows + 1
+        rowShift = 1
+    endif
+    resizeGrid(expandColumns, expandRows)
+
+    ` the fish that were already on the board keep their kind. a new row pushes them all down by one.
+    ` comboBlownUp marks the cells that need a new fish, the same as it does after a combo.
+    for i = 0 to CELL_COUNT - 1
+        c = CELLS(i)
+        oldY = c.coord.y - rowShift
+        if c.coord.x < oldColumns and oldY >= 0
+            c.value = EXPAND_VALUES(c.coord.x + oldY * oldColumns)
+            c.comboBlownUp = 0
+        else
+            c.comboBlownUp = 1
+        endif
+        CELLS(i) = c
+    next
+
+    ` the cursor stays on the fish that it was on
+    SELECTION_POS.y = SELECTION_POS.y + rowShift
+
+    ` the cells to the left and above already have their fish by the time a new cell gets its turn
+    for i = 0 to CELL_COUNT - 1
+        c = CELLS(i)
+        cellY = getCellY(c.coord.y)
+
+        if c.comboBlownUp
+            CELLS(i).value = getImpossibleRandomValueForCell(i)
+
+            ` a new column fills from the bottom up, and a new row fills from left to right
+            stagger = c.coord.x
+            if addColumn then stagger = CELL_ROW_COUNT - (c.coord.y + 1)
+            delay = 250 + stagger * 30
+
+            sprite c.spriteId, getCellX(c.coord.x), cellY - CELL_SIZE * 2, CELLS(i).value
+            size sprite c.spriteId, CELL_ART_SIZE, CELL_ART_SIZE
+            set sprite alpha c.spriteId, 0
+
+            create basic tween c.comboDownShiftTweenId, cellY - CELL_SIZE * 2, cellY, 300, delay
+            set tween easing c.comboDownShiftTweenId, EASING_BOUNCE
+            create basic tween c.comboAlphaTweenId, 0, 255, 150, delay
+
+            ` a few bubbles come off of the fish as it lands
+            spawnBubbles(getCellX(c.coord.x), cellY, CELL_SIZE / 4, 3, delay + 200, FISH_COLORS(getFishColorIndex(CELLS(i).value)))
+        else
+            ` the cell holds a different fish than it did before, but that fish does not move until the loop below
+            set sprite texture c.spriteId, c.value
+            set sprite alpha c.spriteId, 255
+            show sprite c.spriteId
+        endif
+    next
+
+    ` the zoom goes from 0 (the old board) to 1 (the new board).
+    ` a cell is at "origin + coordinate * cell size", so sliding the origin and the cell size slides every fish.
+    ` the old origin is where the new top left cell would have been on the old board, even if that is off of the top of it.
+    create basic tween BOARD_EXPAND_TWEEN_ID, 0, 1, 450, 0
+    oldGridY = oldGridY - rowShift * oldCellSize
+
+    dropSfxOn = 0
+    repeat
+        anyStillPlaying = 0
+        if is tween done(BOARD_EXPAND_TWEEN_ID) < 1 then anyStillPlaying = 1
+
+        ` this sizes the fish for the new board, so it goes before the fish get their in-between size
+        gosub update_frame
+
+        zoom# = tweenVal(BOARD_EXPAND_TWEEN_ID)
+        zoomCellSize# = oldCellSize + (CELL_SIZE - oldCellSize) * zoom#
+        zoomArtSize# = oldArtSize + (CELL_ART_SIZE - oldArtSize) * zoom#
+        zoomGridX# = oldGridX + (GRID_POS.x - oldGridX) * zoom#
+        zoomGridY# = oldGridY + (GRID_POS.y - oldGridY) * zoom#
+
+        for i = 0 to CELL_COUNT - 1
+            c = CELLS(i)
+            if c.comboBlownUp
+                if is tween done(c.comboDownShiftTweenId) < 1 then anyStillPlaying = 1
+
+                ` the drop sound starts with the first fish that shows up
+                if dropSfxOn = 0 and tweenVal(c.comboAlphaTweenId) > 0
+                    dropSfxOn = 1
+                    set sfx volume SFX_DROP, 1
+                endif
+
+                position sprite c.spriteId, sprite x(c.spriteId), tweenVal(c.comboDownShiftTweenId)
+                set sprite alpha c.spriteId, tweenVal(c.comboAlphaTweenId)
+            else
+                position sprite c.spriteId, zoomGridX# + c.coord.x * zoomCellSize#, zoomGridY# + c.coord.y * zoomCellSize#
+                size sprite c.spriteId, zoomArtSize#, zoomArtSize#
+            endif
+        next
+
+        position sprite SELECTION_SPRITE, zoomGridX# + SELECTION_POS.x * zoomCellSize#, zoomGridY# + SELECTION_POS.y * zoomCellSize#
+        scale sprite SELECTION_SPRITE, zoomCellSize#, zoomCellSize#
+
+        sync
+    until anyStillPlaying = 0
+
+    set sfx volume SFX_DROP, 0
+
+    ` put everything exactly where it belongs
+    for i = 0 to CELL_COUNT - 1
+        CELLS(i).comboBlownUp = 0
+        updateCell(CELLS(i))
+        set sprite alpha CELLS(i).spriteId, 255
+    next
+    scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+    gosub update_selection_position
+
+    ` the new fish may have landed next to two of their own kind
+    REQUEST_COMBO_CHECK = 1
 
 return
 

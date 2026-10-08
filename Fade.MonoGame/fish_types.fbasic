@@ -76,6 +76,8 @@ type ability
     moveClock
     moveValue
     artTexId `the picture in the background of the card on the upgrade screen
+    maxUses `how many times the card can be taken. 0 means that there is no limit.
+    uses `how many times the card has been taken so far
 endtype
 
 type passiveDisplay
@@ -107,7 +109,8 @@ type moveDisplay
 
 
     moveValue
-    key$ 
+    actionId `the input action that uses the move. it is one of ACT_ABILITY.
+    icon$ `the name of the input icon for that action, like "move1"
     movesLeft
     resetTimer
 
@@ -153,4 +156,48 @@ type infoBlob
 
     `the faint outline that shows this thing COULD be highlighted
     border as infoBorder
+endtype
+
+` one line of the menu
+type menuItem
+    name$
+    desc$
+    textId
+    ready `0 for the things that are not built yet
+endtype
+
+` one bubble in the wave that wipes between the menu and the game
+type bubble
+    spriteId `the bubble that is seen
+    maskSpriteId `the same bubble as a solid circle, which is drawn into the mask
+    tideSpriteId `only the bubbles in the front of the wave have one. it fills in the mask underneath the bubble.
+    x
+    offsetY `how far behind the front of the wave it is. negative is ahead of the front.
+    size
+    phase `so that they do not all wobble together
+endtype
+
+` one of the little bubbles that floats up from something that just happened. see fish_routines_bubbles.
+type floatBubble
+    active
+    spriteId
+    x#, y#
+    vx#, vy# `the push that it started with, in pixels per second. it dies away.
+    rise `how fast it floats up, in pixels per second
+    size
+    phase `so that they do not all wobble together
+    age `milliseconds since it showed up
+    life `how many milliseconds it lasts before it pops
+    delay `milliseconds left to wait before it shows up
+    loud `1 if it makes a sound when it pops
+    alpha `255 for a solid bubble, and less for a faint one
+endtype
+
+` a fish that drifts across the back of the main menu
+type menuFish
+    spriteId
+    startX
+    y
+    speed
+    phase
 endtype

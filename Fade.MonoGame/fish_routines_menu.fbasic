@@ -1,0 +1,1051 @@
+goto routines_menu_exit
+
+remstart
+    THE MENU
+    the main menu is what the game opens on, and the pause menu comes up over the game when the pause key is pressed (P, or start on a controller).
+    they are the same list of lines, except that the pause menu starts with "Resume".
+
+    the menu is not drawn onto the screen. it is drawn to its own render target, and then one sprite
+    draws that render target over the top of the game. that sprite is the "composite" sprite.
+
+    the composite sprite looks at a second render target, the bubble mask, to decide which parts of the
+    menu to draw. a wave of bubbles floats up through the mask, and leaves the mask filled in behind it.
+    so as the wave goes up the screen, the menu is wiped in over the game, or wiped away from it.
+    the same bubbles are drawn on the screen too, so that the edge of the wipe is hidden behind them.
+
+    the pause menu does not use the bubbles. it just fades in, on a dark backdrop that the game shows through.
+remend
+
+setup_menu:
+    ` the globals are declared in the fish headers, so that functions can use them no matter where they are called from
+
+    ` load effects
+    reserve effect id(MENU_FX_ID)
+    effect MENU_FX_ID, "Fish/Shaders/MenuCompositeEffect"
+
+    reserve effect id(BUBBLE_FX_ID)
+    effect BUBBLE_FX_ID, "Fish/Shaders/BubbleEffect"
+
+    ` the menu's render target is see-through wherever nothing is drawn, so that the pause menu can sit over the game
+    reserve render target id(TARGET_MENU)
+    render target TARGET_MENU
+    set render target background color TARGET_MENU, rgb(0, 0, 0, 0)
+
+    ` the bubble mask is black, and the bubbles paint it white
+    reserve render target id(TARGET_MASK)
+    render target TARGET_MASK
+    set render target background color TARGET_MASK, rgb(0, 0, 0)
+
+    ` the composite sprite draws the menu over the game
+    reserve sprite id(MENU_COMPOSITE_SPRITE)
+    sprite MENU_COMPOSITE_SPRITE, 0, 0, render target texture(TARGET_MENU)
+    set sprite offset MENU_COMPOSITE_SPRITE, 0, 0
+    size sprite MENU_COMPOSITE_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    order sprite MENU_COMPOSITE_SPRITE, ORDER_MENU
+    set sprite effect MENU_COMPOSITE_SPRITE, MENU_FX_ID
+    hide sprite MENU_COMPOSITE_SPRITE
+
+    ` the screen is drawn before the menu's render target is, so the very first frame has no menu to show yet.
+    ` the cover hides the game for that one frame.
+    reserve sprite id(MENU_COVER_SPRITE)
+    sprite MENU_COVER_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset MENU_COVER_SPRITE, 0, 0
+    size sprite MENU_COVER_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    color sprite MENU_COVER_SPRITE, rgb(32, 40, 64)
+    order sprite MENU_COVER_SPRITE, ORDER_MENU - 2
+    hide sprite MENU_COVER_SPRITE
+
+    ` everything from here on is drawn into the menu's render target, instead of onto the screen.
+
+    ` the main menu has a solid background, which hides the game.
+    reserve sprite id(MENU_BG_SPRITE)
+    sprite MENU_BG_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset MENU_BG_SPRITE, 0, 0
+    size sprite MENU_BG_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    color sprite MENU_BG_SPRITE, rgb(32, 40, 64)
+    order sprite MENU_BG_SPRITE, ORDER_MENU_BACKDROP
+    set sprite render target MENU_BG_SPRITE, TARGET_MENU
+
+    ` the pause menu has a dark backdrop instead, which the game shows through.
+    reserve sprite id(MENU_DIM_SPRITE)
+    sprite MENU_DIM_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset MENU_DIM_SPRITE, 0, 0
+    size sprite MENU_DIM_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    color sprite MENU_DIM_SPRITE, rgb(0, 0, 0, 165)
+    order sprite MENU_DIM_SPRITE, ORDER_MENU_BACKDROP
+    set sprite render target MENU_DIM_SPRITE, TARGET_MENU
+    hide sprite MENU_DIM_SPRITE
+
+    ` some fish drift across the back of the main menu. the quick ones are closer, so they are bigger and brighter.
+    for menuI = 0 to MENU_FISH_COUNT - 1
+        fish = MENU_FISHES(menuI)
+        reserve sprite id(fish.spriteId)
+        fish.startX = rnd(WORLD_WIDTH)
+        fish.y = 30 + rnd(WORLD_HEIGHT - 60)
+        fish.speed = 1 + rnd(3)
+        fish.phase = rnd(6)
+
+        sprite fish.spriteId, 0, 0, rnd(7) + 1
+        fishSize = 16 + fish.speed * 8
+        size sprite fish.spriteId, fishSize, fishSize
+        color sprite fish.spriteId, rgb(120, 160, 255, 30 + fish.speed * 25)
+        order sprite fish.spriteId, ORDER_MENU_FISH
+        set sprite render target fish.spriteId, TARGET_MENU
+
+        MENU_FISHES(menuI) = fish
+    next
+
+    ` the list sits on a panel that looks like the one in info mode
+    reserve sprite id(MENU_PANEL_SPRITE)
+    sprite MENU_PANEL_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset MENU_PANEL_SPRITE, 0, 0
+    color sprite MENU_PANEL_SPRITE, rgb(10, 14, 30, 235)
+    order sprite MENU_PANEL_SPRITE, ORDER_MENU_PANEL
+    set sprite render target MENU_PANEL_SPRITE, TARGET_MENU
+
+    MENU_PANEL_BORDER = createMenuBorder(ORDER_MENU_PANEL + 1)
+    colorInfoBorder(MENU_PANEL_BORDER, rgb(64, 128, 255, 200))
+
+    ` the cursor is the bright outline around the highlighted line. it slides from line to line.
+    MENU_CURSOR = createMenuBorder(ORDER_MENU_CURSOR)
+    reserve tween id(MENU_CURSOR_TWEEN_Y)
+    create basic tween MENU_CURSOR_TWEEN_Y, 0, 0, 1, 0
+
+    ` the fade tween goes from 0 (no menu) to 1 (menu). only the pause menu fades. the main menu uses the bubbles.
+    reserve tween id(MENU_FADE_TWEEN_ID)
+    create basic tween MENU_FADE_TWEEN_ID, 1, 1, 1, 0
+
+    ` shakes a line that cannot be picked yet
+    reserve tween id(MENU_SHAKE_TWEEN_ID)
+    create basic tween MENU_SHAKE_TWEEN_ID, 0, 0, 1, 0
+
+    reserve tween id(MENU_CURTAIN_TWEEN_ID)
+    reserve tween id(TRANSITION_TWEEN_ID)
+
+    ` the sound of the wave of bubbles. it is faded in and out by hand as the wave goes by.
+    load sfx clip reserve sfx clip id(SFX_CLIP_BUBBLES), "Fish/Audio/bubble-wave"
+    sfx reserve sfx id(SFX_BUBBLES), SFX_CLIP_BUBBLES
+    set sfx volume SFX_BUBBLES, 0
+    SFX_BUBBLES_VOLUME# = .2 `how loud the wave gets at its loudest
+
+    reserve text id(MENU_TITLE_TEXT_ID)
+    text MENU_TITLE_TEXT_ID, WORLD_WIDTH / 2, MENU_TITLE_Y, SCORE_FONT, "Fish Fish Pop"
+    set text offset MENU_TITLE_TEXT_ID, .5, .5
+    color text MENU_TITLE_TEXT_ID, rgb(255, 255, 255)
+    enable text drop shadow MENU_TITLE_TEXT_ID, 2, -2, rgb(64, 128, 255)
+    order text MENU_TITLE_TEXT_ID, ORDER_MENU_TEXT
+    set text render target MENU_TITLE_TEXT_ID, TARGET_MENU
+
+    ` the lines of the menu. the ones that are not ready cannot be picked yet.
+    MENU_ITEMS(MENU_ITEM_RESUME) = {
+        name$ = "Resume"
+        desc$ = "Back to the fish."
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_NEW_GAME) = {
+        name$ = "New Game"
+        desc$ = "Start a fresh run from round one."
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_HIGHSCORES) = {
+        name$ = "Highscores"
+        desc$ = "The best runs so far. Not built yet."
+        ready = 0
+    }
+    MENU_ITEMS(MENU_ITEM_CODEC) = {
+        name$ = "Codec"
+        desc$ = "Every fish and upgrade. Not built yet."
+        ready = 0
+    }
+    MENU_ITEMS(MENU_ITEM_OPTIONS) = {
+        name$ = "Options"
+        desc$ = "Sound and screen."
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_CREDITS) = {
+        name$ = "Credits"
+        desc$ = "Who made this. Not built yet."
+        ready = 0
+    }
+    MENU_ITEMS(MENU_ITEM_QUIT) = {
+        name$ = "Quit"
+        desc$ = "Close the game."
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_CONFIRM_NO) = {
+        name$ = "No"
+        desc$ = "Go back to the game."
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_CONFIRM_YES) = {
+        name$ = "Yes"
+        desc$ = "This run will be lost."
+        ready = 1
+    }
+
+    ` the lines of the options page. refreshOptionLines writes the setting onto the end of each name.
+    MENU_ITEMS(MENU_ITEM_SET_SOUND) = {
+        name$ = "Sound"
+        desc$ = "How loud the sound effects are."
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_SET_FULLSCREEN) = {
+        name$ = "Fullscreen"
+        desc$ = "Fill the whole screen."
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_SET_WINDOW) = {
+        name$ = "Window"
+        desc$ = "How big the window is."
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_SET_BACK) = {
+        name$ = "Back"
+        desc$ = "Back to the menu."
+        ready = 1
+    }
+
+    ` the sizes that the window can be. the size that the game started at is one of them.
+    addWindowSize(960, 540)
+    addWindowSize(1280, 720)
+    addWindowSize(1600, 900)
+    addWindowSize(1920, 1080)
+    addWindowSize(2560, 1440)
+    OPTION_WINDOW = addWindowSize(SCREEN_WIDTH, SCREEN_HEIGHT)
+    OPTION_WINDOW_W = SCREEN_WIDTH
+    OPTION_WINDOW_H = SCREEN_HEIGHT
+
+    ` the player can also drag the edges of the window to make it any size they like
+    set window resizable 1
+
+    for menuI = 0 to MENU_ITEM_COUNT - 1
+        reserve text id(MENU_ITEMS(menuI).textId)
+        menuTextId = MENU_ITEMS(menuI).textId
+
+        text menuTextId, WORLD_WIDTH / 2, 0, SCORE_FONT, MENU_ITEMS(menuI).name$
+        size text y menuTextId, 20
+        set text offset menuTextId, .5, 0
+        enable text drop shadow menuTextId, 2, -2, rgb(0,0,0)
+        order text menuTextId, ORDER_MENU_TEXT
+        set text render target menuTextId, TARGET_MENU
+    next
+
+    ` the description says what the highlighted line does
+    reserve text id(MENU_DESC_TEXT_ID)
+    text MENU_DESC_TEXT_ID, WORLD_WIDTH / 2, 0, SCORE_FONT, "desc"
+    set text offset MENU_DESC_TEXT_ID, .5, 0
+    size text y MENU_DESC_TEXT_ID, 16
+    set text wrap MENU_DESC_TEXT_ID, 420
+    set text align MENU_DESC_TEXT_ID, .5
+    enable rich text MENU_DESC_TEXT_ID
+    color text MENU_DESC_TEXT_ID, rgb(150, 190, 255)
+    enable text drop shadow MENU_DESC_TEXT_ID, 2, -2, rgb(0,0,0)
+    order text MENU_DESC_TEXT_ID, ORDER_MENU_TEXT
+    set text render target MENU_DESC_TEXT_ID, TARGET_MENU
+
+    ` the hint tells the player which keys do what, the same way that the hint in the game does.
+    reserve text id(MENU_HINT_TEXT_ID)
+    text MENU_HINT_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT - 2, SCORE_FONT, "{dir} choose    {confirm} select"
+    enable rich text MENU_HINT_TEXT_ID
+    set text offset MENU_HINT_TEXT_ID, .5, 1
+    size text y MENU_HINT_TEXT_ID, 16
+    color text MENU_HINT_TEXT_ID, rgb(64, 128, 255)
+    enable text drop shadow MENU_HINT_TEXT_ID, 2, -2, rgb(0,0,0)
+    order text MENU_HINT_TEXT_ID, ORDER_MENU_TEXT
+    set text render target MENU_HINT_TEXT_ID, TARGET_MENU
+
+    ` everything from here on is the wave of bubbles.
+
+    ` every bubble is two sprites. one is seen on the screen, and the other is a solid circle in the mask.
+    for menuI = 0 to BUBBLE_COUNT - 1
+        bub = BUBBLES(menuI)
+        reserve sprite id(bub.spriteId)
+        reserve sprite id(bub.maskSpriteId)
+
+        ` the tide is the part of the mask that the wave has already gone past. every bubble in the front of
+        ` the wave drags a tall strip of it up underneath itself. the strips are wider than the gaps between
+        ` the bubbles, so together they fill the mask all the way across, even when the front is not level.
+        ` when there is no wave, they are left covering the whole mask, which means "show all of the menu".
+        if menuI < BUBBLE_FRONT_COUNT
+            reserve sprite id(bub.tideSpriteId)
+            sprite bub.tideSpriteId, menuI * WORLD_WIDTH / (BUBBLE_FRONT_COUNT - 1), -10, TEX_PIXEL
+            set sprite offset bub.tideSpriteId, .5, 0
+            size sprite bub.tideSpriteId, 70, WORLD_HEIGHT * 4
+            color sprite bub.tideSpriteId, rgb(255, 255, 255)
+            set sprite render target bub.tideSpriteId, TARGET_MASK
+        endif
+
+        sprite bub.spriteId, 0, 0, TEX_PIXEL
+        color sprite bub.spriteId, rgb(200, 230, 255)
+        order sprite bub.spriteId, ORDER_MENU_BUBBLES
+        set sprite effect bub.spriteId, BUBBLE_FX_ID
+        hide sprite bub.spriteId
+
+        sprite bub.maskSpriteId, 0, WORLD_HEIGHT * 2, TEX_PIXEL
+        color sprite bub.maskSpriteId, rgb(255, 255, 255)
+        set sprite effect bub.maskSpriteId, BUBBLE_FX_ID
+        set sprite render target bub.maskSpriteId, TARGET_MASK
+
+        BUBBLES(menuI) = bub
+    next
+
+    ` the game opens on the main menu
+    gosub menu_open_main
+    show sprite MENU_COMPOSITE_SPRITE
+    show sprite MENU_COVER_SPRITE
+    gosub frame_menu_render
+    sync
+    hide sprite MENU_COVER_SPRITE
+
+return
+
+
+` everything that happens on a frame while a menu is up
+frame_menu:
+    menuStep = 0
+    if new action down(ACT_DOWN) then menuStep = 1
+    if new action down(ACT_RIGHT) then menuStep = 1
+    if new action down(ACT_UP) then menuStep = -1
+    if new action down(ACT_LEFT) then menuStep = -1
+
+    ` on the options page, left and right change the highlighted setting instead of moving the highlight
+    menuChange = 0
+    if MENU_PAGE = MENU_PAGE_OPTIONS
+        ` the player may have dragged the window to a new size, so the line that shows the size keeps up with it
+        if OPTION_FULLSCREEN = 0
+            if screen width() <> OPTION_WINDOW_W or screen height() <> OPTION_WINDOW_H
+                OPTION_WINDOW_W = screen width()
+                OPTION_WINDOW_H = screen height()
+                refreshOptionLines()
+            endif
+        endif
+
+        menuStep = 0
+        if new action down(ACT_DOWN) then menuStep = 1
+        if new action down(ACT_UP) then menuStep = -1
+        if new action down(ACT_RIGHT) then menuChange = 1
+        if new action down(ACT_LEFT) then menuChange = -1
+    endif
+
+    ` the highlight wraps around the ends of the list
+    if menuStep <> 0
+        menuNext = MENU_SELECTED + menuStep
+        if menuNext < 0 then menuNext = MENU_PAGE_LENGTH - 1
+        if menuNext >= MENU_PAGE_LENGTH then menuNext = 0
+        selectMenuItem(menuNext, 120)
+    endif
+
+    if menuChange <> 0
+        changeMenuOption(MENU_PAGE_FIRST + MENU_SELECTED, menuChange)
+    endif
+
+    ` the same swell of sound that the cursor in the game makes when it moves. a change to
+    ` how loud the sound is makes it too, so that the new setting can be heard.
+    if menuStep <> 0 or menuChange <> 0
+        create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
+        set tween type SWAP_TWEEN_SFX, 1
+    endif
+
+    menuPicked = -1
+    if new action down(ACT_CONFIRM) then menuPicked = MENU_PAGE_FIRST + MENU_SELECTED
+
+    ` the pause key backs out of the pause menu, the same as picking "Resume". it backs out of the question, too.
+    if MENU_MODE = MENU_MODE_PAUSE
+        if new action down(ACT_PAUSE)
+            menuPicked = MENU_ITEM_RESUME
+            if MENU_PAGE = MENU_PAGE_CONFIRM then menuPicked = MENU_ITEM_CONFIRM_NO
+        endif
+    endif
+
+    ` and it backs out of the options page, whichever menu the options were opened from
+    if MENU_PAGE = MENU_PAGE_OPTIONS
+        if new action down(ACT_PAUSE)
+            menuPicked = MENU_ITEM_SET_BACK
+        endif
+    endif
+
+    if menuPicked >= 0
+        gosub menu_pick
+    endif
+
+    gosub frame_menu_render
+return
+
+
+` do whatever the line in menuPicked is for
+menu_pick:
+    if MENU_ITEMS(menuPicked).ready = 0
+        ` it is not built yet, so it shakes its head.
+        create basic tween MENU_SHAKE_TWEEN_ID, 1, 0, 400, 0
+        return
+    endif
+
+    select menuPicked
+        case MENU_ITEM_RESUME
+            gosub menu_close_pause
+        endcase
+
+        case MENU_ITEM_NEW_GAME
+            if MENU_MODE = MENU_MODE_PAUSE
+                ` there is a game going, so ask before throwing it away. "No" is highlighted to start with.
+                setMenuPage(MENU_PAGE_CONFIRM)
+                selectMenuItem(0, 0)
+            else
+                gosub menu_start_game
+            endif
+        endcase
+
+        case MENU_ITEM_QUIT
+            if MENU_MODE = MENU_MODE_PAUSE
+                gosub menu_quit_to_title
+            else
+                end
+            endif
+        endcase
+
+        case MENU_ITEM_CONFIRM_NO
+            ` back to the pause menu, with "New Game" highlighted again
+            setMenuPage(MENU_PAGE_PAUSE)
+            selectMenuItem(MENU_ITEM_NEW_GAME, 0)
+        endcase
+
+        case MENU_ITEM_CONFIRM_YES
+            gosub menu_abandon_game
+        endcase
+
+        case MENU_ITEM_OPTIONS
+            setMenuPage(MENU_PAGE_OPTIONS)
+            refreshOptionLines()
+            selectMenuItem(0, 0)
+        endcase
+
+        ` picking a setting is the same as pressing right on it
+        case MENU_ITEM_SET_SOUND
+            changeMenuOption(MENU_ITEM_SET_SOUND, 1)
+        endcase
+        case MENU_ITEM_SET_FULLSCREEN
+            changeMenuOption(MENU_ITEM_SET_FULLSCREEN, 1)
+        endcase
+        case MENU_ITEM_SET_WINDOW
+            changeMenuOption(MENU_ITEM_SET_WINDOW, 1)
+        endcase
+
+        case MENU_ITEM_SET_BACK
+            ` back to whichever menu the options were opened from, with "Options" highlighted again.
+            ` the main menu does not have the "Resume" line, so its lines are counted from "New Game".
+            if MENU_MODE = MENU_MODE_PAUSE
+                setMenuPage(MENU_PAGE_PAUSE)
+                selectMenuItem(MENU_ITEM_OPTIONS, 0)
+            else
+                setMenuPage(MENU_PAGE_MAIN)
+                selectMenuItem(MENU_ITEM_OPTIONS - MENU_ITEM_NEW_GAME, 0)
+            endif
+        endcase
+    endselect
+return
+
+
+` put the main menu into the menu's render target. this does not show it, the callers do that.
+menu_open_main:
+    MENU_MODE = MENU_MODE_MAIN
+
+    show sprite MENU_BG_SPRITE
+    hide sprite MENU_DIM_SPRITE
+    for menuI = 0 to MENU_FISH_COUNT - 1
+        show sprite MENU_FISHES(menuI).spriteId
+    next
+
+    setMenuPage(MENU_PAGE_MAIN)
+    selectMenuItem(0, 0)
+
+    create basic tween MENU_FADE_TWEEN_ID, 1, 1, 1, 0
+return
+
+
+` the main menu's "New Game". the bubbles take the menu away, and the game is underneath.
+menu_start_game:
+    gosub reset_game
+
+    TRANSITION_TO_MENU = 0
+    gosub menu_transition
+
+    MENU_MODE = MENU_MODE_CLOSED
+return
+
+
+` the pause key was pressed in the game
+menu_open_pause:
+    MENU_MODE = MENU_MODE_PAUSE
+
+    hide sprite MENU_BG_SPRITE
+    show sprite MENU_DIM_SPRITE
+    for menuI = 0 to MENU_FISH_COUNT - 1
+        hide sprite MENU_FISHES(menuI).spriteId
+    next
+
+    setMenuPage(MENU_PAGE_PAUSE)
+    selectMenuItem(0, 0)
+
+    ` the menu has its own hint, in the same place
+    hide text INFO_HINT_TEXT_ID
+
+    ` nothing runs while the game is paused, so nothing would ever stop a shake that was going
+    set screen shake amount 0
+
+    ` the screen is drawn before the menu's render target is, so the menu has to be drawn once before it is shown.
+    ` otherwise the first frame would show whatever the menu looked like the last time it was up.
+    create basic tween MENU_FADE_TWEEN_ID, 0, 0, 1, 0
+    gosub frame_menu_render
+    sync
+
+    show sprite MENU_COMPOSITE_SPRITE
+    create basic tween MENU_FADE_TWEEN_ID, 0, 1, 150, 0
+return
+
+
+` fade the pause menu out, and go back to the game
+menu_close_pause:
+    gosub menu_fade_out
+    MENU_MODE = MENU_MODE_CLOSED
+return
+
+
+menu_fade_out:
+    create basic tween MENU_FADE_TWEEN_ID, tweenVal(MENU_FADE_TWEEN_ID), 0, 150, 0
+    while is tween done(MENU_FADE_TWEEN_ID) < 1
+        gosub frame_menu_render
+        sync
+    endwhile
+
+    hide sprite MENU_COMPOSITE_SPRITE
+    show text INFO_HINT_TEXT_ID
+return
+
+
+` the pause menu's "Quit". the bubbles bring the main menu in over the game.
+menu_quit_to_title:
+    gosub menu_fade_out
+    gosub menu_open_main
+
+    TRANSITION_TO_MENU = 1
+    gosub menu_transition
+
+    ` the game is hidden now, so it can be put back to how it starts
+    gosub reset_game
+return
+
+
+` the answer was "Yes", so throw the game away and start a new one.
+menu_abandon_game:
+
+    ` the old game has to be out of sight before it can be swapped for the new one. so the main menu's
+    ` background is pulled over the top of the pause menu like a curtain.
+    order sprite MENU_BG_SPRITE, ORDER_MENU_CURTAIN
+    show sprite MENU_BG_SPRITE
+    set sprite alpha MENU_BG_SPRITE, 0
+    create basic tween MENU_CURTAIN_TWEEN_ID, 0, 255, 250, 0
+    while is tween done(MENU_CURTAIN_TWEEN_ID) < 1
+        set sprite alpha MENU_BG_SPRITE, tweenVal(MENU_CURTAIN_TWEEN_ID)
+        gosub frame_menu_render
+        sync
+    endwhile
+
+    ` the screen shows the menu a frame late, so give the solid curtain a frame to get there
+    set sprite alpha MENU_BG_SPRITE, 255
+    gosub frame_menu_render
+    sync
+    sync
+
+    gosub reset_game
+    show text INFO_HINT_TEXT_ID
+
+    ` and then the bubbles take the curtain away, the same as when the game starts from the main menu
+    TRANSITION_TO_MENU = 0
+    gosub menu_transition
+
+    order sprite MENU_BG_SPRITE, ORDER_MENU_BACKDROP
+    MENU_MODE = MENU_MODE_CLOSED
+return
+
+
+` wipe between the menu and the game with a wave of bubbles.
+` set TRANSITION_TO_MENU before calling this. 1 brings the menu in over the game, and 0 takes it away.
+menu_transition:
+
+    ` the wave is a different shape every time. one side of it is ahead of the other, and the middle
+    ` bows up or down. together they are never more than TRANSITION_SWEEP_MAX.
+    sweepLean = 70 + rnd(60)
+    if rnd(2) = 0 then sweepLean = 0 - sweepLean
+    sweepBow = rnd(51) - 25
+
+    ` give every bubble a new spot in the wave
+    for menuI = 0 to BUBBLE_COUNT - 1
+        bub = BUBBLES(menuI)
+
+        if menuI < BUBBLE_FRONT_COUNT
+            ` the front is a row of big bubbles that overlap, so that there are no gaps between them
+            bub.x = menuI * WORLD_WIDTH / (BUBBLE_FRONT_COUNT - 1) + rnd(9) - 4
+            bub.offsetY = rnd(11) - 5
+            bub.size = 68 + rnd(16)
+        else
+            ` the rest are scattered ahead of the front and behind it. most are small, and some are not.
+            bub.x = rnd(WORLD_WIDTH)
+            bub.offsetY = rnd(280) - 150
+            bub.size = 5 + rnd(18)
+            if menuI mod 5 = 0 then bub.size = 24 + rnd(26)
+        endif
+        bub.phase = rnd(628)
+
+        ` move the bubble to where the wave is at its part of the screen
+        sweepX = bub.x - WORLD_WIDTH / 2
+        bub.offsetY = bub.offsetY + (sweepLean * sweepX) / WORLD_WIDTH + sweepBow * sin(bub.x * .0055)
+
+        size sprite bub.spriteId, bub.size, bub.size
+        set sprite all texcoord1 bub.spriteId, bub.size, 0, 0, 0
+        show sprite bub.spriteId
+
+        size sprite bub.maskSpriteId, bub.size, bub.size
+        set sprite all texcoord1 bub.maskSpriteId, bub.size, 1, 0, 0
+
+        BUBBLES(menuI) = bub
+    next
+
+    ` the wave starts below the screen, which leaves the mask empty. the screen is drawn before the mask is,
+    ` so the screen is always looking at the mask from the frame before. the empty mask gets drawn once here,
+    ` before the composite sprite is told to start using it.
+    create basic tween TRANSITION_TWEEN_ID, 0, 0, 1, 0
+    transitionPrev# = 0
+    gosub frame_transition
+    gosub frame_menu_render
+    sync
+
+    MENU_INVERT = 1 - TRANSITION_TO_MENU
+    show sprite MENU_COMPOSITE_SPRITE
+
+    create basic tween TRANSITION_TWEEN_ID, 0, 1, TRANSITION_DURATION, 0
+    set tween easing TRANSITION_TWEEN_ID, EASING_LINEAR
+
+    ` the wave sounds a little higher or lower every time. frame_transition fades it in and out.
+    set sfx volume SFX_BUBBLES, 0
+    set sfx pitch SFX_BUBBLES, (rnd(31) - 15) * .01
+    play sfx SFX_BUBBLES
+
+    while is tween done(TRANSITION_TWEEN_ID) < 1
+        gosub frame_transition
+        gosub frame_menu_render
+        sync
+    endwhile
+
+    ` once more, so that the mask is drawn with the wave all the way off of the top of the screen
+    gosub frame_transition
+    gosub frame_menu_render
+    sync
+
+    for menuI = 0 to BUBBLE_COUNT - 1
+        hide sprite BUBBLES(menuI).spriteId
+    next
+
+    ` the sound is longer than the wave is, and it has been faded out by now
+    pause sfx SFX_BUBBLES
+
+    ` the mask is full now. if the menu was being taken away, then none of it is being drawn any more.
+    if TRANSITION_TO_MENU = 0
+        hide sprite MENU_COMPOSITE_SPRITE
+        MENU_INVERT = 0
+    endif
+return
+
+
+` move the wave of bubbles to wherever the transition tween says it should be
+frame_transition:
+    transitionNow# = tweenVal(TRANSITION_TWEEN_ID)
+
+    ` the bubbles in the mask go where the wave is now. the bubbles on the screen go where the wave
+    ` was on the frame before, because that is the mask that the screen is looking at.
+    for bubPass = 0 to 1
+        bubT# = transitionNow#
+        if bubPass = 1 then bubT# = transitionPrev#
+
+        bubLine = TRANSITION_LINE_START - TRANSITION_LINE_TRAVEL * bubT#
+
+        for menuI = 0 to BUBBLE_COUNT - 1
+            bub = BUBBLES(menuI)
+            bubX = bub.x + sin(bubT# * 12 + bub.phase * .01) * 5
+            bubY = bubLine + bub.offsetY
+
+            if bubPass = 0
+                position sprite bub.maskSpriteId, bubX, bubY
+
+                ` the tide fills in the mask from the middle of each front bubble, all the way down
+                if menuI < BUBBLE_FRONT_COUNT
+                    position sprite bub.tideSpriteId, bub.x, bubY
+                endif
+            else
+                position sprite bub.spriteId, bubX, bubY
+            endif
+        next
+    next
+
+    ` the sound of the wave comes up quickly at the start, and dies away as the wave leaves the top of the screen
+    bubVolume# = transitionNow# * 6
+    if bubVolume# > 1 then bubVolume# = 1
+    bubFadeOut# = (1 - transitionNow#) * 3
+    if bubFadeOut# < bubVolume# then bubVolume# = bubFadeOut#
+
+    ` the recording is much louder than the other sounds in the game. at full volume, the sound of
+    ` the cursor moving is too quiet next to it to be heard.
+    set sfx volume SFX_BUBBLES, bubVolume# * SFX_BUBBLES_VOLUME#
+
+    transitionPrev# = transitionNow#
+return
+
+
+` everything in the menu that changes from frame to frame
+frame_menu_render:
+
+    ` TODO: stupid FX system loses parameters between reloads, so best to set them in a loop.
+    set effect param texture MENU_FX_ID, "MaskTexture", render target texture(TARGET_MASK)
+    set effect param float MENU_FX_ID, "Fade", tweenVal(MENU_FADE_TWEEN_ID)
+    set effect param float MENU_FX_ID, "Invert", MENU_INVERT
+
+    menuMs = game ms()
+
+    ` the main loop does not run update_frame while a menu is up, so this keeps the bubbles going
+    updateBubbles()
+
+    ` the sound of the highlight moving
+    set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
+
+    ` the outline slides to the highlighted line, and pulses the same way that the info mode cursor does
+    layoutInfoBorder(MENU_CURSOR, (WORLD_WIDTH - MENU_WIDTH) / 2 + 6, tweenVal(MENU_CURSOR_TWEEN_Y), MENU_WIDTH - 12, MENU_ROW_HEIGHT)
+    menuPulse# = .8 + .2 * sin(menuMs * .006)
+    colorInfoBorder(MENU_CURSOR, rgb(255, 255, 255, 255 * menuPulse#))
+
+    ` text sits on whole pixels, and the position gets cut down to one, not rounded. the extra half
+    ` pixel makes that the same as rounding, so that a tiny shake does not flicker the text by a pixel.
+
+    ` the highlighted line shakes from side to side when it cannot be picked
+    menuShake# = sin(menuMs * .045) * 4 * tweenVal(MENU_SHAKE_TWEEN_ID)
+    set text position MENU_ITEMS(MENU_PAGE_FIRST + MENU_SELECTED).textId, WORLD_WIDTH / 2 + .5 + menuShake#, MENU_LIST_TOP + MENU_SELECTED * MENU_ROW_HEIGHT
+
+    ` the title bobs up and down
+    set text position MENU_TITLE_TEXT_ID, WORLD_WIDTH / 2, MENU_TITLE_Y + .5 + sin(menuMs * .002) * 3
+
+    ` the fish swim across, and come back around on the other side
+    if MENU_MODE = MENU_MODE_MAIN
+        for menuI = 0 to MENU_FISH_COUNT - 1
+            fish = MENU_FISHES(menuI)
+            fishX = ((fish.startX + (menuMs * fish.speed) / 50) mod (WORLD_WIDTH + 60)) - 30
+            fishY = fish.y + sin(menuMs * .0015 + fish.phase) * 6
+            position sprite fish.spriteId, fishX, fishY
+        next
+    endif
+
+return
+
+
+` put the game back to how it is at the very start, so that a new one can be played.
+reset_game:
+
+    ` the upgrades go first, because some of them change which fish can show up
+    for resetI = 0 to CARD_LENGTH - 1
+        CARDS(resetI).obtained = 0
+        CARDS(resetI).uses = 0
+    next
+
+    for resetI = 0 to PASSIVE_BINDINGS_LENGTH - 1
+        PASSIVE_BINDINGS(resetI).assigned = 0
+        set text alpha PASSIVE_BINDINGS(resetI).titleTextId, 0
+    next
+    PASSIVE_COUNT = 0
+
+    for resetI = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
+        MOVE_ABILITY_BINDINGS(resetI).assigned = 0
+        MOVE_ABILITY_BINDINGS(resetI).movesLeft = 0
+        set text alpha MOVE_ABILITY_BINDINGS(resetI).titleTextId, 0
+        set text alpha MOVE_ABILITY_BINDINGS(resetI).keyTextId, 0
+        set text alpha MOVE_ABILITY_BINDINGS(resetI).timerTextId, 0
+    next
+    MOVE_ABILITY_COUNT = 0
+
+    ` the upgrades explained themselves in info mode. forget those, and explain the empty spaces again.
+    if INFO_LENGTH > INFO_BASE_LENGTH
+        for resetI = INFO_BASE_LENGTH to INFO_LENGTH - 1
+            INFOS(resetI).assigned = 0
+            INFOS(resetI).enabled = 0
+            showInfoBorder(INFOS(resetI).border, 0)
+        next
+    endif
+    INFO_LENGTH = INFO_BASE_LENGTH
+    INFO_SELECTED = 0
+    setInfoBlobEnabled(INFO_INDEX_PASSIVES, 1)
+    setInfoBlobEnabled(INFO_INDEX_MOVES, 1)
+
+    ` the board goes back to the size that it starts at, and the cells that it grew are put away
+    PENDING_BOARD_EXPANSIONS = 0
+    resizeGrid(GRID_START_COUNT, GRID_START_COUNT)
+    scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+
+    ` a new board of fish. the cells to the left and above are already new by the time a cell gets its turn.
+    for resetI = 0 to CELL_COUNT - 1
+        CELLS(resetI).value = getImpossibleRandomValueForCell(resetI)
+        CELLS(resetI).comboForce = 0
+        CELLS(resetI).comboBlownUp = 0
+        updateCell(CELLS(resetI))
+        set sprite alpha CELLS(resetI).spriteId, 255
+        hide sprite CELLS(resetI).fxSpriteId
+    next
+
+    ` the cursor goes back to the middle
+    SELECTION_POS.x = CELL_COLUMN_COUNT / 2
+    SELECTION_POS.y = CELL_ROW_COUNT / 2
+    gosub update_selection_position
+    QUEUED_MOVE_NUM = 0
+    QUEUED_MOVE_TAIL = 0
+    REQUEST_COMBO_CHECK = 0
+    REQUEST_ABILITY_SELECTION = 0
+
+    ` the score
+    CURRENT_SCORE = 0
+    CURRENT_ROUND = 0
+    CURRENT_MOVE_COUNT = 0
+    PENDING_FREE_MOVES = 0
+    set text MOVE_COUNT_TEXT_ID, "0"
+    set text ROUND_COUNT_TEXT_ID, str$(getRoundsLeft())
+
+    SCORE_BAR.startVal = 0
+    SCORE_BAR.endVal = 100
+    PROGRESS_BARS(0) = SCORE_BAR
+    create basic tween SCORE_BAR.progressTweenId, 0, 0, 1, 0
+
+    ` any score that was still floating up off of the fish
+    for resetI = 0 to SCORE_TEXT_COUNT - 1
+        create basic tween SCORE_TEXTS(resetI).fadeInTweenId, 0, 0, 1, 0
+        create basic tween SCORE_TEXTS(resetI).fadeTweenId, 0, 0, 1, 0
+        set text alpha SCORE_TEXTS(resetI).textId, 0
+    next
+
+    set screen shake amount 0
+    FREE_MOVES_SHAKING = 0
+
+    clearBubbles()
+
+return
+
+
+routines_menu_exit:
+
+
+` jump straight into the game, without going through the main menu. the tests use this.
+function skipMainMenu()
+    MENU_MODE = MENU_MODE_CLOSED
+    hide sprite MENU_COMPOSITE_SPRITE
+endfunction
+
+
+` change which lines the menu is showing, and lay them out.
+function setMenuPage(page)
+    MENU_PAGE = page
+
+    ` the main menu
+    title$ = "Fish Fish Pop"
+    titleSize = 44
+    hint$ = "{dir} choose    {confirm} select"
+    first = MENU_ITEM_NEW_GAME
+    last = MENU_ITEM_QUIT
+    MENU_WIDTH = 180
+    MENU_ITEMS(MENU_ITEM_QUIT).desc$ = "Close the game."
+
+    ` the options page can be opened from the main menu or from the pause menu, and looks the same from both.
+    ` its lines are longer, because they have their settings on the end, so the panel is wider.
+    if page = MENU_PAGE_OPTIONS
+        title$ = "Options"
+        titleSize = 36
+        hint$ = "{dir} choose and change    {pause} back"
+        first = MENU_ITEM_SET_SOUND
+        last = MENU_ITEM_SET_BACK
+        MENU_WIDTH = 250
+    endif
+
+    if page = MENU_PAGE_PAUSE
+        title$ = "Paused"
+        titleSize = 36
+        hint$ = "{dir} choose    {confirm} select    {pause} resume"
+        first = MENU_ITEM_RESUME
+
+        ` quitting from a game goes back to the main menu, which has the quit that closes the window
+        MENU_ITEMS(MENU_ITEM_QUIT).desc$ = "Give up on this run, and go to the title."
+    endif
+
+    if page = MENU_PAGE_CONFIRM
+        title$ = "Abandon current game?"
+        titleSize = 28
+        hint$ = "{dir} choose    {confirm} select    {pause} back"
+        first = MENU_ITEM_CONFIRM_NO
+        last = MENU_ITEM_CONFIRM_YES
+    endif
+
+    ` a - b + c comes out as a - (b + c), so the subtraction goes last
+    MENU_PAGE_FIRST = first
+    MENU_PAGE_LENGTH = 1 + last - first
+
+    ` the list is centered on the same spot no matter how long it is
+    MENU_LIST_TOP = 184 - MENU_PAGE_LENGTH * MENU_ROW_HEIGHT / 2
+
+    for i = 0 to MENU_ITEM_COUNT - 1
+        if i < first or i > last
+            hide text MENU_ITEMS(i).textId
+        else
+            show text MENU_ITEMS(i).textId
+        endif
+    next
+
+    panelX = (WORLD_WIDTH - MENU_WIDTH) / 2
+    panelY = MENU_LIST_TOP - 8
+    panelH = MENU_PAGE_LENGTH * MENU_ROW_HEIGHT + 16
+    position sprite MENU_PANEL_SPRITE, panelX, panelY
+    size sprite MENU_PANEL_SPRITE, MENU_WIDTH, panelH
+    layoutInfoBorder(MENU_PANEL_BORDER, panelX, panelY, MENU_WIDTH, panelH)
+
+    set text MENU_TITLE_TEXT_ID, title$
+    size text y MENU_TITLE_TEXT_ID, titleSize
+
+    set text position MENU_DESC_TEXT_ID, WORLD_WIDTH / 2, panelY + panelH + 6
+
+    set text MENU_HINT_TEXT_ID, hint$
+    size text y MENU_HINT_TEXT_ID, 16
+endfunction
+
+
+` move the highlight to a line of the page. the cursor takes `duration` milliseconds to slide there.
+` a duration of 0 puts the cursor there right away.
+function selectMenuItem(index, duration)
+    MENU_SELECTED = index
+
+    rowY = MENU_LIST_TOP + index * MENU_ROW_HEIGHT - 1
+    startY = tweenVal(MENU_CURSOR_TWEEN_Y)
+    if duration <= 0
+        ` a tween that starts where it ends is already there
+        duration = 1
+        startY = rowY
+    else
+        ` the cursor leaves some bubbles behind on the line that it was on
+        spawnWakeBubbles((WORLD_WIDTH - MENU_WIDTH) / 2 + 6, startY + 4, MENU_WIDTH - 12, MENU_ROW_HEIGHT - 8, 7, rgb(255, 255, 255), ORDER_MENU_FLOAT_BUBBLES)
+    endif
+    create basic tween MENU_CURSOR_TWEEN_Y, startY, rowY, duration, 0
+
+    ` the highlighted line is white, and the lines that are not built yet are dim.
+    ` the lines are put back in their places too, in case one of them was in the middle of a shake.
+    for i = 0 to MENU_PAGE_LENGTH - 1
+        item = MENU_ITEMS(MENU_PAGE_FIRST + i)
+
+        itemColor = rgb(64, 128, 255, 150)
+        if item.ready then itemColor = rgb(150, 190, 255)
+        if i = index then itemColor = rgb(255, 255, 255)
+        color text item.textId, itemColor
+
+        set text position item.textId, WORLD_WIDTH / 2, MENU_LIST_TOP + i * MENU_ROW_HEIGHT
+    next
+    create basic tween MENU_SHAKE_TWEEN_ID, 0, 0, 1, 0
+
+    set text MENU_DESC_TEXT_ID, MENU_ITEMS(MENU_PAGE_FIRST + index).desc$
+endfunction
+
+
+` add a size to the list of sizes that the window can be, and return where it is in the list.
+` a size that is already in the list is not added twice, and a size that is bigger than the monitor is not added at all.
+function addWindowSize(width, height)
+    for i = 0 to WINDOW_SIZE_MAX - 1
+        if i < WINDOW_SIZE_COUNT
+            if WINDOW_WIDTHS(i) = width and WINDOW_HEIGHTS(i) = height then exitfunction i
+        endif
+    next
+
+    if width > display width() or height > display height() then exitfunction 0
+    if WINDOW_SIZE_COUNT >= WINDOW_SIZE_MAX then exitfunction 0
+
+    index = WINDOW_SIZE_COUNT
+    WINDOW_WIDTHS(index) = width
+    WINDOW_HEIGHTS(index) = height
+    WINDOW_SIZE_COUNT = WINDOW_SIZE_COUNT + 1
+endfunction index
+
+
+` write the settings onto the lines of the options page.
+function refreshOptionLines()
+    set text MENU_ITEMS(MENU_ITEM_SET_SOUND).textId, "Sound    " + str$(OPTION_SOUND * 10) + "%"
+
+    if OPTION_FULLSCREEN
+        set text MENU_ITEMS(MENU_ITEM_SET_FULLSCREEN).textId, "Fullscreen    on"
+    else
+        set text MENU_ITEMS(MENU_ITEM_SET_FULLSCREEN).textId, "Fullscreen    off"
+    endif
+
+    set text MENU_ITEMS(MENU_ITEM_SET_WINDOW).textId, "Window    " + str$(OPTION_WINDOW_W) + " x " + str$(OPTION_WINDOW_H)
+
+    ` the size of the window does not mean anything while the game is filling the screen
+    if OPTION_FULLSCREEN
+        MENU_ITEMS(MENU_ITEM_SET_WINDOW).ready = 0
+        MENU_ITEMS(MENU_ITEM_SET_WINDOW).desc$ = "The game is filling the screen."
+    else
+        MENU_ITEMS(MENU_ITEM_SET_WINDOW).ready = 1
+        MENU_ITEMS(MENU_ITEM_SET_WINDOW).desc$ = "How big the window is."
+    endif
+endfunction
+
+
+` change one of the settings on the options page, and do whatever the setting is for.
+` change is 1 for the next choice, and -1 for the one before.
+function changeMenuOption(item, change)
+    select item
+        case MENU_ITEM_SET_SOUND
+            OPTION_SOUND = OPTION_SOUND + change
+            if OPTION_SOUND > 10 then OPTION_SOUND = 10
+            if OPTION_SOUND < 0 then OPTION_SOUND = 0
+
+            ` every sound in the game is in this group, so this turns all of them up or down
+            set sfx group volume SFX_GROUP_SFX, OPTION_SOUND * .1
+        endcase
+
+        case MENU_ITEM_SET_FULLSCREEN
+            OPTION_FULLSCREEN = 1 - OPTION_FULLSCREEN
+            set fullscreen OPTION_FULLSCREEN
+
+            ` leaving fullscreen leaves the window as big as the monitor, so it is put back to its own size
+            if OPTION_FULLSCREEN = 0
+                set screen size OPTION_WINDOW_W, OPTION_WINDOW_H
+            endif
+        endcase
+
+        case MENU_ITEM_SET_WINDOW
+            if OPTION_FULLSCREEN
+                ` it cannot be changed right now, so it shakes its head.
+                create basic tween MENU_SHAKE_TWEEN_ID, 1, 0, 400, 0
+                exitfunction
+            endif
+
+            ` the sizes go around in a loop
+            OPTION_WINDOW = OPTION_WINDOW + change
+            if OPTION_WINDOW >= WINDOW_SIZE_COUNT then OPTION_WINDOW = 0
+            if OPTION_WINDOW < 0 then OPTION_WINDOW = WINDOW_SIZE_COUNT - 1
+            OPTION_WINDOW_W = WINDOW_WIDTHS(OPTION_WINDOW)
+            OPTION_WINDOW_H = WINDOW_HEIGHTS(OPTION_WINDOW)
+            set screen size OPTION_WINDOW_W, OPTION_WINDOW_H
+        endcase
+    endselect
+
+    ` the lines have changed, so write them again. selecting the line again colors it and fills in its description.
+    refreshOptionLines()
+    selectMenuItem(MENU_SELECTED, 0)
+endfunction
+
+
+` an info border that is drawn into the menu, instead of onto the screen
+function createMenuBorder(drawOrder)
+    b as infoBorder = createInfoBorder(drawOrder)
+    set sprite render target b.topId, TARGET_MENU
+    set sprite render target b.bottomId, TARGET_MENU
+    set sprite render target b.leftId, TARGET_MENU
+    set sprite render target b.rightId, TARGET_MENU
+    showInfoBorder(b, 1)
+endfunction b

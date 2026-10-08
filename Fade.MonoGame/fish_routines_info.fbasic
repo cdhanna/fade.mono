@@ -2,7 +2,7 @@ goto routines_info_exit
 
 remstart
     INFO MODE
-    press I to dim the game and inspect what the things on screen mean.
+    press the info key (I, or back on a controller) to dim the game and inspect what the things on screen mean.
 
     anything that wants an explanation calls allocateInfoBlob() with its
     rectangle, a title, and a description. in info mode, every blob gets a
@@ -12,10 +12,6 @@ remend
 
 setup_infos:
     ` the globals are declared in the fish headers, so that functions can use them no matter where they are called from
-
-    ` this would be tab, but while the debug inspector is enabled, imgui takes the keyboard
-    ` when tab is pressed, and then the game does not see any keys at all.
-    INFO_KEY = scancode("I")
 
     ` load effects
     reserve effect id(INFO_FX_ID)
@@ -84,14 +80,14 @@ setup_infos:
     set text offset INFO_DESC_TEXT_ID, 0, 0
     size text y INFO_DESC_TEXT_ID, 16
     set text wrap INFO_DESC_TEXT_ID, 300
-    enable rich text INFO_DESC_TEXT_ID `descriptions can show pictures of keys, like {space}
+    enable rich text INFO_DESC_TEXT_ID `descriptions can show pictures of keys, like {swap}
     color text INFO_DESC_TEXT_ID, rgb(150, 190, 255)
     order text INFO_DESC_TEXT_ID, ORDER_INFO_TEXT
     hide text INFO_DESC_TEXT_ID
 
     ` the hint tells the player which keys do what. it is always on screen.
     reserve text id(INFO_HINT_TEXT_ID)
-    text INFO_HINT_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT - 2, SCORE_FONT, "{i} info"
+    text INFO_HINT_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT - 2, SCORE_FONT, GAME_HINT$
     enable rich text INFO_HINT_TEXT_ID
     set text offset INFO_HINT_TEXT_ID, .5, 1
     size text y INFO_HINT_TEXT_ID, 16
@@ -103,7 +99,7 @@ return
 
 ` the info key opens and closes info mode
 frame_info_toggle:
-    if new key down(INFO_KEY)
+    if new action down(ACT_INFO)
         if INFO_MODE
             gosub info_close
         else
@@ -141,7 +137,7 @@ info_open:
     show text INFO_TITLE_TEXT_ID
     show text INFO_DESC_TEXT_ID
 
-    set text INFO_HINT_TEXT_ID, "{arrows} look around    {i} back to game"
+    set text INFO_HINT_TEXT_ID, "{dir} look around    {info} back to game"
     size text y INFO_HINT_TEXT_ID, 16
     order text INFO_HINT_TEXT_ID, ORDER_INFO_TEXT
 
@@ -180,7 +176,7 @@ info_close:
     hide text INFO_TITLE_TEXT_ID
     hide text INFO_DESC_TEXT_ID
 
-    set text INFO_HINT_TEXT_ID, "{i} info"
+    set text INFO_HINT_TEXT_ID, GAME_HINT$
     size text y INFO_HINT_TEXT_ID, 16
     order text INFO_HINT_TEXT_ID, 0
     set text alpha INFO_HINT_TEXT_ID, 140
@@ -191,10 +187,10 @@ return
 handle_info_input:
     infoDx = 0
     infoDy = 0
-    if new rightkey() then infoDx = 1
-    if new leftkey() then infoDx = -1
-    if new upkey() then infoDy = -1
-    if new downkey() then infoDy = 1
+    if new action down(ACT_RIGHT) then infoDx = 1
+    if new action down(ACT_LEFT) then infoDx = -1
+    if new action down(ACT_UP) then infoDy = -1
+    if new action down(ACT_DOWN) then infoDy = 1
 
     if infoDx = 0 and infoDy = 0 then return
 
@@ -275,7 +271,11 @@ function allocateInfoBlob(x, y, width, height, title$, desc$)
     blob.size.y = height
     blob.title$ = title$
     blob.desc$ = desc$
-    blob.border = createInfoBorder(ORDER_INFO_BORDER)
+
+    ` a slot that was used by an earlier game still has its outline
+    if blob.border.topId = 0
+        blob.border = createInfoBorder(ORDER_INFO_BORDER)
+    endif
     INFOS(curr) = blob
 
 endfunction curr
@@ -349,6 +349,9 @@ function selectInfo(index, duration)
         startY = blob.topLeft.y
         startW = blob.size.x
         startH = blob.size.y
+    else
+        ` the cursor leaves some bubbles behind on the thing that it was around
+        spawnWakeBubbles(startX, startY, startW, startH, 8, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
     endif
 
     create basic tween INFO_CURSOR_TWEEN_X, startX, blob.topLeft.x, duration, 0

@@ -20,6 +20,8 @@ using Microsoft.Xna.Framework.Content.Pipeline.Extra;
 #endif
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Graphics.Fade;
+using GamePad = Microsoft.Xna.Framework.Input.GamePad;
+using GamePadState = Microsoft.Xna.Framework.Input.GamePadState;
 using Keyboard = Microsoft.Xna.Framework.Input.Keyboard;
 using Keys = Microsoft.Xna.Framework.Input.Keys;
 using SpriteBatch = Microsoft.Xna.Framework.Graphics.Fade.SpriteBatch;
@@ -178,6 +180,86 @@ public class Game1 : Microsoft.Xna.Framework.Game
     // the per-frame render in Draw.
 #endif
 
+#if !BROWSER
+    /// <summary>
+    /// The window's client area changed size, usually because the player dragged an edge.
+    ///
+    /// The platform has already resized the back buffer by the time this fires. What it has
+    /// NOT done is tell the GraphicsDeviceManager, and PreferredBackBufferWidth/Height are
+    /// what the rest of the engine treats as "the size of the window": the letterbox fit,
+    /// the mouse mapping and `screen width` all read them. Left stale, the image keeps its
+    /// old size and position inside the new window and every mouse coordinate is off.
+    ///
+    /// Deliberately no ApplyChanges. The device is already the right size, and ApplyChanges
+    /// would resize the window to match the preferred size -- raising this event again, in
+    /// the middle of the player's drag.
+    /// </summary>
+    private void OnWindowClientSizeChanged(object sender, EventArgs e)
+    {
+        var bounds = Window.ClientBounds;
+        FitImageToWindow(bounds.Width, bounds.Height);
+    }
+
+    /// <summary>
+    /// Record a new window size and re-fit the letterboxed image to it.
+    /// </summary>
+    private void FitImageToWindow(int width, int height)
+    {
+        if (_graphics == null || _graphics.IsFullScreen) return;
+
+        // A minimised window reports a zero-sized client area. Fitting the image into that
+        // would divide by zero in the mouse mapping; keep the last real size instead.
+        if (width <= 0 || height <= 0) return;
+
+        if (width == _graphics.PreferredBackBufferWidth &&
+            height == _graphics.PreferredBackBufferHeight) return;
+
+        _graphics.PreferredBackBufferWidth = width;
+        _graphics.PreferredBackBufferHeight = height;
+
+        // No main buffer until the program's first `set render size` (or the default one).
+        if (RenderSystem.mainBuffer != null)
+        {
+            RenderSystem.ResetRenderPositioning();
+        }
+    }
+
+    /// <summary>
+    /// Run one whole frame at a window size the platform has not told MonoGame about yet.
+    /// Called by <see cref="LiveResize"/> while the player is still dragging an edge.
+    ///
+    /// The back buffer size is borrowed for the one frame and then PUT BACK. MonoGame's own
+    /// resize handling starts by comparing the new size with the one it has, and does nothing
+    /// if they match -- including not updating the window's own record of its size and not
+    /// raising ClientSizeChanged. Leaving the new size in place would make every resize the
+    /// drag queued up look like a no-op when MonoGame finally gets to them, and the window
+    /// would be left believing it is the size it was before the drag.
+    /// </summary>
+    internal void TickAtWindowSize(int width, int height)
+    {
+        if (_graphics == null || _graphics.IsFullScreen) return;
+        if (width <= 0 || height <= 0) return;
+        if (_spriteBatch == null) return; // still starting up
+
+        var pp = GraphicsDevice.PresentationParameters;
+        var oldWidth = pp.BackBufferWidth;
+        var oldHeight = pp.BackBufferHeight;
+
+        pp.BackBufferWidth = width;
+        pp.BackBufferHeight = height;
+        FitImageToWindow(width, height);
+        try
+        {
+            Tick();
+        }
+        finally
+        {
+            pp.BackBufferWidth = oldWidth;
+            pp.BackBufferHeight = oldHeight;
+        }
+    }
+#endif
+
     protected override void Initialize()
     {
         // initialize calls Load Content
@@ -193,6 +275,16 @@ public class Game1 : Microsoft.Xna.Framework.Game
         HostSystemRegistry.Resolve(this);
 
         ResetFade();
+
+#if !BROWSER
+        // A window the player can drag to a new size (see `set window resizable`). Subscribed
+        // unconditionally: the event only fires while resizing is allowed, or when something
+        // else changes the client area, and both want the same bookkeeping.
+        Window.ClientSizeChanged += OnWindowClientSizeChanged;
+
+        // And keep drawing WHILE an edge is being dragged, instead of only once it is let go.
+        LiveResize.Install(this);
+#endif
 
 #if !BROWSER
         // Desktop: prefer a project-local Content/FadeSpriteBatchEffect.xnb
@@ -734,6 +826,21 @@ public class Game1 : Microsoft.Xna.Framework.Game
 #endif
 
         InputSystem.ApplyNewMouse(ref mouseState, ref keyState);
+
+        // The first controller that is plugged in is the one the game hears. Unlike the keyboard, a
+        // controller keeps reporting while the window is in the background, so that is blanked here.
+        GamePadState padState = default;
+        if (IsActive)
+        {
+            for (var playerIndex = PlayerIndex.One; playerIndex <= PlayerIndex.Four; playerIndex++)
+            {
+                var candidate = GamePad.GetState(playerIndex);
+                if (!candidate.IsConnected) continue;
+                padState = candidate;
+                break;
+            }
+        }
+        InputSystem.ApplyNewGamePad(ref padState);
 
         TweenSystem.currentTime = AudioInstanceSystem.currentTime = gameTime.TotalGameTime.TotalMilliseconds;
         TweenSystem.ProcessTweens();

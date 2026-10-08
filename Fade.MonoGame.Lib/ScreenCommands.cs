@@ -73,6 +73,49 @@ public partial class FadeMonoGameCommands
     }
 
     /// <summary>
+    /// <para>Lets the player resize the game window by dragging its edges, or stops them.</para>
+    /// <para>Windows cannot be resized until this is turned on.</para>
+    /// </summary>
+    /// <remarks>
+    /// Resizing the window does not change <c>set render size</c>. The game is still drawn
+    /// at its own resolution, and the picture is scaled to fit the new window, with bars
+    /// down the sides or across the top and bottom when the shape does not match.
+    ///
+    /// <see cref="ScreenWidth">screen width</see> and <see cref="ScreenHeight">screen height</see>
+    /// follow the window as it is dragged, so a program can read them to find out the size
+    /// the player chose. <see cref="SetScreenResolution">set screen size</see> still works,
+    /// and sets the size from the program instead.
+    ///
+    /// Has no effect in fullscreen, or in the browser, where the page decides the size.
+    /// </remarks>
+    /// <example>
+    /// A window the player can resize, with its size shown on screen:
+    /// <code>
+    /// set screen size 1280, 720
+    /// set window resizable 1
+    ///
+    /// font 1, "font"
+    /// text 1, 470, 200, 1, ""
+    ///
+    /// do
+    ///   ` these change as the window is dragged
+    ///   set text 1, str$(screen width()) + " x " + str$(screen height())
+    ///   sync
+    /// loop
+    /// </code>
+    /// </example>
+    /// <param name="resizable"><c>1</c> to let the player resize the window, <c>0</c> to lock it.</param>
+    /// <seealso cref="SetScreenResolution">set screen size</seealso>
+    /// <seealso cref="ScreenWidth">screen width</seealso>
+    /// <seealso cref="ScreenHeight">screen height</seealso>
+    /// <seealso cref="SetFullScreen">set fullscreen</seealso>
+    [FadeBasicCommand("set window resizable")]
+    public static void SetWindowResizable(bool resizable)
+    {
+        GameSystem.game.Window.AllowUserResizing = resizable;
+    }
+
+    /// <summary>
     /// <para>Reserves a strip of the window along each edge that the game image will not use.</para>
     /// <para>The render target still fits and centres as usual, just inside a smaller area — so the
     /// game shrinks and leaves you empty screen for debug panels, an editor sidebar, or anything

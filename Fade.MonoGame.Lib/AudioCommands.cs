@@ -384,6 +384,8 @@ public partial class FadeMonoGameCommands
         }
         AudioInstanceSystem.audioEffects[index] = sfx;
 #endif
+        // The new instance keeps the id's group, and the group is applied to it right away.
+        AudioMixSystem.OnInstanceCreated(sfxId);
     }
 
     /// <summary>
@@ -772,12 +774,11 @@ public partial class FadeMonoGameCommands
     {
         if (pitch >= 1) pitch = 1;
         if (pitch <= -1) pitch = -1;
-#if BROWSER
-        BrowserAudioBridge.SetPitch(sfxId, pitch);
-#else
-        AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
-        AudioInstanceSystem.audioEffects[index].instance.Pitch = pitch;
-#endif
+
+        // The sound's own pitch. What is heard also has its group's pitch added.
+        var sound = AudioMixSystem.GetSound(sfxId);
+        sound.pitch = pitch;
+        AudioMixSystem.SetSound(sfxId, sound);
     }
 
 
@@ -821,12 +822,8 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("sfx pitch")]
     public static float GetSfxPitch(int sfxId)
     {
-#if BROWSER
-        return BrowserAudioBridge.GetPitch(sfxId);
-#else
-        AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
-        return AudioInstanceSystem.audioEffects[index].instance.Pitch;
-#endif
+        // The sound's own pitch, not the one that is heard after its group is added.
+        return AudioMixSystem.GetSound(sfxId).pitch;
     }
 
 
@@ -906,12 +903,11 @@ public partial class FadeMonoGameCommands
     {
         if (pan >= 1) pan = 1;
         if (pan <= -1) pan = -1;
-#if BROWSER
-        BrowserAudioBridge.SetPan(sfxId, pan);
-#else
-        AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
-        AudioInstanceSystem.audioEffects[index].instance.Pan = pan;
-#endif
+
+        // The sound's own pan. What is heard also has its group's pan added.
+        var sound = AudioMixSystem.GetSound(sfxId);
+        sound.pan = pan;
+        AudioMixSystem.SetSound(sfxId, sound);
     }
 
     /// <summary>
@@ -956,12 +952,8 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("sfx pan")]
     public static float GetSfxPan(int sfxId)
     {
-#if BROWSER
-        return BrowserAudioBridge.GetPan(sfxId);
-#else
-        AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
-        return AudioInstanceSystem.audioEffects[index].instance.Pan;
-#endif
+        // The sound's own pan, not the one that is heard after its group is added.
+        return AudioMixSystem.GetSound(sfxId).pan;
     }
 
 
@@ -1038,12 +1030,11 @@ public partial class FadeMonoGameCommands
     {
         if (volume >= 1) volume = 1;
         if (volume <= 0) volume = 0;
-#if BROWSER
-        BrowserAudioBridge.SetVolume(sfxId, volume);
-#else
-        AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
-        AudioInstanceSystem.audioEffects[index].instance.Volume = volume;
-#endif
+
+        // The sound's own volume. What is heard is this multiplied by its group's volume.
+        var sound = AudioMixSystem.GetSound(sfxId);
+        sound.volume = volume;
+        AudioMixSystem.SetSound(sfxId, sound);
     }
 
     /// <summary>
@@ -1087,12 +1078,8 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("sfx volume")]
     public static float GetSfxVolume(int sfxId)
     {
-#if BROWSER
-        return BrowserAudioBridge.GetVolume(sfxId);
-#else
-        AudioInstanceSystem.GetAudioEffectIndex(sfxId, out var index, out var sfx);
-        return AudioInstanceSystem.audioEffects[index].instance.Volume;
-#endif
+        // The sound's own volume, not the one that is heard after its group is multiplied in.
+        return AudioMixSystem.GetSound(sfxId).volume;
     }
 
 

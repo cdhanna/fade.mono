@@ -11,6 +11,9 @@ test sampleTest
     waitSeconds = 2
     gosub runforseconds
 
+    ` the game opens on the main menu, and the test is about the game
+    skipMainMenu()
+
     ` force a combo by setting the first 3 cells to the same value...
     CELLS(1).value = CELLS(0).value
     CELLS(2).value = CELLS(0).value
@@ -56,7 +59,7 @@ set render size WORLD_WIDTH, WORLD_HEIGHT
 set render target background color 1, rgb(32, 40, 64)
 sync
 
-set window title("Fish Game")
+set window title("Fish Fish Pop")
 `focus window
 
 ` `TEST START
@@ -92,6 +95,7 @@ effect 2, "Fish/Shaders/FishEffect"
 gosub setup_abilities
 gosub load_textures
 gosub load_audio
+gosub setup_input
 gosub load_fonts
 gosub setup_infos
 gosub setup_grid
@@ -102,6 +106,12 @@ gosub setup_passives
 gosub setup_moves
 gosub setup_ability_selection
 
+` everything that can be explained in info mode from here on belongs to an upgrade, and goes away with a new game
+INFO_BASE_LENGTH = INFO_LENGTH
+
+gosub setup_menu
+gosub setup_float_bubbles `these use the bubble effect, which the menu loads
+
 
 
 p# = 0
@@ -111,7 +121,7 @@ sync
         dbg_count = 0
         
 enable debug inspector
-do 
+do
 
 
 
@@ -120,25 +130,40 @@ do
     ` TODO: stupid FX system loses parameters between reloads, so best to s8et them in a loop. 
     set effect param float 1, "TimeSpeed", 1
 
-    gosub frame_info_toggle
+    ` show keys or controller buttons, depending on which one the player touched last
+    gosub frame_input_icons
 
-    if INFO_MODE
-        ` handle info mode.
-        gosub handle_info_input
+    if MENU_MODE
+        ` a menu is up, so the game waits underneath it.
+        gosub frame_menu
 
-    else 
-        ` handle the gameplay.
-        
-        gosub handle_ability_selection
-        gosub process_input
-        gosub handle_combos
+    else
+        gosub frame_info_toggle
 
+        if INFO_MODE
+            ` handle info mode.
+            gosub handle_info_input
+
+        else
+            ` handle the gameplay.
+
+            gosub handle_ability_selection
+            gosub handle_board_expansion
+            gosub process_input
+            gosub handle_combos
+
+            ` the pause key brings up the pause menu
+            if new action down(ACT_PAUSE)
+                gosub menu_open_pause
+            endif
+
+        endif
+
+        gosub frame_info_render
+        gosub update_frame
     endif
 
-    gosub frame_info_render
-    gosub update_frame
-
-    sync 
+    sync
     
     _loop:
 loop

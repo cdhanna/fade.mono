@@ -8,8 +8,8 @@ global SCORE_POS as vec = {
 }
 
 
-global dim CARDS(10) as ability
-global CARD_LENGTH = 9
+global dim CARDS(16) as ability
+global CARD_LENGTH = 11
 
 global CURRENT_MOVE_COUNT = 0
 global MOVE_COUNT_TEXT_ID
@@ -30,6 +30,8 @@ global ABILITY_INDEX_PASSIVE_STOCK_MARKET = 5
 global ABILITY_INDEX_MOVE_CLONER = 6
 global ABILITY_INDEX_MOVE_BOMB3x3 = 7
 global ABILITY_INDEX_MOVE_LINE_OUT = 8
+#constant ABILITY_INDEX_MIND_EXPANSION 9
+global ABILITY_INDEX_THINK_BIGGER = 10
 
 ` ability type enum constants
 ` global ABILITY_TYPE_PASSIVE = 0
@@ -38,6 +40,26 @@ global ABILITY_INDEX_MOVE_LINE_OUT = 8
 
 global TEX_PIXEL = 0 `magic texture that always exists
 global TEX_KEYS `the sheet of keyboard key pictures. the font uses these as icons.
+global TEX_PAD `the same thing for the buttons of a controller.
+
+` INPUT ACTIONS. the game asks about these, and never about a key or a button directly.
+` setup_input, in fish_routines_input, binds the keys and the controller buttons to them.
+global ACT_LEFT
+global ACT_RIGHT
+global ACT_UP
+global ACT_DOWN
+global ACT_SWAP `held with a direction to swap fish
+global ACT_CONFIRM `picks the highlighted thing on a menu
+global ACT_INFO
+global ACT_PAUSE
+
+` a move ability is held with a direction, the same way that the swap is. on a controller they are
+` on x, y, b, and the bumpers, so 4 is as many move abilities as can be owned.
+global MOVE_SLOT_COUNT = 4
+global dim ACT_ABILITY(MOVE_SLOT_COUNT)
+
+` which device the input icons were last set up for. -1 means that they have not been set up at all.
+global INPUT_ICON_DEVICE = -1
 
 ` small pictures for the kinds of ability. the font uses these as icons too.
 global TEX_TYPE_PASSIVE
@@ -82,6 +104,38 @@ global FREE_MOVES_TICK_TWEEN_ID
 global FREE_MOVES_SHAKE_TWEEN_ID
 global FREE_MOVES_SHAKING = 0
 
+` FLOATING BUBBLES. the routines are in fish_routines_bubbles.
+global FLOAT_BUBBLE_COUNT = 300
+global dim FLOAT_BUBBLES(FLOAT_BUBBLE_COUNT) as floatBubble
+global FLOAT_BUBBLE_NEXT = 0 `the bubble that the next spawn will use
+global FLOAT_BUBBLE_LIVE = 0 `how many are going right now. when there are none, there is nothing to do on a frame.
+global FLOAT_BUBBLE_LAST_MS = 0
+global ORDER_FLOAT_BUBBLES = 26 `on top of the fish, and underneath the info screen
+global ORDER_OVERLAY_BUBBLES = 120 `on top of the info screen and the upgrade screen
+global ORDER_MENU_FLOAT_BUBBLES = 205 `on top of the menu, and underneath the wave of bubbles that wipes it
+
+` the sound budget. one bubble in this many makes a sound when it pops, there are only so many
+` sounds to go around, and there has to be this many milliseconds between two of them.
+global FLOAT_BUBBLE_LOUD_ODDS = 6
+global FLOAT_BUBBLE_WAKE_LOUD_ODDS = 14 `the bubbles in the wake of a cursor are quieter, because there are so many of them
+global FLOAT_BUBBLE_WAKE_ALPHA = 110 `and they are faint, so that they do not get in the way. 255 is solid.
+global FLOAT_BUBBLE_WAKE_COLOR = rgb(210, 170, 255) `a pale version of the purple of the cursor on the board
+global FLOAT_BUBBLE_SFX_COUNT = 8
+global FLOAT_BUBBLE_SFX_GAP = 45
+global dim FLOAT_BUBBLE_SFX(FLOAT_BUBBLE_SFX_COUNT)
+global FLOAT_BUBBLE_SFX_NEXT = 0
+global FLOAT_BUBBLE_CLIP_COUNT = 2 `the sound clips that a pop can be
+global dim FLOAT_BUBBLE_CLIPS(FLOAT_BUBBLE_CLIP_COUNT)
+global FLOAT_BUBBLE_SFX_LAST_MS = 0
+
+` the "mind expansion" card adds a column or a row to the board, whichever one keeps the board closest to a square.
+` the board grows after the upgrade screen has closed, so that it can be seen happening.
+` the routine that does it, handle_board_expansion, is in fish_routines, because it has to come after the grid is declared.
+global BOARD_EXPANSION_MAX = 4
+global PENDING_BOARD_EXPANSIONS = 0
+global BOARD_EXPAND_TWEEN_ID
+global INFO_INDEX_GRID = 0 `the info blob that explains the board. it has to follow the board when the board changes size.
+
 global PASSIVE_BINDINGS_LENGTH = 10
 global PASSIVE_COUNT = 0
 global passive as passiveDisplay
@@ -115,6 +169,131 @@ global INFO_PANEL_SPRITE
 global INFO_TITLE_TEXT_ID
 global INFO_DESC_TEXT_ID
 global INFO_HINT_TEXT_ID
-global INFO_KEY
 global INFO_CURSOR as infoBorder
 global INFO_PANEL_BORDER as infoBorder
+global INFO_BASE_LENGTH = 0 `how many infos there are before any upgrades have been picked. a new game goes back to this.
+
+` the hint at the bottom of the screen while the game is being played
+global GAME_HINT$ = "{info} info    {pause} pause"
+
+
+` THE MENU. the routines are in fish_routines_menu.
+
+` which menu is up, if any
+#constant MENU_MODE_CLOSED 0
+#constant MENU_MODE_MAIN 1
+#constant MENU_MODE_PAUSE 2
+global MENU_MODE = 0
+
+` a page is the list of things that can be picked right now
+#constant MENU_PAGE_MAIN 0
+#constant MENU_PAGE_PAUSE 1
+#constant MENU_PAGE_CONFIRM 2
+#constant MENU_PAGE_OPTIONS 3
+global MENU_PAGE = 0
+
+` every line that any page of the menu can show. a page shows a run of these that are next to each other.
+#constant MENU_ITEM_RESUME 0
+#constant MENU_ITEM_NEW_GAME 1
+#constant MENU_ITEM_HIGHSCORES 2
+#constant MENU_ITEM_CODEC 3
+#constant MENU_ITEM_OPTIONS 4
+#constant MENU_ITEM_CREDITS 5
+#constant MENU_ITEM_QUIT 6
+#constant MENU_ITEM_CONFIRM_NO 7
+#constant MENU_ITEM_CONFIRM_YES 8
+#constant MENU_ITEM_SET_SOUND 9
+#constant MENU_ITEM_SET_FULLSCREEN 10
+#constant MENU_ITEM_SET_WINDOW 11
+#constant MENU_ITEM_SET_BACK 12
+global MENU_ITEM_COUNT = 13
+global dim MENU_ITEMS(MENU_ITEM_COUNT) as menuItem
+
+global MENU_PAGE_FIRST = 0 `the first item on the page
+global MENU_PAGE_LENGTH = 0 `how many items are on the page
+global MENU_SELECTED = 0 `the highlighted line, counted from the top of the page
+
+` where the list goes
+global MENU_WIDTH = 180
+global MENU_ROW_HEIGHT = 20
+global MENU_TITLE_Y = 62
+global MENU_LIST_TOP = 0 `worked out from how long the page is
+
+` the menu is drawn on top of everything else in the game, and the bubbles are drawn on top of the menu
+global ORDER_MENU = 200
+global ORDER_MENU_BUBBLES = 210
+
+` these are draw orders inside of the menu's own render target
+global ORDER_MENU_BACKDROP = 0
+global ORDER_MENU_FISH = 4
+global ORDER_MENU_PANEL = 10
+global ORDER_MENU_CURSOR = 14
+global ORDER_MENU_TEXT = 20
+global ORDER_MENU_CURTAIN = 50
+
+` menu resources. these are filled in by setup_menu
+global MENU_FX_ID
+global BUBBLE_FX_ID
+global TARGET_MENU
+global TARGET_MASK
+global MENU_COMPOSITE_SPRITE
+global MENU_COVER_SPRITE
+global MENU_BG_SPRITE
+global MENU_DIM_SPRITE
+global MENU_PANEL_SPRITE
+global MENU_TITLE_TEXT_ID
+global MENU_DESC_TEXT_ID
+global MENU_HINT_TEXT_ID
+global MENU_CURSOR_TWEEN_Y
+global MENU_FADE_TWEEN_ID
+global MENU_SHAKE_TWEEN_ID
+global MENU_CURTAIN_TWEEN_ID
+global MENU_INVERT = 0 `1 while the bubbles are taking the menu away, instead of bringing it in
+global MENU_PANEL_BORDER as infoBorder
+global MENU_CURSOR as infoBorder
+
+` THE OPTIONS. these are what the options page of the menu changes.
+
+` every sound belongs to a group, and a group can be turned up and down all at once.
+` everything is in the first group until it is put in another one. nothing is in the music group yet.
+#constant SFX_GROUP_SFX 0
+#constant SFX_GROUP_MUSIC 1
+
+global OPTION_SOUND = 10 `how loud the sound effects are, from 0 to 10
+global OPTION_FULLSCREEN = 0
+global OPTION_WINDOW = 0 `which of the window sizes was picked last
+
+` how big the window is when the game is not filling the screen. the player can also drag the window
+` to any size they like, so this is not always one of the sizes in the list.
+global OPTION_WINDOW_W = 0
+global OPTION_WINDOW_H = 0
+
+` the sizes that the window can be. setup_menu fills these in with the ones that fit on the monitor.
+global WINDOW_SIZE_MAX = 8
+global WINDOW_SIZE_COUNT = 0
+global dim WINDOW_WIDTHS(WINDOW_SIZE_MAX)
+global dim WINDOW_HEIGHTS(WINDOW_SIZE_MAX)
+
+global MENU_FISH_COUNT = 7
+global dim MENU_FISHES(MENU_FISH_COUNT) as menuFish
+
+` the wave of bubbles. the first few are big, and sit in a row to make the front of the wave.
+` the rest are small, and are scattered ahead of the front and behind it.
+global BUBBLE_FRONT_COUNT = 13
+global BUBBLE_COUNT = 140
+global dim BUBBLES(BUBBLE_COUNT) as bubble
+global TRANSITION_TWEEN_ID
+global SFX_CLIP_BUBBLES
+global SFX_BUBBLES `the sound of the wave of bubbles going by
+global TRANSITION_TO_MENU = 0 `1 to bring the menu in over the game, 0 to take it away
+global TRANSITION_DURATION = 1800
+
+` the front of the wave is not level. it leans to one side and bows in the middle, by a different
+` amount every time, so that the wave sweeps across the screen as it goes up.
+` this is the most that any part of the front can be above or below the middle of it.
+global TRANSITION_SWEEP_MAX = 90
+
+` the front of the wave starts below the screen, far enough down that the bubbles ahead of it are hidden too.
+` it ends above the screen, far enough up that the bubbles behind it are gone too.
+global TRANSITION_LINE_START = 600
+global TRANSITION_LINE_TRAVEL = 850

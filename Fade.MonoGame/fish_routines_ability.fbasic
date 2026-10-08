@@ -4,14 +4,6 @@ goto routines_abilities_exit
 
 setup_abilities:
 
-    ` move keys
-    global dim MOVE_KEYS$(4)
-    global MOVE_KEY_COUNT = 0
-    MOVE_KEYS$(0) = "Z"
-    MOVE_KEYS$(1) = "X"
-    MOVE_KEYS$(2) = "C"
-    MOVE_KEYS$(3) = "V"
-
     ` instants
     CARDS(ABILITY_INDEX_MOVE_BUNDLE) = {
         name$ = "free moves",
@@ -19,6 +11,14 @@ setup_abilities:
         obtained = 0
         abilityType = ABILITY_TYPE_INSTANT,
         stackable = 1
+    }
+    CARDS(ABILITY_INDEX_MIND_EXPANSION) = {
+        name$ = "mind expansion",
+        desc$ = "Add a new row or column of fish to the board."
+        obtained = 0
+        abilityType = ABILITY_TYPE_INSTANT,
+        stackable = 1
+        maxUses = BOARD_EXPANSION_MAX
     }
 
     ` passives
@@ -50,7 +50,14 @@ setup_abilities:
         abilityType = ABILITY_TYPE_PASSIVE
         stackable = 0
     }
-    
+    CARDS(ABILITY_INDEX_THINK_BIGGER) = {
+        name$ = "think bigger"
+        desc$ = "combos need 4 fish instead of 3"
+        obtained = 0
+        abilityType = ABILITY_TYPE_PASSIVE
+        stackable = 0
+    }
+
 
     ` moves
     CARDS(ABILITY_INDEX_MOVE_SHIFT) = {
@@ -258,7 +265,7 @@ setup_moves:
         set text alpha moveAbility.titleTextId, 0
 
         ` a picture of the key that uses the move. it scales from its middle when it punches.
-        text moveAbility.keyTextId, 16 + 100 + 10, WORLD_HEIGHT - 22 - i*18, SCORE_FONT, "{z}"
+        text moveAbility.keyTextId, 16 + 100 + 10, WORLD_HEIGHT - 22 - i*18, SCORE_FONT, "{move1}"
         enable rich text moveAbility.keyTextId
         set text offset moveAbility.keyTextId, .5, .5
         size text y moveAbility.keyTextId, 16 `the key icons are sharpest at this size
@@ -336,7 +343,17 @@ assign_ability_selection:
 
                 ` need to make sure we are not offering the same thing twice
                 valid = 1
-                for j = 0 to i - 1 
+
+                ` every move needs a button of its own, and there are only so many of those
+                if CARDS(candidate).abilityType = ABILITY_TYPE_MOVE and MOVE_ABILITY_COUNT >= MOVE_SLOT_COUNT
+                    valid = 0
+                endif
+
+                ` some cards can only be taken so many times
+                if CARDS(candidate).maxUses > 0 and CARDS(candidate).uses >= CARDS(candidate).maxUses
+                    valid = 0
+                endif
+                for j = 0 to i - 1
                     if CARD_CHOICE_INDEXES(j) = candidate
                         valid = 0
                         exit
@@ -364,6 +381,10 @@ handle_ability_instant_effect:
         case ABILITY_INDEX_MOVE_BUNDLE
             ` the moves come off of the counter in frame_free_moves, once the upgrade screen is out of the way
             PENDING_FREE_MOVES = PENDING_FREE_MOVES + FREE_MOVES_AMOUNT
+        endcase
+        case ABILITY_INDEX_MIND_EXPANSION
+            ` the board grows in handle_board_expansion, once the upgrade screen is out of the way
+            PENDING_BOARD_EXPANSIONS = PENDING_BOARD_EXPANSIONS + 1
         endcase
     endselect
 return
@@ -408,7 +429,13 @@ handle_ability_selection:
         ` bind the data we need.
         set text a.titleTextId, CARDS(a.abilityIndex).name$
         size text x a.titleTextId, CARD_WIDTH - 16, .1, .33
-        set text a.descTextId, CARDS(a.abilityIndex).desc$
+
+        ` a card that runs out says how many of it are left
+        cardDesc$ = CARDS(a.abilityIndex).desc$
+        if CARDS(a.abilityIndex).maxUses > 0
+            cardDesc$ = cardDesc$ + " " + str$(CARDS(a.abilityIndex).maxUses - CARDS(a.abilityIndex).uses) + " left."
+        endif
+        set text a.descTextId, cardDesc$
         set transform position a.transformId, startX + i * (CARD_WIDTH + cardPadding), CARD_TOP
 
         ` the size is set again, because it is worked out from the size of the texture
@@ -443,7 +470,7 @@ handle_ability_selection:
     showInfoBorder(ABILITY_CURSOR, 1)
 
     ` the hint at the bottom of the screen explains the keys for this screen instead
-    set text INFO_HINT_TEXT_ID, "{arrows} choose    {space} take it"
+    set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} take it"
     order text INFO_HINT_TEXT_ID, ORDER_ABILITY_TEXT
 
     ` fade in the dark overlay from info mode. nothing is highlighted, so the whole game dims.
@@ -464,10 +491,13 @@ handle_ability_selection:
 
         ` allow left/right input
         dir = 0
-        if new rightkey() then dir = 1
-        if new leftkey() then dir = -1
+        if new action down(ACT_RIGHT) then dir = 1
+        if new action down(ACT_LEFT) then dir = -1
 
         if dir <> 0
+
+            ` the outline leaves some bubbles behind on the card that it was around
+            spawnWakeBubbles(tweenVal(ABILITY_SELECTION_INDICATOR_TWEEN_ID) - CARD_WIDTH / 2, CARD_TOP, CARD_WIDTH, CARD_HEIGHT, 10, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
 
             ABILITY_SELECTION_INDEX = ABILITY_SELECTION_INDEX + dir
             if ABILITY_SELECTION_INDEX < 0 then ABILITY_SELECTION_INDEX = choiceCount
@@ -491,7 +521,7 @@ handle_ability_selection:
 
 
         ` allow the user to pick an ability 
-        if new upkey() or new spacekey()
+        if new action down(ACT_UP) or new action down(ACT_CONFIRM)
             
             ` add the passive
             selectedAbilityIndex = ABILITY_CHOICES(ABILITY_SELECTION_INDEX).abilityIndex
@@ -517,6 +547,7 @@ handle_ability_selection:
 
                 ` when it is an instant, go handle it elsewhere, because it is a big old select statement itself...
                 case ABILITY_TYPE_INSTANT
+                    CARDS(selectedAbilityIndex).uses = CARDS(selectedAbilityIndex).uses + 1
                     gosub handle_ability_instant_effect
                 endcase
 
@@ -528,12 +559,14 @@ handle_ability_selection:
                     moveBinding.movesLeft = 0 `start ready
                     moveBinding.resetTimer = CARDS(moveBinding.abilityIndex).moveClock
                     moveBinding.moveValue = CARDS(moveBinding.abilityIndex).moveValue
-                    moveBinding.key$ = MOVE_KEYS$(MOVE_KEY_COUNT)
-                    MOVE_KEY_COUNT = MOVE_KEY_COUNT + 1
+
+                    ` the moves take the buttons in order. assign_ability_selection stops offering moves once the buttons run out.
+                    moveBinding.actionId = ACT_ABILITY(MOVE_ABILITY_COUNT)
+                    moveBinding.icon$ = "move" + str$(MOVE_ABILITY_COUNT + 1)
 
                     set text moveBinding.titleTextId, CARDS(moveBinding.abilityIndex).name$
                     size text x moveBinding.titleTextId, 100, .1, .3 `fit the name to the column, so that a long one does not run into the key
-                    set text moveBinding.keyTextId, "{" + moveBinding.key$ + "}"
+                    set text moveBinding.keyTextId, "{" + moveBinding.icon$ + "}"
 
                     MOVE_ABILITY_BINDINGS(MOVE_ABILITY_COUNT) = moveBinding
                     MOVE_ABILITY_COUNT = MOVE_ABILITY_COUNT + 1
@@ -542,7 +575,7 @@ handle_ability_selection:
 
                     ` the move explains itself in info mode, instead of the empty space
                     setInfoBlobEnabled(INFO_INDEX_MOVES, 0)
-                    infoIndex = allocateInfoBlob(12, WORLD_HEIGHT - 30 - (MOVE_ABILITY_COUNT - 1) * 18, 140, 18, CARDS(moveBinding.abilityIndex).name$, CARDS(moveBinding.abilityIndex).desc$ + ". Hold {" + moveBinding.key$ + "} and press {arrows} to use it. It recharges after " + str$(moveBinding.resetTimer) + " moves.")
+                    infoIndex = allocateInfoBlob(12, WORLD_HEIGHT - 30 - (MOVE_ABILITY_COUNT - 1) * 18, 140, 18, CARDS(moveBinding.abilityIndex).name$, CARDS(moveBinding.abilityIndex).desc$ + ". Hold {" + moveBinding.icon$ + "} and press {dir} to use it. It recharges after " + str$(moveBinding.resetTimer) + " moves.")
                 endcase
             endselect
 
@@ -568,7 +601,7 @@ handle_ability_selection:
 
             ` hand the overlay and the hint back to the game
             hide sprite INFO_MASK_SPRITE
-            set text INFO_HINT_TEXT_ID, "{i} info"
+            set text INFO_HINT_TEXT_ID, GAME_HINT$
             order text INFO_HINT_TEXT_ID, 0
             set text alpha INFO_HINT_TEXT_ID, 140
 
@@ -584,6 +617,12 @@ return
 
 ` everything on the upgrade screen that changes from frame to frame
 frame_ability_selection:
+
+    ` the main loop does not run while the upgrade screen is up, so this has to keep the input icons right itself
+    gosub frame_input_icons
+
+    ` and it has to keep the bubbles going, too
+    updateBubbles()
 
     ` TODO: stupid FX system loses parameters between reloads, so best to set them in a loop.
     abilityFade# = tweenVal(INFO_FADE_TWEEN_ID)
@@ -712,3 +751,12 @@ endfunction CARDS(ABILITY_INDEX_MOVE_SHIFT).obtained > 0
 
 function isAbility_Passive_StockMarket()
 endfunction CARDS(ABILITY_INDEX_PASSIVE_STOCK_MARKET).obtained > 0
+
+function isAbility_ThinkBigger()
+endfunction CARDS(ABILITY_INDEX_THINK_BIGGER).obtained > 0
+
+` how many connected fish of the same kind it takes to make a combo
+function getRequiredComboCount()
+    required = 3
+    if isAbility_ThinkBigger() then required = 4
+endfunction required

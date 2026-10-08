@@ -7,6 +7,53 @@ endfunction GRID_POS.y + row * CELL_SIZE
 function getCellIndex(pos as vec)
 endfunction pos.x + pos.y * CELL_COLUMN_COUNT
 
+` change how many columns and rows the board has.
+` the board always fills the same square of the screen, and stays in the middle of it, so the cells
+` get smaller as the board gets bigger. this puts every cell in its place in the grid, but it does
+` not decide which fish is in it, and it does not move any sprites. the caller does those.
+function resizeGrid(columns, rows)
+    CELL_COLUMN_COUNT = columns
+    CELL_ROW_COUNT = rows
+    CELL_COUNT = columns * rows
+
+    ` the longest side of the board is the one that has to fit
+    longest = columns
+    if rows > longest then longest = rows
+    CELL_SIZE = GRID_SPAN / longest
+    CELL_ART_SIZE = (CELL_START_ART_SIZE * CELL_SIZE) / CELL_START_SIZE
+
+    ` the sprites are centered on their cell position, so the grid starts half a cell in.
+    ` a - b + c comes out as a - (b + c), so the subtraction goes last
+    GRID_POS.x = GRID_CENTER.x + CELL_SIZE / 2 - (columns * CELL_SIZE) / 2
+    GRID_POS.y = GRID_CENTER.y + CELL_SIZE / 2 - (rows * CELL_SIZE) / 2
+
+    ` the smoke is not sized in pixels like the fish are, so it gets scaled instead
+    startSize# = CELL_START_SIZE
+    fxScale# = CELL_SIZE / startSize#
+
+    for i = 0 to CELL_MAX_COUNT - 1
+        c = CELLS(i)
+        if i < CELL_COUNT
+            c.coord.x = i mod columns
+            c.coord.y = i / columns
+        else
+            ` this cell is not on the board
+            hide sprite c.spriteId
+        endif
+        scale sprite c.fxSpriteId, fxScale#, fxScale#
+        hide sprite c.fxSpriteId
+        CELLS(i) = c
+    next
+
+    ` info mode explains the board, wherever the board is now
+    blob = INFOS(INFO_INDEX_GRID)
+    blob.topLeft.x = GRID_POS.x - CELL_SIZE / 2
+    blob.topLeft.y = GRID_POS.y - CELL_SIZE / 2
+    blob.size.x = columns * CELL_SIZE
+    blob.size.y = rows * CELL_SIZE
+    INFOS(INFO_INDEX_GRID) = blob
+endfunction
+
 function getFishColorIndex(fishValue)
 endfunction fishValue - 1
 
@@ -176,13 +223,13 @@ function collectInput()
         y = 0
     } 
 
-    isSwap = spaceKey()
+    isSwap = action down(ACT_SWAP)
     swapVal = -1
     if MOVE_ABILITY_COUNT > 0
         for i = 0 to MOVE_ABILITY_COUNT - 1
             moveBinding = MOVE_ABILITY_BINDINGS(i)
 
-            isKey = key down(scancode(moveBinding.key$))
+            isKey = action down(moveBinding.actionId)
             ` TODO: check for the ready staus when actually processing input.
             `isReady = moveBinding.movesLeft <= 0
 
@@ -196,10 +243,10 @@ function collectInput()
     
 `    isShift = isAbility_MoveShift() and key down(scancode("Z"))
 
-    if new rightkey() then swapDir.x = 1
-    if new leftkey() then swapDir.x = -1
-    if new upKey() then swapDir.y = -1
-    if new downKey() then swapDir.y = 1
+    if new action down(ACT_RIGHT) then swapDir.x = 1
+    if new action down(ACT_LEFT) then swapDir.x = -1
+    if new action down(ACT_UP) then swapDir.y = -1
+    if new action down(ACT_DOWN) then swapDir.y = 1
 
     if swapDir.x <> 0 or swapDir.y <> 0
         QUEUED_MOVES(QUEUED_MOVE_NUM) = {
@@ -265,6 +312,7 @@ function getRandomValue()
 endfunction rnd(7)+1
 
 function doBomb(start as vec, dir as vec)
+    spawnCursorWake(start.x, start.y)
     target as vec = addCoordinates(start, dir)
     aIndex = getCellIndex(start)
 
@@ -331,6 +379,7 @@ function doBomb(start as vec, dir as vec)
         set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
 
         collectInput()
+        updateBubbles()
         sync
     endwhile
 
@@ -384,6 +433,7 @@ function doBomb(start as vec, dir as vec)
         set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
 
         collectInput()
+        updateBubbles()
         sync
     endwhile
 
@@ -391,6 +441,7 @@ function doBomb(start as vec, dir as vec)
 endfunction
 
 function doLineOut(start as vec, dir as vec)
+    spawnCursorWake(start.x, start.y)
     target as vec = addCoordinates(start, dir)
     aIndex = getCellIndex(start)
 
@@ -452,6 +503,7 @@ function doLineOut(start as vec, dir as vec)
         set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
 
         collectInput()
+        updateBubbles()
         sync
     endwhile
 
@@ -487,6 +539,7 @@ function doLineOut(start as vec, dir as vec)
         set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
 
         collectInput()
+        updateBubbles()
         sync
     endwhile
 
@@ -494,6 +547,7 @@ function doLineOut(start as vec, dir as vec)
 endfunction
 
 function doClone(start as vec, dir as vec)
+    spawnCursorWake(start.x, start.y)
     target as vec = addCoordinates(start, dir)
 
     aIndex = getCellIndex(start)
@@ -548,6 +602,7 @@ function doClone(start as vec, dir as vec)
         set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
 
         collectInput()
+        updateBubbles()
         sync
 
     endwhile
@@ -567,6 +622,7 @@ endfunction
 
 
 function doShift(start as vec, dir as vec)
+    spawnCursorWake(start.x, start.y)
     target as vec = addCoordinates(start, dir)
     aIndex = getCellIndex(start)
 
@@ -592,9 +648,10 @@ function doShift(start as vec, dir as vec)
     }
     duration = 150
 
-    shiftSize = CELL_ROW_COUNT
+    ` a row is as long as the number of columns, and a column is as long as the number of rows
+    shiftSize = CELL_COLUMN_COUNT
     if (dir.x = 0)
-        shiftSize = CELL_COLUMN_COUNT
+        shiftSize = CELL_ROW_COUNT
     endif
     for i = 0 to shiftSize - 1
         
@@ -606,7 +663,7 @@ function doShift(start as vec, dir as vec)
         endif
  
         if dir.y = 1
-            index = ai + (i * CELL_ROW_COUNT)
+            index = ai + (i * CELL_COLUMN_COUNT)
             startVal = getCellY(i)
             endVal = getCellY(i + 1)
             if i = shiftSize - 1 then endVal = getCellY(0)
@@ -620,7 +677,7 @@ function doShift(start as vec, dir as vec)
         endif
 
         if dir.y = -1
-            index = ai + (i * CELL_ROW_COUNT)
+            index = ai + (i * CELL_COLUMN_COUNT)
             startVal = getCellY(i)
             endVal = getCellY(i - 1)
             if i = 0 then endVal = getCellY(CELL_ROW_COUNT - 1)
@@ -640,11 +697,11 @@ function doShift(start as vec, dir as vec)
     set tween type SWAP_TWEEN_SFX, 1
 
     while any tweens running(cells(ai).shiftTweenId)
-        for i = 0 to CELL_ROW_COUNT - 1
+        for i = 0 to shiftSize - 1
             index = ai + i
 
             if (dir.y <> 0)
-                index = ai + i*CELL_ROW_COUNT
+                index = ai + i*CELL_COLUMN_COUNT
             endif
 
             cell = cells(index)
@@ -659,6 +716,7 @@ function doShift(start as vec, dir as vec)
 
             set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
         next
+        updateBubbles()
         sync
     endwhile
 
@@ -690,12 +748,12 @@ function doShift(start as vec, dir as vec)
     endif
 
     if (dir.y = 1)
-        endIndex = ai + ((CELL_COLUMN_COUNT-1) * CELL_ROW_COUNT)
+        endIndex = ai + ((CELL_ROW_COUNT-1) * CELL_COLUMN_COUNT)
         temp = cells(endIndex).value
         for i = (shiftSize - 1) to 1 step -1
 
-            index = ai + ((i) * CELL_ROW_COUNT)
-            prevIndex = ai + ((i - 1) * CELL_ROW_COUNT)
+            index = ai + ((i) * CELL_COLUMN_COUNT)
+            prevIndex = ai + ((i - 1) * CELL_COLUMN_COUNT)
             cells(index).value = cells(prevIndex).value
             updateCell(cells(index))
         next
@@ -705,12 +763,12 @@ function doShift(start as vec, dir as vec)
     endif
 
     if (dir.y = -1)
-        endIndex = ai + ((CELL_COLUMN_COUNT-1) * CELL_ROW_COUNT)
+        endIndex = ai + ((CELL_ROW_COUNT-1) * CELL_COLUMN_COUNT)
         temp = cells(ai).value
         for i = 0 to (shiftSize - 2)
 
-            index = ai + ((i) * CELL_ROW_COUNT)
-            prevIndex = ai + ((i + 1) * CELL_ROW_COUNT)
+            index = ai + ((i) * CELL_COLUMN_COUNT)
+            prevIndex = ai + ((i + 1) * CELL_COLUMN_COUNT)
             cells(index).value = cells(prevIndex).value
             updateCell(cells(index))
         next
@@ -725,6 +783,9 @@ function doShift(start as vec, dir as vec)
 endfunction
 
 function doSwap(start as vec, dir as vec, doSwap)
+
+    ` the cursor leaves a few bubbles behind
+    spawnCursorWake(start.x, start.y)
 
     target as vec = addCoordinates(start, dir)
 
@@ -768,6 +829,7 @@ function doSwap(start as vec, dir as vec, doSwap)
         set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
 
         collectInput()
+        updateBubbles()
         sync
 
     endwhile

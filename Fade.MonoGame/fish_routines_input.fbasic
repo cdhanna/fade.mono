@@ -1,6 +1,109 @@
 goto routines_input_exit
 
 
+` bind the keys of the keyboard, and the buttons of a controller, to the things the player can do.
+` the rest of the game only asks about the actions, so it works the same on both.
+setup_input:
+
+    ` directions come from the arrow keys, the d-pad, or the left stick
+    reserve action id(ACT_LEFT)
+    bind action key ACT_LEFT, scancode("Left")
+    bind action button ACT_LEFT, padCode("DPadLeft")
+    bind action button ACT_LEFT, padCode("LeftThumbstickLeft")
+
+    reserve action id(ACT_RIGHT)
+    bind action key ACT_RIGHT, scancode("Right")
+    bind action button ACT_RIGHT, padCode("DPadRight")
+    bind action button ACT_RIGHT, padCode("LeftThumbstickRight")
+
+    reserve action id(ACT_UP)
+    bind action key ACT_UP, scancode("Up")
+    bind action button ACT_UP, padCode("DPadUp")
+    bind action button ACT_UP, padCode("LeftThumbstickUp")
+
+    reserve action id(ACT_DOWN)
+    bind action key ACT_DOWN, scancode("Down")
+    bind action button ACT_DOWN, padCode("DPadDown")
+    bind action button ACT_DOWN, padCode("LeftThumbstickDown")
+
+    ` the swap is the main thing the player does, so it gets the main button
+    reserve action id(ACT_SWAP)
+    bind action key ACT_SWAP, scancode("Space")
+    bind action button ACT_SWAP, padCode("A")
+
+    reserve action id(ACT_CONFIRM)
+    bind action key ACT_CONFIRM, scancode("Space")
+    bind action key ACT_CONFIRM, scancode("Enter")
+    bind action button ACT_CONFIRM, padCode("A")
+
+    ` this would be tab, but while the debug inspector is enabled, imgui takes the keyboard
+    ` when tab is pressed, and then the game does not see any keys at all.
+    reserve action id(ACT_INFO)
+    bind action key ACT_INFO, scancode("I")
+    bind action button ACT_INFO, padCode("Back")
+
+    ` this would be escape, but the engine closes the window when escape is pressed.
+    reserve action id(ACT_PAUSE)
+    bind action key ACT_PAUSE, scancode("P")
+    bind action button ACT_PAUSE, padCode("Start")
+
+    ` the move abilities, in the order that they get handed out
+    dim abilityKeys$(MOVE_SLOT_COUNT)
+    dim abilityButtons$(MOVE_SLOT_COUNT)
+    abilityKeys$(0) = "Z"
+    abilityKeys$(1) = "X"
+    abilityKeys$(2) = "C"
+    abilityKeys$(3) = "V"
+    abilityButtons$(0) = "X"
+    abilityButtons$(1) = "Y"
+    abilityButtons$(2) = "B"
+    abilityButtons$(3) = "RightShoulder"
+    for i = 0 to MOVE_SLOT_COUNT - 1
+        reserve action id(abilityActionId)
+        bind action key abilityActionId, scancode(abilityKeys$(i))
+        bind action button abilityActionId, padCode(abilityButtons$(i))
+        ACT_ABILITY(i) = abilityActionId
+    next
+
+    ` the last move is on the bumpers, and either one will do
+    bind action button ACT_ABILITY(MOVE_SLOT_COUNT - 1), padCode("LeftShoulder")
+
+return
+
+
+` the input icons are named after the things the player can do, like {swap}, and not after keys.
+` so the text that uses them never changes. this points the names at the pictures for whichever
+` device the player touched last, the keyboard or a controller.
+frame_input_icons:
+    if input device() = INPUT_ICON_DEVICE then return
+    INPUT_ICON_DEVICE = input device()
+
+    ` the last number is the frame of the picture in its sheet. the sheets are grids, and the
+    ` frames count across each row, starting from the top left.
+    if INPUT_ICON_DEVICE = 1
+        font icon SCORE_FONT, 1, "move1", TEX_PAD, 86 `x
+        font icon SCORE_FONT, 2, "move2", TEX_PAD, 88 `y
+        font icon SCORE_FONT, 3, "move3", TEX_PAD, 84 `b
+        font icon SCORE_FONT, 4, "move4", TEX_PAD, 23 `the right bumper. the left one works too.
+        font icon SCORE_FONT, 5, "info", TEX_PAD, 78 `the button with two squares, where back used to be
+        font icon SCORE_FONT, 6, "swap", TEX_PAD, 82 `a
+        font icon SCORE_FONT, 7, "dir", TEX_PAD, 64 `the d-pad
+        font icon SCORE_FONT, 11, "pause", TEX_PAD, 70 `the button with three lines, where start used to be
+        font icon SCORE_FONT, 12, "confirm", TEX_PAD, 82 `a
+    else
+        font icon SCORE_FONT, 1, "move1", TEX_KEYS, 44 `z
+        font icon SCORE_FONT, 2, "move2", TEX_KEYS, 40 `x
+        font icon SCORE_FONT, 3, "move3", TEX_KEYS, 189 `c
+        font icon SCORE_FONT, 4, "move4", TEX_KEYS, 34 `v
+        font icon SCORE_FONT, 5, "info", TEX_KEYS, 119 `i
+        font icon SCORE_FONT, 6, "swap", TEX_KEYS, 51 `space
+        font icon SCORE_FONT, 7, "dir", TEX_KEYS, 224 `the arrow keys
+        font icon SCORE_FONT, 11, "pause", TEX_KEYS, 112 `p
+        font icon SCORE_FONT, 12, "confirm", TEX_KEYS, 51 `space
+    endif
+return
+
+
 process_input:
     collectInput()
 
