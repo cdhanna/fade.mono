@@ -9,7 +9,7 @@ global SCORE_POS as vec = {
 
 
 global dim CARDS(20) as ability
-global CARD_LENGTH = 16
+global CARD_LENGTH = 18
 
 global CURRENT_MOVE_COUNT = 0
 global MOVE_COUNT_TEXT_ID
@@ -37,6 +37,32 @@ global ABILITY_INDEX_BOTTOM_FEEDER_2 = 12 `the second copy. it only gets offered
 global ABILITY_INDEX_CONTAGIOUS_SMILE = 13
 global ABILITY_INDEX_BOTTOMS_UP = 14
 global ABILITY_INDEX_MOVE_FREE = 15
+global ABILITY_INDEX_MOVE_ROBOT = 16
+global ABILITY_INDEX_MOVE_ERASER = 17
+
+` THE ROBOT. a special move that makes swaps for the player. it looks at the fish near the cursor, picks
+` the swap that would pop the most fish, makes it, and then does that again, a few times over.
+` the swaps do not count as moves of their own, and they do not touch the multiplier. the whole thing
+` counts as the one move. doRobot, in fish_funcs, does it.
+global ROBOT_SWAPS = 3 `how many swaps it makes
+global ROBOT_REACH = 2 `how many cells away from the cursor it looks, in every direction
+global ROBOT_COOLDOWN = 2 `how many moves it takes to recharge
+global ROBOT_SWAP_TIME = 170 `how long each of its swaps takes, in milliseconds
+global ROBOT_STAMP = 1000000 `a number that is different for every search that it makes. see robotGroupSize.
+global ROBOT_LAST_COUNT = 0 `how many swaps it made the last time. 0 means that it found nothing to do.
+
+` THE ERASER. a special move that sorts the whole board, with a flurry of quick swaps, so that every
+` kind of fish ends up all together, and then all of it pops.
+` it sorts along a path that snakes through the board: left to right along the top row, back from right
+` to left along the next one, and so on down. two cells that are next to each other on the path are
+` next to each other on the board, so every swap that it makes is one that the player could have made.
+` once the path is sorted, each kind of fish is one unbroken stretch of it, and so one group.
+` a kind that there are too few of to pop on their own gets popped anyway, so that nothing is left over.
+` doEraser, in fish_funcs, does it.
+global ERASER_COOLDOWN = 4 `how many moves it takes to recharge
+global ERASER_SPEED_START# = 1 `how many swaps it makes on its first frame
+global ERASER_SPEED_GROW# = .35 `how many more it makes on every frame after that, so that it starts slow enough to follow and then tears through
+global ERASER_SPEED_MAX# = 60 `the most that it makes on a frame
 
 ` ability type enum constants
 ` global ABILITY_TYPE_PASSIVE = 0
@@ -229,6 +255,14 @@ global SCORE_SHOWN = 0
 ` more than SCORE_CARRY_MAX# of the way along, so one combo cannot win two rounds in a row.
 global SCORE_BAR_HOLD = 0 `0 is not full. 1 is full, and waiting for the board to settle. 2 is full, with the upgrade screen asked for.
 global SCORE_CARRY_MAX# = .5 `how much of the next round's bar the points scored past the end can fill, at the most
+
+` HOW LONG A ROUND IS. round n needs SCORE_ROUND_BASE * n ^ SCORE_ROUND_POWER# points: 400, 1020, 1760, 2600, 3510,
+` then about 8950 for round 10, 22830 for round 20, and 39460 for round 30. getRoundSpan, in fish_funcs, works it out.
+` the base is how long the first round is, and it scales every round. the power is how much steeper the later
+` rounds get: at 1 every round adds the same amount, and at 2 they pull away fast. it wants to grow about as
+` fast as what a move scores does, so that the upgrades keep coming at a steady pace.
+global SCORE_ROUND_BASE = 400
+global SCORE_ROUND_POWER# = 1.35
 global SCORE_BAR_FIZZ_MS = 0 `when the full bar lets off its next bubbles
 global SCORE_BAR_FIZZ_GAP = 55 `how many milliseconds there are between them
 
@@ -335,25 +369,44 @@ global MOVE_ABILITY_COUNT = 0
 global moveAbility as moveDisplay
 global dim MOVE_ABILITY_BINDINGS(MOVE_ABILITY_BINDINGS_LENGTH) as moveDisplay
 
-` EQUIPPING A MOVE. there are more moves than there are buttons, so a move that is picked on the upgrade
-` screen has to be put in a slot. the screen lists the slots that are open, each with its button and the
-` move that is in it, all greyed out, and the player picks one. picking a slot that has a move in it
-` throws that move out, and it is gone until an upgrade offers it again, so the player is asked first.
-` the last row leaves the new move behind instead, and that asks first too.
+` EQUIPPING A MOVE. there are more moves than there are buttons, so a move has to be put in a slot to
+` be used. one screen does all of it. it lists the slots that are open, each with its button and the
+` move that is in it, all greyed out. the player picks a row up, and then picks another row, and the
+` moves in the two rows trade places.
+` when a move has just been picked on the upgrade screen, it is not in a slot yet. if there is a slot
+` that is empty, it goes straight into the first one, and the screen does not come up at all.
+` when every slot is full, it waits in a row of its own, the spare row, at the top of the list, and
+` it gets a slot by trading places with one. the spare row is labelled "available", and the rows of
+` the slots are labelled "inventory".
+` whatever is in the spare row when the player is done is left behind, and is gone until an upgrade
+` offers it again, so the player is asked first.
+` the same screen, without the spare row, can be opened at any time to move the moves between the
+` buttons: from info mode, with the confirm button on a move, and from the pause menu.
 ` the routines are in fish_routines_equip.
-global EQUIP_ROW_MAX = 5 `a row for every slot, and one more to leave the move behind
+#constant EQUIP_ROW_SLOT 0
+#constant EQUIP_ROW_SPARE 1
+#constant EQUIP_ROW_DONE 2
+#constant EQUIP_MODE_UPGRADE 0
+#constant EQUIP_MODE_REARRANGE 1
+global EQUIP_MODE = 0
+global EQUIP_HELD = -1 `the row that has been picked up, or -1
+global EQUIP_SPARE = -1 `the card of the move that is in the spare row, or -1
+global EQUIP_SPARE_LEFT = 0 `how long that move has left to recharge
+global EQUIP_START_SLOT = -1 `the slot to start on, when the screen is opened to rearrange. -1 is the first one.
+global EQUIP_SPARE_GAP = 6 `how much further the spare row is from the slots than the slots are from each other
+global EQUIP_ROW_MAX = 6 `a row for every slot, the spare row, and the row that says "done"
 global dim EQUIP_ROWS(EQUIP_ROW_MAX) as equipRow
-global EQUIP_ROW_COUNT = 0 `how many rows are showing. the last one leaves the move behind.
+global EQUIP_ROW_COUNT = 0 `how many rows are showing. the last one is "done".
 global EQUIP_SELECTED = 0 `the highlighted row
 global EQUIP_CONFIRMING = 0 `1 while the player is being asked if they are sure
 global EQUIP_CONFIRM_YES = 0 `which answer is highlighted
-global EQUIP_ROW_WIDTH = 230
+global EQUIP_ROW_WIDTH = 260 `wide enough that a long name does not run into the note at the other end
 global EQUIP_ROW_HEIGHT = 22
-global EQUIP_ROW_GAP = 4
-global EQUIP_ROWS_TOP = 128
+global EQUIP_ROW_GAP = 3
+global EQUIP_ROWS_TOP = 126
 global EQUIP_OPTION_WIDTH = 60 `how wide the outline around an answer is
 global EQUIP_ROW_X = 0 `the left edge of the rows. setup_move_equip works these out, because the size of the world is not known here.
-global EQUIP_NO_X = 0 `the middle of each of the two answers. they go to the right of the row that was picked.
+global EQUIP_NO_X = 0 `the middle of each of the two answers. they go to the right of the highlighted row.
 global EQUIP_YES_X = 0
 global EQUIP_FADE_TWEEN_ID
 global EQUIP_CURSOR_TWEEN_ID
@@ -361,6 +414,8 @@ global EQUIP_DESC_TEXT_ID
 global EQUIP_PROMPT_TEXT_ID
 global EQUIP_NO_TEXT_ID
 global EQUIP_YES_TEXT_ID
+global EQUIP_INVENTORY_TEXT_ID `the label next to the rows of the slots
+global EQUIP_AVAILABLE_TEXT_ID `the label next to the spare row
 
 ` setup fish info allocations.
 global INFO_COUNT = 100 `allocate up a bunch of these things, and hope for the best. 
@@ -429,7 +484,10 @@ global MENU_PAGE = 0
 #constant MENU_ITEM_GAME_START 15
 #constant MENU_ITEM_GAME_BACK 16
 #constant MENU_ITEM_OVER_DONE 17
-global MENU_ITEM_COUNT = 18
+` this one is on the pause menu, right under "Resume". it is last in this list so that the numbers
+` of the others did not have to change. setMenuPage puts it where it goes.
+#constant MENU_ITEM_MOVES 18
+global MENU_ITEM_COUNT = 19
 global dim MENU_ITEMS(MENU_ITEM_COUNT) as menuItem
 
 global MENU_PAGE_FIRST = 0 `the first item on the page
@@ -437,7 +495,7 @@ global MENU_PAGE_LENGTH = 0 `how many items are on the page
 
 ` the items on the page, from the top down. a page is a run of items that are next to each other, but
 ` it can leave some of them out. the pause menu leaves out the things that only make sense from the title.
-global dim MENU_PAGE_ITEMS(18)
+global dim MENU_PAGE_ITEMS(19)
 global MENU_SELECTED = 0 `the highlighted line, counted from the top of the page
 
 ` where the list goes
@@ -452,7 +510,7 @@ global ORDER_MENU_BUBBLES = 210
 
 ` these are draw orders inside of the menu's own render target
 global ORDER_MENU_BACKDROP = 0
-global ORDER_MENU_FISH = 4
+global ORDER_MENU_SURFACE = 4
 global ORDER_MENU_PANEL = 10
 global ORDER_MENU_CURSOR = 14
 global ORDER_MENU_TEXT = 20
@@ -518,8 +576,93 @@ global OPTION_FULLSCREEN = 0
 global OPTION_WINDOW_W = 0
 global OPTION_WINDOW_H = 0
 
-global MENU_FISH_COUNT = 7
-global dim MENU_FISHES(MENU_FISH_COUNT) as menuFish
+` THE SURFACE. the main menu is the view from the surface of the water. the routines are in fish_routines_surface.
+global SURFACE_FX_ID
+global TEX_DIVE_BOAT
+
+` THE TIME OF DAY. the surface has two sets of colors: the middle of the day, and the sun going down.
+` setup_surface picks one when the game starts, by the clock of the computer. setting the FISH_SKY
+` environment variable to "day" or to "evening" picks one no matter what the time is.
+global SURFACE_DAY = 0 `1 for the middle of the day, 0 for the evening
+global SURFACE_EVENING_HOUR = 17 `the evening starts at this hour of the day, out of 24
+global SURFACE_MORNING_HOUR = 6 `and it lasts all night, until this hour
+global SURFACE_SPRITE `the sky and the sea
+global MENU_CAMERA_ID `slides everything in the menu's render target up the screen as the game goes under
+global SURFACE_BOAT_SPRITE
+global SURFACE_HORIZON = 150 `how far down the screen the horizon is
+global SURFACE_BOAT_X = 458 `where the middle of the picture of the boat is, which is off to the side of the menu
+global SURFACE_SINK_DISTANCE = 230 `how far up the screen the horizon goes as the camera goes under
+global SURFACE_SWELL_RISE = 150 `and how far up the screen the water right in front of the camera comes
+global SURFACE_SINK_LEAD_SHARE# = .5 `and how much of the way under it has got by then, where 1 is all of the way
+global SURFACE_SINK_LEAD = 750`how long the camera has been sinking for when the wave of bubbles starts up the screen, in milliseconds
+global SURFACE_SINK# = 0`how far under the camera is. 0 is at the surface, and 1 is all the way under.
+global SURFACE_UP = 0 `1 when the camera is at the surface, which is whenever the main menu is all there is to see
+global TRANSITION_SURFACE = 0 `1 while the wave of bubbles is the waterline, going between the surface and the game
+
+` the camera can look up from the boat, into the sky. this is how far up it is looking, in pixels. the
+` splash screen is all the way up, where there is nothing but stars, and then the camera comes down.
+global SURFACE_PAN# = 0
+global SPLASH_PAN = 760 `how far up the splash screen is
+global SPLASH_PAN_DURATION = 3200 `how long the camera takes to come down from there, in milliseconds
+global MENU_CHROME_ALPHA# = 1 `0 when the title and the list of the menu are see-through. they fade in as the camera comes down.
+
+` THE SEA FLOOR. what is behind the board while the game is being played. the routines are in fish_routines_seabed.
+global SEABED_FX_ID
+global SEABED_SPRITE `the water, the light and the rock
+global SNOW_FX_ID
+global SNOW_SPRITE `the specks that drift in front of the fish
+global ORDER_SEABED = -10 `underneath everything
+global ORDER_SNOW = 27 `on top of the fish and the bubbles, and underneath the score text
+
+` THE MOOD. one swap can set off a run of pops: fish pop, the board fills back in, and that pops more.
+` the water gets brighter, the shafts of light get stronger, and the words around the board light up,
+` for every group of fish that pops in the run. when the board settles, it all dims back down. so
+` every move breathes in and out, and a long run lights the whole place up.
+global SEABED_COMBO = 0 `how many groups of fish have popped since the board was last settled. handle_combos keeps count.
+global SEABED_MOOD# = 0 `0 is the dim water of a settled board, and 1 is as bright as it gets
+global SEABED_MOOD_HALF# = 3 `how many groups it takes to get half of the way to the brightest. it never quite gets there.
+global SEABED_MOOD_EASE# = .0015 `how much of the way up to where it should be it goes in a millisecond
+global SEABED_MOOD_FALL# = .0005 `and how much of the way down. it comes up quicker than it settles.
+global SEABED_LAST_MS = 0
+
+` THE RAINBOW. when a run of pops is a long one, the specks in the water turn the colors of the rainbow
+` every time more fish pop. then it fades, until the next pop.
+global SEABED_SURGE# = 0 `1 when more fish have just popped. it dies away to 0.
+global SEABED_SURGE_FADE# = .00025 `how much of the surge goes away in a millisecond
+global SEABED_SURGE_WAS# = 0 `where the mood was headed on the last frame, to tell when it goes up
+global SEABED_RAINBOW_FROM# = .3 `how high the mood has to be for there to be any rainbow at all
+global SEABED_RAINBOW_FULL# = .6 `and how high for all of it
+global SEABED_RAINBOW_REST# = .25 `how much of the rainbow stays between one pop and the next, while the mood is high
+global SEABED_RAINBOW# = 0 `how much rainbow is showing. it chases what the surge says, so that it does not snap on.
+global SEABED_RAINBOW_EASE# = .003 `how much of the way there it goes in a millisecond
+
+` the specks drift faster when the mood is high. the effects can not just be told a faster speed, because
+` the specks would all jump to somewhere else. so they move by a clock of their own, and it is the
+` clock that runs faster.
+global SEABED_SNOW_CLOCK# = 0 `in seconds
+global SEABED_SNOW_RUSH# = 1.5 `how much faster the clock runs when the mood is all the way up. 1 is twice as fast.
+
+` THE CURRENT. every so often a little wave comes through the board, from the top left to the bottom
+` right. each fish leans into it as it gets there, and back out of it as it leaves, and then sits still
+` until the next one. the fish do not move from their places. frame_fish_fx, in fish_routines, does it.
+global CURRENT_PERIOD# = 9000 `how long it is from one wave to the next, in milliseconds
+global CURRENT_SPREAD# = .25 `how much later the wave gets to the next fish along. smaller is a wider, faster wave.
+global CURRENT_DIR_X# = .89 `which way the wave goes: this many cells across,
+global CURRENT_DIR_Y# = .45 `and this many down
+global CURRENT_TILT# = .3 `how far a fish leans at the most, in radians
+
+` RIPPLES. the rings that tilt the fish also push the picture of the whole screen as they pass, like
+` a bulge in the water. the pushes of all the rings add up, so two rings that cross do not hide each other.
+` the screen effect does it, for this many of the strongest rings at once.
+` this has to be how many Ripple parameters ScreenEffect.fx has.
+global RIPPLE_COUNT = 8
+
+` THE WATERLINE. going from the game back up to the main menu, the water drains down the screen. there
+` are no bubbles in that. the menu's effect and the screen effect both draw the water as everything
+` below a wavy line, in place of looking at the bubble mask.
+global WATERLINE_USE = 0 `1 while that is going on
+global WATERLINE_Y# = 0 `how far down the screen the line is, where 0 is the top and 1 is the bottom
+global WATERLINE_TILT# = 0 `how much lower the right end of the line is than the left end, measured the same way
 
 ` THE SAVED GAME. the routines are in fish_routines_save.
 ` the game in progress is kept in the preferences, as a block of numbers. these say where each part of it starts.
@@ -531,6 +674,116 @@ global SAVE_PREF_PASSIVES = 300 `the passives, in order
 global SAVE_PREF_MOVES = 350 `the move in every slot, with two numbers each
 global SAVE_PREF_CELLS = 1000 `one number for every cell of the board
 global SAVE_SIGNATURE = -1 `what saveSignature said at the last save. the game is saved again when that changes.
+
+` THE HIGH SCORES. the routines are in fish_routines_highscores, and the top of that file explains how they work.
+` there is a table for every kind of game: every length, in both modes. a table is a run of HISCORE_ROWS
+` entries in these lists, best first, and table n starts at n * HISCORE_ROWS. getHighscoreTable says which n.
+global HISCORE_ROWS = 8 `how many entries a table has
+global HISCORE_TABLE_COUNT = 6 `three lengths, times two modes
+global dim HISCORE_NAMES(48) `the initials, packed into one number. see packInitials.
+global dim HISCORE_MOVES(48) `how many moves the game took. fewer is better.
+global dim HISCORE_MULTS(48) `the highest that the multiplier got
+global HISCORE_EMPTY_MOVES = 999999 `an entry with this many moves is a row that nobody has taken yet
+
+` the scores that the tables start out with. seed_highscores, in fish_routines_highscores, fills these in.
+global HISCORE_SEED_COUNT = 0
+global dim HISCORE_SEED_NAMES(8)
+global dim HISCORE_SEED_MULTS(8)
+global dim HISCORE_SEED_MOVES(24) `three for every seed: a short game, a regular one, and a long one
+
+` the tables are kept in the preferences, 100 numbers apart, starting here. they must not move.
+global HISCORE_PREF = 3000
+` the initials that were entered last, packed the same way, are kept with the options
+#constant PREF_INITIALS 6
+
+global BEST_MULTIPLIER = 1 `the highest that the multiplier has been in the game that is being played
+global dim HISCORE_LETTERS(3) `the initials that are being entered, as numbers from 0 (A) to 25 (Z)
+
+` where the table goes on the screen
+global HISCORE_WIDTH = 300
+global HISCORE_TOP = 86
+global HISCORE_ROW_HEIGHT = 20
+
+` which table is showing is said by two rows of tabs on top of it: one for the modes, and under that,
+` one for the lengths. tabs 0 and 1 are the modes, and tabs 2, 3 and 4 are the lengths.
+global dim HISCORE_TAB_TEXTS(5)
+global dim HISCORE_TAB_SPRITES(5)
+global HISCORE_TAB_HEIGHT = 18
+global HISCORE_NOTE_TEXT_ID `says how the game that just ended did
+global dim HISCORE_HEAD_TEXTS(4) `the names of the columns
+global dim HISCORE_CELL_TEXTS(48) `six for every row: the place, the three initials, the moves, and the multiplier
+global dim HISCORE_LETTER_TEXTS(3) `the big letters on the page where the initials are entered
+
+` THE LOG OF UPGRADES. every upgrade that gets picked is written down, with the move that it was picked on.
+` each one is one number: the move, times 100, plus the card. logUpgrade, in fish_routines_highscores, adds one.
+` the log of the game that is being played is saved with the game. when a game gets onto a table, its log
+` goes with it, and picking its row on the table shows it.
+global HISCORE_LOG_MAX = 100 `the most upgrades that get written down for one game
+global GAME_LOG_COUNT = 0
+global dim GAME_LOG(100)
+
+` the log of every entry on every table. each entry has HISCORE_LOG_STRIDE numbers: how many upgrades
+` there are, and then the upgrades. entry n starts at n * HISCORE_LOG_STRIDE.
+global HISCORE_LOG_STRIDE = 101
+global dim HISCORE_LOGS(4848)
+
+` where the logs are kept in the preferences. a table has 1000 numbers, and they must not move.
+global HISCORE_LOG_PREF = 10000
+global SAVE_PREF_LOG = 500 `and where the log of the saved game is kept, with the rest of the saved game
+
+` the page that shows the log of one entry. it lists this many upgrades at a time, and it scrolls.
+global HISCORE_DETAIL_ROWS = 7
+global HISCORE_DETAIL_WIDTH = 360
+global HISCORE_DETAIL_TOP = 70
+global HISCORE_DETAIL_ROW_HEIGHT = 26
+global dim HISCORE_DETAIL_HEAD_TEXTS(3)
+global dim HISCORE_DETAIL_NUM_TEXTS(7) `which upgrade of the game it was: the first, the second, and so on
+global dim HISCORE_DETAIL_ART_SPRITES(7) `the picture from the card
+global dim HISCORE_DETAIL_NAME_TEXTS(7)
+global dim HISCORE_DETAIL_KIND_TEXTS(7) `passive, move or instant, with its icon
+global dim HISCORE_DETAIL_MOVE_TEXTS(7) `the move that it was picked on
+
+global HISCORE_CURSOR as infoBorder `the outline around a row of the table or a tab, and around the letter that is being changed
+global HISCORE_CURSOR_ON = 0
+
+` where the outline is on whichever of these pages is up: the high scores, or the codec. when it moves, it
+` leaves a wake behind where it was. movePageOutline, in fish_routines_highscores, does that.
+global PAGE_OUTLINE_PLACED = 0 `0 until the outline has been put somewhere on the page that is up
+global PAGE_OUTLINE_X = 0
+global PAGE_OUTLINE_Y = 0
+global PAGE_OUTLINE_W = 0
+global PAGE_OUTLINE_H = 0
+
+` THE CODEC. the routines are in fish_routines_codec, and the top of that file explains how it works.
+global CODEC_COUNT = 16 `how many entries there are, which is one for every card. setup_codec works this out.
+global dim CODEC_SEEN(32) `1 for every entry that has been seen in a game, and so is unlocked
+
+` where in the preferences what has been seen is kept, one number for every entry. it must not move.
+global CODEC_PREF = 57
+
+` where the codec goes on the screen
+global CODEC_COLUMNS = 8 `how many upgrades there are on a row of the grid
+global CODEC_ROWS = 2 `and how many rows there are on a page of it
+global CODEC_PAGE_SIZE = 16 `how many tiles that makes. there is a sprite for every tile of a page, and no more.
+global CODEC_PAGE_TEXT_ID `says which page is showing
+global dim CODEC_ARROW_TEXTS(2) `the arrows at the two ends of the grid, which say that there are more pages
+global CODEC_TILE = 40 `how far apart the tiles of the grid are
+global CODEC_X = 75
+global CODEC_WIDTH = 420
+global CODEC_TOP = 80
+global CODEC_HEIGHT = 194
+global CODEC_DETAIL_TOP = 178 `where the part that explains the highlighted tile starts
+global TEX_LOCK
+global dim CODEC_ICON_SPRITES(32)
+global dim CODEC_LOCK_SPRITES(32)
+global CODEC_COUNT_TEXT_ID
+global CODEC_DIVIDER_SPRITE
+global CODEC_BIG_SPRITE
+global CODEC_NAME_TEXT_ID
+global CODEC_KIND_TEXT_ID
+global CODEC_DESC_TEXT_ID
+global CODEC_CURSOR as infoBorder
+global CODEC_SELECTED = 0 `the entry that is highlighted
 
 ` THE CREDITS, AND THE SPLASH SCREEN. the routines are in fish_routines_credits.
 global TEX_LOGO_FADE

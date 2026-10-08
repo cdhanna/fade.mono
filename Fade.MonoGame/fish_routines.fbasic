@@ -202,7 +202,8 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_PASSIVE_STOCK_MARKET).artTexId), "Fish/Textures/Cards/stock_market"
     texture reserve texture id(CARDS(ABILITY_INDEX_THINK_BIGGER).artTexId), "Fish/Textures/Cards/think_bigger"
     texture reserve texture id(CARDS(ABILITY_INDEX_BOTTOM_FEEDER).artTexId), "Fish/Textures/Cards/bottom_feeder"
-    texture reserve texture id(CARDS(ABILITY_INDEX_BOTTOM_FEEDER_2).artTexId), "Fish/Textures/Cards/bottom_feeder"
+    ` the second copy uses the same texture. loading the same picture into a second texture came out as a black square.
+    CARDS(ABILITY_INDEX_BOTTOM_FEEDER_2).artTexId = CARDS(ABILITY_INDEX_BOTTOM_FEEDER).artTexId
     texture reserve texture id(CARDS(ABILITY_INDEX_CONTAGIOUS_SMILE).artTexId), "Fish/Textures/Cards/contagious_smile"
     texture reserve texture id(CARDS(ABILITY_INDEX_BOTTOMS_UP).artTexId), "Fish/Textures/Cards/bottoms_up"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_SHIFT).artTexId), "Fish/Textures/Cards/shift"
@@ -210,6 +211,8 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_BOMB3x3).artTexId), "Fish/Textures/Cards/bomb"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_LINE_OUT).artTexId), "Fish/Textures/Cards/line_out"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_FREE).artTexId), "Fish/Textures/Cards/free_swap"
+    texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_ROBOT).artTexId), "Fish/Textures/Cards/robot"
+    texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_ERASER).artTexId), "Fish/Textures/Cards/eraser"
 
 return
 
@@ -330,7 +333,7 @@ setup_score:
     }
     global SCORE_BAR as progressBar = createProgressBar(SCORE_POS, SCORE_SIZE)
     SCORE_BAR.startVal = 0
-    SCORE_BAR.endVal = 100
+    SCORE_BAR.endVal = getRoundSpan(0)
     infoIndex = allocateInfoBlob(SCORE_POS.x - 4, SCORE_POS.y - 16, SCORE_SIZE.x + 8, 34, "Round Progress", "Popping fish fills the bar, and bigger groups are worth more. Fill it to finish the round and pick an upgrade.")
     
     global dim PROGRESS_BARS(1) as progressBar
@@ -368,7 +371,7 @@ setup_score:
     set text offset MOVE_TEXT_ID, 1, 0
     color text MOVE_TEXT_ID, rgb(64, 128, 255, 200)
     enable text drop shadow MOVE_TEXT_ID, 2, -2, rgb(0,0,0)
-    infoIndex = allocateInfoBlob(570 - 32 - 104, SCORE_POS.y - 16 - 2, 108, 56, "Rounds Left", "How many rounds are left to play. Every round needs twice the score of the one before.")
+    infoIndex = allocateInfoBlob(570 - 32 - 104, SCORE_POS.y - 16 - 2, 108, 56, "Rounds Left", "How many rounds are left to play. Every round needs more score than the one before.")
 
 
     reserve text id(MOVE_COUNT_TEXT_ID)
@@ -501,10 +504,13 @@ frame_fish_fx:
         endif
     next
 
+    ` the same rings push the picture of the whole screen as they pass
+    gosub frame_ripples
+
     for i = 0 to CELL_COUNT - 1
         c = CELLS(i)
 
-        ` the fish sit still, except for where a shockwave is passing under them.
+        ` the fish sit still, except for where a shockwave is passing under them, or a wave of the current.
         ` lift is how far up the bump the fish is, and lean is how steep the bump is under it, in each direction.
         lift# = 0
         leanX# = 0
@@ -554,6 +560,23 @@ frame_fish_fx:
         pushX# = leanX# * SHOCK_PUSH#
         pushY# = leanY# * SHOCK_PUSH# - lift# * SHOCK_BOB# `up the screen is the other way from y
         lift# = lift# * SHOCK_LIFT#
+
+        ` the current. the phase goes around once for every wave, and it is later for the fish that are
+        ` further along the way that the wave goes.
+        currentAlong# = c.coord.x * CURRENT_DIR_X# + c.coord.y * CURRENT_DIR_Y#
+        currentPhase# = (shockNow * 6.28318) / CURRENT_PERIOD# - currentAlong# * CURRENT_SPREAD#
+
+        ` this is 1 when the wave is right on the fish, and it drops off to nothing very quickly on both
+        ` sides of that, so the fish is still for most of the time
+        currentNear# = .5 + .5 * cos(currentPhase#)
+        currentNear# = currentNear# * currentNear#
+        currentNear# = currentNear# * currentNear#
+        currentNear# = currentNear# * currentNear#
+
+        ` the fish leans one way as the wave gets to it, and the other way as it leaves. the 3.7 makes the most of that 1.
+        currentLean# = sin(currentPhase#) * currentNear# * 3.7 * CURRENT_TILT#
+        yaw# = yaw# + currentLean# * CURRENT_DIR_X#
+        pitch# = pitch# - currentLean# * CURRENT_DIR_Y#
 
         ` a fish that is belly up is turned all the way over, top over bottom. the turn that is drawn chases
         ` the real one, so that the fish can be seen rolling over. once it is over, it rocks from side to
@@ -1012,9 +1035,13 @@ handle_combos:
     ` popping now were scored with the multiplier as it was, and a new one counts from the next pop.
     judgeMultiplierSwaps(totalComboCount)
 
+    ` the sea floor lights up for every group that pops in a run, and dims when the board settles. see THE MOOD in fish_headers.
+    SEABED_COMBO = SEABED_COMBO + totalComboCount
+
     ` exit early if no combos
     if totalComboCount = 0
         REQUEST_COMBO_CHECK = 0
+        SEABED_COMBO = 0
 
         ` the board has settled, so this is when a move gets its chance to turn a fish belly up
         rollBellyUpFish()

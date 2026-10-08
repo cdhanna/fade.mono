@@ -11,9 +11,15 @@ using FadeBasic.Testing;
 
 public class Program
 {
+    // Release has nothing to await: the whole dev path below is compiled out.
+#pragma warning disable CS1998
     public static async Task<int> Main(string[] args)
+#pragma warning restore CS1998
     {
-        var csProjPath = GameReloader.GetCsprojPath(); // TODO: support a non-dev way of running the game
+#if FADE_CONTENT_HOTRELOAD
+        // Debug desktop: compile the .fbasic from source at runtime and watch it, so the
+        // game hot-reloads. Compiled out of Release, which runs GeneratedFade (below).
+        var csProjPath = GameReloader.GetCsprojPath();
 
         Console.WriteLine("STARTING:");
         if (!string.IsNullOrEmpty(csProjPath))
@@ -87,8 +93,42 @@ public class Program
 
             }
 
+            return 0;
         }
+#endif
 
+        // Release, or no project on disk: run the program compiled at build time.
+        // This is what ships. See steam/SETUP.md.
+#if !FADE_CONTENT_HOTRELOAD
+        UseSaveDirectory();
+#endif
+        using var shipped = new Game1(new GeneratedFade());
+        shipped.Run();
         return 0;
+    }
+
+    // The engine saves prefs.json (the saved game and the options) in the working directory.
+    // A shipped game cannot use the one it is launched with: a macOS .app starts in "/", which
+    // cannot be written, and on Windows it is the Steam install folder, which is wiped by an
+    // uninstall. So a shipped game moves to a folder of its own first:
+    //
+    //   Windows   %APPDATA%\FishFishPop
+    //   macOS     ~/Library/Application Support/FishFishPop
+    //
+    // Content is not affected: it loads from next to the executable, not the working directory.
+    // Steam Auto-Cloud can be pointed at these two folders.
+    static void UseSaveDirectory()
+    {
+        try
+        {
+            var dir = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FishFishPop");
+            System.IO.Directory.CreateDirectory(dir);
+            Environment.CurrentDirectory = dir;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("could not use the save directory: " + ex.Message);
+        }
     }
 }

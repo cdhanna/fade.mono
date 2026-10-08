@@ -138,6 +138,28 @@ setup_abilities:
         moveValue = [MOVE_FREE]
     }
 
+    ` see THE ROBOT in fish_headers
+    CARDS(ABILITY_INDEX_MOVE_ROBOT) = {
+        name$ = "robot"
+        desc$ = "makes " + str$(ROBOT_SWAPS) + " good swaps near the cursor, all for one move"
+        obtained = 0
+        abilityType = ABILITY_TYPE_MOVE
+        stackable = 0
+        moveClock = ROBOT_COOLDOWN
+        moveValue = [MOVE_ROBOT]
+    }
+
+    ` see THE ERASER in fish_headers
+    CARDS(ABILITY_INDEX_MOVE_ERASER) = {
+        name$ = "the eraser"
+        desc$ = "sorts the whole board with a flurry of swaps, so that all of it pops"
+        obtained = 0
+        abilityType = ABILITY_TYPE_MOVE
+        stackable = 0
+        moveClock = ERASER_COOLDOWN
+        moveValue = [MOVE_ERASER]
+    }
+
 return
 
 
@@ -475,6 +497,9 @@ handle_ability_selection:
         ` pick a random ability that is not yet owned.
         a.abilityIndex = CARD_CHOICE_INDEXES(i)
 
+        ` being offered a card is enough to unlock it in the codec
+        codecSeeCard(CARD_CHOICE_INDEXES(i))
+
         ` bind the data we need.
         set text a.titleTextId, CARDS(a.abilityIndex).name$
         size text x a.titleTextId, CARD_WIDTH - 16, .1, .33
@@ -619,6 +644,9 @@ handle_ability_selection:
             if UPGRADE_SKIP_SELECTED = 0
                 selectedAbilityIndex = ABILITY_CHOICES(ABILITY_SELECTION_INDEX).abilityIndex
                 upgradeType = CARDS(selectedAbilityIndex).abilityType
+
+                ` write down what was picked, and on which move, for the table of high scores
+                logUpgrade(selectedAbilityIndex)
             endif
             select upgradeType
 

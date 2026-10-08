@@ -76,24 +76,8 @@ setup_menu:
     set sprite render target MENU_DIM_SPRITE, TARGET_MENU
     hide sprite MENU_DIM_SPRITE
 
-    ` some fish drift across the back of the main menu. the quick ones are closer, so they are bigger and brighter.
-    for menuI = 0 to MENU_FISH_COUNT - 1
-        fish = MENU_FISHES(menuI)
-        reserve sprite id(fish.spriteId)
-        fish.startX = rnd(WORLD_WIDTH)
-        fish.y = 30 + rnd(WORLD_HEIGHT - 60)
-        fish.speed = 1 + rnd(3)
-        fish.phase = rnd(6)
-
-        sprite fish.spriteId, 0, 0, rnd(7) + 1
-        fishSize = 16 + fish.speed * 8
-        size sprite fish.spriteId, fishSize, fishSize
-        color sprite fish.spriteId, rgb(120, 160, 255, 30 + fish.speed * 25)
-        order sprite fish.spriteId, ORDER_MENU_FISH
-        set sprite render target fish.spriteId, TARGET_MENU
-
-        MENU_FISHES(menuI) = fish
-    next
+    ` the main menu is the view from the surface of the water, which is drawn over the solid background
+    gosub setup_surface
 
     ` the list sits on a panel that looks like the one in info mode
     reserve sprite id(MENU_PANEL_SPRITE)
@@ -146,18 +130,18 @@ setup_menu:
     }
     MENU_ITEMS(MENU_ITEM_NEW_GAME) = {
         name$ = "New Game"
-        desc$ = "Start a fresh run from round one."
+        desc$ = "Fresh and wet fish."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_HIGHSCORES) = {
         name$ = "Highscores"
-        desc$ = "The best runs so far. Not built yet."
-        ready = 0
+        desc$ = "Gaze upon the glory."
+        ready = 1
     }
     MENU_ITEMS(MENU_ITEM_CODEC) = {
         name$ = "Codec"
-        desc$ = "Every fish and upgrade. Not built yet."
-        ready = 0
+        desc$ = "Review discovered upgrades."
+        ready = 1
     }
     MENU_ITEMS(MENU_ITEM_OPTIONS) = {
         name$ = "Options"
@@ -166,7 +150,7 @@ setup_menu:
     }
     MENU_ITEMS(MENU_ITEM_CREDITS) = {
         name$ = "Credits"
-        desc$ = "Who made this."
+        desc$ = "Pay attention to me!"
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_QUIT) = {
@@ -234,6 +218,13 @@ setup_menu:
     MENU_ITEMS(MENU_ITEM_OVER_DONE) = {
         name$ = "Done"
         desc$ = "Back to the title."
+        ready = 1
+    }
+
+    ` the pause menu's way in to the page that moves the moves between the buttons
+    MENU_ITEMS(MENU_ITEM_MOVES) = {
+        name$ = "Inventory"
+        desc$ = "Change which button each move is on."
         ready = 1
     }
 
@@ -343,6 +334,10 @@ setup_menu:
 
     ` the credits and the splash screen are drawn with the menu, so they are set up with it
     gosub setup_credits
+
+    ` and so are the high scores
+    gosub setup_highscores
+    gosub setup_codec
 
     ` the game opens on the splash screen, and then the main menu
     gosub menu_startup
@@ -495,7 +490,7 @@ menu_pick:
         case MENU_ITEM_CONFIRM_NO
             ` back to the pause menu, with "New Game" highlighted again
             setMenuPage(MENU_PAGE_PAUSE)
-            selectMenuItem(MENU_ITEM_NEW_GAME, 0)
+            selectMenuItem(getMenuRow(MENU_ITEM_NEW_GAME), 0)
         endcase
 
         case MENU_ITEM_CONFIRM_YES
@@ -504,6 +499,25 @@ menu_pick:
 
         case MENU_ITEM_CREDITS
             gosub menu_run_credits
+        endcase
+
+        case MENU_ITEM_HIGHSCORES
+            gosub menu_run_highscores
+        endcase
+
+        case MENU_ITEM_CODEC
+            gosub menu_run_codec
+        endcase
+
+        case MENU_ITEM_MOVES
+            ` the pause menu goes away, and the page that moves the moves between the buttons comes up
+            ` over the game. with no moves to move, the line shakes its head.
+            if MOVE_ABILITY_COUNT > 0
+                gosub menu_close_pause
+                gosub handle_move_rearrange
+            else
+                create basic tween MENU_SHAKE_TWEEN_ID, 1, 0, 400, 0
+            endif
         endcase
 
         case MENU_ITEM_OPTIONS
@@ -544,9 +558,7 @@ menu_open_main:
 
     show sprite MENU_BG_SPRITE
     hide sprite MENU_DIM_SPRITE
-    for menuI = 0 to MENU_FISH_COUNT - 1
-        show sprite MENU_FISHES(menuI).spriteId
-    next
+    showSurface(1)
 
     setMenuPage(MENU_PAGE_MAIN)
     selectMenuItem(0, 0)
@@ -578,12 +590,13 @@ apply_game_options:
     ` a zen game has the one passive, and never gets another
     if GAME_ZEN
         grantPassive(ABILITY_INDEX_WRAP)
+        logUpgrade(ABILITY_INDEX_WRAP)
     endif
 return
 
 
 ` the main loop comes here on every frame of the game. when the last round has been won, this brings
-` up a page that says so, over the game, the same way that the pause menu comes up.
+` up the high scores, over the game, the same way that the pause menu comes up.
 handle_game_end:
     if REQUEST_GAME_END = 0 then return
 
@@ -595,9 +608,7 @@ handle_game_end:
 
     hide sprite MENU_BG_SPRITE
     show sprite MENU_DIM_SPRITE
-    for menuI = 0 to MENU_FISH_COUNT - 1
-        hide sprite MENU_FISHES(menuI).spriteId
-    next
+    showSurface(0)
 
     MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = str$(GAME_ROUND_CAP) + " rounds in " + str$(CURRENT_MOVE_COUNT) + " moves. Back to the title."
     setMenuPage(MENU_PAGE_GAME_OVER)
@@ -606,13 +617,14 @@ handle_game_end:
     hide text INFO_HINT_TEXT_ID
     set screen shake amount 0
 
-    ` the menu has to be drawn once before it is shown, the same as the pause menu
-    create basic tween MENU_FADE_TWEEN_ID, 0, 0, 1, 0
-    gosub frame_menu_render
-    sync
+    ` the player is asked for their initials, and shown the table of high scores. that takes the place
+    ` of the list of the menu, and it fades the menu in. see fish_routines_highscores.
+    gosub highscore_game_end
 
-    show sprite MENU_COMPOSITE_SPRITE
-    create basic tween MENU_FADE_TWEEN_ID, 0, 1, 150, 0
+    ` and then it is back to the title. the high scores fade out before they are put away.
+    gosub menu_fade_out
+    closeHighscores()
+    gosub menu_quit_to_title
 return
 
 
@@ -625,9 +637,7 @@ menu_open_pause:
 
     hide sprite MENU_BG_SPRITE
     show sprite MENU_DIM_SPRITE
-    for menuI = 0 to MENU_FISH_COUNT - 1
-        hide sprite MENU_FISHES(menuI).spriteId
-    next
+    showSurface(0)
 
     setMenuPage(MENU_PAGE_PAUSE)
     selectMenuItem(0, 0)
@@ -735,6 +745,32 @@ menu_transition:
     wavePan# = .35
     if sweepLean < 0 then wavePan# = -.35
 
+    ` between the main menu and the game, the wave is the waterline. the mask is the water, and the
+    ` main menu is the view from the surface, so it shows wherever the mask is empty. see THE SURFACE,
+    ` in fish_routines_surface.
+    transitionSurface = 0
+    if TRANSITION_FOR_UPGRADE = 0
+        if MENU_MODE = MENU_MODE_MAIN then transitionSurface = 1
+    endif
+
+    ` coming back up to the surface, the waterline goes down the screen. bubbles do not go down, so
+    ` there are none to see on the way up. the effects draw a line of water with foam on it instead.
+    ` see THE WATERLINE in fish_headers. the mask still gets emptied behind it, by a wave that runs
+    ` backwards, so that the mask is right when the line has gone.
+    transitionDown = 0
+    if transitionSurface
+        if TRANSITION_TO_MENU then transitionDown = 1
+    endif
+
+    ` going under, the camera starts to sink a moment before the bubbles show up. this is how much
+    ` of the way down it gets in that moment, which is no way at all for any other wave.
+    sinkLead# = 0
+    if transitionSurface
+        if transitionDown = 0
+            sinkLead# = SURFACE_SINK_LEAD_SHARE#
+        endif
+    endif
+
     ` give every bubble a new spot in the wave
     frontX = 0
     frontSize = 0
@@ -774,7 +810,9 @@ menu_transition:
 
         size sprite bub.spriteId, bub.size, bub.size
         set sprite all texcoord1 bub.spriteId, bub.size, 0, 0, 0
-        show sprite bub.spriteId
+        if transitionDown = 0
+            show sprite bub.spriteId
+        endif
 
         size sprite bub.maskSpriteId, bub.size, bub.size
         set sprite all texcoord1 bub.maskSpriteId, bub.size, 1, 0, 0
@@ -786,8 +824,9 @@ menu_transition:
     ` so the screen is always looking at the mask from the frame before. the empty mask gets drawn once here,
     ` before the composite sprite is told to start using it.
     create basic tween TRANSITION_TWEEN_ID, 0, 0, 1, 0
-    transitionPrev# = 0
+    transitionPrev# = transitionDown
     gosub frame_transition
+    if sinkLead# > 0 then SURFACE_SINK# = 0 `the camera has not had its head start yet
     gosub frame_transition_render
     sync
 
@@ -796,7 +835,28 @@ menu_transition:
         show sprite UPGRADE_COMPOSITE_SPRITE
     else
         MENU_INVERT = 1 - TRANSITION_TO_MENU
+        if transitionDown then MENU_INVERT = 1
         show sprite MENU_COMPOSITE_SPRITE
+    endif
+
+    ` the watery wobble over the screen follows the waterline from here on
+    TRANSITION_SURFACE = transitionSurface
+
+    ` on the way up, the line of water takes over from the mask. it leans a different way every time.
+    WATERLINE_USE = transitionDown
+    WATERLINE_TILT# = (rnd(21) - 10) * .012
+
+    ` the camera gets its head start. the wave is still waiting below the screen.
+    if sinkLead# > 0
+        create basic tween TRANSITION_TWEEN_ID, 0, 1, SURFACE_SINK_LEAD, 0
+        set tween easing TRANSITION_TWEEN_ID, EASING_LINEAR
+        while is tween done(TRANSITION_TWEEN_ID) < 1
+            ` it is slow to get going, and it is still moving when the wave comes
+            sinkLeadT# = tweenVal(TRANSITION_TWEEN_ID)
+            SURFACE_SINK# = sinkLeadT# * sinkLeadT# * sinkLead#
+            gosub frame_menu_render
+            sync
+        endwhile
     endif
 
     create basic tween TRANSITION_TWEEN_ID, 0, 1, TRANSITION_DURATION, 0
@@ -852,6 +912,14 @@ menu_transition:
             MENU_INVERT = 0
         endif
     endif
+
+    ` the camera is all the way under now, or all the way up
+    if transitionSurface
+        TRANSITION_SURFACE = 0
+        WATERLINE_USE = 0
+        SURFACE_UP = TRANSITION_TO_MENU
+        SURFACE_SINK# = 1 - TRANSITION_TO_MENU
+    endif
 return
 
 
@@ -869,10 +937,32 @@ return
 frame_transition:
     transitionNow# = tweenVal(TRANSITION_TWEEN_ID)
 
+    ` how far up the screen the wave is. 0 is below the bottom, and 1 is above the top.
+    ` a wave that is going down the screen starts at the top.
+    waveNow# = transitionNow#
+    if transitionDown then waveNow# = 1 - transitionNow#
+
+    ` the higher the waterline is, the further under the camera is
+    if transitionSurface
+        if transitionDown
+            ` coming up is slow to start and slow to stop
+            SURFACE_SINK# = waveNow# * waveNow# * (3 - 2 * waveNow#)
+        else
+            ` going under, the camera has had a head start on the wave. it carries on from there, and slows to a stop.
+            ` it does most of what is left early on, so that it does not lose its speed when the wave starts.
+            sinkLeft# = (1 - waveNow#) * (1 - waveNow#)
+            SURFACE_SINK# = sinkLead# + (1 - sinkLeft# * sinkLeft#) * (1 - sinkLead#)
+        endif
+    endif
+
+    ` the line of water starts above the top of the screen and ends below the bottom. it is slow to
+    ` start and slow to stop, the same as the camera is.
+    WATERLINE_Y# = transitionNow# * transitionNow# * (3 - 2 * transitionNow#) * 1.5 - .25
+
     ` the bubbles in the mask go where the wave is now. the bubbles on the screen go where the wave
     ` was on the frame before, because that is the mask that the screen is looking at.
     for bubPass = 0 to 1
-        bubT# = transitionNow#
+        bubT# = waveNow#
         if bubPass = 1 then bubT# = transitionPrev#
 
         bubLine = TRANSITION_LINE_START - TRANSITION_LINE_TRAVEL * bubT#
@@ -907,7 +997,7 @@ frame_transition:
     set sfx pitch SFX_BUBBLES, wavePitch# + waveGlide# * transitionNow#
     set sfx pan SFX_BUBBLES, wavePan# * (transitionNow# * 2 - 1)
 
-    transitionPrev# = transitionNow#
+    transitionPrev# = waveNow#
 return
 
 
@@ -918,6 +1008,8 @@ frame_menu_render:
     set effect param texture MENU_FX_ID, "MaskTexture", render target texture(TARGET_MASK)
     set effect param float MENU_FX_ID, "Fade", tweenVal(MENU_FADE_TWEEN_ID)
     set effect param float MENU_FX_ID, "Invert", MENU_INVERT
+    set effect param float4 MENU_FX_ID, "WaterLine", WATERLINE_Y#, WATERLINE_TILT#, game ms() * .001, WATERLINE_USE
+    set effect param float2 MENU_FX_ID, "Grid", WORLD_WIDTH, WORLD_HEIGHT
 
     menuMs = game ms()
 
@@ -931,7 +1023,7 @@ frame_menu_render:
     ` the outline slides to the highlighted line, and pulses the same way that the info mode cursor does
     layoutInfoBorder(MENU_CURSOR, (WORLD_WIDTH - MENU_WIDTH) / 2 + 6, tweenVal(MENU_CURSOR_TWEEN_Y), MENU_WIDTH - 12, MENU_ROW_HEIGHT)
     menuPulse# = .8 + .2 * sin(menuMs * .006)
-    colorInfoBorder(MENU_CURSOR, rgb(255, 255, 255, 255 * menuPulse#))
+    colorInfoBorder(MENU_CURSOR, rgb(255, 255, 255, 255 * menuPulse# * MENU_CHROME_ALPHA#))
 
     ` text sits on whole pixels, and the position gets cut down to one, not rounded. the extra half
     ` pixel makes that the same as rounding, so that a tiny shake does not flicker the text by a pixel.
@@ -943,15 +1035,8 @@ frame_menu_render:
     ` the title bobs up and down
     set text position MENU_TITLE_TEXT_ID, WORLD_WIDTH / 2, MENU_TITLE_Y + .5 + sin(menuMs * .002) * 3
 
-    ` the fish swim across, and come back around on the other side
-    if MENU_MODE = MENU_MODE_MAIN
-        for menuI = 0 to MENU_FISH_COUNT - 1
-            fish = MENU_FISHES(menuI)
-            fishX = ((fish.startX + (menuMs * fish.speed) / 50) mod (WORLD_WIDTH + 60)) - 30
-            fishY = fish.y + sin(menuMs * .0015 + fish.phase) * 6
-            position sprite fish.spriteId, fishX, fishY
-        next
-    endif
+    ` the sea rolls, and the boat rocks on it
+    gosub frame_surface
 
 return
 
@@ -1027,12 +1112,13 @@ reset_game:
     syncScoreShown()
     CURRENT_ROUND = 0
     CURRENT_MOVE_COUNT = 0
+    GAME_LOG_COUNT = 0 `no upgrades have been picked yet
     PENDING_FREE_MOVES = 0
     set text MOVE_COUNT_TEXT_ID, "0"
     set text ROUND_COUNT_TEXT_ID, str$(getRoundsLeft())
 
     SCORE_BAR.startVal = 0
-    SCORE_BAR.endVal = 100
+    SCORE_BAR.endVal = getRoundSpan(0)
     PROGRESS_BARS(0) = SCORE_BAR
     create basic tween SCORE_BAR.progressTweenId, 0, 0, 1, 0
 
@@ -1147,10 +1233,23 @@ function setMenuPage(page)
             if i = MENU_ITEM_HIGHSCORES or i = MENU_ITEM_CODEC or i = MENU_ITEM_CREDITS then onPage = 0
         endif
 
+        ` the pause menu has "Inventory" right under "Resume"
+        if i = MENU_ITEM_MOVES
+            if page = MENU_PAGE_PAUSE then skip
+        endif
+
         if onPage
             MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = i
             MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
             show text MENU_ITEMS(i).textId
+
+            if page = MENU_PAGE_PAUSE
+                if i = MENU_ITEM_RESUME
+                    MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_MOVES
+                    MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+                    show text MENU_ITEMS(MENU_ITEM_MOVES).textId
+                endif
+            endif
         else
             hide text MENU_ITEMS(i).textId
         endif
@@ -1188,8 +1287,13 @@ function selectMenuItem(index, duration)
         duration = 1
         startY = rowY
     else
-        ` the cursor leaves some bubbles behind on the line that it was on
-        spawnWakeBubbles((WORLD_WIDTH - MENU_WIDTH) / 2 + 6, startY + 4, MENU_WIDTH - 12, MENU_ROW_HEIGHT - 8, 7, rgb(255, 255, 255), ORDER_MENU_FLOAT_BUBBLES)
+        ` the cursor leaves some bubbles behind on the line that it was on. the main menu is above
+        ` the water, where there are no bubbles, so there it leaves some sparkles.
+        if MENU_MODE = MENU_MODE_MAIN
+            spawnWakeSparkles((WORLD_WIDTH - MENU_WIDTH) / 2 + 6, startY + 2, MENU_WIDTH - 12, MENU_ROW_HEIGHT - 4, 6, ORDER_MENU_FLOAT_BUBBLES)
+        else
+            spawnWakeBubbles((WORLD_WIDTH - MENU_WIDTH) / 2 + 6, startY + 4, MENU_WIDTH - 12, MENU_ROW_HEIGHT - 8, 7, rgb(255, 255, 255), ORDER_MENU_FLOAT_BUBBLES)
+        endif
     endif
     create basic tween MENU_CURSOR_TWEEN_Y, startY, rowY, duration, 0
 

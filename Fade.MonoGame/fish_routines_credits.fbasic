@@ -6,8 +6,9 @@ remstart
     or a picture. they are drawn into the menu's render target, in place of the menu, so they have the
     same background that the menu has. picking "Credits" on the menu starts them, and they can be skipped.
 
-    the splash screen is the first thing the game shows. it is the two logos on a dark screen for a moment,
-    and then the wave of bubbles brings in the main menu.
+    the splash screen is the first thing the game shows. it is the two logos for a moment, way up among
+    the stars, in the same sky that is behind the main menu. then the camera comes down out of the sky
+    to the boat, and the main menu fades in. see THE SURFACE, in fish_routines_surface.
 
     two environment variables change how the game starts, for when the intro is in the way:
         FISH_SKIP_SPLASH    go straight to the main menu
@@ -71,15 +72,18 @@ setup_credits:
     ` CREDIT_LENGTH, in the fish headers, is where the bottom of this last line is
     addCreditText(800, 28, "Thanks for playing, friend", 1)
 
-    ` the splash screen is drawn onto the screen itself, not into the menu. the bubbles wipe the menu in over it.
+    ` the splash screen is drawn into the menu, on top of the sky. it is a long way up in that sky, and
+    ` the logos are left behind up there when the camera comes down to the main menu.
     reserve sprite id(SPLASH_FADE_SPRITE)
     sprite SPLASH_FADE_SPRITE, WORLD_WIDTH / 2 - 60, 130, TEX_LOGO_FADE
-    order sprite SPLASH_FADE_SPRITE, ORDER_MENU - 1
+    order sprite SPLASH_FADE_SPRITE, ORDER_MENU_TEXT
+    set sprite render target SPLASH_FADE_SPRITE, TARGET_MENU
     hide sprite SPLASH_FADE_SPRITE
 
     reserve sprite id(SPLASH_MONOGAME_SPRITE)
     sprite SPLASH_MONOGAME_SPRITE, WORLD_WIDTH / 2 + 60, 130, TEX_LOGO_MONOGAME
-    order sprite SPLASH_MONOGAME_SPRITE, ORDER_MENU - 1
+    order sprite SPLASH_MONOGAME_SPRITE, ORDER_MENU_TEXT
+    set sprite render target SPLASH_MONOGAME_SPRITE, TARGET_MENU
     hide sprite SPLASH_MONOGAME_SPRITE
 
     reserve text id(SPLASH_TEXT_ID)
@@ -87,7 +91,9 @@ setup_credits:
     size text y SPLASH_TEXT_ID, 20
     set text offset SPLASH_TEXT_ID, .5, 0
     color text SPLASH_TEXT_ID, rgb(150, 190, 255)
-    order text SPLASH_TEXT_ID, ORDER_MENU - 1
+    enable text drop shadow SPLASH_TEXT_ID, 2, -2, rgb(0,0,0)
+    order text SPLASH_TEXT_ID, ORDER_MENU_TEXT
+    set text render target SPLASH_TEXT_ID, TARGET_MENU
     hide text SPLASH_TEXT_ID
 
     reserve tween id(SPLASH_TWEEN_ID)
@@ -111,6 +117,7 @@ menu_startup:
 
     ` straight to the main menu. the screen is drawn before the menu's render target is, so the very
     ` first frame has no menu to show yet. the cover hides the game for that one frame.
+    SURFACE_UP = 1
     show sprite MENU_COMPOSITE_SPRITE
     show sprite MENU_COVER_SPRITE
     gosub frame_menu_render
@@ -119,21 +126,37 @@ menu_startup:
 return
 
 
-` show the logos for a moment, and then let the bubbles bring in the main menu.
+` show the logos for a moment, way up in the sky, and then bring the camera down to the main menu.
+` there are no bubbles in this, because none of it is under the water.
 menu_run_splash:
 
-    ` the cover hides the game, and the logos go on top of the cover
-    color sprite MENU_COVER_SPRITE, rgb(10, 14, 30)
-    show sprite MENU_COVER_SPRITE
+    ` the camera starts all the way up, where there is nothing but stars. the main menu is drawn
+    ` already, but it is see-through until the camera gets down to it.
+    SURFACE_UP = 1
+    SURFACE_PAN# = SPLASH_PAN
+    setMenuChromeAlpha(0)
+
+    set sprite alpha SPLASH_FADE_SPRITE, 0
+    set sprite alpha SPLASH_MONOGAME_SPRITE, 0
+    set text alpha SPLASH_TEXT_ID, 0
     show sprite SPLASH_FADE_SPRITE
     show sprite SPLASH_MONOGAME_SPRITE
     show text SPLASH_TEXT_ID
 
+    ` the screen is drawn before the menu's render target is, so the very first frame has no sky
+    ` to show yet. the cover hides the game for that one frame.
+    color sprite MENU_COVER_SPRITE, rgb(4, 4, 12)
+    show sprite MENU_COMPOSITE_SPRITE
+    show sprite MENU_COVER_SPRITE
+    gosub frame_menu_render
+    sync
+    hide sprite MENU_COVER_SPRITE
+    color sprite MENU_COVER_SPRITE, rgb(32, 40, 64)
+
     create basic tween SPLASH_TWEEN_ID, 0, 255, 400, 0
     splashStart = game ms()
     do
-        ` the watery wobble over the whole screen. the main loop sets this every frame, but the splash
-        ` screen comes before the main loop, and without it the wobble runs so fast that it cannot be seen.
+        ` the main loop sets this every frame, but the splash screen comes before the main loop
         set effect param float 1, "TimeSpeed", 1
 
         splashAlpha = tweenVal(SPLASH_TWEEN_ID)
@@ -141,7 +164,6 @@ menu_run_splash:
         set sprite alpha SPLASH_MONOGAME_SPRITE, splashAlpha
         set text alpha SPLASH_TEXT_ID, splashAlpha
 
-        ` the menu is not on the screen yet, but this keeps it drawn and ready for when the bubbles get to it
         gosub frame_menu_render
         sync
 
@@ -151,15 +173,42 @@ menu_run_splash:
         if new action down(ACT_CONFIRM) then exit
     loop
 
-    TRANSITION_TO_MENU = 1
-    gosub menu_transition
+    ` the camera comes down. it is slow to start and slow to stop. the logos stay where they are in
+    ` the sky, so they go off of the top of the screen.
+    create basic tween SPLASH_TWEEN_ID, 0, 1, SPLASH_PAN_DURATION, 0
+    set tween easing SPLASH_TWEEN_ID, EASING_LINEAR
+    while is tween done(SPLASH_TWEEN_ID) < 1
+        splashT# = tweenVal(SPLASH_TWEEN_ID)
+        splashEase# = splashT# * splashT# * splashT# * (splashT# * (splashT# * 6 - 15) + 10)
+        splashRise# = SPLASH_PAN * splashEase#
+        SURFACE_PAN# = SPLASH_PAN - splashRise#
 
-    ` the menu covers everything now, so the splash screen can be put away underneath it
+        position sprite SPLASH_FADE_SPRITE, WORLD_WIDTH / 2 - 60, 130 - splashRise#
+        position sprite SPLASH_MONOGAME_SPRITE, WORLD_WIDTH / 2 + 60, 130 - splashRise#
+        set text position SPLASH_TEXT_ID, WORLD_WIDTH / 2, 190 - splashRise#
+
+        ` the main menu fades in as the camera settles
+        splashChrome# = (splashT# - .7) * 4
+        if splashChrome# < 0 then splashChrome# = 0
+        if splashChrome# > 1 then splashChrome# = 1
+        setMenuChromeAlpha(splashChrome#)
+
+        gosub frame_menu_render
+        sync
+    endwhile
+
+    ` the camera is down, so the splash screen can be put away, back where it started
+    SURFACE_PAN# = 0
     hide sprite SPLASH_FADE_SPRITE
     hide sprite SPLASH_MONOGAME_SPRITE
     hide text SPLASH_TEXT_ID
-    hide sprite MENU_COVER_SPRITE
-    color sprite MENU_COVER_SPRITE, rgb(32, 40, 64)
+    position sprite SPLASH_FADE_SPRITE, WORLD_WIDTH / 2 - 60, 130
+    position sprite SPLASH_MONOGAME_SPRITE, WORLD_WIDTH / 2 + 60, 130
+    set text position SPLASH_TEXT_ID, WORLD_WIDTH / 2, 190
+
+    ` and the main menu is all the way there. selecting the line again puts the colors of the lines back.
+    setMenuChromeAlpha(1)
+    selectMenuItem(MENU_SELECTED, 0)
 return
 
 
@@ -305,6 +354,23 @@ function addCreditSprite(x, y, textureId, width, height)
 
     CREDIT_LINES(CREDIT_COUNT) = entry
     CREDIT_COUNT = CREDIT_COUNT + 1
+endfunction
+
+
+` make the title, the panel, and everything on the page of the menu see-through. 0 is not there at all, and
+` 1 is all the way there. the camera coming down from the splash screen fades the main menu in with this.
+` the line colors are put back by selectMenuItem, so call that once this has got to 1.
+function setMenuChromeAlpha(amount#)
+    MENU_CHROME_ALPHA# = amount#
+
+    set sprite alpha MENU_PANEL_SPRITE, 235 * amount#
+    colorInfoBorder(MENU_PANEL_BORDER, rgb(64, 128, 255, 200 * amount#))
+    set text alpha MENU_TITLE_TEXT_ID, 255 * amount#
+    set text alpha MENU_DESC_TEXT_ID, 255 * amount#
+    set text alpha MENU_HINT_TEXT_ID, 255 * amount#
+    for i = 0 to MENU_PAGE_LENGTH - 1
+        set text alpha MENU_ITEMS(MENU_PAGE_ITEMS(i)).textId, 255 * amount#
+    next
 endfunction
 
 

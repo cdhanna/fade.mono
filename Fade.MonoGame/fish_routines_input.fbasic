@@ -179,6 +179,18 @@ process_input:
                         print "DOING LINE OUT"
                         doLineOut(SELECTION_POS, swapDir)
                     endcase
+                    case [MOVE_ERASER]
+                        doEraser(SELECTION_POS, swapDir)
+                    endcase
+                    case [MOVE_ROBOT]
+                        doRobot(SELECTION_POS, swapDir)
+
+                        ` it found nothing to swap, so it is not used up. its cooldown number shakes to say so.
+                        if ROBOT_LAST_COUNT = 0
+                            MOVE_ABILITY_BINDINGS(move.moveBindingIndex).movesLeft = 0
+                            create basic tween MOVE_ABILITY_BINDINGS(move.moveBindingIndex).shakeTweenId, 1, 0, 500, 0
+                        endif
+                    endcase
                     case default 
                         print "DOING NOTHING"
 
@@ -240,6 +252,13 @@ process_input:
     endif
 
 
+return
+
+
+` forget the moves that are waiting in the queue
+clear_queued_moves:
+    QUEUED_MOVE_NUM = 0
+    QUEUED_MOVE_TAIL = 0
 return
 
 

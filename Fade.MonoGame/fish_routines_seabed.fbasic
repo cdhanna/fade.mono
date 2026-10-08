@@ -1,0 +1,155 @@
+goto routines_seabed_exit
+
+remstart
+    THE SEA FLOOR
+    what is behind the board while the game is being played: the water, shafts of light coming down
+    from the surface, ridges of rock, and specks drifting down.
+
+    all of it is one sprite that covers the whole screen, underneath everything else, drawn by the
+    seabed effect. see SeabedEffect.fx. nothing in it is a picture.
+
+    a few more specks drift in front of the fish. they are a second sprite, on top of the fish, drawn
+    by the snow effect.
+
+    the water is brighter, and the shafts of light are stronger, the longer a run of pops goes on, and
+    it dims back down when the board settles. see THE MOOD in fish_headers. and in a long run, the
+    specks turn the colors of the rainbow every time more fish pop. see THE RAINBOW, in the same place.
+
+    frame_ripples is here too. it tells the screen effect about the rings that are crossing the board,
+    so that the whole picture bulges as they pass. see RIPPLES in fish_headers.
+
+    updateSeabed() has to be called on every frame, or the sea floor stands still. updateBubbles()
+    calls it, because everything that draws frames of its own already calls that.
+remend
+
+setup_seabed:
+    ` the globals are declared in the fish headers, so that functions can use them no matter where they are called from
+
+    reserve effect id(SEABED_FX_ID)
+    effect SEABED_FX_ID, "Fish/Shaders/SeabedEffect"
+
+    reserve sprite id(SEABED_SPRITE)
+    sprite SEABED_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset SEABED_SPRITE, 0, 0
+    size sprite SEABED_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    order sprite SEABED_SPRITE, ORDER_SEABED
+    set sprite effect SEABED_SPRITE, SEABED_FX_ID
+
+    reserve effect id(SNOW_FX_ID)
+    effect SNOW_FX_ID, "Fish/Shaders/SnowEffect"
+
+    reserve sprite id(SNOW_SPRITE)
+    sprite SNOW_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset SNOW_SPRITE, 0, 0
+    size sprite SNOW_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    order sprite SNOW_SPRITE, ORDER_SNOW
+    set sprite effect SNOW_SPRITE, SNOW_FX_ID
+return
+
+
+` tell the screen effect where the strongest rings are. frame_fish_fx comes here on every frame, when it
+` has worked out which rings are going and how big they have got.
+frame_ripples:
+    ripWorldW# = WORLD_WIDTH
+    ripWorldH# = WORLD_HEIGHT
+
+    ripSlot = 0
+    while ripSlot < RIPPLE_COUNT
+        ripU# = 0
+        ripV# = 0
+        ripRadius# = 0
+        ripPower# = 0
+
+        if ripSlot < SHOCK_LIVE_COUNT
+            ` find the strongest ring that has not been sent yet, and bring it to the front of what is left
+            ripBest = ripSlot
+            ripScan = ripSlot + 1
+            while ripScan < SHOCK_LIVE_COUNT
+                if SHOCKS(SHOCK_LIVE(ripScan)).power# > SHOCKS(SHOCK_LIVE(ripBest)).power#
+                    ripBest = ripScan
+                endif
+                ripScan = ripScan + 1
+            endwhile
+            ripKeep = SHOCK_LIVE(ripSlot)
+            SHOCK_LIVE(ripSlot) = SHOCK_LIVE(ripBest)
+            SHOCK_LIVE(ripBest) = ripKeep
+
+            ` a ring is measured in cells, and the effect wants the screen
+            ripRing = SHOCKS(SHOCK_LIVE(ripSlot))
+            ripPixelX# = GRID_POS.x + ripRing.x# * CELL_SIZE
+            ripPixelY# = GRID_POS.y + ripRing.y# * CELL_SIZE
+            ripU# = ripPixelX# / ripWorldW#
+            ripV# = ripPixelY# / ripWorldH#
+            ripRadius# = ripRing.radius# * CELL_SIZE
+            ripPower# = ripRing.power#
+        endif
+
+        set effect param float4 1, "Ripple" + str$(ripSlot), ripU#, ripV#, ripRadius#, ripPower#
+        ripSlot = ripSlot + 1
+    endwhile
+return
+
+
+routines_seabed_exit:
+
+
+` move the sea floor along, and take the mood a little closer to where the run of pops says it should be.
+` it works out how much time has gone by on its own, so calling it twice on a frame does no harm.
+function updateSeabed()
+    seabedNow = game ms()
+    seabedElapsed# = seabedNow - SEABED_LAST_MS
+    SEABED_LAST_MS = seabedNow
+    if seabedElapsed# > 50 then seabedElapsed# = 50
+
+    ` every group of fish that has popped in this run counts for 1
+    moodLevel# = SEABED_COMBO
+    moodRoom# = moodLevel# + SEABED_MOOD_HALF#
+    moodWant# = moodLevel# / moodRoom#
+
+    ` it comes up quicker than it settles
+    moodStep# = seabedElapsed# * SEABED_MOOD_EASE#
+    if moodWant# < SEABED_MOOD# then moodStep# = seabedElapsed# * SEABED_MOOD_FALL#
+    SEABED_MOOD# = SEABED_MOOD# + (moodWant# - SEABED_MOOD#) * moodStep#
+
+    ` more fish have just popped, so there is a surge. it dies away after that.
+    if moodWant# > SEABED_SURGE_WAS# + .001 then SEABED_SURGE# = 1
+    SEABED_SURGE_WAS# = moodWant#
+    surgeLoss# = seabedElapsed# * SEABED_SURGE_FADE#
+    SEABED_SURGE# = SEABED_SURGE# - surgeLoss#
+    if SEABED_SURGE# < 0 then SEABED_SURGE# = 0
+
+    ` how much rainbow there is. there is none until the mood is high. past that, a little of it stays
+    ` for as long as the mood does, and the rest of it comes with a surge. it chases the mood, and not
+    ` where the mood is headed, so that it fades in.
+    rainbowRange# = SEABED_RAINBOW_FULL# - SEABED_RAINBOW_FROM#
+    rainbowHigh# = (SEABED_MOOD# - SEABED_RAINBOW_FROM#) / rainbowRange#
+    if rainbowHigh# < 0 then rainbowHigh# = 0
+    if rainbowHigh# > 1 then rainbowHigh# = 1
+    rainbowSurge# = SEABED_SURGE# * (1 - SEABED_RAINBOW_REST#)
+    rainbowWant# = rainbowHigh# * (SEABED_RAINBOW_REST# + rainbowSurge#)
+    rainbowStep# = seabedElapsed# * SEABED_RAINBOW_EASE#
+    SEABED_RAINBOW# = SEABED_RAINBOW# + (rainbowWant# - SEABED_RAINBOW#) * rainbowStep#
+
+    ` the clock that the specks move by
+    snowRate# = 1 + SEABED_SNOW_RUSH# * SEABED_MOOD#
+    snowTick# = seabedElapsed# * .001 * snowRate#
+    SEABED_SNOW_CLOCK# = SEABED_SNOW_CLOCK# + snowTick#
+
+    seabedTime# = seabedNow * .001
+
+    ` the effects lose their parameters when they are reloaded, so they are all set on every frame
+    set effect param float SEABED_FX_ID, "Time", seabedTime#
+    set effect param float2 SEABED_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT
+    set effect param float SEABED_FX_ID, "Mood", SEABED_MOOD#
+    set effect param float SEABED_FX_ID, "Rainbow", SEABED_RAINBOW#
+    set effect param float SEABED_FX_ID, "Clock", SEABED_SNOW_CLOCK#
+
+    set effect param float SNOW_FX_ID, "Time", seabedTime#
+    set effect param float2 SNOW_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT
+    set effect param float SNOW_FX_ID, "Rainbow", SEABED_RAINBOW#
+    set effect param float SNOW_FX_ID, "Clock", SEABED_SNOW_CLOCK#
+    set effect param float SNOW_FX_ID, "Mood", SEABED_MOOD#
+
+    ` the words and the bars around the board get brighter along with the water. the screen effect does that.
+    set effect param float 1, "HudGlow", SEABED_MOOD#
+endfunction

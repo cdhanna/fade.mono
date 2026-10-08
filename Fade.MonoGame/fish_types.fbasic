@@ -128,7 +128,8 @@ endtype
 
 ` one row of the list of slots, on the screen where a new move gets put in a slot
 type equipRow
-    slotIndex `the slot that it stands for, or -1 for the row that leaves the move behind
+    kind `EQUIP_ROW_SLOT, EQUIP_ROW_SPARE, or EQUIP_ROW_DONE
+    slotIndex `the slot that it stands for, when it stands for one
     panelSpriteId
     keyTextId `a picture of the button of the slot
     nameTextId `the move that is in the slot
@@ -211,6 +212,7 @@ type floatBubble
     delay `milliseconds left to wait before it shows up
     loud `1 if it makes a sound when it pops
     alpha `255 for a solid bubble, and less for a faint one
+    star `1 if it is a sparkle and not a bubble. a sparkle twinkles where it is, and does not float up or pop.
 endtype
 
 ` a ring that spreads across the board and tilts the fish as it passes. see SHOCKWAVES in fish_headers.
@@ -223,15 +225,6 @@ type shockwave
     dirX#, dirY# `the way that it is headed. it is strongest that way, and there is none of it behind. a ring that goes every way has 0 for both.
     radius# `how far out the top of the bump is on this frame, in cells
     power# `how strong it is on this frame, now that it has swelled up or died away some
-endtype
-
-` a fish that drifts across the back of the main menu
-type menuFish
-    spriteId
-    startX
-    y
-    speed
-    phase
 endtype
 
 ` one looping layer of the music, like the rumble or a chord. see fish_routines_music.

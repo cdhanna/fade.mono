@@ -6,6 +6,11 @@
         <PublishReadyToRun>false</PublishReadyToRun>
         <TieredCompilation>false</TieredCompilation>
     </PropertyGroup>
+    <!-- A shipped game must not open a console window next to the game window on Windows.
+         Debug keeps the console, because that is where the reload and build output goes. -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+        <OutputType>WinExe</OutputType>
+    </PropertyGroup>
     <!-- Matches the conditional Fade.MonoGame.Content reference below: enables the
          in-process content hot-reload registration in Program.cs for Debug desktop. -->
     <PropertyGroup Condition="'$(Configuration)' == 'Debug' and '$(FadeMonoGamePlatform)' != 'Web'">
@@ -75,16 +80,16 @@
     <!-- Desktop deps: MonoGame + ImGui. The runtime packages carry the native
          Vulkan/MoltenVK binaries per RID; Native itself is managed-only. -->
     <ItemGroup Condition="'$(FadeMonoGameIsDesktop)' == 'true'">
-        <PackageReference Include="ImGui.NET" Version="1.91.6.1" PrivateAssets="all" />
+        <PackageReference Include="ImGui.NET" Version="1.91.6.1" PrivateAssets="all" Publish="true" />
     </ItemGroup>
     <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'Desktop'">
-        <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)" PrivateAssets="all" />
+        <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)" PrivateAssets="all" Publish="true" />
     </ItemGroup>
     <ItemGroup Condition="'$(FadeMonoGamePlatform)' == 'DesktopVK'">
-        <PackageReference Include="MonoGame.Framework.Native" Version="$(MonogameVersion)" PrivateAssets="all" />
-        <PackageReference Include="MonoGame.Runtime.Mac.Vulkan" Version="$(MonogameVersion)" PrivateAssets="all" />
-        <PackageReference Include="MonoGame.Runtime.Linux.Vulkan" Version="$(MonogameVersion)" PrivateAssets="all" />
-        <PackageReference Include="MonoGame.Runtime.Windows.Vulkan" Version="$(MonogameVersion)" PrivateAssets="all" />
+        <PackageReference Include="MonoGame.Framework.Native" Version="$(MonogameVersion)" PrivateAssets="all" Publish="true" />
+        <PackageReference Include="MonoGame.Runtime.Mac.Vulkan" Version="$(MonogameVersion)" PrivateAssets="all" Publish="true" />
+        <PackageReference Include="MonoGame.Runtime.Linux.Vulkan" Version="$(MonogameVersion)" PrivateAssets="all" Publish="true" />
+        <PackageReference Include="MonoGame.Runtime.Windows.Vulkan" Version="$(MonogameVersion)" PrivateAssets="all" Publish="true" />
     </ItemGroup>
 
     <!-- Browser deps: KNI BlazorGL. No ImGui (cimgui has no WASM build). -->
@@ -107,6 +112,65 @@
         />
     </Target>
     
+    <!-- Fail early and legibly when the bucket assets have not been fetched.
+         Assets/Fish/{Audio,Fonts,Textures} live in Cloudflare R2, not git (see steam/SETUP.md).
+         Without them the game starts and every texture and sound is missing, which reads as a
+         rendering bug rather than a missing download. -->
+    <Target Name="CheckBucketAssets" BeforeTargets="BeforeBuild">
+        <Error Condition="!Exists('$(MSBuildProjectDirectory)/Assets/Fish/Textures')"
+               Text="Fade.MonoGame/Assets/Fish/Textures is missing. The textures, audio and fonts live in Cloudflare R2, not git. Run build\fetch-assets.ps1 (or ./build/fetch-assets.sh) and build again." />
+    </Target>
+
+    <!-- Build Assets/ into Content/*.xnb at build time, and ship it.
+
+         In Debug the engine does this in-process at startup, through the IContentBuilder
+         that Program.cs registers, so nothing here is needed. A Release build has no
+         pipeline, so without this target it ships with no Content folder at all.
+
+         Uses the same CLI that Fade.MonoGame.Game uses to bake its own sprite shader, built
+         the same way: as a plain desktop tool, with this publish's RID and platform stripped
+         off. It is not a ProjectReference in Release on purpose, because that would put the
+         content pipeline's tool binaries (ffmpeg, basisu, crunch) into the shipped game. -->
+    <PropertyGroup>
+        <_GameAssetsDir>$(MSBuildProjectDirectory)/Assets</_GameAssetsDir>
+        <!-- No trailing slash: these are quoted on a command line, and on Windows a
+             backslash before the closing quote would escape it. -->
+        <_GameContentObjDir>$(MSBuildProjectDirectory)/obj/gamecontent/$(FadeMonoGamePlatform)</_GameContentObjDir>
+        <_FadeContentProject>$(MSBuildProjectDirectory)/../Fade.MonoGame.Content/Fade.MonoGame.Content.csproj</_FadeContentProject>
+    </PropertyGroup>
+    <Target Name="BuildGameContent"
+            Condition="'$(Configuration)' != 'Debug' AND '$(FadeMonoGamePlatform)' != 'Web' AND Exists('$(_GameAssetsDir)')"
+            BeforeTargets="AssignTargetPaths">
+        <Message Importance="high" Text="Building game content from $(_GameAssetsDir) for $(FadeMonoGamePlatform)..." />
+        <MakeDir Directories="$(_GameContentObjDir)" />
+
+        <!-- Restore in a separate process, then build. See the long note on the same pair of
+             steps in Fade.MonoGame.Game.csproj for why the restore cannot be an MSBuild task. -->
+        <Exec Command="dotnet restore &quot;$(_FadeContentProject)&quot;" StandardOutputImportance="low" />
+        <MSBuild Projects="$(_FadeContentProject)"
+                 Targets="Build"
+                 RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;FadeMonoGamePlatform;SelfContained;PublishTrimmed;PublishReadyToRun">
+            <Output TaskParameter="TargetOutputs" ItemName="_GameContentCli" />
+        </MSBuild>
+
+        <Exec Command="dotnet &quot;@(_GameContentCli)&quot; --platform $(FadeMonoGamePlatform) --source &quot;$(_GameAssetsDir)&quot; --output &quot;$(_GameContentObjDir)&quot; --intermediate &quot;$(_GameContentObjDir)/obj&quot;"
+              CustomErrorRegularExpression="\[E\] .+" />
+
+        <!-- Declared here rather than statically: the files do not exist until the Exec
+             above has run. AssignTargetPaths is late enough that Content added now is still
+             copied to the output and publish folders. -->
+        <ItemGroup>
+            <_BuiltGameContent Include="$(_GameContentObjDir)/Content/**/*" />
+            <Content Include="@(_BuiltGameContent)">
+                <Link>Content/%(RecursiveDir)%(Filename)%(Extension)</Link>
+                <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            </Content>
+        </ItemGroup>
+
+        <Error Condition="'@(_BuiltGameContent)' == ''"
+               Text="Content build produced nothing from $(_GameAssetsDir). A Release build with no XNBs ships a game with no art and no sound." />
+    </Target>
+
     <ItemGroup>
         <FadeSource Include="fish_macros.fbasic" />
         <FadeSource Include="fish_headers.fbasic" />
@@ -120,8 +184,12 @@
         <FadeSource Include="fish_routines.fbasic" />
         <FadeSource Include="fish_routines_input.fbasic" />
         <FadeSource Include="fish_routines_menu.fbasic" />
+        <FadeSource Include="fish_routines_surface.fbasic" />
+        <FadeSource Include="fish_routines_seabed.fbasic" />
         <FadeSource Include="fish_routines_credits.fbasic" />
         <FadeSource Include="fish_routines_save.fbasic" />
+        <FadeSource Include="fish_routines_highscores.fbasic" />
+        <FadeSource Include="fish_routines_codec.fbasic" />
         <FadeSource Include="fish_routines_bubbles.fbasic" />
         <FadeSource Include="fish_routines_multiplier.fbasic" />
         <FadeSource Include="fish_routines_music.fbasic" />
@@ -139,4 +207,4 @@
     <ItemGroup>
       <ClCompile Include="Content\MySpriteEffect.fx" />
     </ItemGroup>
-</Project>
+</Project>

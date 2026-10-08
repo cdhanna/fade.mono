@@ -1,0 +1,141 @@
+goto routines_surface_exit
+
+remstart
+    THE SURFACE
+    the main menu is the view from the surface of the water: the sun going down, and the dive boat, with
+    a diver sat on the back of it. starting a game goes under, and going back to the main menu comes
+    back up.
+
+    the sky and the sea are one sprite that covers the whole menu, drawn by the surface effect. the boat
+    is a sprite on top of that. both are drawn into the menu's render target, behind the menu.
+
+    the wave of bubbles is the waterline. the bubble mask is filled in wherever the water is, so the
+    surface shows where the mask is empty. when the game starts the wave goes up the screen, and the
+    water comes up with it. see menu_transition, in fish_routines_menu.
+
+    on the way back to the main menu, the water drains down the screen. bubbles do not go down, so
+    there are none in that. the water is everything under a wavy line with foam on it, which the
+    effects draw. see THE WATERLINE in fish_headers.
+
+    the watery wobble over the whole screen is only for under the water. so the screen effect looks at
+    the same mask, or the same line, while the water goes by, and it is off for as long as the main menu is up.
+
+    the sky goes a long way up, to where it is black and full of stars. the splash screen is up there,
+    and the camera comes down from it to the boat. see menu_run_splash, in fish_routines_credits.
+remend
+
+setup_surface:
+    ` the globals are declared in the fish headers, so that functions can use them no matter where they are called from
+
+    reserve effect id(SURFACE_FX_ID)
+    effect SURFACE_FX_ID, "Fish/Shaders/SurfaceEffect"
+
+    ` the surface comes in two sets of colors. it is the middle of the day, unless the clock of the
+    ` computer says that it is the evening or the night, and then the sun is going down.
+    SURFACE_DAY = 1
+    surfaceHour = clock hour()
+    if surfaceHour >= SURFACE_EVENING_HOUR or surfaceHour < SURFACE_MORNING_HOUR then SURFACE_DAY = 0
+
+    ` the FISH_SKY environment variable picks one, whatever the time is
+    surfaceSky$ = env$("FISH_SKY")
+    if surfaceSky$ = "day" then SURFACE_DAY = 1
+    if surfaceSky$ = "evening" then SURFACE_DAY = 0
+
+    ` in the evening the boat is a dark shape against the sun, and in the day it is a white boat
+    if SURFACE_DAY
+        texture reserve texture id(TEX_DIVE_BOAT), "Fish/Textures/Menu/dive_boat_day"
+    else
+        texture reserve texture id(TEX_DIVE_BOAT), "Fish/Textures/Menu/dive_boat"
+    endif
+
+    reserve sprite id(SURFACE_SPRITE)
+    sprite SURFACE_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset SURFACE_SPRITE, 0, 0
+    size sprite SURFACE_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    order sprite SURFACE_SPRITE, ORDER_MENU_SURFACE
+    set sprite effect SURFACE_SPRITE, SURFACE_FX_ID
+    set sprite render target SURFACE_SPRITE, TARGET_MENU
+
+    ` the picture of the boat is 168 by 80, and the bottom of it is the waterline
+    reserve sprite id(SURFACE_BOAT_SPRITE)
+    sprite SURFACE_BOAT_SPRITE, 0, 0, TEX_DIVE_BOAT
+    order sprite SURFACE_BOAT_SPRITE, ORDER_MENU_SURFACE + 1
+    set sprite render target SURFACE_BOAT_SPRITE, TARGET_MENU
+
+    ` the camera that slides the main menu up the screen as the game goes under. a camera in the
+    ` middle of its render target does not move anything.
+    reserve camera id(MENU_CAMERA_ID)
+    camera MENU_CAMERA_ID, WORLD_WIDTH / 2, WORLD_HEIGHT / 2
+    set render target camera TARGET_MENU, MENU_CAMERA_ID
+return
+
+
+` move the surface. frame_menu_render comes here on every frame that a menu is drawn.
+frame_surface:
+    applyScreenWater()
+
+    ` the main menu stays where it is, at the surface, while the camera goes under. so it slides up
+    ` the screen by as much as the horizon does. the menu's render target has a camera of its own
+    ` for that, which moves everything that is drawn there. any other menu is not moved at all.
+    surfaceShift = 0
+    if MENU_MODE = MENU_MODE_MAIN then surfaceShift = SURFACE_SINK# * SURFACE_SINK_DISTANCE
+    position camera MENU_CAMERA_ID, WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + surfaceShift
+
+    if MENU_MODE <> MENU_MODE_MAIN then return
+
+    ` the sky and the sea are moved by the surface effect, and not by the camera, so that sprite
+    ` is put wherever the camera is looking. the boat is too, further down.
+    position sprite SURFACE_SPRITE, 0, surfaceShift
+
+    surfaceTime# = game ms() * .001
+
+    ` menu_transition eases this, so that the camera gets going before the wave of bubbles does
+    surfaceSink# = SURFACE_SINK#
+
+    ` the camera bobs in the water, so everything far away goes up and down together. the horizon
+    ` climbs up the screen as the camera goes under, and it drops off of the bottom when the camera looks up.
+    surfaceBob# = sin(surfaceTime# * .9) * 2.5
+    surfaceHorizon# = SURFACE_HORIZON + surfaceBob# + SURFACE_PAN# - surfaceSink# * SURFACE_SINK_DISTANCE
+
+    ` the water right in front of the camera comes up the screen as the camera goes under, too
+    surfaceSwell# = WORLD_HEIGHT + SURFACE_PAN# - (30 + surfaceBob# * 1.5 + surfaceSink# * SURFACE_SWELL_RISE)
+
+    ` the boat is closer than the horizon, and it rocks on a swell of its own
+    surfaceBoatY# = surfaceHorizon# + 30 + sin(surfaceTime# * 1.3 + 1) * 1.5
+    position sprite SURFACE_BOAT_SPRITE, SURFACE_BOAT_X, surfaceBoatY# + surfaceShift - 37
+
+    set effect param float SURFACE_FX_ID, "Time", surfaceTime#
+    set effect param float SURFACE_FX_ID, "Day", SURFACE_DAY
+    set effect param float2 SURFACE_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT
+    set effect param float SURFACE_FX_ID, "Horizon", surfaceHorizon#
+    set effect param float SURFACE_FX_ID, "Swell", surfaceSwell#
+
+    ` the hull is not in the middle of the picture, because the diver's fins stick out of the back
+    set effect param float3 SURFACE_FX_ID, "Boat", SURFACE_BOAT_X - 10, surfaceBoatY#, 60
+return
+
+
+routines_surface_exit:
+
+
+` show or hide the surface. it is only behind the main menu, and never behind the pause menu.
+function showSurface(isVisible)
+    if isVisible
+        show sprite SURFACE_SPRITE
+        show sprite SURFACE_BOAT_SPRITE
+    else
+        hide sprite SURFACE_SPRITE
+        hide sprite SURFACE_BOAT_SPRITE
+    endif
+endfunction
+
+
+` tell the screen effect where the water is, so that it only wobbles what is under it.
+` the effect loses its parameters when it is reloaded, so this is called on every frame.
+function applyScreenWater()
+    set effect param texture 1, "MaskTexture", render target texture(TARGET_MASK)
+    set effect param float 1, "UseMask", TRANSITION_SURFACE
+    set effect param float 1, "Submerged", 1 - SURFACE_UP
+    set effect param float4 1, "WaterLine", WATERLINE_Y#, WATERLINE_TILT#, game ms() * .001, WATERLINE_USE
+    set effect param float2 1, "Grid", WORLD_WIDTH, WORLD_HEIGHT
+endfunction

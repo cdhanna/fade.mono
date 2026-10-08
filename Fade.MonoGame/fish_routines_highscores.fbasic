@@ -1,0 +1,1039 @@
+goto routines_highscores_exit
+
+remstart
+    THE HIGH SCORES
+    every game ends after a set number of rounds, so what makes one game better than another is how
+    few moves it took. a table lists the best games, fewest moves first. when two games took the same
+    number of moves, the one whose multiplier got higher is the better one.
+
+    there is a table for every kind of game: short, regular and long, each in normal mode and in zen mode.
+
+    when the last round of a game has been won, the player is asked for their initials, and then they
+    are shown the table for the kind of game that they played. if the game made it onto the table, its
+    row is outlined. "Highscores" on the main menu shows the tables too.
+
+    two rows of tabs sit on top of the table, and say which table it is. the top row is the mode, and
+    the row under it is the length. the tab of the table that is showing is lit up. on the main menu,
+    up and down go through the two rows of tabs and then the rows of the table, and left and right
+    change the tab on a row of tabs.
+
+    every upgrade that is picked in a game is written down, with the move that it was picked on. see
+    THE LOG OF UPGRADES in fish_headers. picking a row of a table shows the log of that game, as a
+    list that scrolls. the scores that the tables start out with have no log.
+
+    the tables are kept in the preferences. the preferences are whole numbers, so the three initials
+    are packed into one number, the way that the digits of a number are: see packInitials.
+    a table is only written to the preferences once the player has got onto it. until then, it is
+    whatever the seed scores say it is.
+
+    all of this is drawn into the menu's render target, in place of the list of the menu, the same
+    way that the credits are.
+remend
+
+
+` THE SEED SCORES. these are what every table starts out with, so that there is something to beat.
+` each line is: the initials, the highest multiplier, and then how many moves the game took, for a
+` short game, a regular game, and a long game. the normal table and the zen table get the same ones.
+` they can be in any order, and there can be fewer than 8 of them. the rest of the table is left empty.
+` a table that the player has got onto is kept in prefs.json, and does not look at these any more.
+seed_highscores:
+    seedHighscore("CDH", 9, 60, 420, 1500)
+    seedHighscore("LEE", 8, 75, 500, 1800)
+    seedHighscore("FFP", 7, 90, 580, 2100)
+    seedHighscore("CDH", 6, 105, 660, 2400)
+    seedHighscore("LEE", 5, 120, 740, 2700)
+    seedHighscore("FFP", 4, 140, 820, 3000)
+    seedHighscore("CDH", 3, 160, 900, 3300)
+    seedHighscore("LEE", 2, 180, 1000, 3600)
+return
+
+
+` setup_menu comes here, because all of this is drawn with the menu.
+setup_highscores:
+    gosub seed_highscores
+    for hsTable = 0 to HISCORE_TABLE_COUNT - 1
+        loadHighscoreTable(hsTable)
+    next
+
+    hsPanelX = (WORLD_WIDTH - HISCORE_WIDTH) / 2
+
+    ` the tabs. the modes are the top row, and the lengths are the row that sits on the table.
+    createHighscoreTab(0, hsPanelX, 149, "Normal")
+    createHighscoreTab(1, hsPanelX + 151, 149, "Zen")
+    createHighscoreTab(2, hsPanelX, 98, "Short")
+    createHighscoreTab(3, hsPanelX + 101, 98, "Regular")
+    createHighscoreTab(4, hsPanelX + 202, 98, "Long")
+
+    HISCORE_NOTE_TEXT_ID = createHighscoreText(WORLD_WIDTH / 2, 0, 16, "note")
+
+    ` the columns. every row has a text in each of them, and the initials are a text for every letter.
+    ` chr$ makes a letter out of a number. putting that straight onto a text works, but joining three of
+    ` them into one word did not, so every letter gets a text of its own.
+    HISCORE_HEAD_TEXTS(0) = createHighscoreText(hsPanelX + 34, HISCORE_TOP + 5, 16, "Place")
+    HISCORE_HEAD_TEXTS(1) = createHighscoreText(hsPanelX + 100, HISCORE_TOP + 5, 16, "Initials")
+    HISCORE_HEAD_TEXTS(2) = createHighscoreText(hsPanelX + 176, HISCORE_TOP + 5, 16, "Moves")
+    HISCORE_HEAD_TEXTS(3) = createHighscoreText(hsPanelX + 252, HISCORE_TOP + 5, 16, "Multiplier")
+    for hsI = 0 to 3
+        color text HISCORE_HEAD_TEXTS(hsI), rgb(64, 128, 255)
+    next
+
+    for hsI = 0 to HISCORE_ROWS - 1
+        hsRowY = HISCORE_TOP + 24 + hsI * HISCORE_ROW_HEIGHT
+        HISCORE_CELL_TEXTS(hsI * 6) = createHighscoreText(hsPanelX + 34, hsRowY, 20, "1")
+        HISCORE_CELL_TEXTS(hsI * 6 + 1) = createHighscoreText(hsPanelX + 90, hsRowY, 20, "A")
+        HISCORE_CELL_TEXTS(hsI * 6 + 2) = createHighscoreText(hsPanelX + 100, hsRowY, 20, "A")
+        HISCORE_CELL_TEXTS(hsI * 6 + 3) = createHighscoreText(hsPanelX + 110, hsRowY, 20, "A")
+        HISCORE_CELL_TEXTS(hsI * 6 + 4) = createHighscoreText(hsPanelX + 176, hsRowY, 20, "0")
+        HISCORE_CELL_TEXTS(hsI * 6 + 5) = createHighscoreText(hsPanelX + 252, hsRowY, 20, "x1")
+    next
+
+    ` the page where the initials are entered
+    for hsI = 0 to 2
+        HISCORE_LETTER_TEXTS(hsI) = createHighscoreText(WORLD_WIDTH / 2 + (hsI - 1) * 56, 130, 48, "A")
+    next
+
+    ` the page that shows the upgrades of one game. it is wider than the table is.
+    hsDetailX = (WORLD_WIDTH - HISCORE_DETAIL_WIDTH) / 2
+    HISCORE_DETAIL_HEAD_TEXTS(0) = createHighscoreText(hsDetailX + 100, HISCORE_DETAIL_TOP + 5, 16, "Upgrade")
+    HISCORE_DETAIL_HEAD_TEXTS(1) = createHighscoreText(hsDetailX + 256, HISCORE_DETAIL_TOP + 5, 16, "Kind")
+    HISCORE_DETAIL_HEAD_TEXTS(2) = createHighscoreText(hsDetailX + 324, HISCORE_DETAIL_TOP + 5, 16, "Move")
+    for hsI = 0 to 2
+        color text HISCORE_DETAIL_HEAD_TEXTS(hsI), rgb(64, 128, 255)
+    next
+
+    for hsI = 0 to HISCORE_DETAIL_ROWS - 1
+        hsRowY = HISCORE_DETAIL_TOP + 22 + hsI * HISCORE_DETAIL_ROW_HEIGHT
+
+        HISCORE_DETAIL_NUM_TEXTS(hsI) = createHighscoreText(hsDetailX + 18, hsRowY + 3, 20, "1")
+        color text HISCORE_DETAIL_NUM_TEXTS(hsI), rgb(64, 128, 255)
+
+        ` the picture from the card. it is 48 pixels across, and it is drawn at half of that.
+        hsArtId = 0
+        reserve sprite id(hsArtId)
+        sprite hsArtId, hsDetailX + 34, hsRowY + 1, TEX_PIXEL
+        set sprite offset hsArtId, 0, 0
+        size sprite hsArtId, 24, 24
+        order sprite hsArtId, ORDER_MENU_TEXT
+        set sprite render target hsArtId, TARGET_MENU
+        hide sprite hsArtId
+        HISCORE_DETAIL_ART_SPRITES(hsI) = hsArtId
+
+        ` the name starts at its left end, so that the names line up
+        HISCORE_DETAIL_NAME_TEXTS(hsI) = createHighscoreText(hsDetailX + 66, hsRowY + 3, 20, "name")
+        set text offset HISCORE_DETAIL_NAME_TEXTS(hsI), 0, 0
+
+        HISCORE_DETAIL_KIND_TEXTS(hsI) = createHighscoreText(hsDetailX + 256, hsRowY + 5, 16, "kind")
+        enable rich text HISCORE_DETAIL_KIND_TEXTS(hsI)
+        color text HISCORE_DETAIL_KIND_TEXTS(hsI), rgb(150, 190, 255)
+
+        HISCORE_DETAIL_MOVE_TEXTS(hsI) = createHighscoreText(hsDetailX + 324, hsRowY + 3, 20, "0")
+    next
+
+    HISCORE_CURSOR = createMenuBorder(ORDER_MENU_CURSOR)
+    showInfoBorder(HISCORE_CURSOR, 0)
+
+    ` what the table loop is told. see highscore_table_loop.
+    hsLoopTable = 0
+    hsLoopMarked = -1
+    hsLoopTabs = 0
+    hsLoopNote = 0
+    hsFocus = 0
+    hsNote$ = ""
+    hsNoteColor = rgb(255, 255, 255)
+
+    ` the direction that is held down on the page of the initials, so that holding it runs through the letters
+    hsHeldDir = 0
+    hsRepeatMs = 0
+return
+
+
+` "Highscores" on the main menu. show the tables, in place of the menu, until the player backs out.
+menu_run_highscores:
+
+    ` it starts on the table for the kind of game that "New Game" is set to, with the row of the modes picked
+    hsLoopTable = getHighscoreTable(OPTION_GAME_LENGTH, OPTION_GAME_ZEN)
+    hsLoopMarked = -1
+    hsLoopTabs = 1
+    hsLoopNote = 0
+    hsFocus = 0
+
+    gosub highscore_table_open
+    gosub highscore_table_loop
+
+    ` back to the main menu, with "Highscores" highlighted again
+    closeHighscores()
+    setMenuPage(MENU_PAGE_MAIN)
+    selectMenuItem(getMenuRow(MENU_ITEM_HIGHSCORES), 0)
+return
+
+
+` put the table in hsLoopTable on the screen, with everything that goes around it. this is what shows
+` it in the first place, and it is what puts it back after the page of one game's upgrades.
+highscore_table_open:
+    openHighscoreTable(hsLoopTable, hsLoopMarked, hsFocus)
+
+    ` the line under the table says how the game that just ended did. the main menu has no game to talk about.
+    if hsLoopNote
+        set text HISCORE_NOTE_TEXT_ID, hsNote$
+        color text HISCORE_NOTE_TEXT_ID, hsNoteColor
+    else
+        hide text HISCORE_NOTE_TEXT_ID
+    endif
+
+    if hsLoopTabs
+        set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} details    {pause} back"
+    else
+        set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} details    {pause} done"
+    endif
+    size text y MENU_HINT_TEXT_ID, 16
+return
+
+
+` the table is showing. let the player look around it until they back out with the pause button.
+` hsFocus is what the outline is on: 0 is the row of tabs for the modes, 1 is the row of tabs for the
+` lengths, and from 2 on it is a row of the table. up and down move it.
+` on a row of tabs, left and right change the tab, and so the table. hsLoopTabs is 0 when the table
+` cannot be changed, and then the outline stays on the rows of the table.
+` on a row of the table, the confirm button shows the upgrades of that game.
+highscore_table_loop:
+    do
+        gosub frame_highscores
+        sync
+
+        ` these are checked after the frame, so that the press that brought the table up is not used twice
+        if new action down(ACT_PAUSE) then exit
+
+        hsLoopChanged = 0
+        hsLoopStep = 0
+        if new action down(ACT_DOWN) then hsLoopStep = 1
+        if new action down(ACT_UP) then hsLoopStep = -1
+        if hsLoopStep <> 0
+            hsFocusFirst = 2
+            if hsLoopTabs then hsFocusFirst = 0
+            hsFocus = hsFocus + hsLoopStep
+            if hsFocus > HISCORE_ROWS + 1 then hsFocus = hsFocusFirst
+            if hsFocus < hsFocusFirst then hsFocus = HISCORE_ROWS + 1
+            hsLoopChanged = 1
+        endif
+
+        ` left and right change the tab on a row of tabs. both rows go around at the ends.
+        hsLoopStep = 0
+        if new action down(ACT_RIGHT) then hsLoopStep = 1
+        if new action down(ACT_LEFT) then hsLoopStep = -1
+        if hsLoopStep <> 0
+            if hsFocus < 2
+                hsLoopZen = hsLoopTable mod 2
+                hsLoopLength = hsLoopTable / 2
+                if hsFocus = 0
+                    hsLoopZen = 1 - hsLoopZen
+                else
+                    hsLoopLength = hsLoopLength + hsLoopStep
+                    if hsLoopLength > GAME_LENGTH_LONG then hsLoopLength = GAME_LENGTH_SHORT
+                    if hsLoopLength < GAME_LENGTH_SHORT then hsLoopLength = GAME_LENGTH_LONG
+                endif
+                hsLoopTable = getHighscoreTable(hsLoopLength, hsLoopZen)
+                hsLoopChanged = 1
+            endif
+        endif
+
+        ` the upgrades of the game on the row. a row that nobody has taken has no game to show.
+        if new action down(ACT_CONFIRM)
+            if hsFocus >= 2
+                hsDetailIndex = hsLoopTable * HISCORE_ROWS + (hsFocus - 2)
+                if HISCORE_MOVES(hsDetailIndex) < HISCORE_EMPTY_MOVES
+                    gosub highscore_details
+                    gosub highscore_table_open
+                    hsLoopChanged = 0
+                endif
+            endif
+        endif
+
+        if hsLoopChanged
+            refreshHighscoreTable(hsLoopTable, hsLoopMarked, hsFocus)
+
+            ` the same swell of sound that the highlight of the menu makes when it moves
+            create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
+            set tween type SWAP_TWEEN_SFX, 1
+        endif
+    loop
+return
+
+
+` show the upgrades of the game at hsDetailIndex, in place of the table, until the player backs out.
+` up and down scroll the list, when it is longer than the page.
+highscore_details:
+    hsDetailCount = HISCORE_LOGS(hsDetailIndex * HISCORE_LOG_STRIDE)
+    hsDetailLast = hsDetailCount - HISCORE_DETAIL_ROWS `how far the list can scroll
+    if hsDetailLast < 0 then hsDetailLast = 0
+    hsDetailScroll = 0
+
+    openHighscoreDetails(hsDetailIndex, hsFocus - 1)
+    refreshHighscoreDetails(hsDetailIndex, hsDetailScroll)
+
+    do
+        gosub frame_highscores
+        sync
+
+        if new action down(ACT_CONFIRM) then exit
+        if new action down(ACT_PAUSE) then exit
+
+        ` holding up or down keeps the list going, after a moment
+        hsScrollStep = 0
+        hsDirNow = 0
+        if action down(ACT_UP) then hsDirNow = -1
+        if action down(ACT_DOWN) then hsDirNow = 1
+        if hsDirNow <> hsHeldDir
+            hsHeldDir = hsDirNow
+            hsScrollStep = hsDirNow
+            hsRepeatMs = game ms() + 350
+        else
+            if hsDirNow <> 0
+                if game ms() >= hsRepeatMs
+                    hsScrollStep = hsDirNow
+                    hsRepeatMs = game ms() + 80
+                endif
+            endif
+        endif
+
+        if hsScrollStep <> 0
+            hsScrollTo = hsDetailScroll + hsScrollStep
+            if hsScrollTo > hsDetailLast then hsScrollTo = hsDetailLast
+            if hsScrollTo < 0 then hsScrollTo = 0
+            if hsScrollTo <> hsDetailScroll
+                hsDetailScroll = hsScrollTo
+                refreshHighscoreDetails(hsDetailIndex, hsDetailScroll)
+                create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
+                set tween type SWAP_TWEEN_SFX, 1
+            endif
+        endif
+    loop
+return
+
+
+` the last round has been won. handle_game_end, in fish_routines_menu, comes here with the menu's
+` render target set up to go over the game, and not showing yet. this asks for the player's initials,
+` puts the game on its table if it is good enough, and shows the table. it comes back when the player is
+` done looking, with the table still showing.
+highscore_game_end:
+
+    ` which table the game belongs on, and where on it. -1 is not on it at all.
+    hsEndTable = getGameHighscoreTable()
+    hsEndPlace = -1
+    if hsEndTable >= 0
+        hsEndPlace = getHighscorePlace(hsEndTable, CURRENT_MOVE_COUNT, BEST_MULTIPLIER)
+    endif
+
+    ` the initials start out as whatever was entered the last time
+    hsPacked = get pref(PREF_INITIALS, 0)
+    if hsPacked < 0 or hsPacked > 17575 then hsPacked = 0
+    HISCORE_LETTERS(0) = hsPacked / 676
+    HISCORE_LETTERS(1) = (hsPacked / 26) mod 26
+    HISCORE_LETTERS(2) = hsPacked mod 26
+    hsSlot = 0
+
+    hsIsHighscore = 0
+    if hsEndPlace >= 0 then hsIsHighscore = 1
+    openHighscoreInitials(hsIsHighscore)
+
+    ` the menu has to be drawn once before it is shown, the same as the pause menu
+    create basic tween MENU_FADE_TWEEN_ID, 0, 0, 1, 0
+    refreshHighscoreInitials(hsSlot)
+    gosub frame_highscores
+    sync
+
+    show sprite MENU_COMPOSITE_SPRITE
+    create basic tween MENU_FADE_TWEEN_ID, 0, 1, 150, 0
+
+    do
+        refreshHighscoreInitials(hsSlot)
+        gosub frame_highscores
+        sync
+
+        if new action down(ACT_CONFIRM) then exit
+
+        hsChanged = 0
+        if new action down(ACT_RIGHT)
+            hsSlot = hsSlot + 1
+            if hsSlot > 2 then hsSlot = 0
+            hsChanged = 1
+        endif
+        if new action down(ACT_LEFT)
+            hsSlot = hsSlot - 1
+            if hsSlot < 0 then hsSlot = 2
+            hsChanged = 1
+        endif
+
+        ` up and down go through the alphabet. holding one of them down keeps going, after a moment.
+        hsLetterStep = 0
+        hsDirNow = 0
+        if action down(ACT_UP) then hsDirNow = -1
+        if action down(ACT_DOWN) then hsDirNow = 1
+        if hsDirNow <> hsHeldDir
+            hsHeldDir = hsDirNow
+            hsLetterStep = hsDirNow
+            hsRepeatMs = game ms() + 350
+        else
+            if hsDirNow <> 0
+                if game ms() >= hsRepeatMs
+                    hsLetterStep = hsDirNow
+                    hsRepeatMs = game ms() + 80
+                endif
+            endif
+        endif
+
+        if hsLetterStep <> 0
+            hsLetter = HISCORE_LETTERS(hsSlot) + hsLetterStep
+            if hsLetter > 25 then hsLetter = 0
+            if hsLetter < 0 then hsLetter = 25
+            HISCORE_LETTERS(hsSlot) = hsLetter
+            hsChanged = 1
+        endif
+
+        if hsChanged
+            create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
+            set tween type SWAP_TWEEN_SFX, 1
+        endif
+    loop
+
+    ` the initials are remembered for the next time
+    hsPacked = packInitials(HISCORE_LETTERS(0), HISCORE_LETTERS(1), HISCORE_LETTERS(2))
+    set pref PREF_INITIALS, hsPacked
+
+    ` the game goes on its table, if it is good enough. the table is only saved when it has changed.
+    hsEndPlace = -1
+    if hsEndTable >= 0
+        hsEndPlace = insertHighscore(hsEndTable, hsPacked, CURRENT_MOVE_COUNT, BEST_MULTIPLIER)
+        if hsEndPlace >= 0
+            ` the upgrades that were picked go onto the table with it
+            takeGameLog(hsEndTable * HISCORE_ROWS + hsEndPlace)
+            saveHighscoreTable(hsEndTable)
+        endif
+    endif
+
+    ` the game is over and it has been counted, so it must not be there to carry on with. if it were, then
+    ` closing the window now and coming back would end it a second time, and count it a second time.
+    gosub forget_saved_game
+
+    ` a game that is not one of the kinds that has a table has nothing more to show
+    if hsEndTable < 0 then return
+
+    ` the table comes up with the outline on the new row. it cannot be changed for another table here.
+    hsLoopTable = hsEndTable
+    hsLoopMarked = hsEndPlace
+    hsLoopTabs = 0
+    hsLoopNote = 1
+    hsFocus = 2
+    if hsEndPlace >= 0
+        hsFocus = hsEndPlace + 2
+        hsNote$ = "A new high score! Number " + str$(hsEndPlace + 1) + " of " + str$(HISCORE_ROWS) + "."
+        hsNoteColor = rgb(255, 220, 96)
+    else
+        hsNote$ = "Not a high score this time: " + str$(CURRENT_MOVE_COUNT) + " moves, and a multiplier of x" + str$(BEST_MULTIPLIER) + "."
+        hsNoteColor = rgb(150, 190, 255)
+    endif
+
+    gosub highscore_table_open
+    gosub highscore_table_loop
+return
+
+
+` everything on the pages of the high scores that changes from frame to frame
+frame_highscores:
+    if HISCORE_CURSOR_ON
+        hsPulse# = .8 + .2 * sin(game ms() * .006)
+        colorInfoBorder(HISCORE_CURSOR, rgb(255, 255, 255, 255 * hsPulse#))
+    endif
+
+    gosub frame_menu_render
+return
+
+
+routines_highscores_exit:
+
+
+` add one of the scores that every table starts out with. see THE SEED SCORES, at the top of this file.
+function seedHighscore(initials$, bestMult, shortMoves, regularMoves, longMoves)
+    if HISCORE_SEED_COUNT < HISCORE_ROWS
+        HISCORE_SEED_NAMES(HISCORE_SEED_COUNT) = packInitialsText(initials$)
+        HISCORE_SEED_MULTS(HISCORE_SEED_COUNT) = bestMult
+        HISCORE_SEED_MOVES(HISCORE_SEED_COUNT * 3 + GAME_LENGTH_SHORT) = shortMoves
+        HISCORE_SEED_MOVES(HISCORE_SEED_COUNT * 3 + GAME_LENGTH_REGULAR) = regularMoves
+        HISCORE_SEED_MOVES(HISCORE_SEED_COUNT * 3 + GAME_LENGTH_LONG) = longMoves
+        HISCORE_SEED_COUNT = HISCORE_SEED_COUNT + 1
+    endif
+endfunction
+
+
+` three letters, as numbers from 0 (A) to 25 (Z), packed into one number. the first letter is worth
+` the most, the way that the first digit of a number is.
+function packInitials(first, second, third)
+    packed = first * 676 + second * 26 + third
+endfunction packed
+
+
+` the same, from three letters of text, like "CDH". anything that is not a letter turns into an A.
+function packInitialsText(initials$)
+    packed = 0
+    capitals$ = upper$(initials$)
+    for i = 1 to 3
+        letter = asc(right$(left$(capitals$, i), 1)) - 65
+        if letter < 0 or letter > 25 then letter = 0
+        packed = packed * 26 + letter
+    next
+endfunction packed
+
+
+` which table a kind of game has. the length is one of the GAME_LENGTH constants.
+function getHighscoreTable(gameLength, zen)
+    tableIndex = gameLength * 2 + zen
+endfunction tableIndex
+
+
+` which table the game that is being played belongs on. a game only knows how many rounds it has, so this
+` finds the length that has that many. it is -1 if no length does.
+function getGameHighscoreTable()
+    tableIndex = -1
+    for gameLength = GAME_LENGTH_SHORT to GAME_LENGTH_LONG
+        if getGameLengthRounds(gameLength) = GAME_ROUND_CAP
+            tableIndex = getHighscoreTable(gameLength, GAME_ZEN)
+        endif
+    next
+endfunction tableIndex
+
+
+` where in the preferences a table is kept
+function getHighscorePref(tableIndex)
+    prefIndex = HISCORE_PREF + tableIndex * 100
+endfunction prefIndex
+
+
+` write down that an upgrade was picked, on the move that the game is up to. see THE LOG OF UPGRADES in fish_headers.
+function logUpgrade(cardIndex)
+    if GAME_LOG_COUNT < HISCORE_LOG_MAX
+        GAME_LOG(GAME_LOG_COUNT) = CURRENT_MOVE_COUNT * 100 + cardIndex
+        GAME_LOG_COUNT = GAME_LOG_COUNT + 1
+    endif
+endfunction
+
+
+` give an entry of a table the log of the game that is being played
+function takeGameLog(scoreIndex)
+    logStart = scoreIndex * HISCORE_LOG_STRIDE
+    HISCORE_LOGS(logStart) = GAME_LOG_COUNT
+    if GAME_LOG_COUNT > 0
+        for i = 0 to GAME_LOG_COUNT - 1
+            HISCORE_LOGS(logStart + 1 + i) = GAME_LOG(i)
+        next
+    endif
+endfunction
+
+
+` copy the log of one entry of a table over the log of another
+function copyHighscoreLog(fromIndex, toIndex)
+    logFrom = fromIndex * HISCORE_LOG_STRIDE
+    logTo = toIndex * HISCORE_LOG_STRIDE
+    for i = 0 to HISCORE_LOG_STRIDE - 1
+        HISCORE_LOGS(logTo + i) = HISCORE_LOGS(logFrom + i)
+    next
+endfunction
+
+
+` where in the preferences the log of a row of a table is kept
+function getHighscoreLogPref(tableIndex, tableRow)
+    prefIndex = HISCORE_LOG_PREF + tableIndex * 1000 + tableRow * HISCORE_LOG_STRIDE
+endfunction prefIndex
+
+
+` which row of a table a game would take, counted from 0 at the top. it is -1 if the game is not good
+` enough to be on the table. a game has to be better than a row to take it, so a tie leaves the older one on top.
+function getHighscorePlace(tableIndex, entryMoves, entryMult)
+    place = -1
+    firstEntry = tableIndex * HISCORE_ROWS
+    for i = 0 to HISCORE_ROWS - 1
+        if place < 0
+            beats = 0
+            if entryMoves < HISCORE_MOVES(firstEntry + i) then beats = 1
+            if entryMoves = HISCORE_MOVES(firstEntry + i)
+                if entryMult > HISCORE_MULTS(firstEntry + i) then beats = 1
+            endif
+            if beats then place = i
+        endif
+    next
+endfunction place
+
+
+` put a game on a table, if it is good enough. the rows underneath it move down, and the last one falls
+` off of the bottom. this says which row the game took, or -1. the new row starts out with an empty log.
+function insertHighscore(tableIndex, packedName, entryMoves, entryMult)
+    place = getHighscorePlace(tableIndex, entryMoves, entryMult)
+    if place >= 0
+        firstEntry = tableIndex * HISCORE_ROWS
+        i = HISCORE_ROWS - 1
+        while i > place
+            entryTo = firstEntry + i
+            entryFrom = entryTo - 1
+            HISCORE_NAMES(entryTo) = HISCORE_NAMES(entryFrom)
+            HISCORE_MOVES(entryTo) = HISCORE_MOVES(entryFrom)
+            HISCORE_MULTS(entryTo) = HISCORE_MULTS(entryFrom)
+            copyHighscoreLog(entryFrom, entryTo)
+            i = i - 1
+        endwhile
+        HISCORE_LOGS((firstEntry + place) * HISCORE_LOG_STRIDE) = 0
+
+        HISCORE_NAMES(firstEntry + place) = packedName
+        HISCORE_MOVES(firstEntry + place) = entryMoves
+        HISCORE_MULTS(firstEntry + place) = entryMult
+    endif
+endfunction place
+
+
+` fill in a table when the game starts: from the preferences if it is there, and from the seed scores if not.
+function loadHighscoreTable(tableIndex)
+    firstEntry = tableIndex * HISCORE_ROWS
+    for i = 0 to HISCORE_ROWS - 1
+        HISCORE_NAMES(firstEntry + i) = 0
+        HISCORE_MOVES(firstEntry + i) = HISCORE_EMPTY_MOVES
+        HISCORE_MULTS(firstEntry + i) = 0
+        HISCORE_LOGS((firstEntry + i) * HISCORE_LOG_STRIDE) = 0
+    next
+
+    prefIndex = getHighscorePref(tableIndex)
+    if get pref(prefIndex, 0) = 1
+        ` the file can be changed by hand, so the rows are put on the table one at a time, which sorts them
+        for i = 0 to HISCORE_ROWS - 1
+            savedName = get pref(prefIndex + 1 + i * 3, 0)
+            savedMoves = get pref(prefIndex + 2 + i * 3, HISCORE_EMPTY_MOVES)
+            savedMult = get pref(prefIndex + 3 + i * 3, 1)
+            if savedMoves > 0 and savedMoves < HISCORE_EMPTY_MOVES
+                savedPlace = insertHighscore(tableIndex, savedName, savedMoves, savedMult)
+
+                ` the upgrades of the game go wherever the row ended up
+                if savedPlace >= 0
+                    logPref = getHighscoreLogPref(tableIndex, i)
+                    logStart = (firstEntry + savedPlace) * HISCORE_LOG_STRIDE
+                    logCount = get pref(logPref, 0)
+                    if logCount > HISCORE_LOG_MAX then logCount = HISCORE_LOG_MAX
+                    if logCount < 0 then logCount = 0
+                    HISCORE_LOGS(logStart) = logCount
+                    if logCount > 0
+                        for k = 1 to logCount
+                            HISCORE_LOGS(logStart + k) = get pref(logPref + k, 0)
+                        next
+                    endif
+                endif
+            endif
+        next
+    else
+        seedLength = tableIndex / 2
+        if HISCORE_SEED_COUNT > 0
+            for i = 0 to HISCORE_SEED_COUNT - 1
+                seedPlace = insertHighscore(tableIndex, HISCORE_SEED_NAMES(i), HISCORE_SEED_MOVES(i * 3 + seedLength), HISCORE_SEED_MULTS(i))
+            next
+        endif
+    endif
+endfunction
+
+
+` write a table into the preferences
+function saveHighscoreTable(tableIndex)
+    firstEntry = tableIndex * HISCORE_ROWS
+    prefIndex = getHighscorePref(tableIndex)
+
+    ` all of this is written to the file once, at the end, instead of once for every number
+    begin pref batch
+    set pref prefIndex, 1 `the table is here
+    for i = 0 to HISCORE_ROWS - 1
+        set pref prefIndex + 1 + i * 3, HISCORE_NAMES(firstEntry + i)
+        set pref prefIndex + 2 + i * 3, HISCORE_MOVES(firstEntry + i)
+        set pref prefIndex + 3 + i * 3, HISCORE_MULTS(firstEntry + i)
+
+        ` the upgrades of the game on the row
+        logPref = getHighscoreLogPref(tableIndex, i)
+        logStart = (firstEntry + i) * HISCORE_LOG_STRIDE
+        logCount = HISCORE_LOGS(logStart)
+        set pref logPref, logCount
+        if logCount > 0
+            for k = 1 to logCount
+                set pref logPref + k, HISCORE_LOGS(logStart + k)
+            next
+        endif
+    next
+    end pref batch
+endfunction
+
+
+` a text on one of the pages of the high scores. it is drawn into the menu, and starts out hidden.
+function createHighscoreText(x, y, height, words$)
+    madeId = 0
+    reserve text id(madeId)
+    text madeId, x, y, SCORE_FONT, words$
+    size text y madeId, height
+    set text offset madeId, .5, 0
+    color text madeId, rgb(255, 255, 255)
+    enable text drop shadow madeId, 2, -2, rgb(0,0,0)
+    order text madeId, ORDER_MENU_TEXT
+    set text render target madeId, TARGET_MENU
+    hide text madeId
+endfunction madeId
+
+
+` the list of the menu gets out of the way, and leaves its title and its panel for the high scores to use.
+` the panel goes where it is told to.
+function openHighscoreChrome(x, y, width, height)
+    showMenuChrome(0)
+    show sprite MENU_PANEL_SPRITE
+    showInfoBorder(MENU_PANEL_BORDER, 1)
+    show text MENU_TITLE_TEXT_ID
+
+    position sprite MENU_PANEL_SPRITE, x, y
+    size sprite MENU_PANEL_SPRITE, width, height
+    layoutInfoBorder(MENU_PANEL_BORDER, x, y, width, height)
+
+    hideHighscoreTexts()
+
+    ` the outline has not been anywhere on this page yet, so the first place it goes leaves no wake
+    PAGE_OUTLINE_PLACED = 0
+endfunction
+
+
+` put the outline of a page somewhere. when it was somewhere else before, it leaves a wake behind
+` there, the same as the highlight of the menu does: sparkles on the main menu, which is above the
+` water, and bubbles over the game.
+function movePageOutline(b as infoBorder, x, y, width, height)
+    if PAGE_OUTLINE_PLACED
+        hasMoved = 0
+        if x <> PAGE_OUTLINE_X then hasMoved = 1
+        if y <> PAGE_OUTLINE_Y then hasMoved = 1
+        if hasMoved
+            if MENU_MODE = MENU_MODE_MAIN
+                spawnWakeSparkles(PAGE_OUTLINE_X, PAGE_OUTLINE_Y + 2, PAGE_OUTLINE_W, PAGE_OUTLINE_H - 4, 6, ORDER_MENU_FLOAT_BUBBLES)
+            else
+                spawnWakeBubbles(PAGE_OUTLINE_X, PAGE_OUTLINE_Y + 4, PAGE_OUTLINE_W, PAGE_OUTLINE_H - 8, 7, rgb(255, 255, 255), ORDER_MENU_FLOAT_BUBBLES)
+            endif
+        endif
+    endif
+
+    PAGE_OUTLINE_PLACED = 1
+    PAGE_OUTLINE_X = x
+    PAGE_OUTLINE_Y = y
+    PAGE_OUTLINE_W = width
+    PAGE_OUTLINE_H = height
+    layoutInfoBorder(b, x, y, width, height)
+endfunction
+
+
+function hideHighscoreTexts()
+    for i = 0 to 4
+        hide text HISCORE_TAB_TEXTS(i)
+        hide sprite HISCORE_TAB_SPRITES(i)
+    next
+    hide text HISCORE_NOTE_TEXT_ID
+    for i = 0 to 3
+        hide text HISCORE_HEAD_TEXTS(i)
+    next
+    for i = 0 to HISCORE_ROWS * 6 - 1
+        hide text HISCORE_CELL_TEXTS(i)
+    next
+    for i = 0 to 2
+        hide text HISCORE_LETTER_TEXTS(i)
+        hide text HISCORE_DETAIL_HEAD_TEXTS(i)
+    next
+    for i = 0 to HISCORE_DETAIL_ROWS - 1
+        hide text HISCORE_DETAIL_NUM_TEXTS(i)
+        hide sprite HISCORE_DETAIL_ART_SPRITES(i)
+        hide text HISCORE_DETAIL_NAME_TEXTS(i)
+        hide text HISCORE_DETAIL_KIND_TEXTS(i)
+        hide text HISCORE_DETAIL_MOVE_TEXTS(i)
+    next
+    showInfoBorder(HISCORE_CURSOR, 0)
+    HISCORE_CURSOR_ON = 0
+endfunction
+
+
+` show a table, in place of the list of the menu. see refreshHighscoreTable for the last two.
+function openHighscoreTable(tableIndex, markedRow, cursorAt)
+    panelHeight = 30 + HISCORE_ROWS * HISCORE_ROW_HEIGHT
+    openHighscoreChrome((WORLD_WIDTH - HISCORE_WIDTH) / 2, HISCORE_TOP, HISCORE_WIDTH, panelHeight)
+
+    ` the table is tall, so the title moves up to make room for it. closeHighscores puts it back.
+    MENU_TITLE_Y = 26
+    set text MENU_TITLE_TEXT_ID, "Highscores"
+    size text y MENU_TITLE_TEXT_ID, 36
+
+    for i = 0 to 4
+        show text HISCORE_TAB_TEXTS(i)
+        show sprite HISCORE_TAB_SPRITES(i)
+    next
+    show text HISCORE_NOTE_TEXT_ID
+    set text position HISCORE_NOTE_TEXT_ID, WORLD_WIDTH / 2, HISCORE_TOP + panelHeight + 4
+    for i = 0 to 3
+        show text HISCORE_HEAD_TEXTS(i)
+    next
+    for i = 0 to HISCORE_ROWS * 6 - 1
+        show text HISCORE_CELL_TEXTS(i)
+    next
+
+    refreshHighscoreTable(tableIndex, markedRow, cursorAt)
+endfunction
+
+
+` write a table onto the rows, and light up its tabs. the row at markedRow is the game that was just
+` added, so it is gold. -1 is none of them.
+` cursorAt is what the outline goes around: 0 is the lit tab of the modes, 1 is the lit tab of the lengths,
+` and from 2 on it is a row of the table, which is white. -1 is nothing.
+function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
+    firstEntry = tableIndex * HISCORE_ROWS
+    for i = 0 to HISCORE_ROWS - 1
+        scoreIndex = firstEntry + i
+        cellText = i * 6
+
+        ` the place, the three letters of the initials, the moves, and the multiplier
+        set text HISCORE_CELL_TEXTS(cellText), str$(i + 1)
+        if HISCORE_MOVES(scoreIndex) >= HISCORE_EMPTY_MOVES
+            for col = 1 to 5
+                set text HISCORE_CELL_TEXTS(cellText + col), "-"
+            next
+        else
+            packed = HISCORE_NAMES(scoreIndex)
+            if packed < 0 or packed > 17575 then packed = 0
+            firstLetter = packed / 676
+            secondLetter = (packed / 26) mod 26
+            thirdLetter = packed mod 26
+            set text HISCORE_CELL_TEXTS(cellText + 1), chr$(65 + firstLetter)
+            set text HISCORE_CELL_TEXTS(cellText + 2), chr$(65 + secondLetter)
+            set text HISCORE_CELL_TEXTS(cellText + 3), chr$(65 + thirdLetter)
+            set text HISCORE_CELL_TEXTS(cellText + 4), str$(HISCORE_MOVES(scoreIndex))
+            set text HISCORE_CELL_TEXTS(cellText + 5), "x" + str$(HISCORE_MULTS(scoreIndex))
+        endif
+
+        rowColor = rgb(150, 190, 255)
+        if i = markedRow then rowColor = rgb(255, 220, 96)
+        if i + 2 = cursorAt then rowColor = rgb(255, 255, 255)
+        for col = 0 to 5
+            color text HISCORE_CELL_TEXTS(cellText + col), rowColor
+        next
+    next
+
+    ` the tabs of this table are lit up, and the others are dark
+    tableX = (WORLD_WIDTH - HISCORE_WIDTH) / 2
+    litMode = tableIndex mod 2
+    litLength = tableIndex / 2
+    for i = 0 to 4
+        isLit = 0
+        if i < 2
+            if i = litMode then isLit = 1
+        else
+            if i = litLength + 2 then isLit = 1
+        endif
+
+        if isLit
+            color sprite HISCORE_TAB_SPRITES(i), rgb(64, 128, 255, 235)
+            color text HISCORE_TAB_TEXTS(i), rgb(255, 255, 255)
+        else
+            color sprite HISCORE_TAB_SPRITES(i), rgb(10, 14, 30, 235)
+            color text HISCORE_TAB_TEXTS(i), rgb(64, 128, 255)
+        endif
+    next
+
+    HISCORE_CURSOR_ON = 0
+    if cursorAt >= 2
+        HISCORE_CURSOR_ON = 1
+        rowY = HISCORE_TOP + 23 + (cursorAt - 2) * HISCORE_ROW_HEIGHT
+        movePageOutline(HISCORE_CURSOR, tableX + 6, rowY, HISCORE_WIDTH - 12, HISCORE_ROW_HEIGHT)
+    endif
+    if cursorAt = 0
+        HISCORE_CURSOR_ON = 1
+        movePageOutline(HISCORE_CURSOR, tableX + litMode * 151, getHighscoreTabY(0), 149, HISCORE_TAB_HEIGHT)
+    endif
+    if cursorAt = 1
+        HISCORE_CURSOR_ON = 1
+        movePageOutline(HISCORE_CURSOR, tableX + litLength * 101, getHighscoreTabY(2), 98, HISCORE_TAB_HEIGHT)
+    endif
+    showInfoBorder(HISCORE_CURSOR, HISCORE_CURSOR_ON)
+endfunction
+
+
+` how far down the screen a tab is. the row of the lengths sits right on top of the table, and the row
+` of the modes sits on top of that.
+function getHighscoreTabY(tabIndex)
+    tabY = HISCORE_TOP - HISCORE_TAB_HEIGHT
+    if tabIndex < 2 then tabY = tabY - (HISCORE_TAB_HEIGHT + 2)
+endfunction tabY
+
+
+` make one of the tabs: a block of color with a word on it. see refreshHighscoreTable for how they are colored.
+function createHighscoreTab(tabIndex, x, width, words$)
+    tabY = getHighscoreTabY(tabIndex)
+
+    madeId = 0
+    reserve sprite id(madeId)
+    sprite madeId, x, tabY, TEX_PIXEL
+    set sprite offset madeId, 0, 0
+    size sprite madeId, width, HISCORE_TAB_HEIGHT
+    order sprite madeId, ORDER_MENU_PANEL
+    set sprite render target madeId, TARGET_MENU
+    hide sprite madeId
+    HISCORE_TAB_SPRITES(tabIndex) = madeId
+
+    HISCORE_TAB_TEXTS(tabIndex) = createHighscoreText(x + width / 2, tabY + 1, 16, words$)
+endfunction
+
+
+` show the page where the initials are entered, in place of the list of the menu.
+function openHighscoreInitials(isHighscore)
+    openHighscoreChrome((WORLD_WIDTH - 200) / 2, 120, 200, 72)
+
+    set text MENU_TITLE_TEXT_ID, "Run Complete"
+    size text y MENU_TITLE_TEXT_ID, 36
+
+    ` what the game came to, and what to do about it
+    show text HISCORE_NOTE_TEXT_ID
+    set text position HISCORE_NOTE_TEXT_ID, WORLD_WIDTH / 2, 94
+    if isHighscore
+        set text HISCORE_NOTE_TEXT_ID, "A new high score! Enter your initials."
+        color text HISCORE_NOTE_TEXT_ID, rgb(255, 220, 96)
+    else
+        set text HISCORE_NOTE_TEXT_ID, "Enter your initials."
+        color text HISCORE_NOTE_TEXT_ID, rgb(150, 190, 255)
+    endif
+
+    show text MENU_DESC_TEXT_ID
+    set text position MENU_DESC_TEXT_ID, WORLD_WIDTH / 2, 198
+    set text MENU_DESC_TEXT_ID, str$(GAME_ROUND_CAP) + " rounds in " + str$(CURRENT_MOVE_COUNT) + " moves. The multiplier got to x" + str$(BEST_MULTIPLIER) + "."
+
+    set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} done"
+    size text y MENU_HINT_TEXT_ID, 16
+
+    ` the page of one game's upgrades uses these letters too, smaller, so they are put back here
+    for i = 0 to 2
+        show text HISCORE_LETTER_TEXTS(i)
+        size text y HISCORE_LETTER_TEXTS(i), 48
+        set text position HISCORE_LETTER_TEXTS(i), WORLD_WIDTH / 2 + (i - 1) * 56, 130
+    next
+    showInfoBorder(HISCORE_CURSOR, 1)
+    HISCORE_CURSOR_ON = 1
+endfunction
+
+
+` show the page of one game's upgrades, in place of the table. scoreIndex is the entry of the game, and
+` place is where it is on its table, counted from 1.
+function openHighscoreDetails(scoreIndex, place)
+    detailX = (WORLD_WIDTH - HISCORE_DETAIL_WIDTH) / 2
+    panelHeight = 26 + HISCORE_DETAIL_ROWS * HISCORE_DETAIL_ROW_HEIGHT
+    openHighscoreChrome(detailX, HISCORE_DETAIL_TOP, HISCORE_DETAIL_WIDTH, panelHeight)
+
+    set text MENU_TITLE_TEXT_ID, "Upgrades"
+    size text y MENU_TITLE_TEXT_ID, 36
+
+    ` whose game it is, and how it did. the initials are the letters from the page where they are entered.
+    packed = HISCORE_NAMES(scoreIndex)
+    if packed < 0 or packed > 17575 then packed = 0
+    firstLetter = packed / 676
+    secondLetter = (packed / 26) mod 26
+    thirdLetter = packed mod 26
+    set text HISCORE_LETTER_TEXTS(0), chr$(65 + firstLetter)
+    set text HISCORE_LETTER_TEXTS(1), chr$(65 + secondLetter)
+    set text HISCORE_LETTER_TEXTS(2), chr$(65 + thirdLetter)
+    for i = 0 to 2
+        show text HISCORE_LETTER_TEXTS(i)
+        size text y HISCORE_LETTER_TEXTS(i), 20
+        set text position HISCORE_LETTER_TEXTS(i), detailX + 16 + i * 11, 48
+        color text HISCORE_LETTER_TEXTS(i), rgb(255, 255, 255)
+    next
+
+    show text HISCORE_NOTE_TEXT_ID
+    set text position HISCORE_NOTE_TEXT_ID, WORLD_WIDTH / 2 + 30, 50
+    set text HISCORE_NOTE_TEXT_ID, "Number " + str$(place) + "    " + str$(HISCORE_MOVES(scoreIndex)) + " moves    multiplier x" + str$(HISCORE_MULTS(scoreIndex))
+    color text HISCORE_NOTE_TEXT_ID, rgb(150, 190, 255)
+
+    ` the line under the list says how far down the list it is. refreshHighscoreDetails writes it.
+    show text MENU_DESC_TEXT_ID
+    set text position MENU_DESC_TEXT_ID, WORLD_WIDTH / 2, HISCORE_DETAIL_TOP + panelHeight + 4
+
+    set text MENU_HINT_TEXT_ID, "{dir} scroll    {confirm} back"
+    size text y MENU_HINT_TEXT_ID, 16
+
+    for i = 0 to 2
+        show text HISCORE_DETAIL_HEAD_TEXTS(i)
+    next
+endfunction
+
+
+` write the upgrades of a game onto the rows of the page, starting from the one at `firstShown`.
+function refreshHighscoreDetails(scoreIndex, firstShown)
+    logStart = scoreIndex * HISCORE_LOG_STRIDE
+    logCount = HISCORE_LOGS(logStart)
+
+    for i = 0 to HISCORE_DETAIL_ROWS - 1
+        logIndex = firstShown + i
+        if logIndex < logCount
+            logged = HISCORE_LOGS(logStart + 1 + logIndex)
+            cardIndex = logged mod 100
+            if cardIndex >= CARD_LENGTH then cardIndex = 0
+
+            set text HISCORE_DETAIL_NUM_TEXTS(i), str$(logIndex + 1)
+            set text HISCORE_DETAIL_NAME_TEXTS(i), CARDS(cardIndex).name$
+            set text HISCORE_DETAIL_MOVE_TEXTS(i), str$(logged / 100)
+
+            ` the size is set again, because it is worked out from the size of the texture
+            set sprite texture HISCORE_DETAIL_ART_SPRITES(i), CARDS(cardIndex).artTexId
+            size sprite HISCORE_DETAIL_ART_SPRITES(i), 24, 24
+
+            select CARDS(cardIndex).abilityType
+                case ABILITY_TYPE_PASSIVE
+                    set text HISCORE_DETAIL_KIND_TEXTS(i), "{passive} passive"
+                endcase
+                case ABILITY_TYPE_MOVE
+                    set text HISCORE_DETAIL_KIND_TEXTS(i), "{move} move"
+                endcase
+                case ABILITY_TYPE_INSTANT
+                    set text HISCORE_DETAIL_KIND_TEXTS(i), "{instant} instant"
+                endcase
+            endselect
+
+            show text HISCORE_DETAIL_NUM_TEXTS(i)
+            show sprite HISCORE_DETAIL_ART_SPRITES(i)
+            show text HISCORE_DETAIL_NAME_TEXTS(i)
+            show text HISCORE_DETAIL_KIND_TEXTS(i)
+            show text HISCORE_DETAIL_MOVE_TEXTS(i)
+        else
+            hide text HISCORE_DETAIL_NUM_TEXTS(i)
+            hide sprite HISCORE_DETAIL_ART_SPRITES(i)
+            hide text HISCORE_DETAIL_NAME_TEXTS(i)
+            hide text HISCORE_DETAIL_KIND_TEXTS(i)
+            hide text HISCORE_DETAIL_MOVE_TEXTS(i)
+        endif
+    next
+
+    if logCount = 0
+        set text MENU_DESC_TEXT_ID, "No upgrades were written down for this game."
+    else
+        lastShown = firstShown + HISCORE_DETAIL_ROWS
+        if lastShown > logCount then lastShown = logCount
+        set text MENU_DESC_TEXT_ID, str$(firstShown + 1) + " to " + str$(lastShown) + " of " + str$(logCount)
+    endif
+endfunction
+
+
+` write the initials that are being entered onto the page. the letter at `slot` is the one that the
+` directions change, so it is white and it has the outline around it.
+function refreshHighscoreInitials(slot)
+    for i = 0 to 2
+        set text HISCORE_LETTER_TEXTS(i), chr$(65 + HISCORE_LETTERS(i))
+
+        letterColor = rgb(150, 190, 255)
+        if i = slot then letterColor = rgb(255, 255, 255)
+        color text HISCORE_LETTER_TEXTS(i), letterColor
+    next
+
+    movePageOutline(HISCORE_CURSOR, WORLD_WIDTH / 2 + (slot - 1) * 56 - 22, 128, 44, 56)
+endfunction
+
+
+` put the pages of the high scores away, and give the menu back its title, its panel and its list.
+` setMenuPage has to be called after this, to lay the list out again.
+function closeHighscores()
+    hideHighscoreTexts()
+    MENU_TITLE_Y = 62
+    showMenuChrome(1)
+endfunction

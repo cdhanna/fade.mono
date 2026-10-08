@@ -340,16 +340,25 @@ function syncScoreShown()
     SCORE_BAR_HOLD = 0
 endfunction
 
+` how many points the round takes. `roundIndex` is 0 for the first round. see HOW LONG A ROUND IS in fish_headers.
+function getRoundSpan(roundIndex)
+    roundNumber# = roundIndex + 1
+    roundBase# = SCORE_ROUND_BASE
+    roundSpan# = roundBase# * pow(roundNumber#, SCORE_ROUND_POWER#)
+
+    ` to the nearest 10, because everything that scores is a multiple of 10
+    roundTens = (roundSpan# + 5) / 10
+    roundSpan = roundTens * 10
+    if roundSpan < 10 then roundSpan = 10
+endfunction roundSpan
+
 ` an upgrade has been picked, so the bar that was being held full empties out, and starts on the next round.
-` every round needs twice the score of the one before.
 function advanceScoreBar()
     if SCORE_BAR_HOLD
         SCORE_BAR_HOLD = 0
 
-        ` the second round is as long as the first one, and every round after that is twice as long as the one before
-        oldSpan = SCORE_BAR.endVal - SCORE_BAR.startVal
-        newSpan = oldSpan * 2
-        if SCORE_BAR.startVal = 0 then newSpan = oldSpan
+        ` the round was counted when its bar filled up, so CURRENT_ROUND is already the round that is starting
+        newSpan = getRoundSpan(CURRENT_ROUND)
         newStart = SCORE_BAR.endVal
 
         ` whatever was scored past the end of the last round is already part of this one, but only so much
@@ -1304,6 +1313,358 @@ function startFreeMove(slot, dirX, dirY)
         create basic tween MOVE_ABILITY_BINDINGS(slot).useShakeTweenId, 1, 0, 500, 0
     endif
 endfunction freeStarted
+
+` THE ROBOT. see the notes in fish_headers.
+
+` how many fish of this kind are joined up with the one in this cell, counting it.
+` every search has a stamp of its own, and a cell that already has the stamp has been counted. the
+` stamp goes in comboFillId, which handle_combos wipes clean before it uses it for anything.
+function robotGroupSize(index, value, stamp)
+    total = 0
+    if CELLS(index).comboFillId <> stamp
+        if CELLS(index).value = value
+            CELLS(index).comboFillId = stamp
+            total = 1
+
+            groupX = CELLS(index).coord.x
+            groupY = CELLS(index).coord.y
+            if groupX > 0
+                total = total + robotGroupSize(index - 1, value, stamp)
+            endif
+            if groupX < CELL_COLUMN_COUNT - 1
+                total = total + robotGroupSize(index + 1, value, stamp)
+            endif
+            if groupY > 0
+                total = total + robotGroupSize(index - CELL_COLUMN_COUNT, value, stamp)
+            endif
+            if groupY < CELL_ROW_COUNT - 1
+                total = total + robotGroupSize(index + CELL_COLUMN_COUNT, value, stamp)
+            endif
+        endif
+    endif
+endfunction total
+
+` mark every fish that is joined up with the one in this cell as spoken for, so that a later swap of
+` the robot's does not take one of them away again. the mark goes in comboFillMask, which handle_combos
+` wipes clean too.
+function robotClaimGroup(index, value)
+    if CELLS(index).comboFillMask = 0
+        if CELLS(index).value = value
+            CELLS(index).comboFillMask = 1
+
+            claimX = CELLS(index).coord.x
+            claimY = CELLS(index).coord.y
+            if claimX > 0
+                robotClaimGroup(index - 1, value)
+            endif
+            if claimX < CELL_COLUMN_COUNT - 1
+                robotClaimGroup(index + 1, value)
+            endif
+            if claimY > 0
+                robotClaimGroup(index - CELL_COLUMN_COUNT, value)
+            endif
+            if claimY < CELL_ROW_COUNT - 1
+                robotClaimGroup(index + CELL_COLUMN_COUNT, value)
+            endif
+        endif
+    endif
+endfunction
+
+` how many fish would pop if the fish in these two cells traded places. 0 means that it is not a good swap.
+function robotSwapScore(aIndex, bIndex, required)
+    score = 0
+    usable = 1
+    if CELLS(aIndex).value = CELLS(bIndex).value then usable = 0
+    if CELLS(aIndex).comboFillMask then usable = 0
+    if CELLS(bIndex).comboFillMask then usable = 0
+
+    if usable
+        ` try it out, count, and put them back
+        tryValue = CELLS(aIndex).value
+        CELLS(aIndex).value = CELLS(bIndex).value
+        CELLS(bIndex).value = tryValue
+
+        ROBOT_STAMP = ROBOT_STAMP + 1
+        sizeA = robotGroupSize(aIndex, CELLS(aIndex).value, ROBOT_STAMP)
+        ROBOT_STAMP = ROBOT_STAMP + 1
+        sizeB = robotGroupSize(bIndex, CELLS(bIndex).value, ROBOT_STAMP)
+        if sizeA >= required then score = score + sizeA
+        if sizeB >= required then score = score + sizeB
+
+        tryValue = CELLS(aIndex).value
+        CELLS(aIndex).value = CELLS(bIndex).value
+        CELLS(bIndex).value = tryValue
+    endif
+endfunction score
+
+` the robot makes its swaps. the cursor rides along on each one, and ends up one cell over, the way
+` that it was pointed, like it does after any other special move.
+` this stops the game until it has played out, the same as the other special moves do.
+function doRobot(start as vec, dir as vec)
+    spawnCursorWake(start.x, start.y)
+    target as vec = addCoordinates(start, dir)
+    required = getRequiredComboCount()
+
+    cursorX = getCellX(start.x)
+    cursorY = getCellY(start.y)
+    made = 0
+    looking = 1
+
+    ` the square of cells that it looks at
+    lookLeft = start.x - ROBOT_REACH
+    lookRight = start.x + ROBOT_REACH
+    lookTop = start.y - ROBOT_REACH
+    lookBottom = start.y + ROBOT_REACH
+
+    for robotTurn = 1 to ROBOT_SWAPS
+        ` find the swap near the cursor that would pop the most fish
+        bestScore = 0
+        bestA = 0
+        bestB = 0
+        if looking
+            for lookY = lookTop to lookBottom
+                for lookX = lookLeft to lookRight
+                    onBoard = 1
+                    if lookX < 0 then onBoard = 0
+                    if lookY < 0 then onBoard = 0
+                    if lookX >= CELL_COLUMN_COUNT then onBoard = 0
+                    if lookY >= CELL_ROW_COUNT then onBoard = 0
+
+                    if onBoard
+                        lookIndex = lookX + lookY * CELL_COLUMN_COUNT
+
+                        ` with the fish to the right of it
+                        if lookX < CELL_COLUMN_COUNT - 1
+                            lookScore = robotSwapScore(lookIndex, lookIndex + 1, required)
+                            if lookScore > bestScore
+                                bestScore = lookScore
+                                bestA = lookIndex
+                                bestB = lookIndex + 1
+                            endif
+                        endif
+
+                        ` and with the fish underneath it
+                        if lookY < CELL_ROW_COUNT - 1
+                            lookScore = robotSwapScore(lookIndex, lookIndex + CELL_COLUMN_COUNT, required)
+                            if lookScore > bestScore
+                                bestScore = lookScore
+                                bestA = lookIndex
+                                bestB = lookIndex + CELL_COLUMN_COUNT
+                            endif
+                        endif
+                    endif
+                next
+            next
+        endif
+
+        if bestScore = 0
+            ` there is nothing good left to do
+            looking = 0
+        else
+            made = made + 1
+
+            ` the two fish trade places, and the cursor goes along with the first one
+            fromX = getCellX(CELLS(bestA).coord.x)
+            fromY = getCellY(CELLS(bestA).coord.y)
+            toX = getCellX(CELLS(bestB).coord.x)
+            toY = getCellY(CELLS(bestB).coord.y)
+
+            ` the cursor hops over to where the swap is first
+            create basic tween TWEEN_SWAP_AX, 0, 1, 90, 0
+            while is tween done(TWEEN_SWAP_AX) < 1
+                hop# = tweenVal(TWEEN_SWAP_AX)
+                position sprite SELECTION_SPRITE, cursorX + (fromX - cursorX) * hop#, cursorY + (fromY - cursorY) * hop#
+                collectInput()
+                updateBubbles()
+                sync
+            endwhile
+
+            create basic tween TWEEN_SWAP_BX, 0, 1, ROBOT_SWAP_TIME, 0
+            create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, CELL_SIZE * 1.5, ROBOT_SWAP_TIME, 0
+            set tween type SELECTION_TWEEN_PUNCH_ID, 1
+            create basic tween SWAP_TWEEN_SFX, 0, 1, ROBOT_SWAP_TIME, 0
+            set tween type SWAP_TWEEN_SFX, 1
+
+            while is tween done(TWEEN_SWAP_BX) < 1
+                slide# = tweenVal(TWEEN_SWAP_BX)
+                slideX = fromX + (toX - fromX) * slide#
+                slideY = fromY + (toY - fromY) * slide#
+                backX = toX + (fromX - toX) * slide#
+                backY = toY + (fromY - toY) * slide#
+
+                position sprite CELLS(bestA).spriteId, slideX, slideY
+                position sprite CELLS(bestB).spriteId, backX, backY
+                position sprite SELECTION_SPRITE, slideX, slideY
+                scale sprite SELECTION_SPRITE, tweenVal(SELECTION_TWEEN_PUNCH_ID), tweenVal(SELECTION_TWEEN_PUNCH_ID)
+                set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
+
+                collectInput()
+                updateBubbles()
+                sync
+            endwhile
+
+            cursorX = toX
+            cursorY = toY
+
+            ` they really do trade places now
+            tradeValue = CELLS(bestB).value
+            CELLS(bestB).value = CELLS(bestA).value
+            CELLS(bestA).value = tradeValue
+            swapCellStacks(bestA, bestB)
+            updateCell(CELLS(bestA))
+            updateCell(CELLS(bestB))
+
+            ` the groups that it made are spoken for, so that the next swap leaves them alone
+            ROBOT_STAMP = ROBOT_STAMP + 1
+            madeSize = robotGroupSize(bestA, CELLS(bestA).value, ROBOT_STAMP)
+            if madeSize >= required
+                robotClaimGroup(bestA, CELLS(bestA).value)
+            endif
+            ROBOT_STAMP = ROBOT_STAMP + 1
+            madeSize = robotGroupSize(bestB, CELLS(bestB).value, ROBOT_STAMP)
+            if madeSize >= required
+                robotClaimGroup(bestB, CELLS(bestB).value)
+            endif
+
+            ` a few bubbles, so that each swap gets noticed
+            spawnBubbles(toX, toY, CELL_SIZE / 4, 4, 0, rgb(255, 255, 255))
+        endif
+    next
+
+    ` the cursor goes to where it ends up
+    endX = getCellX(target.x)
+    endY = getCellY(target.y)
+    create basic tween TWEEN_SWAP_AX, 0, 1, 120, 0
+    while is tween done(TWEEN_SWAP_AX) < 1
+        hop# = tweenVal(TWEEN_SWAP_AX)
+        position sprite SELECTION_SPRITE, cursorX + (endX - cursorX) * hop#, cursorY + (endY - cursorY) * hop#
+        collectInput()
+        updateBubbles()
+        sync
+    endwhile
+    scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+    set sfx volume SFX_SWAP, 0
+
+    ` all of its swaps count as the one move. if it found nothing to do, it was not a move at all.
+    ROBOT_LAST_COUNT = made
+    if made > 0
+        registerMove(1)
+    endif
+endfunction
+
+` THE ERASER. see the notes in fish_headers.
+
+` the cell that is this far along the path that snakes through the board
+function getSnakeCell(pathAt)
+    snakeRow = pathAt / CELL_COLUMN_COUNT
+    snakeCol = pathAt mod CELL_COLUMN_COUNT
+
+    ` every other row runs backwards, so that the end of one row is right above the start of the next
+    if snakeRow mod 2 = 1 then snakeCol = CELL_COLUMN_COUNT - 1 - snakeCol
+endfunction snakeRow * CELL_COLUMN_COUNT + snakeCol
+
+` sort the whole board along the snaking path, with swaps of fish that are next to each other, and
+` then see to it that all of it pops.
+` this stops the game until it has played out, the same as the other special moves do.
+function doEraser(start as vec, dir as vec)
+    spawnCursorWake(start.x, start.y)
+    target as vec = addCoordinates(start, dir)
+    required = getRequiredComboCount()
+
+    set sfx volume SFX_SWAP, 1
+
+    ` sweep down the path over and over, swapping any two neighbors that are the wrong way around,
+    ` until a whole sweep finds nothing to swap. a few swaps are made on every frame, and more and
+    ` more of them as it goes.
+    eraserSpeed# = ERASER_SPEED_START#
+    swapsThisFrame = 0
+    swapsEver = 0
+    lastStep = CELL_COUNT - 2
+    sorting = 1
+    while sorting
+        sorting = 0
+        for pathAt = 0 to lastStep
+            aIndex = getSnakeCell(pathAt)
+            bIndex = getSnakeCell(pathAt + 1)
+            if CELLS(aIndex).value > CELLS(bIndex).value
+                sorting = 1
+
+                swapValue = CELLS(aIndex).value
+                CELLS(aIndex).value = CELLS(bIndex).value
+                CELLS(bIndex).value = swapValue
+                swapCellStacks(aIndex, bIndex)
+                updateCell(CELLS(aIndex))
+                updateCell(CELLS(bIndex))
+
+                ` a bubble now and then, so that the swaps leave a trail
+                swapsEver = swapsEver + 1
+                if swapsEver mod 12 = 0
+                    spawnBubbles(getCellX(CELLS(bIndex).coord.x), getCellY(CELLS(bIndex).coord.y), CELL_SIZE / 4, 1, 0, rgb(255, 255, 255))
+                endif
+
+                ` that is enough for this frame, so show it
+                swapsThisFrame = swapsThisFrame + 1
+                if swapsThisFrame >= eraserSpeed#
+                    swapsThisFrame = 0
+                    eraserSpeed# = eraserSpeed# + ERASER_SPEED_GROW#
+                    if eraserSpeed# > ERASER_SPEED_MAX# then eraserSpeed# = ERASER_SPEED_MAX#
+
+                    ` the cursor chases the swaps
+                    position sprite SELECTION_SPRITE, getCellX(CELLS(bIndex).coord.x), getCellY(CELLS(bIndex).coord.y)
+
+                    collectInput()
+                    updateBubbles()
+                    sync
+                endif
+            endif
+        next
+    endwhile
+
+    set sfx volume SFX_SWAP, 0
+
+    ` every kind of fish is one unbroken stretch of the path now. a stretch that is too short to pop on
+    ` its own gets popped anyway.
+    runStart = 0
+    lastCell = CELL_COUNT - 1
+    for pathAt = 1 to CELL_COUNT
+        runEnds = 0
+        if pathAt = CELL_COUNT
+            runEnds = 1
+        else
+            hereCell = getSnakeCell(pathAt)
+            runCell = getSnakeCell(runStart)
+            if CELLS(hereCell).value <> CELLS(runCell).value then runEnds = 1
+        endif
+
+        if runEnds
+            runLength = pathAt - runStart
+            if runLength < required
+                runLast = pathAt - 1
+                for runAt = runStart to runLast
+                    forceCell = getSnakeCell(runAt)
+                    CELLS(forceCell).comboForce = 1
+                next
+            endif
+            runStart = pathAt
+        endif
+    next
+
+    ` the cursor goes to where it ends up, one cell over from where it started
+    cursorX = sprite x(SELECTION_SPRITE)
+    cursorY = sprite y(SELECTION_SPRITE)
+    endX = getCellX(target.x)
+    endY = getCellY(target.y)
+    create basic tween TWEEN_SWAP_AX, 0, 1, 150, 0
+    while is tween done(TWEEN_SWAP_AX) < 1
+        glide# = tweenVal(TWEEN_SWAP_AX)
+        position sprite SELECTION_SPRITE, cursorX + (endX - cursorX) * glide#, cursorY + (endY - cursorY) * glide#
+        collectInput()
+        updateBubbles()
+        sync
+    endwhile
+
+    registerMove(1)
+endfunction
 
 function registerMove(delta)
     ` register the move against the score

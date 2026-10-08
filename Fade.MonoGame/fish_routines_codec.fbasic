@@ -1,0 +1,362 @@
+goto routines_codec_exit
+
+remstart
+    THE CODEC
+    the codec is a page of the main menu that shows every upgrade there is to come across in the game.
+    each one is a tile in a grid, and the tile that is highlighted is explained underneath the grid.
+
+    an upgrade is locked until it has been seen in a game. a locked tile is a lock, and it does not
+    say what it is. an upgrade is seen when it is one of the cards that the upgrade screen offers,
+    whether or not it gets picked. what has been seen is kept in the preferences, so it stays
+    unlocked for good.
+
+    the entries are the cards, in the order of CARDS. entry n is card n.
+
+    there are more upgrades than fit in the grid, so the grid has pages. a page is CODEC_PAGE_SIZE
+    tiles, and there are only that many tile sprites: they are given the pictures of whichever page is
+    showing. the page that is showing is the one that the highlighted entry is on. going off of
+    either end of a row turns the page, and the arrows at the ends of the grid say so.
+
+    the rest of the game only has to call codecSeeCard() when a card is seen.
+
+    all of this is drawn into the menu's render target, in place of the list of the menu, the same
+    way that the high scores are.
+remend
+
+
+` setup_menu comes here, because all of this is drawn with the menu.
+setup_codec:
+    CODEC_COUNT = CARD_LENGTH
+
+    ` what has been seen, in every game that has ever been played
+    for codecI = 0 to CODEC_COUNT - 1
+        CODEC_SEEN(codecI) = get pref(CODEC_PREF + codecI, 0)
+    next
+
+    texture reserve texture id(TEX_LOCK), "Fish/Textures/Cards/lock"
+
+    ` the tiles of one page. each one is the art of a card, with a lock to go on top of it while it is
+    ` locked. refreshCodec gives them the pictures of the page that is showing.
+    ` the art is 48 pixels across, and is drawn at half of that.
+    for codecI = 0 to CODEC_PAGE_SIZE - 1
+        codecX = getCodecTileX(codecI)
+        codecY = getCodecTileY(codecI)
+
+        codecSprite = 0
+        reserve sprite id(codecSprite)
+        sprite codecSprite, codecX, codecY, TEX_LOCK
+        set sprite offset codecSprite, .5, .5
+        size sprite codecSprite, 24, 24
+        order sprite codecSprite, ORDER_MENU_TEXT
+        set sprite render target codecSprite, TARGET_MENU
+        hide sprite codecSprite
+        CODEC_ICON_SPRITES(codecI) = codecSprite
+
+        codecSprite = 0
+        reserve sprite id(codecSprite)
+        sprite codecSprite, codecX, codecY, TEX_LOCK
+        set sprite offset codecSprite, .5, .5
+        size sprite codecSprite, 16, 16
+        color sprite codecSprite, rgb(120, 140, 185)
+        order sprite codecSprite, ORDER_MENU_TEXT + 1
+        set sprite render target codecSprite, TARGET_MENU
+        hide sprite codecSprite
+        CODEC_LOCK_SPRITES(codecI) = codecSprite
+    next
+
+    ` the arrows at the two ends of the grid, and the page number in the corner of the panel
+    codecGridMiddle = CODEC_TOP + 26 + (CODEC_ROWS - 1) * CODEC_TILE / 2
+    CODEC_ARROW_TEXTS(0) = createHighscoreText(CODEC_X + 26, codecGridMiddle - 20, 40, "<")
+    CODEC_ARROW_TEXTS(1) = createHighscoreText(CODEC_X + CODEC_WIDTH - 26, codecGridMiddle - 20, 40, ">")
+    CODEC_PAGE_TEXT_ID = createHighscoreText(CODEC_X + CODEC_WIDTH - 8, CODEC_TOP - 20, 16, "page 1 of 1")
+    set text offset CODEC_PAGE_TEXT_ID, 1, 0
+    color text CODEC_PAGE_TEXT_ID, rgb(64, 128, 255)
+
+    ` how many upgrades have been found, under the title
+    CODEC_COUNT_TEXT_ID = createHighscoreText(WORLD_WIDTH / 2, CODEC_TOP - 20, 16, "0 of 0 found")
+    color text CODEC_COUNT_TEXT_ID, rgb(150, 190, 255)
+
+    ` a line across the panel, between the grid and what explains the highlighted tile
+    reserve sprite id(CODEC_DIVIDER_SPRITE)
+    sprite CODEC_DIVIDER_SPRITE, CODEC_X + 8, CODEC_DETAIL_TOP - 6, TEX_PIXEL
+    set sprite offset CODEC_DIVIDER_SPRITE, 0, 0
+    size sprite CODEC_DIVIDER_SPRITE, CODEC_WIDTH - 16, 1
+    color sprite CODEC_DIVIDER_SPRITE, rgb(64, 128, 255, 120)
+    order sprite CODEC_DIVIDER_SPRITE, ORDER_MENU_PANEL + 1
+    set sprite render target CODEC_DIVIDER_SPRITE, TARGET_MENU
+    hide sprite CODEC_DIVIDER_SPRITE
+
+    ` the highlighted tile, explained: a big picture of it, its name, what kind of upgrade it is, and what it does
+    reserve sprite id(CODEC_BIG_SPRITE)
+    sprite CODEC_BIG_SPRITE, CODEC_X + 44, CODEC_DETAIL_TOP + 40, TEX_LOCK
+    set sprite offset CODEC_BIG_SPRITE, .5, .5
+    size sprite CODEC_BIG_SPRITE, 48, 48
+    order sprite CODEC_BIG_SPRITE, ORDER_MENU_TEXT
+    set sprite render target CODEC_BIG_SPRITE, TARGET_MENU
+    hide sprite CODEC_BIG_SPRITE
+
+    CODEC_NAME_TEXT_ID = createHighscoreText(CODEC_X + 86, CODEC_DETAIL_TOP, 24, "name")
+    set text offset CODEC_NAME_TEXT_ID, 0, 0
+
+    CODEC_KIND_TEXT_ID = createHighscoreText(CODEC_X + 86, CODEC_DETAIL_TOP + 25, 16, "kind")
+    set text offset CODEC_KIND_TEXT_ID, 0, 0
+    enable rich text CODEC_KIND_TEXT_ID
+    color text CODEC_KIND_TEXT_ID, rgb(64, 128, 255)
+
+    CODEC_DESC_TEXT_ID = createHighscoreText(CODEC_X + 86, CODEC_DETAIL_TOP + 43, 16, "desc")
+    set text offset CODEC_DESC_TEXT_ID, 0, 0
+    set text wrap CODEC_DESC_TEXT_ID, CODEC_WIDTH - 100
+    color text CODEC_DESC_TEXT_ID, rgb(150, 190, 255)
+
+    CODEC_CURSOR = createMenuBorder(ORDER_MENU_CURSOR)
+    showInfoBorder(CODEC_CURSOR, 0)
+return
+
+
+` "Codec" on the main menu. show the codec, in place of the menu, until the player backs out.
+menu_run_codec:
+    openCodec()
+    refreshCodec()
+
+    do
+        gosub frame_codec
+        sync
+
+        ` these are checked after the frame, so that the press that picked "Codec" is not the press that leaves
+        if new action down(ACT_CONFIRM) then exit
+        if new action down(ACT_PAUSE) then exit
+
+        ` left and right go along the row. going off of either end of it turns the page, and the pages
+        ` go around. up and down go between the rows.
+        codecPage = CODEC_SELECTED / CODEC_PAGE_SIZE
+        codecSlot = CODEC_SELECTED mod CODEC_PAGE_SIZE
+        codecRow = codecSlot / CODEC_COLUMNS
+        codecCol = codecSlot mod CODEC_COLUMNS
+        codecPageCount = getCodecPageCount()
+        codecMoved = 0
+        if new action down(ACT_RIGHT)
+            codecCol = codecCol + 1
+            codecNext = codecPage * CODEC_PAGE_SIZE + codecRow * CODEC_COLUMNS + codecCol
+            if codecCol >= CODEC_COLUMNS or codecNext >= CODEC_COUNT
+                codecCol = 0
+                codecPage = codecPage + 1
+                if codecPage >= codecPageCount then codecPage = 0
+            endif
+            codecMoved = 1
+        endif
+        if new action down(ACT_LEFT)
+            codecCol = codecCol - 1
+            if codecCol < 0
+                codecCol = CODEC_COLUMNS - 1
+                codecPage = codecPage - 1
+                if codecPage < 0 then codecPage = codecPageCount - 1
+            endif
+            codecMoved = 1
+        endif
+        if new action down(ACT_DOWN)
+            codecRow = codecRow + 1
+            if codecRow >= CODEC_ROWS then codecRow = 0
+            codecMoved = 1
+        endif
+        if new action down(ACT_UP)
+            codecRow = codecRow - 1
+            if codecRow < 0 then codecRow = CODEC_ROWS - 1
+            codecMoved = 1
+        endif
+
+        if codecMoved
+            ` the last page may not be full. a spot with no tile on it gives way to the top row, and
+            ` then to the last tile that there is.
+            codecNext = codecPage * CODEC_PAGE_SIZE + codecRow * CODEC_COLUMNS + codecCol
+            if codecNext >= CODEC_COUNT then codecNext = codecPage * CODEC_PAGE_SIZE + codecCol
+            if codecNext >= CODEC_COUNT then codecNext = CODEC_COUNT - 1
+            CODEC_SELECTED = codecNext
+            refreshCodec()
+
+            ` the same swell of sound that the highlight of the menu makes when it moves
+            create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
+            set tween type SWAP_TWEEN_SFX, 1
+        endif
+    loop
+
+    ` back to the main menu, with "Codec" highlighted again
+    closeCodec()
+    setMenuPage(MENU_PAGE_MAIN)
+    selectMenuItem(getMenuRow(MENU_ITEM_CODEC), 0)
+return
+
+
+` everything on the codec that changes from frame to frame
+frame_codec:
+    codecPulse# = .8 + .2 * sin(game ms() * .006)
+    colorInfoBorder(CODEC_CURSOR, rgb(255, 255, 255, 255 * codecPulse#))
+
+    gosub frame_menu_render
+return
+
+
+routines_codec_exit:
+
+
+` a card has been seen in a game, so it is unlocked in the codec from now on. it was offered on the
+` upgrade screen, or it was given to the player.
+function codecSeeCard(cardIndex)
+    if cardIndex >= 0 and cardIndex < CODEC_COUNT
+        if CODEC_SEEN(cardIndex) = 0
+            CODEC_SEEN(cardIndex) = 1
+            set pref CODEC_PREF + cardIndex, 1
+        endif
+    endif
+endfunction
+
+
+` how many pages the grid has
+function getCodecPageCount()
+    pageCount = (CODEC_COUNT + CODEC_PAGE_SIZE - 1) / CODEC_PAGE_SIZE
+    if pageCount < 1 then pageCount = 1
+endfunction pageCount
+
+
+` where the middle of a tile is on the screen. the tiles of a page are numbered along the top row and
+` then along the next. the grid is in the middle of the panel.
+function getCodecTileX(tileSlot)
+    gridLeft = CODEC_X + (CODEC_WIDTH - CODEC_COLUMNS * CODEC_TILE) / 2
+    tileX = gridLeft + CODEC_TILE / 2 + (tileSlot mod CODEC_COLUMNS) * CODEC_TILE
+endfunction tileX
+
+function getCodecTileY(tileSlot)
+    tileY = CODEC_TOP + 26 + (tileSlot / CODEC_COLUMNS) * CODEC_TILE
+endfunction tileY
+
+
+` show the codec, in place of the list of the menu. the high scores take the menu apart the same way.
+function openCodec()
+    openHighscoreChrome(CODEC_X, CODEC_TOP, CODEC_WIDTH, CODEC_HEIGHT)
+
+    ` the codec is tall, so the title moves up to make room for it. closeCodec puts it back.
+    MENU_TITLE_Y = CODEC_TOP - 40
+    set text MENU_TITLE_TEXT_ID, "Codec"
+    size text y MENU_TITLE_TEXT_ID, 36
+
+    set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} back"
+    size text y MENU_HINT_TEXT_ID, 16
+
+    ` refreshCodec shows the tiles, because how many there are depends on the page
+    show text CODEC_COUNT_TEXT_ID
+    show text CODEC_PAGE_TEXT_ID
+    show text CODEC_ARROW_TEXTS(0)
+    show text CODEC_ARROW_TEXTS(1)
+    show sprite CODEC_DIVIDER_SPRITE
+    show sprite CODEC_BIG_SPRITE
+    show text CODEC_NAME_TEXT_ID
+    show text CODEC_KIND_TEXT_ID
+    show text CODEC_DESC_TEXT_ID
+    showInfoBorder(CODEC_CURSOR, 1)
+endfunction
+
+
+` put the codec away, and give the menu back its title, its panel and its list.
+` setMenuPage has to be called after this, to lay the list out again.
+function closeCodec()
+    for i = 0 to CODEC_PAGE_SIZE - 1
+        hide sprite CODEC_ICON_SPRITES(i)
+        hide sprite CODEC_LOCK_SPRITES(i)
+    next
+    hide text CODEC_COUNT_TEXT_ID
+    hide text CODEC_PAGE_TEXT_ID
+    hide text CODEC_ARROW_TEXTS(0)
+    hide text CODEC_ARROW_TEXTS(1)
+    hide sprite CODEC_DIVIDER_SPRITE
+    hide sprite CODEC_BIG_SPRITE
+    hide text CODEC_NAME_TEXT_ID
+    hide text CODEC_KIND_TEXT_ID
+    hide text CODEC_DESC_TEXT_ID
+    showInfoBorder(CODEC_CURSOR, 0)
+
+    MENU_TITLE_Y = 62
+    showMenuChrome(1)
+endfunction
+
+
+` put the page that the highlighted entry is on onto the tiles, color every tile by whether it is
+` locked, put the outline on the highlighted one, and explain it.
+function refreshCodec()
+    foundCount = 0
+    for i = 0 to CODEC_COUNT - 1
+        if CODEC_SEEN(i) then foundCount = foundCount + 1
+    next
+    set text CODEC_COUNT_TEXT_ID, str$(foundCount) + " of " + str$(CODEC_COUNT) + " found"
+
+    pageNow = CODEC_SELECTED / CODEC_PAGE_SIZE
+    pageCount = getCodecPageCount()
+    set text CODEC_PAGE_TEXT_ID, "page " + str$(pageNow + 1) + " of " + str$(pageCount)
+
+    ` the arrows are only lit when there is another page to turn to
+    arrowColor = rgb(64, 128, 255, 60)
+    if pageCount > 1 then arrowColor = rgb(255, 255, 255)
+    color text CODEC_ARROW_TEXTS(0), arrowColor
+    color text CODEC_ARROW_TEXTS(1), arrowColor
+
+    for i = 0 to CODEC_PAGE_SIZE - 1
+        shownEntry = pageNow * CODEC_PAGE_SIZE + i
+        if shownEntry < CODEC_COUNT
+            ` the size is set again, because it is worked out from the size of the texture
+            set sprite texture CODEC_ICON_SPRITES(i), CARDS(shownEntry).artTexId
+            size sprite CODEC_ICON_SPRITES(i), 24, 24
+            show sprite CODEC_ICON_SPRITES(i)
+
+            if CODEC_SEEN(shownEntry)
+                hide sprite CODEC_LOCK_SPRITES(i)
+
+                ` the art of a card is white, so it is tinted like the text of the menu is, and the
+                ` highlighted one is left white.
+                tileColor = rgb(150, 190, 255)
+                if shownEntry = CODEC_SELECTED then tileColor = rgb(255, 255, 255)
+                color sprite CODEC_ICON_SPRITES(i), tileColor
+            else
+                ` a locked tile is greyed out so far that only the lock on top of it shows
+                show sprite CODEC_LOCK_SPRITES(i)
+                color sprite CODEC_ICON_SPRITES(i), rgb(30, 40, 70)
+            endif
+        else
+            ` the last page may not be full
+            hide sprite CODEC_ICON_SPRITES(i)
+            hide sprite CODEC_LOCK_SPRITES(i)
+        endif
+    next
+
+    selectedSlot = CODEC_SELECTED mod CODEC_PAGE_SIZE
+    movePageOutline(CODEC_CURSOR, getCodecTileX(selectedSlot) - 18, getCodecTileY(selectedSlot) - 18, 36, 36)
+
+    ` the highlighted tile, explained. a locked one only says how to find it.
+    if CODEC_SEEN(CODEC_SELECTED) = 0
+        set sprite texture CODEC_BIG_SPRITE, TEX_LOCK
+        size sprite CODEC_BIG_SPRITE, 48, 48
+        color sprite CODEC_BIG_SPRITE, rgb(120, 140, 185)
+
+        set text CODEC_NAME_TEXT_ID, "? ? ?"
+        color text CODEC_NAME_TEXT_ID, rgb(120, 140, 185)
+        set text CODEC_KIND_TEXT_ID, "locked"
+        set text CODEC_DESC_TEXT_ID, "Not found yet. It turns up on the upgrade screen."
+    else
+        ` the size is set again, because it is worked out from the size of the texture
+        set sprite texture CODEC_BIG_SPRITE, CARDS(CODEC_SELECTED).artTexId
+        size sprite CODEC_BIG_SPRITE, 48, 48
+        color sprite CODEC_BIG_SPRITE, rgb(255, 255, 255)
+
+        set text CODEC_NAME_TEXT_ID, CARDS(CODEC_SELECTED).name$
+        color text CODEC_NAME_TEXT_ID, rgb(255, 255, 255)
+        set text CODEC_DESC_TEXT_ID, CARDS(CODEC_SELECTED).desc$
+        select CARDS(CODEC_SELECTED).abilityType
+            case ABILITY_TYPE_PASSIVE
+                set text CODEC_KIND_TEXT_ID, "{passive} passive"
+            endcase
+            case ABILITY_TYPE_MOVE
+                set text CODEC_KIND_TEXT_ID, "{move} move"
+            endcase
+            case ABILITY_TYPE_INSTANT
+                set text CODEC_KIND_TEXT_ID, "{instant} instant"
+            endcase
+        endselect
+    endif
+endfunction

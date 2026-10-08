@@ -185,6 +185,19 @@ return
 
 ` the arrow keys move the selection to the nearest blob in that direction
 handle_info_input:
+
+    ` the confirm button on a move leaves info mode, and opens the page that moves the moves between
+    ` the buttons, on that move. see fish_routines_equip.
+    if new action down(ACT_CONFIRM)
+        infoMoveSlot = getInfoMoveSlot(INFO_SELECTED)
+        if infoMoveSlot >= 0
+            gosub info_close
+            EQUIP_START_SLOT = infoMoveSlot
+            gosub handle_move_rearrange
+            return
+        endif
+    endif
+
     infoDx = 0
     infoDy = 0
     if new action down(ACT_RIGHT) then infoDx = 1
