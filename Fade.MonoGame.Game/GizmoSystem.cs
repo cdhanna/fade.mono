@@ -206,12 +206,12 @@ public static class GizmoSystem
         out Vector2 p0, out Vector2 p1, out Vector2 p2, out Vector2 p3)
     {
         p0 = p1 = p2 = p3 = default;
-        TextSystem.GetTextSpriteIndex(textId, out _, out var text);
+        TextSystem.GetTextSpriteIndex(textId, out var textIndex, out var text);
         if (string.IsNullOrEmpty(text.text)) return false;
         TextureSystem.GetSpriteFontIndex(text.sprite.imageId, out _, out var runtimeFont);
         var font = runtimeFont.font;
         if (font == null) return false;
-        var size = font.MeasureString(text.text);
+        var size = RichTextSystem.Measure(textIndex, ref runtimeFont);
         float frameW = size.X;
         float frameH = size.Y;
         if (frameW <= 0 || frameH <= 0) return false;

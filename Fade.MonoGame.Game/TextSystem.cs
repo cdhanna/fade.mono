@@ -12,6 +12,20 @@ public struct TextSprite
     public Color dropShadowColor;
     public Vector2 dropShadowOffset;
     public bool dropShadowEnabled;
+
+    // Rich text draws the font's icons wherever the text names one in braces.
+    public bool richText;
+
+    // The width, in pixels on screen, that the text wraps at. Zero means that it does not wrap.
+    public float wrapWidth;
+
+    // Where each line sits inside the block when the lines are different widths. 0 is left,
+    // .5 is centered, and 1 is right.
+    public float align;
+
+    // The cached layout, for text that is rich or that wraps. Go through RichTextSystem to read
+    // it, because it is only rebuilt on demand.
+    public RichTextLayout layout;
 }
 
 

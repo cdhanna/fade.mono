@@ -316,6 +316,7 @@ public partial class FadeMonoGameCommands
         }
 
         TextureSystem.textures[index] = tex;
+        RichTextSystem.textureVersion++; // icons are sized from texture frames
     }
 
     /// <summary>
@@ -348,6 +349,7 @@ public partial class FadeMonoGameCommands
             });
         }
         TextureSystem.textures[index] = tex;
+        RichTextSystem.textureVersion++; // icons are sized from texture frames
     }
 
     /// <summary>
@@ -383,6 +385,7 @@ public partial class FadeMonoGameCommands
             xOffset = x, yOffset = y, xSize = width, ySize = height,
         };
         TextureSystem.textures[index] = tex;
+        RichTextSystem.textureVersion++; // icons are sized from texture frames
     }
 
     /// <summary>

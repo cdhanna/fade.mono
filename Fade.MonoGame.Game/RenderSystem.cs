@@ -382,6 +382,42 @@ public static class RenderSystem
     /// `add sprite render target` -- must dirty all of them, not `GetOutputIndex(theWholeMask)`
     /// which would either throw (mask &gt; 63) or fabricate a phantom output with that id.
     /// </summary>
+    /// <summary>
+    /// Draw the runs of a rich text layout as if they were one string. The position, rotation, and
+    /// scale belong to the whole text, so each run is drawn around the text's origin instead of
+    /// its own.
+    /// </summary>
+    private static void DrawRichText(SpriteBatch sb, Microsoft.Xna.Framework.Graphics.Fade.SpriteFont font,
+        RichTextLayout layout,
+        Vector2 position, Color textColor, Color iconColor, float angle, Vector2 origin, Vector2 scale,
+        SpriteEffects effects, float order)
+    {
+        for (var i = 0; i < layout.runs.Count; i++)
+        {
+            var run = layout.runs[i];
+            if (!run.isIcon)
+            {
+                sb.DrawString(font, run.text, position, textColor, angle, origin - run.offset, scale, effects,
+                    order);
+                continue;
+            }
+
+            TextureSystem.GetTextureIndex(run.textureId, out _, out var runtimeTex);
+            var tex = runtimeTex.texture;
+            if (tex == null) continue;
+
+            var src = TextureSystem.GetSourceRect(ref runtimeTex, run.frame);
+            if (src.Width <= 0 || src.Height <= 0) continue;
+
+            // The icon's frame gets stretched to the size the layout gave it. The origin is in
+            // the frame's pixels, so it has to be un-stretched to land in the same place.
+            var stretch = new Vector2(run.iconSize.X / src.Width, run.iconSize.Y / src.Height);
+            var iconOrigin = (origin - run.offset) / stretch;
+            sb.Draw(tex, position, src, iconColor, angle, iconOrigin, scale * stretch, effects, order,
+                default(SpriteTexCoord1));
+        }
+    }
+
     public static void MarkOutputsDirtyForFlags(int outputIdFlags)
     {
         for (var s = 0; s < outputs.Count; s++)
@@ -788,7 +824,19 @@ public static class RenderSystem
                         // cannot render text without a default font.
                         if (font == null) continue;
 
-                        var size = font.MeasureString(text.text);
+                        // Text with icons or wrapping is laid out once and cached on the sprite,
+                        // so ask for it through the array instead of through the local copy.
+                        RichTextLayout layout = null;
+                        Vector2 size;
+                        if (RichTextSystem.UsesLayout(ref text))
+                        {
+                            layout = RichTextSystem.GetLayout(ref TextSystem.textSprites[item.index], ref runtimeFont);
+                            size = layout.size;
+                        }
+                        else
+                        {
+                            size = font.MeasureString(text.text);
+                        }
                         var origin = new Vector2(size.X * text.sprite.origin.X, size.Y * text.sprite.origin.Y);
 
                         var position = text.sprite.position;
@@ -816,8 +864,18 @@ public static class RenderSystem
                         var order = 1 - ((sprite.zOrder / 500f) +
                                          .001f * (sprite.id /
                                                   500f)); //TODO: Why doesn't deferred rendering work here????
-                        sb.DrawString(font, text.text, position, text.sprite.color, angle, origin, scale,
-                            text.sprite.effects, order);
+                        if (layout != null)
+                        {
+                            // Icons keep their own colors, but fade along with the text.
+                            var iconColor = new Color(255, 255, 255, (int)text.sprite.color.A);
+                            DrawRichText(sb, font, layout, position, text.sprite.color, iconColor, angle, origin,
+                                scale, text.sprite.effects, order);
+                        }
+                        else
+                        {
+                            sb.DrawString(font, text.text, position, text.sprite.color, angle, origin, scale,
+                                text.sprite.effects, order);
+                        }
 
                         if (text.dropShadowEnabled)
                         {
@@ -831,8 +889,17 @@ public static class RenderSystem
 
                             color.A = text.sprite.color.A;
 
-                            sb.DrawString(font, text.text, position, color, angle, origin, scale, text.sprite.effects,
-                                order);
+                            if (layout != null)
+                            {
+                                // The shadow of an icon is the icon's shape in the shadow color.
+                                DrawRichText(sb, font, layout, position, color, color, angle, origin, scale,
+                                    text.sprite.effects, order);
+                            }
+                            else
+                            {
+                                sb.DrawString(font, text.text, position, color, angle, origin, scale,
+                                    text.sprite.effects, order);
+                            }
 
                         }
 

@@ -44,6 +44,9 @@ public struct RuntimeFont
 {
     public int id;
     public SpriteFont font;
+
+    // The icons that rich text can draw with this font. Null until the first icon is registered.
+    public FontIconSet icons;
 }
 
 
@@ -118,6 +121,11 @@ public class TextureSystem
     
     public static Rectangle GetSourceRect(ref RuntimeTexture runtimeTex, ref Sprite sprite)
     {
+        return GetSourceRect(ref runtimeTex, sprite.currentFrame);
+    }
+
+    public static Rectangle GetSourceRect(ref RuntimeTexture runtimeTex, int currentFrame)
+    {
         var tex = runtimeTex.texture;
         var frames = runtimeTex.descriptor.frames;
 
@@ -133,7 +141,7 @@ public class TextureSystem
         // and the sprite draws every material at once, dithered down to its own size. That looks
         // like corruption, not like a missing frame index, which is what makes it expensive to
         // diagnose.
-        var index = sprite.currentFrame < 0 ? 0 : sprite.currentFrame % frames.Count;
+        var index = currentFrame < 0 ? 0 : currentFrame % frames.Count;
         var frame = frames[index];
         return new Rectangle(frame.xOffset, frame.yOffset, frame.xSize, frame.ySize);
     }

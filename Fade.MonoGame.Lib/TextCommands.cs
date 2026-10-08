@@ -737,7 +737,7 @@ public partial class FadeMonoGameCommands
 
         TextureSystem.GetSpriteFontIndex(textSprite.sprite.imageId, out _, out var runtimeFont);
 
-        var size = runtimeFont.font.MeasureString(textSprite.text);
+        var size = RichTextSystem.Measure(ref textSprite, ref runtimeFont);
         var xRatio = xPixels / size.X;
         var yRatio = yPixels / size.Y;
 
@@ -788,7 +788,7 @@ public partial class FadeMonoGameCommands
             Console.Error.WriteLine($"`size text x {textId}, {xPixels}` has no effect, because text has no font yet");
             return;
         }
-        var size = runtimeFont.font.MeasureString(textSprite.text);
+        var size = RichTextSystem.Measure(ref textSprite, ref runtimeFont);
         var xRatio = xPixels / size.X;
         textSprite.sprite.scale = new Vector2(xRatio, xRatio);
         TextSystem.textSprites[index] = textSprite;
@@ -838,7 +838,7 @@ public partial class FadeMonoGameCommands
             Console.Error.WriteLine($"`size text x {textId}, {xPixels}` has no effect, because text has no font yet");
             return;
         }
-        var size = runtimeFont.font.MeasureString(textSprite.text);
+        var size = RichTextSystem.Measure(ref textSprite, ref runtimeFont);
         var xRatio = xPixels / size.X;
         xRatio = Math.Clamp(xRatio, min, max);
 
@@ -887,7 +887,7 @@ public partial class FadeMonoGameCommands
             Console.Error.WriteLine($"`size text y {textId}, {yPixels}` has no effect, because text has no font yet");
             return;
         }
-        var size = runtimeFont.font.MeasureString(textSprite.text);
+        var size = RichTextSystem.Measure(ref textSprite, ref runtimeFont);
         var yRatio = yPixels / size.Y;
         textSprite.sprite.scale = new Vector2(yRatio, yRatio);
         TextSystem.textSprites[index] = textSprite;
@@ -903,7 +903,7 @@ public partial class FadeMonoGameCommands
             return 0;
         }
 
-        return runtimeFont.font.MeasureString(textSprite.text).X * textSprite.sprite.scale.X;
+        return RichTextSystem.Measure(index, ref runtimeFont).X * textSprite.sprite.scale.X;
     }
     
     [FadeBasicCommand("get text size y")]
@@ -916,7 +916,7 @@ public partial class FadeMonoGameCommands
             return 0;
         }
 
-        return runtimeFont.font.MeasureString(textSprite.text).Y * textSprite.sprite.scale.Y;
+        return RichTextSystem.Measure(index, ref runtimeFont).Y * textSprite.sprite.scale.Y;
     }
 
 

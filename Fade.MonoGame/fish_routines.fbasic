@@ -53,6 +53,29 @@ load_fonts:
     SCORE_FONT = 1
     font SCORE_FONT, "Fish/Fonts/ZeroCool"
 
+    ` key icons. any rich text that uses the font can draw these by writing the name in braces, like "press {z}".
+    ` the last number is the frame of the key in the key sheet. the sheet's xml file lists the rows from
+    ` the bottom up, so the frame is (15 - row) * 17 + column.
+    global KEY_ICON_COUNT = 7
+    font icon SCORE_FONT, 1, "z", TEX_KEYS, 44
+    font icon SCORE_FONT, 2, "x", TEX_KEYS, 40
+    font icon SCORE_FONT, 3, "c", TEX_KEYS, 189
+    font icon SCORE_FONT, 4, "v", TEX_KEYS, 34
+    font icon SCORE_FONT, 5, "i", TEX_KEYS, 119
+    font icon SCORE_FONT, 6, "space", TEX_KEYS, 51
+    font icon SCORE_FONT, 7, "arrows", TEX_KEYS, 224
+
+    ` an icon is as tall as a line of text by default. these are drawn a bit bigger, so that
+    ` text that is 16 pixels tall draws the 20 pixel keys at exactly their own size.
+    for i = 1 to KEY_ICON_COUNT
+        set font icon scale SCORE_FONT, i, 1.25, 1.25
+    next
+
+    ` icons for the kinds of ability, like "{move} move"
+    font icon SCORE_FONT, 8, "passive", TEX_TYPE_PASSIVE
+    font icon SCORE_FONT, 9, "move", TEX_TYPE_MOVE
+    font icon SCORE_FONT, 10, "instant", TEX_TYPE_INSTANT
+
 
     global SCORE_TEXT_COUNT = 100
     global SCORE_TEXT_NUM = 0
@@ -141,6 +164,29 @@ load_textures:
     SMOKE_COLORS(3) = rgb(141, 198, 255)
     SMOKE_COLORS(4) = rgb(121, 171, 222)
 
+    ` pictures of keyboard keys, from kenney's input prompts pack (keyboard & mouse, default sheet).
+    ` the original keys are 64 pixels, which turns to mush when drawn this small, so this sheet
+    ` is the same grid shrunk down to 20 pixel keys.
+    texture reserve texture id(TEX_KEYS), "Fish/Textures/Keys"
+    set texture frame grid TEX_KEYS, 16 17 `rows, columns
+
+    ` the small pictures for each kind of ability. these are 16 pixels, to match 16 pixel text.
+    texture reserve texture id(TEX_TYPE_PASSIVE), "Fish/Textures/Cards/type_passive"
+    texture reserve texture id(TEX_TYPE_MOVE), "Fish/Textures/Cards/type_move"
+    texture reserve texture id(TEX_TYPE_INSTANT), "Fish/Textures/Cards/type_instant"
+    texture reserve texture id(TEX_CLOCK), "Fish/Textures/Cards/clock"
+
+    ` the art for each card. it is drawn tinted and faint in the background of the card, so only the shape
+    ` of the picture matters. these are 48 pixels, and get drawn twice as big.
+    texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_BUNDLE).artTexId), "Fish/Textures/Cards/free_moves"
+    texture reserve texture id(CARDS(ABILITY_INDEX_WRAP).artTexId), "Fish/Textures/Cards/seamless"
+    texture reserve texture id(CARDS(ABILITY_INDEX_CRABS).artTexId), "Fish/Textures/Cards/crabs"
+    texture reserve texture id(CARDS(ABILITY_INDEX_BIRD_FEAST).artTexId), "Fish/Textures/Cards/bird_feast"
+    texture reserve texture id(CARDS(ABILITY_INDEX_PASSIVE_STOCK_MARKET).artTexId), "Fish/Textures/Cards/stock_market"
+    texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_SHIFT).artTexId), "Fish/Textures/Cards/shift"
+    texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_CLONER).artTexId), "Fish/Textures/Cards/clone"
+    texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_BOMB3x3).artTexId), "Fish/Textures/Cards/bomb"
+    texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_LINE_OUT).artTexId), "Fish/Textures/Cards/line_out"
 
 return
 
@@ -206,7 +252,7 @@ setup_grid:
     next
 
     ` the sprites are centered on their cell position, so the grid starts half a cell early
-    infoIndex = allocateInfoBlob(GRID_POS.x - CELL_SIZE / 2, GRID_POS.y - CELL_SIZE / 2, CELL_COLUMN_COUNT * CELL_SIZE, CELL_ROW_COUNT * CELL_SIZE, "The Fish", "Arrow keys move the cursor. Hold space and press an arrow to swap two fish. Connect three or more of the same kind to pop them.")
+    infoIndex = allocateInfoBlob(GRID_POS.x - CELL_SIZE / 2, GRID_POS.y - CELL_SIZE / 2, CELL_COLUMN_COUNT * CELL_SIZE, CELL_ROW_COUNT * CELL_SIZE, "The Fish", "{arrows} moves the cursor. Hold {space} and press {arrows} to swap two fish. Connect three or more of the same kind to pop them.")
 return
 
 setup_score:
@@ -337,6 +383,7 @@ update_frame:
     gosub frame_score
     gosub frame_passive_render
     gosub frame_move_ability_render
+    gosub frame_free_moves
     gosub frame_dbg
 
 `     for i = 0 to CELL_COUNT - 1
@@ -412,6 +459,43 @@ frame_score:
 
 
 
+return
+
+` take the free moves off of the counter one at a time, so that the counter can be seen ticking down
+frame_free_moves:
+    if PENDING_FREE_MOVES > 0
+        if is tween done(FREE_MOVES_TICK_TWEEN_ID)
+            PENDING_FREE_MOVES = PENDING_FREE_MOVES - 1
+            registerMove(-1)
+
+            ` a little copy of the move flies off of the counter, the same way that score flies off of the fish
+            freeMovePos as vec = {
+                x = 94 + rnd(12),
+                y = SCORE_POS.y + 24
+            }
+            txtId = spawnScoreText(freeMovePos, "-1", 0)
+            color text txtId, rgb(190, 220, 255)
+
+            ` every move that comes off gives the screen a little knock
+            create basic tween FREE_MOVES_SHAKE_TWEEN_ID, 0, 6, 180, 0
+            set tween type FREE_MOVES_SHAKE_TWEEN_ID, 1
+            set screen shake bounce .5
+            FREE_MOVES_SHAKING = 1
+
+            ` and then wait a moment before the next one
+            create basic tween FREE_MOVES_TICK_TWEEN_ID, 0, 1, 140, 0
+        endif
+    endif
+
+    ` the combos shake the screen too, so only touch the shake while this one is running
+    if FREE_MOVES_SHAKING
+        if is tween done(FREE_MOVES_SHAKE_TWEEN_ID) > 0 AND PENDING_FREE_MOVES = 0
+            set screen shake amount 0
+            FREE_MOVES_SHAKING = 0
+        else
+            set screen shake amount tweenVal(FREE_MOVES_SHAKE_TWEEN_ID)
+        endif
+    endif
 return
 
 frame_texts:

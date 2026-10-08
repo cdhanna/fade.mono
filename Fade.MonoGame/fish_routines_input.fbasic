@@ -64,8 +64,14 @@ process_input:
                         `doSwap(SELECTION_POS, swapDir, 0)
                     endcase 
                 endselect
+
+                ` shake the row of the move that just got used. this starts after the move has played out,
+                ` because the moves animate without drawing the rest of the frame, so it would not be seen before.
+                create basic tween MOVE_ABILITY_BINDINGS(move.moveBindingIndex).useShakeTweenId, 1, 0, 500, 0
             else
-                ` TODO: play a sad animation, the move is not ready yet!
+                ` the move is not ready yet, so shake its cooldown number, and the clock above the numbers
+                create basic tween MOVE_ABILITY_BINDINGS(move.moveBindingIndex).shakeTweenId, 1, 0, 500, 0
+                create basic tween COOLDOWN_CLOCK_SHAKE_TWEEN_ID, 1, 0, 500, 0
                 doSwap(SELECTION_POS, swapDir, 0)
             endif
         else 

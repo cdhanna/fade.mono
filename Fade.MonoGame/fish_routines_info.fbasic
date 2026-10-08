@@ -78,23 +78,25 @@ setup_infos:
     order text INFO_TITLE_TEXT_ID, ORDER_INFO_TEXT
     hide text INFO_TITLE_TEXT_ID
 
-    ` the description is word wrapped across a few lines of text
-    for i = 0 to INFO_DESC_LINE_COUNT - 1
-        reserve text id(INFO_DESC_TEXT_IDS(i))
-        text INFO_DESC_TEXT_IDS(i), 0, 0, SCORE_FONT, "desc"
-        set text offset INFO_DESC_TEXT_IDS(i), 0, 0
-        size text y INFO_DESC_TEXT_IDS(i), 16
-        color text INFO_DESC_TEXT_IDS(i), rgb(150, 190, 255)
-        order text INFO_DESC_TEXT_IDS(i), ORDER_INFO_TEXT
-        hide text INFO_DESC_TEXT_IDS(i)
-    next
+    ` the description wraps onto as many lines as it needs
+    reserve text id(INFO_DESC_TEXT_ID)
+    text INFO_DESC_TEXT_ID, 0, 0, SCORE_FONT, "desc"
+    set text offset INFO_DESC_TEXT_ID, 0, 0
+    size text y INFO_DESC_TEXT_ID, 16
+    set text wrap INFO_DESC_TEXT_ID, 300
+    enable rich text INFO_DESC_TEXT_ID `descriptions can show pictures of keys, like {space}
+    color text INFO_DESC_TEXT_ID, rgb(150, 190, 255)
+    order text INFO_DESC_TEXT_ID, ORDER_INFO_TEXT
+    hide text INFO_DESC_TEXT_ID
 
     ` the hint tells the player which keys do what. it is always on screen.
     reserve text id(INFO_HINT_TEXT_ID)
-    text INFO_HINT_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT - 2, SCORE_FONT, "i: info"
+    text INFO_HINT_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT - 2, SCORE_FONT, "{i} info"
+    enable rich text INFO_HINT_TEXT_ID
     set text offset INFO_HINT_TEXT_ID, .5, 1
-    size text y INFO_HINT_TEXT_ID, 14
+    size text y INFO_HINT_TEXT_ID, 16
     color text INFO_HINT_TEXT_ID, rgb(64, 128, 255, 140)
+    enable text drop shadow INFO_HINT_TEXT_ID, 2, -2, rgb(0,0,0) `the same shadow as the rest of the hud. the key icons get it too.
 
 return
 
@@ -137,9 +139,10 @@ info_open:
     showInfoBorder(INFO_CURSOR, 1)
     showInfoBorder(INFO_PANEL_BORDER, 1)
     show text INFO_TITLE_TEXT_ID
+    show text INFO_DESC_TEXT_ID
 
-    set text INFO_HINT_TEXT_ID, "arrows: look around    i: back to game"
-    size text y INFO_HINT_TEXT_ID, 14
+    set text INFO_HINT_TEXT_ID, "{arrows} look around    {i} back to game"
+    size text y INFO_HINT_TEXT_ID, 16
     order text INFO_HINT_TEXT_ID, ORDER_INFO_TEXT
 
     ` snap the cursor onto the selection instead of sliding in from wherever it was last
@@ -175,12 +178,10 @@ info_close:
     showInfoBorder(INFO_CURSOR, 0)
     showInfoBorder(INFO_PANEL_BORDER, 0)
     hide text INFO_TITLE_TEXT_ID
-    for i = 0 to INFO_DESC_LINE_COUNT - 1
-        hide text INFO_DESC_TEXT_IDS(i)
-    next
+    hide text INFO_DESC_TEXT_ID
 
-    set text INFO_HINT_TEXT_ID, "i: info"
-    size text y INFO_HINT_TEXT_ID, 14
+    set text INFO_HINT_TEXT_ID, "{i} info"
+    size text y INFO_HINT_TEXT_ID, 16
     order text INFO_HINT_TEXT_ID, 0
     set text alpha INFO_HINT_TEXT_ID, 140
 return
@@ -198,7 +199,10 @@ handle_info_input:
     if infoDx = 0 and infoDy = 0 then return
 
     infoNext = findInfoInDirection(infoDx, infoDy)
-    if infoNext >= 0 then selectInfo(infoNext, 180)
+    ` this is a block on purpose. a one line `if ... then someFunction()` also takes the next statement with it.
+    if infoNext >= 0
+        selectInfo(infoNext, 180)
+    endif
 return
 
 
@@ -235,9 +239,7 @@ frame_info_render:
     color sprite INFO_PANEL_SPRITE, rgb(10, 14, 30, 235 * infoFade#)
     colorInfoBorder(INFO_PANEL_BORDER, rgb(64, 128, 255, 200 * infoFade#))
     set text alpha INFO_TITLE_TEXT_ID, 255 * infoFade#
-    for i = 0 to INFO_DESC_LINE_COUNT - 1
-        set text alpha INFO_DESC_TEXT_IDS(i), 255 * infoFade#
-    next
+    set text alpha INFO_DESC_TEXT_ID, 255 * infoFade#
     set text alpha INFO_HINT_TEXT_ID, 140 + 115 * infoFade#
 
 return
@@ -362,28 +364,21 @@ endfunction
 function layoutInfoPanel(index)
     blob = INFOS(index)
     padding = 6
-    lineHeight = 12
 
     set text INFO_TITLE_TEXT_ID, blob.title$
     size text y INFO_TITLE_TEXT_ID, 22
     color text INFO_TITLE_TEXT_ID, rgb(255, 255, 255)
 
-    lineCount = wrapInfoDescription(blob.desc$, 300)
+    ` the description wraps itself, so all that is left to do is to measure it
+    set text INFO_DESC_TEXT_ID, blob.desc$
 
     ` the panel is as wide as the widest line of text
     textWidth = get text size x(INFO_TITLE_TEXT_ID)
-    for i = 0 to INFO_DESC_LINE_COUNT - 1
-        if i < lineCount
-            show text INFO_DESC_TEXT_IDS(i)
-            lineWidth = get text size x(INFO_DESC_TEXT_IDS(i))
-            if lineWidth > textWidth then textWidth = lineWidth
-        else
-            hide text INFO_DESC_TEXT_IDS(i)
-        endif
-    next
+    if get text size x(INFO_DESC_TEXT_ID) > textWidth then textWidth = get text size x(INFO_DESC_TEXT_ID)
 
+    descY = padding + 13
     panelW = textWidth + padding * 2
-    panelH = padding * 2 + 14 + lineCount * lineHeight
+    panelH = descY + get text size y(INFO_DESC_TEXT_ID) + padding - 4
 
     ` center the panel under the blob, but keep it on the screen
     panelX = blob.topLeft.x + blob.size.x / 2 - panelW / 2
@@ -400,53 +395,8 @@ function layoutInfoPanel(index)
     layoutInfoBorder(INFO_PANEL_BORDER, panelX, panelY, panelW, panelH)
 
     set text position INFO_TITLE_TEXT_ID, panelX + padding, panelY + padding - 3
-    for i = 0 to INFO_DESC_LINE_COUNT - 1
-        set text position INFO_DESC_TEXT_IDS(i), panelX + padding, panelY + padding + 13 + i * lineHeight
-    next
+    set text position INFO_DESC_TEXT_ID, panelX + padding, panelY + descY
 endfunction
-
-
-` split a description into the description text lines, so that no line is wider than maxWidth.
-` returns how many lines got used. anything that does not fit stays on the last line.
-function wrapInfoDescription(full$, maxWidth)
-    lineIndex = 0
-    line$ = ""
-    word$ = ""
-    total = len(full$)
-
-    ` walk one character past the end, so that the last word gets handled like the others
-    for n = 1 to total + 1
-        isWordEnd = 1
-        if n <= total
-            ch$ = mid$(full$, n)
-            if asc(ch$) <> 32
-                isWordEnd = 0
-                word$ = word$ + ch$
-            endif
-        endif
-
-        if isWordEnd and len(word$) > 0
-            candidate$ = word$
-            if len(line$) > 0 then candidate$ = line$ + " " + word$
-
-            ` let the text sprite measure how wide the line would be with the word on it
-            set text INFO_DESC_TEXT_IDS(lineIndex), candidate$
-            tooWide = get text size x(INFO_DESC_TEXT_IDS(lineIndex)) > maxWidth
-
-            if tooWide and len(line$) > 0 and lineIndex < INFO_DESC_LINE_COUNT - 1
-                ` the word starts the next line instead
-                set text INFO_DESC_TEXT_IDS(lineIndex), line$
-                lineIndex = lineIndex + 1
-                line$ = word$
-            else
-                line$ = candidate$
-            endif
-            word$ = ""
-        endif
-    next
-
-    set text INFO_DESC_TEXT_IDS(lineIndex), line$
-endfunction lineIndex + 1
 
 
 ` an info border is 4 thin sprites that make a rectangle outline.

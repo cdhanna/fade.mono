@@ -86,7 +86,12 @@ public static class TweenSystem
 
             if (currentTime > tween.endTime)
             {
+                // Land exactly on the final value. The last frame that was still inside the tween only got
+                // close to it, and without this the tween would report that near miss forever.
                 tweens[i].interpolator = 1;
+                tweens[i].currValue = tween.executionType == TweenExecutionType.ONCE_AND_BACK
+                    ? tween.startValue
+                    : tween.endValue;
                 continue;
             }
             if (currentTime < tween.startTime)

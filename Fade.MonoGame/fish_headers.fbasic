@@ -37,6 +37,14 @@ global ABILITY_INDEX_MOVE_LINE_OUT = 8
 ` global ABILITY_TYPE_INSTANT = 2
 
 global TEX_PIXEL = 0 `magic texture that always exists
+global TEX_KEYS `the sheet of keyboard key pictures. the font uses these as icons.
+
+` small pictures for the kinds of ability. the font uses these as icons too.
+global TEX_TYPE_PASSIVE
+global TEX_TYPE_MOVE
+global TEX_TYPE_INSTANT
+
+global TEX_CLOCK `a little clock that marks the column of cooldown numbers
 
 global STAGE_FISH = 2
 global STAGE_HUD_TEXT = 3
@@ -44,8 +52,10 @@ global STAGE_INFO = -2
 global STAGE_INFO_MASKS = -3
 
 ` orderings define draw order. use groups of 10. 
-global ORDER_ABILITY_BACKDROP = 30
+` the upgrade screen draws on top of the dark overlay that it shares with info mode (ORDER_INFO_OVERLAY)
+global ORDER_ABILITY_BACKDROP = 110
 global ORDER_ABILITY_CARD = ORDER_ABILITY_BACKDROP + 2
+global ORDER_ABILITY_ART = ORDER_ABILITY_BACKDROP + 3
 global ORDER_ABILITY_TEXT = ORDER_ABILITY_BACKDROP + 4
 
 global ORDER_FISH = 20
@@ -62,6 +72,15 @@ global ORDER_INFO_TEXT = 108
 
 
 global REQUEST_ABILITY_SELECTION = 0
+
+` the "free moves" card takes this many moves off of the counter. they come off one at a time,
+` after the upgrade screen has closed, so that it can be seen happening.
+` the routine that does it, frame_free_moves, is in fish_routines, because it has to come after the score texts are declared.
+global FREE_MOVES_AMOUNT = 5
+global PENDING_FREE_MOVES = 0
+global FREE_MOVES_TICK_TWEEN_ID
+global FREE_MOVES_SHAKE_TWEEN_ID
+global FREE_MOVES_SHAKING = 0
 
 global PASSIVE_BINDINGS_LENGTH = 10
 global PASSIVE_COUNT = 0
@@ -94,8 +113,7 @@ global INFO_CURSOR_TWEEN_H
 global INFO_FADE_TWEEN_ID
 global INFO_PANEL_SPRITE
 global INFO_TITLE_TEXT_ID
-global INFO_DESC_LINE_COUNT = 3 `the description text wraps onto this many lines at most.
-global dim INFO_DESC_TEXT_IDS(INFO_DESC_LINE_COUNT)
+global INFO_DESC_TEXT_ID
 global INFO_HINT_TEXT_ID
 global INFO_KEY
 global INFO_CURSOR as infoBorder

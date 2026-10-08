@@ -231,6 +231,7 @@ public sealed class TextDebugProvider : IDebugProvider
         new DebugField { Path = "fontId",   Type = "int",    Label = "fontId",
                          ReferenceType = "texture", ReadOnly = true },
         new DebugField { Path = "dropShadowEnabled", Type = "bool", Label = "drop shadow" },
+        new DebugField { Path = "richText", Type = "bool", Label = "rich text" },
         // Gizmo overlay — see SpriteDebugProvider for the rationale; same
         // pattern, different GizmoSystem dictionary.
         new DebugField { Path = "gizmo",          Type = "bool",  Label = "gizmo" },
@@ -259,6 +260,7 @@ public sealed class TextDebugProvider : IDebugProvider
             ["zOrder"]  = ts.sprite.zOrder,
             ["fontId"]  = ts.sprite.imageId,
             ["dropShadowEnabled"] = ts.dropShadowEnabled,
+            ["richText"]      = ts.richText,
             ["gizmo"]         = hasGizmo,
             ["gizmoColor"]    = DebugColor.Pack(hasGizmo ? giz.color : GizmoSystem.DefaultColor),
             ["gizmoThickness"]= hasGizmo ? giz.thickness : GizmoSystem.DefaultThickness,
@@ -278,6 +280,7 @@ public sealed class TextDebugProvider : IDebugProvider
             case "hidden":             ts.sprite.hidden     = value.GetBoolean(); break;
             case "zOrder":             ts.sprite.zOrder     = value.GetInt32(); break;
             case "dropShadowEnabled":  ts.dropShadowEnabled = value.GetBoolean(); break;
+            case "richText":           ts.richText = value.GetBoolean(); break;
             case "color":              ts.sprite.color = DebugColor.Unpack(value.GetInt32()); break;
             // Gizmo controls — mirror `enable/disable text gizmo` +
             // `set text gizmo color/thickness`.
