@@ -23,6 +23,9 @@ float Time;
 float2 Resolution;
 float TimeSpeed = 50.0;
 
+// 0 when the info screen is closed, 1 when it is fully open
+float Fade = 1.0;
+
 struct VertexShaderOutput
 {
 	float4 Position : SV_POSITION;
@@ -33,8 +36,10 @@ struct VertexShaderOutput
 float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 {
     float4 base = tex2D(SpriteTextureSampler, uv);
-	float4 finalColor = float4(0,0,0,.6);
-	finalColor.a *= smoothstep(.5, .4, base.r);//base.r < .5;
+	float4 finalColor = float4(0,0,0,.65);
+
+	// the mask is 1 inside a hole, and 0 everywhere else
+	finalColor.a *= (1 - base.r) * Fade;
     return finalColor;
 }
 

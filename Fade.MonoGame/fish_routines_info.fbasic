@@ -1,60 +1,246 @@
 goto routines_info_exit
 
-setup_infos:
-    ` some of the set up is actually done in the fish_fish headers
+remstart
+    INFO MODE
+    press I to dim the game and inspect what the things on screen mean.
 
+    anything that wants an explanation calls allocateInfoBlob() with its
+    rectangle, a title, and a description. in info mode, every blob gets a
+    faint outline, and the selected blob gets a bright outline and a hole
+    in the dark overlay. the arrow keys move between blobs.
+remend
+
+setup_infos:
+    ` the globals are declared in the fish headers, so that functions can use them no matter where they are called from
+
+    ` this would be tab, but while the debug inspector is enabled, imgui takes the keyboard
+    ` when tab is pressed, and then the game does not see any keys at all.
+    INFO_KEY = scancode("I")
 
     ` load effects
-    global INFO_FX_ID
     reserve effect id(INFO_FX_ID)
     effect INFO_FX_ID, "Fish/Shaders/InfoMaskEffect"
 
-    global INFO_MASK_FX_ID
     reserve effect id(INFO_MASK_FX_ID)
     effect INFO_MASK_FX_ID, "Fish/Shaders/InfoMaskElementEffect"
 
     ` create a new render target
-    global TARGET_INFO
     reserve render target id(TARGET_INFO)
     render target TARGET_INFO
 
-    ` allocate all info data with basic reservations. 
-    for i = 0 to INFO_COUNT - 1
+    ` the hole sprite draws into the mask target. wherever it draws, the overlay
+    ` is see-through. there is only one, and it slides to the selected blob.
+    reserve sprite id(INFO_HOLE_SPRITE)
+    sprite INFO_HOLE_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset INFO_HOLE_SPRITE, 0, 0
+    set sprite effect INFO_HOLE_SPRITE, INFO_MASK_FX_ID
+    set sprite render target INFO_HOLE_SPRITE, TARGET_INFO
+    hide sprite INFO_HOLE_SPRITE
 
-        ` make sure we have a valid sprite id. 
-        reserve sprite id(INFOS(i).spriteMaskId)
-
-        info = INFOS(i)
-
-        sprite info.spriteMaskId, 0, 0, 0
-        hide sprite info.spriteMaskId
-        set sprite offset info.spriteMaskId, 0, 0
-        set sprite effect info.spriteMaskId, INFO_MASK_FX_ID
-        set sprite render target info.spriteMaskId, TARGET_INFO
-
-
-    next
-
-    ` setup the mask sprite 
-    global INFO_MASK_SPRITE
+    ` setup the mask sprite. this is the dark overlay that covers the game.
     reserve sprite id(INFO_MASK_SPRITE)
 
     sprite INFO_MASK_SPRITE, 0, 0, render target texture(TARGET_INFO)
-    order sprite INFO_MASK_SPRITE, ORDER_FISH+1
+    order sprite INFO_MASK_SPRITE, ORDER_INFO_OVERLAY
     size sprite INFO_MASK_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
     set sprite offset INFO_MASK_SPRITE, 0, 0
     set sprite effect INFO_MASK_SPRITE, INFO_FX_ID
 
     hide sprite INFO_MASK_SPRITE
 
-return 
+    ` the cursor is the bright outline around the selected blob.
+    INFO_CURSOR = createInfoBorder(ORDER_INFO_CURSOR)
+    reserve tween id(INFO_CURSOR_TWEEN_X)
+    reserve tween id(INFO_CURSOR_TWEEN_Y)
+    reserve tween id(INFO_CURSOR_TWEEN_W)
+    reserve tween id(INFO_CURSOR_TWEEN_H)
+    create basic tween INFO_CURSOR_TWEEN_X, 0, 0, 1, 0
+    create basic tween INFO_CURSOR_TWEEN_Y, 0, 0, 1, 0
+    create basic tween INFO_CURSOR_TWEEN_W, 0, 0, 1, 0
+    create basic tween INFO_CURSOR_TWEEN_H, 0, 0, 1, 0
+
+    ` the fade tween goes from 0 (game) to 1 (info mode)
+    reserve tween id(INFO_FADE_TWEEN_ID)
+    create basic tween INFO_FADE_TWEEN_ID, 0, 0, 1, 0
+
+    ` the panel holds the text that explains the selected blob.
+    reserve sprite id(INFO_PANEL_SPRITE)
+    sprite INFO_PANEL_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset INFO_PANEL_SPRITE, 0, 0
+    order sprite INFO_PANEL_SPRITE, ORDER_INFO_PANEL
+    hide sprite INFO_PANEL_SPRITE
+
+    INFO_PANEL_BORDER = createInfoBorder(ORDER_INFO_PANEL + 1)
+
+    reserve text id(INFO_TITLE_TEXT_ID)
+    text INFO_TITLE_TEXT_ID, 0, 0, SCORE_FONT, "title"
+    set text offset INFO_TITLE_TEXT_ID, 0, 0
+    order text INFO_TITLE_TEXT_ID, ORDER_INFO_TEXT
+    hide text INFO_TITLE_TEXT_ID
+
+    ` the description is word wrapped across a few lines of text
+    for i = 0 to INFO_DESC_LINE_COUNT - 1
+        reserve text id(INFO_DESC_TEXT_IDS(i))
+        text INFO_DESC_TEXT_IDS(i), 0, 0, SCORE_FONT, "desc"
+        set text offset INFO_DESC_TEXT_IDS(i), 0, 0
+        size text y INFO_DESC_TEXT_IDS(i), 16
+        color text INFO_DESC_TEXT_IDS(i), rgb(150, 190, 255)
+        order text INFO_DESC_TEXT_IDS(i), ORDER_INFO_TEXT
+        hide text INFO_DESC_TEXT_IDS(i)
+    next
+
+    ` the hint tells the player which keys do what. it is always on screen.
+    reserve text id(INFO_HINT_TEXT_ID)
+    text INFO_HINT_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT - 2, SCORE_FONT, "i: info"
+    set text offset INFO_HINT_TEXT_ID, .5, 1
+    size text y INFO_HINT_TEXT_ID, 14
+    color text INFO_HINT_TEXT_ID, rgb(64, 128, 255, 140)
+
+return
+
+
+` the info key opens and closes info mode
+frame_info_toggle:
+    if new key down(INFO_KEY)
+        if INFO_MODE
+            gosub info_close
+        else
+            gosub info_open
+        endif
+    endif
+return
+
+
+info_open:
+    if INFO_LENGTH = 0 then return
+
+    ` the selected blob may have been disabled since the last time
+    if INFOS(INFO_SELECTED).enabled = 0 then INFO_SELECTED = findFirstEnabledInfo()
+    if INFO_SELECTED < 0
+        INFO_SELECTED = 0
+        return
+    endif
+
+    INFO_MODE = 1
+
+    for i = 0 to INFO_LENGTH - 1
+        infoItem = INFOS(i)
+        if infoItem.enabled
+            layoutInfoBorder(infoItem.border, infoItem.topLeft.x, infoItem.topLeft.y, infoItem.size.x, infoItem.size.y)
+            showInfoBorder(infoItem.border, 1)
+        endif
+    next
+
+    show sprite INFO_HOLE_SPRITE
+    show sprite INFO_MASK_SPRITE
+    show sprite INFO_PANEL_SPRITE
+    showInfoBorder(INFO_CURSOR, 1)
+    showInfoBorder(INFO_PANEL_BORDER, 1)
+    show text INFO_TITLE_TEXT_ID
+
+    set text INFO_HINT_TEXT_ID, "arrows: look around    i: back to game"
+    size text y INFO_HINT_TEXT_ID, 14
+    order text INFO_HINT_TEXT_ID, ORDER_INFO_TEXT
+
+    ` snap the cursor onto the selection instead of sliding in from wherever it was last
+    selectInfo(INFO_SELECTED, 0)
+
+    create basic tween INFO_FADE_TWEEN_ID, 0, 1, 150, 0
+    while is tween done(INFO_FADE_TWEEN_ID) < 1
+        gosub frame_info_render
+        gosub update_frame
+        sync
+    endwhile
+    gosub frame_info_render
+return
+
+
+info_close:
+    create basic tween INFO_FADE_TWEEN_ID, 1, 0, 150, 0
+    while is tween done(INFO_FADE_TWEEN_ID) < 1
+        gosub frame_info_render
+        gosub update_frame
+        sync
+    endwhile
+
+    INFO_MODE = 0
+
+    for i = 0 to INFO_LENGTH - 1
+        showInfoBorder(INFOS(i).border, 0)
+    next
+
+    hide sprite INFO_HOLE_SPRITE
+    hide sprite INFO_MASK_SPRITE
+    hide sprite INFO_PANEL_SPRITE
+    showInfoBorder(INFO_CURSOR, 0)
+    showInfoBorder(INFO_PANEL_BORDER, 0)
+    hide text INFO_TITLE_TEXT_ID
+    for i = 0 to INFO_DESC_LINE_COUNT - 1
+        hide text INFO_DESC_TEXT_IDS(i)
+    next
+
+    set text INFO_HINT_TEXT_ID, "i: info"
+    size text y INFO_HINT_TEXT_ID, 14
+    order text INFO_HINT_TEXT_ID, 0
+    set text alpha INFO_HINT_TEXT_ID, 140
+return
+
+
+` the arrow keys move the selection to the nearest blob in that direction
+handle_info_input:
+    infoDx = 0
+    infoDy = 0
+    if new rightkey() then infoDx = 1
+    if new leftkey() then infoDx = -1
+    if new upkey() then infoDy = -1
+    if new downkey() then infoDy = 1
+
+    if infoDx = 0 and infoDy = 0 then return
+
+    infoNext = findInfoInDirection(infoDx, infoDy)
+    if infoNext >= 0 then selectInfo(infoNext, 180)
+return
+
 
 frame_info_render:
-    ` not sure anything here needs to render?
 
-    `set effect param texture INFO_FX_ID, "MaskTexture", STAGE_INFO_TEX
+    ` TODO: stupid FX system loses parameters between reloads, so best to set them in a loop.
+    infoFade# = tweenVal(INFO_FADE_TWEEN_ID)
+    set effect param float INFO_FX_ID, "Fade", infoFade#
 
-return 
+    if INFO_MODE = 0 then return
+
+    ` slide the cursor, and the hole in the overlay, toward the selected blob
+    infoX = tweenVal(INFO_CURSOR_TWEEN_X)
+    infoY = tweenVal(INFO_CURSOR_TWEEN_Y)
+    infoW = tweenVal(INFO_CURSOR_TWEEN_W)
+    infoH = tweenVal(INFO_CURSOR_TWEEN_H)
+    layoutInfoBorder(INFO_CURSOR, infoX, infoY, infoW, infoH)
+
+    ` the hole is a little bigger than the blob, so its soft edge lands outside the outline
+    position sprite INFO_HOLE_SPRITE, infoX - INFO_HOLE_PADDING, infoY - INFO_HOLE_PADDING
+    size sprite INFO_HOLE_SPRITE, infoW + INFO_HOLE_PADDING * 2, infoH + INFO_HOLE_PADDING * 2
+    set effect param float2 INFO_MASK_FX_ID, "Size", infoW + INFO_HOLE_PADDING * 2, infoH + INFO_HOLE_PADDING * 2
+
+    ` the selected outline is bright and pulses a little. all the others are faint.
+    infoPulse# = .8 + .2 * sin(game ms() * .006)
+    colorInfoBorder(INFO_CURSOR, rgb(255, 255, 255, 255 * infoFade# * infoPulse#))
+    for i = 0 to INFO_LENGTH - 1
+        if INFOS(i).enabled
+            colorInfoBorder(INFOS(i).border, rgb(64, 128, 255, 160 * infoFade#))
+        endif
+    next
+
+    ` everything else just fades with the overlay
+    color sprite INFO_PANEL_SPRITE, rgb(10, 14, 30, 235 * infoFade#)
+    colorInfoBorder(INFO_PANEL_BORDER, rgb(64, 128, 255, 200 * infoFade#))
+    set text alpha INFO_TITLE_TEXT_ID, 255 * infoFade#
+    for i = 0 to INFO_DESC_LINE_COUNT - 1
+        set text alpha INFO_DESC_TEXT_IDS(i), 255 * infoFade#
+    next
+    set text alpha INFO_HINT_TEXT_ID, 140 + 115 * infoFade#
+
+return
 
 
 routines_info_exit:
@@ -64,22 +250,257 @@ function infoBeep()
 endfunction
 
 
-function allocateInfoBlob(x, y, width, height)
+` register a rectangle of the screen as something that can be explained in info mode.
+` returns the index of the blob in the INFOS array.
+function allocateInfoBlob(x, y, width, height, title$, desc$)
     curr = INFO_LENGTH
 
-    if curr > INFO_COUNT
+    if curr >= INFO_COUNT
         `TODO: we could scan through the infos looking for un-assigned ones, but until we actually allocate more than 100, who cares?
         print "CRASH: ran out of info blobs"
         end
     endif
 
-    ` mark the info as taken, and move up. 
+    ` mark the info as taken, and move up.
     INFO_LENGTH += 1
 
-    INFOS(curr).assigned = 1
-    show sprite INFOS(curr).spriteMaskId
-    sprite INFOS(curr).spriteMaskId, x, y, 0
-    size sprite INFOS(curr).spriteMaskId, width, height
+    blob = INFOS(curr)
+    blob.assigned = 1
+    blob.enabled = 1
+    blob.topLeft.x = x
+    blob.topLeft.y = y
+    blob.size.x = width
+    blob.size.y = height
+    blob.title$ = title$
+    blob.desc$ = desc$
+    blob.border = createInfoBorder(ORDER_INFO_BORDER)
+    INFOS(curr) = blob
+
+endfunction curr
 
 
-endfunction curr 
+` a disabled blob cannot be highlighted, and has no outline.
+function setInfoBlobEnabled(index, isEnabled)
+    INFOS(index).enabled = isEnabled
+endfunction
+
+
+function findFirstEnabledInfo()
+    found = -1
+    for i = 0 to INFO_LENGTH - 1
+        if found < 0 and INFOS(i).enabled then found = i
+    next
+endfunction found
+
+
+` find the closest enabled blob in the given direction, or -1 if there is nothing that way.
+function findInfoInDirection(dx, dy)
+    best = -1
+    bestScore = 999999
+
+    cur = INFOS(INFO_SELECTED)
+    curX = cur.topLeft.x + cur.size.x / 2
+    curY = cur.topLeft.y + cur.size.y / 2
+
+    for i = 0 to INFO_LENGTH - 1
+        if i = INFO_SELECTED then skip
+
+        other = INFOS(i)
+        if other.enabled = 0 then skip
+
+        vx = (other.topLeft.x + other.size.x / 2) - curX
+        vy = (other.topLeft.y + other.size.y / 2) - curY
+
+        ` how far the blob is in the direction of the key press. it has to be that way at all.
+        along = vx * dx + vy * dy
+        if along <= 0 then skip
+
+        ` and how far off to the side it is. a blob that is more sideways than forwards does not count,
+        ` otherwise pressing left could pick something that is straight above.
+        across = abs(vx * dy) + abs(vy * dx)
+        if across > along * 2 then skip
+
+        ` closer is better, and lined up is better than off to the side
+        candidateScore = along + across * 2
+        if candidateScore < bestScore
+            bestScore = candidateScore
+            best = i
+        endif
+    next
+endfunction best
+
+
+` move the selection to the given blob. the cursor takes `duration` milliseconds to slide there.
+` a duration of 0 puts the cursor there right away.
+function selectInfo(index, duration)
+    INFO_SELECTED = index
+    blob = INFOS(index)
+
+    startX = tweenVal(INFO_CURSOR_TWEEN_X)
+    startY = tweenVal(INFO_CURSOR_TWEEN_Y)
+    startW = tweenVal(INFO_CURSOR_TWEEN_W)
+    startH = tweenVal(INFO_CURSOR_TWEEN_H)
+    if duration <= 0
+        ` a tween that starts where it ends is already there
+        duration = 1
+        startX = blob.topLeft.x
+        startY = blob.topLeft.y
+        startW = blob.size.x
+        startH = blob.size.y
+    endif
+
+    create basic tween INFO_CURSOR_TWEEN_X, startX, blob.topLeft.x, duration, 0
+    create basic tween INFO_CURSOR_TWEEN_Y, startY, blob.topLeft.y, duration, 0
+    create basic tween INFO_CURSOR_TWEEN_W, startW, blob.size.x, duration, 0
+    create basic tween INFO_CURSOR_TWEEN_H, startH, blob.size.y, duration, 0
+
+    layoutInfoPanel(index)
+endfunction
+
+
+` fill in the explanation text for a blob, and put the panel next to it.
+function layoutInfoPanel(index)
+    blob = INFOS(index)
+    padding = 6
+    lineHeight = 12
+
+    set text INFO_TITLE_TEXT_ID, blob.title$
+    size text y INFO_TITLE_TEXT_ID, 22
+    color text INFO_TITLE_TEXT_ID, rgb(255, 255, 255)
+
+    lineCount = wrapInfoDescription(blob.desc$, 300)
+
+    ` the panel is as wide as the widest line of text
+    textWidth = get text size x(INFO_TITLE_TEXT_ID)
+    for i = 0 to INFO_DESC_LINE_COUNT - 1
+        if i < lineCount
+            show text INFO_DESC_TEXT_IDS(i)
+            lineWidth = get text size x(INFO_DESC_TEXT_IDS(i))
+            if lineWidth > textWidth then textWidth = lineWidth
+        else
+            hide text INFO_DESC_TEXT_IDS(i)
+        endif
+    next
+
+    panelW = textWidth + padding * 2
+    panelH = padding * 2 + 14 + lineCount * lineHeight
+
+    ` center the panel under the blob, but keep it on the screen
+    panelX = blob.topLeft.x + blob.size.x / 2 - panelW / 2
+    if panelX + panelW > WORLD_WIDTH - 6 then panelX = WORLD_WIDTH - 6 - panelW
+    if panelX < 6 then panelX = 6
+
+    ` below the blob if there is room, otherwise above it, otherwise inside the bottom of it.
+    panelY = blob.topLeft.y + blob.size.y + 6
+    if panelY + panelH > WORLD_HEIGHT - 16 then panelY = blob.topLeft.y - panelH - 6
+    if panelY < 4 then panelY = blob.topLeft.y + blob.size.y - panelH - 6
+
+    position sprite INFO_PANEL_SPRITE, panelX, panelY
+    size sprite INFO_PANEL_SPRITE, panelW, panelH
+    layoutInfoBorder(INFO_PANEL_BORDER, panelX, panelY, panelW, panelH)
+
+    set text position INFO_TITLE_TEXT_ID, panelX + padding, panelY + padding - 3
+    for i = 0 to INFO_DESC_LINE_COUNT - 1
+        set text position INFO_DESC_TEXT_IDS(i), panelX + padding, panelY + padding + 13 + i * lineHeight
+    next
+endfunction
+
+
+` split a description into the description text lines, so that no line is wider than maxWidth.
+` returns how many lines got used. anything that does not fit stays on the last line.
+function wrapInfoDescription(full$, maxWidth)
+    lineIndex = 0
+    line$ = ""
+    word$ = ""
+    total = len(full$)
+
+    ` walk one character past the end, so that the last word gets handled like the others
+    for n = 1 to total + 1
+        isWordEnd = 1
+        if n <= total
+            ch$ = mid$(full$, n)
+            if asc(ch$) <> 32
+                isWordEnd = 0
+                word$ = word$ + ch$
+            endif
+        endif
+
+        if isWordEnd and len(word$) > 0
+            candidate$ = word$
+            if len(line$) > 0 then candidate$ = line$ + " " + word$
+
+            ` let the text sprite measure how wide the line would be with the word on it
+            set text INFO_DESC_TEXT_IDS(lineIndex), candidate$
+            tooWide = get text size x(INFO_DESC_TEXT_IDS(lineIndex)) > maxWidth
+
+            if tooWide and len(line$) > 0 and lineIndex < INFO_DESC_LINE_COUNT - 1
+                ` the word starts the next line instead
+                set text INFO_DESC_TEXT_IDS(lineIndex), line$
+                lineIndex = lineIndex + 1
+                line$ = word$
+            else
+                line$ = candidate$
+            endif
+            word$ = ""
+        endif
+    next
+
+    set text INFO_DESC_TEXT_IDS(lineIndex), line$
+endfunction lineIndex + 1
+
+
+` an info border is 4 thin sprites that make a rectangle outline.
+function createInfoBorder(drawOrder)
+    b as infoBorder
+    reserve sprite id(b.topId)
+    reserve sprite id(b.bottomId)
+    reserve sprite id(b.leftId)
+    reserve sprite id(b.rightId)
+
+    setupInfoBorderSprite(b.topId, drawOrder)
+    setupInfoBorderSprite(b.bottomId, drawOrder)
+    setupInfoBorderSprite(b.leftId, drawOrder)
+    setupInfoBorderSprite(b.rightId, drawOrder)
+endfunction b
+
+function setupInfoBorderSprite(spriteId, drawOrder)
+    sprite spriteId, 0, 0, TEX_PIXEL
+    set sprite offset spriteId, 0, 0
+    order sprite spriteId, drawOrder
+    hide sprite spriteId
+endfunction
+
+function layoutInfoBorder(b as infoBorder, x, y, w, h)
+    position sprite b.topId, x, y
+    size sprite b.topId, w, 1
+
+    position sprite b.bottomId, x, y + h - 1
+    size sprite b.bottomId, w, 1
+
+    position sprite b.leftId, x, y
+    size sprite b.leftId, 1, h
+
+    position sprite b.rightId, x + w - 1, y
+    size sprite b.rightId, 1, h
+endfunction
+
+function colorInfoBorder(b as infoBorder, colorCode)
+    color sprite b.topId, colorCode
+    color sprite b.bottomId, colorCode
+    color sprite b.leftId, colorCode
+    color sprite b.rightId, colorCode
+endfunction
+
+function showInfoBorder(b as infoBorder, isVisible)
+    if isVisible
+        show sprite b.topId
+        show sprite b.bottomId
+        show sprite b.leftId
+        show sprite b.rightId
+    else
+        hide sprite b.topId
+        hide sprite b.bottomId
+        hide sprite b.leftId
+        hide sprite b.rightId
+    endif
+endfunction

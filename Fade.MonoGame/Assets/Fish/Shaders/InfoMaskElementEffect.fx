@@ -23,6 +23,11 @@ float Time;
 float2 Resolution;
 float TimeSpeed = 50.0;
 
+// the size of the sprite in pixels, so that the edge can be measured in pixels.
+float2 Size = float2(64, 64);
+float Radius = 5.0;
+float Feather = 4.0;
+
 struct VertexShaderOutput
 {
 	float4 Position : SV_POSITION;
@@ -32,10 +37,14 @@ struct VertexShaderOutput
 
 float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 {
-	float d = length(.5 - uv);
+	// signed distance, in pixels, to the edge of a rounded box that fills the sprite.
+	float2 p = (uv - .5) * Size;
+	float2 q = abs(p) - (Size * .5 - Radius);
+	float d = length(max(q, 0)) + min(max(q.x, q.y), 0) - Radius;
 
-	float4 finalColor = float4(1 - (d*1.44), 1, 1, 1);
-    return finalColor;
+	// 1 inside the box, fading to 0 at the edge.
+	float hole = saturate(-d / Feather);
+	return float4(hole, hole, hole, 1);
 }
 
 technique SpriteDrawing

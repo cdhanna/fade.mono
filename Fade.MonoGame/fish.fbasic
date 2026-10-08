@@ -93,10 +93,10 @@ gosub setup_abilities
 gosub load_textures
 gosub load_audio
 gosub load_fonts
+gosub setup_infos
 gosub setup_grid
 gosub setup_selection
 gosub setup_swap_tweens
-gosub setup_infos
 gosub setup_score
 gosub setup_passives
 gosub setup_moves
@@ -120,11 +120,11 @@ do
     ` TODO: stupid FX system loses parameters between reloads, so best to s8et them in a loop. 
     set effect param float 1, "TimeSpeed", 1
 
-    gosub frame_info_render
+    gosub frame_info_toggle
 
     if INFO_MODE
         ` handle info mode.
-        
+        gosub handle_info_input
 
     else 
         ` handle the gameplay.
@@ -135,6 +135,7 @@ do
 
     endif
 
+    gosub frame_info_render
     gosub update_frame
 
     sync 

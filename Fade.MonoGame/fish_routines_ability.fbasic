@@ -222,6 +222,9 @@ setup_passives:
 
     next
 
+    ` until there is a passive to explain, explain the empty space. 
+    global INFO_INDEX_PASSIVES
+    INFO_INDEX_PASSIVES = allocateInfoBlob(WORLD_WIDTH - 124, WORLD_HEIGHT - 30, 112, 18, "Passives", "Upgrades that are always switched on are listed here.")
     
 return
 
@@ -255,6 +258,9 @@ setup_moves:
 
     next
 
+    ` until there is a move to explain, explain the empty space. 
+    global INFO_INDEX_MOVES
+    INFO_INDEX_MOVES = allocateInfoBlob(12, WORLD_HEIGHT - 30, 124, 18, "Special Moves", "Upgrades that give you a new kind of move are listed here.")
     
 return
 
@@ -485,6 +491,10 @@ handle_ability_selection:
                     PASSIVE_COUNT = PASSIVE_COUNT + 1
                     create basic tween binding.fadeTweenId, 0, 1, 400, 0
                     CARDS(binding.abilityIndex).obtained = 1
+
+                    ` the passive explains itself in info mode, instead of the empty space
+                    setInfoBlobEnabled(INFO_INDEX_PASSIVES, 0)
+                    infoIndex = allocateInfoBlob(WORLD_WIDTH - 124, WORLD_HEIGHT - 30 - (PASSIVE_COUNT - 1) * 18, 112, 18, CARDS(binding.abilityIndex).name$, CARDS(binding.abilityIndex).desc$ + ". This is a passive, so it is always switched on.")
                 endcase
 
                 ` when it is an instant, go handle it elsewhere, because it is a big old select statement itself...
@@ -510,6 +520,10 @@ handle_ability_selection:
                     MOVE_ABILITY_COUNT = MOVE_ABILITY_COUNT + 1
                     create basic tween moveBinding.fadeTweenId, 0, 1, 400, 0
                     CARDS(moveBinding.abilityIndex).obtained = 1
+
+                    ` the move explains itself in info mode, instead of the empty space
+                    setInfoBlobEnabled(INFO_INDEX_MOVES, 0)
+                    infoIndex = allocateInfoBlob(12, WORLD_HEIGHT - 30 - (MOVE_ABILITY_COUNT - 1) * 18, 124, 18, CARDS(moveBinding.abilityIndex).name$, CARDS(moveBinding.abilityIndex).desc$ + ". Hold " + moveBinding.key$ + " and press an arrow to use it. It recharges after " + str$(moveBinding.resetTimer) + " moves.")
                 endcase
             endselect
 

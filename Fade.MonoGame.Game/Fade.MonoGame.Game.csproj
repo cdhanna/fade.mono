@@ -237,7 +237,7 @@
             <Output TaskParameter="TargetOutputs" ItemName="_FadeContentCli" />
         </MSBuild>
         <!-- Batches over the variants: one CLI run each, into its own directory. -->
-        <Exec Command="dotnet &quot;@(_FadeContentCli)&quot; --platform %(_EngineShaderVariant.Identity) --source &quot;$(_EngineShaderSrcDir)&quot; --output &quot;$(_EngineShaderObjRoot)%(_EngineShaderVariant.Identity)&quot; --intermediate &quot;$(_EngineShaderObjRoot)%(_EngineShaderVariant.Identity)\obj&quot;"
+        <Exec Command="dotnet &quot;@(_FadeContentCli)&quot; --platform %(_EngineShaderVariant.Identity) --source &quot;$(_EngineShaderSrcDir.TrimEnd('\'))&quot; --output &quot;$(_EngineShaderObjRoot)%(_EngineShaderVariant.Identity)&quot; --intermediate &quot;$(_EngineShaderObjRoot)%(_EngineShaderVariant.Identity)\obj&quot;"
               CustomErrorRegularExpression="\[E\] .+" />
     </Target>
 

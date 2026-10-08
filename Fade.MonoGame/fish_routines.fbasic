@@ -77,8 +77,6 @@ return
 
 
 load_textures:
-    global TEX_PIXEL = 0 `magic texture that always exists
-
     global TEX_CRAB
     global TEX_WORM
 
@@ -206,6 +204,9 @@ setup_grid:
 
         next
     next
+
+    ` the sprites are centered on their cell position, so the grid starts half a cell early
+    infoIndex = allocateInfoBlob(GRID_POS.x - CELL_SIZE / 2, GRID_POS.y - CELL_SIZE / 2, CELL_COLUMN_COUNT * CELL_SIZE, CELL_ROW_COUNT * CELL_SIZE, "The Fish", "Arrow keys move the cursor. Hold space and press an arrow to swap two fish. Connect three or more of the same kind to pop them.")
 return
 
 setup_score:
@@ -218,6 +219,7 @@ setup_score:
     global SCORE_BAR as progressBar = createProgressBar(SCORE_POS, SCORE_SIZE)
     SCORE_BAR.startVal = 0
     SCORE_BAR.endVal = 100
+    infoIndex = allocateInfoBlob(SCORE_POS.x - 4, SCORE_POS.y - 16, SCORE_SIZE.x + 8, 34, "Round Progress", "Popping fish fills the bar, and bigger groups are worth more. Fill it to finish the round and pick an upgrade.")
     
     global dim PROGRESS_BARS(1) as progressBar
     global PROGRESS_BAR_COUNT = 1
@@ -244,7 +246,7 @@ setup_score:
     set text offset MOVE_TEXT_ID, 0, 0
     color text MOVE_TEXT_ID, rgb(64, 128, 255, 200)
     enable text drop shadow MOVE_TEXT_ID, 2, -2, rgb(0,0,0)
-    infoIndex = allocateInfoBlob(32 - 4, SCORE_POS.y - 16 - 2, 50, 50)
+    infoIndex = allocateInfoBlob(32 - 4, SCORE_POS.y - 16 - 2, 56, 56, "Moves", "How many swaps you have made so far.")
 
 
     ` re-use id, and set up "rounds left" label on right
@@ -254,7 +256,7 @@ setup_score:
     set text offset MOVE_TEXT_ID, 1, 0
     color text MOVE_TEXT_ID, rgb(64, 128, 255, 200)
     enable text drop shadow MOVE_TEXT_ID, 2, -2, rgb(0,0,0)
-    infoIndex = allocateInfoBlob(480 - 32 - 4, SCORE_POS.y - 16 - 2, 100, 50)
+    infoIndex = allocateInfoBlob(570 - 32 - 104, SCORE_POS.y - 16 - 2, 108, 56, "Rounds Left", "How many rounds are left to play. Every round needs twice the score of the one before.")
 
 
     reserve text id(MOVE_COUNT_TEXT_ID)
