@@ -19,6 +19,10 @@ public static class InputSystem
     // but sitting on the desk does not count, so this is what on-screen prompts should follow.
     public static int lastDevice, oldLastDevice;
 
+    // Whether pressing escape closes the window. It does until a game says otherwise, because
+    // that is the quickest way out of a program that is still being written.
+    public static bool escapeQuits = true;
+
     // Every button that counts as "the player touched the controller".
     private static readonly Buttons[] _padButtons =
     {
@@ -42,6 +46,7 @@ public static class InputSystem
         oldGamePadState = default;
         lastDevice = DEVICE_KEYBOARD;
         oldLastDevice = DEVICE_KEYBOARD;
+        escapeQuits = true;
     }
 
     public static void ApplyNewMouse(ref MouseState next, ref KeyboardState nextKeyboard)

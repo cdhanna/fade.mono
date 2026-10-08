@@ -1317,6 +1317,64 @@ public partial class FadeMonoGameCommands
         return src.Height;
     }
 
+    /// <summary>
+    /// <para>Returns the sprite's current X scale, where <c>1</c> is the texture frame's own width.</para>
+    /// </summary>
+    /// <remarks>
+    /// This is whatever <see cref="ScaleSprite">scale sprite</see> or <see cref="SizeSprite">size sprite</see>
+    /// last left it at. Multiply it by <see cref="GetSpriteWidth">sprite width</see> to get the on-screen
+    /// width in pixels, which is handy for passing a sprite's real size to a shader.
+    /// </remarks>
+    /// <example>
+    /// Work out how wide a sprite is on screen.
+    /// <code>
+    /// texture 1, "ghost"
+    /// sprite 1, 200, 100, 1
+    /// size sprite 1, 48, 48
+    /// w# = sprite width(1) * sprite scale x(1)
+    /// </code>
+    /// </example>
+    /// <param name="spriteId">The sprite to measure.</param>
+    /// <returns>The X scale multiplier.</returns>
+    /// <seealso cref="GetSpriteScaleY">sprite scale y</seealso>
+    /// <seealso cref="GetSpriteWidth">sprite width</seealso>
+    /// <seealso cref="ScaleSprite">scale sprite</seealso>
+    [FadeBasicCommand("sprite scale x")]
+    public static float GetSpriteScaleX(int spriteId)
+    {
+        SpriteSystem.GetSpriteIndex(spriteId, out _, out var sprite);
+        return sprite.scale.X;
+    }
+
+    /// <summary>
+    /// <para>Returns the sprite's current Y scale, where <c>1</c> is the texture frame's own height.</para>
+    /// </summary>
+    /// <remarks>
+    /// This is whatever <see cref="ScaleSprite">scale sprite</see> or <see cref="SizeSprite">size sprite</see>
+    /// last left it at. Multiply it by <see cref="GetSpriteHeight">sprite height</see> to get the on-screen
+    /// height in pixels.
+    /// </remarks>
+    /// <example>
+    /// Work out how tall a sprite is on screen.
+    /// <code>
+    /// texture 1, "ghost"
+    /// sprite 1, 200, 100, 1
+    /// size sprite 1, 48, 48
+    /// h# = sprite height(1) * sprite scale y(1)
+    /// </code>
+    /// </example>
+    /// <param name="spriteId">The sprite to measure.</param>
+    /// <returns>The Y scale multiplier.</returns>
+    /// <seealso cref="GetSpriteScaleX">sprite scale x</seealso>
+    /// <seealso cref="GetSpriteHeight">sprite height</seealso>
+    /// <seealso cref="ScaleSprite">scale sprite</seealso>
+    [FadeBasicCommand("sprite scale y")]
+    public static float GetSpriteScaleY(int spriteId)
+    {
+        SpriteSystem.GetSpriteIndex(spriteId, out _, out var sprite);
+        return sprite.scale.Y;
+    }
+
 
     /// <summary>
     /// <para>Returns the current X position of a sprite.</para>

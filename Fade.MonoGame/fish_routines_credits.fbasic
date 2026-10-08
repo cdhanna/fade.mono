@@ -1,0 +1,329 @@
+goto routines_credits_exit
+
+remstart
+    THE CREDITS, AND THE SPLASH SCREEN
+    the credits are a list of lines that roll up the screen from the bottom. a line is either some text
+    or a picture. they are drawn into the menu's render target, in place of the menu, so they have the
+    same background that the menu has. picking "Credits" on the menu starts them, and they can be skipped.
+
+    the splash screen is the first thing the game shows. it is the two logos on a dark screen for a moment,
+    and then the wave of bubbles brings in the main menu.
+
+    two environment variables change how the game starts, for when the intro is in the way:
+        FISH_SKIP_SPLASH    go straight to the main menu
+        FISH_SKIP_MENU      go straight to the game
+remend
+
+setup_credits:
+    ` the globals are declared in the fish headers, so that functions can use them no matter where they are called from
+
+    texture reserve texture id(TEX_LOGO_FADE), "Fish/Textures/Logos/fade_ghost"
+    texture reserve texture id(TEX_LOGO_MONOGAME), "Fish/Textures/Logos/monogame"
+
+    ` TODO: this is placeholder art. it is 32 by 48, and gets drawn twice as big.
+    texture reserve texture id(TEX_CREDIT_CHRIS), "Fish/Textures/Logos/chris_placeholder"
+
+    ` the credits are drawn to a render target of their own, which is see-through wherever there is nothing.
+    ` then one sprite draws that render target into the menu, with an effect that fades the credits in as
+    ` they come up from the bottom of the screen, and out again as they leave the top. so they never run
+    ` through the hint at the bottom, and nothing has to be put in front of them to hide them.
+    reserve render target id(TARGET_CREDITS)
+    render target TARGET_CREDITS
+    set render target background color TARGET_CREDITS, rgb(0, 0, 0, 0)
+
+    reserve effect id(creditFxId)
+    effect creditFxId, "Fish/Shaders/CreditFadeEffect"
+
+    reserve sprite id(creditViewSprite)
+    sprite creditViewSprite, 0, 0, render target texture(TARGET_CREDITS)
+    set sprite offset creditViewSprite, 0, 0
+    size sprite creditViewSprite, WORLD_WIDTH, WORLD_HEIGHT
+    order sprite creditViewSprite, ORDER_MENU_TEXT
+    set sprite effect creditViewSprite, creditFxId
+    set sprite render target creditViewSprite, TARGET_MENU
+    hide sprite creditViewSprite
+
+    ` the lines of the credits. the first number is how far down the roll the line is.
+    addCreditText(0, 18, "Created by", 0)
+    addCreditText(24, 40, "Chris Hanna", 1)
+    addCreditSprite(WORLD_WIDTH / 2 + 170, 40, TEX_CREDIT_CHRIS, 64, 96)
+
+    addCreditText(120, 18, "Dedicated to my wife,", 0)
+    addCreditText(144, 40, "Ana", 1)
+
+    ` the two logos go by side by side, with what they are for underneath
+    addCreditSprite(WORLD_WIDTH / 2 - 50, 262, TEX_LOGO_FADE, 64, 64)
+    addCreditSprite(WORLD_WIDTH / 2 + 50, 262, TEX_LOGO_MONOGAME, 64, 64)
+    addCreditText(306, 22, "Made with Fade Basic, and MonoGame", 1)
+
+    ` the melodies in the music are adapted from these. they are written in setup_melodies, in fish_routines_music.
+    addCreditText(400, 18, "Music adapted from the works of", 0)
+    addCreditText(424, 40, "Claude Debussy", 1)
+    addCreditText(470, 16, "Clair de Lune, Arabesque No. 1, La fille aux cheveux de lin", 0)
+    addCreditText(506, 28, "and Erik Satie", 1)
+    addCreditText(538, 16, "Gymnopedie No. 1", 0)
+
+    ` the pictures of the fish are from a pack by pixelGnome
+    addCreditText(630, 18, "Fish icons by", 0)
+    addCreditText(654, 40, "pixelGnome", 1)
+    addCreditText(700, 16, "pixelgnome.itch.io/fish", 0)
+
+    ` CREDIT_LENGTH, in the fish headers, is where the bottom of this last line is
+    addCreditText(800, 28, "Thanks for playing, friend", 1)
+
+    ` the splash screen is drawn onto the screen itself, not into the menu. the bubbles wipe the menu in over it.
+    reserve sprite id(SPLASH_FADE_SPRITE)
+    sprite SPLASH_FADE_SPRITE, WORLD_WIDTH / 2 - 60, 130, TEX_LOGO_FADE
+    order sprite SPLASH_FADE_SPRITE, ORDER_MENU - 1
+    hide sprite SPLASH_FADE_SPRITE
+
+    reserve sprite id(SPLASH_MONOGAME_SPRITE)
+    sprite SPLASH_MONOGAME_SPRITE, WORLD_WIDTH / 2 + 60, 130, TEX_LOGO_MONOGAME
+    order sprite SPLASH_MONOGAME_SPRITE, ORDER_MENU - 1
+    hide sprite SPLASH_MONOGAME_SPRITE
+
+    reserve text id(SPLASH_TEXT_ID)
+    text SPLASH_TEXT_ID, WORLD_WIDTH / 2, 190, SCORE_FONT, "Made with Fade Basic, and MonoGame"
+    size text y SPLASH_TEXT_ID, 20
+    set text offset SPLASH_TEXT_ID, .5, 0
+    color text SPLASH_TEXT_ID, rgb(150, 190, 255)
+    order text SPLASH_TEXT_ID, ORDER_MENU - 1
+    hide text SPLASH_TEXT_ID
+
+    reserve tween id(SPLASH_TWEEN_ID)
+return
+
+
+` the very start of the game. setup_menu ends by coming here.
+menu_startup:
+    gosub menu_open_main
+
+    ` straight to the game
+    if is env set("FISH_SKIP_MENU")
+        skipMainMenu()
+        return
+    endif
+
+    if is env set("FISH_SKIP_SPLASH") = 0
+        gosub menu_run_splash
+        return
+    endif
+
+    ` straight to the main menu. the screen is drawn before the menu's render target is, so the very
+    ` first frame has no menu to show yet. the cover hides the game for that one frame.
+    show sprite MENU_COMPOSITE_SPRITE
+    show sprite MENU_COVER_SPRITE
+    gosub frame_menu_render
+    sync
+    hide sprite MENU_COVER_SPRITE
+return
+
+
+` show the logos for a moment, and then let the bubbles bring in the main menu.
+menu_run_splash:
+
+    ` the cover hides the game, and the logos go on top of the cover
+    color sprite MENU_COVER_SPRITE, rgb(10, 14, 30)
+    show sprite MENU_COVER_SPRITE
+    show sprite SPLASH_FADE_SPRITE
+    show sprite SPLASH_MONOGAME_SPRITE
+    show text SPLASH_TEXT_ID
+
+    create basic tween SPLASH_TWEEN_ID, 0, 255, 400, 0
+    splashStart = game ms()
+    do
+        ` the watery wobble over the whole screen. the main loop sets this every frame, but the splash
+        ` screen comes before the main loop, and without it the wobble runs so fast that it cannot be seen.
+        set effect param float 1, "TimeSpeed", 1
+
+        splashAlpha = tweenVal(SPLASH_TWEEN_ID)
+        set sprite alpha SPLASH_FADE_SPRITE, splashAlpha
+        set sprite alpha SPLASH_MONOGAME_SPRITE, splashAlpha
+        set text alpha SPLASH_TEXT_ID, splashAlpha
+
+        ` the menu is not on the screen yet, but this keeps it drawn and ready for when the bubbles get to it
+        gosub frame_menu_render
+        sync
+
+        ` it does not have to be sat through
+        splashAge = game ms() - splashStart
+        if splashAge > SPLASH_DURATION then exit
+        if new action down(ACT_CONFIRM) then exit
+    loop
+
+    TRANSITION_TO_MENU = 1
+    gosub menu_transition
+
+    ` the menu covers everything now, so the splash screen can be put away underneath it
+    hide sprite SPLASH_FADE_SPRITE
+    hide sprite SPLASH_MONOGAME_SPRITE
+    hide text SPLASH_TEXT_ID
+    hide sprite MENU_COVER_SPRITE
+    color sprite MENU_COVER_SPRITE, rgb(32, 40, 64)
+return
+
+
+` roll the credits, in place of the menu. this comes back when they have finished, or have been skipped.
+menu_run_credits:
+
+    ` the menu gets out of the way, and the hint says how to stop
+    showMenuChrome(0)
+    set text MENU_HINT_TEXT_ID, "{dir} faster, or back    {confirm} skip"
+    size text y MENU_HINT_TEXT_ID, 16
+
+    ` the hint is fainter than it is on the menu, because the credits are the thing to look at.
+    color text MENU_HINT_TEXT_ID, rgb(64, 128, 255, 130)
+    show sprite creditViewSprite
+
+    ` running the credits backwards stops while the first lines are still on the screen, instead of
+    ` going all the way back to the empty screen that they start from.
+    creditReverseStop = 150
+
+    for creditI = 0 to CREDIT_COUNT - 1
+        if CREDIT_LINES(creditI).isSprite
+            show sprite CREDIT_LINES(creditI).id
+        else
+            show text CREDIT_LINES(creditI).id
+        endif
+    next
+
+    ` how far the roll has gone, in pixels. everything starts just below the bottom of the screen.
+    creditRolled# = 0
+    creditLast = game ms()
+    do
+        ` holding down hurries the credits along, and holding up runs them backwards
+        creditRate# = CREDIT_SPEED
+        if action down(ACT_DOWN) then creditRate# = CREDIT_SPEED * 6
+        if action down(ACT_UP) then creditRate# = 0 - CREDIT_SPEED * 5
+
+        ` the roll moves by how long the last frame took, so that it is the same speed on every computer
+        creditNow = game ms()
+        creditElapsed = creditNow - creditLast
+        creditLast = creditNow
+        creditBefore# = creditRolled#
+        creditRolled# = creditRolled# + creditElapsed * creditRate# * .001
+
+        ` going backwards cannot take the roll below where it stops. if the roll has not even got
+        ` that far yet, then going backwards does not move it at all.
+        if creditRate# < 0
+            if creditRolled# < creditReverseStop
+                creditRolled# = creditBefore#
+                if creditBefore# > creditReverseStop then creditRolled# = creditReverseStop
+            endif
+        endif
+        creditScroll = creditRolled#
+
+        for creditI = 0 to CREDIT_COUNT - 1
+            credit = CREDIT_LINES(creditI)
+            creditY = WORLD_HEIGHT + 10 + credit.y - creditScroll
+            if credit.isSprite
+                position sprite credit.id, credit.x, creditY
+            else
+                set text position credit.id, credit.x, creditY
+            endif
+        next
+
+        gosub frame_menu_render
+        sync
+
+        ` the last line has gone off of the top
+        if creditScroll > CREDIT_LENGTH + WORLD_HEIGHT + 20 then exit
+
+        ` these are checked after the frame, so that the press that picked "Credits" is not the press that skips them
+        if new action down(ACT_CONFIRM) then exit
+        if new action down(ACT_PAUSE) then exit
+    loop
+
+    for creditI = 0 to CREDIT_COUNT - 1
+        if CREDIT_LINES(creditI).isSprite
+            hide sprite CREDIT_LINES(creditI).id
+        else
+            hide text CREDIT_LINES(creditI).id
+        endif
+    next
+
+    ` the hint goes back to how the menu has it
+    hide sprite creditViewSprite
+    color text MENU_HINT_TEXT_ID, rgb(64, 128, 255)
+
+    ` back to whichever menu the credits were picked from, with "Credits" highlighted again.
+    ` the main menu does not have the "Resume" line, so its lines are counted from "New Game".
+    showMenuChrome(1)
+    if MENU_MODE = MENU_MODE_PAUSE
+        setMenuPage(MENU_PAGE_PAUSE)
+        selectMenuItem(MENU_ITEM_CREDITS, 0)
+    else
+        setMenuPage(MENU_PAGE_MAIN)
+        selectMenuItem(MENU_ITEM_CREDITS - MENU_ITEM_NEW_GAME, 0)
+    endif
+return
+
+
+routines_credits_exit:
+
+
+` add a line of text to the credits. y is how far down the roll it is, and height is how tall the letters are.
+` the bright lines are the names, and the others are what the names are for.
+function addCreditText(y, height, words$, bright)
+    entry as creditLine
+    entry.isSprite = 0
+    entry.x = WORLD_WIDTH / 2
+    entry.y = y
+
+    reserve text id(entry.id)
+    text entry.id, entry.x, 0, SCORE_FONT, words$
+    size text y entry.id, height
+    set text offset entry.id, .5, 0
+    if bright
+        color text entry.id, rgb(255, 255, 255)
+    else
+        color text entry.id, rgb(150, 190, 255)
+    endif
+    enable text drop shadow entry.id, 2, -2, rgb(0,0,0)
+    order text entry.id, ORDER_MENU_TEXT
+    set text render target entry.id, TARGET_CREDITS
+    hide text entry.id
+
+    CREDIT_LINES(CREDIT_COUNT) = entry
+    CREDIT_COUNT = CREDIT_COUNT + 1
+endfunction
+
+
+` add a picture to the credits. x and y are where the middle of it goes, and y is how far down the roll it is.
+function addCreditSprite(x, y, textureId, width, height)
+    entry as creditLine
+    entry.isSprite = 1
+    entry.x = x
+    entry.y = y
+
+    reserve sprite id(entry.id)
+    sprite entry.id, x, 0, textureId
+    size sprite entry.id, width, height
+    order sprite entry.id, ORDER_MENU_TEXT
+    set sprite render target entry.id, TARGET_CREDITS
+    hide sprite entry.id
+
+    CREDIT_LINES(CREDIT_COUNT) = entry
+    CREDIT_COUNT = CREDIT_COUNT + 1
+endfunction
+
+
+` hide or show the parts of the menu that are always there: the title, the panel, the cursor and the description.
+` hiding them hides the lines of the menu too. setMenuPage is what shows those again.
+function showMenuChrome(isVisible)
+    showInfoBorder(MENU_PANEL_BORDER, isVisible)
+    showInfoBorder(MENU_CURSOR, isVisible)
+
+    if isVisible
+        show sprite MENU_PANEL_SPRITE
+        show text MENU_TITLE_TEXT_ID
+        show text MENU_DESC_TEXT_ID
+    else
+        hide sprite MENU_PANEL_SPRITE
+        hide text MENU_TITLE_TEXT_ID
+        hide text MENU_DESC_TEXT_ID
+        for i = 0 to MENU_ITEM_COUNT - 1
+            hide text MENU_ITEMS(i).textId
+        next
+    endif
+endfunction

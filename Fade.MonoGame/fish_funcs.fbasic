@@ -76,11 +76,178 @@ function getImpossibleRandomValueForCell(cellId)
     endif
 endfunction getImpossibleRandomValue(leftValue, topValue)
 
+` send a ring out across the board from a spot, which tilts the fish as it passes.
+` the spot is in cells, and the ring starts `delay` milliseconds from now.
+function spawnShockwave(x#, y#, strength#, delay)
+    spawnShockwaveToward(x#, y#, 0, 0, strength#, delay, SHOCK_LIFE)
+endfunction
+
+` the same, but the ring is headed one way. it is strongest that way, it fades off to the sides, and
+` there is none of it behind. the direction is how many cells across and down, like a move is.
+function spawnShockwaveToward(x#, y#, dirX, dirY, strength#, delay, life)
+
+    ` use one that is not going. when they are all going, the oldest one has the least left to lose.
+    slot = -1
+    oldest = 0
+    for n = 0 to SHOCK_COUNT - 1
+        if SHOCKS(n).active = 0
+            slot = n
+            exit
+        endif
+        if SHOCKS(n).startMs < SHOCKS(oldest).startMs then oldest = n
+    next
+    if slot < 0 then slot = oldest
+
+    SHOCKS(slot) = {
+        active = 1
+        x# = x#
+        y# = y#
+        startMs = game ms() + delay
+        strength# = strength#
+        life = life
+        dirX# = dirX
+        dirY# = dirY
+    }
+endfunction
+
+` STACKS. the stack of a fish is kept on its cell, the same as its kind is. so whenever a fish moves
+` to a different cell, its stack has to be moved along with it. these do that.
+
+` two fish trade places
+function swapCellStacks(aIndex, bIndex)
+    tempStack = CELLS(aIndex).stack
+    tempShown# = CELLS(aIndex).stackShown#
+    CELLS(aIndex).stack = CELLS(bIndex).stack
+    CELLS(aIndex).stackShown# = CELLS(bIndex).stackShown#
+    CELLS(bIndex).stack = tempStack
+    CELLS(bIndex).stackShown# = tempShown#
+
+    ` a fish that is belly up stays that way
+    tempBelly = CELLS(aIndex).bellyUp
+    tempBellyShown# = CELLS(aIndex).bellyShown#
+    CELLS(aIndex).bellyUp = CELLS(bIndex).bellyUp
+    CELLS(aIndex).bellyShown# = CELLS(bIndex).bellyShown#
+    CELLS(bIndex).bellyUp = tempBelly
+    CELLS(bIndex).bellyShown# = tempBellyShown#
+endfunction
+
+` one fish takes the place of another
+function copyCellStack(fromIndex, toIndex)
+    CELLS(toIndex).stack = CELLS(fromIndex).stack
+    CELLS(toIndex).stackShown# = CELLS(fromIndex).stackShown#
+    CELLS(toIndex).bellyUp = CELLS(fromIndex).bellyUp
+    CELLS(toIndex).bellyShown# = CELLS(fromIndex).bellyShown#
+endfunction
+
+` a fish goes away, or a brand new one shows up
+function clearCellStack(index)
+    CELLS(index).stack = 0
+    CELLS(index).stackShown# = 0
+    CELLS(index).bellyUp = 0
+    CELLS(index).bellyShown# = 0
+endfunction
+
+` a fish just landed in this cell, from a row above it. with the "bottom feeder" card, a fish that lands
+` on the bottom row has a chance to pick up one more fish. the bubbles that show it off start `delay`
+` milliseconds from now, for a fish that is still on its way down.
+function fishHitBottom(index, delay)
+    if isAbility_BottomFeeder()
+        if CELLS(index).coord.y = CELL_ROW_COUNT - 1
+            ` the second copy of the card is the one doing the work, when it is owned
+            feederIndex = ABILITY_INDEX_BOTTOM_FEEDER
+            if CARDS(ABILITY_INDEX_BOTTOM_FEEDER_2).obtained > 0 then feederIndex = ABILITY_INDEX_BOTTOM_FEEDER_2
+            tryStackFish(index, getBottomFeederChance(), delay, feederIndex)
+        endif
+    endif
+endfunction
+
+` give the fish in this cell a chance, out of a hundred, to pick up one more fish for its stack.
+` a puff of bubbles shows it off, `delay` milliseconds from now.
+function tryStackFish(index, chance, delay, abilityIndex)
+    lucky = CELLS(index)
+    if lucky.stack < FISH_STACK_MAX
+        if rnd(100) < chance
+            CELLS(index).stack = lucky.stack + 1
+            showPassiveUsed(abilityIndex)
+            spawnBubbles(getCellX(lucky.coord.x), getCellY(lucky.coord.y), CELL_SIZE / 3, 10, delay, FISH_COLORS(getFishColorIndex(lucky.value)))
+        endif
+    endif
+endfunction
+
+` BOTTOMS UP. see fish_headers.
+
+` a move was made, and the board has settled. with the "bottoms up" card, that has a chance to turn
+` one fish on the board belly up. the fish under the cursor is left alone, because the cursor has to
+` come to a fish to pop it.
+function rollBellyUpFish()
+    if BELLY_UP_ROLL_DUE = 0 then exitfunction
+    BELLY_UP_ROLL_DUE = 0
+    if rnd(100) >= getBottomsUpChance() then exitfunction
+
+    cursorIndex = getCellIndex(SELECTION_POS)
+    startIndex = rnd(CELL_COUNT)
+    for n = 0 to CELL_COUNT - 1
+        index = (n + startIndex) mod CELL_COUNT
+        if index <> cursorIndex and CELLS(index).bellyUp = 0
+            unlucky = CELLS(index)
+            CELLS(index).bellyUp = 1
+            showPassiveUsed(ABILITY_INDEX_BOTTOMS_UP)
+            spawnBubbles(getCellX(unlucky.coord.x), getCellY(unlucky.coord.y), CELL_SIZE / 3, 10, 0, FISH_COLORS(getFishColorIndex(unlucky.value)))
+            exit
+        endif
+    next
+endfunction
+
+` the cursor just came to this cell. a fish that is belly up pops when that happens, and so does every
+` belly up fish right next to it. handle_combos does the popping, and after that it finds any combos
+` that the fish falling in have made.
+function popBellyUpFish(index)
+    touched = CELLS(index)
+    if touched.bellyUp = 0 then exitfunction
+
+    CELLS(index).comboForce = 1
+    if touched.coord.x > 0
+        if CELLS(index - 1).bellyUp then CELLS(index - 1).comboForce = 1
+    endif
+    if touched.coord.x < CELL_COLUMN_COUNT - 1
+        if CELLS(index + 1).bellyUp then CELLS(index + 1).comboForce = 1
+    endif
+    if touched.coord.y > 0
+        if CELLS(index - CELL_COLUMN_COUNT).bellyUp then CELLS(index - CELL_COLUMN_COUNT).comboForce = 1
+    endif
+    if touched.coord.y < CELL_ROW_COUNT - 1
+        if CELLS(index + CELL_COLUMN_COUNT).bellyUp then CELLS(index + CELL_COLUMN_COUNT).comboForce = 1
+    endif
+
+    REQUEST_COMBO_CHECK = 1
+endfunction
+
 function updateCell(c as cell)
     sprite c.spriteId, getCellX(c.coord.x), getCellY(c.coord.y), c.value
 endfunction
  
 function spawnScoreText(pos as vec, score$, delay)
+    textId = spawnScoreTextScaled(pos, score$, delay, 800, 1)
+endfunction textId
+
+` a score text that comes out of a fish on the board. the "mind expansion" card makes the cells of the
+` board smaller, and these shrink along with the fish, the same as the bubbles do.
+` the text is gone again `life` milliseconds after it shows up. 800 is the usual. a short one makes
+` room for the next text to come out of the same spot.
+function spawnBoardScoreText(pos as vec, score$, delay, life)
+    textId = spawnScoreTextScaled(pos, score$, delay, life, getBoardBubbleScale())
+endfunction textId
+
+` the one that does the work. `textScale#` is 1 for a text of the usual size.
+function spawnScoreTextScaled(pos as vec, score$, delay, life, textScale#)
+    ` a short one shrinks and fades more quickly, so that it still gets some time at full size
+    fadeTime = 200
+    shrinkTime = 300
+    if life < 600
+        fadeTime = 120
+        shrinkTime = 160
+    endif
+
     i = SCORE_TEXT_NUM
     SCORE_TEXT_NUM += 1
 
@@ -88,19 +255,25 @@ function spawnScoreText(pos as vec, score$, delay)
 
     txt = SCORE_TEXTS(i)
     txt.active = 1
-    
+    SCORE_TEXTS(i).scale# = textScale#`frame_texts needs it, to know how far to float the text
+
+    ` everything about the text is this many times as big: its letters, its shadow, and how far it moves
+    textHeight# = 24 * textScale#
+    textRise# = 15 * textScale#
+    textDrift# = (rnd(10) - 5) * textScale#
+
     set text txt.textId, score$
     set text position txt.textId, pos.x, pos.y
     set text alpha txt.textId, 0
-    size text y txt.textId, 24
+    size text y txt.textId, textHeight#
     rotate text txt.textId, rnd(10)*.05 - .25
-    enable text drop shadow txt.textId, 2, -4, rgb(0,0,40)
+    enable text drop shadow txt.textId, 2 * textScale#, -4 * textScale#, rgb(0,0,40)
 
-    create basic tween txt.floatTweenIdX, pos.x, pos.x + rnd(10)-5, 230, delay + 50
-    create basic tween txt.floatTweenIdY, pos.y, pos.y - 15, 260, delay + 50
+    create basic tween txt.floatTweenIdX, pos.x, pos.x + textDrift#, 230, delay + 50
+    create basic tween txt.floatTweenIdY, pos.y, pos.y - textRise#, 260, delay + 50
     create basic tween txt.fadeInTweenId,   0, 255,     100, delay
-    create basic tween txt.fadeTweenId,     255, 0,     200, 600 + delay 
-    create basic tween txt.scaleOutTweenId, 24, 4,      300, 500 + delay 
+    create basic tween txt.fadeTweenId,     255, 0,     fadeTime, delay + life - fadeTime
+    create basic tween txt.scaleOutTweenId, textHeight#, 4 * textScale#, shrinkTime, delay + life - shrinkTime
 
 endfunction txt.textId
 
@@ -298,6 +471,7 @@ endfunction target
 function getRandomValue()
     if (isAbility_Crabs())
         if rnd(10) > 7 `a 20 % chance to spawn a crab.
+            showPassiveUsed(ABILITY_INDEX_CRABS)
             exitfunction TEX_CRAB
         endif
     endif
@@ -305,6 +479,7 @@ function getRandomValue()
     if (isAbility_BirdFeast())
         ` worm is the last texture, so ignoring it is simple.
         if (rnd(10) > 7) ` a 20% chance to not pick worm.
+            showPassiveUsed(ABILITY_INDEX_BIRD_FEAST)
             exitfunction rnd(6) + 1
         endif
     endif
@@ -613,6 +788,9 @@ function doClone(start as vec, dir as vec)
     cells(bIndex).value = cells(aIndex).value
     ` cells(aIndex).value = t
 
+    ` the copy is a copy of the whole stack
+    copyCellStack(aIndex, bIndex)
+
     updateCell(cells(aIndex))
     updateCell(cells(bIndex))
 
@@ -722,59 +900,106 @@ function doShift(start as vec, dir as vec)
 
     ` actually update the map
     
+    ` the stacks move along with the fish. the one that falls off of the end comes back on at the start.
     temp = 0
+    tempStack = 0
+    tempShown# = 0
+    tempBelly = 0
+    tempBellyShown# = 0
     if (dir.x = 1)
         temp = cells(ai + (shiftSize - 1)).value
+        tempStack = cells(ai + (shiftSize - 1)).stack
+        tempShown# = cells(ai + (shiftSize - 1)).stackShown#
+        tempBelly = cells(ai + (shiftSize - 1)).bellyUp
+        tempBellyShown# = cells(ai + (shiftSize - 1)).bellyShown#
         for i = (shiftSize - 1) to 1 step -1
             index = ai + i
             cells(index).value = cells(index - 1).value
+            copyCellStack(index - 1, index)
             updateCell(cells(index))
         next
-            
+
         cells(ai).value = temp
+        cells(ai).stack = tempStack
+        cells(ai).stackShown# = tempShown#
+        cells(ai).bellyUp = tempBelly
+        cells(ai).bellyShown# = tempBellyShown#
         updateCell(cells(ai))
     endif
 
     if (dir.x = -1)
         temp = cells(ai).value
+        tempStack = cells(ai).stack
+        tempShown# = cells(ai).stackShown#
+        tempBelly = cells(ai).bellyUp
+        tempBellyShown# = cells(ai).bellyShown#
         for i = 0 to (shiftSize - 2)
             index = ai + i
             cells(index).value = cells(index + 1).value
+            copyCellStack(index + 1, index)
             updateCell(cells(index))
         next
-    
+
         cells(ai + shiftSize-1).value = temp
+        cells(ai + shiftSize-1).stack = tempStack
+        cells(ai + shiftSize-1).stackShown# = tempShown#
+        cells(ai + shiftSize-1).bellyUp = tempBelly
+        cells(ai + shiftSize-1).bellyShown# = tempBellyShown#
         updateCell(cells(ai + shiftSize-1))
     endif
 
     if (dir.y = 1)
         endIndex = ai + ((CELL_ROW_COUNT-1) * CELL_COLUMN_COUNT)
         temp = cells(endIndex).value
+        tempStack = cells(endIndex).stack
+        tempShown# = cells(endIndex).stackShown#
+        tempBelly = cells(endIndex).bellyUp
+        tempBellyShown# = cells(endIndex).bellyShown#
         for i = (shiftSize - 1) to 1 step -1
 
             index = ai + ((i) * CELL_COLUMN_COUNT)
             prevIndex = ai + ((i - 1) * CELL_COLUMN_COUNT)
             cells(index).value = cells(prevIndex).value
+            copyCellStack(prevIndex, index)
             updateCell(cells(index))
         next
-            
+
         cells(ai).value = temp
+        cells(ai).stack = tempStack
+        cells(ai).stackShown# = tempShown#
+        cells(ai).bellyUp = tempBelly
+        cells(ai).bellyShown# = tempBellyShown#
         updateCell(cells(ai))
+
+        ` the fish from the row above came down to the bottom row
+        fishHitBottom(endIndex, 0)
     endif
 
     if (dir.y = -1)
         endIndex = ai + ((CELL_ROW_COUNT-1) * CELL_COLUMN_COUNT)
         temp = cells(ai).value
+        tempStack = cells(ai).stack
+        tempShown# = cells(ai).stackShown#
+        tempBelly = cells(ai).bellyUp
+        tempBellyShown# = cells(ai).bellyShown#
         for i = 0 to (shiftSize - 2)
 
             index = ai + ((i) * CELL_COLUMN_COUNT)
             prevIndex = ai + ((i + 1) * CELL_COLUMN_COUNT)
             cells(index).value = cells(prevIndex).value
+            copyCellStack(prevIndex, index)
             updateCell(cells(index))
         next
-            
+
         cells(endIndex).value = temp
+        cells(endIndex).stack = tempStack
+        cells(endIndex).stackShown# = tempShown#
+        cells(endIndex).bellyUp = tempBelly
+        cells(endIndex).bellyShown# = tempBellyShown#
         updateCell(cells(endIndex))
+
+        ` the fish from the top row came around to the bottom row
+        fishHitBottom(endIndex, 0)
     endif
 
     registerMove(1)
@@ -840,9 +1065,13 @@ function doSwap(start as vec, dir as vec, doSwap)
         t = cells(bIndex).value
         cells(bIndex).value = cells(aIndex).value
         cells(aIndex).value = t
+        swapCellStacks(aIndex, bIndex)
 
         updateCell(cells(aIndex))
         updateCell(cells(bIndex))
+
+        ` a fish that gets swapped down to the bottom row did not land there, so it gets no chance
+        ` at a stack from the "bottom feeder" card
 
         registerMove(1)
     endif

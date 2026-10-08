@@ -126,6 +126,8 @@ setup_menu:
     load sfx clip reserve sfx clip id(SFX_CLIP_BUBBLES), "Fish/Audio/bubble-wave"
     sfx reserve sfx id(SFX_BUBBLES), SFX_CLIP_BUBBLES
     set sfx volume SFX_BUBBLES, 0
+    set sfx loop SFX_BUBBLES, 1
+    waveSfxStarted = 0 `menu_transition plays it the first time, and resumes it after that
     SFX_BUBBLES_VOLUME# = .2 `how loud the wave gets at its loudest
 
     reserve text id(MENU_TITLE_TEXT_ID)
@@ -164,8 +166,8 @@ setup_menu:
     }
     MENU_ITEMS(MENU_ITEM_CREDITS) = {
         name$ = "Credits"
-        desc$ = "Who made this. Not built yet."
-        ready = 0
+        desc$ = "Who made this."
+        ready = 1
     }
     MENU_ITEMS(MENU_ITEM_QUIT) = {
         name$ = "Quit"
@@ -189,14 +191,14 @@ setup_menu:
         desc$ = "How loud the sound effects are."
         ready = 1
     }
+    MENU_ITEMS(MENU_ITEM_SET_MUSIC) = {
+        name$ = "Music"
+        desc$ = "How loud the music is."
+        ready = 1
+    }
     MENU_ITEMS(MENU_ITEM_SET_FULLSCREEN) = {
         name$ = "Fullscreen"
         desc$ = "Fill the whole screen."
-        ready = 1
-    }
-    MENU_ITEMS(MENU_ITEM_SET_WINDOW) = {
-        name$ = "Window"
-        desc$ = "How big the window is."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_SET_BACK) = {
@@ -205,18 +207,31 @@ setup_menu:
         ready = 1
     }
 
-    ` the sizes that the window can be. the size that the game started at is one of them.
-    addWindowSize(960, 540)
-    addWindowSize(1280, 720)
-    addWindowSize(1600, 900)
-    addWindowSize(1920, 1080)
-    addWindowSize(2560, 1440)
-    OPTION_WINDOW = addWindowSize(SCREEN_WIDTH, SCREEN_HEIGHT)
-    OPTION_WINDOW_W = SCREEN_WIDTH
-    OPTION_WINDOW_H = SCREEN_HEIGHT
-
-    ` the player can also drag the edges of the window to make it any size they like
+    ` the size of the window is not an option. the player drags the edges of the window to make it any size they like.
+    ` and the window opens at the size they left it the last time the game was run.
     set window resizable 1
+    menuWindowRemembered = remember window size(1)
+    OPTION_WINDOW_W = screen width()
+    OPTION_WINDOW_H = screen height()
+
+    ` the options are remembered from the last time the game was run. the first time it is ever run,
+    ` there is nothing to remember, and they are what they would be anyway.
+    OPTION_SOUND = get pref(PREF_SOUND, 10)
+    OPTION_MUSIC = get pref(PREF_MUSIC, 10)
+    OPTION_FULLSCREEN = get pref(PREF_FULLSCREEN, 0)
+
+    ` the file they are kept in can be changed by hand, so do not trust it to be sensible
+    if OPTION_SOUND > 10 then OPTION_SOUND = 10
+    if OPTION_SOUND < 0 then OPTION_SOUND = 0
+    if OPTION_MUSIC > 10 then OPTION_MUSIC = 10
+    if OPTION_MUSIC < 0 then OPTION_MUSIC = 0
+    if OPTION_FULLSCREEN <> 0 then OPTION_FULLSCREEN = 1
+
+    set sfx group volume SFX_GROUP_SFX, OPTION_SOUND * .1
+    applyMusicVolume()
+    if OPTION_FULLSCREEN
+        set fullscreen 1
+    endif
 
     for menuI = 0 to MENU_ITEM_COUNT - 1
         reserve text id(MENU_ITEMS(menuI).textId)
@@ -289,13 +304,11 @@ setup_menu:
         BUBBLES(menuI) = bub
     next
 
-    ` the game opens on the main menu
-    gosub menu_open_main
-    show sprite MENU_COMPOSITE_SPRITE
-    show sprite MENU_COVER_SPRITE
-    gosub frame_menu_render
-    sync
-    hide sprite MENU_COVER_SPRITE
+    ` the credits and the splash screen are drawn with the menu, so they are set up with it
+    gosub setup_credits
+
+    ` the game opens on the splash screen, and then the main menu
+    gosub menu_startup
 
 return
 
@@ -311,15 +324,6 @@ frame_menu:
     ` on the options page, left and right change the highlighted setting instead of moving the highlight
     menuChange = 0
     if MENU_PAGE = MENU_PAGE_OPTIONS
-        ` the player may have dragged the window to a new size, so the line that shows the size keeps up with it
-        if OPTION_FULLSCREEN = 0
-            if screen width() <> OPTION_WINDOW_W or screen height() <> OPTION_WINDOW_H
-                OPTION_WINDOW_W = screen width()
-                OPTION_WINDOW_H = screen height()
-                refreshOptionLines()
-            endif
-        endif
-
         menuStep = 0
         if new action down(ACT_DOWN) then menuStep = 1
         if new action down(ACT_UP) then menuStep = -1
@@ -413,6 +417,10 @@ menu_pick:
             gosub menu_abandon_game
         endcase
 
+        case MENU_ITEM_CREDITS
+            gosub menu_run_credits
+        endcase
+
         case MENU_ITEM_OPTIONS
             setMenuPage(MENU_PAGE_OPTIONS)
             refreshOptionLines()
@@ -423,11 +431,11 @@ menu_pick:
         case MENU_ITEM_SET_SOUND
             changeMenuOption(MENU_ITEM_SET_SOUND, 1)
         endcase
+        case MENU_ITEM_SET_MUSIC
+            changeMenuOption(MENU_ITEM_SET_MUSIC, 1)
+        endcase
         case MENU_ITEM_SET_FULLSCREEN
             changeMenuOption(MENU_ITEM_SET_FULLSCREEN, 1)
-        endcase
-        case MENU_ITEM_SET_WINDOW
-            changeMenuOption(MENU_ITEM_SET_WINDOW, 1)
         endcase
 
         case MENU_ITEM_SET_BACK
@@ -578,15 +586,39 @@ menu_transition:
     if rnd(2) = 0 then sweepLean = 0 - sweepLean
     sweepBow = rnd(51) - 25
 
+    ` the wave sounds different every time too. it is higher or lower, it slides up or down a little as it
+    ` goes by, and it is a little louder or quieter. it also crosses from the side of the screen that is
+    ` ahead to the side that is behind. frame_transition does the sliding.
+    wavePitch# = (rnd(71) - 40) * .01
+    waveGlide# = (rnd(51) - 25) * .01
+    waveLoud# = .8 + rnd(31) * .01
+    wavePan# = .35
+    if sweepLean < 0 then wavePan# = -.35
+
     ` give every bubble a new spot in the wave
+    frontX = 0
+    frontSize = 0
     for menuI = 0 to BUBBLE_COUNT - 1
         bub = BUBBLES(menuI)
 
         if menuI < BUBBLE_FRONT_COUNT
-            ` the front is a row of big bubbles that overlap, so that there are no gaps between them
-            bub.x = menuI * WORLD_WIDTH / (BUBBLE_FRONT_COUNT - 1) + rnd(9) - 4
-            bub.offsetY = rnd(11) - 5
-            bub.size = 68 + rnd(16)
+            ` the front is a ragged row of big bubbles. they are different sizes, and a few are much bigger
+            ` than the rest. each one is pushed off of its spot in the row, and up or down.
+            bub.size = 64 + rnd(22)
+            if rnd(3) = 0 then bub.size = 84 + rnd(26)
+            bub.x = menuI * WORLD_WIDTH / (BUBBLE_FRONT_COUNT - 1) + rnd(25) - 12
+            bub.offsetY = rnd(37) - 18
+
+            ` the strip of tide under a bubble is narrower than the bubble is, so that its corners are hidden
+            ` inside of the bubble. the strips have to overlap, or there would be a gap in the mask. so a
+            ` bubble is never further from the one on its left than their two strips can reach.
+            if menuI > 0
+                frontGap = (frontSize + bub.size) / 2 - 14
+                if bub.x > frontX + frontGap then bub.x = frontX + frontGap
+            endif
+            frontX = bub.x
+            frontSize = bub.size
+            size sprite bub.tideSpriteId, bub.size - 12, WORLD_HEIGHT * 4
         else
             ` the rest are scattered ahead of the front and behind it. most are small, and some are not.
             bub.x = rnd(WORLD_WIDTH)
@@ -625,10 +657,16 @@ menu_transition:
     create basic tween TRANSITION_TWEEN_ID, 0, 1, TRANSITION_DURATION, 0
     set tween easing TRANSITION_TWEEN_ID, EASING_LINEAR
 
-    ` the wave sounds a little higher or lower every time. frame_transition fades it in and out.
+    ` the recording is a lot longer than the wave is, and it loops. it carries on from wherever it was
+    ` stopped the last time, so every wave gets a different part of it. frame_transition fades it in and out.
     set sfx volume SFX_BUBBLES, 0
-    set sfx pitch SFX_BUBBLES, (rnd(31) - 15) * .01
-    play sfx SFX_BUBBLES
+    set sfx pitch SFX_BUBBLES, wavePitch#
+    if waveSfxStarted
+        resume sfx SFX_BUBBLES
+    else
+        play sfx SFX_BUBBLES
+        waveSfxStarted = 1
+    endif
 
     while is tween done(TRANSITION_TWEEN_ID) < 1
         gosub frame_transition
@@ -645,7 +683,7 @@ menu_transition:
         hide sprite BUBBLES(menuI).spriteId
     next
 
-    ` the sound is longer than the wave is, and it has been faded out by now
+    ` the sound has been faded out by now. it is paused and not stopped, so that the next wave carries on from here.
     pause sfx SFX_BUBBLES
 
     ` the mask is full now. if the menu was being taken away, then none of it is being drawn any more.
@@ -694,7 +732,9 @@ frame_transition:
 
     ` the recording is much louder than the other sounds in the game. at full volume, the sound of
     ` the cursor moving is too quiet next to it to be heard.
-    set sfx volume SFX_BUBBLES, bubVolume# * SFX_BUBBLES_VOLUME#
+    set sfx volume SFX_BUBBLES, bubVolume# * SFX_BUBBLES_VOLUME# * waveLoud#
+    set sfx pitch SFX_BUBBLES, wavePitch# + waveGlide# * transitionNow#
+    set sfx pan SFX_BUBBLES, wavePan# * (transitionNow# * 2 - 1)
 
     transitionPrev# = transitionNow#
 return
@@ -710,8 +750,9 @@ frame_menu_render:
 
     menuMs = game ms()
 
-    ` the main loop does not run update_frame while a menu is up, so this keeps the bubbles going
+    ` the main loop does not run update_frame while a menu is up, so this keeps the bubbles and the music going
     updateBubbles()
+    updateMusic()
 
     ` the sound of the highlight moving
     set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
@@ -791,6 +832,7 @@ reset_game:
         CELLS(resetI).value = getImpossibleRandomValueForCell(resetI)
         CELLS(resetI).comboForce = 0
         CELLS(resetI).comboBlownUp = 0
+        clearCellStack(resetI)
         updateCell(CELLS(resetI))
         set sprite alpha CELLS(resetI).spriteId, 255
         hide sprite CELLS(resetI).fxSpriteId
@@ -804,6 +846,7 @@ reset_game:
     QUEUED_MOVE_TAIL = 0
     REQUEST_COMBO_CHECK = 0
     REQUEST_ABILITY_SELECTION = 0
+    BELLY_UP_ROLL_DUE = 0
 
     ` the score
     CURRENT_SCORE = 0
@@ -864,7 +907,7 @@ function setMenuPage(page)
         hint$ = "{dir} choose and change    {pause} back"
         first = MENU_ITEM_SET_SOUND
         last = MENU_ITEM_SET_BACK
-        MENU_WIDTH = 250
+        MENU_WIDTH = 220
     endif
 
     if page = MENU_PAGE_PAUSE
@@ -952,44 +995,15 @@ function selectMenuItem(index, duration)
 endfunction
 
 
-` add a size to the list of sizes that the window can be, and return where it is in the list.
-` a size that is already in the list is not added twice, and a size that is bigger than the monitor is not added at all.
-function addWindowSize(width, height)
-    for i = 0 to WINDOW_SIZE_MAX - 1
-        if i < WINDOW_SIZE_COUNT
-            if WINDOW_WIDTHS(i) = width and WINDOW_HEIGHTS(i) = height then exitfunction i
-        endif
-    next
-
-    if width > display width() or height > display height() then exitfunction 0
-    if WINDOW_SIZE_COUNT >= WINDOW_SIZE_MAX then exitfunction 0
-
-    index = WINDOW_SIZE_COUNT
-    WINDOW_WIDTHS(index) = width
-    WINDOW_HEIGHTS(index) = height
-    WINDOW_SIZE_COUNT = WINDOW_SIZE_COUNT + 1
-endfunction index
-
-
 ` write the settings onto the lines of the options page.
 function refreshOptionLines()
     set text MENU_ITEMS(MENU_ITEM_SET_SOUND).textId, "Sound    " + str$(OPTION_SOUND * 10) + "%"
+    set text MENU_ITEMS(MENU_ITEM_SET_MUSIC).textId, "Music    " + str$(OPTION_MUSIC * 10) + "%"
 
     if OPTION_FULLSCREEN
         set text MENU_ITEMS(MENU_ITEM_SET_FULLSCREEN).textId, "Fullscreen    on"
     else
         set text MENU_ITEMS(MENU_ITEM_SET_FULLSCREEN).textId, "Fullscreen    off"
-    endif
-
-    set text MENU_ITEMS(MENU_ITEM_SET_WINDOW).textId, "Window    " + str$(OPTION_WINDOW_W) + " x " + str$(OPTION_WINDOW_H)
-
-    ` the size of the window does not mean anything while the game is filling the screen
-    if OPTION_FULLSCREEN
-        MENU_ITEMS(MENU_ITEM_SET_WINDOW).ready = 0
-        MENU_ITEMS(MENU_ITEM_SET_WINDOW).desc$ = "The game is filling the screen."
-    else
-        MENU_ITEMS(MENU_ITEM_SET_WINDOW).ready = 1
-        MENU_ITEMS(MENU_ITEM_SET_WINDOW).desc$ = "How big the window is."
     endif
 endfunction
 
@@ -1003,36 +1017,39 @@ function changeMenuOption(item, change)
             if OPTION_SOUND > 10 then OPTION_SOUND = 10
             if OPTION_SOUND < 0 then OPTION_SOUND = 0
 
-            ` every sound in the game is in this group, so this turns all of them up or down
+            ` every sound that is not music is in this group, so this turns all of them up or down
             set sfx group volume SFX_GROUP_SFX, OPTION_SOUND * .1
+        endcase
+
+        case MENU_ITEM_SET_MUSIC
+            OPTION_MUSIC = OPTION_MUSIC + change
+            if OPTION_MUSIC > 10 then OPTION_MUSIC = 10
+            if OPTION_MUSIC < 0 then OPTION_MUSIC = 0
+            applyMusicVolume()
         endcase
 
         case MENU_ITEM_SET_FULLSCREEN
             OPTION_FULLSCREEN = 1 - OPTION_FULLSCREEN
+
+            ` the player may have dragged the window to some size of their own, so remember it on the way in
+            if OPTION_FULLSCREEN
+                OPTION_WINDOW_W = screen width()
+                OPTION_WINDOW_H = screen height()
+            endif
+
             set fullscreen OPTION_FULLSCREEN
 
-            ` leaving fullscreen leaves the window as big as the monitor, so it is put back to its own size
+            ` leaving fullscreen leaves the window as big as the monitor, so it is put back to the size it was
             if OPTION_FULLSCREEN = 0
                 set screen size OPTION_WINDOW_W, OPTION_WINDOW_H
             endif
         endcase
-
-        case MENU_ITEM_SET_WINDOW
-            if OPTION_FULLSCREEN
-                ` it cannot be changed right now, so it shakes its head.
-                create basic tween MENU_SHAKE_TWEEN_ID, 1, 0, 400, 0
-                exitfunction
-            endif
-
-            ` the sizes go around in a loop
-            OPTION_WINDOW = OPTION_WINDOW + change
-            if OPTION_WINDOW >= WINDOW_SIZE_COUNT then OPTION_WINDOW = 0
-            if OPTION_WINDOW < 0 then OPTION_WINDOW = WINDOW_SIZE_COUNT - 1
-            OPTION_WINDOW_W = WINDOW_WIDTHS(OPTION_WINDOW)
-            OPTION_WINDOW_H = WINDOW_HEIGHTS(OPTION_WINDOW)
-            set screen size OPTION_WINDOW_W, OPTION_WINDOW_H
-        endcase
     endselect
+
+    ` remember the options for the next time the game is run. only the one that changed gets written.
+    set pref PREF_SOUND, OPTION_SOUND
+    set pref PREF_MUSIC, OPTION_MUSIC
+    set pref PREF_FULLSCREEN, OPTION_FULLSCREEN
 
     ` the lines have changed, so write them again. selecting the line again colors it and fills in its description.
     refreshOptionLines()

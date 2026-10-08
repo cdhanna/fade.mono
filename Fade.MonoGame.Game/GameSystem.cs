@@ -27,6 +27,8 @@ public class GameSystem
         AudioSystem.Reset();
         AudioInstanceSystem.Reset();
         AudioMixSystem.Reset();
+        PrefsSystem.Reset();
+        WindowMemorySystem.Reset();
         CameraSystem.Reset();
         CollisionSystem.Reset();
         SpriteSystem.Reset();

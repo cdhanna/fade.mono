@@ -74,11 +74,14 @@ function updateBubbles()
         ` it has not shown up yet
         if floaty.delay > 0
             floaty.delay = floaty.delay - bubElapsed
-            if floaty.delay <= 0
-                show sprite floaty.spriteId
+            if floaty.delay > 0
+                FLOAT_BUBBLES(bubI) = floaty
+                skip
             endif
-            FLOAT_BUBBLES(bubI) = floaty
-            skip
+
+            ` it shows up on this frame, so it has to be moved on this frame too. its sprite is still
+            ` wherever the last bubble that used it popped.
+            show sprite floaty.spriteId
         endif
 
         floaty.age = floaty.age + bubElapsed
@@ -140,29 +143,46 @@ endfunction
 ` they start within `radius` pixels of the spot, and they show up `delay` milliseconds from now.
 ` about half of them are the color `tint`, and the rest are the pale blue of the bubbles in the menu.
 ` these are drawn on top of the fish, and they are the noisy kind.
+` these are the bubbles on the board, so they are as big as the board's cells say. see getBoardBubbleScale.
 function spawnBubbles(x, y, radius, count, delay, tint)
-    spawnBubblesOnLayer(x, y, radius, count, delay, tint, ORDER_FLOAT_BUBBLES, FLOAT_BUBBLE_LOUD_ODDS, 255)
+    spawnBubblesOnLayer(x, y, radius, count, delay, tint, ORDER_FLOAT_BUBBLES, FLOAT_BUBBLE_LOUD_ODDS, 255, getBoardBubbleScale())
 endfunction
 
 
 ` scatter some quiet, faint bubbles over a rectangle of the screen. this is the wake that a cursor leaves
 ` behind when it moves away from somewhere.
 function spawnWakeBubbles(x, y, width, height, count, tint, drawOrder)
+    spawnScaledWakeBubbles(x, y, width, height, count, tint, drawOrder, 1)
+endfunction
+
+
+` the same as spawnWakeBubbles, but the bubbles are `sizeScale#` times as big
+function spawnScaledWakeBubbles(x, y, width, height, count, tint, drawOrder, sizeScale#)
     for n = 1 to count
-        spawnBubblesOnLayer(x + rnd(width + 1), y + rnd(height + 1), 0, 1, 0, tint, drawOrder, FLOAT_BUBBLE_WAKE_LOUD_ODDS, FLOAT_BUBBLE_WAKE_ALPHA)
+        spawnBubblesOnLayer(x + rnd(width + 1), y + rnd(height + 1), 0, 1, 0, tint, drawOrder, FLOAT_BUBBLE_WAKE_LOUD_ODDS, FLOAT_BUBBLE_WAKE_ALPHA, sizeScale#)
     next
 endfunction
 
 
 ` the wake of the cursor on the board, which is one cell big
 function spawnCursorWake(column, row)
-    spawnWakeBubbles(getCellX(column) - CELL_SIZE / 3, getCellY(row) - CELL_SIZE / 3, (CELL_SIZE * 2) / 3, (CELL_SIZE * 2) / 3, 3, FLOAT_BUBBLE_WAKE_COLOR, ORDER_FLOAT_BUBBLES)
+    spawnScaledWakeBubbles(getCellX(column) - CELL_SIZE / 3, getCellY(row) - CELL_SIZE / 3, (CELL_SIZE * 2) / 3, (CELL_SIZE * 2) / 3, 3, FLOAT_BUBBLE_WAKE_COLOR, ORDER_FLOAT_BUBBLES, getBoardBubbleScale())
 endfunction
+
+
+` how big the bubbles on the board are, where 1 is the size that they are on the board that the game
+` starts with. the "mind expansion" card makes the cells smaller, and the bubbles shrink along with the fish.
+function getBoardBubbleScale()
+    cellNow# = CELL_SIZE
+    cellStart# = CELL_START_SIZE
+    boardScale# = cellNow# / cellStart#
+endfunction boardScale#
 
 
 ` the same as spawnBubbles, but it also says what the bubbles are drawn on top of, and how noisy they are.
 ` one bubble in `loudOdds` makes a sound when it pops. `alpha` is 255 for a solid bubble, and less for a faint one.
-function spawnBubblesOnLayer(x, y, radius, count, delay, tint, drawOrder, loudOdds, alpha)
+` `sizeScale#` is 1 for bubbles of the usual size, and less for smaller ones.
+function spawnBubblesOnLayer(x, y, radius, count, delay, tint, drawOrder, loudOdds, alpha, sizeScale#)
     for n = 1 to count
         i = FLOAT_BUBBLE_NEXT
         FLOAT_BUBBLE_NEXT = (FLOAT_BUBBLE_NEXT + 1) mod FLOAT_BUBBLE_COUNT
@@ -190,6 +210,10 @@ function spawnBubblesOnLayer(x, y, radius, count, delay, tint, drawOrder, loudOd
 
         ` the small ones float up faster than the big ones do
         b.rise = 62 + rnd(30) - b.size * 3
+
+        ` this goes after the rise, so that a shrunken bubble floats the same way that it would have
+        b.size = b.size * sizeScale# + .5
+        if b.size < 2 then b.size = 2
 
         b.loud = 0
         if rnd(loudOdds) = 0 then b.loud = 1

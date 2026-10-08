@@ -9,7 +9,7 @@ global SCORE_POS as vec = {
 
 
 global dim CARDS(16) as ability
-global CARD_LENGTH = 11
+global CARD_LENGTH = 15
 
 global CURRENT_MOVE_COUNT = 0
 global MOVE_COUNT_TEXT_ID
@@ -32,6 +32,10 @@ global ABILITY_INDEX_MOVE_BOMB3x3 = 7
 global ABILITY_INDEX_MOVE_LINE_OUT = 8
 #constant ABILITY_INDEX_MIND_EXPANSION 9
 global ABILITY_INDEX_THINK_BIGGER = 10
+global ABILITY_INDEX_BOTTOM_FEEDER = 11
+global ABILITY_INDEX_BOTTOM_FEEDER_2 = 12 `the second copy. it only gets offered once the first one is owned.
+global ABILITY_INDEX_CONTAGIOUS_SMILE = 13
+global ABILITY_INDEX_BOTTOMS_UP = 14
 
 ` ability type enum constants
 ` global ABILITY_TYPE_PASSIVE = 0
@@ -83,6 +87,71 @@ global ORDER_ABILITY_TEXT = ORDER_ABILITY_BACKDROP + 4
 global ORDER_FISH = 20
 global ORDER_SELECTION = 10
 
+` THE FISH EFFECT. every fish on the board is drawn with it. it tilts the fish like a card in 3d,
+` and it draws more copies of the fish stacked up behind. the routine that feeds it, frame_fish_fx, is in fish_routines.
+global FISH_FX_ID = 2
+global FISH_STACK_EASE# = .2 `how much of the way a stack moves toward its real count on a frame
+
+` STACKS. a cell can hold more fish, stacked up behind the one that shows. the stack goes wherever the fish
+` goes, and every fish in it scores when it pops. cards are the only way to get one.
+` with "bottom feeder", a fish that lands on the bottom row, from a row above it, has a chance to pick up
+` one more. fishHitBottom, in fish_funcs, is where that happens.
+` with "contagious smile", a fish that is right next to a fish that pops has a chance to. handle_combos does that.
+` when a stacked fish pops, the fish in its stack pop first, one at a time, and each one scores. the one in
+` front goes last.
+global FISH_STACK_MAX = 3 `the most fish that can be stacked up behind one. the fish effect cannot draw more.
+global FISH_STACK_POP_GAP = 380`how many milliseconds there are between one fish of a stack popping and the next
+global BOTTOM_FEEDER_CHANCE = 30 `how many landings in a hundred pick up a fish
+global BOTTOM_FEEDER_CHANCE_2 = 60 `and how many do with the second copy of the card
+global CONTAGIOUS_SMILE_CHANCE = 10 `how many fish in a hundred pick one up from a pop next to them, for every time the card has been taken
+global CONTAGIOUS_SMILE_MAX = 4 `how many times the card can be taken
+
+` BOTTOMS UP. with the "bottoms up" card, every move has a chance to turn one fish on the board belly up.
+` the fish rolls over, top over bottom, and stays that way wherever it goes, the same as a stack does.
+` when the cursor comes to a fish that is belly up, that fish pops, and so does every belly up fish
+` right next to it. they pop as a group of their own, however few of them there are.
+` rollBellyUpFish and popBellyUpFish, in fish_funcs, do those, and frame_fish_fx draws the fish turned over.
+global BOTTOMS_UP_CHANCE = 10 `how many moves in a hundred turn a fish over, for every time the card has been taken
+global BOTTOMS_UP_MAX = 3 `how many times the card can be taken
+global BELLY_UP_ROLL_DUE = 0 `1 when a move has been made, and the board has not settled since
+global BELLY_UP_EASE# = .2 `how much of the way a fish rolls toward where it should be on a frame
+global BELLY_UP_ROCK# = .3 `how far a belly up fish rocks from side to side as it floats, in radians
+
+` SHOCKWAVES. a move or a combo sends a ring out across the board, and the fish ride it as it passes under them,
+` like things floating on a ripple. the ring is a bump in the water. a fish on top of the bump lifts up, so it
+` gets bigger. a fish on the front of the bump gets pushed away from where the ring started, and
+` leans away from it, and a fish on the back of the bump gets pulled back, and leans back.
+` the rings add up. where two of them cross, a fish gets the lift of both, and the pushes of both.
+` spawnShockwave and spawnShockwaveToward, in fish_funcs, start one, and frame_fish_fx turns them into what the fish do.
+global SHOCK_COUNT = 24 `how many can be going at once. past that, a new one takes the place of the oldest.
+global dim SHOCKS(SHOCK_COUNT) as shockwave
+global dim SHOCK_LIVE(SHOCK_COUNT) `which of them are going on this frame
+global SHOCK_LIVE_COUNT = 0
+global SHOCK_SPEED# = 4.5 `how fast the ring grows, in cells per second
+global SHOCK_WIDTH# = 2.5 `how thick the ring is, in cells, from the middle of it to either edge. a thick one rolls over a fish slowly.
+global SHOCK_LIFE = 2000 `how many milliseconds one lasts. it gets weaker the whole time.
+global SHOCK_ATTACK = 160 `how many milliseconds one takes to swell up at the start, so that it does not pop in
+
+` how strong a ring is, where 1 does all of the things below in full. only the big things get a strong one.
+` the cursor moving on its own does not send one out at all.
+global SHOCK_SWAP_STRENGTH# = .2 `for a swap
+global SHOCK_ABILITY_STRENGTH# = 1 `for a special move, like the bomb
+global SHOCK_COMBO_STRENGTH# = .25 `for the smallest group of fish that can pop
+global SHOCK_COMBO_GROW# = .25 `and how much stronger it gets for every fish past that, up to 1
+
+` what a ring of strength 1 does to a fish.
+` the fish are pixel art, drawn at one pixel of the picture to one pixel of the world, so making one bigger
+` or leaning it makes some of its pixels double up and some drop out. the push lands on whole pixels to stay crisp.
+global SHOCK_LIFT# = .4 `how much bigger the fish gets on top of the bump. 1 is twice as big.
+global SHOCK_TILT# = .9 `how far it leans on the side of the bump, in radians
+global SHOCK_PUSH# = .3 `how far it gets pushed on the side of the bump, where 1 is the size of a fish
+global SHOCK_BOB# = 0 `how far it floats up the screen on top of the bump, the same way. this is off.
+
+` rings that pile up cannot add up forever. the sum bends over as it gets close to these, instead
+` of stopping dead at them, so a second ring always shows on top of a first.
+global SHOCK_LIFT_MAX# = 1.6 `the most lift, where 1 is what one ring of strength 1 does
+global SHOCK_LEAN_MAX# = 1.5 `and the most push and lean. the effect falls apart close to edge on, so this times SHOCK_TILT has to stay under 1.57.
+
 ` the info screen draws on top of everything else in the game
 global ORDER_INFO_OVERLAY = 100
 global ORDER_INFO_BORDER = 102
@@ -111,6 +180,15 @@ global FLOAT_BUBBLE_NEXT = 0 `the bubble that the next spawn will use
 global FLOAT_BUBBLE_LIVE = 0 `how many are going right now. when there are none, there is nothing to do on a frame.
 global FLOAT_BUBBLE_LAST_MS = 0
 global ORDER_FLOAT_BUBBLES = 26 `on top of the fish, and underneath the info screen
+` THE SCORE TEXTS. the numbers that pop out of the fish are not drawn onto the screen. they are drawn to a
+` render target of their own, and then one sprite draws that over the top of the board. so they are always
+` on top of the fish and the bubbles, and the effect on that sprite, ScoreTextEffect, is applied to all of
+` them at once. load_fonts, in fish_routines, sets it up.
+global TARGET_SCORE_TEXT
+global SCORE_TEXT_FX_ID
+global SCORE_TEXT_VIEW_SPRITE
+global ORDER_SCORE_TEXT = 30 `on top of the fish and the bubbles, and underneath the info screen
+
 global ORDER_OVERLAY_BUBBLES = 120 `on top of the info screen and the upgrade screen
 global ORDER_MENU_FLOAT_BUBBLES = 205 `on top of the menu, and underneath the wave of bubbles that wipes it
 
@@ -119,7 +197,7 @@ global ORDER_MENU_FLOAT_BUBBLES = 205 `on top of the menu, and underneath the wa
 global FLOAT_BUBBLE_LOUD_ODDS = 6
 global FLOAT_BUBBLE_WAKE_LOUD_ODDS = 14 `the bubbles in the wake of a cursor are quieter, because there are so many of them
 global FLOAT_BUBBLE_WAKE_ALPHA = 110 `and they are faint, so that they do not get in the way. 255 is solid.
-global FLOAT_BUBBLE_WAKE_COLOR = rgb(210, 170, 255) `a pale version of the purple of the cursor on the board
+global FLOAT_BUBBLE_WAKE_COLOR = rgb(170, 195, 255) `a pale version of the blue of the outline of the cursor on the board
 global FLOAT_BUBBLE_SFX_COUNT = 8
 global FLOAT_BUBBLE_SFX_GAP = 45
 global dim FLOAT_BUBBLE_SFX(FLOAT_BUBBLE_SFX_COUNT)
@@ -174,7 +252,7 @@ global INFO_PANEL_BORDER as infoBorder
 global INFO_BASE_LENGTH = 0 `how many infos there are before any upgrades have been picked. a new game goes back to this.
 
 ` the hint at the bottom of the screen while the game is being played
-global GAME_HINT$ = "{info} info    {pause} pause"
+global GAME_HINT$ = "{dir} move    {swap} + {dir} swap    {info} info"
 
 
 ` THE MENU. the routines are in fish_routines_menu.
@@ -203,8 +281,8 @@ global MENU_PAGE = 0
 #constant MENU_ITEM_CONFIRM_NO 7
 #constant MENU_ITEM_CONFIRM_YES 8
 #constant MENU_ITEM_SET_SOUND 9
-#constant MENU_ITEM_SET_FULLSCREEN 10
-#constant MENU_ITEM_SET_WINDOW 11
+#constant MENU_ITEM_SET_MUSIC 10
+#constant MENU_ITEM_SET_FULLSCREEN 11
 #constant MENU_ITEM_SET_BACK 12
 global MENU_ITEM_COUNT = 13
 global dim MENU_ITEMS(MENU_ITEM_COUNT) as menuItem
@@ -255,27 +333,47 @@ global MENU_CURSOR as infoBorder
 ` THE OPTIONS. these are what the options page of the menu changes.
 
 ` every sound belongs to a group, and a group can be turned up and down all at once.
-` everything is in the first group until it is put in another one. nothing is in the music group yet.
+` everything is in the first group until it is put in another one. the music is in the music group.
 #constant SFX_GROUP_SFX 0
 #constant SFX_GROUP_MUSIC 1
 
-global OPTION_SOUND = 10 `how loud the sound effects are, from 0 to 10
-global OPTION_FULLSCREEN = 0
-global OPTION_WINDOW = 0 `which of the window sizes was picked last
+` the options are kept between runs of the game, as preferences. these are the indexes they are kept under.
+` they must not change, or an old prefs.json would be read as the wrong options.
+#constant PREF_SOUND 1
+#constant PREF_MUSIC 2
+#constant PREF_FULLSCREEN 3
 
-` how big the window is when the game is not filling the screen. the player can also drag the window
-` to any size they like, so this is not always one of the sizes in the list.
+global OPTION_SOUND = 10 `how loud the sound effects are, from 0 to 10
+global OPTION_MUSIC = 10 `how loud the music is, from 0 to 10
+global OPTION_FULLSCREEN = 0
+
+` how big the window was before the game filled the screen, so that it can go back to that size afterwards.
+` the player sets the size of the window by dragging its edges.
 global OPTION_WINDOW_W = 0
 global OPTION_WINDOW_H = 0
 
-` the sizes that the window can be. setup_menu fills these in with the ones that fit on the monitor.
-global WINDOW_SIZE_MAX = 8
-global WINDOW_SIZE_COUNT = 0
-global dim WINDOW_WIDTHS(WINDOW_SIZE_MAX)
-global dim WINDOW_HEIGHTS(WINDOW_SIZE_MAX)
-
 global MENU_FISH_COUNT = 7
 global dim MENU_FISHES(MENU_FISH_COUNT) as menuFish
+
+` THE CREDITS, AND THE SPLASH SCREEN. the routines are in fish_routines_credits.
+global TEX_LOGO_FADE
+global TEX_LOGO_MONOGAME
+global TEX_CREDIT_CHRIS
+global TARGET_CREDITS `the credits are drawn to a render target of their own, so that they can be faded in and out
+
+` everything that rolls by in the credits. setup_credits fills these in.
+global CREDIT_MAX = 24
+global CREDIT_COUNT = 0
+global dim CREDIT_LINES(CREDIT_MAX) as creditLine
+global CREDIT_LENGTH = 830 `how tall the whole roll is, from the top of the first line to the bottom of the last
+global CREDIT_SPEED = 32 `how many pixels the credits roll in a second
+
+` the logos that are shown when the game starts
+global SPLASH_FADE_SPRITE
+global SPLASH_MONOGAME_SPRITE
+global SPLASH_TEXT_ID
+global SPLASH_TWEEN_ID
+global SPLASH_DURATION = 2400 `how long the logos stay up, in milliseconds
 
 ` the wave of bubbles. the first few are big, and sit in a row to make the front of the wave.
 ` the rest are small, and are scattered ahead of the front and behind it.
@@ -297,3 +395,95 @@ global TRANSITION_SWEEP_MAX = 90
 ` it ends above the screen, far enough up that the bubbles behind it are gone too.
 global TRANSITION_LINE_START = 600
 global TRANSITION_LINE_TRAVEL = 850
+
+
+` THE MUSIC. the routines are in fish_routines_music, and the top of that file explains how it works.
+global MUSIC_VOLUME# = .65 `how loud all of the music is when the music option is all the way up, from 0 to 1
+global MUSIC_LAST_MS = 0
+
+` the layers are loops that never stop. they are only turned up and down.
+#constant MUSIC_LAYER_RUMBLE 0
+#constant MUSIC_LAYER_WASH 1
+#constant MUSIC_LAYER_CURRENT 2
+#constant MUSIC_LAYER_PAD_DM 3
+#constant MUSIC_LAYER_PAD_BB 4
+global MUSIC_LAYER_COUNT = 5
+global dim MUSIC_LAYERS(MUSIC_LAYER_COUNT) as musicLayer
+
+` a layer that wanders picks a new level after a wait that is somewhere between these, in milliseconds
+global MUSIC_DRIFT_GAP_MIN = 15000
+global MUSIC_DRIFT_GAP_MAX = 30000
+global MUSIC_DRIFT_FADE# = 8 `and takes this many seconds to get there
+
+` the two pad layers are chords, and only one of them is up at a time. they take turns.
+#constant MUSIC_CHORD_DM 0
+` MUSIC_CHORD_ANY is for a melody that does not care which chord is up
+#constant MUSIC_CHORD_BB 1
+#constant MUSIC_CHORD_ANY 2
+global MUSIC_CHORD = 0
+global MUSIC_CHORD_MS = 0 `when the chord changes next
+global MUSIC_CHORD_GAP_MIN = 25000 `a chord lasts somewhere between these, in milliseconds.
+global MUSIC_CHORD_GAP_MAX = 45000 `0 means that the chord only changes when setMusicChord() is called.
+global MUSIC_CHORD_FADE# = 6 `how many seconds it takes to go from one chord to the other
+global MUSIC_CHORD_LEAD = 3500 `a melody that has to change the chord waits this many milliseconds for it to arrive
+
+` the shots are sounds that play once, now and then
+#constant MUSIC_SHOT_PING 0
+#constant MUSIC_SHOT_WHALE_LOW 1
+#constant MUSIC_SHOT_WHALE_HIGH 2
+#constant MUSIC_SHOT_BUBBLES_SPARSE 3
+#constant MUSIC_SHOT_BUBBLES_DENSE 4
+global MUSIC_SHOT_COUNT = 5
+global dim MUSIC_SHOTS(MUSIC_SHOT_COUNT) as musicShot
+
+` the notes that a melody can use, from low to high. there is a sound for every one of them.
+#constant REST 0
+` they are the scale of F major, which is also the scale of D minor. Bb is B flat.
+#constant D4 1
+#constant E4 2
+#constant F4 3
+#constant G4 4
+#constant A4 5
+#constant Bb4 6
+#constant C5 7
+#constant D5 8
+#constant E5 9
+#constant F5 10
+#constant G5 11
+#constant A5 12
+#constant Bb5 13
+#constant C6 14
+
+` the instruments that a melody can be played on. every one of them has a sound for every note.
+` the bell is a clear ring. it is good for slow tunes with room in them.
+` the pluck is a plucked string, like a harp. it is good for quick runs of notes.
+` the swell is a soft tone that fades in. it takes a second to arrive, so it is only good for slow tunes.
+#constant INSTRUMENT_BELL 0
+#constant INSTRUMENT_PLUCK 1
+#constant INSTRUMENT_SWELL 2
+global MUSIC_INSTRUMENT_COUNT = 3
+global MUSIC_NOTE_SLOTS = 15 `a rest, and the 14 notes
+global dim MUSIC_NOTE_SFX(45) `every note of the first instrument, and then every note of the next one
+global dim MUSIC_INSTRUMENT_VOLUME#(3) `how loud each instrument is next to the others. setup_music fills these in.
+
+` the melodies are written in setup_melodies. all of their beats are kept in one long list,
+` and every melody knows where it starts in the list and how many beats long it is.
+global MELODY_MAX = 32
+global MELODY_COUNT = 0
+global dim MELODY_FIRST(MELODY_MAX)
+global dim MELODY_LENGTH(MELODY_MAX)
+global dim MELODY_BEAT(MELODY_MAX) `how many milliseconds a beat lasts
+global dim MELODY_INSTRUMENT(MELODY_MAX)
+global dim MELODY_CHORD(MELODY_MAX) `the chord that it wants underneath it, or MUSIC_CHORD_ANY
+global MELODY_NOTE_MAX = 1024
+global MELODY_NOTE_TOTAL = 0
+global dim MELODY_NOTES(MELODY_NOTE_MAX)
+
+global MELODY_VOLUME# = .28
+global MELODY_GAP_MIN = 20000 `after a melody ends, the next one starts on its own after a wait
+global MELODY_GAP_MAX = 45000 `somewhere between these, in milliseconds. 0 means that one never does.
+global MELODY_AUTO_MS = 0 `when the next one starts on its own
+global MELODY_PLAYING = -1 `the melody that is playing, or -1
+global MELODY_LAST = -1 `the one that played last, so that it is not picked twice in a row
+global MELODY_STEP = 0 `the beat of it that is next
+global MELODY_NEXT_MS = 0 `when that beat is due

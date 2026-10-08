@@ -543,6 +543,67 @@ public partial class FadeMonoGameCommands
         return IsNewKeyPressed((int)Keys.Escape) ? 1 : 0;
     }
 
+    /// <summary>
+    /// <para>Stops the escape key from closing the game window.</para>
+    /// <para>After this, escape is an ordinary key that the program can read like any other.</para>
+    /// </summary>
+    /// <remarks>
+    /// On desktop, pressing escape closes the window straight away. That is handy while a game is
+    /// being written, but a finished game usually wants escape for a pause menu, and wants to ask
+    /// before it throws away what the player was doing. Call this once at startup to take the key
+    /// over, and then read it with <see cref="escKeyNew">new escapeKey</see>, or bind it to an
+    /// action with <see cref="BindActionKey">bind action key</see>.
+    ///
+    /// Once escape no longer closes the window, the program needs its own way to quit, like a menu
+    /// item that runs <c>end</c>. The window's close button still works either way.
+    ///
+    /// The setting goes back to closing the window each time the program starts, so a program that
+    /// never calls this behaves the way it always has. In the browser, escape never closes
+    /// anything, and this command does nothing.
+    /// </remarks>
+    /// <example>
+    /// Use escape to pause, and ask before quitting.
+    /// <code>
+    /// disable escape quit
+    /// font 1, "font"
+    /// text 1, 500, 300, 1, "playing. escape to pause"
+    /// paused = 0
+    /// do
+    ///   if new escapeKey() = 1 then paused = 1 - paused
+    ///   if paused = 1
+    ///     set text 1, "paused. escape to resume, return to quit"
+    ///     if new returnKey() = 1 then end
+    ///   else
+    ///     set text 1, "playing. escape to pause"
+    ///   endif
+    ///   sync
+    /// loop
+    /// </code>
+    /// </example>
+    /// <seealso cref="EnableEscapeQuit">enable escape quit</seealso>
+    /// <seealso cref="escKeyNew">new escapeKey</seealso>
+    /// <seealso cref="BindActionKey">bind action key</seealso>
+    [FadeBasicCommand("disable escape quit")]
+    public static void DisableEscapeQuit()
+    {
+        InputSystem.escapeQuits = false;
+    }
+
+    /// <summary>
+    /// <para>Makes the escape key close the game window again.</para>
+    /// <para>This is how every program starts out, so it only matters after <see cref="DisableEscapeQuit">disable escape quit</see>.</para>
+    /// </summary>
+    /// <remarks>
+    /// Useful for a game that takes escape over while it is being played, but wants the quick way
+    /// out back somewhere else, like on its title screen.
+    /// </remarks>
+    /// <seealso cref="DisableEscapeQuit">disable escape quit</seealso>
+    [FadeBasicCommand("enable escape quit")]
+    public static void EnableEscapeQuit()
+    {
+        InputSystem.escapeQuits = true;
+    }
+
     [FadeBasicCommand("left shiftKey")]
     public static int shiftLeftKey()
     {

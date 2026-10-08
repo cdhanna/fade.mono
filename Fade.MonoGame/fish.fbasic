@@ -53,6 +53,10 @@ set screen size SCREEN_WIDTH, SCREEN_HEIGHT
 ` the world space is a tiny pixelly space
 global WORLD_WIDTH = 570
 global WORLD_HEIGHT = 320
+
+` where the bottom row of the ability lists sits, on both sides of the screen. the rows stack upwards from here.
+` it leaves a strip along the bottom of the screen for the line of key hints.
+global ABILITY_ROWS_Y = WORLD_HEIGHT - 46
 set render size WORLD_WIDTH, WORLD_HEIGHT
 ` set stage sampler 1 SAMPLER_STATE_POINT
 ` set background color rgb(32, 40, 64)
@@ -60,6 +64,9 @@ set render target background color 1, rgb(32, 40, 64)
 sync
 
 set window title("Fish Fish Pop")
+
+` escape opens the pause menu, instead of closing the window. quitting is on the menus.
+disable escape quit
 `focus window
 
 ` `TEST START
@@ -89,12 +96,13 @@ effect 1, "Fish/Shaders/ScreenEffect"
 set screen effect 1
 
 
-effect 2, "Fish/Shaders/FishEffect"
+effect FISH_FX_ID, "Fish/Shaders/FishEffect"
 
 
 gosub setup_abilities
 gosub load_textures
 gosub load_audio
+gosub setup_music
 gosub setup_input
 gosub load_fonts
 gosub setup_infos
@@ -164,7 +172,7 @@ do
     endif
 
     sync
-    
+
     _loop:
 loop
 

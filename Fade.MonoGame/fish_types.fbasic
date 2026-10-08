@@ -17,6 +17,11 @@ type cell
     comboDownShift
     comboForce
     explodeSfxId
+    stack `how many more fish are stacked up behind this one
+    stackShown# `how many fish are being drawn. it chases stack + 1, so that a new one slides out.
+    stackPopMs `while the fish is popping, when the next fish of its stack goes
+    bellyUp `1 when the fish is floating upside down. see BOTTOMS UP in fish_headers.
+    bellyShown# `how far over it is being drawn, in radians. it chases the real thing, so that the fish rolls over.
 endtype
 
 type smokeAnimInfo
@@ -47,6 +52,7 @@ type floatingText
     fadeInTweenId
     fadeTweenId
     scaleOutTweenId
+    scale# `how many times as big as usual it is. the ones on a board that has grown are smaller.
 endtype
 
 type progressBar
@@ -86,6 +92,7 @@ type passiveDisplay
     slotIndex
 
     fadeTweenId
+    shakeTweenId `shakes the name when the passive does its thing
     titleTextId
     descTextId
 endtype
@@ -193,6 +200,18 @@ type floatBubble
     alpha `255 for a solid bubble, and less for a faint one
 endtype
 
+` a ring that spreads across the board and tilts the fish as it passes. see SHOCKWAVES in fish_headers.
+type shockwave
+    active
+    x#, y# `where it started, in cells. it can be in between two cells.
+    startMs `when it starts. this can be in the future, to line it up with something that is delayed.
+    strength# `how strong it is, where 1 is a full one
+    life `how many milliseconds it lasts. it gets weaker the whole time.
+    dirX#, dirY# `the way that it is headed. it is strongest that way, and there is none of it behind. a ring that goes every way has 0 for both.
+    radius# `how far out the top of the bump is on this frame, in cells
+    power# `how strong it is on this frame, now that it has swelled up or died away some
+endtype
+
 ` a fish that drifts across the back of the main menu
 type menuFish
     spriteId
@@ -200,4 +219,33 @@ type menuFish
     y
     speed
     phase
+endtype
+
+` one looping layer of the music, like the rumble or a chord. see fish_routines_music.
+type musicLayer
+    sfxId
+    mix# `how loud it is when its level is all the way up
+    level# `how far up it is right now, from 0 to 1
+    target# `the level that it is fading to
+    speed# `how much the level moves in a second
+    driftMin#, driftMax# `it wanders between these levels on its own. it stays put if the highest is 0.
+    driftMs `when it picks a new level next
+endtype
+
+` a sound that the music plays once, now and then, like a whale
+type musicShot
+    sfxId
+    volume#
+    wobble `how far its pitch can be off, in hundredths of an octave, so that it is different every time
+    gapMin `the shortest wait before it plays on its own again, in milliseconds
+    gapMax `the longest wait. it never plays on its own if this is 0.
+    nextMs `when it plays on its own next
+endtype
+
+` one thing that rolls by in the credits. it is some text, or it is a picture.
+type creditLine
+    isSprite `1 for a picture, 0 for text
+    id `the sprite id or the text id, depending
+    x
+    y `how far down the roll it is
 endtype

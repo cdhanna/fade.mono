@@ -43,7 +43,7 @@ load_audio:
 
 
     sfx 100,100
-    play sfx 100
+    `play sfx 100
     set sfx loop 100, 1
 
 return
@@ -76,6 +76,22 @@ load_fonts:
     global SCORE_TEXT_NUM = 0
     global dim SCORE_TEXTS(SCORE_TEXT_COUNT) as floatingText
 
+    ` the score texts are drawn to a render target of their own, which is see-through wherever there is
+    ` nothing. then one sprite draws that render target over the board. see THE SCORE TEXTS in fish_headers.
+    reserve render target id(TARGET_SCORE_TEXT)
+    render target TARGET_SCORE_TEXT
+    set render target background color TARGET_SCORE_TEXT, rgb(0, 0, 0, 0)
+
+    reserve effect id(SCORE_TEXT_FX_ID)
+    effect SCORE_TEXT_FX_ID, "Fish/Shaders/ScoreTextEffect"
+
+    reserve sprite id(SCORE_TEXT_VIEW_SPRITE)
+    sprite SCORE_TEXT_VIEW_SPRITE, 0, 0, render target texture(TARGET_SCORE_TEXT)
+    set sprite offset SCORE_TEXT_VIEW_SPRITE, 0, 0
+    size sprite SCORE_TEXT_VIEW_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    order sprite SCORE_TEXT_VIEW_SPRITE, ORDER_SCORE_TEXT
+    set sprite effect SCORE_TEXT_VIEW_SPRITE, SCORE_TEXT_FX_ID
+
     for i = 0 to SCORE_TEXT_COUNT - 1
         SCORE_TEXTS(i) = {
             active = 0
@@ -87,6 +103,7 @@ load_fonts:
             scaleOutTweenId = reserve tween id(n)
         }
         text SCORE_TEXTS(i).textId, 0, 0, SCORE_FONT, ""
+        set text render target SCORE_TEXTS(i).textId, TARGET_SCORE_TEXT
         `hide text SCORE_TEXTS(i).textId
     next
 
@@ -184,6 +201,10 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_BIRD_FEAST).artTexId), "Fish/Textures/Cards/bird_feast"
     texture reserve texture id(CARDS(ABILITY_INDEX_PASSIVE_STOCK_MARKET).artTexId), "Fish/Textures/Cards/stock_market"
     texture reserve texture id(CARDS(ABILITY_INDEX_THINK_BIGGER).artTexId), "Fish/Textures/Cards/think_bigger"
+    texture reserve texture id(CARDS(ABILITY_INDEX_BOTTOM_FEEDER).artTexId), "Fish/Textures/Cards/bottom_feeder"
+    texture reserve texture id(CARDS(ABILITY_INDEX_BOTTOM_FEEDER_2).artTexId), "Fish/Textures/Cards/bottom_feeder"
+    texture reserve texture id(CARDS(ABILITY_INDEX_CONTAGIOUS_SMILE).artTexId), "Fish/Textures/Cards/contagious_smile"
+    texture reserve texture id(CARDS(ABILITY_INDEX_BOTTOMS_UP).artTexId), "Fish/Textures/Cards/bottoms_up"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_SHIFT).artTexId), "Fish/Textures/Cards/shift"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_CLONER).artTexId), "Fish/Textures/Cards/clone"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_BOMB3x3).artTexId), "Fish/Textures/Cards/bomb"
@@ -224,6 +245,8 @@ setup_grid:
 
     ` what kind of fish was in every cell, from before the board grew
     global dim EXPAND_VALUES(CELL_MAX_COUNT)
+    global dim EXPAND_STACKS(CELL_MAX_COUNT) `and how many more fish were stacked up behind it
+    global dim EXPAND_BELLY_UPS(CELL_MAX_COUNT) `and if it was belly up
     reserve tween id(BOARD_EXPAND_TWEEN_ID)
 
     global DEBUG_COLOR_COUNT = 1000
@@ -261,6 +284,7 @@ setup_grid:
             c as cell = CELLS(cellId)
             sprite c.spriteId, getCellX(c.coord.x), getCellY(c.coord.y), c.value
             order sprite c.spriteId, ORDER_FISH
+            set sprite effect c.spriteId, FISH_FX_ID
 
             sprite c.fxSpriteId, getCellX(c.coord.y), getCellY(c.coord.y), TEX_SMOKE_1
             hide sprite c.fxSpriteId
@@ -286,6 +310,7 @@ setup_grid:
         reserve sfx id(CELLS(cellId).explodeSfxId)
 
         order sprite CELLS(cellId).spriteId, ORDER_FISH
+        set sprite effect CELLS(cellId).spriteId, FISH_FX_ID
         hide sprite CELLS(cellId).spriteId
         hide sprite CELLS(cellId).fxSpriteId
     next
@@ -382,7 +407,16 @@ print SELECTION_SPRITE
     gosub update_selection_position
     size sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
     order sprite SELECTION_SPRITE, ORDER_SELECTION
-    color sprite SELECTION_SPRITE, rgb(160, 90, 170, 170)
+
+    ` the cursor is a dark square with a thin outline, like the panel in info mode. the effect draws the
+    ` outline, so that it stays one pixel thick while the cursor changes size.
+    ` the outline is the color of the game's background, rgb(32, 40, 64), three and a half times as bright.
+    global CURSOR_FX_ID
+    reserve effect id(CURSOR_FX_ID)
+    effect CURSOR_FX_ID, "Fish/Shaders/CursorEffect"
+    set sprite effect SELECTION_SPRITE, CURSOR_FX_ID
+    color sprite SELECTION_SPRITE, rgb(10, 14, 30, 90) `the fill is faint, so that the background shows through it
+    set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, 1
 
 return
 
@@ -420,38 +454,125 @@ time# = 0
 update_frame:
     gosub frame_texts
     gosub frame_scale_wave
+    gosub frame_fish_fx `after the scale wave, because it needs to know how big the fish ended up
     gosub frame_score
     gosub frame_passive_render
     gosub frame_move_ability_render
     gosub frame_free_moves
     updateBubbles()
+    updateMusic()
     gosub frame_dbg
 
-`     for i = 0 to CELL_COUNT - 1
-`         c = CELLS(i)
-`         spriteId = c.spriteId
+return
 
+` tell the fish effect how to draw every fish on the board. see FishEffect.fx for what the numbers mean.
+frame_fish_fx:
 
-`         xd = SELECTION_POS.x - c.coord.x
-`         yd = SELECTION_POS.y - c.coord.y
-       
-`         z# = 12
-`         yaw# = deg(atan2(-xd, z#))
-`         pitch# = deg(atan2(yd, sqrt(xd * xd + z#*z#)))
-` `float yaw = MathF.Atan2(x, z); // rotation around Y axis
-` `float pitch = MathF.Atan2(-y, MathF.Sqrt(x * x + z * z)); // rotation around X axis
+    ` work out where every shockwave has got to on this frame, and which ones there are, so that
+    ` the fish do not each have to
+    shockNow = game ms()
+    SHOCK_LIVE_COUNT = 0
+    for s = 0 to SHOCK_COUNT - 1
+        if SHOCKS(s).active
+            shockAge = shockNow - SHOCKS(s).startMs
+            shockLife# = SHOCKS(s).life
+            if shockAge > SHOCKS(s).life
+                ` it has run its course
+                SHOCKS(s).active = 0
+            else
+                if shockAge >= 0
+                    ` it swells up quickly, and then it dies away for the rest of its life
+                    shockPower# = SHOCKS(s).strength# * (1 - (shockAge / shockLife#))
+                    if shockAge < SHOCK_ATTACK then shockPower# = (shockPower# * shockAge) / SHOCK_ATTACK
 
-`         set sprite all texcoord1 spriteId, pitch#, yaw#, 0, 0
+                    ` the top of the bump starts right where the ring does, so the fish there feel it straight away
+                    SHOCKS(s).radius# = (shockAge * SHOCK_SPEED#) / 1000
+                    SHOCKS(s).power# = shockPower#
 
-`         if i mod 14 = 1 or i mod 17 = 2
-`             set sprite texture spriteId, 0
-`             set sprite all texcoord1 spriteId, pitch# + time# * 2, yaw#, 0, 0
+                    SHOCK_LIVE(SHOCK_LIVE_COUNT) = s
+                    SHOCK_LIVE_COUNT = SHOCK_LIVE_COUNT + 1
+                endif
+            endif
+        endif
+    next
 
-`         endif
+    for i = 0 to CELL_COUNT - 1
+        c = CELLS(i)
 
-`     next
-`     time# += 2
-    
+        ` the fish sit still, except for where a shockwave is passing under them.
+        ` lift is how far up the bump the fish is, and lean is how steep the bump is under it, in each direction.
+        lift# = 0
+        leanX# = 0
+        leanY# = 0
+        if SHOCK_LIVE_COUNT > 0
+            for s = 0 to SHOCK_LIVE_COUNT - 1
+                wave = SHOCKS(SHOCK_LIVE(s))
+
+                shockX# = c.coord.x - wave.x#
+                shockY# = c.coord.y - wave.y#
+                shockDist# = sqrt(shockX# * shockX# + shockY# * shockY#)
+
+                ` this is 0 on top of the bump, 1 at the front edge of it, and -1 at the back edge
+                shockAhead# = (shockDist# - wave.radius#) / SHOCK_WIDTH#
+                if abs(shockAhead#) >= 1 then skip
+
+                ` a ring that is headed one way is at its strongest for the fish that are that way from where
+                ` it started. it fades off to the sides, and there is none of it for the fish straight behind.
+                shockPower# = wave.power#
+                if shockDist# > .01
+                    if wave.dirX# <> 0 or wave.dirY# <> 0
+                        shockFacing# = .5 + (.5 * (shockX# * wave.dirX# + shockY# * wave.dirY#)) / shockDist#
+                        shockPower# = shockPower# * shockFacing# * shockFacing#
+                    endif
+                endif
+
+                lift# = lift# + (.5 + .5 * cos(shockAhead# * 3.14159)) * shockPower#
+
+                ` the fish in the very middle has no way to lean
+                if shockDist# > .01
+                    shockSlope# = sin(shockAhead# * 3.14159) * shockPower#
+                    leanX# = leanX# + (shockSlope# * shockX#) / shockDist#
+                    leanY# = leanY# + (shockSlope# * shockY#) / shockDist#
+                endif
+            next
+        endif
+
+        ` the sums bend over as they get big, so that rings on top of rings still show
+        lift# = lift# / sqrt(1 + (lift# * lift#) / (SHOCK_LIFT_MAX# * SHOCK_LIFT_MAX#))
+        leanBend# = sqrt(1 + (leanX# * leanX# + leanY# * leanY#) / (SHOCK_LEAN_MAX# * SHOCK_LEAN_MAX#))
+        leanX# = leanX# / leanBend#
+        leanY# = leanY# / leanBend#
+
+        ` positive yaw faces the fish to the right, and positive pitch faces it up, which is the other way from y
+        yaw# = leanX# * SHOCK_TILT#
+        pitch# = 0 - leanY# * SHOCK_TILT#
+        pushX# = leanX# * SHOCK_PUSH#
+        pushY# = leanY# * SHOCK_PUSH# - lift# * SHOCK_BOB# `up the screen is the other way from y
+        lift# = lift# * SHOCK_LIFT#
+
+        ` a fish that is belly up is turned all the way over, top over bottom. the turn that is drawn chases
+        ` the real one, so that the fish can be seen rolling over. once it is over, it rocks from side to
+        ` side a little, like it is floating.
+        bellyWant# = c.bellyUp * 3.14159
+        bellyShown# = c.bellyShown# + (bellyWant# - c.bellyShown#) * BELLY_UP_EASE#
+        if abs(bellyWant# - bellyShown#) < .01 then bellyShown# = bellyWant#
+        CELLS(i).bellyShown# = bellyShown#
+        pitch# = pitch# + bellyShown#
+        yaw# = yaw# + (sin(shockNow * .003 + i) * BELLY_UP_ROCK# * bellyShown#) / 3.14159
+
+        ` the count that is drawn chases the real one, so that a new fish slides out from behind
+        stackWant# = c.stack + 1
+        stackShown# = c.stackShown# + (stackWant# - c.stackShown#) * FISH_STACK_EASE#
+        if abs(stackWant# - stackShown#) < .01 then stackShown# = stackWant#
+        CELLS(i).stackShown# = stackShown#
+
+        ` the effect grows the sprite to make room, so it needs to know how big the sprite is on the screen
+        fishSize# = sprite width(c.spriteId) * sprite scale x(c.spriteId)
+
+        set sprite all texcoord1 c.spriteId, pitch#, yaw#, stackShown#, fishSize#
+        set sprite all texcoord2 c.spriteId, pushX# * fishSize#, pushY# * fishSize#, lift#, 0
+    next
+
 return
 
 dbg# = 1.0
@@ -558,11 +679,12 @@ frame_texts:
             y = SCORE_BAR.pos.y
 
             ` or should it just go "up"
+            ` a text on a board that has been zoomed out is smaller, and it floats a shorter way to match
             x = tweenVal(scoreTxt.floatTweenIdX)
-            y = tweenVal(scoreTxt.floatTweenIdY) - 50
-            
+            y = tweenVal(scoreTxt.floatTweenIdY) - 50 * scoreTxt.scale#
+
             `x+= (rnd(6)-3) * 5
-            y -= rnd(2) * 4
+            y -= rnd(2) * 4 * scoreTxt.scale#
 
             ` TODO: BUG: float division seems broken? These always come out to zero. 
             flip# = 1.0 / (WORLD_HEIGHT + 1.0)
@@ -607,7 +729,7 @@ handle_combos:
 
     if REQUEST_COMBO_CHECK = 0 then return
 
-    ` clear the combo mask... 
+    ` clear the combo mask...
     for i = 1 to CELL_COUNT
         c = CELLS(i-1)
         c.comboFillMask = 0
@@ -687,6 +809,7 @@ handle_combos:
                     if CELLS(cellIndex).comboFillMask = 0
                         CELLS(cellIndex).comboFillId = g
                         CELLS(cellIndex).comboFillMask = 1
+                        showPassiveUsed(ABILITY_INDEX_PASSIVE_STOCK_MARKET)
                         exit
                     endif
                 next
@@ -698,19 +821,54 @@ handle_combos:
 
         ` animate the exit of the group
         randomG = (totalComboCount-1)
-        
+
+        ` the group sends out a shockwave from the middle of itself, when the first of its fish pops
+        groupSumX = 0
+        groupSumY = 0
+        groupSize# = 0
+        groupDelay = (explodeIndex + 1) * 50
+
         for i = 1 to CELL_COUNT
             cell = CELLS(i-1)
-            if cell.comboFillId <> g then skip 
+            if cell.comboFillId <> g then skip
 
             CELLS(i-1).comboBlownUp = 1
             cellId = i-1
+
+            groupSumX = groupSumX + cell.coord.x
+            groupSumY = groupSumY + cell.coord.y
+            groupSize# = groupSize# + 1
 
             smokeIndex = rnd(SMOKE_ANIM_COUNT)
             smoke = SMOKE_ANIMS(smokeIndex)
 
             explodeIndex += 1
             delay = explodeIndex * 50`rnd(3)*75+25 `TODO: somehow use the delay to "randomize" the animation
+
+            ` a stacked fish pops the fish in its stack first, one at a time, and each of them scores
+            ` as one more fish in the group. a score text comes out of the fish for every one of them.
+            ` the loop that waits for the pops to finish, further down, takes them off of the stack
+            ` at the same moments, so that the stack can be seen shrinking.
+            ` the fish in front goes last, so everything of its own waits until the stack is gone.
+            stackLeft = cell.stack
+            if stackLeft > FISH_STACK_MAX then stackLeft = FISH_STACK_MAX
+            CELLS(i-1).stackPopMs = game ms() + delay
+            while stackLeft > 0
+                stackLeft = stackLeft - 1
+
+                stackTxtPos as vec = {
+                    x = getCellX(cell.coord.x),
+                    y = getCellY(cell.coord.y)
+                }
+                scoreAdd += 10
+                ` this one is gone by the time the next fish of the stack pops, so that each of them
+                ` gets a text of its own to be read
+                stackTxtId = spawnBoardScoreText(stackTxtPos, "+" + str$(scoreAdd), delay, FISH_STACK_POP_GAP - 20)
+                color text stackTxtId, FISH_COLORS(getFishColorIndex(cell.value))
+                CURRENT_SCORE += scoreAdd
+
+                delay = delay + FISH_STACK_POP_GAP
+            endwhile
 
             ` kaboom sprite
             create basic tween cell.comboAnimTweenId, smoke.startFrame, smoke.endFrame, 400, delay
@@ -743,15 +901,27 @@ handle_combos:
                 y = getCellY(cell.coord.y)
             }
             scoreAdd += 10
-            txtId = spawnScoreText(txtPos, "+" + str$(scoreAdd), delay)
+            txtId = spawnBoardScoreText(txtPos, "+" + str$(scoreAdd), delay, 800)
             color text txtId, FISH_COLORS(getFishColorIndex(cell.value))
 
             ` create basic tween SCORE_BAR.progressTweenId, getScoreRatio(0), getScoreRatio(scoreAdd), 100, 50
             CURRENT_SCORE += scoreAdd
             print CURRENT_SCORE
+
             setProgressTween(SCORE_BAR, CURRENT_SCORE)
 
         next
+
+        if groupSize# > 0
+            groupMidX# = groupSumX / groupSize#
+            groupMidY# = groupSumY / groupSize#
+
+            ` a bigger group sends a stronger one
+            groupShock# = SHOCK_COMBO_STRENGTH# + (groupSize# - requiredComboCount) * SHOCK_COMBO_GROW#
+            if groupShock# < SHOCK_COMBO_STRENGTH# then groupShock# = SHOCK_COMBO_STRENGTH#
+            if groupShock# > 1 then groupShock# = 1
+            spawnShockwave(groupMidX#, groupMidY#, groupShock#, groupDelay)
+        endif
 
     next
 
@@ -763,22 +933,63 @@ handle_combos:
     ` exit early if no combos
     if totalComboCount = 0
         REQUEST_COMBO_CHECK = 0
+
+        ` the board has settled, so this is when a move gets its chance to turn a fish belly up
+        rollBellyUpFish()
         return
     endif
 
+    ` with the "contagious smile" card, a fish that is right next to a fish that popped has a chance
+    ` to pick up one more fish for its stack. a fish only gets the one chance, however many popped around it.
+    if isAbility_ContagiousSmile()
+        for i = 0 to CELL_COUNT - 1
+            c = CELLS(i)
+            if c.comboBlownUp then skip
+
+            nextToPop = 0
+            if c.coord.x > 0
+                if CELLS(i - 1).comboBlownUp then nextToPop = 1
+            endif
+            if c.coord.x < CELL_COLUMN_COUNT - 1
+                if CELLS(i + 1).comboBlownUp then nextToPop = 1
+            endif
+            if c.coord.y > 0
+                if CELLS(i - CELL_COLUMN_COUNT).comboBlownUp then nextToPop = 1
+            endif
+            if c.coord.y < CELL_ROW_COUNT - 1
+                if CELLS(i + CELL_COLUMN_COUNT).comboBlownUp then nextToPop = 1
+            endif
+
+            if nextToPop
+                tryStackFish(i, getContagiousSmileChance(), 150, ABILITY_INDEX_CONTAGIOUS_SMILE)
+            endif
+        next
+    endif
+
     ` wait for all exit animations to finish
-    repeat 
+    repeat
         anyStillPlaying = 0
         if is tween done(SHAKE_TWEEN_ID) < 1
             anyStillPlaying = 1
             set screen shake amount tweenVal(SHAKE_TWEEN_ID)
-            else 
+            else
             set screen shake amount 0
 
         endif
         for i = 1 to CELL_COUNT
             cell = CELLS(i-1)
-            if cell.comboBlownUp <> 1 then skip 
+            if cell.comboBlownUp <> 1 then skip
+
+            ` the fish in its stack go one at a time. each one gives the fish a little jump, and a few bubbles.
+            if cell.stack > 0
+                anyStillPlaying = 1
+                if game ms() >= cell.stackPopMs
+                    CELLS(i-1).stack = cell.stack - 1
+                    CELLS(i-1).stackPopMs = cell.stackPopMs + FISH_STACK_POP_GAP
+                    create basic tween cell.scaleWaveTweenId, 1.5, 1, 200, 0
+                    spawnBubbles(getCellX(cell.coord.x), getCellY(cell.coord.y), CELL_SIZE / 4, 4, 0, FISH_COLORS(getFishColorIndex(cell.value)))
+                endif
+            endif
 
             if is tween done(cell.comboDownShiftTweenId) < 1 OR is tween done(cell.comboAnimTweenId) < 1
                 anyStillPlaying = 1
@@ -800,7 +1011,14 @@ handle_combos:
         sync
     until anyStillPlaying = 0
 
-    ` for all cells that are not blown up, need to find out where they should live... 
+    ` the fish that popped took their stacks with them
+    for i = 0 to CELL_COUNT - 1
+        if CELLS(i).comboBlownUp
+            clearCellStack(i)
+        endif
+    next
+
+    ` for all cells that are not blown up, need to find out where they should live...
     startIndexOfLastRow = CELL_COUNT - CELL_COLUMN_COUNT
     for x = 1 to CELL_COLUMN_COUNT
 
@@ -867,6 +1085,7 @@ handle_combos:
             tempValue = cell.value
             CELLS(index).value = CELLS(droppedToIndex).value
             CELLS(droppedToIndex).value = tempValue
+            swapCellStacks(index, droppedToIndex)
 
             tempValue = cell.comboBlownUp
             CELLS(index).comboBlownUp = CELLS(droppedToIndex).comboBlownUp
@@ -876,6 +1095,11 @@ handle_combos:
             updateCell(CELLS(droppedToIndex))
             updateCell(CELLS(index))
 
+            ` a fish that fell may have come down to the bottom row
+            if cell.comboBlownUp = 0 and cell.comboDownShift > 0
+                fishHitBottom(droppedToIndex, 0)
+            endif
+
             index -= CELL_COLUMN_COUNT
 
         next
@@ -883,7 +1107,7 @@ handle_combos:
 
     set sfx volume SFX_DROP, 1
 
-    ` step 2; spawn in new cells and animate them falling in  
+    ` step 2; spawn in new cells and animate them falling in
     for i = 1 to CELL_COUNT
         cell = CELLS(i - 1)
         y = getCellY(cell.coord.y)
@@ -899,6 +1123,12 @@ handle_combos:
         endif
 
         delay = cell.coord.x * 20 + (CELL_ROW_COUNT - cell.coord.y)*20
+
+        ` a new fish that drops in may come down to the bottom row
+        if cell.comboBlownUp > 0
+            fishHitBottom(i - 1, delay + 250)
+        endif
+
         create basic tween cell.comboDownShiftTweenId, targetY, y, 300, delay
         set tween easing cell.comboDownShiftTweenId, EASING_BOUNCE
         create basic tween cell.comboAlphaTweenId, startAlpha, targetAlpha, 150, delay
@@ -906,11 +1136,11 @@ handle_combos:
 
 
     ` wait for all exit animations to finish
-    repeat 
+    repeat
         anyStillPlaying = 0
         for i = 1 to CELL_COUNT
             cell = CELLS(i-1)
-            if cell.comboBlownUp <> 1 then skip 
+            if cell.comboBlownUp <> 1 then skip
 
             if is tween done(cell.comboDownShiftTweenId) < 1
                 anyStillPlaying = 1
@@ -951,6 +1181,8 @@ handle_board_expansion:
     oldGridY = GRID_POS.y
     for i = 0 to CELL_COUNT - 1
         EXPAND_VALUES(i) = CELLS(i).value
+        EXPAND_STACKS(i) = CELLS(i).stack
+        EXPAND_BELLY_UPS(i) = CELLS(i).bellyUp
     next
 
     ` a square board gets a new column on the right. that leaves it wider than it is tall, so the
@@ -975,8 +1207,16 @@ handle_board_expansion:
         oldY = c.coord.y - rowShift
         if c.coord.x < oldColumns and oldY >= 0
             c.value = EXPAND_VALUES(c.coord.x + oldY * oldColumns)
+            c.stack = EXPAND_STACKS(c.coord.x + oldY * oldColumns)
+            c.stackShown# = c.stack + 1
+            c.bellyUp = EXPAND_BELLY_UPS(c.coord.x + oldY * oldColumns)
+            c.bellyShown# = c.bellyUp * 3.14159
             c.comboBlownUp = 0
         else
+            c.stack = 0
+            c.stackShown# = 0
+            c.bellyUp = 0
+            c.bellyShown# = 0
             c.comboBlownUp = 1
         endif
         CELLS(i) = c

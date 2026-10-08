@@ -116,6 +116,82 @@ public partial class FadeMonoGameCommands
     }
 
     /// <summary>
+    /// <para>Makes the window open at the size it was the last time the game was run.</para>
+    /// <para>Turning it on puts the window back to the remembered size straight away, and
+    /// from then on every change to the size of the window is remembered.</para>
+    /// </summary>
+    /// <remarks>
+    /// Call this once during setup, AFTER <see cref="SetScreenResolution">set screen size</see>.
+    /// The size you set there is the one the window has the very first time the game is run,
+    /// when there is nothing remembered yet. Every run after that, this replaces it with the
+    /// size the player left the window at.
+    ///
+    /// It pairs with <see cref="SetWindowResizable">set window resizable</see>: that lets the
+    /// player drag the window to a size they like, and this keeps it that way. A size set by
+    /// the program with <see cref="SetScreenResolution">set screen size</see> is remembered too.
+    ///
+    /// The size is kept in a file called <c>window.json</c> in the folder the game is run
+    /// from. The fullscreen size is never remembered, so a game that was closed while
+    /// fullscreen opens its window at the size it was before that. A remembered size that is
+    /// bigger than the monitor is brought down to fit it.
+    ///
+    /// Returns <c>1</c> if a remembered size was found and used, which a program can use to
+    /// tell a first run from a later one. Does nothing in the browser, where the page decides
+    /// the size.
+    /// </remarks>
+    /// <example>
+    /// A window that the player can resize, and that stays the size they made it:
+    /// <code>
+    /// ` the size for the very first run
+    /// set screen size 1280, 720
+    ///
+    /// set window resizable 1
+    /// remembered = remember window size(1)
+    ///
+    /// font 1, "font"
+    /// text 1, 470, 200, 1, ""
+    ///
+    /// do
+    ///   set text 1, str$(screen width()) + " x " + str$(screen height())
+    ///   sync
+    /// loop
+    /// </code>
+    /// </example>
+    /// <param name="remember"><c>1</c> to restore the remembered size and keep remembering, <c>0</c> to stop.</param>
+    /// <returns><c>1</c> if the window was put back to a remembered size, <c>0</c> if not.</returns>
+    /// <seealso cref="SetWindowResizable">set window resizable</seealso>
+    /// <seealso cref="SetScreenResolution">set screen size</seealso>
+    /// <seealso cref="ScreenWidth">screen width</seealso>
+    /// <seealso cref="ScreenHeight">screen height</seealso>
+    [FadeBasicCommand("remember window size")]
+    public static int RememberWindowSize(bool remember)
+    {
+        WindowMemorySystem.enabled = remember;
+        if (!remember) return 0;
+
+        var graphics = GameSystem.graphicsDeviceManager;
+        if (graphics.IsFullScreen) return 0;
+
+        if (!WindowMemorySystem.TryLoad(out var width, out var height))
+        {
+            // Nothing remembered yet, so the size the window has now is where it starts.
+            WindowMemorySystem.NoteSize(graphics.PreferredBackBufferWidth, graphics.PreferredBackBufferHeight);
+            return 0;
+        }
+
+        // The monitor may be smaller than it was when the size was saved.
+        width = System.Math.Min(width, DisplayWidth());
+        height = System.Math.Min(height, DisplayHeight());
+
+        if (width != graphics.PreferredBackBufferWidth || height != graphics.PreferredBackBufferHeight)
+        {
+            SetScreenResolution(width, height);
+        }
+
+        return 1;
+    }
+
+    /// <summary>
     /// <para>Reserves a strip of the window along each edge that the game image will not use.</para>
     /// <para>The render target still fits and centres as usual, just inside a smaller area — so the
     /// game shrinks and leaves you empty screen for debug panels, an editor sidebar, or anything
@@ -486,6 +562,13 @@ public partial class FadeMonoGameCommands
         GameSystem.graphicsDeviceManager.ApplyChanges();
         RenderSystem.ResetRenderPositioning();
 
+        // A size the program picked is remembered the same as one the player dragged to,
+        // when `remember window size` is on. Not in fullscreen, where this is not the
+        // size of a window at all.
+        if (!GameSystem.graphicsDeviceManager.IsFullScreen)
+        {
+            WindowMemorySystem.NoteSize(width, height);
+        }
 
     }
 }

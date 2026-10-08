@@ -42,8 +42,9 @@ setup_input:
     bind action key ACT_INFO, scancode("I")
     bind action button ACT_INFO, padCode("Back")
 
-    ` this would be escape, but the engine closes the window when escape is pressed.
+    ` escape pauses, and backs out of menus. p still works too.
     reserve action id(ACT_PAUSE)
+    bind action key ACT_PAUSE, scancode("Escape")
     bind action key ACT_PAUSE, scancode("P")
     bind action button ACT_PAUSE, padCode("Start")
 
@@ -98,7 +99,7 @@ frame_input_icons:
         font icon SCORE_FONT, 5, "info", TEX_KEYS, 119 `i
         font icon SCORE_FONT, 6, "swap", TEX_KEYS, 51 `space
         font icon SCORE_FONT, 7, "dir", TEX_KEYS, 224 `the arrow keys
-        font icon SCORE_FONT, 11, "pause", TEX_KEYS, 112 `p
+        font icon SCORE_FONT, 11, "pause", TEX_KEYS, 183 `escape
         font icon SCORE_FONT, 12, "confirm", TEX_KEYS, 51 `space
     endif
 return
@@ -134,10 +135,12 @@ process_input:
         if target.y >= CELL_ROW_COUNT then return 
 
 
+        usedAbility = 0
         if move.moveBindingIndex >= 0
             moveAbility = MOVE_ABILITY_BINDINGS(move.moveBindingIndex)
-            
+
             if moveAbility.movesLeft <= 0
+                usedAbility = 1
                 print "FOUND MOVE", moveAbility.moveValue
                 MOVE_ABILITY_BINDINGS(move.moveBindingIndex).movesLeft = moveAbility.resetTimer
                 gosub update_ability_texts
@@ -187,6 +190,26 @@ process_input:
         REQUEST_COMBO_CHECK = 1
 
         SELECTION_POS = target
+
+        ` with the "bottoms up" card, a fish that is belly up pops when the cursor comes to it. and a move
+        ` may turn another fish over, once the board has settled.
+        popBellyUpFish(getCellIndex(target))
+        if usedAbility or isSwap
+            BELLY_UP_ROLL_DUE = 1
+        endif
+
+        ` a swap or a special move sends out a shockwave from where it started, headed the way that it went.
+        ` a special move sends a big one, and the cursor moving on its own does not send one at all. this comes
+        ` after the move has played out, because the moves animate without drawing the rest of the frame.
+        shockFromX = target.x - swapDir.x
+        shockFromY = target.y - swapDir.y
+        if usedAbility
+            spawnShockwaveToward(shockFromX, shockFromY, swapDir.x, swapDir.y, SHOCK_ABILITY_STRENGTH#, 0, SHOCK_LIFE)
+        else
+            if isSwap
+                spawnShockwaveToward(shockFromX, shockFromY, swapDir.x, swapDir.y, SHOCK_SWAP_STRENGTH#, 0, SHOCK_LIFE)
+            endif
+        endif
 
         gosub update_selection_position
     endif

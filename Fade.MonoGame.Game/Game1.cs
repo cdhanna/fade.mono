@@ -198,6 +198,14 @@ public class Game1 : Microsoft.Xna.Framework.Game
     {
         var bounds = Window.ClientBounds;
         FitImageToWindow(bounds.Width, bounds.Height);
+
+        // This is the size the window has settled at (a drag reports here once, when it is
+        // let go), so it is the one worth remembering. Never the fullscreen size: that is
+        // the monitor's, not one the player picked for the window.
+        if (_graphics != null && !_graphics.IsFullScreen)
+        {
+            WindowMemorySystem.NoteSize(bounds.Width, bounds.Height);
+        }
     }
 
     /// <summary>
@@ -715,7 +723,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
     {
 #if !BROWSER
         // Escape to quit only makes sense on desktop. Browser closes the tab.
-        if (Keyboard.GetState().IsKeyDown(Keys.Escape) )
+        // A game can turn it off with `disable escape quit`, to use the key for something else.
+        if (InputSystem.escapeQuits && Keyboard.GetState().IsKeyDown(Keys.Escape) )
         {
             Exit();
         }

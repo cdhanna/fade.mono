@@ -1,0 +1,450 @@
+goto routines_music_exit
+
+remstart
+    THE MUSIC
+    there is no song. the music is made out of parts that the game mixes together as it goes,
+    so it never plays the same way twice. there are three kinds of part.
+
+    LAYERS are loops that never stop, like the rumble of the deep, or a chord. a layer is only
+    ever turned up and down. setMusicLayer() fades one to a new level.
+
+    SHOTS are sounds that play once, now and then, like a whale. every shot plays on a timer
+    of its own, and playMusicShot() plays one right away.
+
+    MELODIES are written by hand, as notes, in setup_melodies, which is right below this.
+    one is picked at random every so often. playRandomMelody() and playMelody() start one
+    right away, and playMusicNote() plays a single note. a melody is played on one of a
+    few instruments, and it can ask for the chord that suits it.
+
+    all of the notes are from one scale, and both of the chords fit that scale. so most
+    notes sound fine at any time, and a melody does not have to care which chord is up.
+
+    the game can call any of those functions when something happens. the rest of it runs
+    itself: the chords take turns, some of the layers wander up and down, and the timers go.
+    the numbers that decide how often are in fish_headers, under THE MUSIC.
+
+    updateMusic() has to be called on every frame, the same as updateBubbles().
+
+    the sounds were made by Tools/ocean_music_gen.py.
+remend
+
+
+` THE MELODIES. this is the place to write new ones.
+`
+` newMelody() starts one. it says how many milliseconds a beat lasts, which instrument plays it
+` (INSTRUMENT_BELL, INSTRUMENT_PLUCK or INSTRUMENT_SWELL), and which chord it wants underneath it
+` (MUSIC_CHORD_DM, MUSIC_CHORD_BB, or MUSIC_CHORD_ANY if it does not care). a melody that wants
+` a chord brings that chord in before it starts, and keeps it there until it is over.
+`
+` after that, every melodyBar() adds 8 beats to it, and every melodyBar9() adds 9, for tunes that
+` count in threes. a beat is a note, or it is REST for a beat of silence. a note rings for a few
+` seconds, so a held note is written as a note with rests after it.
+`
+` these are the notes, from low to high:   D4 E4 F4 G4 A4 Bb4 C5   D5 E5 F5 G5 A5 Bb5 C6
+` D, F, G, A and C sound fine over anything. E and Bb (B flat) have more color, and are there
+` for tunes that need them.
+`
+` there can be MELODY_MAX melodies, and a melody can have as many bars as it likes.
+`
+` all of these tunes are old enough to belong to everybody. they are moved into the key of the
+` game, and only the top line is played, so they are close to the real thing and not the same as it.
+setup_melodies:
+
+    ` "clair de lune", by debussy (1905). the first four bars. a bar of it is 9 beats.
+    newMelody(520, INSTRUMENT_BELL, MUSIC_CHORD_DM)
+    melodyBar9(REST, C5, C6, REST, REST, REST, A5, REST, REST)
+    melodyBar9(REST, G5, A5, G5, REST, REST, REST, REST, REST)
+    melodyBar9(REST, F5, G5, F5, REST, A5, REST, REST, F5)
+    melodyBar9(REST, E5, F5, E5, REST, REST, REST, REST, REST)
+
+    ` "clair de lune", the four bars after that, where the line winds its way down
+    newMelody(520, INSTRUMENT_BELL, MUSIC_CHORD_BB)
+    melodyBar9(REST, D5, E5, D5, G5, D5, C5, D5, C5)
+    melodyBar9(REST, Bb4, C5, Bb4, REST, REST, A4, REST, REST)
+    melodyBar9(REST, A4, Bb4, A4, D5, A4, G4, A4, G4)
+    melodyBar9(REST, F4, G4, F4, REST, REST, E4, REST, REST)
+
+    ` "arabesque no. 1", by debussy (1891). the tune that tumbles down, from the sixth bar. it goes in threes.
+    newMelody(260, INSTRUMENT_PLUCK, MUSIC_CHORD_ANY)
+    melodyBar(F5, G5, D5, F5, C5, D5, A4, C5)
+    melodyBar(G4, A4, F4, A4, E4, REST, REST, REST)
+    melodyBar(REST, REST, D4, REST, REST, REST, REST, REST)
+
+    ` "arabesque no. 1", the slow line that rises out of the opening, from the third bar
+    newMelody(700, INSTRUMENT_BELL, MUSIC_CHORD_BB)
+    melodyBar(D5, G5, D5, REST, D5, G5, Bb5, REST)
+    melodyBar(Bb5, REST, A5, G5, REST, REST, REST, REST)
+
+    ` "la fille aux cheveux de lin", by debussy (1910). the opening.
+    ` this one was written down from memory, and has not been checked against the score.
+    newMelody(300, INSTRUMENT_PLUCK, MUSIC_CHORD_ANY)
+    melodyBar(C5, REST, REST, REST, REST, REST, A4, F4)
+    melodyBar(D4, REST, F4, A4, C5, REST, A4, F4)
+    melodyBar(D4, REST, REST, REST, REST, REST, REST, REST)
+
+    ` "gymnopedie no. 1", by satie (1888). the first phrase.
+    ` this one was written down from memory too.
+    newMelody(1000, INSTRUMENT_SWELL, MUSIC_CHORD_BB)
+    melodyBar(A5, C6, Bb5, A5, E5, D5, E5, F5)
+    melodyBar(C5, REST, REST, REST, REST, REST, A4, REST)
+
+return
+
+
+setup_music:
+
+    ` the last number is how loud the layer is when it is all the way up
+    addMusicLayer(MUSIC_LAYER_RUMBLE, "Fish/Audio/Music/loop-rumble", .7)
+    addMusicLayer(MUSIC_LAYER_WASH, "Fish/Audio/Music/loop-wash", .45)
+    addMusicLayer(MUSIC_LAYER_CURRENT, "Fish/Audio/Music/loop-current", .35)
+    addMusicLayer(MUSIC_LAYER_PAD_DM, "Fish/Audio/Music/loop-pad-dm", .45)
+    addMusicLayer(MUSIC_LAYER_PAD_BB, "Fish/Audio/Music/loop-pad-bb", .45)
+
+    ` these layers wander between two levels on their own. the wash never goes away, and the current comes and goes.
+    setMusicLayerDrift(MUSIC_LAYER_WASH, .4, 1)
+    setMusicLayerDrift(MUSIC_LAYER_CURRENT, 0, 1)
+
+    ` how loud it is, how far its pitch can wander (in hundredths of an octave), and the shortest
+    ` and the longest wait before it plays on its own again, in milliseconds.
+    ` a shot with no longest wait never plays on its own.
+    addMusicShot(MUSIC_SHOT_PING, "Fish/Audio/Music/shot-ping", .25, 0, 30000, 70000)
+    addMusicShot(MUSIC_SHOT_WHALE_LOW, "Fish/Audio/Music/shot-whale-low", .3, 6, 45000, 100000)
+    addMusicShot(MUSIC_SHOT_WHALE_HIGH, "Fish/Audio/Music/shot-whale-high", .22, 6, 60000, 130000)
+    addMusicShot(MUSIC_SHOT_BUBBLES_SPARSE, "Fish/Audio/Music/shot-bubbles-sparse", .2, 10, 20000, 50000)
+    addMusicShot(MUSIC_SHOT_BUBBLES_DENSE, "Fish/Audio/Music/shot-bubbles-dense", .2, 10, 50000, 110000)
+
+    ` the instruments. the name is the start of the name of every one of its sound files,
+    ` and the number is how loud it is next to the others.
+    addMusicInstrument(INSTRUMENT_BELL, "Fish/Audio/Music/note", 1)
+    addMusicInstrument(INSTRUMENT_PLUCK, "Fish/Audio/Music/pluck", 1)
+    addMusicInstrument(INSTRUMENT_SWELL, "Fish/Audio/Music/swell", 1)
+
+    gosub setup_melodies
+
+    applyMusicVolume()
+
+    ` the music comes in a layer at a time. the current stays away until it wanders in.
+    MUSIC_LAST_MS = game ms()
+    fadeMusicLayer(MUSIC_LAYER_RUMBLE, 1, 6)
+    fadeMusicLayer(MUSIC_LAYER_WASH, 1, 10)
+    setMusicChord(MUSIC_CHORD_DM, 10)
+    MELODY_AUTO_MS = MUSIC_LAST_MS + musicWait(MELODY_GAP_MIN, MELODY_GAP_MAX) / 2
+
+return
+
+
+routines_music_exit:
+
+
+` keep the music going. this fades the layers, and plays whatever is due.
+` it works out how much time has gone by on its own, so calling it twice on a frame does no harm.
+function updateMusic()
+
+    now = game ms()
+    elapsed = now - MUSIC_LAST_MS
+    if elapsed <= 0 then exitfunction
+    MUSIC_LAST_MS = now
+
+    ` the game can stall, when a window is dragged for example, and a fade should not jump when it comes back
+    if elapsed > 100 then elapsed = 100
+    seconds# = elapsed * .001
+
+    ` the chords take turns
+    if MUSIC_CHORD_GAP_MAX > 0 and now >= MUSIC_CHORD_MS
+        setMusicChord(1 - MUSIC_CHORD, MUSIC_CHORD_FADE#)
+    endif
+
+    for i = 0 to MUSIC_LAYER_COUNT - 1
+        l = MUSIC_LAYERS(i)
+
+        ` a layer that wanders picks a new level every so often
+        if l.driftMax# > 0 and now >= l.driftMs
+            fadeMusicLayer(i, l.driftMin# + (l.driftMax# - l.driftMin#) * rnd(101) * .01, MUSIC_DRIFT_FADE#)
+            MUSIC_LAYERS(i).driftMs = now + musicWait(MUSIC_DRIFT_GAP_MIN, MUSIC_DRIFT_GAP_MAX)
+            l = MUSIC_LAYERS(i)
+        endif
+
+        ` move the level toward where it is going
+        if l.level# <> l.target#
+            change# = l.speed# * seconds#
+            if l.level# < l.target#
+                l.level# = l.level# + change#
+                if l.level# > l.target# then l.level# = l.target#
+            else
+                l.level# = l.level# - change#
+                if l.level# < l.target# then l.level# = l.target#
+            endif
+            MUSIC_LAYERS(i) = l
+            set sfx volume l.sfxId, l.level# * l.mix#
+        endif
+    next
+
+    for i = 0 to MUSIC_SHOT_COUNT - 1
+        if MUSIC_SHOTS(i).gapMax > 0 and now >= MUSIC_SHOTS(i).nextMs
+            playMusicShot(i)
+        endif
+    next
+
+    if MELODY_PLAYING >= 0
+        if now >= MELODY_NEXT_MS
+            m = MELODY_PLAYING
+
+            ` every note is a little louder or quieter than the last, the way that a person would play it
+            playMusicNote(MELODY_INSTRUMENT(m), MELODY_NOTES(MELODY_FIRST(m) + MELODY_STEP), MELODY_VOLUME# * (.8 + rnd(21) * .01))
+
+            ` the next beat is timed from when this one was due, so that the beats do not drift.
+            ` but if the game stalled, the beats that were missed are not all played at once.
+            MELODY_NEXT_MS = MELODY_NEXT_MS + MELODY_BEAT(m)
+            if MELODY_NEXT_MS < now then MELODY_NEXT_MS = now + MELODY_BEAT(m)
+
+            MELODY_STEP = MELODY_STEP + 1
+            if MELODY_STEP >= MELODY_LENGTH(m)
+                MELODY_PLAYING = -1
+                MELODY_AUTO_MS = now + musicWait(MELODY_GAP_MIN, MELODY_GAP_MAX)
+            endif
+        endif
+    else
+        if MELODY_GAP_MAX > 0 and now >= MELODY_AUTO_MS
+            playRandomMelody()
+        endif
+    endif
+
+endfunction
+
+
+` fade a layer to a level, from 0 to 1, over some seconds.
+` a layer that wanders will leave the level alone for a while, and then go back to wandering.
+` setMusicLayerDrift(layer, 0, 0) stops it from wandering at all.
+function setMusicLayer(layer, level#, seconds#)
+    fadeMusicLayer(layer, level#, seconds#)
+    MUSIC_LAYERS(layer).driftMs = game ms() + musicWait(MUSIC_DRIFT_GAP_MIN, MUSIC_DRIFT_GAP_MAX)
+endfunction
+
+
+` make a layer wander between two levels on its own. 0 and 0 makes it stay where it is put.
+function setMusicLayerDrift(layer, lowest#, highest#)
+    MUSIC_LAYERS(layer).driftMin# = lowest#
+    MUSIC_LAYERS(layer).driftMax# = highest#
+    MUSIC_LAYERS(layer).driftMs = game ms() + musicWait(MUSIC_DRIFT_GAP_MIN, MUSIC_DRIFT_GAP_MAX)
+endfunction
+
+
+` bring one of the chords up, and take the other one away, over some seconds.
+` the chords go on taking turns afterwards, unless MUSIC_CHORD_GAP_MAX is 0.
+function setMusicChord(chord, seconds#)
+    MUSIC_CHORD = chord
+    MUSIC_CHORD_MS = game ms() + musicWait(MUSIC_CHORD_GAP_MIN, MUSIC_CHORD_GAP_MAX)
+
+    if chord = MUSIC_CHORD_DM
+        fadeMusicLayer(MUSIC_LAYER_PAD_DM, 1, seconds#)
+        fadeMusicLayer(MUSIC_LAYER_PAD_BB, 0, seconds#)
+    else
+        fadeMusicLayer(MUSIC_LAYER_PAD_DM, 0, seconds#)
+        fadeMusicLayer(MUSIC_LAYER_PAD_BB, 1, seconds#)
+    endif
+endfunction
+
+
+` turn all of the music up or down, to match the music option. the options page calls this when the option changes.
+function applyMusicVolume()
+    set sfx group volume SFX_GROUP_MUSIC, MUSIC_VOLUME# * OPTION_MUSIC * .1
+endfunction
+
+
+` play one of the shots right away. it is a little different every time.
+function playMusicShot(shot)
+    s = MUSIC_SHOTS(shot)
+    set sfx volume s.sfxId, s.volume# * (.8 + rnd(21) * .01)
+    set sfx pitch s.sfxId, (rnd(s.wobble * 2 + 1) - s.wobble) * .01
+    set sfx pan s.sfxId, (rnd(121) - 60) * .01
+    play sfx s.sfxId
+
+    MUSIC_SHOTS(shot).nextMs = game ms() + musicWait(s.gapMin, s.gapMax)
+endfunction
+
+
+` play a single note on one of the instruments. playing a note that is still ringing starts it over.
+function playMusicNote(instrument, note, volume#)
+    if note = REST then exitfunction
+
+    sfxId = MUSIC_NOTE_SFX(instrument * MUSIC_NOTE_SLOTS + note)
+    set sfx volume sfxId, volume# * MUSIC_INSTRUMENT_VOLUME#(instrument)
+    set sfx pan sfxId, (rnd(61) - 30) * .01
+    play sfx sfxId
+endfunction
+
+
+` start a melody, by its number. the first one in setup_melodies is 0.
+` it takes the place of a melody that is already playing.
+function playMelody(index)
+    if index < 0 or index >= MELODY_COUNT then exitfunction
+
+    now = game ms()
+    MELODY_PLAYING = index
+    MELODY_LAST = index
+    MELODY_STEP = 0
+    MELODY_NEXT_MS = now
+
+    chord = MELODY_CHORD(index)
+    if chord <> MUSIC_CHORD_ANY
+        ` the chord that it wants comes in first, and the melody waits for it
+        if chord <> MUSIC_CHORD
+            setMusicChord(chord, MUSIC_CHORD_FADE#)
+            MELODY_NEXT_MS = now + MUSIC_CHORD_LEAD
+        endif
+
+        ` and that chord stays until the last note has rung out
+        melodyEnd = MELODY_NEXT_MS + MELODY_LENGTH(index) * MELODY_BEAT(index) + 4000
+        if MUSIC_CHORD_MS < melodyEnd then MUSIC_CHORD_MS = melodyEnd
+    endif
+endfunction
+
+
+` start a melody that is picked at random. it is never the one that played last.
+function playRandomMelody()
+    if MELODY_COUNT = 0 then exitfunction
+
+    index = rnd(MELODY_COUNT)
+    if index = MELODY_LAST then index = (index + 1) mod MELODY_COUNT
+    playMelody(index)
+endfunction
+
+
+` start writing a new melody. a beat of it lasts this many milliseconds, and it is played on this
+` instrument. the chord is the one that it wants underneath it, or MUSIC_CHORD_ANY.
+function newMelody(beatMs, instrument, chord)
+    if MELODY_COUNT >= MELODY_MAX then exitfunction
+
+    MELODY_FIRST(MELODY_COUNT) = MELODY_NOTE_TOTAL
+    MELODY_LENGTH(MELODY_COUNT) = 0
+    MELODY_BEAT(MELODY_COUNT) = beatMs
+    MELODY_INSTRUMENT(MELODY_COUNT) = instrument
+    MELODY_CHORD(MELODY_COUNT) = chord
+    MELODY_COUNT = MELODY_COUNT + 1
+endfunction
+
+
+` add 8 beats to the melody that is being written
+function melodyBar(n1, n2, n3, n4, n5, n6, n7, n8)
+    melodyBeat(n1)
+    melodyBeat(n2)
+    melodyBeat(n3)
+    melodyBeat(n4)
+    melodyBeat(n5)
+    melodyBeat(n6)
+    melodyBeat(n7)
+    melodyBeat(n8)
+endfunction
+
+
+` add 9 beats to the melody that is being written, for a tune that counts in threes
+function melodyBar9(n1, n2, n3, n4, n5, n6, n7, n8, n9)
+    melodyBeat(n1)
+    melodyBeat(n2)
+    melodyBeat(n3)
+    melodyBeat(n4)
+    melodyBeat(n5)
+    melodyBeat(n6)
+    melodyBeat(n7)
+    melodyBeat(n8)
+    melodyBeat(n9)
+endfunction
+
+
+` add one beat to the melody that is being written
+function melodyBeat(note)
+    if MELODY_COUNT = 0 or MELODY_NOTE_TOTAL >= MELODY_NOTE_MAX then exitfunction
+
+    MELODY_NOTES(MELODY_NOTE_TOTAL) = note
+    MELODY_NOTE_TOTAL = MELODY_NOTE_TOTAL + 1
+    MELODY_LENGTH(MELODY_COUNT - 1) = MELODY_LENGTH(MELODY_COUNT - 1) + 1
+endfunction
+
+
+` the fade itself. setMusicLayer is the one to call from the game.
+function fadeMusicLayer(layer, level#, seconds#)
+    if level# < 0 then level# = 0
+    if level# > 1 then level# = 1
+    if seconds# < .01 then seconds# = .01
+
+    distance# = abs(level# - MUSIC_LAYERS(layer).level#)
+    MUSIC_LAYERS(layer).target# = level#
+    MUSIC_LAYERS(layer).speed# = distance# / seconds#
+endfunction
+
+
+` a wait of a random length, in milliseconds
+function musicWait(shortest, longest)
+    waitMs = shortest
+    if longest > shortest then waitMs = shortest + rnd(longest + 1 - shortest)
+endfunction waitMs
+
+
+` load a loop, and start it playing with the volume all the way down
+function addMusicLayer(layer, path$, mix#)
+    clipId = 0
+    sfxId = 0
+    reserve sfx clip id(clipId)
+    load sfx clip clipId, path$
+    reserve sfx id(sfxId)
+    sfx sfxId, clipId
+    set sfx group sfxId, SFX_GROUP_MUSIC
+    set sfx loop sfxId, 1
+    set sfx volume sfxId, 0
+    play sfx sfxId
+
+    MUSIC_LAYERS(layer).sfxId = sfxId
+    MUSIC_LAYERS(layer).mix# = mix#
+endfunction
+
+
+function addMusicShot(shot, path$, volume#, wobble, gapMin, gapMax)
+    clipId = 0
+    sfxId = 0
+    reserve sfx clip id(clipId)
+    load sfx clip clipId, path$
+    reserve sfx id(sfxId)
+    sfx sfxId, clipId
+    set sfx group sfxId, SFX_GROUP_MUSIC
+
+    MUSIC_SHOTS(shot).sfxId = sfxId
+    MUSIC_SHOTS(shot).volume# = volume#
+    MUSIC_SHOTS(shot).wobble = wobble
+    MUSIC_SHOTS(shot).gapMin = gapMin
+    MUSIC_SHOTS(shot).gapMax = gapMax
+    MUSIC_SHOTS(shot).nextMs = game ms() + musicWait(gapMin, gapMax)
+endfunction
+
+
+` load every note of an instrument. the files are named for the notes, like "pluck-bb4".
+function addMusicInstrument(instrument, name$, volume#)
+    MUSIC_INSTRUMENT_VOLUME#(instrument) = volume#
+
+    addMusicNote(instrument, D4, name$ + "-d4")
+    addMusicNote(instrument, E4, name$ + "-e4")
+    addMusicNote(instrument, F4, name$ + "-f4")
+    addMusicNote(instrument, G4, name$ + "-g4")
+    addMusicNote(instrument, A4, name$ + "-a4")
+    addMusicNote(instrument, Bb4, name$ + "-bb4")
+    addMusicNote(instrument, C5, name$ + "-c5")
+    addMusicNote(instrument, D5, name$ + "-d5")
+    addMusicNote(instrument, E5, name$ + "-e5")
+    addMusicNote(instrument, F5, name$ + "-f5")
+    addMusicNote(instrument, G5, name$ + "-g5")
+    addMusicNote(instrument, A5, name$ + "-a5")
+    addMusicNote(instrument, Bb5, name$ + "-bb5")
+    addMusicNote(instrument, C6, name$ + "-c6")
+endfunction
+
+
+function addMusicNote(instrument, note, path$)
+    clipId = 0
+    sfxId = 0
+    reserve sfx clip id(clipId)
+    load sfx clip clipId, path$
+    reserve sfx id(sfxId)
+    sfx sfxId, clipId
+    set sfx group sfxId, SFX_GROUP_MUSIC
+
+    MUSIC_NOTE_SFX(instrument * MUSIC_NOTE_SLOTS + note) = sfxId
+endfunction
