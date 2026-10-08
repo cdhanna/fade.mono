@@ -1,0 +1,176 @@
+goto routines_multiplier_exit
+
+remstart
+    THE MULTIPLIER
+    every fish that pops scores SCORE_MULTIPLIER times what it would have. see THE MULTIPLIER in
+    fish_headers for the rules.
+
+    the rest of the game only has to do three things:
+    - call multiplierSwapMade() when a swap has been made
+    - call judgeMultiplierSwaps() when handle_combos has looked at the board, and knows if anything popped
+    - multiply what a fish scores by SCORE_MULTIPLIER
+
+    it sits underneath the count of moves: the multiplier, and the bar that fills up toward the next one.
+remend
+
+setup_multiplier:
+
+    ` the label, in the same style as the "moves" label above it. all of this is a little smaller than
+    ` the count of moves is, and it sits right underneath it.
+    reserve text id(multLabelTextId)
+    text multLabelTextId, MULT_POS.x, MULT_POS.y, SCORE_FONT, "Multiplier"
+    size text y multLabelTextId, 16
+    set text offset multLabelTextId, 0, 0
+    color text multLabelTextId, rgb(64, 128, 255, 200)
+    enable text drop shadow multLabelTextId, 2, -2, rgb(0,0,0)
+
+    ` the multiplier itself. stepMultiplier colors it and sizes it on every frame.
+    reserve text id(MULT_TEXT_ID)
+    text MULT_TEXT_ID, MULT_POS.x + 24, MULT_POS.y + 43, SCORE_FONT, "x1"
+    size text y MULT_TEXT_ID, 30
+    set text offset MULT_TEXT_ID, .5, 1
+    color text MULT_TEXT_ID, rgb(64, 128, 255, 200)
+    enable text drop shadow MULT_TEXT_ID, 2, -2, rgb(0,0,0)
+
+    ` the bar, which looks like the bar of the round's progress
+    reserve sprite id(MULT_BAR_BACK_SPRITE)
+    sprite MULT_BAR_BACK_SPRITE, MULT_POS.x, MULT_POS.y + 46, TEX_PIXEL
+    size sprite MULT_BAR_BACK_SPRITE, MULT_BAR_WIDTH, 4
+    set sprite offset MULT_BAR_BACK_SPRITE, 0, 0
+    color sprite MULT_BAR_BACK_SPRITE, rgb(32, 64, 128, 128)
+
+    reserve sprite id(MULT_BAR_FILL_SPRITE)
+    sprite MULT_BAR_FILL_SPRITE, MULT_POS.x + 1, MULT_POS.y + 47, TEX_PIXEL
+    size sprite MULT_BAR_FILL_SPRITE, 0, 2
+    set sprite offset MULT_BAR_FILL_SPRITE, 0, 0
+    color sprite MULT_BAR_FILL_SPRITE, rgb(64, 128, 255, 200)
+
+    ` how many swaps in a row there have been, out of how many it takes
+    reserve text id(MULT_NUM_TEXT_ID)
+    text MULT_NUM_TEXT_ID, MULT_POS.x + MULT_BAR_WIDTH, MULT_POS.y + 48, SCORE_FONT, "0/2"
+    size text y MULT_NUM_TEXT_ID, 15
+    set text offset MULT_NUM_TEXT_ID, 1, 0
+    color text MULT_NUM_TEXT_ID, rgb(64, 128, 255, 200)
+    enable text drop shadow MULT_NUM_TEXT_ID, 2, -2, rgb(0,0,0)
+
+    reserve tween id(MULT_FILL_TWEEN_ID)
+    reserve tween id(MULT_PUNCH_TWEEN_ID)
+    create basic tween MULT_FILL_TWEEN_ID, 0, 0, 1, 0
+    create basic tween MULT_PUNCH_TWEEN_ID, 0, 0, 1, 0
+
+    infoIndex = allocateInfoBlob(MULT_POS.x - 4, MULT_POS.y - 2, MULT_BAR_WIDTH + 8, 66, "Multiplier", "Every fish that pops scores this many times as much. A swap that pops fish fills the bar, and a full bar adds one. A swap that pops nothing empties the bar, and takes one away.")
+
+return
+
+
+routines_multiplier_exit:
+
+
+` how many swaps in a row have to pop something to fill the bar. it is 2 for the first multiplier,
+` and 3 more for every one after that: 2, 5, 8, 11, and so on.
+function getMultiplierRequired()
+    required = MULT_FIRST_REQUIRED + (SCORE_MULTIPLIER - 1) * MULT_REQUIRED_STEP
+endfunction required
+
+
+` a swap has been made. it is not known yet if it popped anything. handle_combos finds that out.
+function multiplierSwapMade()
+    MULT_PENDING_SWAPS = MULT_PENDING_SWAPS + 1
+endfunction
+
+
+` handle_combos has looked at the board, and `comboCount` groups of fish are popping.
+` if any swaps were made since the last time, this is where they fill the bar, or empty it.
+` the fish that keep popping afterwards, as the board fills back in, are not swaps, so they do neither.
+function judgeMultiplierSwaps(comboCount)
+    if MULT_PENDING_SWAPS > 0
+        pendingSwaps = MULT_PENDING_SWAPS
+        MULT_PENDING_SWAPS = 0
+
+        if comboCount > 0
+            MULT_PROGRESS = MULT_PROGRESS + 1
+            requiredNow = getMultiplierRequired()
+            if MULT_PROGRESS >= requiredNow
+                ` the bar is full, so the multiplier goes up, and the bar starts again. there is no top to it.
+                SCORE_MULTIPLIER = SCORE_MULTIPLIER + 1
+                MULT_PROGRESS = 0
+
+                MULT_PUNCH_DIR = 1
+                create basic tween MULT_PUNCH_TWEEN_ID, 1, 0, 500, 0
+                spawnBubbles(MULT_POS.x + 24, MULT_POS.y + 30, 8, 14, 0, rgb(255, 255, 255))
+            endif
+        else
+            ` the player can swap while fish are still popping, so more than one swap can be waiting.
+            ` every one of them that popped nothing takes one off.
+            if SCORE_MULTIPLIER > 1 or MULT_PROGRESS > 0
+                MULT_PUNCH_DIR = -1
+                create basic tween MULT_PUNCH_TWEEN_ID, 1, 0, 400, 0
+            endif
+
+            SCORE_MULTIPLIER = SCORE_MULTIPLIER - pendingSwaps
+            if SCORE_MULTIPLIER < 1 then SCORE_MULTIPLIER = 1
+            MULT_PROGRESS = 0
+        endif
+
+        refreshMultiplier(150)
+    endif
+endfunction
+
+
+` write the multiplier onto the screen, and slide the bar to where it should be over `duration` milliseconds
+function refreshMultiplier(duration)
+    set text MULT_TEXT_ID, "x" + str$(SCORE_MULTIPLIER)
+
+    requiredNow = getMultiplierRequired()
+    set text MULT_NUM_TEXT_ID, str$(MULT_PROGRESS) + "/" + str$(requiredNow)
+
+    progressNow# = MULT_PROGRESS
+    requiredNow# = requiredNow
+    create basic tween MULT_FILL_TWEEN_ID, tweenVal(MULT_FILL_TWEEN_ID), progressNow# / requiredNow#, duration, 0
+endfunction
+
+
+` a new game starts with no multiplier, and an empty bar
+function resetMultiplier()
+    SCORE_MULTIPLIER = 1
+    MULT_PROGRESS = 0
+    MULT_PENDING_SWAPS = 0
+    MULT_PUNCH_DIR = 0
+    create basic tween MULT_PUNCH_TWEEN_ID, 0, 0, 1, 0
+    create basic tween MULT_FILL_TWEEN_ID, 0, 0, 1, 0
+    refreshMultiplier(1)
+endfunction
+
+
+` draw the multiplier. update_frame calls this on every frame.
+function stepMultiplier()
+    fillWidth# = (MULT_BAR_WIDTH - 2.0) * tweenVal(MULT_FILL_TWEEN_ID)
+    size sprite MULT_BAR_FILL_SPRITE, fillWidth#, 2
+
+    ` the punch is 1 when the multiplier has just changed, and it dies away to 0
+    punch# = tweenVal(MULT_PUNCH_TWEEN_ID)
+    textX# = MULT_POS.x + 24
+    textSize# = 30
+
+    ` it is blue like the rest of the numbers, and it flashes when it changes
+    flashR# = 64
+    flashG# = 128
+    flashB# = 255
+    if MULT_PUNCH_DIR > 0
+        ` going up: it jumps bigger, and flashes white
+        textSize# = 30 + 6 * punch#
+        flashR# = 64 + 191 * punch#
+        flashG# = 128 + 127 * punch#
+    endif
+    if MULT_PUNCH_DIR < 0
+        ` going down: it shakes, and flashes red
+        textX# = textX# + sin(game ms() * .05) * 4 * punch#
+        flashR# = 64 + 191 * punch#
+        flashG# = 128 - 48 * punch#
+        flashB# = 255 - 175 * punch#
+    endif
+
+    size text y MULT_TEXT_ID, textSize#
+    set text position MULT_TEXT_ID, textX#, MULT_POS.y + 43
+    color text MULT_TEXT_ID, rgb(flashR#, flashG#, flashB#, 200 + 55 * punch#)
+endfunction

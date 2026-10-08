@@ -287,9 +287,102 @@ function setProgressTween(bar as progressBar, progress)
 
 endfunction
 
+` score some points, and have them show up on the bar `delay` milliseconds from now.
+` see THE SCORE THAT SHOWS in fish_headers.
+function queueScore(points, delay)
+    CURRENT_SCORE = CURRENT_SCORE + points
+
+    if SCORE_TICK_COUNT < SCORE_TICK_MAX
+        SCORE_TICK_MS(SCORE_TICK_COUNT) = game ms() + delay
+        SCORE_TICK_POINTS(SCORE_TICK_COUNT) = points
+        SCORE_TICK_COUNT = SCORE_TICK_COUNT + 1
+    else
+        ` there is no room to wait, so these show up right away
+        SCORE_SHOWN = SCORE_SHOWN + points
+    endif
+endfunction
+
+` move the points that are due onto the bar. frame_score calls this on every frame.
+function stepScoreTicks()
+    if SCORE_TICK_COUNT > 0
+        tickNow = game ms()
+        tickGot = 0
+        tickI = 0
+        while tickI < SCORE_TICK_COUNT
+            if SCORE_TICK_MS(tickI) <= tickNow
+                SCORE_SHOWN = SCORE_SHOWN + SCORE_TICK_POINTS(tickI)
+                tickGot = 1
+
+                ` the last one in the list takes its place, and gets looked at next
+                SCORE_TICK_COUNT = SCORE_TICK_COUNT - 1
+                SCORE_TICK_MS(tickI) = SCORE_TICK_MS(SCORE_TICK_COUNT)
+                SCORE_TICK_POINTS(tickI) = SCORE_TICK_POINTS(SCORE_TICK_COUNT)
+            else
+                tickI = tickI + 1
+            endif
+        endwhile
+
+        ` the bar slides to the new score. it is quick, so that it keeps up with fish that pop one right after another.
+        if tickGot
+            tickSpan# = SCORE_BAR.endVal - SCORE_BAR.startVal
+            tickAhead# = SCORE_SHOWN - SCORE_BAR.startVal
+            tickRatio# = tickAhead# / tickSpan#
+            if tickRatio# > 1 then tickRatio# = 1
+            create basic tween SCORE_BAR.progressTweenId, tweenVal(SCORE_BAR.progressTweenId), tickRatio#, 90, 0
+        endif
+    endif
+endfunction
+
+` the score that shows is the real score, with nothing waiting. for a new game, and a loaded one.
+function syncScoreShown()
+    SCORE_SHOWN = CURRENT_SCORE
+    SCORE_TICK_COUNT = 0
+    SCORE_BAR_HOLD = 0
+endfunction
+
+` an upgrade has been picked, so the bar that was being held full empties out, and starts on the next round.
+` every round needs twice the score of the one before.
+function advanceScoreBar()
+    if SCORE_BAR_HOLD
+        SCORE_BAR_HOLD = 0
+
+        ` the second round is as long as the first one, and every round after that is twice as long as the one before
+        oldSpan = SCORE_BAR.endVal - SCORE_BAR.startVal
+        newSpan = oldSpan * 2
+        if SCORE_BAR.startVal = 0 then newSpan = oldSpan
+        newStart = SCORE_BAR.endVal
+
+        ` whatever was scored past the end of the last round is already part of this one, but only so much
+        ` of it. past that, the round starts later instead, so that the score is still all there.
+        carryMax = newSpan * SCORE_CARRY_MAX#
+        carried = CURRENT_SCORE - newStart
+        if carried > carryMax then newStart = CURRENT_SCORE - carryMax
+
+        SCORE_BAR.startVal = newStart
+        SCORE_BAR.endVal = newStart + newSpan
+        PROGRESS_BARS(0) = SCORE_BAR
+
+        barSpan# = SCORE_BAR.endVal - SCORE_BAR.startVal
+        barAhead# = SCORE_SHOWN - SCORE_BAR.startVal
+        barRatio# = barAhead# / barSpan#
+        if barRatio# > 1 then barRatio# = 1
+
+        ` the bar is empty right away, and stays that way for a moment so that it is seen to be empty.
+        ` then it grows from the left to where the new round starts.
+        create basic tween SCORE_BAR.progressTweenId, 0, barRatio#, 450, 350
+    endif
+endfunction
+
 function getRoundsLeft()
 
-endfunction 100 - CURRENT_ROUND
+endfunction GAME_ROUND_CAP - CURRENT_ROUND
+
+` how many rounds a game of the given length has. the length is one of the GAME_LENGTH constants.
+function getGameLengthRounds(length)
+    rounds = 30
+    if length = GAME_LENGTH_SHORT then rounds = 5
+    if length = GAME_LENGTH_LONG then rounds = 100
+endfunction rounds
 
 function createProgressBar(pos as vec, size as vec)
     bar as progressBar 
@@ -399,8 +492,9 @@ function collectInput()
     isSwap = action down(ACT_SWAP)
     swapVal = -1
     if MOVE_ABILITY_COUNT > 0
-        for i = 0 to MOVE_ABILITY_COUNT - 1
+        for i = 0 to MOVE_SLOT_COUNT - 1
             moveBinding = MOVE_ABILITY_BINDINGS(i)
+            if moveBinding.assigned = 0 then skip
 
             isKey = action down(moveBinding.actionId)
             ` TODO: check for the ready staus when actually processing input.
@@ -420,6 +514,9 @@ function collectInput()
     if new action down(ACT_LEFT) then swapDir.x = -1
     if new action down(ACT_UP) then swapDir.y = -1
     if new action down(ACT_DOWN) then swapDir.y = 1
+
+    ` the queue is full. moves can pile up now that they can be made while a combo is going.
+    if QUEUED_MOVE_NUM >= QUEUED_MOVE_MAX - 1 then exitfunction
 
     if swapDir.x <> 0 or swapDir.y <> 0
         QUEUED_MOVES(QUEUED_MOVE_NUM) = {
@@ -508,6 +605,11 @@ function doBomb(start as vec, dir as vec)
     create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, CELL_SIZE * 1.5, 150, 50
     set tween type SELECTION_TWEEN_PUNCH_ID, 1
 
+    ` the loops below wait on the tween of the last fish that the bomb reached. part of the bomb can be
+    ` off of the board, so this is not always the last fish that the loops look at. the fish in the
+    ` middle is always on the board, so there is always one.
+    lastTweenId = cells(aIndex).shiftTweenId
+
     for x = -1 to 1
         for y = -1 to 1
             offset as vec = {
@@ -515,7 +617,6 @@ function doBomb(start as vec, dir as vec)
                 y = y
             }
             position as vec = addCoordinates(start, offset)
-            lastTweenId = 0
             if position.x >= 0 and position.x < CELL_COLUMN_COUNT
                 if position.y >= 0 and position.y < CELL_ROW_COUNT
                     bIndex = getCellIndex(position)
@@ -568,7 +669,6 @@ function doBomb(start as vec, dir as vec)
             }
             position = addCoordinates(start, offset)
             duration = 70
-            lastTweenId = 0
             if position.x >= 0 and position.x < CELL_COLUMN_COUNT
                 if position.y >= 0 and position.y < CELL_ROW_COUNT
                     bIndex = getCellIndex(position)
@@ -1007,75 +1107,203 @@ function doShift(start as vec, dir as vec)
 
 endfunction
 
-function doSwap(start as vec, dir as vec, doSwap)
+` LIVE MOVES. see the notes in fish_headers.
 
-    ` the cursor leaves a few bubbles behind
-    spawnCursorWake(start.x, start.y)
+` is a combo busy with the fish in this cell? a swap cannot touch one that is.
+function isCellLocked(index)
+    locked = 0
+    if COMBO_PHASE > 0
+        ` a fish that is popping, or the empty spot that it left, or a new fish dropping into one
+        if CELLS(index).comboBlownUp then locked = 1
 
-    target as vec = addCoordinates(start, dir)
+        ` while the fish fall, the ones that have a gap under them are on the move
+        if COMBO_PHASE = 2
+            if CELLS(index).comboDownShift > 0 then locked = 1
+        endif
+    endif
+endfunction locked
 
-    aIndex = getCellIndex(start)
-    bIndex = getCellIndex(target)
+` start a swap from the cursor to the cell next to it, or only move the cursor there.
+` this says 1 if it started. it does not start if it would leave the board, or if it is a swap that
+` would touch a fish that a combo is busy with.
+function startLiveMove(dirX, dirY, wantSwap)
+    started = 0
 
-    ` do a little fake animation thiny? 
-    startPosition as vec = {
-        x = getCellX(start.x),
-        y = getCellY(start.y)
+    liveDir as vec = {
+        x = dirX,
+        y = dirY
     }
-    endPosition as vec = {
-        x = getCellX(target.x),
-        y = getCellY(target.y)
-    }
+    liveTarget as vec = addCoordinates(SELECTION_POS, liveDir)
 
-    ` there are 4 tweens, 
-    duration = 150
-    
-    create basic tween TWEEN_SWAP_AX, startPosition.x, endPosition.x, duration, 0
-    create basic tween TWEEN_SWAP_AY, startPosition.y, endPosition.y, duration, 0
-    create basic tween TWEEN_SWAP_BX, endPosition.x, startPosition.x, duration, 0
-    create basic tween TWEEN_SWAP_BY, endPosition.y, startPosition.y, duration, 0
+    allowed = 1
+    if liveTarget.x < 0 then allowed = 0
+    if liveTarget.x >= CELL_COLUMN_COUNT then allowed = 0
+    if liveTarget.y < 0 then allowed = 0
+    if liveTarget.y >= CELL_ROW_COUNT then allowed = 0
 
-    create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, CELL_SIZE * 1.5, 150, 50
-    set tween type SELECTION_TWEEN_PUNCH_ID, 1
+    if allowed
+        aIndex = getCellIndex(SELECTION_POS)
+        bIndex = getCellIndex(liveTarget)
+        if wantSwap
+            if isCellLocked(aIndex) then allowed = 0
+            if isCellLocked(bIndex) then allowed = 0
+        endif
+    endif
 
-    create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
-    set tween type SWAP_TWEEN_SFX, 1
+    if allowed
+        ` the cursor leaves a few bubbles behind
+        spawnCursorWake(SELECTION_POS.x, SELECTION_POS.y)
 
-    while (is tween done(TWEEN_SWAP_AX) < 1) or (is tween done(SELECTION_TWEEN_PUNCH_ID) < 1)
+        startX = getCellX(SELECTION_POS.x)
+        startY = getCellY(SELECTION_POS.y)
+        endX = getCellX(liveTarget.x)
+        endY = getCellY(liveTarget.y)
+        duration = 150
 
-        if (doSwap)
-            position sprite cells(aIndex).spriteId, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
-            position sprite cells(bIndex).spriteId, tweenVal(TWEEN_SWAP_BX), tweenVal(TWEEN_SWAP_BY)
+        ` the fish that the cursor is on goes along with it, and the other one comes back the other way
+        create basic tween TWEEN_SWAP_AX, startX, endX, duration, 0
+        create basic tween TWEEN_SWAP_AY, startY, endY, duration, 0
+        create basic tween TWEEN_SWAP_BX, endX, startX, duration, 0
+        create basic tween TWEEN_SWAP_BY, endY, startY, duration, 0
+
+        create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, CELL_SIZE * 1.5, 150, 50
+        set tween type SELECTION_TWEEN_PUNCH_ID, 1
+
+        create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
+        set tween type SWAP_TWEEN_SFX, 1
+
+        LIVE_MOVE_ACTIVE = 1
+        LIVE_MOVE_IS_SWAP = wantSwap
+        LIVE_MOVE_FREE = 0 `startFreeMove sets this, after it has started the swap
+        LIVE_MOVE_A = aIndex
+        LIVE_MOVE_B = bIndex
+        LIVE_MOVE_FROM_X = SELECTION_POS.x
+        LIVE_MOVE_FROM_Y = SELECTION_POS.y
+        LIVE_MOVE_TO_X = liveTarget.x
+        LIVE_MOVE_TO_Y = liveTarget.y
+        LIVE_MOVE_DIR_X = dirX
+        LIVE_MOVE_DIR_Y = dirY
+        started = 1
+
+        ` a shake that was still going is over. the cursor is on its way somewhere now.
+        CURSOR_SHAKING = 0
+    else
+        ` the move cannot be made, so the cursor shakes toward where it was asked to go
+        CURSOR_SHAKING = 1
+        CURSOR_SHAKE_DIR_X = dirX
+        CURSOR_SHAKE_DIR_Y = dirY
+        create basic tween CURSOR_SHAKE_TWEEN_ID, 1, 0, CURSOR_SHAKE_TIME, 0
+    endif
+endfunction started
+
+` play the shake that the cursor does when a move cannot be made. this runs on every frame.
+function stepCursorShake()
+    if CURSOR_SHAKING
+        ` a move that is playing out puts the cursor where it wants it
+        if LIVE_MOVE_ACTIVE = 0
+            cursorX = getCellX(SELECTION_POS.x)
+            cursorY = getCellY(SELECTION_POS.y)
+
+            if is tween done(CURSOR_SHAKE_TWEEN_ID) >= 1
+                ` it is over, so the cursor goes back to exactly where it belongs
+                CURSOR_SHAKING = 0
+                position sprite SELECTION_SPRITE, cursorX, cursorY
+            else
+                ` it lunges the way that it was asked to go, and wobbles back as the shake dies away
+                shakeNow# = sin(game ms() * .05) * CURSOR_SHAKE_SIZE * tweenVal(CURSOR_SHAKE_TWEEN_ID)
+                position sprite SELECTION_SPRITE, cursorX + CURSOR_SHAKE_DIR_X * shakeNow#, cursorY + CURSOR_SHAKE_DIR_Y * shakeNow#
+            endif
+        endif
+    endif
+endfunction
+
+` move the swap, or the cursor, that is playing out along by one frame. when it gets to the end, the two
+` fish really do trade places, and the cursor really is on the new cell.
+` this says 0 if nothing is playing, 1 if it still is, and 2 if it finished on this frame.
+function stepLiveMove()
+    result = 0
+    if LIVE_MOVE_ACTIVE
+        result = 1
+
+        if LIVE_MOVE_IS_SWAP
+            position sprite CELLS(LIVE_MOVE_A).spriteId, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
+            position sprite CELLS(LIVE_MOVE_B).spriteId, tweenVal(TWEEN_SWAP_BX), tweenVal(TWEEN_SWAP_BY)
         endif
 
         position sprite SELECTION_SPRITE, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
         scale sprite SELECTION_SPRITE, tweenVal(SELECTION_TWEEN_PUNCH_ID), tweenVal(SELECTION_TWEEN_PUNCH_ID)
-
         set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
 
-        collectInput()
-        updateBubbles()
-        sync
+        finished = 0
+        if is tween done(TWEEN_SWAP_AX) >= 1
+            if is tween done(SELECTION_TWEEN_PUNCH_ID) >= 1 then finished = 1
+        endif
 
-    endwhile
+        if finished
+            result = 2
+            LIVE_MOVE_ACTIVE = 0
 
+            if LIVE_MOVE_IS_SWAP
+                t = CELLS(LIVE_MOVE_B).value
+                CELLS(LIVE_MOVE_B).value = CELLS(LIVE_MOVE_A).value
+                CELLS(LIVE_MOVE_A).value = t
+                swapCellStacks(LIVE_MOVE_A, LIVE_MOVE_B)
 
-    ` map the values of the cells to the new values 
-    if (doSwap)
-        t = cells(bIndex).value
-        cells(bIndex).value = cells(aIndex).value
-        cells(aIndex).value = t
-        swapCellStacks(aIndex, bIndex)
+                updateCell(CELLS(LIVE_MOVE_A))
+                updateCell(CELLS(LIVE_MOVE_B))
 
-        updateCell(cells(aIndex))
-        updateCell(cells(bIndex))
+                ` a fish that gets swapped down to the bottom row did not land there, so it gets no chance
+                ` at a stack from the "bottom feeder" card
 
-        ` a fish that gets swapped down to the bottom row did not land there, so it gets no chance
-        ` at a stack from the "bottom feeder" card
+                ` the swap of the "free move" card is not counted as a move, and the multiplier does not
+                ` care if it pops anything
+                if LIVE_MOVE_FREE = 0
+                    registerMove(1)
 
-        registerMove(1)
+                    ` the multiplier wants to know if this swap pops anything
+                    multiplierSwapMade()
+                endif
+
+                ` a swap may turn a fish belly up, once the board has settled
+                BELLY_UP_ROLL_DUE = 1
+
+                ` and it sends out a shockwave from where it started, headed the way that it went
+                spawnShockwaveToward(LIVE_MOVE_FROM_X, LIVE_MOVE_FROM_Y, LIVE_MOVE_DIR_X, LIVE_MOVE_DIR_Y, SHOCK_SWAP_STRENGTH#, 0, SHOCK_LIFE)
+            endif
+
+            SELECTION_POS.x = LIVE_MOVE_TO_X
+            SELECTION_POS.y = LIVE_MOVE_TO_Y
+            position sprite SELECTION_SPRITE, getCellX(SELECTION_POS.x), getCellY(SELECTION_POS.y)
+
+            ` the cursor swelled up on the way, and it ends up exactly the size of a cell again
+            scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+
+            ` with the "bottoms up" card, a fish that is belly up pops when the cursor comes to it.
+            ` not one that a combo is already busy with, though.
+            if isCellLocked(LIVE_MOVE_B) = 0
+                popBellyUpFish(LIVE_MOVE_B)
+            endif
+
+            ` the board may have a new combo on it now
+            REQUEST_COMBO_CHECK = 1
+        endif
     endif
-endfunction
+endfunction result
+
+` use the "free move" that is in the given slot. it is a swap like any other, except that it is not
+` counted as a move, and the multiplier does not care if it pops anything.
+` this says 1 if the swap started. if it could not, the move is not used up.
+function startFreeMove(slot, dirX, dirY)
+    freeStarted = startLiveMove(dirX, dirY, 1)
+    if freeStarted
+        LIVE_MOVE_FREE = 1
+
+        ` it did not cost a move, so the other moves do not get any closer to being ready
+        MOVE_ABILITY_BINDINGS(slot).movesLeft = MOVE_ABILITY_BINDINGS(slot).resetTimer
+        set text MOVE_ABILITY_BINDINGS(slot).timerTextId, str$(MOVE_ABILITY_BINDINGS(slot).movesLeft)
+        create basic tween MOVE_ABILITY_BINDINGS(slot).useShakeTweenId, 1, 0, 500, 0
+    endif
+endfunction freeStarted
 
 function registerMove(delta)
     ` register the move against the score

@@ -209,6 +209,7 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_CLONER).artTexId), "Fish/Textures/Cards/clone"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_BOMB3x3).artTexId), "Fish/Textures/Cards/bomb"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_LINE_OUT).artTexId), "Fish/Textures/Cards/line_out"
+    texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_FREE).artTexId), "Fish/Textures/Cards/free_swap"
 
 return
 
@@ -442,6 +443,8 @@ setup_swap_tweens:
     global SWAP_TWEEN_SFX
     reserve tween id (SWAP_TWEEN_SFX)
 
+    reserve tween id (CURSOR_SHAKE_TWEEN_ID)
+
 return
 
 
@@ -459,6 +462,8 @@ update_frame:
     gosub frame_passive_render
     gosub frame_move_ability_render
     gosub frame_free_moves
+    stepCursorShake()
+    stepMultiplier()
     updateBubbles()
     updateMusic()
     gosub frame_dbg
@@ -589,31 +594,92 @@ return
 
 frame_score:
 
-    if CURRENT_SCORE >= SCORE_BAR.endVal
-        
-        ` show ability upgrade!
-        REQUEST_ABILITY_SELECTION = 1
+    ` the points of the fish that popped on this frame go onto the bar
+    stepScoreTicks()
 
+    ` the round is over when the bar has been seen to fill up, which is a moment after the score got there
+    if SCORE_BAR_HOLD = 0 and SCORE_SHOWN >= SCORE_BAR.endVal
+        
         ` update the rounds left
         CURRENT_ROUND = CURRENT_ROUND + 1
         set text ROUND_COUNT_TEXT_ID, str$(getRoundsLeft())
 
 
-        ` produce next score range
-        SCORE_BAR.startVal = SCORE_BAR.endVal
-        SCORE_BAR.endVal = SCORE_BAR.endVal * 2
-        PROGRESS_BARS(0) = SCORE_BAR
-        create basic tween SCORE_BAR.progressTweenId, tweenVal(SCORE_BAR.progressTweenId), 0, 100, 0
+        ` the bar stays full until an upgrade has been picked. then advanceScoreBar starts it on the next round.
+        SCORE_BAR_HOLD = 1
+        create basic tween SCORE_BAR.progressTweenId, tweenVal(SCORE_BAR.progressTweenId), 1, 90, 0
+    endif
+
+    if SCORE_BAR_HOLD > 0
+
+        ` show ability upgrade! but not while fish are still popping. it waits for the board to settle.
+        if SCORE_BAR_HOLD = 1 and REQUEST_COMBO_CHECK = 0 and LIVE_MOVE_ACTIVE = 0
+            if getRoundsLeft() <= 0
+                ` that was the last round, so the game is over. handle_game_end, in fish_routines_menu, says so.
+                REQUEST_GAME_END = 1
+                SCORE_BAR_HOLD = 2
+            else
+                if GAME_ZEN
+                    ` a zen game has no upgrades. the bar empties out, and the next round starts.
+                    advanceScoreBar()
+                else
+                    REQUEST_ABILITY_SELECTION = 1
+                    SCORE_BAR_HOLD = 2
+                endif
+            endif
+        endif
+
+        ` until the upgrade screen comes up, the full bar fizzes with bubbles, all the way along it
+        if game ms() >= SCORE_BAR_FIZZ_MS
+            SCORE_BAR_FIZZ_MS = game ms() + SCORE_BAR_FIZZ_GAP
+            for fizzN = 1 to 2
+                fizzColor = rgb(64, 128, 255)
+                if rnd(3) = 0 then fizzColor = rgb(255, 255, 255)
+                spawnBubblesOnLayer(SCORE_BAR.pos.x + rnd(SCORE_BAR.size.x), SCORE_BAR.pos.y + 2, 2, 1, 0, fizzColor, ORDER_FLOAT_BUBBLES, 40, 255, 1)
+            next
+
+            ` the cursor on the board fizzes along with it, in the color of its outline
+            fizzColor = rgb(112, 140, 224)
+            if rnd(3) = 0 then fizzColor = rgb(255, 255, 255)
+            spawnBubblesOnLayer(getCellX(SELECTION_POS.x), getCellY(SELECTION_POS.y), CELL_SIZE / 2, 1, 0, fizzColor, ORDER_FLOAT_BUBBLES, 40, 255, getBoardBubbleScale())
+        endif
+
+        ` and it shakes, the same as the bar does. a move that is playing out, or the shake of a move that
+        ` cannot be made, puts the cursor where it wants it, so this leaves the cursor alone for those.
+        if LIVE_MOVE_ACTIVE = 0 and CURSOR_SHAKING = 0
+            position sprite SELECTION_SPRITE, getCellX(SELECTION_POS.x) + rnd(3) - 1, getCellY(SELECTION_POS.y) + rnd(3) - 1
+        endif
     endif
 
     for i = 0 to PROGRESS_BAR_COUNT - 1
         bar = PROGRESS_BARS(i)
-        scoreWidth# = (bar.size.x - 2.0) * tweenVal(bar.progressTweenId)
+        barFill# = tweenVal(bar.progressTweenId)
+        scoreWidth# = (bar.size.x - 2.0) * barFill#
         size sprite bar.foregroundSpriteId, scoreWidth#, 2
+
+        ` the bar shakes by a pixel while it is filling up. while it is full and fizzing, it shakes
+        ` every which way, and it is brighter. it sits still when it is emptying out, or doing nothing.
+        barShakeX = 0
+        barShakeY = 0
+        barColor = rgb(64, 128, 255, 200)
+        if barFill# > SCORE_BAR_LAST_FILL# then barShakeY = rnd(2)
+        if SCORE_BAR_HOLD > 0
+            barShakeX = rnd(3) - 1
+            barShakeY = rnd(3) - 1
+            barColor = rgb(190, 225, 255, 255)
+        endif
+        SCORE_BAR_LAST_FILL# = barFill#
+
+        position sprite bar.backgroundSpriteId, bar.pos.x + barShakeX, bar.pos.y + barShakeY
+        position sprite bar.foregroundSpriteId, bar.pos.x + 1 + barShakeX, bar.pos.y + 1 + barShakeY
+        color sprite bar.foregroundSpriteId, barColor
         span = bar.endVal - bar.startVal
         z$ = "/"
         x$ = str$(span)
-        y$ = str$(CURRENT_SCORE - SCORE_BAR.startVal)
+        ` a bar that is being held full says that it is full, and not how far past the end the score went
+        shownInRound = SCORE_SHOWN - SCORE_BAR.startVal
+        if SCORE_BAR_HOLD and shownInRound > span then shownInRound = span
+        y$ = str$(shownInRound)
 
         concat$ = y$ + z$ + x$
         set text bar.textNumId, y$ + z$ + x$
@@ -621,6 +687,14 @@ frame_score:
 
 
 
+return
+
+` the upgrade screen comes here when an upgrade has been picked. see SCORE_BAR_HOLD in fish_headers.
+advance_score_bar:
+    advanceScoreBar()
+
+    ` the cursor was shaking along with the full bar, and it goes back to exactly where it belongs
+    gosub update_selection_position
 return
 
 ` take the free moves off of the counter one at a time, so that the counter can be seen ticking down
@@ -728,6 +802,9 @@ handle_combos:
     remend
 
     if REQUEST_COMBO_CHECK = 0 then return
+
+    ` a swap that is still playing out has not happened yet, so the board is not ready to be looked at
+    if LIVE_MOVE_ACTIVE then return
 
     ` clear the combo mask...
     for i = 1 to CELL_COUNT
@@ -861,11 +938,12 @@ handle_combos:
                     y = getCellY(cell.coord.y)
                 }
                 scoreAdd += 10
+                scorePoints = scoreAdd * SCORE_MULTIPLIER `see THE MULTIPLIER in fish_headers
                 ` this one is gone by the time the next fish of the stack pops, so that each of them
                 ` gets a text of its own to be read
-                stackTxtId = spawnBoardScoreText(stackTxtPos, "+" + str$(scoreAdd), delay, FISH_STACK_POP_GAP - 20)
+                stackTxtId = spawnBoardScoreText(stackTxtPos, "+" + str$(scorePoints), delay, FISH_STACK_POP_GAP - 20)
                 color text stackTxtId, FISH_COLORS(getFishColorIndex(cell.value))
-                CURRENT_SCORE += scoreAdd
+                queueScore(scorePoints, delay) `the bar gets these when this fish of the stack pops
 
                 delay = delay + FISH_STACK_POP_GAP
             endwhile
@@ -901,14 +979,14 @@ handle_combos:
                 y = getCellY(cell.coord.y)
             }
             scoreAdd += 10
-            txtId = spawnBoardScoreText(txtPos, "+" + str$(scoreAdd), delay, 800)
+            scorePoints = scoreAdd * SCORE_MULTIPLIER
+            txtId = spawnBoardScoreText(txtPos, "+" + str$(scorePoints), delay, 800)
             color text txtId, FISH_COLORS(getFishColorIndex(cell.value))
 
             ` create basic tween SCORE_BAR.progressTweenId, getScoreRatio(0), getScoreRatio(scoreAdd), 100, 50
-            CURRENT_SCORE += scoreAdd
+            ` the bar gets these when the fish pops, and not before. see THE SCORE THAT SHOWS in fish_headers.
+            queueScore(scorePoints, delay)
             print CURRENT_SCORE
-
-            setProgressTween(SCORE_BAR, CURRENT_SCORE)
 
         next
 
@@ -929,6 +1007,10 @@ handle_combos:
     for i = 0 to CELL_COUNT - 1
         CELLS(i).comboForce = 0
     next 
+
+    ` a swap that led to this look at the board either popped something, or it did not. the fish that are
+    ` popping now were scored with the multiplier as it was, and a new one counts from the next pop.
+    judgeMultiplierSwaps(totalComboCount)
 
     ` exit early if no combos
     if totalComboCount = 0
@@ -966,7 +1048,13 @@ handle_combos:
         next
     endif
 
+    ` the player can keep moving the cursor and swapping fish through all of what follows, as long as
+    ` they leave the fish that the combo is busy with alone. see LIVE MOVES in fish_headers.
+    ` each part waits for the swap that is playing to finish before it moves on to the next part,
+    ` so that a fish is never halfway through a swap when it is told to fall.
+
     ` wait for all exit animations to finish
+    COMBO_PHASE = 1
     repeat
         anyStillPlaying = 0
         if is tween done(SHAKE_TWEEN_ID) < 1
@@ -1006,6 +1094,11 @@ handle_combos:
             set sprite alpha cell.spriteId, tweenVal(cell.comboDownShiftTweenId)
             `position sprite cell.spriteId, sprite x(cell.spriteId), tweenVal(cell.comboDownShiftTweenId)
         next
+
+        LIVE_MOVE_HOLD = 0
+        if anyStillPlaying = 0 then LIVE_MOVE_HOLD = 1
+        gosub frame_combo_input
+        if LIVE_MOVE_ACTIVE then anyStillPlaying = 1
 
         gosub update_frame
         sync
@@ -1054,16 +1147,28 @@ handle_combos:
         set tween easing cell.comboDownShiftTweenId, EASING_BOUNCE
     next
 
-    while is tween done(CELLS(0).comboDownShiftTweenId) < 1
+    COMBO_PHASE = 2
+    repeat
         for i = 1 to CELL_COUNT
             cell = CELLS(i-1)
 
+            ` only the fish that are falling get moved. the rest are where they belong, unless the
+            ` player is swapping them, and then the swap is what moves them.
+            if cell.comboDownShift = 0 then skip
             position sprite cell.spriteId, sprite x(cell.spriteId), tweenVal(cell.comboDownShiftTweenId)
         next
 
+        anyStillPlaying = 0
+        if is tween done(CELLS(0).comboDownShiftTweenId) < 1 then anyStillPlaying = 1
+
+        LIVE_MOVE_HOLD = 0
+        if anyStillPlaying = 0 then LIVE_MOVE_HOLD = 1
+        gosub frame_combo_input
+        if LIVE_MOVE_ACTIVE then anyStillPlaying = 1
+
         gosub update_frame
         sync
-    endwhile
+    until anyStillPlaying = 0
 
     ` now all the cells have animated to the right spot; but we need to do 2 things...
     `  1. ACTUALLY move the shizam to the shoozum 
@@ -1136,6 +1241,7 @@ handle_combos:
 
 
     ` wait for all exit animations to finish
+    COMBO_PHASE = 3
     repeat
         anyStillPlaying = 0
         for i = 1 to CELL_COUNT
@@ -1146,15 +1252,24 @@ handle_combos:
                 anyStillPlaying = 1
             endif
 
-            
+
 
             position sprite cell.spriteId, sprite x(cell.spriteId), tweenVal(cell.comboDownShiftTweenId)
             set sprite alpha cell.spriteId, tweenVal(cell.comboAlphaTweenId)
         next
 
+        LIVE_MOVE_HOLD = 0
+        if anyStillPlaying = 0 then LIVE_MOVE_HOLD = 1
+        gosub frame_combo_input
+        if LIVE_MOVE_ACTIVE then anyStillPlaying = 1
+
         gosub update_frame
         sync
     until anyStillPlaying = 0
+
+    ` the combo is done with all of its fish
+    COMBO_PHASE = 0
+    LIVE_MOVE_HOLD = 0
 
     set sfx volume SFX_DROP, 0
 
@@ -1168,6 +1283,9 @@ return
 handle_board_expansion:
 
     if PENDING_BOARD_EXPANSIONS <= 0 then return
+
+    ` let a swap that is playing out finish first. the board cannot change shape under it.
+    if LIVE_MOVE_ACTIVE then return
     PENDING_BOARD_EXPANSIONS = PENDING_BOARD_EXPANSIONS - 1
 
     ` the board is as big as it gets

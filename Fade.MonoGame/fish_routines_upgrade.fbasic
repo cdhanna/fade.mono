@@ -1,0 +1,90 @@
+goto routines_upgrade_exit
+
+remstart
+    THE UPGRADE WIPE
+    the wave of bubbles wipes the upgrade screen in over the game, and away again, the same way that it
+    wipes the menu. see fish_routines_menu for how the wipe works.
+
+    for that, the upgrade screen cannot be drawn straight onto the screen. everything on it is drawn to a
+    render target of its own, and one sprite draws that over the game, through the mask that the bubbles paint.
+
+    this moves everything on the upgrade screen into that render target. the cards are made in
+    fish_routines_ability, and the rows of the page that puts a move in a slot are made in
+    fish_routines_equip. anything new that goes on the upgrade screen has to be moved here too, or it
+    will be drawn onto the screen, where the wipe does not touch it.
+remend
+
+setup_upgrade_wipe:
+
+    ` the render target is see-through wherever nothing is drawn, so that the game shows through
+    reserve render target id(TARGET_UPGRADE)
+    render target TARGET_UPGRADE
+    set render target background color TARGET_UPGRADE, rgb(0, 0, 0, 0)
+
+    ` the composite sprite draws the upgrade screen over the game. it uses the same effect as the menu's does.
+    reserve sprite id(UPGRADE_COMPOSITE_SPRITE)
+    sprite UPGRADE_COMPOSITE_SPRITE, 0, 0, render target texture(TARGET_UPGRADE)
+    set sprite offset UPGRADE_COMPOSITE_SPRITE, 0, 0
+    size sprite UPGRADE_COMPOSITE_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    order sprite UPGRADE_COMPOSITE_SPRITE, ORDER_ABILITY_BACKDROP
+    set sprite effect UPGRADE_COMPOSITE_SPRITE, MENU_FX_ID
+    hide sprite UPGRADE_COMPOSITE_SPRITE
+
+    ` the dark backdrop, which the game shows through. it is as dark as the overlay of info mode.
+    reserve sprite id(UPGRADE_DIM_SPRITE)
+    sprite UPGRADE_DIM_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset UPGRADE_DIM_SPRITE, 0, 0
+    size sprite UPGRADE_DIM_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    color sprite UPGRADE_DIM_SPRITE, rgb(0, 0, 0, 166)
+    order sprite UPGRADE_DIM_SPRITE, ORDER_ABILITY_BACKDROP
+    set sprite render target UPGRADE_DIM_SPRITE, TARGET_UPGRADE
+
+    ` the title, and the bright outline
+    set text render target ABILITY_SELECT_LABEL_TEXT_ID, TARGET_UPGRADE
+    setInfoBorderTarget(ABILITY_CURSOR, TARGET_UPGRADE)
+
+    ` the line underneath the cards, that takes none of them. see UPGRADE_SKIP_SELECTED in fish_headers.
+    reserve text id(UPGRADE_SKIP_TEXT_ID)
+    text UPGRADE_SKIP_TEXT_ID, WORLD_WIDTH / 2, UPGRADE_SKIP_Y, SCORE_FONT, "take nothing"
+    size text y UPGRADE_SKIP_TEXT_ID, 20
+    set text offset UPGRADE_SKIP_TEXT_ID, .5, 0
+    order text UPGRADE_SKIP_TEXT_ID, ORDER_ABILITY_TEXT
+    set text render target UPGRADE_SKIP_TEXT_ID, TARGET_UPGRADE
+    hide text UPGRADE_SKIP_TEXT_ID
+
+    ` the cards
+    for wipeI = 0 to ABILITY_CHOICE_LENGTH - 1
+        set sprite render target ABILITY_CHOICES(wipeI).spriteId, TARGET_UPGRADE
+        set sprite render target ABILITY_CHOICES(wipeI).artSpriteId, TARGET_UPGRADE
+        set text render target ABILITY_CHOICES(wipeI).titleTextId, TARGET_UPGRADE
+        set text render target ABILITY_CHOICES(wipeI).typeTextId, TARGET_UPGRADE
+        set text render target ABILITY_CHOICES(wipeI).descTextId, TARGET_UPGRADE
+        setInfoBorderTarget(ABILITY_CHOICES(wipeI).border, TARGET_UPGRADE)
+    next
+
+    ` the page that puts a move in a slot
+    for wipeI = 0 to EQUIP_ROW_MAX - 1
+        set sprite render target EQUIP_ROWS(wipeI).panelSpriteId, TARGET_UPGRADE
+        set text render target EQUIP_ROWS(wipeI).keyTextId, TARGET_UPGRADE
+        set text render target EQUIP_ROWS(wipeI).nameTextId, TARGET_UPGRADE
+        set text render target EQUIP_ROWS(wipeI).noteTextId, TARGET_UPGRADE
+        setInfoBorderTarget(EQUIP_ROWS(wipeI).border, TARGET_UPGRADE)
+    next
+    set text render target EQUIP_DESC_TEXT_ID, TARGET_UPGRADE
+    set text render target EQUIP_PROMPT_TEXT_ID, TARGET_UPGRADE
+    set text render target EQUIP_NO_TEXT_ID, TARGET_UPGRADE
+    set text render target EQUIP_YES_TEXT_ID, TARGET_UPGRADE
+
+return
+
+
+routines_upgrade_exit:
+
+
+` draw the four sides of an outline to a render target, instead of onto the screen
+function setInfoBorderTarget(b as infoBorder, target)
+    set sprite render target b.topId, target
+    set sprite render target b.bottomId, target
+    set sprite render target b.leftId, target
+    set sprite render target b.rightId, target
+endfunction

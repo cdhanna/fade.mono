@@ -8,6 +8,9 @@ remstart
     LAYERS are loops that never stop, like the rumble of the deep, or a chord. a layer is only
     ever turned up and down. setMusicLayer() fades one to a new level.
 
+    there are two SCENES, the surface and the deep, and some layers are only heard in one of
+    them. the music drifts from one to the other and back. setMusicDepth() sends it to one.
+
     SHOTS are sounds that play once, now and then, like a whale. every shot plays on a timer
     of its own, and playMusicShot() plays one right away.
 
@@ -93,25 +96,46 @@ return
 
 setup_music:
 
-    ` the last number is how loud the layer is when it is all the way up
-    addMusicLayer(MUSIC_LAYER_RUMBLE, "Fish/Audio/Music/loop-rumble", .7)
-    addMusicLayer(MUSIC_LAYER_WASH, "Fish/Audio/Music/loop-wash", .45)
-    addMusicLayer(MUSIC_LAYER_CURRENT, "Fish/Audio/Music/loop-current", .35)
-    addMusicLayer(MUSIC_LAYER_PAD_DM, "Fish/Audio/Music/loop-pad-dm", .45)
-    addMusicLayer(MUSIC_LAYER_PAD_BB, "Fish/Audio/Music/loop-pad-bb", .45)
+    ` the number is how loud the layer is when it is all the way up, and the scene is where it is heard.
+
+    ` the surface: a rumble, waves breaking, and the pull of the water
+    addMusicLayer(MUSIC_LAYER_RUMBLE, "Fish/Audio/Music/loop-rumble", .7, MUSIC_SCENE_SURFACE)
+    addMusicLayer(MUSIC_LAYER_WASH, "Fish/Audio/Music/loop-wash", .45, MUSIC_SCENE_SURFACE)
+    addMusicLayer(MUSIC_LAYER_CURRENT, "Fish/Audio/Music/loop-current", .35, MUSIC_SCENE_SURFACE)
+
+    ` the deep: a darker rumble with a slow throb, a thin stream of bubbles, the far away crackle of a reef,
+    ` and the waves that are breaking up at the surface, which are only a dull roll from down here
+    addMusicLayer(MUSIC_LAYER_DEEP, "Fish/Audio/Music/loop-deep", .7, MUSIC_SCENE_DEEP)
+    addMusicLayer(MUSIC_LAYER_TRICKLE, "Fish/Audio/Music/loop-trickle", .22, MUSIC_SCENE_DEEP)
+    addMusicLayer(MUSIC_LAYER_CRACKLE, "Fish/Audio/Music/loop-crackle", .12, MUSIC_SCENE_DEEP)
+    addMusicLayer(MUSIC_LAYER_SURF_ABOVE, "Fish/Audio/Music/loop-surf-above", .5, MUSIC_SCENE_DEEP)
+
+    ` and a recording of being under the water. it is a quiet recording, so it is all the way up.
+    addMusicLayer(MUSIC_LAYER_AMBIENCE, "Fish/Audio/underwater-ambiencewav", 1, MUSIC_SCENE_DEEP)
+
+    ` the chords are heard in both
+    addMusicLayer(MUSIC_LAYER_PAD_DM, "Fish/Audio/Music/loop-pad-dm", .45, MUSIC_SCENE_BOTH)
+    addMusicLayer(MUSIC_LAYER_PAD_BB, "Fish/Audio/Music/loop-pad-bb", .45, MUSIC_SCENE_BOTH)
 
     ` these layers wander between two levels on their own. the wash never goes away, and the current comes and goes.
     setMusicLayerDrift(MUSIC_LAYER_WASH, .4, 1)
     setMusicLayerDrift(MUSIC_LAYER_CURRENT, 0, 1)
+    setMusicLayerDrift(MUSIC_LAYER_TRICKLE, .3, 1)
+    setMusicLayerDrift(MUSIC_LAYER_CRACKLE, .3, 1)
+    setMusicLayerDrift(MUSIC_LAYER_SURF_ABOVE, .5, 1)
 
-    ` how loud it is, how far its pitch can wander (in hundredths of an octave), and the shortest
-    ` and the longest wait before it plays on its own again, in milliseconds.
-    ` a shot with no longest wait never plays on its own.
-    addMusicShot(MUSIC_SHOT_PING, "Fish/Audio/Music/shot-ping", .25, 0, 30000, 70000)
-    addMusicShot(MUSIC_SHOT_WHALE_LOW, "Fish/Audio/Music/shot-whale-low", .3, 6, 45000, 100000)
-    addMusicShot(MUSIC_SHOT_WHALE_HIGH, "Fish/Audio/Music/shot-whale-high", .22, 6, 60000, 130000)
-    addMusicShot(MUSIC_SHOT_BUBBLES_SPARSE, "Fish/Audio/Music/shot-bubbles-sparse", .2, 10, 20000, 50000)
-    addMusicShot(MUSIC_SHOT_BUBBLES_DENSE, "Fish/Audio/Music/shot-bubbles-dense", .2, 10, 50000, 110000)
+    ` how loud it is, how far its pitch can wander (in hundredths of an octave), the shortest and
+    ` the longest wait before it plays on its own again, in milliseconds, and the scene that it
+    ` plays on its own in. a shot with no longest wait never plays on its own.
+    addMusicShot(MUSIC_SHOT_PING, "Fish/Audio/Music/shot-ping", .25, 0, 30000, 70000, MUSIC_SCENE_BOTH)
+    addMusicShot(MUSIC_SHOT_WHALE_LOW, "Fish/Audio/Music/shot-whale-low", .3, 6, 45000, 100000, MUSIC_SCENE_BOTH)
+    addMusicShot(MUSIC_SHOT_WHALE_HIGH, "Fish/Audio/Music/shot-whale-high", .22, 6, 60000, 130000, MUSIC_SCENE_BOTH)
+    addMusicShot(MUSIC_SHOT_BUBBLES_SPARSE, "Fish/Audio/Music/shot-bubbles-sparse", .2, 10, 20000, 50000, MUSIC_SCENE_SURFACE)
+    addMusicShot(MUSIC_SHOT_BUBBLES_DENSE, "Fish/Audio/Music/shot-bubbles-dense", .2, 10, 50000, 110000, MUSIC_SCENE_SURFACE)
+    addMusicShot(MUSIC_SHOT_TANK_CLINK, "Fish/Audio/Music/shot-tank-clink", .18, 3, 40000, 90000, MUSIC_SCENE_DEEP)
+    addMusicShot(MUSIC_SHOT_BOAT_PASS, "Fish/Audio/Music/shot-boat-pass", .35, 4, 60000, 140000, MUSIC_SCENE_DEEP)
+    addMusicShot(MUSIC_SHOT_DOLPHIN, "Fish/Audio/Music/shot-dolphin", .2, 4, 50000, 120000, MUSIC_SCENE_BOTH)
+    addMusicShot(MUSIC_SHOT_THUNDER_ABOVE, "Fish/Audio/Music/shot-thunder-above", .45, 5, 70000, 160000, MUSIC_SCENE_DEEP)
 
     ` the instruments. the name is the start of the name of every one of its sound files,
     ` and the number is how loud it is next to the others.
@@ -127,6 +151,14 @@ setup_music:
     MUSIC_LAST_MS = game ms()
     fadeMusicLayer(MUSIC_LAYER_RUMBLE, 1, 6)
     fadeMusicLayer(MUSIC_LAYER_WASH, 1, 10)
+
+    ` it starts at the surface. the layers of the deep are up already, and are heard once it gets down there.
+    fadeMusicLayer(MUSIC_LAYER_DEEP, 1, 1)
+    fadeMusicLayer(MUSIC_LAYER_TRICKLE, 1, 1)
+    fadeMusicLayer(MUSIC_LAYER_CRACKLE, 1, 1)
+    fadeMusicLayer(MUSIC_LAYER_SURF_ABOVE, 1, 1)
+    fadeMusicLayer(MUSIC_LAYER_AMBIENCE, 1, 1)
+    MUSIC_SCENE_MS = MUSIC_LAST_MS + musicWait(MUSIC_SCENE_GAP_MIN, MUSIC_SCENE_GAP_MAX) / 2
     setMusicChord(MUSIC_CHORD_DM, 10)
     MELODY_AUTO_MS = MUSIC_LAST_MS + musicWait(MELODY_GAP_MIN, MELODY_GAP_MAX) / 2
 
@@ -154,6 +186,26 @@ function updateMusic()
         setMusicChord(1 - MUSIC_CHORD, MUSIC_CHORD_FADE#)
     endif
 
+    ` the music goes down to the deep, and comes back up, in turns
+    if MUSIC_SCENE_GAP_MAX > 0 and now >= MUSIC_SCENE_MS
+        if MUSIC_DEPTH_TARGET# > .5
+            setMusicDepth(0, MUSIC_SCENE_FADE#)
+        else
+            setMusicDepth(1, MUSIC_SCENE_FADE#)
+        endif
+    endif
+
+    if MUSIC_DEPTH# <> MUSIC_DEPTH_TARGET#
+        change# = MUSIC_DEPTH_SPEED# * seconds#
+        if MUSIC_DEPTH# < MUSIC_DEPTH_TARGET#
+            MUSIC_DEPTH# = MUSIC_DEPTH# + change#
+            if MUSIC_DEPTH# > MUSIC_DEPTH_TARGET# then MUSIC_DEPTH# = MUSIC_DEPTH_TARGET#
+        else
+            MUSIC_DEPTH# = MUSIC_DEPTH# - change#
+            if MUSIC_DEPTH# < MUSIC_DEPTH_TARGET# then MUSIC_DEPTH# = MUSIC_DEPTH_TARGET#
+        endif
+    endif
+
     for i = 0 to MUSIC_LAYER_COUNT - 1
         l = MUSIC_LAYERS(i)
 
@@ -175,13 +227,29 @@ function updateMusic()
                 if l.level# < l.target# then l.level# = l.target#
             endif
             MUSIC_LAYERS(i) = l
-            set sfx volume l.sfxId, l.level# * l.mix#
         endif
+
+        ` a layer that belongs to one scene is only as loud as the music is close to that scene
+        heard# = l.level# * l.mix#
+        if l.scene = MUSIC_SCENE_SURFACE then heard# = heard# * (1 - MUSIC_DEPTH#)
+        if l.scene = MUSIC_SCENE_DEEP then heard# = heard# * MUSIC_DEPTH#
+        set sfx volume l.sfxId, heard#
     next
 
     for i = 0 to MUSIC_SHOT_COUNT - 1
-        if MUSIC_SHOTS(i).gapMax > 0 and now >= MUSIC_SHOTS(i).nextMs
-            playMusicShot(i)
+        s = MUSIC_SHOTS(i)
+        if s.gapMax > 0 and now >= s.nextMs
+
+            ` a shot that belongs to the other scene waits for another turn
+            away = 0
+            if s.scene = MUSIC_SCENE_SURFACE and MUSIC_DEPTH# > .5 then away = 1
+            if s.scene = MUSIC_SCENE_DEEP and MUSIC_DEPTH# < .5 then away = 1
+
+            if away
+                MUSIC_SHOTS(i).nextMs = now + musicWait(s.gapMin, s.gapMax) / 2
+            else
+                playMusicShot(i)
+            endif
         endif
     next
 
@@ -226,6 +294,21 @@ function setMusicLayerDrift(layer, lowest#, highest#)
     MUSIC_LAYERS(layer).driftMin# = lowest#
     MUSIC_LAYERS(layer).driftMax# = highest#
     MUSIC_LAYERS(layer).driftMs = game ms() + musicWait(MUSIC_DRIFT_GAP_MIN, MUSIC_DRIFT_GAP_MAX)
+endfunction
+
+
+` take the music down to the deep, or back up to the surface, over some seconds.
+` the depth is from 0 (the surface) to 1 (the deep), and anything in between is a mix of the two.
+` the music goes on drifting between the two afterwards, unless MUSIC_SCENE_GAP_MAX is 0.
+function setMusicDepth(depth#, seconds#)
+    if depth# < 0 then depth# = 0
+    if depth# > 1 then depth# = 1
+    if seconds# < .01 then seconds# = .01
+
+    distance# = abs(depth# - MUSIC_DEPTH#)
+    MUSIC_DEPTH_TARGET# = depth#
+    MUSIC_DEPTH_SPEED# = distance# / seconds#
+    MUSIC_SCENE_MS = game ms() + musicWait(MUSIC_SCENE_GAP_MIN, MUSIC_SCENE_GAP_MAX)
 endfunction
 
 
@@ -381,7 +464,7 @@ endfunction waitMs
 
 
 ` load a loop, and start it playing with the volume all the way down
-function addMusicLayer(layer, path$, mix#)
+function addMusicLayer(layer, path$, mix#, scene)
     clipId = 0
     sfxId = 0
     reserve sfx clip id(clipId)
@@ -395,10 +478,11 @@ function addMusicLayer(layer, path$, mix#)
 
     MUSIC_LAYERS(layer).sfxId = sfxId
     MUSIC_LAYERS(layer).mix# = mix#
+    MUSIC_LAYERS(layer).scene = scene
 endfunction
 
 
-function addMusicShot(shot, path$, volume#, wobble, gapMin, gapMax)
+function addMusicShot(shot, path$, volume#, wobble, gapMin, gapMax, scene)
     clipId = 0
     sfxId = 0
     reserve sfx clip id(clipId)
@@ -412,6 +496,7 @@ function addMusicShot(shot, path$, volume#, wobble, gapMin, gapMax)
     MUSIC_SHOTS(shot).wobble = wobble
     MUSIC_SHOTS(shot).gapMin = gapMin
     MUSIC_SHOTS(shot).gapMax = gapMax
+    MUSIC_SHOTS(shot).scene = scene
     MUSIC_SHOTS(shot).nextMs = game ms() + musicWait(gapMin, gapMax)
 endfunction
 

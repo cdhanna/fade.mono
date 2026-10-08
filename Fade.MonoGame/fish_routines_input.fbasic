@@ -108,6 +108,13 @@ return
 process_input:
     collectInput()
 
+    ` a swap, or the cursor moving, does not stop the game while it plays out. it gets moved along a
+    ` little on every frame, and the next move in the queue waits for it. see LIVE MOVES in fish_headers.
+    if LIVE_MOVE_ACTIVE
+        liveResult = stepLiveMove()
+        return
+    endif
+
     if QUEUED_MOVE_NUM <= 0
         return
     endif
@@ -138,6 +145,14 @@ process_input:
         usedAbility = 0
         if move.moveBindingIndex >= 0
             moveAbility = MOVE_ABILITY_BINDINGS(move.moveBindingIndex)
+
+            ` the "free move" is a swap, so it plays out over the next few frames, the way that a swap does
+            if moveAbility.moveValue = [MOVE_FREE]
+                if moveAbility.movesLeft <= 0
+                    liveStarted = startFreeMove(move.moveBindingIndex, swapDir.x, swapDir.y)
+                    return
+                endif
+            endif
 
             if moveAbility.movesLeft <= 0
                 usedAbility = 1
@@ -178,14 +193,24 @@ process_input:
                 ` the move is not ready yet, so shake its cooldown number, and the clock above the numbers
                 create basic tween MOVE_ABILITY_BINDINGS(move.moveBindingIndex).shakeTweenId, 1, 0, 500, 0
                 create basic tween COOLDOWN_CLOCK_SHAKE_TWEEN_ID, 1, 0, 500, 0
-                doSwap(SELECTION_POS, swapDir, 0)
+
+                ` the cursor still moves. it plays out over the next few frames, and what comes after
+                ` a move happens when it gets there, in stepLiveMove.
+                liveStarted = startLiveMove(swapDir.x, swapDir.y, 0)
+                return
             endif
-        else 
-            if (isSwap)
-                gosub update_ability_texts
+        else
+            ` a swap, or the cursor moving on its own. the same goes for these.
+            liveStarted = startLiveMove(swapDir.x, swapDir.y, isSwap)
+            if liveStarted
+                if (isSwap)
+                    gosub update_ability_texts
+                endif
             endif
-            doSwap(SELECTION_POS, swapDir, isSwap)
+            return
         endif
+
+        ` only a special move gets to here. it stopped the game until it had played out.
 
         REQUEST_COMBO_CHECK = 1
 
@@ -214,7 +239,69 @@ process_input:
         gosub update_selection_position
     endif
 
-    
+
+return
+
+
+` the same as process_input, for while a combo is playing out. the combo calls this on every frame
+` that it waits, so that the player does not have to wait along with it.
+` a special move stays in the queue until the board has settled, because it stops the game while it plays.
+` and nothing new starts while LIVE_MOVE_HOLD is set, which is when a part of the combo is done and is
+` only waiting for the move that is playing to finish.
+` the names in here all start with "live", because this runs in the middle of handle_combos, and it
+` must not touch anything that handle_combos is in the middle of using.
+frame_combo_input:
+    collectInput()
+
+    if LIVE_MOVE_ACTIVE
+        liveResult = stepLiveMove()
+        return
+    endif
+
+    if LIVE_MOVE_HOLD then return
+    if QUEUED_MOVE_NUM <= 0 then return
+
+    liveMove = QUEUED_MOVES(QUEUED_MOVE_TAIL)
+    liveSwap = liveMove.swap
+    liveDirX = liveMove.dir.x
+    liveDirY = liveMove.dir.y
+
+    if liveMove.moveBindingIndex >= 0
+        if MOVE_ABILITY_BINDINGS(liveMove.moveBindingIndex).movesLeft <= 0
+            ` a special move that is ready waits for the board to settle
+            if MOVE_ABILITY_BINDINGS(liveMove.moveBindingIndex).moveValue <> [MOVE_FREE] then return
+
+            ` all but the "free move", which is a swap, and does not stop the game
+            QUEUED_MOVE_TAIL += 1
+            if QUEUED_MOVE_TAIL = QUEUED_MOVE_NUM
+                QUEUED_MOVE_TAIL = 0
+                QUEUED_MOVE_NUM = 0
+            endif
+            liveStarted = startFreeMove(liveMove.moveBindingIndex, liveDirX, liveDirY)
+            return
+        endif
+
+        ` one that is not ready only moves the cursor, and shakes its cooldown number, and the clock above the numbers
+        create basic tween MOVE_ABILITY_BINDINGS(liveMove.moveBindingIndex).shakeTweenId, 1, 0, 500, 0
+        create basic tween COOLDOWN_CLOCK_SHAKE_TWEEN_ID, 1, 0, 500, 0
+        liveSwap = 0
+    endif
+
+    ` take it off of the queue
+    QUEUED_MOVE_TAIL += 1
+    if QUEUED_MOVE_TAIL = QUEUED_MOVE_NUM
+        QUEUED_MOVE_TAIL = 0
+        QUEUED_MOVE_NUM = 0
+    endif
+
+    if liveDirX <> 0 or liveDirY <> 0
+        liveStarted = startLiveMove(liveDirX, liveDirY, liveSwap)
+        if liveStarted
+            if liveSwap
+                gosub update_ability_texts
+            endif
+        endif
+    endif
 return
 
 

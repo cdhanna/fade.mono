@@ -207,6 +207,36 @@ setup_menu:
         ready = 1
     }
 
+    ` the lines of the page that "New Game" opens. refreshOptionLines writes the choice onto the end of the
+    ` first two, and gives them a description of whatever is chosen.
+    MENU_ITEMS(MENU_ITEM_GAME_LENGTH) = {
+        name$ = "Length"
+        desc$ = "How many rounds the game lasts."
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_GAME_MODE) = {
+        name$ = "Mode"
+        desc$ = "Normal, or zen."
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_GAME_START) = {
+        name$ = "Start"
+        desc$ = "Start the game."
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_GAME_BACK) = {
+        name$ = "Back"
+        desc$ = "Back to the menu."
+        ready = 1
+    }
+
+    ` the only line on the page that comes up when the last round has been won
+    MENU_ITEMS(MENU_ITEM_OVER_DONE) = {
+        name$ = "Done"
+        desc$ = "Back to the title."
+        ready = 1
+    }
+
     ` the size of the window is not an option. the player drags the edges of the window to make it any size they like.
     ` and the window opens at the size they left it the last time the game was run.
     set window resizable 1
@@ -226,6 +256,13 @@ setup_menu:
     if OPTION_MUSIC > 10 then OPTION_MUSIC = 10
     if OPTION_MUSIC < 0 then OPTION_MUSIC = 0
     if OPTION_FULLSCREEN <> 0 then OPTION_FULLSCREEN = 1
+
+    ` the kind of game that was picked the last time is what "New Game" starts out on
+    OPTION_GAME_LENGTH = get pref(PREF_GAME_LENGTH, GAME_LENGTH_REGULAR)
+    OPTION_GAME_ZEN = get pref(PREF_GAME_ZEN, 0)
+    if OPTION_GAME_LENGTH > GAME_LENGTH_LONG then OPTION_GAME_LENGTH = GAME_LENGTH_REGULAR
+    if OPTION_GAME_LENGTH < 0 then OPTION_GAME_LENGTH = GAME_LENGTH_REGULAR
+    if OPTION_GAME_ZEN <> 0 then OPTION_GAME_ZEN = 1
 
     set sfx group volume SFX_GROUP_SFX, OPTION_SOUND * .1
     applyMusicVolume()
@@ -321,9 +358,12 @@ frame_menu:
     if new action down(ACT_UP) then menuStep = -1
     if new action down(ACT_LEFT) then menuStep = -1
 
-    ` on the options page, left and right change the highlighted setting instead of moving the highlight
+    ` on the options page, left and right change the highlighted setting instead of moving the highlight.
+    ` the page that "New Game" opens works the same way.
     menuChange = 0
-    if MENU_PAGE = MENU_PAGE_OPTIONS
+    menuSettingsPage = 0
+    if MENU_PAGE = MENU_PAGE_OPTIONS or MENU_PAGE = MENU_PAGE_NEW_GAME then menuSettingsPage = 1
+    if menuSettingsPage
         menuStep = 0
         if new action down(ACT_DOWN) then menuStep = 1
         if new action down(ACT_UP) then menuStep = -1
@@ -340,7 +380,7 @@ frame_menu:
     endif
 
     if menuChange <> 0
-        changeMenuOption(MENU_PAGE_FIRST + MENU_SELECTED, menuChange)
+        changeMenuOption(MENU_PAGE_ITEMS(MENU_SELECTED), menuChange)
     endif
 
     ` the same swell of sound that the cursor in the game makes when it moves. a change to
@@ -351,13 +391,16 @@ frame_menu:
     endif
 
     menuPicked = -1
-    if new action down(ACT_CONFIRM) then menuPicked = MENU_PAGE_FIRST + MENU_SELECTED
+    if new action down(ACT_CONFIRM) then menuPicked = MENU_PAGE_ITEMS(MENU_SELECTED)
 
     ` the pause key backs out of the pause menu, the same as picking "Resume". it backs out of the question, too.
     if MENU_MODE = MENU_MODE_PAUSE
         if new action down(ACT_PAUSE)
             menuPicked = MENU_ITEM_RESUME
             if MENU_PAGE = MENU_PAGE_CONFIRM then menuPicked = MENU_ITEM_CONFIRM_NO
+
+            ` there is no game to go back to once it is over
+            if MENU_PAGE = MENU_PAGE_GAME_OVER then menuPicked = -1
         endif
     endif
 
@@ -365,6 +408,11 @@ frame_menu:
     if MENU_PAGE = MENU_PAGE_OPTIONS
         if new action down(ACT_PAUSE)
             menuPicked = MENU_ITEM_SET_BACK
+        endif
+    endif
+    if MENU_PAGE = MENU_PAGE_NEW_GAME
+        if new action down(ACT_PAUSE)
+            menuPicked = MENU_ITEM_GAME_BACK
         endif
     endif
 
@@ -395,6 +443,22 @@ menu_pick:
         endcase
 
         case MENU_ITEM_NEW_GAME
+            ` ask what kind of game it should be. "Start" is highlighted to start with, so that picking
+            ` it straight away plays the same kind of game as the last time.
+            setMenuPage(MENU_PAGE_NEW_GAME)
+            refreshOptionLines()
+            selectMenuItem(getMenuRow(MENU_ITEM_GAME_START), 0)
+        endcase
+
+        ` picking a choice is the same as pressing right on it
+        case MENU_ITEM_GAME_LENGTH
+            changeMenuOption(MENU_ITEM_GAME_LENGTH, 1)
+        endcase
+        case MENU_ITEM_GAME_MODE
+            changeMenuOption(MENU_ITEM_GAME_MODE, 1)
+        endcase
+
+        case MENU_ITEM_GAME_START
             if MENU_MODE = MENU_MODE_PAUSE
                 ` there is a game going, so ask before throwing it away. "No" is highlighted to start with.
                 setMenuPage(MENU_PAGE_CONFIRM)
@@ -402,6 +466,22 @@ menu_pick:
             else
                 gosub menu_start_game
             endif
+        endcase
+
+        case MENU_ITEM_GAME_BACK
+            ` back to whichever menu "New Game" was picked from, with "New Game" highlighted again
+            if MENU_MODE = MENU_MODE_PAUSE
+                setMenuPage(MENU_PAGE_PAUSE)
+            else
+                setMenuPage(MENU_PAGE_MAIN)
+            endif
+            selectMenuItem(getMenuRow(MENU_ITEM_NEW_GAME), 0)
+        endcase
+
+        case MENU_ITEM_OVER_DONE
+            ` the game is over, so there is nothing to carry on with later
+            gosub forget_saved_game
+            gosub menu_quit_to_title
         endcase
 
         case MENU_ITEM_QUIT
@@ -448,10 +528,10 @@ menu_pick:
             ` the main menu does not have the "Resume" line, so its lines are counted from "New Game".
             if MENU_MODE = MENU_MODE_PAUSE
                 setMenuPage(MENU_PAGE_PAUSE)
-                selectMenuItem(MENU_ITEM_OPTIONS, 0)
+                selectMenuItem(getMenuRow(MENU_ITEM_OPTIONS), 0)
             else
                 setMenuPage(MENU_PAGE_MAIN)
-                selectMenuItem(MENU_ITEM_OPTIONS - MENU_PAGE_FIRST, 0)
+                selectMenuItem(getMenuRow(MENU_ITEM_OPTIONS), 0)
             endif
         endcase
     endselect
@@ -478,12 +558,61 @@ return
 ` the main menu's "New Game". the bubbles take the menu away, and the game is underneath.
 menu_start_game:
     gosub reset_game
+    gosub apply_game_options
     gosub forget_saved_game
 
     TRANSITION_TO_MENU = 0
     gosub menu_transition
 
     MENU_MODE = MENU_MODE_CLOSED
+return
+
+
+` a new game has just been reset. make it the kind of game that was picked on the menu.
+` see THE KIND OF GAME in fish_headers.
+apply_game_options:
+    GAME_ROUND_CAP = getGameLengthRounds(OPTION_GAME_LENGTH)
+    GAME_ZEN = OPTION_GAME_ZEN
+    set text ROUND_COUNT_TEXT_ID, str$(getRoundsLeft())
+
+    ` a zen game has the one passive, and never gets another
+    if GAME_ZEN
+        grantPassive(ABILITY_INDEX_WRAP)
+    endif
+return
+
+
+` the main loop comes here on every frame of the game. when the last round has been won, this brings
+` up a page that says so, over the game, the same way that the pause menu comes up.
+handle_game_end:
+    if REQUEST_GAME_END = 0 then return
+
+    ` let a swap that is playing out finish first
+    if LIVE_MOVE_ACTIVE then return
+    REQUEST_GAME_END = 0
+
+    MENU_MODE = MENU_MODE_PAUSE
+
+    hide sprite MENU_BG_SPRITE
+    show sprite MENU_DIM_SPRITE
+    for menuI = 0 to MENU_FISH_COUNT - 1
+        hide sprite MENU_FISHES(menuI).spriteId
+    next
+
+    MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = str$(GAME_ROUND_CAP) + " rounds in " + str$(CURRENT_MOVE_COUNT) + " moves. Back to the title."
+    setMenuPage(MENU_PAGE_GAME_OVER)
+    selectMenuItem(0, 0)
+
+    hide text INFO_HINT_TEXT_ID
+    set screen shake amount 0
+
+    ` the menu has to be drawn once before it is shown, the same as the pause menu
+    create basic tween MENU_FADE_TWEEN_ID, 0, 0, 1, 0
+    gosub frame_menu_render
+    sync
+
+    show sprite MENU_COMPOSITE_SPRITE
+    create basic tween MENU_FADE_TWEEN_ID, 0, 1, 150, 0
 return
 
 
@@ -574,6 +703,7 @@ menu_abandon_game:
     sync
 
     gosub reset_game
+    gosub apply_game_options
     gosub forget_saved_game
     show text INFO_HINT_TEXT_ID
 
@@ -658,14 +788,30 @@ menu_transition:
     create basic tween TRANSITION_TWEEN_ID, 0, 0, 1, 0
     transitionPrev# = 0
     gosub frame_transition
-    gosub frame_menu_render
+    gosub frame_transition_render
     sync
 
-    MENU_INVERT = 1 - TRANSITION_TO_MENU
-    show sprite MENU_COMPOSITE_SPRITE
+    if TRANSITION_FOR_UPGRADE
+        UPGRADE_INVERT = 1 - TRANSITION_TO_MENU
+        show sprite UPGRADE_COMPOSITE_SPRITE
+    else
+        MENU_INVERT = 1 - TRANSITION_TO_MENU
+        show sprite MENU_COMPOSITE_SPRITE
+    endif
 
     create basic tween TRANSITION_TWEEN_ID, 0, 1, TRANSITION_DURATION, 0
     set tween easing TRANSITION_TWEEN_ID, EASING_LINEAR
+
+    ` the music goes with the wave. it dives down to the deep as the game comes in, and it comes back
+    ` up to the surface with the menu. after that it goes back to drifting between the two on its own.
+    ` the music stays where it is for the upgrade screen.
+    if TRANSITION_FOR_UPGRADE = 0
+        if TRANSITION_TO_MENU
+            setMusicDepth(0, MUSIC_DIVE_FADE#)
+        else
+            setMusicDepth(1, MUSIC_DIVE_FADE#)
+        endif
+    endif
 
     ` the recording is a lot longer than the wave is, and it loops. it carries on from wherever it was
     ` stopped the last time, so every wave gets a different part of it. frame_transition fades it in and out.
@@ -680,13 +826,13 @@ menu_transition:
 
     while is tween done(TRANSITION_TWEEN_ID) < 1
         gosub frame_transition
-        gosub frame_menu_render
+        gosub frame_transition_render
         sync
     endwhile
 
     ` once more, so that the mask is drawn with the wave all the way off of the top of the screen
     gosub frame_transition
-    gosub frame_menu_render
+    gosub frame_transition_render
     sync
 
     for menuI = 0 to BUBBLE_COUNT - 1
@@ -698,8 +844,23 @@ menu_transition:
 
     ` the mask is full now. if the menu was being taken away, then none of it is being drawn any more.
     if TRANSITION_TO_MENU = 0
-        hide sprite MENU_COMPOSITE_SPRITE
-        MENU_INVERT = 0
+        if TRANSITION_FOR_UPGRADE
+            hide sprite UPGRADE_COMPOSITE_SPRITE
+            UPGRADE_INVERT = 0
+        else
+            hide sprite MENU_COMPOSITE_SPRITE
+            MENU_INVERT = 0
+        endif
+    endif
+return
+
+
+` draw whatever it is that the wave is wiping: the menu, or the upgrade screen
+frame_transition_render:
+    if TRANSITION_FOR_UPGRADE
+        gosub frame_ability_selection
+    else
+        gosub frame_menu_render
     endif
 return
 
@@ -777,7 +938,7 @@ frame_menu_render:
 
     ` the highlighted line shakes from side to side when it cannot be picked
     menuShake# = sin(menuMs * .045) * 4 * tweenVal(MENU_SHAKE_TWEEN_ID)
-    set text position MENU_ITEMS(MENU_PAGE_FIRST + MENU_SELECTED).textId, WORLD_WIDTH / 2 + .5 + menuShake#, MENU_LIST_TOP + MENU_SELECTED * MENU_ROW_HEIGHT
+    set text position MENU_ITEMS(MENU_PAGE_ITEMS(MENU_SELECTED)).textId, WORLD_WIDTH / 2 + .5 + menuShake#, MENU_LIST_TOP + MENU_SELECTED * MENU_ROW_HEIGHT
 
     ` the title bobs up and down
     set text position MENU_TITLE_TEXT_ID, WORLD_WIDTH / 2, MENU_TITLE_Y + .5 + sin(menuMs * .002) * 3
@@ -813,11 +974,13 @@ reset_game:
     for resetI = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
         MOVE_ABILITY_BINDINGS(resetI).assigned = 0
         MOVE_ABILITY_BINDINGS(resetI).movesLeft = 0
+        MOVE_ABILITY_BINDINGS(resetI).hasInfo = 0 `the info blobs of the upgrades are forgotten, further down
         set text alpha MOVE_ABILITY_BINDINGS(resetI).titleTextId, 0
         set text alpha MOVE_ABILITY_BINDINGS(resetI).keyTextId, 0
         set text alpha MOVE_ABILITY_BINDINGS(resetI).timerTextId, 0
     next
     MOVE_ABILITY_COUNT = 0
+    MOVE_SLOTS_OPEN = MOVE_SLOT_START_COUNT
 
     ` the upgrades explained themselves in info mode. forget those, and explain the empty spaces again.
     if INFO_LENGTH > INFO_BASE_LENGTH
@@ -856,10 +1019,12 @@ reset_game:
     QUEUED_MOVE_TAIL = 0
     REQUEST_COMBO_CHECK = 0
     REQUEST_ABILITY_SELECTION = 0
+    REQUEST_GAME_END = 0
     BELLY_UP_ROLL_DUE = 0
 
     ` the score
     CURRENT_SCORE = 0
+    syncScoreShown()
     CURRENT_ROUND = 0
     CURRENT_MOVE_COUNT = 0
     PENDING_FREE_MOVES = 0
@@ -870,6 +1035,8 @@ reset_game:
     SCORE_BAR.endVal = 100
     PROGRESS_BARS(0) = SCORE_BAR
     create basic tween SCORE_BAR.progressTweenId, 0, 0, 1, 0
+
+    resetMultiplier()
 
     ` any score that was still floating up off of the fish
     for resetI = 0 to SCORE_TEXT_COUNT - 1
@@ -893,6 +1060,7 @@ routines_menu_exit:
 function skipMainMenu()
     MENU_MODE = MENU_MODE_CLOSED
     hide sprite MENU_COMPOSITE_SPRITE
+    setMusicDepth(1, MUSIC_DIVE_FADE#) `the music dives, the same as when the wave takes the menu away
 endfunction
 
 
@@ -929,6 +1097,25 @@ function setMenuPage(page)
         MENU_WIDTH = 220
     endif
 
+    ` the page that "New Game" opens, to ask what kind of game it should be. it works like the options page.
+    if page = MENU_PAGE_NEW_GAME
+        title$ = "New Game"
+        titleSize = 36
+        hint$ = "{dir} choose and change    {confirm} select    {pause} back"
+        first = MENU_ITEM_GAME_LENGTH
+        last = MENU_ITEM_GAME_BACK
+        MENU_WIDTH = 220
+    endif
+
+    ` the page that comes up over the game when the last round has been won
+    if page = MENU_PAGE_GAME_OVER
+        title$ = "Run Complete"
+        titleSize = 36
+        hint$ = "{confirm} select"
+        first = MENU_ITEM_OVER_DONE
+        last = MENU_ITEM_OVER_DONE
+    endif
+
     if page = MENU_PAGE_PAUSE
         title$ = "Paused"
         titleSize = 36
@@ -949,20 +1136,28 @@ function setMenuPage(page)
         last = MENU_ITEM_CONFIRM_YES
     endif
 
-    ` a - b + c comes out as a - (b + c), so the subtraction goes last
+    ` the page is the run of items from the first to the last. the pause menu leaves out the high scores,
+    ` the codec and the credits, which are things to look at from the title, and not in the middle of a game.
     MENU_PAGE_FIRST = first
-    MENU_PAGE_LENGTH = 1 + last - first
+    MENU_PAGE_LENGTH = 0
+    for i = 0 to MENU_ITEM_COUNT - 1
+        onPage = 1
+        if i < first or i > last then onPage = 0
+        if page = MENU_PAGE_PAUSE
+            if i = MENU_ITEM_HIGHSCORES or i = MENU_ITEM_CODEC or i = MENU_ITEM_CREDITS then onPage = 0
+        endif
+
+        if onPage
+            MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = i
+            MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+            show text MENU_ITEMS(i).textId
+        else
+            hide text MENU_ITEMS(i).textId
+        endif
+    next
 
     ` the list is centered on the same spot no matter how long it is
     MENU_LIST_TOP = 184 - MENU_PAGE_LENGTH * MENU_ROW_HEIGHT / 2
-
-    for i = 0 to MENU_ITEM_COUNT - 1
-        if i < first or i > last
-            hide text MENU_ITEMS(i).textId
-        else
-            show text MENU_ITEMS(i).textId
-        endif
-    next
 
     panelX = (WORLD_WIDTH - MENU_WIDTH) / 2
     panelY = MENU_LIST_TOP - 8
@@ -1001,7 +1196,7 @@ function selectMenuItem(index, duration)
     ` the highlighted line is white, and the lines that are not built yet are dim.
     ` the lines are put back in their places too, in case one of them was in the middle of a shake.
     for i = 0 to MENU_PAGE_LENGTH - 1
-        item = MENU_ITEMS(MENU_PAGE_FIRST + i)
+        item = MENU_ITEMS(MENU_PAGE_ITEMS(i))
 
         itemColor = rgb(64, 128, 255, 150)
         if item.ready then itemColor = rgb(150, 190, 255)
@@ -1012,8 +1207,17 @@ function selectMenuItem(index, duration)
     next
     create basic tween MENU_SHAKE_TWEEN_ID, 0, 0, 1, 0
 
-    set text MENU_DESC_TEXT_ID, MENU_ITEMS(MENU_PAGE_FIRST + index).desc$
+    set text MENU_DESC_TEXT_ID, MENU_ITEMS(MENU_PAGE_ITEMS(index)).desc$
 endfunction
+
+
+` which line of the page an item is on, counted from the top. it is 0 if the item is not on the page.
+function getMenuRow(item)
+    row = 0
+    for i = 0 to MENU_PAGE_LENGTH - 1
+        if MENU_PAGE_ITEMS(i) = item then row = i
+    next
+endfunction row
 
 
 ` write the settings onto the lines of the options page.
@@ -1025,6 +1229,21 @@ function refreshOptionLines()
         set text MENU_ITEMS(MENU_ITEM_SET_FULLSCREEN).textId, "Fullscreen    on"
     else
         set text MENU_ITEMS(MENU_ITEM_SET_FULLSCREEN).textId, "Fullscreen    off"
+    endif
+
+    ` and the kind of game onto the lines of the page that "New Game" opens
+    lengthName$ = "regular"
+    if OPTION_GAME_LENGTH = GAME_LENGTH_SHORT then lengthName$ = "short"
+    if OPTION_GAME_LENGTH = GAME_LENGTH_LONG then lengthName$ = "long"
+    set text MENU_ITEMS(MENU_ITEM_GAME_LENGTH).textId, "Length    " + lengthName$
+    MENU_ITEMS(MENU_ITEM_GAME_LENGTH).desc$ = "The game is over after " + str$(getGameLengthRounds(OPTION_GAME_LENGTH)) + " rounds."
+
+    if OPTION_GAME_ZEN
+        set text MENU_ITEMS(MENU_ITEM_GAME_MODE).textId, "Mode    zen"
+        MENU_ITEMS(MENU_ITEM_GAME_MODE).desc$ = "No upgrades. Fish can move around the edges of the board, and that is all."
+    else
+        set text MENU_ITEMS(MENU_ITEM_GAME_MODE).textId, "Mode    normal"
+        MENU_ITEMS(MENU_ITEM_GAME_MODE).desc$ = "Pick an upgrade after every round."
     endif
 endfunction
 
@@ -1065,9 +1284,22 @@ function changeMenuOption(item, change)
                 set screen size OPTION_WINDOW_W, OPTION_WINDOW_H
             endif
         endcase
+
+        ` the lengths go around: short, regular, long, and back to short
+        case MENU_ITEM_GAME_LENGTH
+            OPTION_GAME_LENGTH = OPTION_GAME_LENGTH + change
+            if OPTION_GAME_LENGTH > GAME_LENGTH_LONG then OPTION_GAME_LENGTH = GAME_LENGTH_SHORT
+            if OPTION_GAME_LENGTH < GAME_LENGTH_SHORT then OPTION_GAME_LENGTH = GAME_LENGTH_LONG
+        endcase
+
+        case MENU_ITEM_GAME_MODE
+            OPTION_GAME_ZEN = 1 - OPTION_GAME_ZEN
+        endcase
     endselect
 
     ` remember the options for the next time the game is run. only the one that changed gets written.
+    set pref PREF_GAME_LENGTH, OPTION_GAME_LENGTH
+    set pref PREF_GAME_ZEN, OPTION_GAME_ZEN
     set pref PREF_SOUND, OPTION_SOUND
     set pref PREF_MUSIC, OPTION_MUSIC
     set pref PREF_FULLSCREEN, OPTION_FULLSCREEN

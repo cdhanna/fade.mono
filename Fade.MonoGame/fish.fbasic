@@ -110,14 +110,17 @@ gosub setup_grid
 gosub setup_selection
 gosub setup_swap_tweens
 gosub setup_score
+gosub setup_multiplier
 gosub setup_passives
 gosub setup_moves
 gosub setup_ability_selection
+gosub setup_move_equip
 
 ` everything that can be explained in info mode from here on belongs to an upgrade, and goes away with a new game
 INFO_BASE_LENGTH = INFO_LENGTH
 
 gosub setup_menu
+gosub setup_upgrade_wipe `this uses the menu's effect, and the cards and rows of the upgrade screen
 gosub setup_float_bubbles `these use the bubble effect, which the menu loads
 
 
@@ -164,6 +167,9 @@ do
             if new action down(ACT_PAUSE)
                 gosub menu_open_pause
             endif
+
+            ` when the last round has been won, the game is over
+            gosub handle_game_end
 
         endif
 

@@ -41,6 +41,8 @@ save_game:
     set pref SAVE_PREF + 14, REQUEST_ABILITY_SELECTION
     set pref SAVE_PREF + 15, PASSIVE_COUNT
     set pref SAVE_PREF + 16, MOVE_ABILITY_COUNT
+    set pref SAVE_PREF + 17, SCORE_MULTIPLIER
+    set pref SAVE_PREF + 18, MULT_PROGRESS
 
     ` how many times every card has been taken
     for saveI = 0 to CARD_LENGTH - 1
@@ -54,12 +56,19 @@ save_game:
         endif
     next
 
-    ` the moves, in the order that they were taken, and how long each one has left to recharge
-    for saveI = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
-        if saveI < MOVE_ABILITY_COUNT
-            set pref SAVE_PREF_MOVES + saveI * 2, MOVE_ABILITY_BINDINGS(saveI).abilityIndex
-            set pref SAVE_PREF_MOVES + saveI * 2 + 1, MOVE_ABILITY_BINDINGS(saveI).movesLeft
-        endif
+    set pref SAVE_PREF + 19, MOVE_SLOTS_OPEN
+
+    ` the kind of game that it is
+    set pref SAVE_PREF + 20, GAME_ROUND_CAP
+    set pref SAVE_PREF + 21, GAME_ZEN
+
+    ` the move in every slot, and how long it has left to recharge. the move is saved as one more
+    ` than its card, so that 0 can stand for a slot that is empty.
+    for saveI = 0 to MOVE_SLOT_COUNT - 1
+        saveMove = 0
+        if MOVE_ABILITY_BINDINGS(saveI).assigned then saveMove = MOVE_ABILITY_BINDINGS(saveI).abilityIndex + 1
+        set pref SAVE_PREF_MOVES + saveI * 2, saveMove
+        set pref SAVE_PREF_MOVES + saveI * 2 + 1, MOVE_ABILITY_BINDINGS(saveI).movesLeft
     next
 
     ` the board. everything about a cell is packed into one number: the kind of fish, then
@@ -100,11 +109,12 @@ load_game:
         endif
     next
 
-    ` and so are the moves. a move that was recharging still is.
-    loadCount = get pref(SAVE_PREF + 16)
-    for saveI = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
-        if saveI < loadCount
-            grantMove(get pref(SAVE_PREF_MOVES + saveI * 2))
+    ` and so are the moves, each one back in the slot that it was in. a move that was recharging still is.
+    MOVE_SLOTS_OPEN = get pref(SAVE_PREF + 19, MOVE_SLOT_START_COUNT)
+    for saveI = 0 to MOVE_SLOT_COUNT - 1
+        loadMove = get pref(SAVE_PREF_MOVES + saveI * 2)
+        if loadMove > 0
+            grantMoveToSlot(loadMove - 1, saveI)
 
             loadLeft = get pref(SAVE_PREF_MOVES + saveI * 2 + 1)
             MOVE_ABILITY_BINDINGS(saveI).movesLeft = loadLeft
@@ -130,7 +140,12 @@ load_game:
 
     ` the score, and the bar that it fills
     CURRENT_SCORE = get pref(SAVE_PREF + 4)
+    syncScoreShown()
     CURRENT_ROUND = get pref(SAVE_PREF + 5)
+
+    ` the kind of game that it is. a game that was saved before there were kinds is a long, normal one.
+    GAME_ROUND_CAP = get pref(SAVE_PREF + 20, 100)
+    GAME_ZEN = get pref(SAVE_PREF + 21, 0)
     CURRENT_MOVE_COUNT = get pref(SAVE_PREF + 6)
     PENDING_FREE_MOVES = get pref(SAVE_PREF + 7)
     PENDING_BOARD_EXPANSIONS = get pref(SAVE_PREF + 8)
@@ -141,6 +156,20 @@ load_game:
     SCORE_BAR.endVal = get pref(SAVE_PREF + 10, 100)
     PROGRESS_BARS(0) = SCORE_BAR
     setProgressTween(SCORE_BAR, CURRENT_SCORE)
+
+    ` a game that was saved with a round won, and no upgrade picked for it yet, still has its bar held full.
+    ` the round was already counted when it was won. see SCORE_BAR_HOLD in fish_headers for what the numbers mean.
+    if CURRENT_SCORE >= SCORE_BAR.endVal
+        SCORE_BAR_HOLD = 1
+        if REQUEST_ABILITY_SELECTION then SCORE_BAR_HOLD = 2
+        create basic tween SCORE_BAR.progressTweenId, 1, 1, 1, 0
+    endif
+
+    ` the multiplier. a game that was saved before there was one has none, so it starts from x1.
+    SCORE_MULTIPLIER = get pref(SAVE_PREF + 17, 1)
+    if SCORE_MULTIPLIER < 1 then SCORE_MULTIPLIER = 1
+    MULT_PROGRESS = get pref(SAVE_PREF + 18, 0)
+    refreshMultiplier(1)
 
     registerMove(0) `this writes the number of moves onto the screen
     set text ROUND_COUNT_TEXT_ID, str$(getRoundsLeft())
@@ -203,8 +232,18 @@ function saveSignature()
     signature = CURRENT_MOVE_COUNT * 7 + CURRENT_SCORE * 13 + CURRENT_ROUND * 101
     signature = signature + CELL_COUNT * 3 + PASSIVE_COUNT * 17 + MOVE_ABILITY_COUNT * 19
     signature = signature + PENDING_FREE_MOVES * 23 + PENDING_BOARD_EXPANSIONS * 29 + REQUEST_ABILITY_SELECTION * 31
+    signature = signature + SCORE_MULTIPLIER * 41 + MULT_PROGRESS * 43
     for i = 0 to CARD_LENGTH - 1
         signature = signature + CARDS(i).uses * (37 + i)
+    next
+
+    ` which move is in which slot, and how long each has left to recharge. the "free move" changes
+    ` the board without changing the count of moves, and this is what gives that away.
+    signature = signature + MOVE_SLOTS_OPEN * 47
+    for i = 0 to MOVE_SLOT_COUNT - 1
+        if MOVE_ABILITY_BINDINGS(i).assigned
+            signature = signature + (MOVE_ABILITY_BINDINGS(i).abilityIndex + 1) * (53 + i * 6) + MOVE_ABILITY_BINDINGS(i).movesLeft * (59 + i * 6)
+        endif
     next
 endfunction signature
 
@@ -243,30 +282,76 @@ function grantPassive(abilityIndex)
 endfunction
 
 
-` give the player a move upgrade, ready to use, and put it in the list at the side of the board.
-` the upgrade screen calls this when a move is picked, and load_game calls it to put the moves back.
-function grantMove(abilityIndex)
-    moveBinding = MOVE_ABILITY_BINDINGS(MOVE_ABILITY_COUNT)
+` give the player a move upgrade, ready to use, in the given slot, which has to be empty. the slot
+` says which button uses the move, and which row it gets in the list at the side of the board.
+` the screen where a move gets put in a slot calls this, and load_game calls it to put the moves back.
+function grantMoveToSlot(abilityIndex, slot)
+    moveBinding = MOVE_ABILITY_BINDINGS(slot)
     moveBinding.assigned = 1
     moveBinding.abilityIndex = abilityIndex
+    moveBinding.slotIndex = slot
     moveBinding.movesLeft = 0 `start ready
     moveBinding.resetTimer = CARDS(abilityIndex).moveClock
     moveBinding.moveValue = CARDS(abilityIndex).moveValue
 
-    ` the moves take the buttons in order. assign_ability_selection stops offering moves once the buttons run out.
-    moveBinding.actionId = ACT_ABILITY(MOVE_ABILITY_COUNT)
-    moveBinding.icon$ = "move" + str$(MOVE_ABILITY_COUNT + 1)
+    moveBinding.actionId = ACT_ABILITY(slot)
+    moveBinding.icon$ = "move" + str$(slot + 1)
 
     set text moveBinding.titleTextId, CARDS(abilityIndex).name$
     size text x moveBinding.titleTextId, 100, .1, .3 `fit the name to the column, so that a long one does not run into the key
     set text moveBinding.keyTextId, "{" + moveBinding.icon$ + "}"
 
-    MOVE_ABILITY_BINDINGS(MOVE_ABILITY_COUNT) = moveBinding
+    ` the move explains itself in info mode, instead of the empty space. a slot only ever gets one
+    ` info blob, and a move that takes the place of another one takes over its blob.
+    setInfoBlobEnabled(INFO_INDEX_MOVES, 0)
+    moveInfo$ = CARDS(abilityIndex).desc$ + ". Hold {" + moveBinding.icon$ + "} and press {dir} to use it. It recharges after " + str$(moveBinding.resetTimer) + " moves."
+    if moveBinding.hasInfo
+        INFOS(moveBinding.infoIndex).title$ = CARDS(abilityIndex).name$
+        INFOS(moveBinding.infoIndex).desc$ = moveInfo$
+    else
+        moveBinding.infoIndex = allocateInfoBlob(12, ABILITY_ROWS_Y + 2 - slot * 18, 140, 18, CARDS(abilityIndex).name$, moveInfo$)
+        moveBinding.hasInfo = 1
+    endif
+
+    MOVE_ABILITY_BINDINGS(slot) = moveBinding
     MOVE_ABILITY_COUNT = MOVE_ABILITY_COUNT + 1
     create basic tween moveBinding.fadeTweenId, 0, 1, 400, 0
     CARDS(abilityIndex).obtained = 1
 
-    ` the move explains itself in info mode, instead of the empty space
-    setInfoBlobEnabled(INFO_INDEX_MOVES, 0)
-    infoIndex = allocateInfoBlob(12, ABILITY_ROWS_Y + 2 - (MOVE_ABILITY_COUNT - 1) * 18, 140, 18, CARDS(abilityIndex).name$, CARDS(abilityIndex).desc$ + ". Hold {" + moveBinding.icon$ + "} and press {dir} to use it. It recharges after " + str$(moveBinding.resetTimer) + " moves.")
+    layoutMoveInfos()
+endfunction
+
+
+` the moves are listed at the side of the board in the order of their slots, packed together, so
+` which row a move is on depends on which of the slots before it are empty. frame_move_ability_render
+` puts the rows there on every frame, and this puts the info blobs of the moves on the same rows.
+function layoutMoveInfos()
+    infoRow = 0
+    for infoSlot = 0 to MOVE_SLOT_COUNT - 1
+        if MOVE_ABILITY_BINDINGS(infoSlot).assigned
+            if MOVE_ABILITY_BINDINGS(infoSlot).hasInfo
+                rowBlob = INFOS(MOVE_ABILITY_BINDINGS(infoSlot).infoIndex)
+                rowBlob.topLeft.y = ABILITY_ROWS_Y + 2 - infoRow * 18
+                INFOS(MOVE_ABILITY_BINDINGS(infoSlot).infoIndex) = rowBlob
+            endif
+            infoRow = infoRow + 1
+        endif
+    next
+endfunction
+
+
+` throw out the move that is in the given slot. its card can be offered again by a later upgrade.
+` the slot keeps its info blob, because the only reason to throw a move out is to put another one in.
+function ejectMove(slot)
+    if MOVE_ABILITY_BINDINGS(slot).assigned
+        CARDS(MOVE_ABILITY_BINDINGS(slot).abilityIndex).obtained = 0
+        MOVE_ABILITY_BINDINGS(slot).assigned = 0
+        MOVE_ABILITY_BINDINGS(slot).movesLeft = 0
+        MOVE_ABILITY_COUNT = MOVE_ABILITY_COUNT - 1
+
+        ` frame_move_ability_render does not touch the row of an empty slot, so put it away here
+        set text alpha MOVE_ABILITY_BINDINGS(slot).titleTextId, 0
+        set text alpha MOVE_ABILITY_BINDINGS(slot).keyTextId, 0
+        set text alpha MOVE_ABILITY_BINDINGS(slot).timerTextId, 0
+    endif
 endfunction

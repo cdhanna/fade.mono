@@ -8,8 +8,8 @@ global SCORE_POS as vec = {
 }
 
 
-global dim CARDS(16) as ability
-global CARD_LENGTH = 15
+global dim CARDS(20) as ability
+global CARD_LENGTH = 16
 
 global CURRENT_MOVE_COUNT = 0
 global MOVE_COUNT_TEXT_ID
@@ -36,6 +36,7 @@ global ABILITY_INDEX_BOTTOM_FEEDER = 11
 global ABILITY_INDEX_BOTTOM_FEEDER_2 = 12 `the second copy. it only gets offered once the first one is owned.
 global ABILITY_INDEX_CONTAGIOUS_SMILE = 13
 global ABILITY_INDEX_BOTTOMS_UP = 14
+global ABILITY_INDEX_MOVE_FREE = 15
 
 ` ability type enum constants
 ` global ABILITY_TYPE_PASSIVE = 0
@@ -59,8 +60,14 @@ global ACT_PAUSE
 
 ` a move ability is held with a direction, the same way that the swap is. on a controller they are
 ` on x, y, b, and the bumpers, so 4 is as many move abilities as can be owned.
+` every button is a slot, and a move has to be put in a slot to be used. see EQUIPPING A MOVE, further down.
 global MOVE_SLOT_COUNT = 4
 global dim ACT_ABILITY(MOVE_SLOT_COUNT)
+
+` how many of the slots can be used. a new game starts with MOVE_SLOT_START_COUNT of them, and
+` MOVE_SLOTS_OPEN can go up from there, as far as MOVE_SLOT_COUNT. nothing raises it yet.
+global MOVE_SLOT_START_COUNT = 4
+global MOVE_SLOTS_OPEN = 4
 
 ` which device the input icons were last set up for. -1 means that they have not been set up at all.
 global INPUT_ICON_DEVICE = -1
@@ -91,6 +98,39 @@ global ORDER_SELECTION = 10
 ` and it draws more copies of the fish stacked up behind. the routine that feeds it, frame_fish_fx, is in fish_routines.
 global FISH_FX_ID = 2
 global FISH_STACK_EASE# = .2 `how much of the way a stack moves toward its real count on a frame
+
+` LIVE MOVES. a swap, or the cursor moving on its own, does not stop the game while it plays out. it gets
+` started, and then it gets moved along a little on every frame until it is done. that is what lets the
+` player keep moving and swapping while a combo is popping, falling, and filling back in.
+` only one plays at a time, and the rest wait in the queue of moves. the special moves still stop the
+` game while they play, so they wait for the board to settle first.
+` a swap cannot touch a fish that the combo is busy with: one that is popping, one that is falling, or a
+` new one that is dropping in. isCellLocked says which those are. the places that they are leaving or
+` heading for are empty, so there is nothing to swap with there either.
+` startLiveMove and stepLiveMove, in fish_funcs, do the work. process_input and frame_combo_input, in
+` fish_routines_input, call them.
+global LIVE_MOVE_ACTIVE = 0 `1 while one is playing out
+global LIVE_MOVE_IS_SWAP = 0 `1 if it swaps two fish, and 0 if only the cursor moves
+global LIVE_MOVE_A = 0 `the cell that it started on
+global LIVE_MOVE_B = 0 `and the cell that it is headed for
+global LIVE_MOVE_FROM_X = 0
+global LIVE_MOVE_FROM_Y = 0
+global LIVE_MOVE_TO_X = 0
+global LIVE_MOVE_TO_Y = 0
+global LIVE_MOVE_DIR_X = 0
+global LIVE_MOVE_DIR_Y = 0
+global LIVE_MOVE_FREE = 0 `1 if it is the swap of the "free move" card, which is not counted as a move
+global LIVE_MOVE_HOLD = 0 `1 when no new one may start, because a part of a combo is done and waiting to move on
+global COMBO_PHASE = 0 `what a combo is doing right now. 0 is nothing, 1 is popping, 2 is falling, and 3 is filling back in.
+
+` a move that cannot be made gives the cursor a quick shake, toward the way that it was asked to go and
+` back, so that the press does not look like it was missed. stepCursorShake, in fish_funcs, plays it.
+global CURSOR_SHAKE_TWEEN_ID
+global CURSOR_SHAKING = 0
+global CURSOR_SHAKE_DIR_X = 0
+global CURSOR_SHAKE_DIR_Y = 0
+global CURSOR_SHAKE_SIZE = 4 `how far it goes, in pixels
+global CURSOR_SHAKE_TIME = 220 `how long it lasts, in milliseconds
 
 ` STACKS. a cell can hold more fish, stacked up behind the one that shows. the stack goes wherever the fish
 ` goes, and every fish in it scores when it pops. cards are the only way to get one.
@@ -164,7 +204,7 @@ global ORDER_INFO_TEXT = 108
 
 global REQUEST_ABILITY_SELECTION = 0
 
-` the "free moves" card takes this many moves off of the counter. they come off one at a time,
+` the "negative moves" card takes this many moves off of the counter. they come off one at a time,
 ` after the upgrade screen has closed, so that it can be seen happening.
 ` the routine that does it, frame_free_moves, is in fish_routines, because it has to come after the score texts are declared.
 global FREE_MOVES_AMOUNT = 5
@@ -172,6 +212,75 @@ global PENDING_FREE_MOVES = 0
 global FREE_MOVES_TICK_TWEEN_ID
 global FREE_MOVES_SHAKE_TWEEN_ID
 global FREE_MOVES_SHAKING = 0
+
+` THE SCORE THAT SHOWS. a combo is scored all at once, when it is found, but its fish pop one after another.
+` so the bar of the round's progress does not show CURRENT_SCORE. it shows SCORE_SHOWN, which gets the points
+` of each fish at the moment that the fish pops, and catches up with CURRENT_SCORE by the time the last one has.
+` the round is over when the score that shows gets to the end of the bar, so that the bar is seen filling up first.
+` queueScore and stepScoreTicks, in fish_funcs, do the work.
+global SCORE_SHOWN = 0
+
+` when the bar fills up, the round is over. the upgrade screen does not come up right away, though. it waits
+` for the board to settle, so that fish which are still popping get to finish. the bar stays full that whole
+` time, and it fizzes with bubbles to show that an upgrade is on its way.
+` the bar stays full while the upgrade screen is up, too. only once an upgrade has been picked does the bar
+` empty out and start on the next round. advanceScoreBar, in fish_funcs, does that.
+` a big combo can score far past the end of the bar. the score is kept, but the next round never starts
+` more than SCORE_CARRY_MAX# of the way along, so one combo cannot win two rounds in a row.
+global SCORE_BAR_HOLD = 0 `0 is not full. 1 is full, and waiting for the board to settle. 2 is full, with the upgrade screen asked for.
+global SCORE_CARRY_MAX# = .5 `how much of the next round's bar the points scored past the end can fill, at the most
+global SCORE_BAR_FIZZ_MS = 0 `when the full bar lets off its next bubbles
+global SCORE_BAR_FIZZ_GAP = 55 `how many milliseconds there are between them
+
+` the bar shakes a little while it is filling up, and it shakes more, and is brighter, while it is full and fizzing
+global SCORE_BAR_LAST_FILL# = 0 `how full the bar was drawn on the last frame, to tell when it is filling up
+global SCORE_TICK_MAX = 600 `more than every fish on the biggest board, with a full stack behind each one
+global SCORE_TICK_COUNT = 0 `how many are waiting
+global dim SCORE_TICK_MS(SCORE_TICK_MAX) `when each one is due
+global dim SCORE_TICK_POINTS(SCORE_TICK_MAX) `and how many points it is worth
+
+` THE MULTIPLIER. every fish that pops scores this many times what it would have.
+` a swap that makes something pop fills the multiplier's bar a little. when the bar is full, the multiplier
+` goes up by one, and the bar starts again from empty. a swap that pops nothing empties the bar, and takes
+` one off of the multiplier, down to 1 at the least.
+` the bar takes 3 more swaps in a row to fill every time: 2 to get to x2, 5 to get to x3, 8 to get to x4.
+` how many it takes follows from the multiplier, so when the multiplier goes down, so does how many it takes.
+` there is no top to the multiplier. the higher it is, the longer the next one takes, and the more every pop is worth.
+` only swaps count. the special moves, and the cursor moving on its own, do not fill the bar or empty it.
+` the routines are in fish_routines_multiplier.
+global SCORE_MULTIPLIER = 1
+global MULT_FIRST_REQUIRED = 2 `how many swaps in a row it takes to get from x1 to x2
+global MULT_REQUIRED_STEP = 3 `and how many more it takes for every multiplier after that
+global MULT_PROGRESS = 0 `how many swaps in a row have popped something, since the bar was last empty
+global MULT_PENDING_SWAPS = 0 `swaps that have been made, that handle_combos has not looked at the board since
+global MULT_POS as vec = {
+    x = 32,
+    y = 70
+}
+global MULT_BAR_WIDTH = 64
+global MULT_BAR_BACK_SPRITE
+global MULT_BAR_FILL_SPRITE
+global MULT_TEXT_ID
+global MULT_NUM_TEXT_ID
+global MULT_FILL_TWEEN_ID
+global MULT_PUNCH_TWEEN_ID `1 when the multiplier has just changed, dying away to 0
+global MULT_PUNCH_DIR = 0 `1 if it went up, and -1 if it went down
+
+` THE UPGRADE WIPE. the upgrade screen is not drawn onto the screen. it is drawn to a render target of its
+` own, and the wave of bubbles wipes that in over the game, and away again, the same way that it wipes the
+` menu. menu_transition does both. it wipes the upgrade screen when TRANSITION_FOR_UPGRADE is set.
+` the setup is in fish_routines_upgrade.
+global TARGET_UPGRADE
+global UPGRADE_COMPOSITE_SPRITE `draws the upgrade screen over the game, through the mask that the bubbles paint
+global UPGRADE_DIM_SPRITE `the dark backdrop of the upgrade screen, which the game shows through
+global UPGRADE_INVERT = 0 `1 while the bubbles are taking the upgrade screen away, instead of bringing it in
+global TRANSITION_FOR_UPGRADE = 0 `1 when menu_transition is wiping the upgrade screen, and not the menu
+
+` the upgrade screen does not have to be taken up on its offer. underneath the cards there is a line that
+` takes none of them. down goes to it, and up, left and right go back to the cards.
+global UPGRADE_SKIP_TEXT_ID
+global UPGRADE_SKIP_SELECTED = 0 `1 while the line that takes nothing is the one that is highlighted
+global UPGRADE_SKIP_Y = 268
 
 ` FLOATING BUBBLES. the routines are in fish_routines_bubbles.
 global FLOAT_BUBBLE_COUNT = 300
@@ -219,10 +328,39 @@ global PASSIVE_COUNT = 0
 global passive as passiveDisplay
 global dim PASSIVE_BINDINGS(PASSIVE_BINDINGS_LENGTH) as passiveDisplay
 
+` the moves. MOVE_ABILITY_BINDINGS(n) is the move in slot n, which is the move on button n. a slot
+` can be empty, so check `assigned`. MOVE_ABILITY_COUNT is how many of the slots have a move in them.
 global MOVE_ABILITY_BINDINGS_LENGTH = 10
 global MOVE_ABILITY_COUNT = 0
 global moveAbility as moveDisplay
 global dim MOVE_ABILITY_BINDINGS(MOVE_ABILITY_BINDINGS_LENGTH) as moveDisplay
+
+` EQUIPPING A MOVE. there are more moves than there are buttons, so a move that is picked on the upgrade
+` screen has to be put in a slot. the screen lists the slots that are open, each with its button and the
+` move that is in it, all greyed out, and the player picks one. picking a slot that has a move in it
+` throws that move out, and it is gone until an upgrade offers it again, so the player is asked first.
+` the last row leaves the new move behind instead, and that asks first too.
+` the routines are in fish_routines_equip.
+global EQUIP_ROW_MAX = 5 `a row for every slot, and one more to leave the move behind
+global dim EQUIP_ROWS(EQUIP_ROW_MAX) as equipRow
+global EQUIP_ROW_COUNT = 0 `how many rows are showing. the last one leaves the move behind.
+global EQUIP_SELECTED = 0 `the highlighted row
+global EQUIP_CONFIRMING = 0 `1 while the player is being asked if they are sure
+global EQUIP_CONFIRM_YES = 0 `which answer is highlighted
+global EQUIP_ROW_WIDTH = 230
+global EQUIP_ROW_HEIGHT = 22
+global EQUIP_ROW_GAP = 4
+global EQUIP_ROWS_TOP = 128
+global EQUIP_OPTION_WIDTH = 60 `how wide the outline around an answer is
+global EQUIP_ROW_X = 0 `the left edge of the rows. setup_move_equip works these out, because the size of the world is not known here.
+global EQUIP_NO_X = 0 `the middle of each of the two answers. they go to the right of the row that was picked.
+global EQUIP_YES_X = 0
+global EQUIP_FADE_TWEEN_ID
+global EQUIP_CURSOR_TWEEN_ID
+global EQUIP_DESC_TEXT_ID
+global EQUIP_PROMPT_TEXT_ID
+global EQUIP_NO_TEXT_ID
+global EQUIP_YES_TEXT_ID
 
 ` setup fish info allocations.
 global INFO_COUNT = 100 `allocate up a bunch of these things, and hope for the best. 
@@ -268,6 +406,8 @@ global MENU_MODE = 0
 #constant MENU_PAGE_PAUSE 1
 #constant MENU_PAGE_CONFIRM 2
 #constant MENU_PAGE_OPTIONS 3
+#constant MENU_PAGE_NEW_GAME 4
+#constant MENU_PAGE_GAME_OVER 5
 global MENU_PAGE = 0
 
 ` every line that any page of the menu can show. a page shows a run of these that are next to each other.
@@ -284,11 +424,20 @@ global MENU_PAGE = 0
 #constant MENU_ITEM_SET_MUSIC 10
 #constant MENU_ITEM_SET_FULLSCREEN 11
 #constant MENU_ITEM_SET_BACK 12
-global MENU_ITEM_COUNT = 13
+#constant MENU_ITEM_GAME_LENGTH 13
+#constant MENU_ITEM_GAME_MODE 14
+#constant MENU_ITEM_GAME_START 15
+#constant MENU_ITEM_GAME_BACK 16
+#constant MENU_ITEM_OVER_DONE 17
+global MENU_ITEM_COUNT = 18
 global dim MENU_ITEMS(MENU_ITEM_COUNT) as menuItem
 
 global MENU_PAGE_FIRST = 0 `the first item on the page
 global MENU_PAGE_LENGTH = 0 `how many items are on the page
+
+` the items on the page, from the top down. a page is a run of items that are next to each other, but
+` it can leave some of them out. the pause menu leaves out the things that only make sense from the title.
+global dim MENU_PAGE_ITEMS(18)
 global MENU_SELECTED = 0 `the highlighted line, counted from the top of the page
 
 ` where the list goes
@@ -342,6 +491,23 @@ global MENU_CURSOR as infoBorder
 #constant PREF_SOUND 1
 #constant PREF_MUSIC 2
 #constant PREF_FULLSCREEN 3
+#constant PREF_GAME_LENGTH 4
+#constant PREF_GAME_ZEN 5
+
+` THE KIND OF GAME. "New Game" on the menu asks how long the game should be, and which mode it is in.
+` the length is how many rounds there are. when the last one has been won, the game is over.
+` the mode is normal or zen. a zen game starts with the "seamless" passive, and that is all that it
+` ever gets: there is no upgrade screen. when the bar fills up, it empties out and the next round starts.
+` the menu changes the two options, and they are remembered for the next time the game is run. they only
+` turn into the rules of a game when one is started. apply_game_options, in fish_routines_menu, does that.
+#constant GAME_LENGTH_SHORT 0
+#constant GAME_LENGTH_REGULAR 1
+#constant GAME_LENGTH_LONG 2
+global OPTION_GAME_LENGTH = 1
+global OPTION_GAME_ZEN = 0
+global GAME_ROUND_CAP = 100 `how many rounds the game that is being played has
+global GAME_ZEN = 0 `1 when the game that is being played is a zen game
+global REQUEST_GAME_END = 0 `1 when the last round has been won, and the end of the game has not come up yet
 
 global OPTION_SOUND = 10 `how loud the sound effects are, from 0 to 10
 global OPTION_MUSIC = 10 `how loud the music is, from 0 to 10
@@ -358,11 +524,11 @@ global dim MENU_FISHES(MENU_FISH_COUNT) as menuFish
 ` THE SAVED GAME. the routines are in fish_routines_save.
 ` the game in progress is kept in the preferences, as a block of numbers. these say where each part of it starts.
 ` they must not change, and SAVE_VERSION has to go up whenever what is saved does, or an old save would be read wrong.
-global SAVE_VERSION = 1
+global SAVE_VERSION = 2
 global SAVE_PREF = 100 `the score, the size of the board, and the other single numbers
 global SAVE_PREF_CARDS = 200 `how many times every card has been taken
 global SAVE_PREF_PASSIVES = 300 `the passives, in order
-global SAVE_PREF_MOVES = 350 `the moves, in order, with two numbers each
+global SAVE_PREF_MOVES = 350 `the move in every slot, with two numbers each
 global SAVE_PREF_CELLS = 1000 `one number for every cell of the board
 global SAVE_SIGNATURE = -1 `what saveSignature said at the last save. the game is saved again when that changes.
 
@@ -418,8 +584,29 @@ global MUSIC_LAST_MS = 0
 #constant MUSIC_LAYER_CURRENT 2
 #constant MUSIC_LAYER_PAD_DM 3
 #constant MUSIC_LAYER_PAD_BB 4
-global MUSIC_LAYER_COUNT = 5
+#constant MUSIC_LAYER_DEEP 5
+#constant MUSIC_LAYER_TRICKLE 6
+#constant MUSIC_LAYER_CRACKLE 7
+#constant MUSIC_LAYER_SURF_ABOVE 8
+#constant MUSIC_LAYER_AMBIENCE 9
+global MUSIC_LAYER_COUNT = 10
 global dim MUSIC_LAYERS(MUSIC_LAYER_COUNT) as musicLayer
+
+` there are two scenes. at the surface there are waves breaking, and down in the deep it is dark
+` and muffled, with bubbles going by. some of the layers are only heard in one of the scenes.
+` the depth is how far down the music is, from 0 (the surface) to 1 (the deep), and the layers
+` of the two scenes fade into each other as it changes. setMusicDepth() changes it.
+#constant MUSIC_SCENE_BOTH 0
+#constant MUSIC_SCENE_SURFACE 1
+#constant MUSIC_SCENE_DEEP 2
+global MUSIC_DEPTH# = 0
+global MUSIC_DEPTH_TARGET# = 0 `the depth that it is on its way to
+global MUSIC_DEPTH_SPEED# = 0 `how much the depth moves in a second
+global MUSIC_SCENE_MS = 0 `when it goes to the other scene next
+global MUSIC_SCENE_GAP_MIN = 60000 `it stays in a scene for somewhere between these, in milliseconds.
+global MUSIC_SCENE_GAP_MAX = 120000 `0 means that the scene only changes when setMusicDepth() is called.
+global MUSIC_SCENE_FADE# = 15 `how many seconds it takes to go from one scene to the other
+global MUSIC_DIVE_FADE# = 4 `the same, for when the game starts (it dives) and when it goes back to the main menu (it surfaces)
 
 ` a layer that wanders picks a new level after a wait that is somewhere between these, in milliseconds
 global MUSIC_DRIFT_GAP_MIN = 15000
@@ -444,7 +631,11 @@ global MUSIC_CHORD_LEAD = 3500 `a melody that has to change the chord waits this
 #constant MUSIC_SHOT_WHALE_HIGH 2
 #constant MUSIC_SHOT_BUBBLES_SPARSE 3
 #constant MUSIC_SHOT_BUBBLES_DENSE 4
-global MUSIC_SHOT_COUNT = 5
+#constant MUSIC_SHOT_TANK_CLINK 5
+#constant MUSIC_SHOT_BOAT_PASS 6
+#constant MUSIC_SHOT_DOLPHIN 7
+#constant MUSIC_SHOT_THUNDER_ABOVE 8
+global MUSIC_SHOT_COUNT = 9
 global dim MUSIC_SHOTS(MUSIC_SHOT_COUNT) as musicShot
 
 ` the notes that a melody can use, from low to high. there is a sound for every one of them.

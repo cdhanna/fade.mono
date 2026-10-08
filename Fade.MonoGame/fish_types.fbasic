@@ -121,6 +121,19 @@ type moveDisplay
     movesLeft
     resetTimer
 
+    hasInfo `1 once the slot has an info blob. a move that takes over the slot takes over the blob too.
+    infoIndex
+
+endtype
+
+` one row of the list of slots, on the screen where a new move gets put in a slot
+type equipRow
+    slotIndex `the slot that it stands for, or -1 for the row that leaves the move behind
+    panelSpriteId
+    keyTextId `a picture of the button of the slot
+    nameTextId `the move that is in the slot
+    noteTextId `how long that move takes to recharge
+    border as infoBorder
 endtype
 
 type abilityChoice
@@ -230,6 +243,7 @@ type musicLayer
     speed# `how much the level moves in a second
     driftMin#, driftMax# `it wanders between these levels on its own. it stays put if the highest is 0.
     driftMs `when it picks a new level next
+    scene `MUSIC_SCENE_SURFACE or MUSIC_SCENE_DEEP if it is only heard in one of them, or MUSIC_SCENE_BOTH
 endtype
 
 ` a sound that the music plays once, now and then, like a whale
@@ -240,6 +254,7 @@ type musicShot
     gapMin `the shortest wait before it plays on its own again, in milliseconds
     gapMax `the longest wait. it never plays on its own if this is 0.
     nextMs `when it plays on its own next
+    scene `it only plays on its own in this scene, or in both of them if this is MUSIC_SCENE_BOTH
 endtype
 
 ` one thing that rolls by in the credits. it is some text, or it is a picture.

@@ -1,0 +1,372 @@
+goto routines_equip_exit
+
+remstart
+    EQUIPPING A MOVE
+    a move that is picked on the upgrade screen has to be put in a slot, and every slot is a button.
+    see EQUIPPING A MOVE in fish_headers for the rules.
+
+    this is a second page of the upgrade screen. handle_ability_selection comes to handle_move_equip
+    when a move is picked, while the dark overlay is still up, and carries on with closing the
+    screen when this is done. it borrows the title and the bright outline of the upgrade screen.
+
+    the names in here all start with "equip", because this runs in the middle of
+    handle_ability_selection, and it must not touch anything that it is in the middle of using.
+remend
+
+setup_move_equip:
+
+    EQUIP_ROW_X = (WORLD_WIDTH - EQUIP_ROW_WIDTH) / 2
+    EQUIP_NO_X = EQUIP_ROW_X + EQUIP_ROW_WIDTH + 10 + EQUIP_OPTION_WIDTH / 2
+    EQUIP_YES_X = EQUIP_NO_X + EQUIP_OPTION_WIDTH + 8
+
+    ` the fade goes from 0 (put away) to 1 (showing)
+    reserve tween id(EQUIP_FADE_TWEEN_ID)
+    create basic tween EQUIP_FADE_TWEEN_ID, 0, 0, 1, 0
+
+    ` where the top of the bright outline is, as it slides from row to row
+    reserve tween id(EQUIP_CURSOR_TWEEN_ID)
+    create basic tween EQUIP_CURSOR_TWEEN_ID, 0, 0, 1, 0
+
+    for i = 0 to EQUIP_ROW_MAX - 1
+        equipSetup = EQUIP_ROWS(i)
+        equipSetupY = getEquipRowY(i)
+
+        reserve sprite id(equipSetup.panelSpriteId)
+        reserve text id(equipSetup.keyTextId)
+        reserve text id(equipSetup.nameTextId)
+        reserve text id(equipSetup.noteTextId)
+        equipSetup.border = createInfoBorder(ORDER_ABILITY_ART)
+
+        ` the row is a dark panel with a faint outline, like a card
+        sprite equipSetup.panelSpriteId, EQUIP_ROW_X, equipSetupY, TEX_PIXEL
+        set sprite offset equipSetup.panelSpriteId, 0, 0
+        size sprite equipSetup.panelSpriteId, EQUIP_ROW_WIDTH, EQUIP_ROW_HEIGHT
+        order sprite equipSetup.panelSpriteId, ORDER_ABILITY_CARD
+        hide sprite equipSetup.panelSpriteId
+
+        layoutInfoBorder(equipSetup.border, EQUIP_ROW_X, equipSetupY, EQUIP_ROW_WIDTH, EQUIP_ROW_HEIGHT)
+
+        ` the button of the slot, then the move that is in it, laid out like the list at the side of the board
+        text equipSetup.keyTextId, EQUIP_ROW_X + 14, equipSetupY + 11, SCORE_FONT, "{move1}"
+        enable rich text equipSetup.keyTextId
+        set text offset equipSetup.keyTextId, .5, .5
+        size text y equipSetup.keyTextId, 16 `the key icons are sharpest at this size
+        order text equipSetup.keyTextId, ORDER_ABILITY_TEXT
+        hide text equipSetup.keyTextId
+
+        text equipSetup.nameTextId, EQUIP_ROW_X + 28, equipSetupY + 1, SCORE_FONT, "empty"
+        set text offset equipSetup.nameTextId, 0, 0
+        size text x equipSetup.nameTextId, 120, .1, .3
+        order text equipSetup.nameTextId, ORDER_ABILITY_TEXT
+        hide text equipSetup.nameTextId
+
+        ` how long the move takes to recharge, at the right end of the row
+        text equipSetup.noteTextId, EQUIP_ROW_X + EQUIP_ROW_WIDTH - 6, equipSetupY + 3, SCORE_FONT, " "
+        set text offset equipSetup.noteTextId, 1, 0
+        size text y equipSetup.noteTextId, 16
+        order text equipSetup.noteTextId, ORDER_ABILITY_TEXT
+        hide text equipSetup.noteTextId
+
+        EQUIP_ROWS(i) = equipSetup
+    next
+
+    ` what the new move does, above the rows, so that the player does not have to remember the card
+    reserve text id(EQUIP_DESC_TEXT_ID)
+    text EQUIP_DESC_TEXT_ID, WORLD_WIDTH / 2, 92, SCORE_FONT, "desc"
+    size text y EQUIP_DESC_TEXT_ID, 16
+    set text offset EQUIP_DESC_TEXT_ID, .5, 0
+    set text wrap EQUIP_DESC_TEXT_ID, 440
+    set text align EQUIP_DESC_TEXT_ID, .5
+    enable rich text EQUIP_DESC_TEXT_ID
+    color text EQUIP_DESC_TEXT_ID, rgb(150, 190, 255)
+    order text EQUIP_DESC_TEXT_ID, ORDER_ABILITY_TEXT
+    hide text EQUIP_DESC_TEXT_ID
+
+    ` the question takes the place of that, when the player has to be asked if they are sure
+    reserve text id(EQUIP_PROMPT_TEXT_ID)
+    text EQUIP_PROMPT_TEXT_ID, WORLD_WIDTH / 2, 92, SCORE_FONT, "sure?"
+    size text y EQUIP_PROMPT_TEXT_ID, 16
+    set text offset EQUIP_PROMPT_TEXT_ID, .5, 0
+    set text wrap EQUIP_PROMPT_TEXT_ID, 440
+    set text align EQUIP_PROMPT_TEXT_ID, .5
+    color text EQUIP_PROMPT_TEXT_ID, rgb(255, 255, 255)
+    order text EQUIP_PROMPT_TEXT_ID, ORDER_ABILITY_TEXT
+    hide text EQUIP_PROMPT_TEXT_ID
+
+    ` and the two answers go to the right of the row that was picked, with "no" the nearer one.
+    ` they are put on that row when the question is asked.
+    reserve text id(EQUIP_NO_TEXT_ID)
+    text EQUIP_NO_TEXT_ID, EQUIP_NO_X, 0, SCORE_FONT, "No"
+    size text y EQUIP_NO_TEXT_ID, 20
+    set text offset EQUIP_NO_TEXT_ID, .5, 0
+    order text EQUIP_NO_TEXT_ID, ORDER_ABILITY_TEXT
+    hide text EQUIP_NO_TEXT_ID
+
+    reserve text id(EQUIP_YES_TEXT_ID)
+    text EQUIP_YES_TEXT_ID, EQUIP_YES_X, 0, SCORE_FONT, "Yes"
+    size text y EQUIP_YES_TEXT_ID, 20
+    set text offset EQUIP_YES_TEXT_ID, .5, 0
+    order text EQUIP_YES_TEXT_ID, ORDER_ABILITY_TEXT
+    hide text EQUIP_YES_TEXT_ID
+
+return
+
+
+` the player picked the move `selectedAbilityIndex` on the upgrade screen. have them put it in a slot.
+handle_move_equip:
+
+    ` the cards shrink away, and the title goes with them, because it is about to say something else
+    for i = 0 to choiceCount
+        create basic tween ABILITY_CHOICES(i).sizeTweenId, get local transform scale x(ABILITY_CHOICES(i).transformId), 0, 200, 0
+    next
+    showInfoBorder(ABILITY_CURSOR, 0)
+    create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 1, 0, 200, 0
+    while is tween done(ABILITY_SELECT_LABEL_FADE_TWEEN_ID) < 1
+        gosub frame_ability_selection
+        sync
+    endwhile
+
+    set text ABILITY_SELECT_LABEL_TEXT_ID, "Choose a Button"
+    size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
+
+    equipName$ = CARDS(selectedAbilityIndex).name$
+    set text EQUIP_DESC_TEXT_ID, equipName$ + ": " + CARDS(selectedAbilityIndex).desc$
+    show text EQUIP_DESC_TEXT_ID
+
+    ` a row for every slot that is open, and then the row that leaves the move behind
+    EQUIP_ROW_COUNT = MOVE_SLOTS_OPEN + 1
+    equipFirstEmpty = -1
+    for equipN = 0 to EQUIP_ROW_COUNT - 1
+        equipFill = EQUIP_ROWS(equipN)
+
+        if equipN < MOVE_SLOTS_OPEN
+            equipFill.slotIndex = equipN
+            set text equipFill.keyTextId, "{move" + str$(equipN + 1) + "}"
+
+            if MOVE_ABILITY_BINDINGS(equipN).assigned
+                set text equipFill.nameTextId, CARDS(MOVE_ABILITY_BINDINGS(equipN).abilityIndex).name$
+                set text equipFill.noteTextId, str$(MOVE_ABILITY_BINDINGS(equipN).resetTimer) + " move recharge"
+            else
+                set text equipFill.nameTextId, "empty"
+                set text equipFill.noteTextId, " "
+                if equipFirstEmpty < 0 then equipFirstEmpty = equipN
+            endif
+        else
+            equipFill.slotIndex = -1
+            set text equipFill.keyTextId, " "
+            set text equipFill.nameTextId, "leave it behind"
+            set text equipFill.noteTextId, " "
+        endif
+        size text x equipFill.nameTextId, 120, .1, .3 `fit the name to the row, the same as the list at the side of the board
+
+        show sprite equipFill.panelSpriteId
+        show text equipFill.keyTextId
+        show text equipFill.nameTextId
+        show text equipFill.noteTextId
+        showInfoBorder(equipFill.border, 1)
+
+        EQUIP_ROWS(equipN) = equipFill
+    next
+
+    ` start on the first slot that is empty, if there is one, so that the quick thing to do loses nothing
+    EQUIP_SELECTED = 0
+    if equipFirstEmpty >= 0 then EQUIP_SELECTED = equipFirstEmpty
+    EQUIP_CONFIRMING = 0
+    EQUIP_CONFIRM_YES = 0
+
+    equipCursorY = getEquipRowY(EQUIP_SELECTED)
+    create basic tween EQUIP_CURSOR_TWEEN_ID, equipCursorY, equipCursorY, 1, 0
+    showInfoBorder(ABILITY_CURSOR, 1)
+
+    set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} put it here"
+
+    create basic tween EQUIP_FADE_TWEEN_ID, 0, 1, 200, 0
+    create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 0, 1, 200, 0
+
+    ` the slot that the move goes in, or -1 to leave it behind
+    equipSlot = -1
+    equipDone = 0
+    while equipDone = 0
+
+        ` what the player pressed on this frame
+        equipPressConfirm = new action down(ACT_CONFIRM)
+        equipPressBack = new action down(ACT_PAUSE)
+        equipSide = 0
+        if new action down(ACT_RIGHT) then equipSide = 1
+        if new action down(ACT_LEFT) then equipSide = -1
+        equipDir = 0
+        if new action down(ACT_DOWN) then equipDir = 1
+        if new action down(ACT_UP) then equipDir = -1
+
+        if EQUIP_CONFIRMING
+            ` the player is being asked if they are sure. the answers are side by side, and "yes" is the
+            ` far one, so it takes a press of right to get to it. it cannot be picked by leaning on one button.
+            if equipSide > 0 then EQUIP_CONFIRM_YES = 1
+            if equipSide < 0 then EQUIP_CONFIRM_YES = 0
+
+            equipAnswered = equipPressConfirm
+
+            ` the pause key backs out, the same as it does on the menus
+            if equipPressBack
+                equipAnswered = 1
+                EQUIP_CONFIRM_YES = 0
+            endif
+
+            if equipAnswered
+                if EQUIP_CONFIRM_YES
+                    equipDone = 1
+                else
+                    ` back to the rows
+                    EQUIP_CONFIRMING = 0
+                    hide text EQUIP_PROMPT_TEXT_ID
+                    hide text EQUIP_NO_TEXT_ID
+                    hide text EQUIP_YES_TEXT_ID
+                    show text EQUIP_DESC_TEXT_ID
+                    set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} put it here"
+                endif
+            endif
+        else
+            if equipDir <> 0
+                ` the outline leaves some bubbles behind on the row that it was around
+                spawnWakeBubbles(EQUIP_ROW_X, tweenVal(EQUIP_CURSOR_TWEEN_ID), EQUIP_ROW_WIDTH, EQUIP_ROW_HEIGHT, 8, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
+
+                EQUIP_SELECTED = EQUIP_SELECTED + equipDir
+                if EQUIP_SELECTED < 0 then EQUIP_SELECTED = EQUIP_ROW_COUNT - 1
+                if EQUIP_SELECTED >= EQUIP_ROW_COUNT then EQUIP_SELECTED = 0
+
+                create basic tween EQUIP_CURSOR_TWEEN_ID, tweenVal(EQUIP_CURSOR_TWEEN_ID), getEquipRowY(EQUIP_SELECTED), 120, 0
+            endif
+
+            if equipPressConfirm
+                equipSlot = EQUIP_ROWS(EQUIP_SELECTED).slotIndex
+
+                ` an empty slot loses nothing, so there is nothing to ask about
+                equipAsk = 1
+                if equipSlot >= 0
+                    if MOVE_ABILITY_BINDINGS(equipSlot).assigned = 0 then equipAsk = 0
+                endif
+
+                if equipAsk
+                    EQUIP_CONFIRMING = 1
+                    EQUIP_CONFIRM_YES = 0 `start on "no", so that leaning on the button does not lose a move
+
+                    if equipSlot >= 0
+                        equipOld$ = CARDS(MOVE_ABILITY_BINDINGS(equipSlot).abilityIndex).name$
+                        set text EQUIP_PROMPT_TEXT_ID, "Replace " + equipOld$ + " with " + equipName$ + "? You lose " + equipOld$ + " until an upgrade offers it again."
+                    else
+                        set text EQUIP_PROMPT_TEXT_ID, "Leave " + equipName$ + " behind? You do not get it until an upgrade offers it again."
+                    endif
+
+                    ` the answers go on the row that was picked
+                    equipAnswerY = getEquipRowY(EQUIP_SELECTED) + 1
+                    set text position EQUIP_NO_TEXT_ID, EQUIP_NO_X, equipAnswerY
+                    set text position EQUIP_YES_TEXT_ID, EQUIP_YES_X, equipAnswerY
+
+                    hide text EQUIP_DESC_TEXT_ID
+                    show text EQUIP_PROMPT_TEXT_ID
+                    show text EQUIP_NO_TEXT_ID
+                    show text EQUIP_YES_TEXT_ID
+                    set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} answer    {pause} go back"
+                else
+                    equipDone = 1
+                endif
+            endif
+        endif
+
+        gosub frame_ability_selection
+        gosub frame_move_equip
+        sync
+    endwhile
+
+    ` the move that was in the slot goes, and the new one takes its place
+    if equipSlot >= 0
+        ejectMove(equipSlot)
+        grantMoveToSlot(selectedAbilityIndex, equipSlot)
+    endif
+
+    ` put the page away. handle_ability_selection closes the rest of the screen after this.
+    showInfoBorder(ABILITY_CURSOR, 0)
+    create basic tween EQUIP_FADE_TWEEN_ID, 1, 0, 200, 0
+    while is tween done(EQUIP_FADE_TWEEN_ID) < 1
+        gosub frame_ability_selection
+        gosub frame_move_equip
+        sync
+    endwhile
+
+    for equipN = 0 to EQUIP_ROW_COUNT - 1
+        hide sprite EQUIP_ROWS(equipN).panelSpriteId
+        hide text EQUIP_ROWS(equipN).keyTextId
+        hide text EQUIP_ROWS(equipN).nameTextId
+        hide text EQUIP_ROWS(equipN).noteTextId
+        showInfoBorder(EQUIP_ROWS(equipN).border, 0)
+    next
+    hide text EQUIP_DESC_TEXT_ID
+    hide text EQUIP_PROMPT_TEXT_ID
+    hide text EQUIP_NO_TEXT_ID
+    hide text EQUIP_YES_TEXT_ID
+    EQUIP_CONFIRMING = 0
+
+return
+
+
+` everything on this page that changes from frame to frame. this comes after frame_ability_selection,
+` which puts the bright outline around a card, so that the outline ends up where this page wants it.
+frame_move_equip:
+
+    equipFade# = tweenVal(EQUIP_FADE_TWEEN_ID)
+
+    ` the rows are grey, all but the highlighted one, which is white
+    for equipN = 0 to EQUIP_ROW_COUNT - 1
+        equipDraw = EQUIP_ROWS(equipN)
+
+        equipTone = 140
+        equipKeyAlpha = 130
+        if equipN = EQUIP_SELECTED
+            equipTone = 255
+            equipKeyAlpha = 255
+        endif
+
+        color sprite equipDraw.panelSpriteId, rgb(20, 20, 24, 235 * equipFade#)
+        colorInfoBorder(equipDraw.border, rgb(130, 130, 135, 160 * equipFade#))
+
+        color text equipDraw.nameTextId, rgb(equipTone, equipTone, equipTone)
+        set text alpha equipDraw.nameTextId, 255 * equipFade#
+        color text equipDraw.noteTextId, rgb(equipTone, equipTone, equipTone)
+        set text alpha equipDraw.noteTextId, 200 * equipFade#
+        color text equipDraw.keyTextId, rgb(equipTone, equipTone, equipTone)
+        set text alpha equipDraw.keyTextId, equipKeyAlpha * equipFade#
+    next
+
+    set text alpha EQUIP_DESC_TEXT_ID, 255 * equipFade#
+    set text alpha EQUIP_PROMPT_TEXT_ID, 255 * equipFade#
+
+    ` the bright outline is around the highlighted row, or around the highlighted answer
+    if EQUIP_CONFIRMING
+        equipNoTone = 255
+        equipYesTone = 140
+        equipOptionX = EQUIP_NO_X
+        if EQUIP_CONFIRM_YES
+            equipNoTone = 140
+            equipYesTone = 255
+            equipOptionX = EQUIP_YES_X
+        endif
+        color text EQUIP_NO_TEXT_ID, rgb(equipNoTone, equipNoTone, equipNoTone)
+        set text alpha EQUIP_NO_TEXT_ID, 255 * equipFade#
+        color text EQUIP_YES_TEXT_ID, rgb(equipYesTone, equipYesTone, equipYesTone)
+        set text alpha EQUIP_YES_TEXT_ID, 255 * equipFade#
+
+        layoutInfoBorder(ABILITY_CURSOR, equipOptionX - EQUIP_OPTION_WIDTH / 2, getEquipRowY(EQUIP_SELECTED) - 2, EQUIP_OPTION_WIDTH, EQUIP_ROW_HEIGHT + 4)
+    else
+        layoutInfoBorder(ABILITY_CURSOR, EQUIP_ROW_X - 2, tweenVal(EQUIP_CURSOR_TWEEN_ID) - 2, EQUIP_ROW_WIDTH + 4, EQUIP_ROW_HEIGHT + 4)
+    endif
+
+return
+
+
+routines_equip_exit:
+
+
+` where the top of a row of the list of slots is
+function getEquipRowY(equipIndex)
+    equipTop = EQUIP_ROWS_TOP + equipIndex * (EQUIP_ROW_HEIGHT + EQUIP_ROW_GAP)
+endfunction equipTop

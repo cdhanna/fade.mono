@@ -6,7 +6,7 @@ setup_abilities:
 
     ` instants
     CARDS(ABILITY_INDEX_MOVE_BUNDLE) = {
-        name$ = "free moves",
+        name$ = "negative moves",
         desc$ = "Give back " + str$(FREE_MOVES_AMOUNT) + " moves to your score"
         obtained = 0
         abilityType = ABILITY_TYPE_INSTANT,
@@ -127,6 +127,17 @@ setup_abilities:
         moveValue = [MOVE_LINE_OUT]
     }
 
+    ` this one is a swap like any other, so it does not stop the game while it plays. see LIVE_MOVE_FREE.
+    CARDS(ABILITY_INDEX_MOVE_FREE) = {
+        name$ = "free move"
+        desc$ = "swap without using up a move, or risking the multiplier"
+        obtained = 0
+        abilityType = ABILITY_TYPE_MOVE
+        stackable = 0
+        moveClock = 2
+        moveValue = [MOVE_FREE]
+    }
+
 return
 
 
@@ -184,10 +195,10 @@ setup_ability_selection:
         attach text to transform a.descTextId, a.transformId
         attach sprite to transform a.spriteId, a.transformId
         attach sprite to transform a.artSpriteId, a.transformId
-        attach sprite to transform a.border.topId, a.transformId
-        attach sprite to transform a.border.bottomId, a.transformId
-        attach sprite to transform a.border.leftId, a.transformId
-        attach sprite to transform a.border.rightId, a.transformId
+
+        ` the outline does not hang off of the transform. it is one pixel thick, and the transform would
+        ` shrink it along with the card, to less than a pixel, and then whole sides of it go missing.
+        ` frame_ability_selection lays it out around the card on every frame instead, on whole pixels.
 
         ` the card is a dark panel with a faint outline
         sprite a.spriteId, 0, 0, TEX_PIXEL
@@ -196,9 +207,8 @@ setup_ability_selection:
         set sprite offset a.spriteId, .5, 0
         order sprite a.spriteId, ORDER_ABILITY_CARD
 
-        layoutInfoBorder(a.border, 0 - CARD_WIDTH / 2, 0, CARD_WIDTH, CARD_HEIGHT)
         colorInfoBorder(a.border, rgb(64, 128, 255, 160))
-        showInfoBorder(a.border, 1)
+        showInfoBorder(a.border, 0) `it shows up along with the card
 
         ` the art sits behind the text. it is tinted and faint, so only its shape shows.
         ` the texture gets swapped for the art of whichever card is being offered.
@@ -331,7 +341,7 @@ setup_moves:
     reserve tween id(COOLDOWN_CLOCK_SHAKE_TWEEN_ID)
     create basic tween COOLDOWN_CLOCK_SHAKE_TWEEN_ID, 0, 0, 1, 0
 
-    ` the timers for the free moves card
+    ` the timers for the "negative moves" card
     reserve tween id(FREE_MOVES_TICK_TWEEN_ID)
     create basic tween FREE_MOVES_TICK_TWEEN_ID, 0, 0, 1, 0
     reserve tween id(FREE_MOVES_SHAKE_TWEEN_ID)
@@ -375,11 +385,6 @@ assign_ability_selection:
 
                 ` need to make sure we are not offering the same thing twice
                 valid = 1
-
-                ` every move needs a button of its own, and there are only so many of those
-                if CARDS(candidate).abilityType = ABILITY_TYPE_MOVE and MOVE_ABILITY_COUNT >= MOVE_SLOT_COUNT
-                    valid = 0
-                endif
 
                 ` the second copy of "bottom feeder" only makes sense once the first one is owned
                 if candidate = ABILITY_INDEX_BOTTOM_FEEDER_2 and CARDS(ABILITY_INDEX_BOTTOM_FEEDER).obtained = 0
@@ -429,6 +434,9 @@ return
 handle_ability_selection:
 
     if REQUEST_ABILITY_SELECTION = 0 then return
+
+    ` let a swap that is playing out finish first, so that it is not left hanging behind the cards
+    if LIVE_MOVE_ACTIVE then return
     REQUEST_ABILITY_SELECTION = 0
 
 
@@ -446,6 +454,10 @@ handle_ability_selection:
     for i = 0 to ABILITY_CHOICE_LENGTH - 1
         ABILITY_CHOICES(i).available = 0
     next
+
+    ` the screen where a move gets put in a slot changes the title
+    set text ABILITY_SELECT_LABEL_TEXT_ID, "Select Upgrade"
+    size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
 
     ` set the ability choices
     choiceCount = 1
@@ -494,11 +506,12 @@ handle_ability_selection:
         ABILITY_CHOICES(i) = a
     next
 
-    ` the cards grow in, and the selected one ends up a little bigger than the rest
+    ` the cards are there from the start, because the wave of bubbles is what brings them in.
+    ` the selected one is a little bigger than the rest.
     for i = 0 to choiceCount
         scale# = .95
         if (i = ABILITY_SELECTION_INDEX) then scale# = 1.05
-        create basic tween ABILITY_CHOICES(i).sizeTweenId, 0, scale#, 300, 50
+        create basic tween ABILITY_CHOICES(i).sizeTweenId, scale#, scale#, 1, 0
     next
 
     ` put the outline on the selected card
@@ -510,18 +523,23 @@ handle_ability_selection:
     set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} take it"
     order text INFO_HINT_TEXT_ID, ORDER_ABILITY_TEXT
 
-    ` fade in the dark overlay from info mode. nothing is highlighted, so the whole game dims.
-    show sprite INFO_MASK_SPRITE
-    create basic tween INFO_FADE_TWEEN_ID, 0, 1, 400, 0
-    create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 0, 1, 300, 200
+    ` the upgrade screen is drawn to a render target of its own, and the wave of bubbles wipes it in over
+    ` the game, the same way that it wipes the menu in. see THE UPGRADE WIPE in fish_headers.
+    ` so everything on the screen is put where it ends up, and the wave does the rest.
+    create basic tween INFO_FADE_TWEEN_ID, 1, 1, 1, 0
+    create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 1, 1, 1, 0
 
     free tween id(titleDropTweenId)
-    create basic tween titleDropTweenId, 64 - 100,  64, 300, 100
+    create basic tween titleDropTweenId, 64, 64, 1, 0
 
-    while any tweens running(INFO_FADE_TWEEN_ID, ABILITY_SELECT_LABEL_FADE_TWEEN_ID, titleDropTweenId)
-        gosub frame_ability_selection
-        sync
-    endwhile
+    ` the line underneath the cards, that takes none of them
+    UPGRADE_SKIP_SELECTED = 0
+    show text UPGRADE_SKIP_TEXT_ID
+
+    TRANSITION_FOR_UPGRADE = 1
+    TRANSITION_TO_MENU = 1
+    gosub menu_transition
+    TRANSITION_FOR_UPGRADE = 0
 
 
     do
@@ -530,6 +548,36 @@ handle_ability_selection:
         dir = 0
         if new action down(ACT_RIGHT) then dir = 1
         if new action down(ACT_LEFT) then dir = -1
+
+        ` down goes to the line that takes nothing, and up comes back from it. left and right come
+        ` back from it too, to the card that was highlighted before, without moving along.
+        skipWas = UPGRADE_SKIP_SELECTED
+        skipLeft = 0
+        if UPGRADE_SKIP_SELECTED
+            if dir <> 0 or new action down(ACT_UP)
+                UPGRADE_SKIP_SELECTED = 0
+                skipLeft = 1
+                dir = 0
+            endif
+        else
+            if new action down(ACT_DOWN) then UPGRADE_SKIP_SELECTED = 1
+        endif
+
+        if UPGRADE_SKIP_SELECTED <> skipWas
+            ` the outline leaves some bubbles behind on whatever it was around
+            if skipWas
+                spawnWakeBubbles(WORLD_WIDTH / 2 - 60, UPGRADE_SKIP_Y, 120, 20, 8, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
+            else
+                spawnWakeBubbles(tweenVal(ABILITY_SELECTION_INDICATOR_TWEEN_ID) - CARD_WIDTH / 2, CARD_TOP, CARD_WIDTH, CARD_HEIGHT, 10, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
+            endif
+
+            ` no card is the big one while the line is highlighted
+            for i = 0 to choiceCount
+                scale# = .95
+                if i = ABILITY_SELECTION_INDEX and UPGRADE_SKIP_SELECTED = 0 then scale# = 1.05
+                create basic tween ABILITY_CHOICES(i).sizeTweenId, get local transform scale x(ABILITY_CHOICES(i).transformId), scale#, 200, 0
+            next
+        endif
 
         if dir <> 0
 
@@ -558,11 +606,21 @@ handle_ability_selection:
 
 
         ` allow the user to pick an ability 
-        if new action down(ACT_UP) or new action down(ACT_CONFIRM)
+        ` up takes a card, the same as the confirm button does. but not when it only just came back from the line.
+        upgradePicked = 0
+        if new action down(ACT_CONFIRM) then upgradePicked = 1
+        if new action down(ACT_UP) and skipLeft = 0 then upgradePicked = 1
+
+        if upgradePicked
             
-            ` add the passive
-            selectedAbilityIndex = ABILITY_CHOICES(ABILITY_SELECTION_INDEX).abilityIndex
-            select CARDS(selectedAbilityIndex).abilityType
+            ` add the passive. when the line that takes nothing was picked, there is nothing to add,
+            ` and -1 is not any kind of ability.
+            upgradeType = -1
+            if UPGRADE_SKIP_SELECTED = 0
+                selectedAbilityIndex = ABILITY_CHOICES(ABILITY_SELECTION_INDEX).abilityIndex
+                upgradeType = CARDS(selectedAbilityIndex).abilityType
+            endif
+            select upgradeType
 
                 ` when it is a passive, all we need to do is add it the bindings
                 ` grantPassive is in fish_routines_save, because loading a saved game gives the passives back the same way
@@ -576,37 +634,42 @@ handle_ability_selection:
                     gosub handle_ability_instant_effect
                 endcase
 
-                ` similar to passive, we need to add it the move bindings
+                ` a move has to be put in a slot, and the player picks which. see fish_routines_equip.
                 case ABILITY_TYPE_MOVE
-                    grantMove(selectedAbilityIndex)
+                    hide text UPGRADE_SKIP_TEXT_ID `the page that comes next has rows where this line is
+                    gosub handle_move_equip
                 endcase
             endselect
 
 
 
-            ` fade out the overlay, and shrink the cards away
+            ` the upgrade screen fades away, just as it is, and the game comes back
             create basic tween INFO_FADE_TWEEN_ID, 1, 0, 400, 0
-            create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 1, 0, 300, 200
-
-            free tween id(titleDropTweenId)
-            create basic tween titleDropTweenId, text y(ABILITY_SELECT_LABEL_TEXT_ID),  64 - 100, 300, 100
-
-            for i = 0 to choiceCount
-                create basic tween ABILITY_CHOICES(i).sizeTweenId, get local transform scale x(ABILITY_CHOICES(i).transformId), 0, 300, 0
-            next
-
-            showInfoBorder(ABILITY_CURSOR, 0)
-
-            while any tweens running(INFO_FADE_TWEEN_ID, ABILITY_SELECT_LABEL_FADE_TWEEN_ID, titleDropTweenId)
+            while is tween done(INFO_FADE_TWEEN_ID) < 1
                 gosub frame_ability_selection
                 sync
             endwhile
+            hide sprite UPGRADE_COMPOSITE_SPRITE
+            hide text UPGRADE_SKIP_TEXT_ID
+            UPGRADE_SKIP_SELECTED = 0
 
-            ` hand the overlay and the hint back to the game
-            hide sprite INFO_MASK_SPRITE
+            ` none of it is being drawn any more, so it can all be put away
+            create basic tween INFO_FADE_TWEEN_ID, 0, 0, 1, 0
+            create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 0, 0, 1, 0
+            for i = 0 to choiceCount
+                create basic tween ABILITY_CHOICES(i).sizeTweenId, 0, 0, 1, 0
+            next
+            showInfoBorder(ABILITY_CURSOR, 0)
+            gosub frame_ability_selection
+
+            ` hand the hint back to the game
             set text INFO_HINT_TEXT_ID, GAME_HINT$
             order text INFO_HINT_TEXT_ID, 0
             set text alpha INFO_HINT_TEXT_ID, 140
+
+            ` the bar of the round's progress was held full all this time. now it starts on the next round.
+            ` this is a routine in fish_routines, because it has to come after the score bar is declared
+            gosub advance_score_bar
 
             exit
         endif
@@ -628,6 +691,18 @@ frame_ability_selection:
     updateBubbles()
     updateMusic()
 
+    ` the upgrade screen is drawn through the mask that the wave of bubbles paints. see THE UPGRADE WIPE in fish_headers.
+    set effect param texture MENU_FX_ID, "MaskTexture", render target texture(TARGET_MASK)
+    set effect param float MENU_FX_ID, "Fade", tweenVal(INFO_FADE_TWEEN_ID)
+    set effect param float MENU_FX_ID, "Invert", UPGRADE_INVERT
+
+    ` the line that takes none of the cards is white when it is the one that is highlighted
+    if UPGRADE_SKIP_SELECTED
+        color text UPGRADE_SKIP_TEXT_ID, rgb(255, 255, 255)
+    else
+        color text UPGRADE_SKIP_TEXT_ID, rgb(150, 190, 255, 200)
+    endif
+
     ` TODO: stupid FX system loses parameters between reloads, so best to set them in a loop.
     abilityFade# = tweenVal(INFO_FADE_TWEEN_ID)
     set effect param float INFO_FX_ID, "Fade", abilityFade#
@@ -640,6 +715,19 @@ frame_ability_selection:
     for i = 0 to choiceCount
         scale# = tweenVal(ABILITY_CHOICES(i).sizeTweenId)
         set transform scale ABILITY_CHOICES(i).transformId, scale#, scale#
+
+        ` the faint outline of the card goes around wherever the card is now. the card grows down and
+        ` out from its top middle. the numbers are whole pixels, so that every side of it shows.
+        if scale# > .02
+            cardW = CARD_WIDTH * scale# + .5
+            cardH = CARD_HEIGHT * scale# + .5
+            cardX = get local transform x(ABILITY_CHOICES(i).transformId) - cardW / 2
+            cardY = get local transform y(ABILITY_CHOICES(i).transformId)
+            layoutInfoBorder(ABILITY_CHOICES(i).border, cardX, cardY, cardW, cardH)
+            showInfoBorder(ABILITY_CHOICES(i).border, 1)
+        else
+            showInfoBorder(ABILITY_CHOICES(i).border, 0)
+        endif
     next
 
     ` the outline hugs the selected card, which grows down and out from the top middle
@@ -647,6 +735,11 @@ frame_ability_selection:
     cursorW = CARD_WIDTH * scale# + 4
     cursorH = CARD_HEIGHT * scale# + 4
     layoutInfoBorder(ABILITY_CURSOR, tweenVal(ABILITY_SELECTION_INDICATOR_TWEEN_ID) - cursorW / 2, CARD_TOP - 2, cursorW, cursorH)
+
+    ` or it is around the line underneath the cards, that takes none of them
+    if UPGRADE_SKIP_SELECTED
+        layoutInfoBorder(ABILITY_CURSOR, WORLD_WIDTH / 2 - 64, UPGRADE_SKIP_Y - 3, 128, 26)
+    endif
 
     ` it pulses the same way that the info mode cursor does
     abilityPulse# = .8 + .2 * sin(game ms() * .006)
@@ -674,7 +767,8 @@ return
 
 update_ability_texts:
     if MOVE_ABILITY_COUNT > 0
-        for i = 0 to MOVE_ABILITY_COUNT - 1
+        for i = 0 to MOVE_SLOT_COUNT - 1
+            if MOVE_ABILITY_BINDINGS(i).assigned = 0 then skip
 
             wasRecharging = MOVE_ABILITY_BINDINGS(i).movesLeft > 0
             MOVE_ABILITY_BINDINGS(i).movesLeft = MOVE_ABILITY_BINDINGS(i).movesLeft - 1
@@ -696,8 +790,13 @@ return
 frame_move_ability_render:
     anyRecharging = 0
     if MOVE_ABILITY_COUNT > 0
-        for n = 0 to MOVE_ABILITY_COUNT - 1
+        ` the moves are listed in the order of their slots, packed together, so a slot that is
+        ` empty does not leave a gap. moveRow is the row that the move is on, counted from the bottom.
+        moveRow = -1
+        for n = 0 to MOVE_SLOT_COUNT - 1
             moveAbility = MOVE_ABILITY_BINDINGS(n)
+            if moveAbility.assigned = 0 then skip
+            moveRow = moveRow + 1
             moveFade# = tweenVal(moveAbility.fadeTweenId)
             if moveAbility.movesLeft > 0 then anyRecharging = 1
 
@@ -720,17 +819,17 @@ frame_move_ability_render:
 
             ` the whole row shakes from side to side when the move gets used
             rowShake# = sin(game ms() * .045) * 4 * tweenVal(moveAbility.useShakeTweenId)
-            set text position moveAbility.titleTextId, 16.5 + rowShake#, ABILITY_ROWS_Y - n*18
-            set text position moveAbility.keyTextId, 126.5 + rowShake#, ABILITY_ROWS_Y + 10 - n*18
+            set text position moveAbility.titleTextId, 16.5 + rowShake#, ABILITY_ROWS_Y - moveRow*18
+            set text position moveAbility.keyTextId, 126.5 + rowShake#, ABILITY_ROWS_Y + 10 - moveRow*18
 
             ` and only the number shakes when the move gets used before it is ready
             moveShake# = sin(game ms() * .045) * 4 * tweenVal(moveAbility.shakeTweenId)
-            set text position moveAbility.timerTextId, 138.5 + rowShake# + moveShake#, ABILITY_ROWS_Y - n*18
+            set text position moveAbility.timerTextId, 138.5 + rowShake# + moveShake#, ABILITY_ROWS_Y - moveRow*18
         next
 
         ` the clock sits over the top row of moves, in line with the numbers. it shakes with them.
         clockShake# = sin(game ms() * .045) * 4 * tweenVal(COOLDOWN_CLOCK_SHAKE_TWEEN_ID)
-        position sprite COOLDOWN_CLOCK_SPRITE, 16 + 100 + 26 + clockShake#, ABILITY_ROWS_Y - 6 - (MOVE_ABILITY_COUNT - 1) * 18
+        position sprite COOLDOWN_CLOCK_SPRITE, 16 + 100 + 26 + clockShake#, ABILITY_ROWS_Y - 6 - moveRow * 18
     endif
 
     ` fade the clock in when the first move starts to recharge, and out when the last one is ready
