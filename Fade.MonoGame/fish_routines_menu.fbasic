@@ -165,7 +165,7 @@ setup_menu:
     }
     MENU_ITEMS(MENU_ITEM_CONFIRM_YES) = {
         name$ = "Yes"
-        desc$ = "This run will be lost."
+        desc$ = "This game will be lost."
         ready = 1
     }
 
@@ -192,7 +192,7 @@ setup_menu:
     }
 
     ` the lines of the page that "New Game" opens. refreshOptionLines writes the choice onto the end of the
-    ` first two, and gives them a description of whatever is chosen.
+    ` first three, and gives them a description of whatever is chosen.
     MENU_ITEMS(MENU_ITEM_GAME_LENGTH) = {
         name$ = "Length"
         desc$ = "How many rounds the game lasts."
@@ -201,6 +201,11 @@ setup_menu:
     MENU_ITEMS(MENU_ITEM_GAME_MODE) = {
         name$ = "Mode"
         desc$ = "Normal, or zen."
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_GAME_INTRO) = {
+        name$ = "Include intro"
+        desc$ = "Start with the first dive, or not."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_GAME_START) = {
@@ -438,11 +443,29 @@ menu_pick:
         endcase
 
         case MENU_ITEM_NEW_GAME
-            ` ask what kind of game it should be. "Start" is highlighted to start with, so that picking
-            ` it straight away plays the same kind of game as the last time.
-            setMenuPage(MENU_PAGE_NEW_GAME)
-            refreshOptionLines()
-            selectMenuItem(getMenuRow(MENU_ITEM_GAME_START), 0)
+            ` the very first game is not asked what kind of game it should be. it is a regular one, and it
+            ` starts straight away. it is the first one for as long as the lines of THE FIRST DIVE have not
+            ` been shown, and they are shown when it starts. see fish_routines_intro.
+            menuFirstGame = 0
+            if MENU_MODE = MENU_MODE_MAIN
+                menuIntroSeen = get pref(PREF_INTRO_SEEN, 0)
+                if menuIntroSeen = 0 then menuFirstGame = 1
+            endif
+
+            if menuFirstGame
+                OPTION_GAME_LENGTH = GAME_LENGTH_REGULAR
+                OPTION_GAME_ZEN = 0
+                gosub menu_start_game
+            else
+                ` the intro has to be asked for every time
+                OPTION_GAME_INTRO = 0
+
+                ` ask what kind of game it should be. "Start" is highlighted to start with, so that picking
+                ` it straight away plays the same kind of game as the last time.
+                setMenuPage(MENU_PAGE_NEW_GAME)
+                refreshOptionLines()
+                selectMenuItem(getMenuRow(MENU_ITEM_GAME_START), 0)
+            endif
         endcase
 
         ` picking a choice is the same as pressing right on it
@@ -451,6 +474,9 @@ menu_pick:
         endcase
         case MENU_ITEM_GAME_MODE
             changeMenuOption(MENU_ITEM_GAME_MODE, 1)
+        endcase
+        case MENU_ITEM_GAME_INTRO
+            changeMenuOption(MENU_ITEM_GAME_INTRO, 1)
         endcase
 
         case MENU_ITEM_GAME_START
@@ -573,10 +599,17 @@ menu_start_game:
     gosub apply_game_options
     gosub forget_saved_game
 
+    ` the very first game is a little tutorial, and so is one that asks to be. the board is put away
+    ` before the bubbles uncover it, and then it comes in a piece at a time. see THE FIRST DIVE, in
+    ` fish_routines_intro. for any other game, these two do nothing.
+    gosub tutorial_prepare
+
     TRANSITION_TO_MENU = 0
     gosub menu_transition
 
     MENU_MODE = MENU_MODE_CLOSED
+
+    gosub run_first_dive_intro
 return
 
 
@@ -614,7 +647,7 @@ handle_game_end:
     setMenuPage(MENU_PAGE_GAME_OVER)
     selectMenuItem(0, 0)
 
-    hide text INFO_HINT_TEXT_ID
+    hintShow(0)
     set screen shake amount 0
 
     ` the player is asked for their initials, and shown the table of high scores. that takes the place
@@ -643,7 +676,7 @@ menu_open_pause:
     selectMenuItem(0, 0)
 
     ` the menu has its own hint, in the same place
-    hide text INFO_HINT_TEXT_ID
+    hintShow(0)
 
     ` nothing runs while the game is paused, so nothing would ever stop a shake that was going
     set screen shake amount 0
@@ -674,7 +707,7 @@ menu_fade_out:
     endwhile
 
     hide sprite MENU_COMPOSITE_SPRITE
-    show text INFO_HINT_TEXT_ID
+    hintShow(1)
 return
 
 
@@ -715,7 +748,10 @@ menu_abandon_game:
     gosub reset_game
     gosub apply_game_options
     gosub forget_saved_game
-    show text INFO_HINT_TEXT_ID
+    hintShow(1)
+
+    ` the new game can ask for the tutorial, the same as one that starts from the main menu
+    gosub tutorial_prepare
 
     ` and then the bubbles take the curtain away, the same as when the game starts from the main menu
     TRANSITION_TO_MENU = 0
@@ -723,6 +759,8 @@ menu_abandon_game:
 
     order sprite MENU_BG_SPRITE, ORDER_MENU_BACKDROP
     MENU_MODE = MENU_MODE_CLOSED
+
+    gosub run_first_dive_intro
 return
 
 
@@ -1044,6 +1082,9 @@ return
 ` put the game back to how it is at the very start, so that a new one can be played.
 reset_game:
 
+    ` if the game that is being thrown away was still in its tutorial, the pieces that it had not got to are put back
+    gosub tutorial_end
+
     ` the upgrades go first, because some of them change which fish can show up
     for resetI = 0 to CARD_LENGTH - 1
         CARDS(resetI).obtained = 0
@@ -1067,7 +1108,7 @@ reset_game:
     MOVE_ABILITY_COUNT = 0
     MOVE_SLOTS_OPEN = MOVE_SLOT_START_COUNT
 
-    ` the upgrades explained themselves in info mode. forget those, and explain the empty spaces again.
+    ` the upgrades explained themselves in info mode. forget those. the empty spaces that they leave are not explained.
     if INFO_LENGTH > INFO_BASE_LENGTH
         for resetI = INFO_BASE_LENGTH to INFO_LENGTH - 1
             INFOS(resetI).assigned = 0
@@ -1077,8 +1118,8 @@ reset_game:
     endif
     INFO_LENGTH = INFO_BASE_LENGTH
     INFO_SELECTED = 0
-    setInfoBlobEnabled(INFO_INDEX_PASSIVES, 1)
-    setInfoBlobEnabled(INFO_INDEX_MOVES, 1)
+    setInfoBlobEnabled(INFO_INDEX_PASSIVES, 0)
+    setInfoBlobEnabled(INFO_INDEX_MOVES, 0)
 
     ` the board goes back to the size that it starts at, and the cells that it grew are put away
     PENDING_BOARD_EXPANSIONS = 0
@@ -1168,7 +1209,7 @@ function setMenuPage(page)
         savedGame = hasSavedGame()
         if savedGame
             first = MENU_ITEM_RESUME
-            MENU_ITEMS(MENU_ITEM_RESUME).desc$ = "Carry on with the run you left."
+            MENU_ITEMS(MENU_ITEM_RESUME).desc$ = "Slap those fish back into action."
         endif
     endif
 
@@ -1195,7 +1236,7 @@ function setMenuPage(page)
 
     ` the page that comes up over the game when the last round has been won
     if page = MENU_PAGE_GAME_OVER
-        title$ = "Run Complete"
+        title$ = "You won, buddy!"
         titleSize = 36
         hint$ = "{confirm} select"
         first = MENU_ITEM_OVER_DONE
@@ -1211,7 +1252,7 @@ function setMenuPage(page)
 
         ` quitting from a game goes back to the main menu, which has the quit that closes the window.
         ` the run is saved, and the main menu has a "Resume" that carries on with it.
-        MENU_ITEMS(MENU_ITEM_QUIT).desc$ = "Save this run, and go to the title."
+        MENU_ITEMS(MENU_ITEM_QUIT).desc$ = "Save these fish, for now..."
     endif
 
     if page = MENU_PAGE_CONFIRM
@@ -1349,6 +1390,14 @@ function refreshOptionLines()
         set text MENU_ITEMS(MENU_ITEM_GAME_MODE).textId, "Mode    normal"
         MENU_ITEMS(MENU_ITEM_GAME_MODE).desc$ = "Pick an upgrade after every round."
     endif
+
+    if OPTION_GAME_INTRO
+        set text MENU_ITEMS(MENU_ITEM_GAME_INTRO).textId, "Include intro    yes"
+        MENU_ITEMS(MENU_ITEM_GAME_INTRO).desc$ = "Start with the first dive again: a few words, and then the game a piece at a time."
+    else
+        set text MENU_ITEMS(MENU_ITEM_GAME_INTRO).textId, "Include intro    no"
+        MENU_ITEMS(MENU_ITEM_GAME_INTRO).desc$ = "Straight into the game."
+    endif
 endfunction
 
 
@@ -1398,6 +1447,11 @@ function changeMenuOption(item, change)
 
         case MENU_ITEM_GAME_MODE
             OPTION_GAME_ZEN = 1 - OPTION_GAME_ZEN
+        endcase
+
+        ` this one is not remembered. see OPTION_GAME_INTRO in fish_headers.
+        case MENU_ITEM_GAME_INTRO
+            OPTION_GAME_INTRO = 1 - OPTION_GAME_INTRO
         endcase
     endselect
 

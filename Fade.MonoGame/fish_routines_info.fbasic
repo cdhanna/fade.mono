@@ -137,7 +137,17 @@ info_open:
     show text INFO_TITLE_TEXT_ID
     show text INFO_DESC_TEXT_ID
 
-    set text INFO_HINT_TEXT_ID, "{dir} look around    {info} back to game"
+    ` when there is only one thing to look at, there is nowhere to look around to
+    infoEnabledCount = 0
+    for i = 0 to INFO_LENGTH - 1
+        if INFOS(i).enabled then infoEnabledCount = infoEnabledCount + 1
+    next
+    if infoEnabledCount > 1
+        set text INFO_HINT_TEXT_ID, "{dir} look around    {info} back to game"
+    else
+        set text INFO_HINT_TEXT_ID, "{info} back to game"
+    endif
+    hintMode(0)
     size text y INFO_HINT_TEXT_ID, 16
     order text INFO_HINT_TEXT_ID, ORDER_INFO_TEXT
 
@@ -177,6 +187,7 @@ info_close:
     hide text INFO_DESC_TEXT_ID
 
     set text INFO_HINT_TEXT_ID, GAME_HINT$
+    hintMode(1)
     size text y INFO_HINT_TEXT_ID, 16
     order text INFO_HINT_TEXT_ID, 0
     set text alpha INFO_HINT_TEXT_ID, 140
@@ -249,7 +260,7 @@ frame_info_render:
     colorInfoBorder(INFO_PANEL_BORDER, rgb(64, 128, 255, 200 * infoFade#))
     set text alpha INFO_TITLE_TEXT_ID, 255 * infoFade#
     set text alpha INFO_DESC_TEXT_ID, 255 * infoFade#
-    set text alpha INFO_HINT_TEXT_ID, 140 + 115 * infoFade#
+    set text alpha INFO_HINT_TEXT_ID, 255 * infoFade# `the hints of the game fade out as this fades in
 
 return
 

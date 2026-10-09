@@ -8,8 +8,8 @@ global SCORE_POS as vec = {
 }
 
 
-global dim CARDS(20) as ability
-global CARD_LENGTH = 18
+global dim CARDS(32) as ability
+global CARD_LENGTH = 23
 
 global CURRENT_MOVE_COUNT = 0
 global MOVE_COUNT_TEXT_ID
@@ -39,6 +39,57 @@ global ABILITY_INDEX_BOTTOMS_UP = 14
 global ABILITY_INDEX_MOVE_FREE = 15
 global ABILITY_INDEX_MOVE_ROBOT = 16
 global ABILITY_INDEX_MOVE_ERASER = 17
+global ABILITY_INDEX_JELLIES = 18
+global ABILITY_INDEX_RAYS = 19
+global ABILITY_INDEX_BOTTLES = 20
+global ABILITY_INDEX_MOVE_WASTE_BUCKET = 21
+global ABILITY_INDEX_MOVE_BUNCH_UP = 22
+
+` THE NEW KINDS OF FISH. three cards each put a new kind of thing on the board. each one is a kind of
+` fish like any other: it has a picture, it can be swapped, and three of it in a row pop. load_textures,
+` in fish_routines, loads the pictures right after the first seven fish, so that they are fish 8, 9 and 10.
+global TEX_JELLY
+global TEX_RAY
+global TEX_BOTTLE
+
+` JELLIES. with the "jellies" card, some of the new fish that drop in are jellyfish. when a jellyfish
+` pops, every fish right next to it has a chance of its own to get stung, and a fish that is stung
+` goes belly up. a belly up fish pops when the cursor comes to it, the same as with "bottoms up".
+` getRandomValue and stingJelly, in fish_funcs, do it.
+global JELLY_SPAWN_CHANCE = 10 `how many new fish in a hundred are jellyfish
+global JELLY_STING_CHANCE = 50 `how many fish in a hundred get stung, of the ones next to a jellyfish that pops
+
+` RAYS. with the "rays" card, some of the new fish are stingrays. a stingray that lands on the bottom
+` row, from a row above it, shoots up its column, and every fish in the column pops, from the bottom
+` to the top, as one group. the stingray goes with them. fishHitBottom, in fish_funcs, is where it starts.
+global RAY_SPAWN_CHANCE = 4 `how many new fish in a hundred are stingrays
+
+` BOTTLES. with the "bottles" card, a group of fish that matched, and that is big enough, leaves a
+` bottle behind, in the cell of the group that is closest to the middle of it. the bottle falls like a
+` fish does, and it can be swapped like one. when it is on the bottom row, it adds to the multiplier,
+` and it is gone. handle_combos leaves the bottle, and checkBottles, in fish_funcs, pays it out.
+global BOTTLE_GROUP_SIZE = 5 `how many fish a group needs to leave a bottle
+global BOTTLE_MULT_GAIN = 1 `how much a bottle adds to the multiplier
+
+` THE WASTE BUCKET. a special move that pops every belly up fish on the board at once, as one group,
+` and they score WASTE_BUCKET_BONUS times as much. it never has to recharge, but it does count as a move.
+` when there are no belly up fish, it does nothing, and it is not a move. doWasteBucket, in fish_funcs, does it.
+global WASTE_BUCKET_BONUS = 2
+
+` BUNCH UP. a special move that is a swap. the fish that the swap connects do not pop. they all go
+` into a stack behind the fish that was swapped, and the cells that they leave fill back in. a stack
+` made this way can be taller than the cards can make one, up to BUNCH_STACK_MAX, though only the
+` first few show. a swap that connects nothing is still a swap. doBunchUp, in fish_funcs, does it.
+global BUNCH_STACK_MAX = 9 `the saved game has room for one digit
+global BUNCH_UP_COOLDOWN = 2 `this counts the move itself, so there is one move to wait
+
+` FORCED POPS. a cell with a comboForce pops the next time that handle_combos looks at the board, no
+` matter what is in it, and the cells that have the same number pop as one group. these are the numbers.
+` 1 is a belly up fish that the cursor came to.
+global FORCE_BUCKET = 2 `the belly up fish of the waste bucket, which score more
+global FORCE_BUNCH = 3 `fish that are going into a stack. they go away without popping, and score nothing.
+global FORCE_RAY = 10 `a column that a stingray shot up. the column is added to this.
+global FORCE_BOTTLE = 40 `a bottle that paid out. the column is added to this too.
 
 ` THE ROBOT. a special move that makes swaps for the player. it looks at the fish near the cursor, picks
 ` the swap that would pop the most fish, makes it, and then does that again, a few times over.
@@ -59,7 +110,7 @@ global ROBOT_LAST_COUNT = 0 `how many swaps it made the last time. 0 means that 
 ` once the path is sorted, each kind of fish is one unbroken stretch of it, and so one group.
 ` a kind that there are too few of to pop on their own gets popped anyway, so that nothing is left over.
 ` doEraser, in fish_funcs, does it.
-global ERASER_COOLDOWN = 4 `how many moves it takes to recharge
+global ERASER_COOLDOWN = 6 `how many moves it takes to recharge
 global ERASER_SPEED_START# = 1 `how many swaps it makes on its first frame
 global ERASER_SPEED_GROW# = .35 `how many more it makes on every frame after that, so that it starts slow enough to follow and then tears through
 global ERASER_SPEED_MAX# = 60 `the most that it makes on a frame
@@ -71,6 +122,11 @@ global ERASER_SPEED_MAX# = 60 `the most that it makes on a frame
 
 global TEX_PIXEL = 0 `magic texture that always exists
 global TEX_KEYS `the sheet of keyboard key pictures. the font uses these as icons.
+
+` the tab key, which opens info mode. the one on the sheet has letters too small and too smudged to
+` read, so this is a picture of its own, 32 by 20. Tools are not needed to make it again: the pixels
+` are plain, and any paint program will do.
+global TEX_KEY_TAB
 global TEX_PAD `the same thing for the buttons of a controller.
 
 ` INPUT ACTIONS. the game asks about these, and never about a key or a button directly.
@@ -171,6 +227,26 @@ global BOTTOM_FEEDER_CHANCE = 30 `how many landings in a hundred pick up a fish
 global BOTTOM_FEEDER_CHANCE_2 = 60 `and how many do with the second copy of the card
 global CONTAGIOUS_SMILE_CHANCE = 10 `how many fish in a hundred pick one up from a pop next to them, for every time the card has been taken
 global CONTAGIOUS_SMILE_MAX = 4 `how many times the card can be taken
+
+` NEW FISH. a new fish that drops in is never of a kind that would pop the moment that it lands. so
+` when a combo sets off another one, it is because of how the fish that were already on the board fell,
+` and not because of luck with the new ones. that keeps a chain of combos short, and it means that a
+` chain is something that the player set up.
+` NEW_FISH_COMBO_CHANCE lets some luck back in: it is how many new fish in a hundred are allowed to be of
+` a kind that pops. nothing raises it yet, but a passive could. once the round has been won there is no
+` luck at all, whatever this says, so that the board settles quickly and the upgrade screen can come up.
+` getImpossibleRandomValueForCell and countFishGroup, in fish_funcs, do the work.
+global NEW_FISH_COMBO_CHANCE = 0
+
+` a new fish that lands next to one of its own kind makes a pair. a pair does not pop, but it only takes
+` one more fish falling next to it to make a group that does, so the more pairs there are on the board,
+` the longer a chain of combos runs. this is how many new fish in a hundred are allowed to make a pair.
+` the rest are never of the same kind as any fish that they touch. once the round has been won, none are.
+global NEW_FISH_PAIR_CHANCE = 10
+global NEW_FISH_ROUND_WON = 0 `1 when the fish that are dropping in come after the score that wins the round
+global NEW_FISH_STAMP = 0
+global dim NEW_FISH_MARKS(400) `which cells have been counted, for countFishGroup
+global dim NEW_FISH_STACK(400)
 
 ` BOTTOMS UP. with the "bottoms up" card, every move has a chance to turn one fish on the board belly up.
 ` the fish rolls over, top over bottom, and stays that way wherever it goes, the same as a stack does.
@@ -357,7 +433,7 @@ global PENDING_BOARD_EXPANSIONS = 0
 global BOARD_EXPAND_TWEEN_ID
 global INFO_INDEX_GRID = 0 `the info blob that explains the board. it has to follow the board when the board changes size.
 
-global PASSIVE_BINDINGS_LENGTH = 10
+global PASSIVE_BINDINGS_LENGTH = 16
 global PASSIVE_COUNT = 0
 global passive as passiveDisplay
 global dim PASSIVE_BINDINGS(PASSIVE_BINDINGS_LENGTH) as passiveDisplay
@@ -445,7 +521,12 @@ global INFO_PANEL_BORDER as infoBorder
 global INFO_BASE_LENGTH = 0 `how many infos there are before any upgrades have been picked. a new game goes back to this.
 
 ` the hint at the bottom of the screen while the game is being played
-global GAME_HINT$ = "{dir} move    {swap} + {dir} swap    {info} info"
+` the line of key hints along the bottom of the screen, while the game is being played, is three texts
+` side by side: one for moving, one for swapping, and one for info mode. that is so that each one
+` can shake on its own, when the player does the thing that it is about. see THE HINTS, in
+` fish_routines_intro. INFO_HINT_TEXT_ID is the one text that every other screen writes its hints
+` on, and while the game is being played it is given this, which is nothing.
+global GAME_HINT$ = " "
 
 
 ` THE MENU. the routines are in fish_routines_menu.
@@ -481,13 +562,14 @@ global MENU_PAGE = 0
 #constant MENU_ITEM_SET_BACK 12
 #constant MENU_ITEM_GAME_LENGTH 13
 #constant MENU_ITEM_GAME_MODE 14
-#constant MENU_ITEM_GAME_START 15
-#constant MENU_ITEM_GAME_BACK 16
-#constant MENU_ITEM_OVER_DONE 17
+#constant MENU_ITEM_GAME_INTRO 15
+#constant MENU_ITEM_GAME_START 16
+#constant MENU_ITEM_GAME_BACK 17
+#constant MENU_ITEM_OVER_DONE 18
 ` this one is on the pause menu, right under "Resume". it is last in this list so that the numbers
 ` of the others did not have to change. setMenuPage puts it where it goes.
-#constant MENU_ITEM_MOVES 18
-global MENU_ITEM_COUNT = 19
+#constant MENU_ITEM_MOVES 19
+global MENU_ITEM_COUNT = 20
 global dim MENU_ITEMS(MENU_ITEM_COUNT) as menuItem
 
 global MENU_PAGE_FIRST = 0 `the first item on the page
@@ -696,6 +778,67 @@ global HISCORE_PREF = 3000
 ` the initials that were entered last, packed the same way, are kept with the options
 #constant PREF_INITIALS 6
 
+` THE FIRST DIVE. the very first game is a little tutorial: a few lines of text go by, and then the game
+` comes in a piece at a time. the routines are in fish_routines_intro, and the top of that file explains it.
+` this pref is 1 once the tutorial has been started, so that it does not start by itself again
+#constant PREF_INTRO_SEEN 7
+global INTRO_TEXT_ID
+global INTRO_DIM_SPRITE
+global ORDER_INTRO = 90 `on top of the board and the score text, and underneath the info screen
+global INTRO_LINE_MS = 3200 `how long every line is up for, in milliseconds, with its fades
+global INTRO_FADE_MS = 700 `how long a line takes to fade in, and to fade out
+global INTRO_DIM_ALPHA = 90 `how dark the water gets behind the lines, out of 255
+
+` 0 when there is no tutorial. 1 while the lines of text are still to come, and everything is off of the
+` screen. 2 while the big info key is waiting to be pressed. 3 when the fish are in, and the next pop
+` brings in the moves and the multiplier. 4 when those are in, and the next pop brings in the bar of
+` the round and the rounds that are left.
+global TUTORIAL_STAGE = 0
+global TUTORIAL_SCORE_HOLD = 0 `1 while the fish that brought the bar in are still popping. they do not score.
+
+` the hint for info mode is the first thing to show, on its own, where it always is. it waits to be pressed.
+global TUTORIAL_KEY_MS = 0 `when it showed up, or 0 when this is not going on
+global TUTORIAL_NUDGE_MS = 6000 `how long the hint waits before it starts to bob, in milliseconds
+global TUTORIAL_NUDGE_SIZE = 2 `how far it bobs. it goes up by twice this, and back down to where it sits.
+global TUTORIAL_NUDGE_SPEED# = .005 `how fast. it goes up and down once in 6.28 of these, in milliseconds.
+
+` THE HINTS. the three key hints of the game, and the shake that each one gives when the player does
+` what it is about. the routines are in fish_routines_intro.
+global dim HINT_PART_TEXTS(3) `0 is moving, 1 is swapping, and 2 is info mode
+global dim HINT_SHAKE_TWEENS(3)
+global HINT_PART_GAP = 22 `how far apart they are, in pixels
+global HINT_SHAKE_MS = 220 `how long a shake lasts, in milliseconds
+global HINT_SHAKE_SIZE# = 2 `how far it goes to either side, in pixels
+global HINT_VISIBLE = 1 `0 while the hints are put away, which is while a menu is up
+global HINT_ONLY_INFO = 0 `1 while the hint for info mode is the only one of the three that shows, and it is bright
+global dim HINT_PART_ALPHA#(3) `how see-through each one is now. they fade in and out, and this chases where it should be.
+global HINT_PART_SHOWN_ALPHA = 140 `how see-through they are when they are there, out of 255. it is the same as the text of the other screens.
+global HINT_FADE_MS# = 160 `how long one takes to fade all the way in, or out, in milliseconds
+global HINT_FADE_LAST_MS = 0
+global HINT_GAME_ON = 1 `1 while the hints are the three of the game, and 0 while some other screen has written its own
+
+` in the very first game, info mode opens by itself, and the only hint is the one to close it again.
+` if the player has not closed it after a while, that hint starts to bob.
+global TUTORIAL_INFO_MS = 0 `when info mode opened, or 0 when this is not going on
+global TUTORIAL_INFO_NUDGE_MS = 10000 `how long the hint waits before it starts to bob, in milliseconds
+
+` where the parts of the hud are explained in info mode, so that the tutorial can leave out the ones that are not there yet
+global INFO_INDEX_SCORE_BAR
+global INFO_INDEX_MOVE_COUNT
+global INFO_INDEX_ROUNDS
+global INFO_INDEX_MULTIPLIER
+global TUTORIAL_FISH_GROW = 350 `how long a fish takes to grow to its size as the board comes in, in milliseconds
+global TUTORIAL_FISH_STAGGER = 45 `how much later every fish starts than the one before it, going away from the top left
+
+` the page that "New Game" opens asks if the game should start with the tutorial. it is 0 every time
+` that the page opens, and it is not remembered. the first game does not ask.
+global OPTION_GAME_INTRO = 0
+
+` the labels around the board that nothing else needed to keep a hold of. the tutorial hides and shows them.
+global MOVES_LABEL_TEXT_ID
+global ROUNDS_LABEL_TEXT_ID
+global MULT_LABEL_TEXT_ID
+
 global BEST_MULTIPLIER = 1 `the highest that the multiplier has been in the game that is being played
 global dim HISCORE_LETTERS(3) `the initials that are being entered, as numbers from 0 (A) to 25 (Z)
 
@@ -842,7 +985,8 @@ global MUSIC_LAST_MS = 0
 #constant MUSIC_LAYER_CRACKLE 7
 #constant MUSIC_LAYER_SURF_ABOVE 8
 #constant MUSIC_LAYER_AMBIENCE 9
-global MUSIC_LAYER_COUNT = 10
+#constant MUSIC_LAYER_AMBIENCE_LOW 10
+global MUSIC_LAYER_COUNT = 11
 global dim MUSIC_LAYERS(MUSIC_LAYER_COUNT) as musicLayer
 
 ` there are two scenes. at the surface there are waves breaking, and down in the deep it is dark

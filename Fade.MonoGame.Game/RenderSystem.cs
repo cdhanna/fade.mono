@@ -412,6 +412,19 @@ public static class RenderSystem
             // The icon's frame gets stretched to the size the layout gave it. The origin is in
             // the frame's pixels, so it has to be un-stretched to land in the same place.
             var stretch = new Vector2(run.iconSize.X / src.Width, run.iconSize.Y / src.Height);
+
+            // Text is drawn with a smoothing sampler, so an icon that lands between pixels comes
+            // out blurry even when it is drawn at its own size. When the text is not rotated,
+            // put the icon's corner on a whole pixel instead.
+            if (angle == 0f)
+            {
+                var corner = position - (origin - run.offset) * scale;
+                corner = new Vector2(MathF.Round(corner.X), MathF.Round(corner.Y));
+                sb.Draw(tex, corner, src, iconColor, 0f, Vector2.Zero, scale * stretch, effects, order,
+                    default(SpriteTexCoord1));
+                continue;
+            }
+
             var iconOrigin = (origin - run.offset) / stretch;
             sb.Draw(tex, position, src, iconColor, angle, iconOrigin, scale * stretch, effects, order,
                 default(SpriteTexCoord1));

@@ -20,7 +20,13 @@ function resizeGrid(columns, rows)
     longest = columns
     if rows > longest then longest = rows
     CELL_SIZE = GRID_SPAN / longest
-    CELL_ART_SIZE = (CELL_START_ART_SIZE * CELL_SIZE) / CELL_START_SIZE
+
+    ` the fish do not shrink along with the cells. a picture of a fish is CELL_START_ART_SIZE pixels
+    ` across, and drawing it any smaller than that leaves some of its pixels out, which makes the fish
+    ` hard to tell apart. so on a bigger board they are the same size, and closer together. they only
+    ` shrink if the cells get too small to hold them.
+    CELL_ART_SIZE = CELL_START_ART_SIZE
+    if CELL_ART_SIZE > CELL_SIZE - 1 then CELL_ART_SIZE = CELL_SIZE - 1
 
     ` the sprites are centered on their cell position, so the grid starts half a cell in.
     ` a - b + c comes out as a - (b + c), so the subtraction goes last
@@ -57,24 +63,105 @@ endfunction
 function getFishColorIndex(fishValue)
 endfunction fishValue - 1
 
-function getImpossibleRandomValue(leftValue, topValue)
-    rand = getRandomValue()
-    while rand = leftValue OR rand = topValue
-        rand = getRandomValue()
-    endwhile
-endfunction rand
-
+` pick the kind of a new fish for a cell, so that the fish does not pop the moment that it arrives.
+` a kind is no good if the new fish, together with the fish of that kind that it would touch, and the
+` ones that those touch, would be a group big enough to pop. every side of the cell is looked at.
+` see NEW FISH in fish_headers. a cell that is waiting for a new fish of its own has to have a value
+` of 0 by the time this is called, so that it does not count as a fish of any kind.
 function getImpossibleRandomValueForCell(cellId)
-    leftValue = -1
-    cell = CELLS(cellId)
-    if cell.coord.x > 0
-        leftValue = CELLS(cellId - 1).value
+    required = getRequiredComboCount()
+
+    ` now and then a new fish may be let through that does pop, but never once the round has been won
+    allowCombo = 0
+    if NEW_FISH_COMBO_CHANCE > 0
+        if rnd(100) < NEW_FISH_COMBO_CHANCE then allowCombo = 1
     endif
-    topValue = -1
-    if (cell.coord.y > 0)
-        topValue = CELLS(cellId - CELL_COLUMN_COUNT).value
+    if NEW_FISH_ROUND_WON then allowCombo = 0
+
+    ` most new fish are not even allowed to touch a fish of their own kind. a pair does not pop, but a
+    ` board that is full of pairs pops every time that fish fall, because a pair only needs one more.
+    ` so `tooBig` is how big a group the new fish must not make: 2 for most of them, which is a
+    ` pair, and the size that pops for the few that are allowed to make a pair.
+    tooBig = 2
+    if rnd(100) < NEW_FISH_PAIR_CHANCE then tooBig = required
+    if NEW_FISH_ROUND_WON then tooBig = 2
+    if tooBig > required then tooBig = required
+
+    ` the kinds are tried at random first, so that the cards that change how often a kind shows up
+    ` still do. when luck runs out, they are tried in order. there is always one that works, because
+    ` the cell only touches four others, and there are more kinds than that.
+    picked = getRandomValue()
+    if allowCombo = 0
+        tries = 0
+        isSafe = 0
+        while isSafe = 0
+            groupSize = countFishGroup(cellId, picked, tooBig)
+            if groupSize < tooBig
+                isSafe = 1
+            else
+                tries = tries + 1
+                if tries < 30
+                    picked = getRandomValue()
+                else
+                    picked = (tries mod 7) + 1
+                    if tries > 44 then isSafe = 1
+                endif
+            endif
+        endwhile
     endif
-endfunction getImpossibleRandomValue(leftValue, topValue)
+endfunction picked
+
+
+` how big the group would be, if the fish in a cell were of the given kind: the cell itself, the fish
+` of that kind that touch it, the ones that touch those, and so on. the counting stops at `enough`,
+` because all that anyone wants to know is whether the group is big enough to pop.
+function countFishGroup(cellId, fishValue, enough)
+    ` a cell is marked with this number when it has been counted, so the marks never have to be wiped
+    NEW_FISH_STAMP = NEW_FISH_STAMP + 1
+    NEW_FISH_MARKS(cellId) = NEW_FISH_STAMP
+
+    ` the cells that have been found, and whose sides have not been looked at yet
+    NEW_FISH_STACK(0) = cellId
+    stackSize = 1
+
+    found = 0
+    while stackSize > 0
+        stackSize = stackSize - 1
+        spot = NEW_FISH_STACK(stackSize)
+        found = found + 1
+        if found >= enough
+            stackSize = 0
+        else
+            spotX = spot mod CELL_COLUMN_COUNT
+            spotY = spot / CELL_COLUMN_COUNT
+            for side = 0 to 3
+                nextSpot = -1
+                if side = 0
+                    if spotX > 0 then nextSpot = spot - 1
+                endif
+                if side = 1
+                    if spotX < CELL_COLUMN_COUNT - 1 then nextSpot = spot + 1
+                endif
+                if side = 2
+                    if spotY > 0 then nextSpot = spot - CELL_COLUMN_COUNT
+                endif
+                if side = 3
+                    if spotY < CELL_ROW_COUNT - 1 then nextSpot = spot + CELL_COLUMN_COUNT
+                endif
+
+                if nextSpot >= 0
+                    if NEW_FISH_MARKS(nextSpot) <> NEW_FISH_STAMP
+                        if CELLS(nextSpot).value = fishValue
+                            NEW_FISH_MARKS(nextSpot) = NEW_FISH_STAMP
+                            NEW_FISH_STACK(stackSize) = nextSpot
+                            stackSize = stackSize + 1
+                        endif
+                    endif
+                endif
+            next
+        endif
+    endwhile
+endfunction found
 
 ` send a ring out across the board from a spot, which tilts the fish as it passes.
 ` the spot is in cells, and the ring starts `delay` milliseconds from now.
@@ -151,6 +238,13 @@ endfunction
 ` on the bottom row has a chance to pick up one more fish. the bubbles that show it off start `delay`
 ` milliseconds from now, for a fish that is still on its way down.
 function fishHitBottom(index, delay)
+    ` a stingray that lands on the bottom row shoots up its column. see RAYS in fish_headers.
+    if CELLS(index).value = TEX_RAY
+        if CELLS(index).coord.y = CELL_ROW_COUNT - 1
+            shootRay(CELLS(index).coord.x, delay)
+        endif
+    endif
+
     if isAbility_BottomFeeder()
         if CELLS(index).coord.y = CELL_ROW_COUNT - 1
             ` the second copy of the card is the one doing the work, when it is owned
@@ -205,6 +299,9 @@ function popBellyUpFish(index)
     touched = CELLS(index)
     if touched.bellyUp = 0 then exitfunction
 
+    ` it is already going to pop, with the rest of the belly up fish, because of the waste bucket
+    if touched.comboForce > 0 then exitfunction
+
     CELLS(index).comboForce = 1
     if touched.coord.x > 0
         if CELLS(index - 1).bellyUp then CELLS(index - 1).comboForce = 1
@@ -220,6 +317,207 @@ function popBellyUpFish(index)
     endif
 
     REQUEST_COMBO_CHECK = 1
+endfunction
+
+` RAYS. see fish_headers.
+
+` a stingray landed at the bottom of this column, so every fish in the column pops, the stingray too.
+` handle_combos does the popping, the next time that it looks at the board. the bubbles that show it
+` off start `delay` milliseconds from now, for a stingray that is still on its way down.
+function shootRay(column, delay)
+    lastRow = CELL_ROW_COUNT - 1
+    for rayRow = 0 to lastRow
+        rayIndex = column + rayRow * CELL_COLUMN_COUNT
+        CELLS(rayIndex).comboForce = FORCE_RAY + column
+
+        ` a trail of bubbles goes up the column ahead of the pops
+        rayWait = delay + (lastRow - rayRow) * 40
+        spawnBubbles(getCellX(column), getCellY(rayRow), CELL_SIZE / 4, 3, rayWait, FISH_COLORS(getFishColorIndex(TEX_RAY)))
+    next
+    showPassiveUsed(ABILITY_INDEX_RAYS)
+    REQUEST_COMBO_CHECK = 1
+endfunction
+
+` JELLIES. see fish_headers.
+
+` the jellyfish in this cell is popping, and it stings the fish right next to it
+function stingJelly(index)
+    stingX = CELLS(index).coord.x
+    stingY = CELLS(index).coord.y
+    if stingX > 0
+        stingFish(index - 1)
+    endif
+    if stingX < CELL_COLUMN_COUNT - 1
+        stingFish(index + 1)
+    endif
+    if stingY > 0
+        stingFish(index - CELL_COLUMN_COUNT)
+    endif
+    if stingY < CELL_ROW_COUNT - 1
+        stingFish(index + CELL_COLUMN_COUNT)
+    endif
+endfunction
+
+` the fish in this cell is next to a jellyfish that is popping. it has a chance to get stung, and a fish
+` that is stung goes belly up. a fish that is popping too, or is belly up already, or is a bottle, is left alone.
+function stingFish(index)
+    if CELLS(index).comboBlownUp then exitfunction
+    if CELLS(index).bellyUp then exitfunction
+    if CELLS(index).value = TEX_BOTTLE then exitfunction
+    if rnd(100) >= JELLY_STING_CHANCE then exitfunction
+
+    CELLS(index).bellyUp = 1
+    showPassiveUsed(ABILITY_INDEX_JELLIES)
+    spawnBubbles(getCellX(CELLS(index).coord.x), getCellY(CELLS(index).coord.y), CELL_SIZE / 3, 8, 150, FISH_COLORS(getFishColorIndex(TEX_JELLY)))
+endfunction
+
+` BOTTLES. see fish_headers.
+
+` every bottle that is on the bottom row adds to the multiplier, and is marked to pop. handle_combos
+` calls this every time that it looks at the board, before it finds the groups.
+function checkBottles()
+    bottomStart = CELL_COUNT - CELL_COLUMN_COUNT
+    lastColumn = CELL_COLUMN_COUNT - 1
+    for bottleColumn = 0 to lastColumn
+        bottleIndex = bottomStart + bottleColumn
+        if CELLS(bottleIndex).value = TEX_BOTTLE
+            if CELLS(bottleIndex).comboForce < FORCE_BOTTLE
+                CELLS(bottleIndex).comboForce = FORCE_BOTTLE + bottleColumn
+                addMultiplier(BOTTLE_MULT_GAIN)
+                showPassiveUsed(ABILITY_INDEX_BOTTLES)
+                spawnBubbles(getCellX(bottleColumn), getCellY(CELL_ROW_COUNT - 1), CELL_SIZE / 3, 12, 0, rgb(255, 255, 255))
+            endif
+        endif
+    next
+endfunction
+
+` THE WASTE BUCKET. see fish_headers.
+
+` how many fish on the board are belly up
+function countBellyUpFish()
+    bellyCount = 0
+    lastCell = CELL_COUNT - 1
+    for bellyIndex = 0 to lastCell
+        if CELLS(bellyIndex).bellyUp then bellyCount = bellyCount + 1
+    next
+endfunction bellyCount
+
+` mark every belly up fish to pop, all as one group. handle_combos does the popping, and scores them.
+` the cursor ends up one cell over, the way that it was pointed, like it does after any other special move.
+function doWasteBucket(start as vec, dir as vec)
+    spawnCursorWake(start.x, start.y)
+    target as vec = addCoordinates(start, dir)
+
+    lastCell = CELL_COUNT - 1
+    for bellyIndex = 0 to lastCell
+        if CELLS(bellyIndex).bellyUp
+            CELLS(bellyIndex).comboForce = FORCE_BUCKET
+            spawnBubbles(getCellX(CELLS(bellyIndex).coord.x), getCellY(CELLS(bellyIndex).coord.y), CELL_SIZE / 3, 6, 0, rgb(255, 255, 255))
+        endif
+    next
+
+    cursorX = getCellX(start.x)
+    cursorY = getCellY(start.y)
+    endX = getCellX(target.x)
+    endY = getCellY(target.y)
+    create basic tween TWEEN_SWAP_AX, 0, 1, 150, 0
+    while is tween done(TWEEN_SWAP_AX) < 1
+        glide# = tweenVal(TWEEN_SWAP_AX)
+        position sprite SELECTION_SPRITE, cursorX + (endX - cursorX) * glide#, cursorY + (endY - cursorY) * glide#
+        collectInput()
+        updateBubbles()
+        sync
+    endwhile
+
+    registerMove(1)
+endfunction
+
+` BUNCH UP. see fish_headers.
+
+` the fish that are joined up with the one in this cell all go into a stack behind it, if there are
+` enough of them to have popped. they are marked to go away, and handle_combos fills their cells back in.
+function bunchGroup(keepIndex, required)
+    ` it is already going into the stack of the other fish of the swap, which is the same kind
+    if CELLS(keepIndex).comboForce > 0 then exitfunction
+
+    ROBOT_STAMP = ROBOT_STAMP + 1
+    bunchSize = robotGroupSize(keepIndex, CELLS(keepIndex).value, ROBOT_STAMP)
+    if bunchSize < required then exitfunction
+
+    ` every fish of the group counts, and so does every fish that was stacked behind one of them
+    bunchTotal = 0
+    lastCell = CELL_COUNT - 1
+    for bunchIndex = 0 to lastCell
+        if CELLS(bunchIndex).comboFillId = ROBOT_STAMP
+            bunchTotal = bunchTotal + 1 + CELLS(bunchIndex).stack
+            if bunchIndex <> keepIndex
+                CELLS(bunchIndex).comboForce = FORCE_BUNCH
+                CELLS(bunchIndex).stack = 0
+                spawnBubbles(getCellX(CELLS(bunchIndex).coord.x), getCellY(CELLS(bunchIndex).coord.y), CELL_SIZE / 4, 4, 0, FISH_COLORS(getFishColorIndex(CELLS(bunchIndex).value)))
+            endif
+        endif
+    next
+
+    ` the one in front is not part of its own stack
+    bunchStack = bunchTotal - 1
+    if bunchStack > BUNCH_STACK_MAX then bunchStack = BUNCH_STACK_MAX
+    CELLS(keepIndex).stack = bunchStack
+    create basic tween CELLS(keepIndex).scaleWaveTweenId, 1.6, 1, 300, 0
+endfunction
+
+` swap the fish under the cursor with the one next to it, and then stack up whatever that connects.
+` this stops the game until it has played out, the same as the other special moves do.
+function doBunchUp(start as vec, dir as vec)
+    spawnCursorWake(start.x, start.y)
+    target as vec = addCoordinates(start, dir)
+    aIndex = getCellIndex(start)
+    bIndex = getCellIndex(target)
+
+    startX = getCellX(start.x)
+    startY = getCellY(start.y)
+    endX = getCellX(target.x)
+    endY = getCellY(target.y)
+    duration = 150
+
+    create basic tween TWEEN_SWAP_AX, startX, endX, duration, 0
+    create basic tween TWEEN_SWAP_AY, startY, endY, duration, 0
+    create basic tween TWEEN_SWAP_BX, endX, startX, duration, 0
+    create basic tween TWEEN_SWAP_BY, endY, startY, duration, 0
+
+    create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, CELL_SIZE * 1.5, 150, 50
+    set tween type SELECTION_TWEEN_PUNCH_ID, 1
+
+    create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
+    set tween type SWAP_TWEEN_SFX, 1
+
+    while (is tween done(TWEEN_SWAP_AX) < 1) or (is tween done(SELECTION_TWEEN_PUNCH_ID) < 1)
+        position sprite CELLS(aIndex).spriteId, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
+        position sprite CELLS(bIndex).spriteId, tweenVal(TWEEN_SWAP_BX), tweenVal(TWEEN_SWAP_BY)
+        position sprite SELECTION_SPRITE, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
+        scale sprite SELECTION_SPRITE, tweenVal(SELECTION_TWEEN_PUNCH_ID), tweenVal(SELECTION_TWEEN_PUNCH_ID)
+        set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
+
+        collectInput()
+        updateBubbles()
+        sync
+    endwhile
+    scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+    set sfx volume SFX_SWAP, 0
+
+    ` they really do trade places now
+    tradeValue = CELLS(bIndex).value
+    CELLS(bIndex).value = CELLS(aIndex).value
+    CELLS(aIndex).value = tradeValue
+    swapCellStacks(aIndex, bIndex)
+    updateCell(CELLS(aIndex))
+    updateCell(CELLS(bIndex))
+
+    ` the fish that went with the cursor gets its stack first, and then the one that came back the other way
+    required = getRequiredComboCount()
+    bunchGroup(bIndex, required)
+    bunchGroup(aIndex, required)
+
+    registerMove(1)
 endfunction
 
 function updateCell(c as cell)
@@ -271,8 +569,12 @@ function spawnScoreTextScaled(pos as vec, score$, delay, life, textScale#)
 
     create basic tween txt.floatTweenIdX, pos.x, pos.x + textDrift#, 230, delay + 50
     create basic tween txt.floatTweenIdY, pos.y, pos.y - textRise#, 260, delay + 50
-    create basic tween txt.fadeInTweenId,   0, 255,     100, delay
-    create basic tween txt.fadeTweenId,     255, 0,     fadeTime, delay + life - fadeTime
+    ` while nothing scores, the numbers that float up off of the fish are not shown either
+    textAlpha = 255
+    if tutorialScoreOff() then textAlpha = 0
+
+    create basic tween txt.fadeInTweenId,   0, textAlpha,     100, delay
+    create basic tween txt.fadeTweenId,     textAlpha, 0,     fadeTime, delay + life - fadeTime
     create basic tween txt.scaleOutTweenId, textHeight#, 4 * textScale#, shrinkTime, delay + life - shrinkTime
 
 endfunction txt.textId
@@ -290,6 +592,9 @@ endfunction
 ` score some points, and have them show up on the bar `delay` milliseconds from now.
 ` see THE SCORE THAT SHOWS in fish_headers.
 function queueScore(points, delay)
+    ` the very first game does not score until the bar of the round is on the screen
+    if tutorialScoreOff() then exitfunction
+
     CURRENT_SCORE = CURRENT_SCORE + points
 
     if SCORE_TICK_COUNT < SCORE_TICK_MAX
@@ -492,7 +797,16 @@ endfunction
 function collectInput()
 
     if frame number() = COLLECTED_INPUT_MASK then exitfunction
-    
+
+    ` the bar is full and fizzing, so the round is over, and the upgrade screen is on its way. the cursor
+    ` stays where it is until the next round starts. a move that is already playing out still finishes,
+    ` but the ones that were waiting behind it are dropped, so that they do not go off after the upgrade.
+    if SCORE_BAR_HOLD > 0
+        QUEUED_MOVE_NUM = 0
+        QUEUED_MOVE_TAIL = 0
+        exitfunction
+    endif
+
     swapDir as vec = {
         x = 0, 
         y = 0
@@ -575,6 +889,18 @@ endfunction target
 
 
 function getRandomValue()
+    ` the kinds that only show up with their cards. see THE NEW KINDS OF FISH in fish_headers.
+    if isAbility_Jellies()
+        if rnd(100) < JELLY_SPAWN_CHANCE
+            exitfunction TEX_JELLY
+        endif
+    endif
+    if isAbility_Rays()
+        if rnd(100) < RAY_SPAWN_CHANCE
+            exitfunction TEX_RAY
+        endif
+    endif
+
     if (isAbility_Crabs())
         if rnd(10) > 7 `a 20 % chance to spawn a crab.
             showPassiveUsed(ABILITY_INDEX_CRABS)
@@ -1666,7 +1992,26 @@ function doEraser(start as vec, dir as vec)
     registerMove(1)
 endfunction
 
+` THE FIRST DIVE. the very first game brings its pieces in one at a time, and a piece does not count
+` anything until it is there. see fish_routines_intro.
+
+` 1 while the count of moves and the multiplier are not on the screen yet
+function tutorialMovesOff()
+    isOff = 0
+    if TUTORIAL_STAGE > 0 and TUTORIAL_STAGE < 4 then isOff = 1
+endfunction isOff
+
+` 1 while the bar of the round is not on the screen yet, or the fish that brought it in are still popping
+function tutorialScoreOff()
+    isOff = 0
+    if TUTORIAL_STAGE > 0 then isOff = 1
+    if TUTORIAL_SCORE_HOLD then isOff = 1
+endfunction isOff
+
 function registerMove(delta)
+    ` the very first game does not count moves until the count is on the screen
+    if tutorialMovesOff() then exitfunction
+
     ` register the move against the score
     CURRENT_MOVE_COUNT = CURRENT_MOVE_COUNT + delta
     set text MOVE_COUNT_TEXT_ID, str$(CURRENT_MOVE_COUNT)

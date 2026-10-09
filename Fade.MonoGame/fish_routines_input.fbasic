@@ -36,9 +36,11 @@ setup_input:
     bind action key ACT_CONFIRM, scancode("Enter")
     bind action button ACT_CONFIRM, padCode("A")
 
-    ` this would be tab, but while the debug inspector is enabled, imgui takes the keyboard
-    ` when tab is pressed, and then the game does not see any keys at all.
+    ` tab is the key that the game shows. while the debug inspector is enabled (see FISH_DEBUG, in
+    ` fish.fbasic), imgui takes the keyboard when tab is pressed, and then the game does not see any
+    ` keys at all. so i still works too, for then.
     reserve action id(ACT_INFO)
+    bind action key ACT_INFO, scancode("Tab")
     bind action key ACT_INFO, scancode("I")
     bind action button ACT_INFO, padCode("Back")
 
@@ -96,7 +98,7 @@ frame_input_icons:
         font icon SCORE_FONT, 2, "move2", TEX_KEYS, 40 `x
         font icon SCORE_FONT, 3, "move3", TEX_KEYS, 189 `c
         font icon SCORE_FONT, 4, "move4", TEX_KEYS, 34 `v
-        font icon SCORE_FONT, 5, "info", TEX_KEYS, 119 `i
+        font icon SCORE_FONT, 5, "info", TEX_KEY_TAB `tab. it is a picture of its own, wider than the keys on the sheet.
         font icon SCORE_FONT, 6, "swap", TEX_KEYS, 51 `space
         font icon SCORE_FONT, 7, "dir", TEX_KEYS, 224 `the arrow keys
         font icon SCORE_FONT, 11, "pause", TEX_KEYS, 183 `escape
@@ -154,6 +156,16 @@ process_input:
                 endif
             endif
 
+            ` the "waste bucket" has nothing to do when no fish are belly up. it is not used, and its
+            ` row shakes to say so. the cursor still moves, the same as for a move that is not ready.
+            if moveAbility.moveValue = [MOVE_WASTE_BUCKET]
+                if countBellyUpFish() = 0
+                    create basic tween MOVE_ABILITY_BINDINGS(move.moveBindingIndex).useShakeTweenId, 1, 0, 500, 0
+                    liveStarted = startLiveMove(swapDir.x, swapDir.y, 0)
+                    return
+                endif
+            endif
+
             if moveAbility.movesLeft <= 0
                 usedAbility = 1
                 print "FOUND MOVE", moveAbility.moveValue
@@ -181,6 +193,12 @@ process_input:
                     endcase
                     case [MOVE_ERASER]
                         doEraser(SELECTION_POS, swapDir)
+                    endcase
+                    case [MOVE_WASTE_BUCKET]
+                        doWasteBucket(SELECTION_POS, swapDir)
+                    endcase
+                    case [MOVE_BUNCH_UP]
+                        doBunchUp(SELECTION_POS, swapDir)
                     endcase
                     case [MOVE_ROBOT]
                         doRobot(SELECTION_POS, swapDir)

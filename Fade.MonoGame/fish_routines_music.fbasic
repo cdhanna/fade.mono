@@ -106,12 +106,16 @@ setup_music:
     ` the deep: a darker rumble with a slow throb, a thin stream of bubbles, the far away crackle of a reef,
     ` and the waves that are breaking up at the surface, which are only a dull roll from down here
     addMusicLayer(MUSIC_LAYER_DEEP, "Fish/Audio/Music/loop-deep", .7, MUSIC_SCENE_DEEP)
-    addMusicLayer(MUSIC_LAYER_TRICKLE, "Fish/Audio/Music/loop-trickle", .22, MUSIC_SCENE_DEEP)
+    addMusicLayer(MUSIC_LAYER_TRICKLE, "Fish/Audio/Music/loop-trickle", .04, MUSIC_SCENE_DEEP) `it drips, so there is only a hint of it
     addMusicLayer(MUSIC_LAYER_CRACKLE, "Fish/Audio/Music/loop-crackle", .12, MUSIC_SCENE_DEEP)
     addMusicLayer(MUSIC_LAYER_SURF_ABOVE, "Fish/Audio/Music/loop-surf-above", .5, MUSIC_SCENE_DEEP)
 
-    ` and a recording of being under the water. it is a quiet recording, so it is all the way up.
-    addMusicLayer(MUSIC_LAYER_AMBIENCE, "Fish/Audio/underwater-ambiencewav", 1, MUSIC_SCENE_DEEP)
+    ` and a recording of being under the water. this is the sound of the deep, more than anything else is.
+    ` the recording is a quiet one, so this is a copy of it that has been made louder.
+    addMusicLayer(MUSIC_LAYER_AMBIENCE, "Fish/Audio/Music/loop-ambience", 1, MUSIC_SCENE_DEEP)
+
+    ` the same recording again, slowed down, which makes it lower and further away. it comes and goes under the other one.
+    addMusicLayer(MUSIC_LAYER_AMBIENCE_LOW, "Fish/Audio/Music/loop-ambience-low", .45, MUSIC_SCENE_DEEP)
 
     ` the chords are heard in both
     addMusicLayer(MUSIC_LAYER_PAD_DM, "Fish/Audio/Music/loop-pad-dm", .45, MUSIC_SCENE_BOTH)
@@ -123,6 +127,7 @@ setup_music:
     setMusicLayerDrift(MUSIC_LAYER_TRICKLE, .3, 1)
     setMusicLayerDrift(MUSIC_LAYER_CRACKLE, .3, 1)
     setMusicLayerDrift(MUSIC_LAYER_SURF_ABOVE, .5, 1)
+    setMusicLayerDrift(MUSIC_LAYER_AMBIENCE_LOW, .35, 1)
 
     ` how loud it is, how far its pitch can wander (in hundredths of an octave), the shortest and
     ` the longest wait before it plays on its own again, in milliseconds, and the scene that it
@@ -158,6 +163,7 @@ setup_music:
     fadeMusicLayer(MUSIC_LAYER_CRACKLE, 1, 1)
     fadeMusicLayer(MUSIC_LAYER_SURF_ABOVE, 1, 1)
     fadeMusicLayer(MUSIC_LAYER_AMBIENCE, 1, 1)
+    fadeMusicLayer(MUSIC_LAYER_AMBIENCE_LOW, 1, 1)
     MUSIC_SCENE_MS = MUSIC_LAST_MS + musicWait(MUSIC_SCENE_GAP_MIN, MUSIC_SCENE_GAP_MAX) / 2
     setMusicChord(MUSIC_CHORD_DM, 10)
     MELODY_AUTO_MS = MUSIC_LAST_MS + musicWait(MELODY_GAP_MIN, MELODY_GAP_MAX) / 2

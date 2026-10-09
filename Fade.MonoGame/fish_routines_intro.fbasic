@@ -1,0 +1,490 @@
+goto routines_intro_exit
+
+remstart
+    THE FIRST DIVE
+    the very first game is a little tutorial. the wave of bubbles goes by and there is nothing there
+    but the water. a few lines of text go by, one at a time:
+
+        This is a match 3 game.
+        Take your time.
+        Soak it in.
+        Use [tab] to get more information.
+        Breathe, now.
+
+    the fourth line shows a picture of the key, or the controller button, that opens info mode.
+    the confirm button skips the lines.
+
+    then the game comes in a piece at a time, so that there is only ever one new thing to look at:
+
+        first       the hint for info mode, and nothing else. it is where it always is, in the
+                    line of key hints along the bottom, so that the player learns to look
+                    there. it is brighter than usual. it waits until the player presses the
+                    key. after a few seconds it starts to bob, to ask for it.
+        the key     info mode opens, and behind it are the fish, the cursor, and the line of key
+                    hints along the bottom
+        one pop     the count of moves, and the multiplier
+        next pop    the bar of the round's progress, and the rounds that are left
+
+    a pop here is a move that pops fish. the fish that go on popping as the board fills back in are
+    part of the same one.
+
+    a piece that has not come in yet is not explained in info mode, and it does not count anything
+    yet either. no moves are counted, and the multiplier does not fill, until they can be seen, and
+    nothing scores until the bar can be seen. tutorialMovesOff() and tutorialScoreOff(), in
+    fish_funcs, are how the rest of the game asks.
+
+    TUTORIAL_STAGE says how far along it is. it is 0 when there is no tutorial, which is nearly always,
+    and then nothing here does anything.
+
+    it happens by itself once: PREF_INTRO_SEEN remembers that it has, with the options. after that,
+    the page that "New Game" opens has a line to ask for it again. see OPTION_GAME_INTRO.
+    setting the FISH_INTRO environment variable asks for it every time, to look at it.
+
+    the rest of the game does three things for it:
+    - reset_game ends a tutorial that was going, with tutorial_end
+    - starting a new game calls tutorial_prepare before the wave of bubbles, and run_first_dive_intro after it
+    - handle_combos calls tutorial_pop when a move pops fish
+
+    THE HINTS
+    this part is nothing to do with the tutorial, and it is always on. the line of key hints along the
+    bottom of the game is three texts side by side: one for moving, one for swapping, and one for
+    info mode. each one gives a little shake when the player does the thing that it is about, and
+    the other two stay still. frame_hints lays them out and shakes them, and update_frame comes to it.
+
+    every other screen writes its own hints on the one text that was always there, INFO_HINT_TEXT_ID.
+    so the three are only shown while the game is what is being played. the screens say so with
+    hintMode(), and the menu puts all of the hints away and brings them back with hintShow().
+remend
+
+setup_intro:
+    ` the globals are declared in the fish headers
+
+    ` the water goes a little darker behind the lines, so that they can be read
+    reserve sprite id(INTRO_DIM_SPRITE)
+    sprite INTRO_DIM_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset INTRO_DIM_SPRITE, 0, 0
+    size sprite INTRO_DIM_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    color sprite INTRO_DIM_SPRITE, rgb(4, 8, 24, 0)
+    order sprite INTRO_DIM_SPRITE, ORDER_INTRO
+    hide sprite INTRO_DIM_SPRITE
+
+    ` at this size, the picture of a key in a line is exactly twice as big as it was drawn
+    reserve text id(INTRO_TEXT_ID)
+    text INTRO_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT / 2, SCORE_FONT, " "
+    size text y INTRO_TEXT_ID, 32
+    set text offset INTRO_TEXT_ID, .5, .5
+    color text INTRO_TEXT_ID, rgb(255, 255, 255, 0)
+    order text INTRO_TEXT_ID, ORDER_INTRO + 1
+    enable rich text INTRO_TEXT_ID `so that a line can show a picture of a key, like {info}
+    hide text INTRO_TEXT_ID
+
+    ` the three key hints of the game. they look the same as the text that the other screens write theirs on.
+    for hintI = 0 to 2
+        reserve text id(HINT_PART_TEXTS(hintI))
+        text HINT_PART_TEXTS(hintI), 0, WORLD_HEIGHT - 2, SCORE_FONT, " "
+        enable rich text HINT_PART_TEXTS(hintI)
+        set text offset HINT_PART_TEXTS(hintI), 0, 1
+        size text y HINT_PART_TEXTS(hintI), 16
+        color text HINT_PART_TEXTS(hintI), rgb(64, 128, 255, 140)
+        HINT_PART_ALPHA#(hintI) = HINT_PART_SHOWN_ALPHA
+        enable text drop shadow HINT_PART_TEXTS(hintI), 2, -2, rgb(0,0,0)
+
+        reserve tween id(HINT_SHAKE_TWEENS(hintI))
+        create basic tween HINT_SHAKE_TWEENS(hintI), 0, 0, 1, 0
+    next
+    set text HINT_PART_TEXTS(0), "{dir} move"
+    set text HINT_PART_TEXTS(1), "{swap} + {dir} swap"
+    set text HINT_PART_TEXTS(2), "{info} info"
+return
+
+
+` a new game is about to start. if it is the first one, or the intro was asked for, take everything
+` off of the screen, so that the wave of bubbles uncovers nothing but the water.
+tutorial_prepare:
+    tutWanted = 0
+    tutSeen = get pref(PREF_INTRO_SEEN, 0)
+    if tutSeen = 0 then tutWanted = 1
+    if OPTION_GAME_INTRO then tutWanted = 1
+    if is env set("FISH_INTRO") then tutWanted = 1
+
+    ` it has to be asked for again every time
+    OPTION_GAME_INTRO = 0
+
+    if tutWanted = 0 then return
+    set pref PREF_INTRO_SEEN, 1
+    TUTORIAL_STAGE = 1
+    TUTORIAL_SCORE_HOLD = 0
+
+    for tutI = 0 to CELL_COUNT - 1
+        hide sprite CELLS(tutI).spriteId
+    next
+    hide sprite SELECTION_SPRITE
+    hintShow(0)
+
+    gosub tutorial_hide_moves
+    gosub tutorial_hide_score
+
+return
+
+
+` the lines of text, then the info key, and then the fish. a new game comes here when the wave of
+` bubbles has gone. this does not come back until the player has opened info mode.
+run_first_dive_intro:
+    if TUTORIAL_STAGE <> 1 then return
+
+    introFade# = INTRO_FADE_MS
+    introCount = 5 `how many lines there are
+    introTotal = INTRO_LINE_MS * introCount
+    introStart = game ms()
+    introShown = -1
+    introDone = 0
+
+    show sprite INTRO_DIM_SPRITE
+    show text INTRO_TEXT_ID
+
+    while introDone = 0
+        introAge = game ms() - introStart
+
+        ` which line is up
+        introLine = 0
+        if introAge >= INTRO_LINE_MS then introLine = 1
+        if introAge >= INTRO_LINE_MS * 2 then introLine = 2
+        if introAge >= INTRO_LINE_MS * 3 then introLine = 3
+        if introAge >= INTRO_LINE_MS * 4 then introLine = 4
+        if introAge >= introTotal then introLine = introCount
+
+        if introLine >= introCount
+            introDone = 1
+        else
+            if introLine <> introShown
+                introShown = introLine
+                if introLine = 0 then set text INTRO_TEXT_ID, "This is a match 3 game."
+                if introLine = 1 then set text INTRO_TEXT_ID, "Take your time."
+                if introLine = 2 then set text INTRO_TEXT_ID, "Soak it in."
+                if introLine = 3 then set text INTRO_TEXT_ID, "Use {info} to get more information."
+                if introLine = 4 then set text INTRO_TEXT_ID, "Breathe, now."
+            endif
+
+            ` every line fades in, stays a while, and fades out
+            introLineStart = introLine * INTRO_LINE_MS
+            introIn# = introAge - introLineStart
+            introLeft# = INTRO_LINE_MS - introIn#
+            introAlpha# = 1
+            if introIn# < introFade# then introAlpha# = introIn# / introFade#
+            if introLeft# < introFade# then introAlpha# = introLeft# / introFade#
+            color text INTRO_TEXT_ID, rgb(255, 255, 255, 255 * introAlpha#)
+
+            ` the dark comes in with the first line, and goes out with the last one
+            introEnd# = introTotal - introAge
+            introDim# = 1
+            if introAge < INTRO_FADE_MS then introDim# = introAge / introFade#
+            if introEnd# < introFade# then introDim# = introEnd# / introFade#
+            color sprite INTRO_DIM_SPRITE, rgb(4, 8, 24, INTRO_DIM_ALPHA * introDim#)
+        endif
+
+        if new action down(ACT_CONFIRM) then introDone = 1
+
+        ` the water goes on being drawn underneath
+        gosub update_frame
+        sync
+    endwhile
+
+    hide sprite INTRO_DIM_SPRITE
+    hide text INTRO_TEXT_ID
+
+    ` the hint for info mode, on its own, where it always is. frame_hints makes it bob after a while.
+    TUTORIAL_STAGE = 2
+    TUTORIAL_KEY_MS = game ms()
+    HINT_ONLY_INFO = 1
+    hintShow(1)
+
+    tutEntered = 0
+    while tutEntered = 0
+        ` the main loop is not running, so this keeps the picture of the key right. it is a
+        ` picture of a button if the player picks up a controller.
+        gosub frame_input_icons
+
+        if new action down(ACT_INFO) then tutEntered = 1
+
+        gosub update_frame
+        sync
+    endwhile
+
+    TUTORIAL_KEY_MS = 0
+    HINT_ONLY_INFO = 0
+
+    ` the fish come in. each one grows from nothing, and the ones at the top left go first, so that
+    ` they come in as a wave from that corner. frame_scale_wave is what sizes them.
+    for tutI = 0 to CELL_COUNT - 1
+        tutDelay = (CELLS(tutI).coord.x + CELLS(tutI).coord.y) * TUTORIAL_FISH_STAGGER
+        create basic tween CELLS(tutI).scaleWaveTweenId, 0, 1, TUTORIAL_FISH_GROW, tutDelay
+        size sprite CELLS(tutI).spriteId, 0, 0
+        show sprite CELLS(tutI).spriteId
+    next
+
+    show sprite SELECTION_SPRITE
+    hintShow(1)
+    TUTORIAL_STAGE = 3
+
+    ` and info mode opens over them, which is what the player asked for. the only things that it
+    ` explains are the ones that are there. the hint to close it again starts to bob, if it is left open.
+    TUTORIAL_INFO_MS = game ms()
+    gosub info_open
+return
+
+
+` a move has just popped fish. handle_combos comes here, once for every move that does, while
+` there is a tutorial going. the next piece of the game comes in, with a puff of bubbles.
+tutorial_pop:
+    if TUTORIAL_STAGE = 3
+        gosub tutorial_show_moves
+        spawnBubbles(56, 30, 22, 14, 0, rgb(255, 255, 255))
+        spawnBubbles(MULT_POS.x + 30, MULT_POS.y + 28, 22, 14, 120, rgb(255, 255, 255))
+        TUTORIAL_STAGE = 4
+        return
+    endif
+
+    if TUTORIAL_STAGE = 4
+        gosub tutorial_show_score
+        spawnBubbles(WORLD_WIDTH / 2, 20, 40, 18, 0, rgb(255, 255, 255))
+        spawnBubbles(WORLD_WIDTH - 80, 30, 22, 14, 120, rgb(255, 255, 255))
+        TUTORIAL_STAGE = 0
+
+        ` the fish that brought the bar in do not score. the score starts with the next move.
+        ` handle_combos lets go of this when the board has settled.
+        TUTORIAL_SCORE_HOLD = 1
+    endif
+return
+
+
+` put back everything that a tutorial took away. reset_game comes here, so that a game that is
+` started while a tutorial is still going has all of its pieces.
+tutorial_end:
+    TUTORIAL_SCORE_HOLD = 0
+    TUTORIAL_INFO_MS = 0
+    if TUTORIAL_STAGE = 0 then return
+    TUTORIAL_STAGE = 0
+
+    TUTORIAL_KEY_MS = 0
+    HINT_ONLY_INFO = 0
+
+    for tutI = 0 to CELL_COUNT - 1
+        create basic tween CELLS(tutI).scaleWaveTweenId, 1, 1, 1, 0
+        show sprite CELLS(tutI).spriteId
+    next
+    show sprite SELECTION_SPRITE
+    hintShow(1)
+
+    gosub tutorial_show_moves
+    gosub tutorial_show_score
+return
+
+
+` the count of moves, and the multiplier, on the left of the board. info mode does not explain them while they are away.
+tutorial_hide_moves:
+    hide text MOVES_LABEL_TEXT_ID
+    hide text MOVE_COUNT_TEXT_ID
+    hide text MULT_LABEL_TEXT_ID
+    hide text MULT_TEXT_ID
+    hide text MULT_NUM_TEXT_ID
+    hide sprite MULT_BAR_BACK_SPRITE
+    hide sprite MULT_BAR_FILL_SPRITE
+    setInfoBlobEnabled(INFO_INDEX_MOVE_COUNT, 0)
+    setInfoBlobEnabled(INFO_INDEX_MULTIPLIER, 0)
+return
+
+tutorial_show_moves:
+    show text MOVES_LABEL_TEXT_ID
+    show text MOVE_COUNT_TEXT_ID
+    show text MULT_LABEL_TEXT_ID
+    show text MULT_TEXT_ID
+    show text MULT_NUM_TEXT_ID
+    show sprite MULT_BAR_BACK_SPRITE
+    show sprite MULT_BAR_FILL_SPRITE
+    setInfoBlobEnabled(INFO_INDEX_MOVE_COUNT, 1)
+    setInfoBlobEnabled(INFO_INDEX_MULTIPLIER, 1)
+return
+
+
+` the bar of the round's progress, above the board, and the rounds that are left, on the right of it
+tutorial_hide_score:
+    hide sprite SCORE_BAR.backgroundSpriteId
+    hide sprite SCORE_BAR.foregroundSpriteId
+    hide text SCORE_BAR.textNumId
+    hide text SCORE_BAR.textTitleId
+    hide text ROUNDS_LABEL_TEXT_ID
+    hide text ROUND_COUNT_TEXT_ID
+    setInfoBlobEnabled(INFO_INDEX_SCORE_BAR, 0)
+    setInfoBlobEnabled(INFO_INDEX_ROUNDS, 0)
+return
+
+tutorial_show_score:
+    show sprite SCORE_BAR.backgroundSpriteId
+    show sprite SCORE_BAR.foregroundSpriteId
+    show text SCORE_BAR.textNumId
+    show text SCORE_BAR.textTitleId
+    show text ROUNDS_LABEL_TEXT_ID
+    show text ROUND_COUNT_TEXT_ID
+    setInfoBlobEnabled(INFO_INDEX_SCORE_BAR, 1)
+    setInfoBlobEnabled(INFO_INDEX_ROUNDS, 1)
+return
+
+
+` lay out the three key hints of the game, and shake the one that is about what the player just did.
+` update_frame comes here on every frame of the game. see THE HINTS, at the top of this file.
+frame_hints:
+
+    ` a direction on its own is a move, and a direction while the swap button is held is a swap
+    hintDir = 0
+    if new action down(ACT_LEFT) then hintDir = 1
+    if new action down(ACT_RIGHT) then hintDir = 1
+    if new action down(ACT_UP) then hintDir = 1
+    if new action down(ACT_DOWN) then hintDir = 1
+    if hintDir
+        if action down(ACT_SWAP)
+            create basic tween HINT_SHAKE_TWEENS(1), 1, 0, HINT_SHAKE_MS, 0
+        else
+            create basic tween HINT_SHAKE_TWEENS(0), 1, 0, HINT_SHAKE_MS, 0
+        endif
+    endif
+    if new action down(ACT_INFO)
+        create basic tween HINT_SHAKE_TWEENS(2), 1, 0, HINT_SHAKE_MS, 0
+    endif
+
+    ` they sit in a row, in the middle of the screen. the pictures of the keys are not the same width
+    ` as the pictures of the controller buttons, so the row is measured again on every frame.
+    hintWidth0# = get text size x(HINT_PART_TEXTS(0))
+    hintWidth1# = get text size x(HINT_PART_TEXTS(1))
+    hintWidth2# = get text size x(HINT_PART_TEXTS(2))
+    hintRow# = hintWidth0# + hintWidth1# + hintWidth2# + HINT_PART_GAP * 2
+    hintHalf# = hintRow# / 2
+    hintX# = WORLD_WIDTH / 2 - hintHalf#
+
+    ` a shake dies away, and the hint ends up back where it started
+    hintWave# = sin(game ms() * .07) * HINT_SHAKE_SIZE#
+
+    set text position HINT_PART_TEXTS(0), hintX# + hintWave# * tweenVal(HINT_SHAKE_TWEENS(0)), WORLD_HEIGHT - 2
+    hintX# = hintX# + hintWidth0# + HINT_PART_GAP
+    set text position HINT_PART_TEXTS(1), hintX# + hintWave# * tweenVal(HINT_SHAKE_TWEENS(1)), WORLD_HEIGHT - 2
+    hintX# = hintX# + hintWidth1# + HINT_PART_GAP
+
+    ` in the very first game, the hint for info mode is on its own to start with. if the player has
+    ` not pressed the key after a while, the hint bobs: up a little and back down to where it sits,
+    ` gently. it starts from where it sits, so it does not jump.
+    hintKeyBob = 0
+    if TUTORIAL_KEY_MS > 0
+        hintKeyWait# = game ms() - TUTORIAL_KEY_MS
+        if hintKeyWait# > TUTORIAL_NUDGE_MS
+            hintKeyAge# = hintKeyWait# - TUTORIAL_NUDGE_MS
+            hintKeyBob = (cos(hintKeyAge# * TUTORIAL_NUDGE_SPEED#) - 1) * TUTORIAL_NUDGE_SIZE
+        endif
+    endif
+
+    ` a - b + c comes out as a - (b + c), so the subtraction goes last
+    set text position HINT_PART_TEXTS(2), hintX# + hintWave# * tweenVal(HINT_SHAKE_TWEENS(2)), WORLD_HEIGHT + hintKeyBob - 2
+
+    ` in the very first game, info mode opened by itself, and the only hint is the one to close it.
+    ` if it has been left open for a while, that hint bobs the same way, to ask for the key.
+    if TUTORIAL_INFO_MS > 0
+        hintBob = 0
+        if INFO_MODE = 0
+            TUTORIAL_INFO_MS = 0
+        else
+            hintWaited# = game ms() - TUTORIAL_INFO_MS
+            if hintWaited# > TUTORIAL_INFO_NUDGE_MS
+                hintBobAge# = hintWaited# - TUTORIAL_INFO_NUDGE_MS
+                hintBob = (cos(hintBobAge# * TUTORIAL_NUDGE_SPEED#) - 1) * TUTORIAL_NUDGE_SIZE
+            endif
+        endif
+
+        ` a - b + c comes out as a - (b + c), so the subtraction goes last
+        set text position INFO_HINT_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT + hintBob - 2
+    endif
+return
+
+
+routines_intro_exit:
+
+
+` say if the hints along the bottom are the three of the game (1), or if some other screen has
+` written its own hints on INFO_HINT_TEXT_ID (0)
+function hintMode(isGame)
+    HINT_GAME_ON = isGame
+    applyHints()
+endfunction
+
+
+` put all of the hints away (0), or bring them back (1)
+function hintShow(isVisible)
+    HINT_VISIBLE = isVisible
+    if isVisible
+        show text INFO_HINT_TEXT_ID
+    else
+        hide text INFO_HINT_TEXT_ID
+    endif
+    applyHints()
+endfunction
+
+
+` the three key hints of the game are only there while the hints are showing, and the game is what
+` they are for. this only decides where each one is headed. stepHintFade() takes it there.
+function applyHints()
+    for hintI = 0 to 2
+        show text HINT_PART_TEXTS(hintI) `one that has faded all the way out is hidden again by stepHintFade()
+    next
+endfunction
+
+
+` how see-through one of the three key hints of the game should be right now, out of 255
+function hintPartWant(part)
+    want = 0
+    if HINT_VISIBLE
+        if HINT_GAME_ON then want = HINT_PART_SHOWN_ALPHA
+    endif
+
+    ` the hint for info mode on its own, at the start of the very first game. it is bright, to be seen.
+    if HINT_ONLY_INFO
+        if want > 0
+            want = 0
+            if part = 2 then want = 255
+        endif
+    endif
+endfunction want
+
+
+` fade the three key hints of the game toward where they should be. updateSeabed() calls this, which
+` is called wherever frames are being drawn, so the hints fade under the menus and the upgrade screen too.
+` it works out how much time has gone by on its own, so calling it twice on a frame does no harm.
+function stepHintFade()
+    fadeNow = game ms()
+    fadeElapsed# = fadeNow - HINT_FADE_LAST_MS
+    HINT_FADE_LAST_MS = fadeNow
+    if fadeElapsed# > 50 then fadeElapsed# = 50
+    if fadeElapsed# <= 0 then exitfunction
+
+    ` the texts are not made until setup_intro has run
+    if HINT_PART_TEXTS(0) = 0 then exitfunction
+
+    fadeStep# = (fadeElapsed# * 255) / HINT_FADE_MS#
+
+    for hintI = 0 to 2
+        want# = hintPartWant(hintI)
+        alpha# = HINT_PART_ALPHA#(hintI)
+        if alpha# < want#
+            alpha# = alpha# + fadeStep#
+            if alpha# > want# then alpha# = want#
+        endif
+        if alpha# > want#
+            alpha# = alpha# - fadeStep#
+            if alpha# < want# then alpha# = want#
+        endif
+        HINT_PART_ALPHA#(hintI) = alpha#
+
+        set text alpha HINT_PART_TEXTS(hintI), alpha#
+        if alpha# <= 0
+            hide text HINT_PART_TEXTS(hintI)
+        else
+            show text HINT_PART_TEXTS(hintI)
+        endif
+    next
+endfunction

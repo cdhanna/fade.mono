@@ -23,6 +23,7 @@ setup_multiplier:
     set text offset multLabelTextId, 0, 0
     color text multLabelTextId, rgb(64, 128, 255, 200)
     enable text drop shadow multLabelTextId, 2, -2, rgb(0,0,0)
+    MULT_LABEL_TEXT_ID = multLabelTextId
 
     ` the multiplier itself. stepMultiplier colors it and sizes it on every frame.
     reserve text id(MULT_TEXT_ID)
@@ -59,6 +60,7 @@ setup_multiplier:
     create basic tween MULT_PUNCH_TWEEN_ID, 0, 0, 1, 0
 
     infoIndex = allocateInfoBlob(MULT_POS.x - 4, MULT_POS.y - 2, MULT_BAR_WIDTH + 8, 66, "Multiplier", "Every fish that pops scores this many times as much. A swap that pops fish fills the bar, and a full bar adds one. A swap that pops nothing empties the bar, and takes one away.")
+    INFO_INDEX_MULTIPLIER = infoIndex
 
 return
 
@@ -75,6 +77,8 @@ endfunction required
 
 ` a swap has been made. it is not known yet if it popped anything. handle_combos finds that out.
 function multiplierSwapMade()
+    ` the very first game does not have a multiplier to start with. see THE FIRST DIVE, in fish_routines_intro.
+    if tutorialMovesOff() then exitfunction
     MULT_PENDING_SWAPS = MULT_PENDING_SWAPS + 1
 endfunction
 
@@ -117,6 +121,19 @@ function judgeMultiplierSwaps(comboCount)
 
         refreshMultiplier(150)
     endif
+endfunction
+
+
+` the multiplier goes up by `amount`, right now, without the bar having anything to do with it.
+` a bottle that gets to the bottom row does this. see BOTTLES in fish_headers.
+function addMultiplier(amount)
+    SCORE_MULTIPLIER = SCORE_MULTIPLIER + amount
+    if SCORE_MULTIPLIER > BEST_MULTIPLIER then BEST_MULTIPLIER = SCORE_MULTIPLIER
+
+    MULT_PUNCH_DIR = 1
+    create basic tween MULT_PUNCH_TWEEN_ID, 1, 0, 500, 0
+    spawnBubbles(MULT_POS.x + 24, MULT_POS.y + 30, 8, 14, 0, rgb(255, 255, 255))
+    refreshMultiplier(150)
 endfunction
 
 

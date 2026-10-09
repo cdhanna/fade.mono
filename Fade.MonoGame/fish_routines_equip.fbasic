@@ -235,6 +235,8 @@ handle_move_rearrange:
     ` the upgrade screen comes up with only this page on it. the wave of bubbles wipes it in, the same
     ` as it does after a round, so everything is put where it ends up first. see handle_ability_selection.
     order text INFO_HINT_TEXT_ID, ORDER_ABILITY_TEXT
+    hintMode(0)
+    set text render target INFO_HINT_TEXT_ID, TARGET_UPGRADE `the wave of bubbles brings the hints in with the rest of the page
     create basic tween INFO_FADE_TWEEN_ID, 1, 1, 1, 0
     create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 1, 1, 1, 0
     create basic tween EQUIP_FADE_TWEEN_ID, 1, 1, 1, 0
@@ -269,6 +271,8 @@ handle_move_rearrange:
 
     ` hand the hint back to the game
     set text INFO_HINT_TEXT_ID, GAME_HINT$
+    reset text render target INFO_HINT_TEXT_ID
+    hintMode(1)
     order text INFO_HINT_TEXT_ID, 0
     set text alpha INFO_HINT_TEXT_ID, 140
 
@@ -342,6 +346,7 @@ equip_refresh:
         if equipFillMove >= 0
             equipFillName$ = CARDS(equipFillMove).name$
             equipFillNote$ = str$(CARDS(equipFillMove).moveClock) + " move recharge"
+            if CARDS(equipFillMove).moveClock <= 0 then equipFillNote$ = "no recharge"
         endif
 
         select equipFill.kind

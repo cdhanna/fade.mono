@@ -21,8 +21,11 @@ setup_credits:
     texture reserve texture id(TEX_LOGO_FADE), "Fish/Textures/Logos/fade_ghost"
     texture reserve texture id(TEX_LOGO_MONOGAME), "Fish/Textures/Logos/monogame"
 
-    ` TODO: this is placeholder art. it is 32 by 48, and gets drawn twice as big.
-    texture reserve texture id(TEX_CREDIT_CHRIS), "Fish/Textures/Logos/chris_placeholder"
+    ` the drawing is chris_placeholder.png, which is 512 by 512. the game is drawn so small that most of
+    ` its lines would fall between the pixels, so this is a copy that has been shrunk to the size that
+    ` it is shown at, 96 by 96, with the lines smoothed. when the drawing changes, make the copy again:
+    `   ffmpeg -y -i chris_placeholder.png -vf "format=rgba,scale=96:96:flags=area" chris_credit.png
+    texture reserve texture id(TEX_CREDIT_CHRIS), "Fish/Textures/Logos/chris_credit"
 
     ` the credits are drawn to a render target of their own, which is see-through wherever there is nothing.
     ` then one sprite draws that render target into the menu, with an effect that fades the credits in as
@@ -47,7 +50,7 @@ setup_credits:
     ` the lines of the credits. the first number is how far down the roll the line is.
     addCreditText(0, 18, "Created by", 0)
     addCreditText(24, 40, "Chris Hanna", 1)
-    addCreditSprite(WORLD_WIDTH / 2 + 170, 40, TEX_CREDIT_CHRIS, 64, 96)
+    addCreditSprite(WORLD_WIDTH / 2 + 170, 40, TEX_CREDIT_CHRIS, 96, 96)
 
     addCreditText(120, 18, "Dedicated to my wife,", 0)
     addCreditText(144, 40, "Ana", 1)

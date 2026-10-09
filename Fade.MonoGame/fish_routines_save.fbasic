@@ -330,7 +330,9 @@ function grantMoveToSlot(abilityIndex, slot)
 
     ` the move explains itself in info mode. a slot only ever gets one info blob, and whichever move
     ` is in the slot uses it. layoutMoveInfos switches it off while the slot is empty.
-    moveInfo$ = CARDS(abilityIndex).desc$ + ". Hold {" + moveBinding.icon$ + "} and press {dir} to use it. It recharges after " + str$(moveBinding.resetTimer) + " moves. Press {confirm} here to move it to another button."
+    moveCool$ = "It recharges after " + str$(moveBinding.resetTimer) + " moves."
+    if moveBinding.resetTimer <= 0 then moveCool$ = "It never has to recharge."
+    moveInfo$ = CARDS(abilityIndex).desc$ + ". Hold {" + moveBinding.icon$ + "} and press {dir} to use it. " + moveCool$ + " Press {confirm} here to move it to another button."
     if moveBinding.hasInfo
         INFOS(moveBinding.infoIndex).title$ = CARDS(abilityIndex).name$
         INFOS(moveBinding.infoIndex).desc$ = moveInfo$
@@ -351,8 +353,7 @@ endfunction
 ` the moves are listed at the side of the board in the order of their slots, packed together, so
 ` which row a move is on depends on which of the slots before it are empty. frame_move_ability_render
 ` puts the rows there on every frame, and this puts the info blobs of the moves on the same rows.
-` the blob of a slot that is empty is switched off, and when every slot is empty, the blob that
-` explains the empty space is switched back on.
+` the blob of a slot that is empty is switched off.
 function layoutMoveInfos()
     infoRow = 0
     for infoSlot = 0 to MOVE_SLOT_COUNT - 1
@@ -368,11 +369,8 @@ function layoutMoveInfos()
         if MOVE_ABILITY_BINDINGS(infoSlot).assigned then infoRow = infoRow + 1
     next
 
-    if infoRow > 0
-        setInfoBlobEnabled(INFO_INDEX_MOVES, 0)
-    else
-        setInfoBlobEnabled(INFO_INDEX_MOVES, 1)
-    endif
+    ` the empty space where the moves go is never explained
+    setInfoBlobEnabled(INFO_INDEX_MOVES, 0)
 endfunction
 
 

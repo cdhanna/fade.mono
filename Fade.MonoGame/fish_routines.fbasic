@@ -123,9 +123,18 @@ load_textures:
     texture free texture id(TEX_BASS), "Fish/Textures/Bass"
     texture free texture id(TEX_WORM), "Fish/Textures/Worm"
 
+    ` the kinds that only show up with their cards. see THE NEW KINDS OF FISH in fish_headers.
+    ` they come right after the first seven, and the first seven must stay first: a new fish is picked by number.
+    texture free texture id(TEX_JELLY), "Fish/Textures/Jellyfish"
+    texture free texture id(TEX_RAY), "Fish/Textures/Stingray"
+    texture free texture id(TEX_BOTTLE), "Fish/Textures/Bottle"
+
     texture reserve texture id(TEX_NOISE), "Fish/Textures/Turbulence_13-256x256"
 
-    global dim FISH_COLORS(7)
+    global dim FISH_COLORS(16)
+    FISH_COLORS(getFishColorIndex(TEX_JELLY)) = rgb(200, 130, 255)
+    FISH_COLORS(getFishColorIndex(TEX_RAY)) = rgb(120, 150, 200)
+    FISH_COLORS(getFishColorIndex(TEX_BOTTLE)) = rgb(150, 220, 180)
     FISH_COLORS(getFishColorIndex(TEX_PUFFER)) = rgb(250, 190, 54)
     FISH_COLORS(getFishColorIndex(TEX_CATFISH)) = rgb(160, 150, 121)
     FISH_COLORS(getFishColorIndex(TEX_GOLDFISH)) = rgb(255, 174, 48)
@@ -180,6 +189,7 @@ load_textures:
     ` the original keys are 64 pixels, which turns to mush when drawn this small, so this sheet
     ` is the same grid shrunk down to 20 pixel keys.
     texture reserve texture id(TEX_KEYS), "Fish/Textures/Keys"
+    texture reserve texture id(TEX_KEY_TAB), "Fish/Textures/KeyTab"
     set texture frame grid TEX_KEYS, 16 17 `rows, columns
 
     ` and pictures of controller buttons, from the xbox series sheet of the same pack, shrunk the same way.
@@ -213,6 +223,11 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_FREE).artTexId), "Fish/Textures/Cards/free_swap"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_ROBOT).artTexId), "Fish/Textures/Cards/robot"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_ERASER).artTexId), "Fish/Textures/Cards/eraser"
+    texture reserve texture id(CARDS(ABILITY_INDEX_JELLIES).artTexId), "Fish/Textures/Cards/jellies"
+    texture reserve texture id(CARDS(ABILITY_INDEX_RAYS).artTexId), "Fish/Textures/Cards/rays"
+    texture reserve texture id(CARDS(ABILITY_INDEX_BOTTLES).artTexId), "Fish/Textures/Cards/bottles"
+    texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_WASTE_BUCKET).artTexId), "Fish/Textures/Cards/waste_bucket"
+    texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_BUNCH_UP).artTexId), "Fish/Textures/Cards/bunch_up"
 
 return
 
@@ -335,6 +350,7 @@ setup_score:
     SCORE_BAR.startVal = 0
     SCORE_BAR.endVal = getRoundSpan(0)
     infoIndex = allocateInfoBlob(SCORE_POS.x - 4, SCORE_POS.y - 16, SCORE_SIZE.x + 8, 34, "Round Progress", "Popping fish fills the bar, and bigger groups are worth more. Fill it to finish the round and pick an upgrade.")
+    INFO_INDEX_SCORE_BAR = infoIndex
     
     global dim PROGRESS_BARS(1) as progressBar
     global PROGRESS_BAR_COUNT = 1
@@ -362,6 +378,8 @@ setup_score:
     color text MOVE_TEXT_ID, rgb(64, 128, 255, 200)
     enable text drop shadow MOVE_TEXT_ID, 2, -2, rgb(0,0,0)
     infoIndex = allocateInfoBlob(32 - 4, SCORE_POS.y - 16 - 2, 56, 56, "Moves", "How many swaps you have made so far.")
+    MOVES_LABEL_TEXT_ID = MOVE_TEXT_ID
+    INFO_INDEX_MOVE_COUNT = infoIndex
 
 
     ` re-use id, and set up "rounds left" label on right
@@ -372,6 +390,8 @@ setup_score:
     color text MOVE_TEXT_ID, rgb(64, 128, 255, 200)
     enable text drop shadow MOVE_TEXT_ID, 2, -2, rgb(0,0,0)
     infoIndex = allocateInfoBlob(570 - 32 - 104, SCORE_POS.y - 16 - 2, 108, 56, "Rounds Left", "How many rounds are left to play. Every round needs more score than the one before.")
+    ROUNDS_LABEL_TEXT_ID = MOVE_TEXT_ID
+    INFO_INDEX_ROUNDS = infoIndex
 
 
     reserve text id(MOVE_COUNT_TEXT_ID)
@@ -467,6 +487,7 @@ update_frame:
     gosub frame_free_moves
     stepCursorShake()
     stepMultiplier()
+    gosub frame_hints
     updateBubbles()
     updateMusic()
     gosub frame_dbg
@@ -829,6 +850,9 @@ handle_combos:
     ` a swap that is still playing out has not happened yet, so the board is not ready to be looked at
     if LIVE_MOVE_ACTIVE then return
 
+    ` a bottle that has got to the bottom row pays out, and is popped along with whatever else pops
+    checkBottles()
+
     ` clear the combo mask...
     for i = 1 to CELL_COUNT
         c = CELLS(i-1)
@@ -882,23 +906,33 @@ handle_combos:
 
         ` need to check if this group is big enough
         comboCount = 0
+        groupForce = 0 `which kind of forced pop the group is, or 0 for fish that matched. see FORCED POPS in fish_headers.
         for i = 1 to CELL_COUNT
             cell = CELLS(i-1)
 
             if comboCount >= requiredComboCount then skip  ` once we know there are enough, no need to check the rest of the group
-            if cell.comboFillId <> g then skip 
-            if cell.comboForce > 0 
+            if cell.comboFillId <> g then skip
+            if cell.comboForce > 0
                 print "FORCE COMBO COUNT"
                 comboCount = 99 `some really high number to force
+                groupForce = cell.comboForce
             endif
 
             comboCount += 1
         next
 
         if comboCount < requiredComboCount then skip `if this group is not big enough, then we can skip rendering the explosion
-        
+
+        ` the belly up fish of the waste bucket score more
+        groupBonus = 1
+        if groupForce = FORCE_BUCKET then groupBonus = WASTE_BUCKET_BONUS
+
+        ` fish that are going into a stack are not a combo, so nothing gets added to them
+        groupStock = isAbility_Passive_StockMarket()
+        if groupForce = FORCE_BUNCH then groupStock = 0
+
         ` handle stock market ability
-        if isAbility_Passive_StockMarket()
+        if groupStock
             ` find a fish that is not part of a group, and add it to this group. 
             randoChance = rnd(10) >= 7 `30% chance
             if randoChance
@@ -927,6 +961,7 @@ handle_combos:
         groupSumY = 0
         groupSize# = 0
         groupDelay = (explodeIndex + 1) * 50
+        groupFirstIndex = explodeIndex
 
         for i = 1 to CELL_COUNT
             cell = CELLS(i-1)
@@ -939,11 +974,28 @@ handle_combos:
             groupSumY = groupSumY + cell.coord.y
             groupSize# = groupSize# + 1
 
+            ` fish that are going into a stack do not pop. they fade away, and score nothing. see BUNCH UP in fish_headers.
+            ` the tween of the smoke is set to one that is over, because the loop further down waits on it.
+            if groupForce = FORCE_BUNCH
+                create basic tween cell.comboDownShiftTweenId, 255, 0, 180, 0
+                create basic tween cell.comboAnimTweenId, 0, 0, 1, 0
+            endif
+            if groupForce = FORCE_BUNCH then skip
+
             smokeIndex = rnd(SMOKE_ANIM_COUNT)
             smoke = SMOKE_ANIMS(smokeIndex)
 
             explodeIndex += 1
             delay = explodeIndex * 50`rnd(3)*75+25 `TODO: somehow use the delay to "randomize" the animation
+
+            ` a column that a stingray shot up pops from the bottom to the top. see RAYS in fish_headers.
+            if groupForce >= FORCE_RAY and groupForce < FORCE_BOTTLE
+                rayStep = CELL_ROW_COUNT - cell.coord.y
+                delay = (groupFirstIndex + rayStep) * 50
+            endif
+
+            ` a jellyfish stings the fish next to it, once all of the groups have been found
+            if cell.value = TEX_JELLY then CELLS(i-1).stings = 1
 
             ` a stacked fish pops the fish in its stack first, one at a time, and each of them scores
             ` as one more fish in the group. a score text comes out of the fish for every one of them.
@@ -951,7 +1003,7 @@ handle_combos:
             ` at the same moments, so that the stack can be seen shrinking.
             ` the fish in front goes last, so everything of its own waits until the stack is gone.
             stackLeft = cell.stack
-            if stackLeft > FISH_STACK_MAX then stackLeft = FISH_STACK_MAX
+            if stackLeft > BUNCH_STACK_MAX then stackLeft = BUNCH_STACK_MAX
             CELLS(i-1).stackPopMs = game ms() + delay
             while stackLeft > 0
                 stackLeft = stackLeft - 1
@@ -961,7 +1013,7 @@ handle_combos:
                     y = getCellY(cell.coord.y)
                 }
                 scoreAdd += 10
-                scorePoints = scoreAdd * SCORE_MULTIPLIER `see THE MULTIPLIER in fish_headers
+                scorePoints = scoreAdd * SCORE_MULTIPLIER * groupBonus `see THE MULTIPLIER in fish_headers
                 ` this one is gone by the time the next fish of the stack pops, so that each of them
                 ` gets a text of its own to be read
                 stackTxtId = spawnBoardScoreText(stackTxtPos, "+" + str$(scorePoints), delay, FISH_STACK_POP_GAP - 20)
@@ -1002,7 +1054,7 @@ handle_combos:
                 y = getCellY(cell.coord.y)
             }
             scoreAdd += 10
-            scorePoints = scoreAdd * SCORE_MULTIPLIER
+            scorePoints = scoreAdd * SCORE_MULTIPLIER * groupBonus
             txtId = spawnBoardScoreText(txtPos, "+" + str$(scorePoints), delay, 800)
             color text txtId, FISH_COLORS(getFishColorIndex(cell.value))
 
@@ -1022,6 +1074,30 @@ handle_combos:
             if groupShock# < SHOCK_COMBO_STRENGTH# then groupShock# = SHOCK_COMBO_STRENGTH#
             if groupShock# > 1 then groupShock# = 1
             spawnShockwave(groupMidX#, groupMidY#, groupShock#, groupDelay)
+
+            ` with the "bottles" card, a big group of fish that matched leaves a bottle behind, in the
+            ` cell of the group that is closest to the middle of it. see BOTTLES in fish_headers.
+            bottleOk = isAbility_Bottles()
+            if groupSize# < BOTTLE_GROUP_SIZE then bottleOk = 0
+            if groupForce > 0 then bottleOk = 0
+            if bottleOk
+                bottleBest = -1
+                bottleBestDist# = 9999
+                for i = 0 to CELL_COUNT - 1
+                    if CELLS(i).comboFillId <> g then skip
+                    bottleDX# = CELLS(i).coord.x - groupMidX#
+                    bottleDY# = CELLS(i).coord.y - groupMidY#
+                    bottleDist# = bottleDX# * bottleDX# + bottleDY# * bottleDY#
+                    if bottleDist# < bottleBestDist#
+                        bottleBestDist# = bottleDist#
+                        bottleBest = i
+                    endif
+                next
+                if bottleBest >= 0
+                    CELLS(bottleBest).bottleDue = 1
+                    showPassiveUsed(ABILITY_INDEX_BOTTLES)
+                endif
+            endif
         endif
 
     next
@@ -1035,6 +1111,16 @@ handle_combos:
     ` popping now were scored with the multiplier as it was, and a new one counts from the next pop.
     judgeMultiplierSwaps(totalComboCount)
 
+    ` the first pops of the very first game bring the pieces of the game in. see THE FIRST DIVE, in
+    ` fish_routines_intro. only the pop that a move makes counts, and not the ones that follow from it.
+    if TUTORIAL_STAGE > 2
+        if totalComboCount > 0
+            if SEABED_COMBO = 0
+                gosub tutorial_pop
+            endif
+        endif
+    endif
+
     ` the sea floor lights up for every group that pops in a run, and dims when the board settles. see THE MOOD in fish_headers.
     SEABED_COMBO = SEABED_COMBO + totalComboCount
 
@@ -1042,6 +1128,7 @@ handle_combos:
     if totalComboCount = 0
         REQUEST_COMBO_CHECK = 0
         SEABED_COMBO = 0
+        TUTORIAL_SCORE_HOLD = 0 `the fish that brought the bar of the round in have all popped, so the next ones score
 
         ` the board has settled, so this is when a move gets its chance to turn a fish belly up
         rollBellyUpFish()
@@ -1074,6 +1161,13 @@ handle_combos:
             endif
         next
     endif
+
+    ` a jellyfish that popped stings the fish right next to it. see JELLIES in fish_headers.
+    for i = 0 to CELL_COUNT - 1
+        if CELLS(i).stings = 0 then skip
+        CELLS(i).stings = 0
+        stingJelly(i)
+    next
 
     ` the player can keep moving the cursor and swapping fish through all of what follows, as long as
     ` they leave the fish that the combo is busy with alone. see LIVE MOVES in fish_headers.
@@ -1135,6 +1229,20 @@ handle_combos:
     for i = 0 to CELL_COUNT - 1
         if CELLS(i).comboBlownUp
             clearCellStack(i)
+        endif
+    next
+
+    ` with the "bottles" card, a big group left a bottle behind. it takes the place of the fish that
+    ` popped there, so that cell is not empty, and the bottle falls with the rest of the fish.
+    for i = 0 to CELL_COUNT - 1
+        if CELLS(i).bottleDue
+            CELLS(i).bottleDue = 0
+            CELLS(i).comboBlownUp = 0
+            CELLS(i).value = TEX_BOTTLE
+            updateCell(CELLS(i))
+            set sprite alpha CELLS(i).spriteId, 255
+            create basic tween CELLS(i).scaleWaveTweenId, 1.6, 1, 250, 0
+            spawnBubbles(getCellX(CELLS(i).coord.x), getCellY(CELLS(i).coord.y), CELL_SIZE / 3, 8, 0, FISH_COLORS(getFishColorIndex(TEX_BOTTLE)))
         endif
     next
 
@@ -1238,6 +1346,17 @@ handle_combos:
     next
 
     set sfx volume SFX_DROP, 1
+
+    ` the cells that popped are empty until a new fish has been picked for them. a new fish is picked
+    ` so that it does not pop when it lands, and a cell that is still empty must not look like a
+    ` fish while that is being worked out. see NEW FISH in fish_headers.
+    for i = 0 to CELL_COUNT - 1
+        if CELLS(i).comboBlownUp > 0 then CELLS(i).value = 0
+    next
+
+    ` once the round has been won, no new fish is let through that would pop
+    NEW_FISH_ROUND_WON = 0
+    if CURRENT_SCORE >= SCORE_BAR.endVal then NEW_FISH_ROUND_WON = 1
 
     ` step 2; spawn in new cells and animate them falling in
     for i = 1 to CELL_COUNT

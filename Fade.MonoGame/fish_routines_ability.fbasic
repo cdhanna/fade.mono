@@ -88,6 +88,29 @@ setup_abilities:
         maxUses = BOTTOMS_UP_MAX
     }
 
+    ` see JELLIES, RAYS and BOTTLES in fish_headers
+    CARDS(ABILITY_INDEX_JELLIES) = {
+        name$ = "jellies"
+        desc$ = "adds jellyfish. when one pops, each fish next to it has a " + str$(JELLY_STING_CHANCE) + "% chance to go belly up."
+        obtained = 0
+        abilityType = ABILITY_TYPE_PASSIVE
+        stackable = 0
+    }
+    CARDS(ABILITY_INDEX_RAYS) = {
+        name$ = "rays"
+        desc$ = "adds stingrays. one that lands on the bottom row shoots up, and pops its whole column."
+        obtained = 0
+        abilityType = ABILITY_TYPE_PASSIVE
+        stackable = 0
+    }
+    CARDS(ABILITY_INDEX_BOTTLES) = {
+        name$ = "bottles"
+        desc$ = "a group of " + str$(BOTTLE_GROUP_SIZE) + " or more leaves a bottle. on the bottom row, it adds " + str$(BOTTLE_MULT_GAIN) + " to the multiplier."
+        obtained = 0
+        abilityType = ABILITY_TYPE_PASSIVE
+        stackable = 0
+    }
+
 
     ` moves
     CARDS(ABILITY_INDEX_MOVE_SHIFT) = {
@@ -158,6 +181,28 @@ setup_abilities:
         stackable = 0
         moveClock = ERASER_COOLDOWN
         moveValue = [MOVE_ERASER]
+    }
+
+    ` see THE WASTE BUCKET in fish_headers
+    CARDS(ABILITY_INDEX_MOVE_WASTE_BUCKET) = {
+        name$ = "waste bucket"
+        desc$ = "pops every belly up fish at once, for " + str$(WASTE_BUCKET_BONUS) + " times the points"
+        obtained = 0
+        abilityType = ABILITY_TYPE_MOVE
+        stackable = 0
+        moveClock = 0
+        moveValue = [MOVE_WASTE_BUCKET]
+    }
+
+    ` see BUNCH UP in fish_headers
+    CARDS(ABILITY_INDEX_MOVE_BUNCH_UP) = {
+        name$ = "bunch up"
+        desc$ = "a swap that stacks the fish it connects into one, instead of popping them"
+        obtained = 0
+        abilityType = ABILITY_TYPE_MOVE
+        stackable = 0
+        moveClock = BUNCH_UP_COOLDOWN
+        moveValue = [MOVE_BUNCH_UP]
     }
 
 return
@@ -300,6 +345,7 @@ setup_passives:
     ` until there is a passive to explain, explain the empty space. 
     global INFO_INDEX_PASSIVES
     INFO_INDEX_PASSIVES = allocateInfoBlob(WORLD_WIDTH - 124, ABILITY_ROWS_Y + 2, 112, 18, "Passives", "Upgrades that are always switched on are listed here.")
+    setInfoBlobEnabled(INFO_INDEX_PASSIVES, 0) `an empty space is not worth explaining. the passives explain themselves when there are some.
     
 return
 
@@ -376,6 +422,7 @@ setup_moves:
     ` until there is a move to explain, explain the empty space. 
     global INFO_INDEX_MOVES
     INFO_INDEX_MOVES = allocateInfoBlob(12, ABILITY_ROWS_Y + 2, 140, 18, "Special Moves", "Upgrades that give you a new kind of move are listed here.")
+    setInfoBlobEnabled(INFO_INDEX_MOVES, 0) `the same goes for the moves
     
 return
 
@@ -546,7 +593,12 @@ handle_ability_selection:
 
     ` the hint at the bottom of the screen explains the keys for this screen instead
     set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} take it"
+    hintMode(0)
     order text INFO_HINT_TEXT_ID, ORDER_ABILITY_TEXT
+
+    ` the hints are drawn with the rest of the upgrade screen, so that the wave of bubbles brings them
+    ` in, and they fade away with it. the hints of the game fade out underneath in the meantime.
+    set text render target INFO_HINT_TEXT_ID, TARGET_UPGRADE
 
     ` the upgrade screen is drawn to a render target of its own, and the wave of bubbles wipes it in over
     ` the game, the same way that it wipes the menu in. see THE UPGRADE WIPE in fish_headers.
@@ -692,6 +744,8 @@ handle_ability_selection:
 
             ` hand the hint back to the game
             set text INFO_HINT_TEXT_ID, GAME_HINT$
+            reset text render target INFO_HINT_TEXT_ID
+            hintMode(1)
             order text INFO_HINT_TEXT_ID, 0
             set text alpha INFO_HINT_TEXT_ID, 140
 
@@ -912,6 +966,15 @@ endfunction CARDS(ABILITY_INDEX_BOTTOM_FEEDER).obtained > 0
 
 function isAbility_ContagiousSmile()
 endfunction CARDS(ABILITY_INDEX_CONTAGIOUS_SMILE).obtained > 0
+
+function isAbility_Jellies()
+endfunction CARDS(ABILITY_INDEX_JELLIES).obtained > 0
+
+function isAbility_Rays()
+endfunction CARDS(ABILITY_INDEX_RAYS).obtained > 0
+
+function isAbility_Bottles()
+endfunction CARDS(ABILITY_INDEX_BOTTLES).obtained > 0
 
 ` how many fish in a hundred pick up a fish from a pop next to them. the card adds to it every time it is taken.
 function getContagiousSmileChance()
