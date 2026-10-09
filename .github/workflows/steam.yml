@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       set_live:
-        description: 'Steam branch to set the build live on. "default" is what every player gets. "none" uploads without setting anything live.'
+        description: 'Steam branch to set the build live on. "default" (what every player gets) can only be set by hand in Steamworks, so it uploads the build and links you to the page. "none" uploads without setting anything live.'
         type: choice
         required: false
         default: test
@@ -278,12 +278,14 @@ jobs:
             echo "::error::set_live must be a Steam branch name (letters, digits, - _ .) or \"none\""
             exit 1
           fi
-          # Valve's SteamPipe documentation says the default branch cannot be set live from a
-          # build script. It is attempted anyway, because steamcmd uploads the build before
-          # it sets anything live: if Steam refuses, the build is still in Steamworks and can
-          # be promoted on the Builds page.
+          # Steam does not let a build script set the default branch live, and it does not
+          # fail gently: with "setlive" "default" the whole commit is rejected ("Failed to
+          # commit build ... Failure") and no build is created at all. So "default" uploads
+          # the build with nothing set live, and the last click is done by hand.
+          PROMOTE_BY_HAND=0
           if [ "$SET_LIVE" = "default" ]; then
-            echo "::warning::Setting the DEFAULT branch live: every player with the game gets this build. If Steam refuses, the upload still succeeded; promote it on the Steamworks Builds page."
+            SET_LIVE=""
+            PROMOTE_BY_HAND=1
           fi
           echo "setlive target: '${SET_LIVE:-<none>}'"
 
@@ -300,6 +302,10 @@ jobs:
             +login "$STEAM_USERNAME" \
             +run_app_build "$GITHUB_WORKSPACE/steam/app_build.vdf" \
             +quit
+
+          if [ "$PROMOTE_BY_HAND" = "1" ]; then
+            echo "::notice::Build \"${DESC}\" is uploaded but NOT live. Steam only allows the default branch to be set by hand: open https://partner.steamgames.com/apps/builds/${STEAM_APP_ID} and set this build live on default."
+          fi
 
       - name: Dump SteamPipe logs on failure
         if: failure() && steps.steam_upload.outcome == 'failure'

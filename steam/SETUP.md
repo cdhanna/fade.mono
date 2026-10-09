@@ -238,9 +238,9 @@ upload sets nothing live.
 4. Install it: in your Steam library, the game → Properties → Betas → `test`.
 
 **set_live** is a dropdown: `test`, `default` or `none`. `default` is the branch every player
-gets. Valve's SteamPipe documentation says a build script cannot set `default` live, so that
-choice may fail at its last step. The upload has already happened by then, so the build is
-in Steamworks and you can promote it on the Builds page by hand.
+gets, and Steam only lets it be set by hand: an upload that asks for it is rejected whole
+("Failed to commit build"). So choosing `default` uploads the build with nothing set live,
+and the run summary links to the Builds page, where you set that build live on default.
 
 ---
 
