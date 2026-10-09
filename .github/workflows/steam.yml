@@ -21,9 +21,14 @@ on:
   workflow_dispatch:
     inputs:
       set_live:
-        description: 'Steam branch to set the build live on. Use "none" to upload without setting live (required for the very first build, before the branch can be created).'
+        description: 'Steam branch to set the build live on. "default" is what every player gets. "none" uploads without setting anything live.'
+        type: choice
         required: false
         default: test
+        options:
+          - test
+          - default
+          - none
       deploy:
         description: 'Upload to Steam. Untick to only build: the two builds are then attached to the run as artifacts, and no Steam secret is needed.'
         type: boolean
@@ -273,9 +278,12 @@ jobs:
             echo "::error::set_live must be a Steam branch name (letters, digits, - _ .) or \"none\""
             exit 1
           fi
-          if [ "$SET_LIVE" = "default" ] || [ "$SET_LIVE" = "public" ]; then
-            echo "::error::Steam does not allow a build script to set the default branch live. Upload to a beta branch and promote it on the Steamworks Builds page."
-            exit 1
+          # Valve's SteamPipe documentation says the default branch cannot be set live from a
+          # build script. It is attempted anyway, because steamcmd uploads the build before
+          # it sets anything live: if Steam refuses, the build is still in Steamworks and can
+          # be promoted on the Builds page.
+          if [ "$SET_LIVE" = "default" ]; then
+            echo "::warning::Setting the DEFAULT branch live: every player with the game gets this build. If Steam refuses, the upload still succeeded; promote it on the Steamworks Builds page."
           fi
           echo "setlive target: '${SET_LIVE:-<none>}'"
 

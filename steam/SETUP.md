@@ -237,8 +237,10 @@ upload sets nothing live.
    `main <sha> (run N)` and is live on `test`.
 4. Install it: in your Steam library, the game → Properties → Betas → `test`.
 
-A build script cannot set the `default` branch live; Valve makes you promote a build to
-default on the Builds page by hand. The workflow refuses `default` for that reason.
+**set_live** is a dropdown: `test`, `default` or `none`. `default` is the branch every player
+gets. Valve's SteamPipe documentation says a build script cannot set `default` live, so that
+choice may fail at its last step. The upload has already happened by then, so the build is
+in Steamworks and you can promote it on the Builds page by hand.
 
 ---
 

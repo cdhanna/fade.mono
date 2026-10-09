@@ -57,19 +57,18 @@ setup_input:
     abilityKeys$(1) = "X"
     abilityKeys$(2) = "C"
     abilityKeys$(3) = "V"
-    abilityButtons$(0) = "X"
-    abilityButtons$(1) = "Y"
-    abilityButtons$(2) = "B"
-    abilityButtons$(3) = "RightShoulder"
+    abilityKeys$(4) = "B"
+    abilityButtons$(0) = "B"
+    abilityButtons$(1) = "X"
+    abilityButtons$(2) = "Y"
+    abilityButtons$(3) = "LeftShoulder"
+    abilityButtons$(4) = "RightShoulder"
     for i = 0 to MOVE_SLOT_COUNT - 1
         reserve action id(abilityActionId)
         bind action key abilityActionId, scancode(abilityKeys$(i))
         bind action button abilityActionId, padCode(abilityButtons$(i))
         ACT_ABILITY(i) = abilityActionId
     next
-
-    ` the last move is on the bumpers, and either one will do
-    bind action button ACT_ABILITY(MOVE_SLOT_COUNT - 1), padCode("LeftShoulder")
 
 return
 
@@ -84,10 +83,11 @@ frame_input_icons:
     ` the last number is the frame of the picture in its sheet. the sheets are grids, and the
     ` frames count across each row, starting from the top left.
     if INPUT_ICON_DEVICE = 1
-        font icon SCORE_FONT, 1, "move1", TEX_PAD, 86 `x
-        font icon SCORE_FONT, 2, "move2", TEX_PAD, 88 `y
-        font icon SCORE_FONT, 3, "move3", TEX_PAD, 84 `b
-        font icon SCORE_FONT, 4, "move4", TEX_PAD, 23 `the right bumper. the left one works too.
+        font icon SCORE_FONT, 1, "move1", TEX_PAD, 84 `b
+        font icon SCORE_FONT, 2, "move2", TEX_PAD, 86 `x
+        font icon SCORE_FONT, 3, "move3", TEX_PAD, 88 `y
+        font icon SCORE_FONT, 4, "move4", TEX_PAD, 37 `the left bumper
+        font icon SCORE_FONT, 13, "move5", TEX_PAD, 23 `the right bumper
         font icon SCORE_FONT, 5, "info", TEX_PAD, 78 `the button with two squares, where back used to be
         font icon SCORE_FONT, 6, "swap", TEX_PAD, 82 `a
         font icon SCORE_FONT, 7, "dir", TEX_PAD, 64 `the d-pad
@@ -98,6 +98,7 @@ frame_input_icons:
         font icon SCORE_FONT, 2, "move2", TEX_KEYS, 40 `x
         font icon SCORE_FONT, 3, "move3", TEX_KEYS, 189 `c
         font icon SCORE_FONT, 4, "move4", TEX_KEYS, 34 `v
+        font icon SCORE_FONT, 13, "move5", TEX_KEYS, 207 `b
         font icon SCORE_FONT, 5, "info", TEX_KEY_TAB `tab. it is a picture of its own, wider than the keys on the sheet.
         font icon SCORE_FONT, 6, "swap", TEX_KEYS, 51 `space
         font icon SCORE_FONT, 7, "dir", TEX_KEYS, 224 `the arrow keys
