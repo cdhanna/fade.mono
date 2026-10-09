@@ -1,0 +1,179 @@
+goto routines_coralbars_exit
+
+remstart
+    THE BARS OF THE CORAL
+    two little bars under the songs, that say how close the game is to each of its two endings. see
+    THE TWO ENDINGS, and THE BARS OF THE CORAL, in fish_headers.
+
+    bar 0 is the reef, and it is there as soon as there is any coral. bar 1 is the ancient one, and it
+    is there as soon as there is any horror coral. it is green, slime drips off of the part of it that
+    is full, and little tentacles wave on top of that part.
+
+    a bar that is full fizzes: it flickers, and bubbles come off of it, until the board has settled
+    and the ending starts.
+
+    there is nothing to call. setup_coral makes the bars, and stepCoral draws them on every frame,
+    from how much coral there is.
+remend
+
+setup_coral_bars:
+
+    for barSetupI = 0 to 1
+        barSetupId = 0
+        reserve sprite id(barSetupId)
+        sprite barSetupId, 0, 0, TEX_PIXEL
+        set sprite offset barSetupId, 0, 0
+        size sprite barSetupId, CORAL_BAR_WIDTH, 4
+        hide sprite barSetupId
+        CORAL_BAR_BACKS(barSetupI) = barSetupId
+
+        barSetupId = 0
+        reserve sprite id(barSetupId)
+        sprite barSetupId, 0, 0, TEX_PIXEL
+        set sprite offset barSetupId, 0, 0
+        size sprite barSetupId, 0, 2
+        hide sprite barSetupId
+        CORAL_BAR_FILLS(barSetupI) = barSetupId
+    next
+    color sprite CORAL_BAR_BACKS(0), rgb(32, 64, 128, 128)
+    color sprite CORAL_BAR_BACKS(1), rgb(22, 52, 30, 170)
+
+    ` the slime, and the tentacles, of the bar of the ancient one. a tentacle is a few pixels, one on top of the other.
+    for barSetupI = 0 to CORAL_BAR_DRIP_COUNT - 1
+        barSetupId = 0
+        reserve sprite id(barSetupId)
+        sprite barSetupId, 0, 0, TEX_PIXEL
+        set sprite offset barSetupId, 0, 0
+        color sprite barSetupId, rgb(120, 190, 70, 220)
+        hide sprite barSetupId
+        CORAL_BAR_DRIPS(barSetupI) = barSetupId
+    next
+    for barSetupI = 0 to CORAL_BAR_WISP_COUNT * CORAL_BAR_WISP_TALL - 1
+        barSetupId = 0
+        reserve sprite id(barSetupId)
+        sprite barSetupId, 0, 0, TEX_PIXEL
+        set sprite offset barSetupId, 0, 0
+        size sprite barSetupId, 1, 1
+        color sprite barSetupId, rgb(96, 160, 62, 230)
+        hide sprite barSetupId
+        CORAL_BAR_WISPS(barSetupI) = barSetupId
+    next
+
+return
+
+
+routines_coralbars_exit:
+
+
+` how many cells of the board have to have the one kind of coral on them for its ending
+function coralEndNeed()
+    endNeed = (CELL_COUNT * CORAL_END_SHARE + 99) / 100
+    if endNeed < 1 then endNeed = 1
+endfunction endNeed
+
+
+` how full a bar should be, in thousandths. bar 0 is the reef, and bar 1 is the ancient one.
+function coralBarFill(barWhich)
+    barHave = CORAL_COUNT - CORAL_SICK_COUNT
+    if barWhich = 1 then barHave = CORAL_SICK_COUNT
+    barFill = (barHave * 1000) / coralEndNeed()
+    if barFill > 1000 then barFill = 1000
+    if barFill < 0 then barFill = 0
+endfunction barFill
+
+
+` draw the two bars. this runs on every frame.
+function coralStepBars()
+    barNow = game ms()
+
+    ` they sit right under the last row of songs that has a song in it
+    barRows = (CORAL_USED_COUNT + CORAL_RUNE_COLUMNS - 1) / CORAL_RUNE_COLUMNS
+    if barRows < 1 then barRows = 1
+    barTop = CORAL_RUNE_Y + barRows * CORAL_RUNE_HEIGHT + CORAL_BAR_GAP
+
+    ` bubbles come off of a full bar every so often
+    barFizzNow = 0
+    if barNow >= CORAL_BAR_FIZZ_MS
+        barFizzNow = 1
+        CORAL_BAR_FIZZ_MS = barNow + 70 + rnd(60)
+    endif
+
+    barSlimeWide = 0
+    barSlimeY = 0
+    for barI = 0 to 1
+        barOn = 0
+        if barI = 0 and CORAL_COUNT > 0 then barOn = 1
+        if barI = 1 and CORAL_SICK_COUNT > 0 then barOn = 1
+
+        if barOn = 0
+            hide sprite CORAL_BAR_BACKS(barI)
+            hide sprite CORAL_BAR_FILLS(barI)
+            CORAL_BAR_SHOWN#(barI) = 0
+            skip
+        endif
+
+        ` what is drawn chases the real thing, so that the bar slides
+        barWant# = coralBarFill(barI)
+        barWant# = barWant# * .001
+        barShown# = CORAL_BAR_SHOWN#(barI)
+        barShown# = barShown# + (barWant# - barShown#) * .08
+        if abs(barWant# - barShown#) < .005 then barShown# = barWant#
+        CORAL_BAR_SHOWN#(barI) = barShown#
+
+        barY = barTop + barI * CORAL_BAR_STEP
+        barWide = (CORAL_BAR_WIDTH - 2) * barShown#
+        position sprite CORAL_BAR_BACKS(barI), CORAL_BAR_X, barY
+        show sprite CORAL_BAR_BACKS(barI)
+        position sprite CORAL_BAR_FILLS(barI), CORAL_BAR_X + 1, barY + 1
+        size sprite CORAL_BAR_FILLS(barI), barWide, 2
+        show sprite CORAL_BAR_FILLS(barI)
+
+        barTint = rgb(255, 150, 150, 225)
+        if barI = 1 then barTint = rgb(120, 190, 70, 225)
+
+        ` a bar that is full, with its ending on the way, fizzes. see CORAL_ENDING_DUE in fish_headers.
+        if CORAL_ENDING_DUE = barI + 1
+            if (barNow / 60) mod 2 = 0 then barTint = rgb(255, 255, 255, 255)
+            if barFizzNow
+                ` small ones, and mostly quiet, the way that the bar of the round fizzes when it is full
+                spawnBubblesOnLayer(CORAL_BAR_X + rnd(CORAL_BAR_WIDTH), barY + 2, 2, 1, 0, barTint, ORDER_FLOAT_BUBBLES, 40, 255, .6)
+            endif
+        endif
+        color sprite CORAL_BAR_FILLS(barI), barTint
+
+        if barI = 1
+            barSlimeWide = barWide
+            barSlimeY = barY
+        endif
+    next
+
+    ` the slime hangs off of the part of the bar that is full, and it stretches and shrinks
+    for barDrip = 0 to CORAL_BAR_DRIP_COUNT - 1
+        barDripX = 4 + (barDrip * (CORAL_BAR_WIDTH - 8)) / CORAL_BAR_DRIP_COUNT + (barDrip mod 2) * 3
+        if barDripX < barSlimeWide
+            barDripLong = 2.5 + 1.6 * sin(barNow * .003 + barDrip * 1.9)
+            if barDripLong < 1 then barDripLong = 1
+            position sprite CORAL_BAR_DRIPS(barDrip), CORAL_BAR_X + 1 + barDripX, barSlimeY + 4
+            size sprite CORAL_BAR_DRIPS(barDrip), 1, barDripLong
+            show sprite CORAL_BAR_DRIPS(barDrip)
+        else
+            hide sprite CORAL_BAR_DRIPS(barDrip)
+        endif
+    next
+
+    ` and the tentacles wave on top of it. the further up one a pixel is, the further it sways.
+    for barWisp = 0 to CORAL_BAR_WISP_COUNT - 1
+        barWispX = 9 + (barWisp * (CORAL_BAR_WIDTH - 12)) / CORAL_BAR_WISP_COUNT
+        for barWispN = 0 to CORAL_BAR_WISP_TALL - 1
+            barWispId = CORAL_BAR_WISPS(barWisp * CORAL_BAR_WISP_TALL + barWispN)
+            if barWispX < barSlimeWide
+                barSway# = sin(barNow * .004 + barWisp * 2.1 + barWispN * .8) * (barWispN + 1) * .55
+                barSwayX = CORAL_BAR_X + 1 + barWispX + barSway# + 100.5
+                position sprite barWispId, barSwayX - 100, (barSlimeY - 1) - barWispN
+                show sprite barWispId
+            else
+                hide sprite barWispId
+            endif
+        next
+    next
+endfunction

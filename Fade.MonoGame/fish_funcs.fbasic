@@ -52,12 +52,7 @@ function resizeGrid(columns, rows)
     next
 
     ` info mode explains the board, wherever the board is now
-    blob = INFOS(INFO_INDEX_GRID)
-    blob.topLeft.x = GRID_POS.x - CELL_SIZE / 2
-    blob.topLeft.y = GRID_POS.y - CELL_SIZE / 2
-    blob.size.x = columns * CELL_SIZE
-    blob.size.y = rows * CELL_SIZE
-    INFOS(INFO_INDEX_GRID) = blob
+    coralPlaceInfo()
 endfunction
 
 function getFishColorIndex(fishValue)
@@ -238,12 +233,8 @@ endfunction
 ` on the bottom row has a chance to pick up one more fish. the bubbles that show it off start `delay`
 ` milliseconds from now, for a fish that is still on its way down.
 function fishHitBottom(index, delay)
-    ` a stingray that lands on the bottom row shoots up its column. see RAYS in fish_headers.
-    if CELLS(index).value = TEX_RAY
-        if CELLS(index).coord.y = CELL_ROW_COUNT - 1
-            shootRay(CELLS(index).coord.x, delay)
-        endif
-    endif
+    ` whatever sang in this cell is not what is in it now. see THE FISH ON CORAL SING in fish_headers.
+    CORAL_SUNG(index) = 0
 
     if isAbility_BottomFeeder()
         if CELLS(index).coord.y = CELL_ROW_COUNT - 1
@@ -276,6 +267,10 @@ endfunction
 function rollBellyUpFish()
     if BELLY_UP_ROLL_DUE = 0 then exitfunction
     BELLY_UP_ROLL_DUE = 0
+
+    ` horror coral has its own say about the fish that are on it, with or without the card
+    rollHorrorCoral()
+
     if rnd(100) >= getBottomsUpChance() then exitfunction
 
     cursorIndex = getCellIndex(SELECTION_POS)
@@ -296,24 +291,25 @@ endfunction
 ` belly up fish right next to it. handle_combos does the popping, and after that it finds any combos
 ` that the fish falling in have made.
 function popBellyUpFish(index)
+    ` a skeleton is not belly up, and none of this happens to one. see SKELETONS in fish_headers.
     touched = CELLS(index)
-    if touched.bellyUp = 0 then exitfunction
+    if touched.bellyUp <> 1 then exitfunction
 
     ` it is already going to pop, with the rest of the belly up fish, because of the waste bucket
     if touched.comboForce > 0 then exitfunction
 
     CELLS(index).comboForce = 1
     if touched.coord.x > 0
-        if CELLS(index - 1).bellyUp then CELLS(index - 1).comboForce = 1
+        if CELLS(index - 1).bellyUp = 1 then CELLS(index - 1).comboForce = 1
     endif
     if touched.coord.x < CELL_COLUMN_COUNT - 1
-        if CELLS(index + 1).bellyUp then CELLS(index + 1).comboForce = 1
+        if CELLS(index + 1).bellyUp = 1 then CELLS(index + 1).comboForce = 1
     endif
     if touched.coord.y > 0
-        if CELLS(index - CELL_COLUMN_COUNT).bellyUp then CELLS(index - CELL_COLUMN_COUNT).comboForce = 1
+        if CELLS(index - CELL_COLUMN_COUNT).bellyUp = 1 then CELLS(index - CELL_COLUMN_COUNT).comboForce = 1
     endif
     if touched.coord.y < CELL_ROW_COUNT - 1
-        if CELLS(index + CELL_COLUMN_COUNT).bellyUp then CELLS(index + CELL_COLUMN_COUNT).comboForce = 1
+        if CELLS(index + CELL_COLUMN_COUNT).bellyUp = 1 then CELLS(index + CELL_COLUMN_COUNT).comboForce = 1
     endif
 
     REQUEST_COMBO_CHECK = 1
@@ -321,55 +317,93 @@ endfunction
 
 ` RAYS. see fish_headers.
 
-` a stingray landed at the bottom of this column, so every fish in the column pops, the stingray too.
-` handle_combos does the popping, the next time that it looks at the board. the bubbles that show it
-` off start `delay` milliseconds from now, for a stingray that is still on its way down.
-function shootRay(column, delay)
-    lastRow = CELL_ROW_COUNT - 1
-    for rayRow = 0 to lastRow
-        rayIndex = column + rayRow * CELL_COLUMN_COUNT
-        CELLS(rayIndex).comboForce = FORCE_RAY + column
+` the stingray in this cell is popping, so it swims off the way that it is facing, and every fish in
+` its column on that side of it pops too, as a group of their own. a stingray faces up, so that is the
+` fish above it. one that is belly up faces down, so that is the fish below it.
+` handle_combos calls this while it is going through the groups, and the group that is made
+` here gets its turn later in that same pass. `groupBase` is the number that the groups of the forced
+` pops start from. a fish that is popping already, or is in the group of the stingray, is left alone.
+function shootRay(index, groupBase)
+    rayColumn = CELLS(index).coord.x
+    rayHome = CELLS(index).coord.y
+    rayFirst = 0
+    rayLast = rayHome - 1
+    rayForce = FORCE_RAY + rayColumn
+    if CELLS(index).bellyUp = 1
+        rayFirst = rayHome + 1
+        rayLast = CELL_ROW_COUNT - 1
+        rayForce = FORCE_RAY_DOWN + rayColumn
+    endif
+    if rayLast < rayFirst then exitfunction
 
-        ` a trail of bubbles goes up the column ahead of the pops
-        rayWait = delay + (lastRow - rayRow) * 40
-        spawnBubbles(getCellX(column), getCellY(rayRow), CELL_SIZE / 4, 3, rayWait, FISH_COLORS(getFishColorIndex(TEX_RAY)))
+    rayShot = 0
+    for rayRow = rayFirst to rayLast
+        rayIndex = rayColumn + rayRow * CELL_COLUMN_COUNT
+        rayOk = 1
+        if CELLS(rayIndex).comboBlownUp then rayOk = 0
+        if CELLS(rayIndex).comboForce > 0 then rayOk = 0
+        if CELLS(rayIndex).comboFillId = CELLS(index).comboFillId then rayOk = 0
+        if rayOk
+            CELLS(rayIndex).comboForce = rayForce
+            CELLS(rayIndex).comboFillId = groupBase + rayForce
+            CELLS(rayIndex).comboFillMask = 1
+            rayShot = 1
+
+            ` a trail of bubbles goes along the column ahead of the pops, away from the stingray
+            rayWait = abs(rayHome - rayRow) * 40
+            spawnBubbles(getCellX(rayColumn), getCellY(rayRow), CELL_SIZE / 4, 3, rayWait, FISH_COLORS(getFishColorIndex(TEX_RAY)))
+        endif
     next
-    showPassiveUsed(ABILITY_INDEX_RAYS)
-    REQUEST_COMBO_CHECK = 1
+    if rayShot
+        showPassiveUsed(ABILITY_INDEX_RAYS)
+    endif
 endfunction
 
 ` JELLIES. see fish_headers.
 
-` the jellyfish in this cell is popping, and it stings the fish right next to it
-function stingJelly(index)
+` the jellyfish in this cell is popping, and it stings the fish right next to it. it pops `delay`
+` milliseconds from now, and that is when the bolts jump to the fish that it stung.
+function stingJelly(index, delay)
     stingX = CELLS(index).coord.x
     stingY = CELLS(index).coord.y
     if stingX > 0
-        stingFish(index - 1)
+        stingNeighbor(index, index - 1, delay)
     endif
     if stingX < CELL_COLUMN_COUNT - 1
-        stingFish(index + 1)
+        stingNeighbor(index, index + 1, delay)
     endif
     if stingY > 0
-        stingFish(index - CELL_COLUMN_COUNT)
+        stingNeighbor(index, index - CELL_COLUMN_COUNT, delay)
     endif
     if stingY < CELL_ROW_COUNT - 1
-        stingFish(index + CELL_COLUMN_COUNT)
+        stingNeighbor(index, index + CELL_COLUMN_COUNT, delay)
     endif
 endfunction
 
-` the fish in this cell is next to a jellyfish that is popping. it has a chance to get stung, and a fish
-` that is stung goes belly up. a fish that is popping too, or is belly up already, or is a bottle, is left alone.
-function stingFish(index)
-    if CELLS(index).comboBlownUp then exitfunction
-    if CELLS(index).bellyUp then exitfunction
-    if CELLS(index).value = TEX_BOTTLE then exitfunction
-    if rnd(100) >= JELLY_STING_CHANCE then exitfunction
+` the jellyfish in the one cell has a go at the fish in the other, and sends a bolt to it if it lands
+function stingNeighbor(jellyIndex, fishIndex, delay)
+    if stingFish(fishIndex)
+        spawnZap(getCellX(CELLS(jellyIndex).coord.x), getCellY(CELLS(jellyIndex).coord.y), getCellX(CELLS(fishIndex).coord.x), getCellY(CELLS(fishIndex).coord.y), delay)
 
-    CELLS(index).bellyUp = 1
-    showPassiveUsed(ABILITY_INDEX_JELLIES)
-    spawnBubbles(getCellX(CELLS(index).coord.x), getCellY(CELLS(index).coord.y), CELL_SIZE / 3, 8, 150, FISH_COLORS(getFishColorIndex(TEX_JELLY)))
+        ` a puff of bubbles where the bolt lands. they are the color of bone when the fish is one now.
+        stingTint = FISH_COLORS(getFishColorIndex(TEX_JELLY))
+        if CELLS(fishIndex).bellyUp = 2 then stingTint = rgb(236, 232, 204)
+        spawnBubbles(getCellX(CELLS(fishIndex).coord.x), getCellY(CELLS(fishIndex).coord.y), CELL_SIZE / 3, 8, delay + 60, stingTint)
+    endif
 endfunction
+
+` the fish in this cell is next to a jellyfish that is popping. it has a chance to get stung. a fish
+` that is stung goes belly up, and one that is belly up already turns into a skeleton. a fish that is
+` popping too, or is a skeleton already, or is a bottle, is left alone. this is 1 when the sting landed.
+function stingFish(index)
+    if CELLS(index).comboBlownUp then exitfunction 0
+    if CELLS(index).bellyUp >= 2 then exitfunction 0
+    if CELLS(index).value = TEX_BOTTLE then exitfunction 0
+    if rnd(100) >= JELLY_STING_CHANCE then exitfunction 0
+
+    CELLS(index).bellyUp = CELLS(index).bellyUp + 1
+    showPassiveUsed(ABILITY_INDEX_JELLIES)
+endfunction 1
 
 ` BOTTLES. see fish_headers.
 
@@ -383,7 +417,11 @@ function checkBottles()
         if CELLS(bottleIndex).value = TEX_BOTTLE
             if CELLS(bottleIndex).comboForce < FORCE_BOTTLE
                 CELLS(bottleIndex).comboForce = FORCE_BOTTLE + bottleColumn
-                addMultiplier(BOTTLE_MULT_GAIN)
+                ` a stacked bottle pays out once for itself, and once more for every bottle behind it.
+                ` a bottle that is a skeleton pays more. see SKELETONS in fish_headers.
+                bottleGain = BOTTLE_MULT_GAIN
+                if CELLS(bottleIndex).bellyUp = 2 then bottleGain = BOTTLE_SKELETON_GAIN
+                addMultiplier(bottleGain * (1 + CELLS(bottleIndex).stack))
                 showPassiveUsed(ABILITY_INDEX_BOTTLES)
                 spawnBubbles(getCellX(bottleColumn), getCellY(CELL_ROW_COUNT - 1), CELL_SIZE / 3, 12, 0, rgb(255, 255, 255))
             endif
@@ -393,7 +431,7 @@ endfunction
 
 ` THE WASTE BUCKET. see fish_headers.
 
-` how many fish on the board are belly up
+` how many fish on the board are belly up, or skeletons
 function countBellyUpFish()
     bellyCount = 0
     lastCell = CELL_COUNT - 1
@@ -402,7 +440,7 @@ function countBellyUpFish()
     next
 endfunction bellyCount
 
-` mark every belly up fish to pop, all as one group. handle_combos does the popping, and scores them.
+` mark every belly up fish, and every skeleton, to pop, all as one group. handle_combos does the popping, and scores them.
 ` the cursor ends up one cell over, the way that it was pointed, like it does after any other special move.
 function doWasteBucket(start as vec, dir as vec)
     spawnCursorWake(start.x, start.y)
@@ -527,8 +565,19 @@ function doBunchUp(start as vec, dir as vec)
 endfunction
 
 function updateCell(c as cell)
-    sprite c.spriteId, getCellX(c.coord.x), getCellY(c.coord.y), c.value
+    sprite c.spriteId, getCellX(c.coord.x), getCellY(c.coord.y), fishPicture(c.value, c.bellyUp)
 endfunction
+
+` the picture of a fish of a kind: the fish, or the bones of it when it is a skeleton. see SKELETONS in
+` fish_headers. `fishState` is the bellyUp of the fish.
+function fishPicture(fishKind, fishState)
+    fishShown = fishKind
+    if fishState = 2
+        if fishKind > 0
+            fishShown = SKELETON_TEX(fishKind)
+        endif
+    endif
+endfunction fishShown
  
 function spawnScoreText(pos as vec, score$, delay)
     textId = spawnScoreTextScaled(pos, score$, delay, 800, 1)
@@ -896,13 +945,15 @@ endfunction target
 
 function getRandomValue()
     ` the kinds that only show up with their cards. see THE NEW KINDS OF FISH in fish_headers.
-    if isAbility_Jellies()
-        if rnd(100) < JELLY_SPAWN_CHANCE
+    ` one roll decides between the two of them, so that neither gets in ahead of the other
+    newJellyChance = getJellyChance()
+    newRayChance = getRayChance()
+    if newJellyChance + newRayChance > 0
+        newKindRoll = rnd(100)
+        if newKindRoll < newJellyChance
             exitfunction TEX_JELLY
         endif
-    endif
-    if isAbility_Rays()
-        if rnd(100) < RAY_SPAWN_CHANCE
+        if newKindRoll < newJellyChance + newRayChance
             exitfunction TEX_RAY
         endif
     endif
@@ -962,6 +1013,8 @@ function doBomb(start as vec, dir as vec)
                 if position.y >= 0 and position.y < CELL_ROW_COUNT
                     bIndex = getCellIndex(position)
                     cells(bIndex).value = cells(aIndex).value
+                    ` the copy is a copy of the whole stack
+                    copyCellStack(aIndex, bIndex)
                     lastTweenId = cells(bIndex).shiftTweenId
                     create basic tween lastTweenId, 1, 0, duration * .8, 0 `scale down.
                 endif
@@ -1096,6 +1149,8 @@ function doLineOut(start as vec, dir as vec)
         endif
         bIndex = getCellIndex(position)
         cells(bIndex).value = cells(aIndex).value
+        ` the copy is a copy of the whole stack
+        copyCellStack(aIndex, bIndex)
         lastTweenId = cells(bIndex).shiftTweenId
         create basic tween lastTweenId, 1, 0, duration * .8, 0
     next
@@ -1207,7 +1262,7 @@ function doClone(start as vec, dir as vec)
             scale sprite cells(bIndex).spriteId, tweenVal(TWEEN_SWAP_BX), tweenVal(TWEEN_SWAP_BX)
         else 
             position sprite cells(bIndex).spriteId, startPosition.x, startPosition.y
-            set sprite texture cells(bIndex).spriteId, cells(aIndex).value
+            set sprite texture cells(bIndex).spriteId, fishPicture(cells(aIndex).value, cells(aIndex).bellyUp)
             scale sprite cells(bIndex).spriteId, tweenVal(TWEEN_SWAP_BY), tweenVal(TWEEN_SWAP_BY)
 
         endif
@@ -1593,6 +1648,10 @@ function stepLiveMove()
                 updateCell(CELLS(LIVE_MOVE_A))
                 updateCell(CELLS(LIVE_MOVE_B))
 
+                ` the groups of the two fish that a swap has moved can go through skeletons, when the board is looked at next. see SKELETONS in fish_headers.
+                SKELETON_WILD_A = LIVE_MOVE_A
+                SKELETON_WILD_B = LIVE_MOVE_B
+
                 ` a fish that gets swapped down to the bottom row did not land there, so it gets no chance
                 ` at a stack from the "bottom feeder" card
 
@@ -1603,6 +1662,13 @@ function stepLiveMove()
 
                     ` the multiplier wants to know if this swap pops anything
                     multiplierSwapMade()
+                    CORAL_SWAP_A = LIVE_MOVE_A
+                    CORAL_SWAP_B = LIVE_MOVE_B
+
+                    ` and so does a hidden pattern that the cursor has just walked. see CORAL in fish_headers.
+                    coralSwapStepped(LIVE_MOVE_FROM_X, LIVE_MOVE_FROM_Y, LIVE_MOVE_DIR_X, LIVE_MOVE_DIR_Y)
+                else
+                    coralTrailClear()
                 endif
 
                 ` a swap may turn a fish belly up, once the board has settled
@@ -1610,6 +1676,9 @@ function stepLiveMove()
 
                 ` and it sends out a shockwave from where it started, headed the way that it went
                 spawnShockwaveToward(LIVE_MOVE_FROM_X, LIVE_MOVE_FROM_Y, LIVE_MOVE_DIR_X, LIVE_MOVE_DIR_Y, SHOCK_SWAP_STRENGTH#, 0, SHOCK_LIFE)
+            else
+                ` the cursor moved on its own, which may be a step of a hidden pattern. see CORAL in fish_headers.
+                coralCursorStepped(LIVE_MOVE_FROM_X, LIVE_MOVE_FROM_Y, LIVE_MOVE_DIR_X, LIVE_MOVE_DIR_Y)
             endif
 
             SELECTION_POS.x = LIVE_MOVE_TO_X
@@ -1895,7 +1964,8 @@ function doKnownFill(start as vec, dir as vec)
 
     playSpecialSwap(start, target)
 
-    ` a bottle is not copied
+    ` a bottle is never copied. process_input turns the move down when the swap has a bottle in it,
+    ` so this only matters to something that calls this directly.
     KNOWN_FILL_VALUE = movedValue
     if movedValue = TEX_BOTTLE then KNOWN_FILL_VALUE = 0
 

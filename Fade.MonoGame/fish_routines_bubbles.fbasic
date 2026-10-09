@@ -55,6 +55,9 @@ function updateBubbles()
     ` the sea floor has to move on every frame too, and everything that draws frames already comes here
     updateSeabed()
 
+    ` and so do the bolts of the jellyfish. see fish_routines_zap.
+    updateZaps()
+
     ` how long it has been since the last frame. the game can stall, when a window is dragged for
     ` example, and the bubbles should not all leap up the screen when it comes back.
     bubNow = game ms()
@@ -133,12 +136,21 @@ function updateBubbles()
                 bubScale# = sin(3.1416 * bubAge# / bubLife#)
                 bubAlpha# = 1
             endif
+
+            ` a heart grows in, and then it fades in and back out again over the whole of its life
+            if floaty.heart
+                bubAge# = floaty.age
+                bubLife# = floaty.life
+                bubScale# = 1
+                if floaty.age < 220 then bubScale# = bubAge# / 220
+                bubAlpha# = sin(3.1416 * bubAge# / bubLife#)
+            endif
             bubSize# = floaty.size * bubScale#
 
             ` it wobbles from side to side on the way up
             position sprite floaty.spriteId, floaty.x# + sin(bubNow * .005 + floaty.phase * .01) * 2, floaty.y#
             size sprite floaty.spriteId, bubSize#, bubSize#
-            set sprite all texcoord1 floaty.spriteId, bubSize#, 0, floaty.star, 0
+            set sprite all texcoord1 floaty.spriteId, bubSize#, 0, floaty.star, floaty.heart
             set sprite alpha floaty.spriteId, floaty.alpha * bubAlpha#
         endif
 
@@ -190,6 +202,42 @@ function getBoardBubbleScale()
 endfunction boardScale#
 
 
+` one heart floats up from a spot on the screen, `delay` milliseconds from now. it is one of the bubbles,
+` drawn as a heart. it drifts up slowly, it is a little see-through, and it makes no sound.
+function spawnHeart(x, y, delay)
+    i = FLOAT_BUBBLE_NEXT
+    FLOAT_BUBBLE_NEXT = (FLOAT_BUBBLE_NEXT + 1) mod FLOAT_BUBBLE_COUNT
+
+    b = FLOAT_BUBBLES(i)
+    b.active = 1
+    b.star = 0
+    b.heart = 1
+    b.age = 0
+    b.alpha = 210
+    b.delay = 1 + delay
+    b.life = 1000 + rnd(600)
+    b.phase = rnd(628)
+    b.loud = 0
+
+    ` an odd number of pixels, so that it has a pixel in the middle
+    b.size = 7
+    if getBoardBubbleScale() < .85 then b.size = 5
+
+    b.x# = x
+    b.y# = y
+    b.vx# = rnd(21) - 10
+    b.vy# = 0
+    b.rise = 10 + rnd(8)
+
+    color sprite b.spriteId, rgb(255, 125, 155)
+    order sprite b.spriteId, ORDER_FLOAT_BUBBLES
+    hide sprite b.spriteId
+
+    FLOAT_BUBBLES(i) = b
+    FLOAT_BUBBLE_LIVE = FLOAT_BUBBLE_LIVE + 1
+endfunction
+
+
 ` the same as spawnBubbles, but it also says what the bubbles are drawn on top of, and how noisy they are.
 ` one bubble in `loudOdds` makes a sound when it pops. `alpha` is 255 for a solid bubble, and less for a faint one.
 ` `sizeScale#` is 1 for bubbles of the usual size, and less for smaller ones.
@@ -201,6 +249,7 @@ function spawnBubblesOnLayer(x, y, radius, count, delay, tint, drawOrder, loudOd
         b = FLOAT_BUBBLES(i)
         b.active = 1
         b.star = 0
+        b.heart = 0
         b.age = 0
         b.alpha = alpha
         b.delay = 1 + delay + rnd(80)
@@ -253,6 +302,7 @@ function spawnWakeSparkles(x, y, width, height, count, drawOrder)
         b = FLOAT_BUBBLES(i)
         b.active = 1
         b.star = 1
+        b.heart = 0
         b.loud = 0
         b.age = 0
         b.alpha = 255

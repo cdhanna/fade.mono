@@ -705,8 +705,12 @@ public static class RenderSystem
         screenShakeOffsetTarget.Y = (Random.Shared.NextSingle()-.5f) * screenShakeMag;
         var screenDelta = screenShakeOffsetTarget - screenShakeOffset;
         screenShakeOffset += screenDelta * screenShakeElastic;
-        shakeMat = Matrix.Identity * Matrix.CreateTranslation(new Vector3(screenShakeOffset.X, screenShakeOffset.Y, 0));
-        
+        // The amount is in pixels of the game's own screen (the main buffer), so it is scaled up
+        // by however much the window scales that screen. Without this a shake that looks right
+        // in a small window all but vanishes in a big one, or in full screen on a 4K display.
+        var shakeScale = mainBufferScale > 0 ? mainBufferScale : 1f;
+        shakeMat = Matrix.Identity * Matrix.CreateTranslation(new Vector3(screenShakeOffset.X * shakeScale, screenShakeOffset.Y * shakeScale, 0));
+
         for (var i = 0; i < localOutputs.Count; i++)
         {
             var output = localOutputs[i];

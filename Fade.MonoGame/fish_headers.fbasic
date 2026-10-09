@@ -9,7 +9,7 @@ global SCORE_POS as vec = {
 
 
 global dim CARDS(32) as ability
-global CARD_LENGTH = 24
+global CARD_LENGTH = 25
 
 global CURRENT_MOVE_COUNT = 0
 global MOVE_COUNT_TEXT_ID
@@ -46,6 +46,7 @@ global ABILITY_INDEX_MOVE_WASTE_BUCKET = 21
 global ABILITY_INDEX_MOVE_BUNCH_UP = 22
 ` an instant, so it is a constant, like the other two instants. handle_ability_instant_effect picks between them by number.
 #constant ABILITY_INDEX_MOVE_SLOT 23
+global ABILITY_INDEX_LISTEN = 24 `see LISTEN, with THE HINTS, further down
 
 ` THE NEW KINDS OF FISH. three cards each put a new kind of thing on the board. each one is a kind of
 ` fish like any other: it has a picture, it can be swapped, and three of it in a row pop. load_textures,
@@ -58,13 +59,34 @@ global TEX_BOTTLE
 ` pops, every fish right next to it has a chance of its own to get stung, and a fish that is stung
 ` goes belly up. a belly up fish pops when the cursor comes to it, the same as with "bottoms up".
 ` getRandomValue and stingJelly, in fish_funcs, do it.
-global JELLY_SPAWN_CHANCE = 10 `how many new fish in a hundred are jellyfish
+` a fish that is belly up already can be stung again, and a second sting turns it into a skeleton. see
+` SKELETONS, further down. so can a fish that is next to two jellyfish that pop together, or next to a
+` stacked one, which stings once for every jellyfish in the stack. a skeleton is not stung again.
+` every sting that lands sends a little bolt from the jellyfish to the fish. see ZAPS.
+` the card can be taken more than once. the first card makes JELLY_SPAWN_CHANCE new fish in a hundred
+` jellyfish, and every card after it raises that by JELLY_SPAWN_STEP. so it goes 10, 15, 20. the "rays"
+` card works the same way, and the two water each other down: the chance of a kind is cut to the share
+` that its cards are of all the jellyfish and stingray cards that are owned. so three "jellies" cards make
+` 20 new fish in a hundred jellyfish, and one "rays" card on top of that brings it down to 15, with 2 in
+` a hundred a stingray. getJellyChance and getRayChance, in fish_routines_ability, work it out.
+global JELLY_SPAWN_CHANCE = 10 `how many new fish in a hundred are jellyfish, with the first card
+global JELLY_SPAWN_STEP = 5 `how much every card after the first adds to that
+global JELLY_MAX = 3 `how many times the card can be taken
+global dim STING_DELAY(400) `for every jellyfish that is popping, how long it is until it pops, in milliseconds. the bolts wait for that.
 global JELLY_STING_CHANCE = 50 `how many fish in a hundred get stung, of the ones next to a jellyfish that pops
 
-` RAYS. with the "rays" card, some of the new fish are stingrays. a stingray that lands on the bottom
-` row, from a row above it, shoots up its column, and every fish in the column pops, from the bottom
-` to the top, as one group. the stingray goes with them. fishHitBottom, in fish_funcs, is where it starts.
-global RAY_SPAWN_CHANCE = 4 `how many new fish in a hundred are stingrays
+` RAYS. with the "rays" card, some of the new fish are stingrays. whenever a stingray pops, for whatever
+` reason, it swims off the way that it is facing, and every fish in its column on that side of it pops
+` too, as one group. a stingray faces up, so the fish above it pop, from the stingray to the top. one
+` that is belly up faces down, so the fish below it pop, from the stingray to the bottom. landing on
+` the bottom row does nothing by itself. handle_combos, in fish_routines, calls shootRay, in
+` fish_funcs, for every stingray that is popping.
+` the card can be taken more than once, and "jellies" cards water it down. see JELLIES. the first card
+` makes RAY_SPAWN_CHANCE new fish in a hundred stingrays, and every card after it raises that by
+` RAY_SPAWN_STEP. so it goes 10, 15, 20.
+global RAY_SPAWN_CHANCE = 10 `how many new fish in a hundred are stingrays, with the first card
+global RAY_SPAWN_STEP = 5 `how much every card after the first adds to that
+global RAY_MAX = 3 `how many times the card can be taken
 
 ` BOTTLES. with the "bottles" card, a group of fish that matched, and that is big enough, leaves a
 ` bottle behind, in the cell of the group that is closest to the middle of it. the bottle falls like a
@@ -73,9 +95,30 @@ global RAY_SPAWN_CHANCE = 4 `how many new fish in a hundred are stingrays
 global BOTTLE_GROUP_SIZE = 5 `how many fish a group needs to leave a bottle
 global BOTTLE_MULT_GAIN = 1 `how much a bottle adds to the multiplier
 
+` ZAPS. little bolts of lightning that jump from one spot on the board to another, and are gone again.
+` the top of fish_routines_zap explains how they work.
+global ZAP_COUNT = 16 `how many there can be at once
+global ZAP_PIECES = 4 `how many pieces a bolt is made of. every piece goes along, and then jogs to the side.
+global ZAP_BARS = 8 `how many sprites that takes, which is two for every piece
+global ZAP_LIFE = 260 `how long a bolt lasts, in milliseconds
+global ZAP_FLICKER_MS = 45 `how long it is before the jogs are picked again
+global ZAP_JOG = 4 `how far to the side a jog can go, in pixels
+global ZAP_THICK = 2 `how thick the bars are, in pixels
+global ZAP_NEXT = 0 `the one that the next bolt takes
+global ZAP_LIVE = 0 `how many are showing, or waiting to
+global dim ZAP_ACTIVE(16)
+global dim ZAP_START_MS(16)
+global dim ZAP_FROM_X(16)
+global dim ZAP_FROM_Y(16)
+global dim ZAP_TO_X(16)
+global dim ZAP_TO_Y(16)
+global dim ZAP_FLICKER(16) `which set of jogs each one is showing
+global dim ZAP_SPRITES(128)
+
 ` THE WASTE BUCKET. a special move that pops every belly up fish on the board at once, as one group,
 ` and they score WASTE_BUCKET_BONUS times as much. it never has to recharge, but it does count as a move.
-` when there are no belly up fish, it does nothing, and it is not a move. doWasteBucket, in fish_funcs, does it.
+` it takes every skeleton too. see SKELETONS.
+` when there are no belly up fish and no skeletons, it does nothing, and it is not a move. doWasteBucket, in fish_funcs, does it.
 global WASTE_BUCKET_BONUS = 2
 
 ` BUNCH UP. a special move that is a swap. the fish that the swap connects do not pop. they all go
@@ -90,8 +133,9 @@ global BUNCH_UP_COOLDOWN = 2 `this counts the move itself, so there is one move 
 ` 1 is a belly up fish that the cursor came to.
 global FORCE_BUCKET = 2 `the belly up fish of the waste bucket, which score more
 global FORCE_BUNCH = 3 `fish that are going into a stack. they go away without popping, and score nothing.
-global FORCE_RAY = 10 `a column that a stingray shot up. the column is added to this.
+global FORCE_RAY = 10 `the fish above a stingray that popped. the column is added to this.
 global FORCE_BOTTLE = 40 `a bottle that paid out. the column is added to this too.
+global FORCE_RAY_DOWN = 70 `the fish below a belly up stingray that popped. the column is added to this too.
 
 ` THE ROBOT. a special move that makes swaps for the player. it looks at the fish near the cursor, picks
 ` the swap that would pop the most fish, makes it, and then does that again, a few times over.
@@ -108,7 +152,8 @@ global ROBOT_LAST_COUNT = 0 `how many swaps it made the last time. 0 means that 
 ` fill the gaps are all the same kind as the fish that was moved, instead of being picked at random.
 ` that only goes for the first time the board fills back in. if those fish pop in turn, what fills in
 ` after them is picked at random again, or it would never stop.
-` a bottle is not copied this way. a swap of a bottle fills in at random, like any other swap.
+` a bottle is not copied this way. the move cannot be used on a swap that has a bottle in it, on
+` either side. it is turned down, and it is not used up. process_input, in fish_routines_input, does that.
 ` doKnownFill, in fish_funcs, starts it, and handle_combos does the filling.
 global KNOWN_FILL_COOLDOWN = 4 `how many moves it takes to recharge
 global KNOWN_FILL_VALUE = 0 `the kind of fish that the next fill is made of, or 0 when it is picked at random
@@ -221,6 +266,9 @@ global CURSOR_SHAKE_TIME = 220 `how long it lasts, in milliseconds
 ` with "contagious smile", a fish that is right next to a fish that pops has a chance to. handle_combos does that.
 ` when a stacked fish pops, the fish in its stack pop first, one at a time, and each one scores. the one in
 ` front goes last.
+` whatever a fish does when it pops, it does once for itself and once more for every fish in its stack.
+` a stacked jellyfish stings that many times, and a stacked bottle adds that many times to the multiplier.
+` a special move that turns fish into copies of another one, like the clone or the bomb, copies its stack too.
 global FISH_STACK_MAX = 3 `the most fish that can be stacked up behind one. the fish effect cannot draw more.
 global FISH_STACK_POP_GAP = 380`how many milliseconds there are between one fish of a stack popping and the next
 global BOTTOM_FEEDER_CHANCE = 30 `how many landings in a hundred pick up a fish
@@ -365,7 +413,7 @@ global MULT_PROGRESS = 0 `how many swaps in a row have popped something, since t
 global MULT_PENDING_SWAPS = 0 `swaps that have been made, that handle_combos has not looked at the board since
 global MULT_POS as vec = {
     x = 32,
-    y = 70
+    y = 60
 }
 global MULT_BAR_WIDTH = 64
 global MULT_BAR_BACK_SPRITE
@@ -442,6 +490,7 @@ global dim PASSIVE_BINDINGS(PASSIVE_BINDINGS_LENGTH) as passiveDisplay
 ` can be empty, so check `assigned`. MOVE_ABILITY_COUNT is how many of the slots have a move in them.
 global MOVE_ABILITY_BINDINGS_LENGTH = 10
 global MOVE_ABILITY_COUNT = 0
+global DEBUG_MOVE_SLOT = 1 `the slot that the debug window puts a move in, counting from 1. see fish_routines_debug.
 global moveAbility as moveDisplay
 global dim MOVE_ABILITY_BINDINGS(MOVE_ABILITY_BINDINGS_LENGTH) as moveDisplay
 
@@ -569,7 +618,11 @@ global MENU_PAGE = 0
 ` this one is on the pause menu, right under "Resume". it is last in this list so that the numbers
 ` of the others did not have to change. setMenuPage puts it where it goes.
 #constant MENU_ITEM_MOVES 19
-global MENU_ITEM_COUNT = 20
+` two more lines of the options page, under "Fullscreen". each is only there once there is something
+` for it to turn off. see OPTION_MENU_REEF, further down.
+#constant MENU_ITEM_SET_REEF 20
+#constant MENU_ITEM_SET_MONSTER 21
+global MENU_ITEM_COUNT = 22
 global dim MENU_ITEMS(MENU_ITEM_COUNT) as menuItem
 
 global MENU_PAGE_FIRST = 0 `the first item on the page
@@ -611,6 +664,7 @@ global MENU_PANEL_SPRITE
 global MENU_TITLE_TEXT_ID
 global MENU_DESC_TEXT_ID
 global MENU_HINT_TEXT_ID
+global MENU_VERSION_TEXT_ID `which build this is, small and faint, in the bottom left corner of the main menu. see setup_menu.
 global MENU_CURSOR_TWEEN_Y
 global MENU_FADE_TWEEN_ID
 global MENU_SHAKE_TWEEN_ID
@@ -695,6 +749,9 @@ global SNOW_FX_ID
 global SNOW_SPRITE `the specks that drift in front of the fish
 global ORDER_SEABED = -10 `underneath everything
 global ORDER_SNOW = 27 `on top of the fish and the bubbles, and underneath the score text
+global SPECKS_FX_ID
+global SPECKS_SPRITE `the specks that drift behind the fish, and in front of the coral
+global ORDER_SPECKS = 7 `on top of the sea floor and the coral, and underneath the cursor and the fish
 
 ` THE MOOD. one swap can set off a run of pops: fish pop, the board fills back in, and that pops more.
 ` the water gets brighter, the shafts of light get stronger, and the words around the board light up,
@@ -761,10 +818,19 @@ global SAVE_SIGNATURE = -1 `what saveSignature said at the last save. the game i
 ` there is a table for every kind of game: every length, in both modes. a table is a run of HISCORE_ROWS
 ` entries in these lists, best first, and table n starts at n * HISCORE_ROWS. getHighscoreTable says which n.
 global HISCORE_ROWS = 8 `how many entries a table has
+
+` a game that ended with one of the two endings of the hidden game has a badge on its row. see THE TWO ENDINGS.
+` which badge is kept in the same number as the initials: the initials are less than HISCORE_BADGE_STEP, and
+` the ending is how many times that is added on top. so it is saved with the table, and it moves with the row.
+` getScoreBadge and getScoreInitials, in fish_routines_highscores, take the number apart.
+global HISCORE_BADGE_STEP = 20000
+global dim HISCORE_BADGE_SPRITES(8) `one for every row of the table
+global TEX_BADGE_CORAL
+global TEX_BADGE_TENTACLE
 global HISCORE_TABLE_COUNT = 6 `three lengths, times two modes
-global dim HISCORE_NAMES(48) `the initials, packed into one number. see packInitials.
-global dim HISCORE_MOVES(48) `how many moves the game took. fewer is better.
-global dim HISCORE_MULTS(48) `the highest that the multiplier got
+global dim HISCORE_NAMES(56) `the initials, packed into one number. see packInitials.
+global dim HISCORE_MOVES(56) `how many moves the game took. fewer is better.
+global dim HISCORE_MULTS(56) `the highest that the multiplier got
 global HISCORE_EMPTY_MOVES = 999999 `an entry with this many moves is a row that nobody has taken yet
 
 ` the scores that the tables start out with. seed_highscores, in fish_routines_highscores, fills these in.
@@ -844,13 +910,15 @@ global dim HISCORE_LETTERS(3) `the initials that are being entered, as numbers f
 
 ` where the table goes on the screen
 global HISCORE_WIDTH = 300
-global HISCORE_TOP = 86
-global HISCORE_ROW_HEIGHT = 20
+global HISCORE_TOP = 102
+global HISCORE_ROW_HEIGHT = 18
 
 ` which table is showing is said by two rows of tabs on top of it: one for the modes, and under that,
 ` one for the lengths. tabs 0 and 1 are the modes, and tabs 2, 3 and 4 are the lengths.
-global dim HISCORE_TAB_TEXTS(5)
-global dim HISCORE_TAB_SPRITES(5)
+` a third row sits on top of those two, and says whose scores they are. tabs 5, 6 and 7 are that row:
+` the scores made on this machine, the scores of the player's friends on Steam, and everybody's.
+global dim HISCORE_TAB_TEXTS(8)
+global dim HISCORE_TAB_SPRITES(8)
 global HISCORE_TAB_HEIGHT = 18
 global HISCORE_NOTE_TEXT_ID `says how the game that just ended did
 global dim HISCORE_HEAD_TEXTS(4) `the names of the columns
@@ -868,7 +936,7 @@ global dim GAME_LOG(100)
 ` the log of every entry on every table. each entry has HISCORE_LOG_STRIDE numbers: how many upgrades
 ` there are, and then the upgrades. entry n starts at n * HISCORE_LOG_STRIDE.
 global HISCORE_LOG_STRIDE = 101
-global dim HISCORE_LOGS(4848)
+global dim HISCORE_LOGS(5656)
 
 ` where the logs are kept in the preferences. a table has 1000 numbers, and they must not move.
 global HISCORE_LOG_PREF = 10000
@@ -889,6 +957,42 @@ global dim HISCORE_DETAIL_MOVE_TEXTS(7) `the move that it was picked on
 global HISCORE_CURSOR as infoBorder `the outline around a row of the table or a tab, and around the letter that is being changed
 global HISCORE_CURSOR_ON = 0
 
+` THE SCORES ON STEAM. every table has a leaderboard on Steam, and a game that ends is sent to the one
+` for its table. the routines are in fish_routines_highscores, and THE SCORES ON STEAM there explains them.
+#constant HISCORE_SCOPE_LOCAL 0
+#constant HISCORE_SCOPE_FRIENDS 1
+#constant HISCORE_SCOPE_GLOBAL 2
+global HISCORE_SCOPE = 0 `whose scores the table is showing. one of the HISCORE_SCOPE constants.
+
+` the scores that come back from Steam are written into a table of their own, after the six real ones,
+` so that everything that draws a table can draw them too. it is never saved.
+global HISCORE_ONLINE_TABLE = 6
+global dim HISCORE_ONLINE_ROWS(8) `which row of what Steam sent back each row of that table is. -1 is none.
+global HISCORE_ONLINE_COUNT = 0 `how many rows of that table are filled in
+global HISCORE_ONLINE_ME = -1 `which row of that table is the player's own, or -1
+global HISCORE_ONLINE_BOARD = 0 `the leaderboard that the scores were asked from, or 0 for none
+global HISCORE_ONLINE_STATE = -1 `what "steam scores state" said when the table was last filled in
+global HISCORE_SEND_BOARD = 0 `the leaderboard that a game is on its way to, or 0 when none is
+global HISCORE_STATUS_TEXT_ID `says why there are no scores from Steam to show: still loading, or none yet
+
+` how a game is packed into the details of its score on Steam. the first bits say what follows, so
+` that a later version of the game can pack it another way and still read the old ones.
+` a detail is 32 bits, so detail n starts at bit n * 32.
+global STEAM_PACK_VERSION = 1
+global STEAM_BIT_VERSION = 0 `4 bits: STEAM_PACK_VERSION
+global STEAM_BIT_INITIALS = 4 `15 bits: the initials, packed by packInitials
+global STEAM_BIT_LOG_COUNT = 19 `7 bits: how many upgrades are in the log
+global STEAM_BIT_GAP_WIDTH = 26 `4 bits: how many bits every gap of the log takes
+global STEAM_DETAIL_MULT = 1 `the highest that the multiplier got
+global STEAM_DETAIL_SEED = 2 `the seed of the board. there is no such thing yet, so it is 0.
+global STEAM_DETAIL_FLAGS = 3 `32 flags for later. all 0 for now.
+global STEAM_DETAIL_CHECK = 4 `the check, which Steam's commands fill in. see "set steam leaderboard check".
+global STEAM_DETAIL_SPARE = 5
+global STEAM_BIT_LOG = 192 `the log of upgrades starts at detail 6. every upgrade is 5 bits of card, and then its gap.
+global STEAM_CARD_BITS = 5
+global STEAM_GAP_BITS_MAX = 13 `a gap of more than 8191 moves is written down as 8191
+global STEAM_GLOBAL_FETCH = 40 `how many of everybody's scores are asked for, to find 8 that pass their check
+
 ` where the outline is on whichever of these pages is up: the high scores, or the codec. when it moves, it
 ` leaves a wake behind where it was. movePageOutline, in fish_routines_highscores, does that.
 global PAGE_OUTLINE_PLACED = 0 `0 until the outline has been put somewhere on the page that is up
@@ -898,11 +1002,36 @@ global PAGE_OUTLINE_W = 0
 global PAGE_OUTLINE_H = 0
 
 ` THE CODEC. the routines are in fish_routines_codec, and the top of that file explains how it works.
-global CODEC_COUNT = 16 `how many entries there are, which is one for every card. setup_codec works this out.
-global dim CODEC_SEEN(32) `1 for every entry that has been seen in a game, and so is unlocked
+global CODEC_COUNT = 16 `how many entries there are: one for every card, and then the ones that are not cards. setup_codec works this out.
+
+` the entries that are not cards come after the cards. they are things that are found in a game, and
+` not picked on the upgrade screen: coral, and horror coral. see CORAL, further down. they are locked
+` until some has grown, and coralRecount, in fish_routines_coral, is what unlocks them.
+` and after those, the two endings of the hidden game. handle_coral_ending unlocks them.
+` and after those, the things that turn up on the board. first the special fish: the jellyfish, the
+` stingray and the bottle. then what can happen to a fish: belly up, skeletal and stacked. each of them
+` is unlocked the first time that there is one on a board that has settled. codecSeeBoard, in
+` fish_routines_codec, does that. new entries go on the end, so that the ones before them keep their preferences.
+global CODEC_EXTRA_COUNT = 10
+global CODEC_ENTRY_CORAL = -1 `which entry each of them is, once setup_codec has run
+global CODEC_ENTRY_HORROR = -1
+global CODEC_ENTRY_REEF = -1
+global CODEC_ENTRY_ANCIENT = -1
+global CODEC_ENTRY_JELLY = -1
+global CODEC_ENTRY_RAY = -1
+global CODEC_ENTRY_BOTTLE = -1
+global CODEC_ENTRY_BELLY = -1
+global CODEC_ENTRY_SKELETON = -1
+global CODEC_ENTRY_STACK = -1
+global CODEC_FISH_TEX = 0 `the picture of the fish that stands in for any fish, in those last three. load_textures sets it.
+global dim CODEC_STACK_SPRITES(2) `the fish behind the fish, in the picture of "stacked": one for its tile, and one for the big picture
+global TEX_ENDING_REEF `the pictures of the two endings: a heart, and an eye
+global TEX_ENDING_ANCIENT
+global dim CODEC_SEEN(64) `1 for every entry that has been seen in a game, and so is unlocked
 
 ` where in the preferences what has been seen is kept, one number for every entry. it must not move.
 global CODEC_PREF = 57
+global CODEC_PREF_EXTRA = 90 `and the same for the entries that are not cards, so that a new card does not move them
 
 ` where the codec goes on the screen
 global CODEC_COLUMNS = 8 `how many upgrades there are on a row of the grid
@@ -974,6 +1103,14 @@ global TRANSITION_LINE_TRAVEL = 850
 global MUSIC_VOLUME# = .65 `how loud all of the music is when the music option is all the way up, from 0 to 1
 global MUSIC_LAST_MS = 0
 
+` the music can be hushed: everything that plays on its own fades away, the layers and the shots and the tunes,
+` and comes back when the hush is lifted. a note that is asked for by name is still heard. the two layers
+` that are the sound of deep water, the rumble and the hum of the deep, do the other thing: they come up.
+` the ending with the ancient one does this. see THE TWO ENDINGS.
+global MUSIC_HUSH# = 0 `how hushed it is right now, from 0 to 1
+global MUSIC_HUSH_TARGET# = 0 `and how hushed it is on its way to being
+global MUSIC_HUSH_SECONDS# = 2.5 `how long it takes to go all of the way
+
 ` the layers are loops that never stop. they are only turned up and down.
 #constant MUSIC_LAYER_RUMBLE 0
 #constant MUSIC_LAYER_WASH 1
@@ -1032,7 +1169,22 @@ global MUSIC_CHORD_LEAD = 3500 `a melody that has to change the chord waits this
 #constant MUSIC_SHOT_BOAT_PASS 6
 #constant MUSIC_SHOT_DOLPHIN 7
 #constant MUSIC_SHOT_THUNDER_ABOVE 8
-global MUSIC_SHOT_COUNT = 9
+` a scream from far away, with the water in between, and two more like it. they never play on their
+` own. see THE MUSIC OF THE CORAL. they are cut from a recording, by Tools/coral_clips_gen.py.
+#constant MUSIC_SHOT_SCREAM 9
+#constant MUSIC_SHOT_SCREAM_2 10
+#constant MUSIC_SHOT_SCREAM_3 11
+#constant MUSIC_SHOT_SCREAM_4 12
+#constant MUSIC_SHOT_SCREAM_5 13
+#constant MUSIC_SHOT_SCREAM_6 14
+` the last three of those screams again, slow and low, in a room with no end to it. they are only heard in
+` the ending with the ancient one, where they are laid over each other. see the sounds of the two endings.
+#constant MUSIC_SHOT_DIRGE 15
+#constant MUSIC_SHOT_DIRGE_2 16
+#constant MUSIC_SHOT_DIRGE_3 17
+global MUSIC_SHOT_COUNT = 18
+global MUSIC_SCREAM_COUNT = 6 `how many screams there are to pick from
+global MUSIC_DIRGE_COUNT = 3 `and how many of the slow ones
 global dim MUSIC_SHOTS(MUSIC_SHOT_COUNT) as musicShot
 
 ` the notes that a melody can use, from low to high. there is a sound for every one of them.
@@ -1060,10 +1212,15 @@ global dim MUSIC_SHOTS(MUSIC_SHOT_COUNT) as musicShot
 #constant INSTRUMENT_BELL 0
 #constant INSTRUMENT_PLUCK 1
 #constant INSTRUMENT_SWELL 2
-global MUSIC_INSTRUMENT_COUNT = 3
+` the choir is voices singing "ah", high up and far off. it takes a moment to arrive, like the swell.
+` the wail is voices in pain, an octave lower than they are written, and every note of it sinks as it
+` goes. the last two were made by Tools/coral_voices_gen.py, and are for the coral. see THE MUSIC OF THE CORAL.
+#constant INSTRUMENT_CHOIR 3
+#constant INSTRUMENT_WAIL 4
+global MUSIC_INSTRUMENT_COUNT = 5
 global MUSIC_NOTE_SLOTS = 15 `a rest, and the 14 notes
-global dim MUSIC_NOTE_SFX(45) `every note of the first instrument, and then every note of the next one
-global dim MUSIC_INSTRUMENT_VOLUME#(3) `how loud each instrument is next to the others. setup_music fills these in.
+global dim MUSIC_NOTE_SFX(75) `every note of the first instrument, and then every note of the next one
+global dim MUSIC_INSTRUMENT_VOLUME#(5) `how loud each instrument is next to the others. setup_music fills these in.
 
 ` the melodies are written in setup_melodies. all of their beats are kept in one long list,
 ` and every melody knows where it starts in the list and how many beats long it is.
@@ -1086,3 +1243,466 @@ global MELODY_PLAYING = -1 `the melody that is playing, or -1
 global MELODY_LAST = -1 `the one that played last, so that it is not picked twice in a row
 global MELODY_STEP = 0 `the beat of it that is next
 global MELODY_NEXT_MS = 0 `when that beat is due
+global MELODY_AUTO_COUNT = 0 `how many of the melodies can start on their own. the ones after that only play when the game asks.
+
+` THE MUSIC OF THE CORAL. when a song is cast and coral grows, a choir sings one of a few tunes of praise,
+` over the brighter of the two chords. when the coral that grows is horror coral, there is a scream from
+` far away, and then voices in pain sing one of a few laments, over the darker chord. playCoralMusic, in
+` fish_routines_music, does it, and the tunes are at the end of setup_melodies.
+global MELODY_CORAL_FIRST = 0 `the first of the tunes of praise
+global MELODY_CORAL_COUNT = 0 `and how many there are
+global MELODY_HORROR_FIRST = 0 `the same, for the laments
+global MELODY_HORROR_COUNT = 0
+
+` no tune is ever heard twice while the game is open. the ones that were written by hand are played
+` first, each of them once, in an order that is different every time. once they have all been heard,
+` every tune after that is made up on the spot, and one that is made up never comes back.
+` makeCoralTune, in fish_routines_music, makes them up, and writes them into the melody MELODY_MADE.
+global dim MELODY_HEARD(MELODY_MAX) `1 for every melody of the coral that has been played since the game was opened
+global MELODY_MADE = -1 `the melody that the tunes that are made up are written into
+global MELODY_MADE_BEATS = 24 `the most beats that one of those can have
+global dim CORAL_TUNE_SCALE(10) `the notes that a tune of praise is made up out of. they sound fine over anything.
+global dim CORAL_TUNE_ENDS(10) `where a tune can come to rest: six places for praise, and then four for a lament
+global CORAL_MUSIC_VOLUME# = 1.6 `how loud the notes of these tunes are, next to the notes of the tunes that play on their own
+global CORAL_SCREAM_VOLUME# = .3 `how loud the scream is, from 0 to 1
+global CORAL_LAMENT_WAIT = 1500 `the lament holds off for this many milliseconds, so that the scream is heard first
+global MELODY_GAIN# = 1 `what the notes of the melody that is playing are turned up or down by
+
+` THE RECORDED PRAISE. the praise is not played on an instrument any more. it is a woman singing, cut into
+` phrases from a recording by Tools/coral_clips_gen.py, and when coral grows, one of the phrases is played
+` as it is. they take turns in an order that is different every time around, and the one that ended the
+` last time around never starts the next. there are only as many as the recording had in it, so one is
+` heard again once all of them have been. CORAL_PRAISE_RECORDED set to 0 goes back to the choir and its tunes.
+` the laments are still tunes, but the wail that sings them is cut from a recording of a monster now, by
+` the same tool, and so are the screams.
+global CORAL_PRAISE_RECORDED = 1
+global CORAL_PRAISE_COUNT = 9 `how many phrases there are. the files are praise-1 to praise-9.
+global dim CORAL_PRAISE_SFX(16)
+global dim CORAL_PRAISE_HEARD(16) `1 for every phrase that has had its turn, this time around
+global CORAL_PRAISE_LAST = -1 `the one that played last
+global CORAL_PRAISE_VOLUME# = .55 `how loud a phrase is, from 0 to 1
+global CORAL_PRAISE_HOLD = 8000 `the chord stays, and no other melody starts, for this many milliseconds after one
+
+` CORAL. the hidden game. nothing in the game says that it is there.
+` coral belongs to a place on the board, and not to the fish that is in it. a fish that is swapped off of
+` coral leaves the coral behind.
+` a few patterns are out at any time. a pattern is a list of steps for the cursor, like up, left, up. when the
+` last steps that the cursor took on its own are exactly a pattern, walked from either end (left, left, up
+` is the same pattern as down, right, right), and the very next thing is a swap that
+` pops something, the pattern is cast: coral grows on every cell that the cursor walked over, and the pattern
+` is used up. a new one takes its place, and they get longer as more of them are cast. a pattern that was
+` cast is not given out again, until CORAL_USED_MAX more have been cast after it. see THE SONGS, further down.
+` anything but a step of the cursor forgets the steps so far. a step that the cursor could not take is not a step.
+` THE FISH ON CORAL SING. a fish that is on coral, and is well, never pops. when it is part of a group that
+` is big enough, the fish of the group that are over open water pop, and the ones on coral stay where they
+` are and sing: each one swells, a heart comes up from it, the coral under it lights up,
+` and it scores CORAL_SCORE_BONUS times what it would have
+` scored by popping. a stack behind it scores too, and stays.
+` a group that has sung does not sing again for as long as it is the same fish in the same cells, so it
+` does not score every time that the board is looked at. it sings again when a fish joins it: one that a
+` swap brought, or one that fell in. CORAL_SUNG is how that is known. a group of fish that have all
+` sung already is not a group at all, as far as the multiplier and the songs are concerned.
+` a fish that is belly up, or a skeleton, pops on coral like anywhere else. so does every fish on horror
+` coral. and a pop that is forced takes the fish on coral with it: a stingray's column, the bomb, the
+` waste bucket, a bottle that pays out. see FORCED POPS. coralHolds, in fish_routines_coral, is the rule.
+` coral used to make a group need to be CORAL_GROUP_EXTRA bigger to pop. that is 0 now, which turns it off.
+` the water of the whole screen wobbles all of the time, and it wobbles less over coral. see ScreenEffect.fx.
+` all of this is the same in a zen game. there the cursor goes around the edges of the board, and a step
+` around an edge is a step like any other.
+` the routines are in fish_routines_coral.
+global CORAL_SWAP_A = -1 `the two cells of the last swap that the multiplier has yet to hear about, or -1
+global CORAL_SWAP_B = -1
+global CORAL_HELD_GROUPS = 0 `how many groups that swap put together that only coral kept from popping. handle_combos counts them.
+global dim CORAL_CELLS(400) `1 for every cell of the board that has coral on it
+
+` HORROR CORAL. a song that is sung with the dead brings coral that is diseased: when the cursor passes
+` over a belly up fish anywhere on the way along a pattern, or any of the fish that the swap at the end
+` of the pattern pops is belly up, the coral that the pattern grows is horror coral.
+` every song says which kind the coral on its cells is from then on, so a song with no dead fish in it
+` heals the horror coral that it crosses, and a song with one spoils the coral that it crosses.
+` it is dark and sickly, with tentacles, eyes and skulls coming out of it in place of the things that grow
+` on coral. see CoralEffect.fx. it counts as coral in every other way, but no fish is happy on it.
+global dim CORAL_SICK(400) `1 for every cell whose coral is horror coral
+global CORAL_SICK_COUNT = 0 `how many cells have horror coral on them
+global dim CORAL_TRAIL_DEAD(8) `1 for every step of the cursor that went from, or came to, a belly up fish. see CORAL_TRAIL_DIR.
+global CORAL_PENDING_SICK = 0 `1 if the pattern that is waiting on a swap was walked over a belly up fish
+global INFO_INDEX_CORAL_SICK = -1 `the spot that info mode has for it, once there is some. see coralPlaceInfo.
+
+` THE TWO ENDINGS. the hidden game can be won, and it can be lost, and either one ends the game there and then,
+` whatever round it is. the score is the same as for any game: how many moves it took.
+`   the reef is saved     when CORAL_END_SHARE cells in a hundred have coral on them that is not horror
+`                         coral. the fish leave their cells and
+`                         swim around among the coral in schools, every kind of fish together, slowly,
+`                         and hearts come up from them.
+`   the ancient one       when that many of the cells of the board have horror coral on them. the water
+`                         goes bad: the edges of the screen close in, dark and green, and the bottom of it
+`                         goes thick, with bubbles coming up. the sea behind the board fades away, and what
+`                         is there in place of it is stars, seen through a black hole. tentacles come up,
+`                         a few here and one there, with waits in between. and the fish die where they
+`                         are: one after another, each turns into a skeleton. this one wins, if a board is ever both.
+` coralRecount sees that one is due. handle_coral_ending, which the main loop comes to on every frame, waits
+` for the board to settle, plays it, and then asks for the end of the game, which is the same end as always:
+` the initials, and the table of high scores. the row of a game that ended one of these ways has a badge
+` on it. see HISCORE_BADGE_STEP.
+` THE BARS OF THE CORAL. two little bars under the songs say how close each ending is. the bar of the
+` reef is there as soon as there is any coral, and the bar of the ancient one as soon as there is any
+` horror coral. that one is green, with slime and tentacles on it. each is full when its ending is due,
+` and a full bar fizzes until the board has settled and the ending starts. see fish_routines_coralbars.
+global CORAL_END_SHARE = 60 `how many cells in a hundred need the one kind of coral for its ending
+global CORAL_BAR_X = 32 `where the bars go. they line up with the songs, and are as wide as the songs are.
+global CORAL_BAR_WIDTH = 64
+global CORAL_BAR_GAP = 3 `how far under the songs the first one is, in pixels
+global CORAL_BAR_STEP = 9 `and how far under that one the second one is
+global dim CORAL_BAR_BACKS(2)
+global dim CORAL_BAR_FILLS(2)
+global dim CORAL_BAR_SHOWN#(2) `how full each one is drawn, from 0 to 1. it chases the real thing.
+global CORAL_BAR_DRIP_COUNT = 6 `how many drips of slime the bar of the ancient one has
+global CORAL_BAR_WISP_COUNT = 3 `and how many tentacles
+global CORAL_BAR_WISP_TALL = 3 `how many pixels tall a tentacle is
+global dim CORAL_BAR_DRIPS(6)
+global dim CORAL_BAR_WISPS(9)
+global CORAL_BAR_FIZZ_MS = 0 `when a full bar sends up its next bubbles
+
+#constant CORAL_ENDING_REEF 1
+#constant CORAL_ENDING_ANCIENT 2
+global CORAL_ENDING = 0 `which of them the game that is being played ended with, or 0
+global CORAL_ENDING_DUE = 0 `which of them is waiting for the board to settle, or 0
+global CORAL_END_SWELL_MS = 2500 `how long the fish take to get going, in milliseconds
+
+` THE SCHOOLS. when the reef is saved, every fish sets off on its own, whichever way it likes, and wanders.
+` after a little while the fish start to find their own kind, and before long every kind is a school.
+` a school has a spot that it follows, which goes around the board in a slow loop of its own, and every
+` fish of the school has a place around that spot, in a spiral, with the first fish in the middle. a fish
+` does not jump to its place. it turns toward it, a little more on every frame, so the school strings
+` out behind the spot when it turns.
+global CORAL_DANCE_SCATTER# = 24 `how fast a fish swims while it is on its own, in pixels a second
+global CORAL_DANCE_SCATTER_MS = 2400 `how long the fish are on their own before they start to school, in milliseconds
+global CORAL_DANCE_GATHER_MS = 5500 `and how long it takes from then until they are schooling as much as they ever do
+global CORAL_DANCE_CHASE# = 44 `the fastest that a fish swims to get to its place in its school, in pixels a second
+global CORAL_DANCE_TURN# = .07 `how much of the way a fish turns toward its place on a frame, once it is schooling
+global dim CORAL_DANCE_VX#(400) `which way every fish is swimming, and how fast, in pixels a second
+global dim CORAL_DANCE_VY#(400)
+global CORAL_DANCE_SPEED# = .55 `how fast the schools go around. 1 is a loop of the board in about 18 seconds.
+global CORAL_DANCE_SPACING# = 8.5 `how far apart the fish of a school are, in pixels
+global CORAL_DANCE_ROAM# = .40 `how far from the middle of the board a school goes, as a share of the board
+global dim CORAL_DANCE_X#(400) `where every fish is, in pixels of the game
+global dim CORAL_DANCE_Y#(400)
+global dim CORAL_DANCE_SLOT(400) `which place in its school every fish has, counting from 0 in the middle
+global CORAL_END_RISE_MS = 12000 `how long the tentacles take to come all the way up
+global CORAL_END_CURSOR_MS = 700 `how long the cursor takes to fade away at the start of an ending
+` HOW MUCH THE SCREEN SHAKES. an amount is in pixels of the game's own screen, whatever the size of the
+` window: the screen moves up to half of it in any direction. see "set screen shake amount".
+global SHAKE_POP_AMOUNT# = 6 `the knock that a fish gives the screen when it pops. it is over in a moment.
+global SHAKE_FREE_MOVE_AMOUNT# = 3 `the smaller knock of every move that the "free moves" card gives back
+global CORAL_END_SHAKE_FROM# = .5 `how much the screen shakes when the ancient one starts to come up
+global CORAL_END_SHAKE_TO# = 4 `and how much once the tentacles are all the way up. it grows steadily from the one to the other, and stays.
+global CORAL_END_DIM = 70 `how dark the screen gets behind the tentacles, out of 255. the stars have to show through it.
+global SEABED_VOID# = 0 `how much of the sea behind the board has turned into the stars, from 0 to 1. see SeabedEffect.fx.
+global CORAL_END_WORDS_MS = 900 `how long the words take to fade in
+global CORAL_END_HOLD_MS = 2600 `how long it is, once the words are there, before the player can move on
+global CORAL_END_MAX_MS = 14000 `and how long before it moves on by itself
+global CORAL_END_TEXT_ID `the words
+global CORAL_END_SUB_TEXT_ID `and the smaller words under them
+global CORAL_END_DIM_SPRITE `darkens the screen behind the tentacles
+global TENTACLE_FX_ID
+global TENTACLE_SPRITE `the tentacles. see TentacleEffect.fx.
+global ORDER_END_DIM = 28 `on top of the fish, the bubbles and the specks
+global ORDER_TENTACLES = 29 `and on top of that, and underneath the score text
+
+` the sounds of the two endings. the reef gets a fanfare: a run of notes up a chord on the bell, and then the
+` chord, with the choir under it.
+` the ancient one gets the sound of the deep, gone wrong. there is no tune in it. the music of the game fades
+` away, all but the rumble and the low hum of the deep, which come up. over those:
+`   a drone      three notes of the swell that are right next to each other, played an octave down, and one
+`                of them a little flat, so that they grind against each other
+`   a sonar      the ping, an octave down, slow, like something is being looked for
+`   something    the low whale, as far down as it goes, now and then. it is very big.
+`   wails        the voices in pain, far off: quiet, and anywhere from a little low to an octave low, each
+`                one somewhere else from side to side. there are more of them as the tentacles come up.
+`   screams      the slow screams, one laid over another. a new one starts every few seconds, well
+`                before the one before it is over, and they take turns, so that there are always two or
+`                three of them going at once, each one somewhere else and a little lower or higher.
+` see THE MUSIC, further up, for the instruments and the shots.
+global CORAL_FANFARE_VOLUME# = .75 `how loud a note of the fanfare is, from 0 to 1
+global CORAL_DEEP_DRONE_MS = 4200 `how long it is between one breath of the drone and the next, in milliseconds
+global CORAL_DEEP_DRONE# = .85 `how loud the drone is, from 0 to 1
+global CORAL_DEEP_FLAT# = .045 `how flat the one note of the drone is, in octaves. a twelfth of an octave is the next note down.
+global CORAL_DEEP_PING_MS = 4700 `how long it is between one ping of the sonar and the next
+global CORAL_DEEP_PING# = .5 `how loud the sonar is, next to how loud it usually is
+global CORAL_DEEP_WHALE_MS = 6500 `about how long it is between one groan of the whale and the next
+global CORAL_DEEP_WHALE# = 1.3 `how loud the whale is, next to how loud it usually is
+global CORAL_DEEP_WAIL_SLOW = 2300 `about how long it is between one wail and the next when the tentacles start to come up
+global CORAL_DEEP_WAIL_FAST = 800 `and when they are all the way up
+global CORAL_DEEP_WAIL# = .30 `how loud a wail is, at the most, from 0 to 1. they are far off.
+global CORAL_DEEP_SCREAM_MS = 4000 `about how long it is between one slow scream and the next. each one lasts a lot longer than that.
+global CORAL_DEEP_SCREAM# = .55 `how loud a slow scream is, at the most, next to how loud a scream usually is
+global CORAL_DEEP_SCREAM_LOW# = .25 `how much lower one can be played than it is, in octaves. lower is slower too.
+
+` THE MAIN MENU REMEMBERS. once a game has ended with the reef saved, there is a reef in the sea on the left
+` of the main menu, from then on: under the water, with its tops standing out of it, and a few of the fish
+` of the game swimming over it. it fades away as the camera goes under at the start of a game.
+` and once a game has ended with the ancient one, something
+` is out on the horizon, a long way off, coming slowly toward the boat. it starts over every time that
+` the main menu comes up, and it never gets there. both can be there at once. see SurfaceEffect.fx.
+` the FISH_MENU_REEF and FISH_MENU_ANCIENT environment variables put them there, for working on the game.
+#constant PREF_ENDING_REEF 8
+#constant PREF_ENDING_ANCIENT 9
+` the player can turn either of them off again, on the options page, once it is there. the lines for
+` them are not on the page until then. frame_surface, in fish_routines_surface, is what listens.
+#constant PREF_MENU_REEF 10
+#constant PREF_MENU_MONSTER 11
+global OPTION_MENU_REEF = 1 `1 while the reef is wanted on the main menu
+global OPTION_MENU_MONSTER = 1 `and 1 while the ancient one is
+global SURFACE_REEF = 0 `1 once the reef has been saved in some game
+global SURFACE_FISH_COUNT = 7 `how many fish swim over the reef. there is one of every kind that a game starts with.
+global dim SURFACE_FISH_SPRITES(8)
+global dim SURFACE_FISH_GO#(8) `how far across the reef each one is, from 0 on the left to 1 on the right
+global SURFACE_FISH_MS = 0 `the last frame that they were moved on
+global SURFACE_FISH_LAP# = 22 `how many seconds the slowest of them takes to get across. each of the others is a little quicker than the one before.
+global SURFACE_FISH_SIZE = 16 `how big one of them is, in pixels. this is the size of their pictures, and any smaller leaves pixels out of them.
+global SURFACE_REEF_X = 96 `where the middle of the reef is: how far across the screen,
+global SURFACE_REEF_DOWN = 78 `and how far down from the horizon the fish are, which is a little under the waterline of the reef
+
+` THE REEFS OF THE MAIN MENU. there are two: one on the left, a way off, and one on the right, in front of the
+` boat, which is closer, so it is bigger and further down the screen, and it is the other way around.
+` each is a sprite of its own that covers the screen, with a copy of the reef effect of its own. see ReefEffect.fx.
+` for each: how far across the screen the middle of it is, how far down from the horizon its waterline is,
+` how many pixels one unit of its shape is, whether it is the other way around (-1) or not (1), and a
+` number of its own, which is what makes its lumps different from the other one's.
+global dim SURFACE_REEF_FX(2)
+global dim SURFACE_REEF_SPRITES(2)
+global dim SURFACE_REEF_AT_X(2)
+global dim SURFACE_REEF_AT_DOWN(2)
+global dim SURFACE_REEF_AT_SCALE(2)
+global dim SURFACE_REEF_AT_FLIP(2)
+global dim SURFACE_REEF_SEED#(2)
+global SURFACE_REEF2_X = 452 `the middle of the reef on the right, for the fish that swim around it,
+global SURFACE_REEF2_DOWN = 118 `and how far down from the horizon they are
+
+` the crab and the worm do not swim. each of them is on the rock of a reef that stands out of the water,
+` going slowly back and forth: the crab on the reef on the left, and the worm on the one on the right.
+` these are where on the screen the middle of each one's walk is, across, and down from the horizon,
+` and how far to either side it goes. they have to sit on the knuckles of rock in SurfaceEffect.fx.
+global SURFACE_CRAB_X = 70
+global SURFACE_CRAB_DOWN = 43
+global SURFACE_WORM_X = 487
+global SURFACE_WORM_DOWN = 74
+global SURFACE_WALK = 7
+
+global SURFACE_REEF_FADE# = 3 `how fast the reef fades as the camera goes under. 3 has it gone a third of the way down.
+global SURFACE_ANCIENT = 0 `1 once the ancient one has been summoned in some game
+global SURFACE_MONSTER_START_MS = 0 `when it set out
+global SURFACE_MONSTER_SEEN_MS = 0 `the last frame that the main menu was drawn, to tell when it has come up again
+global SURFACE_MONSTER_HALF# = 70 `how many seconds it takes to come half of the way that it ever comes
+
+` WHAT HORROR CORAL DOES TO THE FISH. every time that a move has been made and the board has settled, each
+` fish that is on horror coral has a chance to go belly up, and each fish that is on horror coral and
+` belly up already has a chance to turn into a skeleton. a bottle never goes belly up, so one that is on
+` horror coral has that second chance right away. a skeleton stays a skeleton, and never goes belly up again.
+` the fish under the cursor does not go belly up, because the cursor has to come to a fish to pop it.
+` rollHorrorCoral, in fish_routines_coral, does it.
+global HORROR_BELLY_CHANCE = 30 `how many of those fish in a hundred go belly up
+global HORROR_SKELETON_CHANCE = 30 `and how many of the belly up ones in a hundred turn into skeletons
+
+` SKELETONS. a skeleton is a fish whose bellyUp is 2. it is still the kind of fish that it was, and it
+` is that kind in every way: it matches, pops, scores, stacks, stings, shoots and pays out as that kind,
+` and whatever makes a copy of a fish makes a copy of a skeleton. it is drawn as the bones of the fish,
+` the right way up.
+` it is not belly up any more: it does not pop when the cursor comes to it, and a skeleton stingray
+` shoots up. but the waste bucket takes skeletons along with the belly up fish, and a skeleton is as
+` dead as a belly up fish is, when a song is sung. see HORROR CORAL.
+` and it is a wildcard. the group of a fish that a swap has just moved can go on through skeletons of
+` any kind, for the look at the board that comes right after that swap. so worm, worm, skeleton, worm
+` is only a pair and a worm until a worm, or a skeleton, is swapped onto the end of it, and then it is
+` five. a skeleton that is swapped makes a group of whichever kind makes the biggest one.
+` a group that no swap has just touched does not go through skeletons, so nothing pops on its own
+` because of one. skeletonsBeforeCombos and skeletonsAfterCombos, in fish_routines_coral, do that,
+` around the search for groups in handle_combos. the pictures were made by Tools/fish_skeleton_gen.py.
+` a bottle that is a skeleton pays out BOTTLE_SKELETON_GAIN when it gets to the bottom, in place of BOTTLE_MULT_GAIN.
+global BOTTLE_SKELETON_GAIN = 2
+global dim SKELETON_TEX(16) `the picture of the skeleton of every kind of fish
+global dim SKELETON_SHOWN(400) `1 for every cell whose fish is being drawn as a skeleton. frame_fish_fx keeps it.
+global dim SKELETON_KIND(400) `while handle_combos searches for groups, the kind of fish that a skeleton that a group has taken really is, or 0
+global SKELETON_WILD_A = -1 `the two cells of the swap that was just made, or -1. the groups of the fish in them can go through skeletons.
+global SKELETON_WILD_B = -1
+
+global dim CORAL_SHOWN#(400) `how much of the coral in every cell is drawn. it chases the real thing, so that new coral grows in.
+
+` HOW THE CORAL IS DRAWN. it is rock, with tufts of coral growing out of it, and all of it is drawn by the
+` coral effect. see CoralEffect.fx. the game only says where the coral is: there is a white square for every
+` cell that has coral, as see-through as the coral in the cell is grown, and they are all drawn to a render
+` target of their own. one sprite that covers the screen, underneath the fish, has that render target for
+` its picture and the coral effect on it, and the effect turns the squares into the rock.
+global dim CORAL_SPRITES(400) `the squares
+global CORAL_SPRITE_COUNT = 0
+global TARGET_CORAL
+global CORAL_FX_ID
+global CORAL_VIEW_SPRITE
+
+` the fish cast shadows on the coral. every fish on the board is drawn a second time, as a plain picture of
+` itself right where the fish is, to another render target. the coral effect looks in that for the fish,
+` and darkens the coral a little way down and to the right of every one. nothing else ever sees them.
+global TARGET_CORAL_SHADOW
+global dim CORAL_SHADOW_SPRITES(400)
+global CORAL_SHADOWS_ON = 0 `1 while the shadows are being kept up, which is only while there is coral
+
+` A FISH ON CORAL sits down on it. it is drawn a little smaller than a fish that is over open water, and it
+` shrinks down to that as it gets there. frame_scale_wave, in fish_routines, sizes the fish.
+global CORAL_SIT_SHRINK# = .125 `how much smaller, where 1 is all the way to nothing. this takes a fish from 16 pixels to 14.
+global dim CORAL_SIT#(400) `how big the fish in every cell is drawn, where 1 is full size. it chases where it should be.
+
+` and it is happy there. when a fish comes to sit on coral, a heart may float up from it, and now and then
+` one floats up from a fish that has been sitting for a while. spawnHeart, in fish_routines_bubbles, makes one.
+global CORAL_HEART_CHANCE = 60 `how many fish in a hundred send up a heart when they sit down
+global CORAL_HEART_GAP_MIN = 900 `after a heart from a fish that was already sitting, the next one comes
+global CORAL_HEART_GAP_MAX = 2700 `somewhere between these, in milliseconds
+global CORAL_HEART_NEXT_MS = 0 `when that next one is due
+global dim CORAL_SAT_VALUE(400) `the kind of fish that was sitting on the coral of every cell on the last frame, or 0
+global CORAL_COUNT = 0 `how many cells have coral on them
+global CORAL_COMPLETE = 0 `1 once every cell of the board has coral on it. the endings do not wait for this. see CORAL_END_SHARE.
+global CORAL_CASTS = 0 `how many patterns have been cast in this game
+global CORAL_GROUP_EXTRA = 0 `how many more fish a group needs to pop, when any fish of it is on coral. 0 is none.
+global dim CORAL_SUNG(400) `the kind of fish that has sung in every cell, and is still sitting there, or 0. see THE FISH ON CORAL SING.
+global dim CORAL_SING_MS(400) `when the fish in every cell starts to sing, or last did, in milliseconds
+global dim CORAL_SING_DUE(400) `1 for every cell whose fish has yet to swell, when that moment comes
+global CORAL_SING_TIME = 900 `how long the coral under a fish that sings stays lit, in milliseconds
+global CORAL_SCORE_BONUS = 3 `how many times as much a fish scores when it sings, or pops, on coral
+
+global CORAL_STEP_MAX = 8 `the most steps that a pattern can have
+global CORAL_FIRST_LENGTH = 3 `how many steps the first patterns of a game have
+global CORAL_LENGTH_EVERY = 3 `and how many patterns are made before they get one step longer
+global CORAL_LIVE_COUNT = 3 `how many patterns are out at once
+global CORAL_LIVE_MAX = 8
+global dim CORAL_SEQ_LENGTH(CORAL_LIVE_MAX) `how many steps the pattern in every slot has, or 0 if the slot is empty
+global dim CORAL_SEQ_STEPS(64) `the steps of every pattern. each slot has room for CORAL_STEP_MAX of them.
+global dim CORAL_SEQ_CODE(CORAL_LIVE_MAX) `the same pattern as one number, which is how it is saved. see coralCode.
+global CORAL_MADE = 0 `how many patterns have been made in this game
+global CORAL_USED_MAX = 14 `only the last few patterns that were cast are kept. the oldest is forgotten, and can be given out again.
+global CORAL_USED_COUNT = 0
+global dim CORAL_USED(14) `the patterns that have been cast in this game, oldest first. these are not given out again.
+
+` THE SONGS. the patterns that have been cast are drawn under the multiplier, small, each one as the shape
+` of its walk. there is no label on them. info mode calls them songs, and only once there is one.
+` each one is a row of dots, one for every cell of the walk, the color of the specks that drift behind
+` the fish, and they twinkle the way that the specks do, so they look like specks that have stopped.
+` a fainter line joins every dot to the next one, which is one step of the pattern.
+global CORAL_RUNE_X = 32 `where the first one goes
+global CORAL_RUNE_Y = 132
+global CORAL_RUNE_COLUMNS = 4 `how many there are in a row
+global CORAL_RUNE_ROWS = 4
+global CORAL_RUNE_WIDTH = 16 `how much room each one gets, in pixels
+global CORAL_RUNE_HEIGHT = 15
+global CORAL_RUNE_UNIT = 2 `how far apart the dots of one are, in pixels
+global CORAL_RUNE_DOTS = 9 `the most dots that one can have, which is one more than the most steps
+global dim CORAL_RUNE_SPRITES(126) `the dots of every one. each has room for CORAL_RUNE_DOTS of them.
+global dim CORAL_RUNE_SHOWN(14) `how many dots each one has showing
+global dim CORAL_RUNE_LINKS(126) `the lines between the dots. the line after a dot has the same place in this list as the dot does.
+global CORAL_RUNE_LINK_ALPHA = 105 `how see-through a line is, out of 255. the dots are 90 to 240.
+global CORAL_RUNE_NEW_MS = -100000 `when the last pattern was cast. its song fades in.
+global CORAL_RUNE_FADE_MS = 1500 `how long that takes, in milliseconds
+
+` a pattern that has been cast is no good any more. when the cursor walks one of them again, and a swap
+` follows, the song of that pattern gives a little shake from side to side, the way that the key hints
+` at the bottom of the screen do, to say that it was seen and that it is used up.
+global dim CORAL_RUNE_SHAKE_MS(14) `when each song started to shake
+global dim CORAL_RUNE_OFFSET#(14) `how far each one is from where it belongs right now, in pixels
+global CORAL_RUNE_SHAKE_TIME = 450 `how long a shake lasts, in milliseconds
+global INFO_INDEX_SONGS
+
+` a pattern that is being tried out, before it is given a slot. the walk that it makes starts from 0, 0.
+global dim CORAL_TRY_STEPS(16)
+global dim CORAL_TRY_X(16)
+global dim CORAL_TRY_Y(16)
+global dim CORAL_EXPAND(400) `where the coral was, from before the board grew
+
+` a step is one of these
+#constant CORAL_UP 0
+#constant CORAL_RIGHT 1
+#constant CORAL_DOWN 2
+#constant CORAL_LEFT 3
+
+` the last steps that the cursor took on its own, oldest first, and the cell that each one started from
+global CORAL_TRAIL_COUNT = 0
+global dim CORAL_TRAIL_DIR(CORAL_STEP_MAX)
+global dim CORAL_TRAIL_X(CORAL_STEP_MAX)
+global dim CORAL_TRAIL_Y(CORAL_STEP_MAX)
+
+` a pattern that was walked, and then followed by a swap. handle_combos has not said yet if that swap popped anything.
+global CORAL_PENDING_SLOT = -1 `the slot of the pattern, or -1 if there is none waiting
+global CORAL_PENDING_COUNT = 0 `how many cells were walked over
+global dim CORAL_PENDING_X(16)
+global dim CORAL_PENDING_Y(16)
+
+` THE HINTS. now and then something small goes along the shape of a pattern that is out, somewhere on the
+` board: a couple of bubbles come up from the cell at one end of it, then a patch of the water goes calm,
+` and the calm moves slowly from cell to cell along the pattern, and a couple more bubbles come up from the
+` cell at the other end. all of the water wobbles all of the time, and has ripples of light in it. in the
+` patch it is still and clear. and the specks that are drifting behind the board anyway glow as they
+` pass through where it is. the screen effect does the calm, and the specks effect does the specks.
+` over coral the water hardly moves, so there is no calm to see, and the specks are lost against the rock.
+` so there, the specks glow a lot more, and the coral itself lights up where the hint is passing: the
+` rock, and the things that grow on it. the coral effect does that.
+` it is meant to be easy to miss, and hard to miss once it has been noticed.
+` which pattern it is, where on the board, and which end it starts from, is picked at random every time.
+` none of those matter. only the shape does, because a pattern can be walked from either end.
+` it happens on its own every so often: when a wave of the current sets out, there is a chance of one. and
+` a big group of fish that pops always brings one, as soon as the board has settled.
+
+` LISTEN. with the "listen" card, a hint is a lot easier to see. the specks glow brighter, and further out
+` from where it is, and it leaves a trail of light behind it, along the path that it took, which fades
+` and thins the further back it is, and bends where it turned. CORAL_HINT_TRAIL# is the path, for the specks
+` effect to draw it. a hint that a big group of fish brought always leaves a trail, and a hint that
+` came on its own does CORAL_LISTEN_LUCK times in a hundred, and that is when the name of the card shakes
+` in the list of passives. see CORAL_HINT_TRAIL_ON. the
+` patch of calm water is bigger. more bubbles come up at each end. and the name of the card shakes in
+` the list of passives when a hint starts. it does not make hints come any more often.
+global CORAL_LISTEN_GLOW# = 2.2 `how many times as bright the specks glow
+global CORAL_LISTEN_REACH# = 1.5 `how many times as far out from the hint they glow
+global CORAL_LISTEN_CALM# = 1.4 `how many times as big the patch of calm water is
+global CORAL_LISTEN_BUBBLES = 3 `how many more bubbles come up at each end
+global CORAL_HINT_GLOW_POWER# = 0 `how strongly the specks glow on this frame. it is CORAL_HINT_POWER#, and more with the card.
+global CORAL_HINT_LISTEN# = 0 `1 on a frame that the card is owned, for the specks effect
+global dim CORAL_HINT_TRAIL#(16) `eight spots along the path of the hint, from where it is to where it was, each CORAL_HINT_TRAIL_MS before the last, with the corners rounded off. x and then y of each.
+global CORAL_HINT_TRAIL_MS = 320
+global CORAL_HINT_TRAIL_ON = 0 `1 while the hint that is playing is one that leaves a trail, with the card
+global CORAL_LISTEN_LUCK = 10 `how many of the hints that come on their own in a hundred leave a trail too, with the card. nothing says so.
+
+global CORAL_HINT_CHANCE = 30 `how many waves of the current in a hundred bring a hint
+global CORAL_HINT_GROUP_SIZE = 5 `a group of this many fish that pops always brings one
+global CORAL_HINT_STEP_MS = 900 `how long it takes to get from one cell to the next, in milliseconds
+global CORAL_HINT_FADE_MS = 450 `how long it takes to swell up at the start, and to die away at the end
+global CORAL_HINT_TAIL_MS = 450 `the specks glow this far behind it
+global CORAL_HINT_BUBBLES = 2 `how many bubbles come up at each end
+global CORAL_HINT_BULGE# = 1.3 `how wide the patch of calm water is, in cells, from the middle of it to the edge
+global CORAL_HINT_REACH# = .75 `and how far from it the specks glow, the same way
+global CORAL_HINT_ROLLED = -1 `the last wave of the current that has had its roll for a hint
+global CORAL_HINT_DUE = 0 `1 when a hint is owed, for a big group of fish that popped
+global CORAL_HINT_SLOT = -1 `the slot of the pattern that the hint is for
+global CORAL_HINT_START_MS = -1 `when the hint that is playing started, or -1 if none is
+global CORAL_HINT_COUNT = 0 `how many cells it goes over
+global dim CORAL_HINT_X(16) `the cells, in the order that it goes over them
+global dim CORAL_HINT_Y(16)
+global CORAL_HINT_POINT_X# = 0 `where coralHintPointAt worked out that it is, in pixels of the game
+global CORAL_HINT_POINT_Y# = 0
+global CORAL_HINT_POWER# = 0 `how strong the hint is on this frame, from 0 to 1
+global CORAL_HINT_HEAD_X# = 0 `where it is on this frame, in pixels of the game. updateSeabed tells the specks.
+global CORAL_HINT_HEAD_Y# = 0
+global CORAL_HINT_TAIL_X# = 0 `and where it was a moment ago
+global CORAL_HINT_TAIL_Y# = 0
+global CORAL_HINT_GLOW_REACH# = 0 `how far from it the specks glow, in pixels
+
+` where the board is, for the specks effect, which makes the specks of a hint brighter over coral, where
+` they are hard to see. stepCoral keeps these up, and updateSeabed hands them on.
+global CORAL_FX_LEFT# = 0 `the top left corner of the board, in pixels of the game
+global CORAL_FX_TOP# = 0
+global CORAL_FX_CELL# = 0 `how big a cell is
+global CORAL_FX_COLUMNS = 0
+global CORAL_FX_ROWS = 0
+
+global ORDER_CORAL = 5 `underneath the cursor and the fish
+global CORAL_DEBUG = 0 `1 to write the patterns that are out onto the screen. set the FISH_CORAL_DEBUG environment variable.
+global CORAL_DEBUG_TEXT_ID
+
+` once there is any coral, info mode has a spot for it. it takes the right side of the board. see coralPlaceInfo.
+global INFO_INDEX_CORAL = -1
+global SAVE_PREF_CORAL = 700 `where the patterns of the saved game are kept, with the rest of the saved game

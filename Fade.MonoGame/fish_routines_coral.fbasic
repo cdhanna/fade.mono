@@ -1,0 +1,2199 @@
+goto routines_coral_exit
+
+remstart
+    CORAL
+    the hidden game. see CORAL in fish_headers for the rules.
+
+    the rest of the game only has to do these things:
+    - call coralCursorStepped() when the cursor has moved on its own, and coralSwapStepped() when a swap has been made
+    - call coralTrailClear() when anything else has been done
+    - call judgeCoralCast() when handle_combos has looked at the board, and knows if anything popped
+    - ask for a bigger group when any fish of it is on coral, and score a fish on coral CORAL_SCORE_BONUS times, both in handle_combos
+    - call coralBoardGrew() when the board has grown
+
+    the FISH_CORAL_DEBUG environment variable writes the patterns that are out onto the screen, and
+    brings a hint every time that a wave of the current sets out.
+remend
+
+setup_coral:
+
+    ` see HOW THE CORAL IS DRAWN in fish_headers
+    reserve render target id(TARGET_CORAL)
+    render target TARGET_CORAL
+    set render target background color TARGET_CORAL, rgb(0, 0, 0, 0)
+
+    reserve effect id(CORAL_FX_ID)
+    effect CORAL_FX_ID, "Fish/Shaders/CoralEffect"
+
+    reserve sprite id(CORAL_VIEW_SPRITE)
+    sprite CORAL_VIEW_SPRITE, 0, 0, render target texture(TARGET_CORAL)
+    set sprite offset CORAL_VIEW_SPRITE, 0, 0
+    size sprite CORAL_VIEW_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    order sprite CORAL_VIEW_SPRITE, ORDER_CORAL
+    set sprite effect CORAL_VIEW_SPRITE, CORAL_FX_ID
+
+    ` the shadows of the fish. see HOW THE CORAL IS DRAWN in fish_headers.
+    reserve render target id(TARGET_CORAL_SHADOW)
+    render target TARGET_CORAL_SHADOW
+    set render target background color TARGET_CORAL_SHADOW, rgb(0, 0, 0, 0)
+    for coralSetupI = 0 to CELL_MAX_COUNT - 1
+        reserve sprite id(coralShadowId)
+        sprite coralShadowId, 0, 0, TEX_PIXEL
+        set sprite render target coralShadowId, TARGET_CORAL_SHADOW
+        hide sprite coralShadowId
+        CORAL_SHADOW_SPRITES(coralSetupI) = coralShadowId
+    next
+
+    ` one square for every cell that the board can ever have
+    CORAL_SPRITE_COUNT = CELL_MAX_COUNT
+    for coralSetupI = 0 to CORAL_SPRITE_COUNT - 1
+        reserve sprite id(coralSpriteId)
+        sprite coralSpriteId, 0, 0, TEX_PIXEL
+        color sprite coralSpriteId, rgb(255, 255, 255)
+        set sprite render target coralSpriteId, TARGET_CORAL
+        hide sprite coralSpriteId
+        CORAL_SPRITES(coralSetupI) = coralSpriteId
+    next
+
+    ` the songs. see THE SONGS in fish_headers.
+    for coralSetupI = 0 to CORAL_USED_MAX * CORAL_RUNE_DOTS - 1
+        reserve sprite id(coralRuneId)
+        sprite coralRuneId, 0, 0, TEX_PIXEL
+        set sprite offset coralRuneId, 0, 0
+        size sprite coralRuneId, 1, 1
+        color sprite coralRuneId, rgb(158, 199, 209)
+        hide sprite coralRuneId
+        CORAL_RUNE_SPRITES(coralSetupI) = coralRuneId
+
+        reserve sprite id(coralLinkId)
+        sprite coralLinkId, 0, 0, TEX_PIXEL
+        set sprite offset coralLinkId, 0, 0
+        size sprite coralLinkId, 1, 1
+        color sprite coralLinkId, rgb(158, 199, 209)
+        hide sprite coralLinkId
+        CORAL_RUNE_LINKS(coralSetupI) = coralLinkId
+    next
+    INFO_INDEX_SONGS = allocateInfoBlob(CORAL_RUNE_X - 4, CORAL_RUNE_Y - 4, CORAL_RUNE_COLUMNS * CORAL_RUNE_WIDTH + 8, CORAL_RUNE_ROWS * CORAL_RUNE_HEIGHT + 8, "Songs", "These healing songs have been used.")
+    setInfoBlobEnabled(INFO_INDEX_SONGS, 0)
+
+    reserve text id(CORAL_DEBUG_TEXT_ID)
+    text CORAL_DEBUG_TEXT_ID, 4, 2, SCORE_FONT, " "
+    size text y CORAL_DEBUG_TEXT_ID, 12
+    set text offset CORAL_DEBUG_TEXT_ID, 0, 0
+    set text alpha CORAL_DEBUG_TEXT_ID, 0
+    if is env set("FISH_CORAL_DEBUG")
+        CORAL_DEBUG = 1
+    endif
+
+    ` info mode says nothing about the coral until there is some. coralPlaceInfo puts this on it.
+    INFO_INDEX_CORAL = allocateInfoBlob(0, 0, CELL_SIZE, CELL_SIZE, "Coral", "Coral reefs are beautiful, but dying and lost. Maybe the ocean will sing them back to us.")
+    setInfoBlobEnabled(INFO_INDEX_CORAL, 0)
+    INFO_INDEX_CORAL_SICK = allocateInfoBlob(0, 0, CELL_SIZE, CELL_SIZE, "Horror Coral", "A song sung by the dead, too late to save them.")
+    setInfoBlobEnabled(INFO_INDEX_CORAL_SICK, 0)
+
+    ` the two endings of the hidden game. see THE TWO ENDINGS in fish_headers.
+    reserve sprite id(CORAL_END_DIM_SPRITE)
+    sprite CORAL_END_DIM_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset CORAL_END_DIM_SPRITE, 0, 0
+    size sprite CORAL_END_DIM_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    color sprite CORAL_END_DIM_SPRITE, rgb(5, 13, 11)
+    order sprite CORAL_END_DIM_SPRITE, ORDER_END_DIM
+    hide sprite CORAL_END_DIM_SPRITE
+
+    reserve effect id(TENTACLE_FX_ID)
+    effect TENTACLE_FX_ID, "Fish/Shaders/TentacleEffect"
+
+    reserve sprite id(TENTACLE_SPRITE)
+    sprite TENTACLE_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset TENTACLE_SPRITE, 0, 0
+    size sprite TENTACLE_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    order sprite TENTACLE_SPRITE, ORDER_TENTACLES
+    set sprite effect TENTACLE_SPRITE, TENTACLE_FX_ID
+    hide sprite TENTACLE_SPRITE
+
+    reserve text id(CORAL_END_TEXT_ID)
+    text CORAL_END_TEXT_ID, WORLD_WIDTH / 2, 150, SCORE_FONT, " "
+    size text y CORAL_END_TEXT_ID, 32
+    set text offset CORAL_END_TEXT_ID, .5, .5
+    enable text drop shadow CORAL_END_TEXT_ID, 2, -2, rgb(0,0,0)
+    order text CORAL_END_TEXT_ID, ORDER_INTRO + 2
+    set text alpha CORAL_END_TEXT_ID, 0
+
+    reserve text id(CORAL_END_SUB_TEXT_ID)
+    text CORAL_END_SUB_TEXT_ID, WORLD_WIDTH / 2, 176, SCORE_FONT, " "
+    size text y CORAL_END_SUB_TEXT_ID, 18
+    set text offset CORAL_END_SUB_TEXT_ID, .5, .5
+    enable text drop shadow CORAL_END_SUB_TEXT_ID, 1, -1, rgb(0,0,0)
+    order text CORAL_END_SUB_TEXT_ID, ORDER_INTRO + 2
+    set text alpha CORAL_END_SUB_TEXT_ID, 0
+
+    gosub setup_coral_bars
+
+    resetCoral()
+
+return
+
+
+` THE TWO ENDINGS. see THE TWO ENDINGS in fish_headers. the main loop comes here on every frame.
+` everything in here starts with "fin", because it draws frames of its own, with update_frame, and
+` it must not touch anything that the rest of the game is using.
+handle_coral_ending:
+    if CORAL_ENDING_DUE = 0 then return
+
+    ` the board has to settle first, and a round that was just won gets its upgrade first
+    if LIVE_MOVE_ACTIVE then return
+    if REQUEST_COMBO_CHECK then return
+    if REQUEST_ABILITY_SELECTION then return
+    if SCORE_BAR_HOLD > 0 then return
+
+    CORAL_ENDING = CORAL_ENDING_DUE
+    CORAL_ENDING_DUE = 0
+    gosub clear_queued_moves
+
+    coralEndingRemember(CORAL_ENDING)
+
+    if CORAL_ENDING = CORAL_ENDING_REEF
+        gosub coral_finale_reef
+    else
+        gosub coral_finale_ancient
+    endif
+
+    ` and then the game ends the way that every game does, with the initials and the table of high scores
+    REQUEST_GAME_END = 1
+return
+
+
+` the reef is saved. there is a fanfare. the fish leave their cells and swim off, every one its own way,
+` and wander around among the coral, and then they find their own kind and school. see THE SCHOOLS in
+` fish_headers. now and then one hops, and hearts come up from them, and the water is as bright as it gets.
+coral_finale_reef:
+    set text CORAL_END_TEXT_ID, "You saved the reef"
+    color text CORAL_END_TEXT_ID, rgb(255, 214, 120)
+    set text CORAL_END_SUB_TEXT_ID, "in " + str$(CURRENT_MOVE_COUNT) + " moves"
+    color text CORAL_END_SUB_TEXT_ID, rgb(255, 170, 190)
+
+    finStart = game ms()
+    finHeartMs = finStart
+    finHopMs = finStart
+    finWaveMs = finStart
+    finSwell# = CORAL_END_SWELL_MS
+    finWords# = CORAL_END_WORDS_MS
+    finDone = 0
+
+    finLast = finStart
+    finFanfare = 0
+
+    ` every fish starts from its cell, and sets off some way of its own. its place in its school, for
+    ` later, is how many fish of its kind come before it.
+    for finI = 0 to CELL_COUNT - 1
+        CORAL_DANCE_X#(finI) = getCellX(finI mod CELL_COLUMN_COUNT)
+        CORAL_DANCE_Y#(finI) = getCellY(finI / CELL_COLUMN_COUNT)
+        finAim# = rnd(628) * .01
+        finPace# = CORAL_DANCE_SCATTER# * (.6 + rnd(80) * .01)
+        CORAL_DANCE_VX#(finI) = cos(finAim#) * finPace#
+        CORAL_DANCE_VY#(finI) = sin(finAim#) * finPace#
+        finRank = 0
+        if finI > 0
+            for finJ = 0 to finI - 1
+                if CELLS(finJ).value = CELLS(finI).value
+                    finRank = finRank + 1
+                endif
+            next
+        endif
+        CORAL_DANCE_SLOT(finI) = finRank
+    next
+
+    repeat
+        ` the mood is all the way up, for as long as this goes on. see THE MOOD in fish_headers.
+        SEABED_COMBO = 12
+        gosub update_frame
+
+        finNow = game ms()
+        finAge# = finNow - finStart
+        finSwing# = finAge# / finSwell#
+        if finSwing# > 1 then finSwing# = 1
+        finClock# = finAge# * .001 * CORAL_DANCE_SPEED#
+        finBob# = sin(finAge# * .003) * 3
+
+        ` the cursor fades away. the fill of it is the color of its sprite, which is faint to start with,
+        ` and the outline of it is drawn by the cursor effect, which is told how thick to make it.
+        finCursor# = 1 - finAge# / CORAL_END_CURSOR_MS
+        if finCursor# < 0 then finCursor# = 0
+        set sprite alpha SELECTION_SPRITE, 90 * finCursor#
+        set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, finCursor#
+
+        ` how long this frame is, in seconds. the game can stall, and the fish should not leap when it comes back.
+        finStep# = (finNow - finLast) * .001
+        finLast = finNow
+        if finStep# > .05 then finStep# = .05
+
+        ` the fanfare: four notes up the chord, and then the chord, with the choir under it
+        if finFanfare = 0
+            playMusicNote(INSTRUMENT_BELL, F4, CORAL_FANFARE_VOLUME#)
+            finFanfare = 1
+        endif
+        if finFanfare = 1
+            if finAge# >= 150
+                playMusicNote(INSTRUMENT_BELL, A4, CORAL_FANFARE_VOLUME#)
+                finFanfare = 2
+            endif
+        endif
+        if finFanfare = 2
+            if finAge# >= 300
+                playMusicNote(INSTRUMENT_BELL, C5, CORAL_FANFARE_VOLUME#)
+                finFanfare = 3
+            endif
+        endif
+        if finFanfare = 3
+            if finAge# >= 450
+                playMusicNote(INSTRUMENT_BELL, F5, CORAL_FANFARE_VOLUME#)
+                finFanfare = 4
+            endif
+        endif
+        if finFanfare = 4
+            if finAge# >= 700
+                playMusicNote(INSTRUMENT_BELL, A5, CORAL_FANFARE_VOLUME#)
+                playMusicNote(INSTRUMENT_BELL, C6, CORAL_FANFARE_VOLUME#)
+                playMusicNote(INSTRUMENT_PLUCK, F5, CORAL_FANFARE_VOLUME#)
+                playMusicNote(INSTRUMENT_CHOIR, F4, CORAL_FANFARE_VOLUME#)
+                playMusicNote(INSTRUMENT_CHOIR, A4, CORAL_FANFARE_VOLUME#)
+                playMusicNote(INSTRUMENT_CHOIR, C5, CORAL_FANFARE_VOLUME#)
+                finFanfare = 5
+            endif
+        endif
+
+        ` how much the fish are schooling, from 0 (every one on its own) to 1. see THE SCHOOLS in fish_headers.
+        finSchool# = (finAge# - CORAL_DANCE_SCATTER_MS) / CORAL_DANCE_GATHER_MS
+        if finSchool# < 0 then finSchool# = 0
+        if finSchool# > 1 then finSchool# = 1
+
+        ` the schools go around the middle of the board, and no fish goes far off of the board
+        finWide# = (CELL_COLUMN_COUNT - 1) * CELL_SIZE
+        finTall# = (CELL_ROW_COUNT - 1) * CELL_SIZE
+        finMidX# = getCellX(0) + finWide# / 2
+        finMidY# = getCellY(0) + finTall# / 2
+        finMinX# = getCellX(0) - CELL_SIZE / 2
+        finMaxX# = finMinX# + finWide# + CELL_SIZE
+        finMinY# = getCellY(0) - CELL_SIZE / 2
+        finMaxY# = finMinY# + finTall# + CELL_SIZE
+        for finI = 0 to CELL_COUNT - 1
+            finVX# = CORAL_DANCE_VX#(finI)
+            finVY# = CORAL_DANCE_VY#(finI)
+
+            ` on its own, a fish wanders: it keeps turning a little, one way and then the other
+            finVeer# = sin(finAge# * .0013 + finI * 2.1) * .035 * (1 - finSchool#)
+            finKeep# = finVX#
+            finVX# = finVX# - finVY# * finVeer#
+            finVY# = finVY# + finKeep# * finVeer#
+
+            ` the spot that the school of this fish is following. every kind has a loop of its own.
+            finKind = CELLS(finI).value
+            finLeadX# = finMidX# + sin(finClock# * (.35 + finKind * .037) + finKind * 2.4) * finWide# * CORAL_DANCE_ROAM#
+            finLeadY# = finMidY# + cos(finClock# * (.27 + finKind * .029) + finKind * 1.3) * finTall# * CORAL_DANCE_ROAM#
+
+            ` the place of this fish around that spot. the spiral turns slowly, so the fish change places.
+            finSlot# = CORAL_DANCE_SLOT(finI)
+            finRing# = sqrt(finSlot#) * CORAL_DANCE_SPACING#
+            finTurn# = finSlot# * 2.4 + finClock# * .5
+            finWantX# = finLeadX# + cos(finTurn#) * finRing#
+            finWantY# = finLeadY# + sin(finTurn#) * finRing# * .7
+
+            ` once it is schooling, it turns toward its place. it swims faster the further off it is,
+            ` up to the fastest that it can.
+            finGoX# = (finWantX# - CORAL_DANCE_X#(finI)) * 1.6
+            finGoY# = (finWantY# - CORAL_DANCE_Y#(finI)) * 1.6
+            finGo# = sqrt(finGoX# * finGoX# + finGoY# * finGoY#)
+            if finGo# > CORAL_DANCE_CHASE#
+                finGoX# = (finGoX# * CORAL_DANCE_CHASE#) / finGo#
+                finGoY# = (finGoY# * CORAL_DANCE_CHASE#) / finGo#
+            endif
+            finVX# = finVX# + (finGoX# - finVX#) * CORAL_DANCE_TURN# * finSchool#
+            finVY# = finVY# + (finGoY# - finVY#) * CORAL_DANCE_TURN# * finSchool#
+
+            ` it turns back when it gets to the edge of the board
+            if CORAL_DANCE_X#(finI) < finMinX# then finVX# = abs(finVX#)
+            if CORAL_DANCE_X#(finI) > finMaxX# then finVX# = 0 - abs(finVX#)
+            if CORAL_DANCE_Y#(finI) < finMinY# then finVY# = abs(finVY#)
+            if CORAL_DANCE_Y#(finI) > finMaxY# then finVY# = 0 - abs(finVY#)
+
+            CORAL_DANCE_VX#(finI) = finVX#
+            CORAL_DANCE_VY#(finI) = finVY#
+            CORAL_DANCE_X#(finI) = CORAL_DANCE_X#(finI) + finVX# * finStep#
+            CORAL_DANCE_Y#(finI) = CORAL_DANCE_Y#(finI) + finVY# * finStep#
+            position sprite CELLS(finI).spriteId, CORAL_DANCE_X#(finI), CORAL_DANCE_Y#(finI)
+        next
+
+        ` a heart from one fish or another, a hop from one, and a ripple through all of them
+        if finNow >= finHeartMs
+            finHeartMs = finNow + 170
+            finPick = rnd(CELL_COUNT)
+            spawnHeart(sprite x(CELLS(finPick).spriteId), sprite y(CELLS(finPick).spriteId) - CELL_ART_SIZE / 2, 0)
+        endif
+        if finNow >= finHopMs
+            finHopMs = finNow + 320
+            finPick = rnd(CELL_COUNT)
+            create basic tween CELLS(finPick).scaleWaveTweenId, 1.5, 1, 260, 0
+        endif
+        if finNow >= finWaveMs
+            finWaveMs = finNow + 1400
+            spawnShockwave(rnd(CELL_COLUMN_COUNT), rnd(CELL_ROW_COUNT), .4, 0)
+        endif
+
+        ` the words fade in, and bob a little
+        finShown# = (finAge# - 700) / finWords#
+        if finShown# < 0 then finShown# = 0
+        if finShown# > 1 then finShown# = 1
+        set text alpha CORAL_END_TEXT_ID, 255 * finShown#
+        set text alpha CORAL_END_SUB_TEXT_ID, 255 * finShown#
+        set text position CORAL_END_TEXT_ID, WORLD_WIDTH / 2, 150 + finBob#
+        set text position CORAL_END_SUB_TEXT_ID, WORLD_WIDTH / 2, 176 + finBob#
+
+        sync
+
+        ` the player can move on once they have had a look, and it moves on by itself after a while
+        if finAge# > 700 + CORAL_END_WORDS_MS + CORAL_END_HOLD_MS
+            if new action down(ACT_CONFIRM) then finDone = 1
+        endif
+        if finAge# > CORAL_END_MAX_MS then finDone = 1
+    until finDone
+
+    ` the words go, and the fish are put back where they belong, for the menu that comes up over them
+    SEABED_COMBO = 0
+    set text alpha CORAL_END_TEXT_ID, 0
+    set text alpha CORAL_END_SUB_TEXT_ID, 0
+    for finI = 0 to CELL_COUNT - 1
+        updateCell(CELLS(finI))
+    next
+return
+
+
+` the ancient one is summoned. the screen darkens and shakes, its edges close in, and the bottom of it goes
+` thick and green. the sea behind the board turns into stars. see SeabedEffect.fx. tentacles come up, a
+` few here and one there, with waits in between. see TentacleEffect.fx. the fish do not go anywhere:
+` one after another, each of them turns into a skeleton, the ones at the bottom of the board first, more
+` or less. the tentacles stay where they are once they are up.
+coral_finale_ancient:
+    set text CORAL_END_TEXT_ID, "You summoned the ancient one"
+    color text CORAL_END_TEXT_ID, rgb(196, 255, 150)
+    set text CORAL_END_SUB_TEXT_ID, "in " + str$(CURRENT_MOVE_COUNT) + " moves"
+    color text CORAL_END_SUB_TEXT_ID, rgb(200, 160, 255)
+
+    show sprite TENTACLE_SPRITE
+    set sprite alpha CORAL_END_DIM_SPRITE, 0
+    show sprite CORAL_END_DIM_SPRITE
+
+    ` the sound of the deep, gone wrong. see the sounds of the two endings, in fish_headers. the music of
+    ` the game fades away, and a tune that was playing stops.
+    MUSIC_HUSH_TARGET# = 1
+    MELODY_PLAYING = -1
+    finDroneMs = 0
+    finPingMs = 0
+    finWhaleMs = 0
+    finWailMs = 0
+    finScreamMs = 0
+    finScreamTurn = rnd(MUSIC_DIRGE_COUNT)
+
+    finStart = game ms()
+    finRiseMs# = CORAL_END_RISE_MS
+    finWords# = CORAL_END_WORDS_MS
+    finDone = 0
+    repeat
+        gosub update_frame
+
+        finNow = game ms()
+        finAge# = finNow - finStart
+        finClock# = finAge# * .001
+
+        ` how far along it all is, from 0 to 1. the tentacles each have their own moment in that to come up.
+        finRise# = finAge# / finRiseMs#
+        if finRise# > 1 then finRise# = 1
+
+        ` the cursor fades away. the fill of it is the color of its sprite, which is faint to start with,
+        ` and the outline of it is drawn by the cursor effect, which is told how thick to make it.
+        finCursor# = 1 - finAge# / CORAL_END_CURSOR_MS
+        if finCursor# < 0 then finCursor# = 0
+        set sprite alpha SELECTION_SPRITE, 90 * finCursor#
+        set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, finCursor#
+
+        ` the sea behind the board turns into the stars
+        SEABED_VOID# = finRise# * finRise# * (3 - 2 * finRise#)
+
+        ` the drone: three notes that are right next to each other, an octave down, and the middle one
+        ` of them a little flat. it breathes in again before it has died away.
+        if finNow >= finDroneMs
+            finDroneMs = finNow + CORAL_DEEP_DRONE_MS
+            coralLowNote(INSTRUMENT_SWELL, D4, CORAL_DEEP_DRONE#, -1)
+            coralLowNote(INSTRUMENT_SWELL, E4, CORAL_DEEP_DRONE# * .8, -1 + CORAL_DEEP_FLAT#)
+            coralLowNote(INSTRUMENT_SWELL, F4, CORAL_DEEP_DRONE# * .6, -1)
+        endif
+
+        ` the sonar, an octave down. the first ping is a moment after the start.
+        if finPingMs = 0 then finPingMs = finNow + 900
+        if finNow >= finPingMs
+            finPingMs = finNow + CORAL_DEEP_PING_MS
+            coralLowShot(MUSIC_SHOT_PING, CORAL_DEEP_PING#, -1)
+        endif
+
+        ` something very big, now and then
+        if finWhaleMs = 0 then finWhaleMs = finNow + 2600
+        if finNow >= finWhaleMs
+            finWhaleMs = finNow + CORAL_DEEP_WHALE_MS / 2 + rnd(CORAL_DEEP_WHALE_MS)
+            coralLowShot(MUSIC_SHOT_WHALE_LOW, CORAL_DEEP_WHALE#, -1)
+        endif
+
+        ` the wails, far off. each one is somewhere between a little low and an octave low, and there
+        ` are more of them, and they are a little louder, as the tentacles come up.
+        if finNow >= finWailMs
+            finGap = CORAL_DEEP_WAIL_SLOW - (CORAL_DEEP_WAIL_SLOW - CORAL_DEEP_WAIL_FAST) * finRise#
+            finWailMs = finNow + finGap / 2 + rnd(finGap)
+            finLow# = 0 - (.45 + rnd(56) * .01)
+            coralLowNote(INSTRUMENT_WAIL, D4 + rnd(9), CORAL_DEEP_WAIL# * (.35 + .65 * finRise#) * (.6 + rnd(41) * .01), finLow#)
+        endif
+
+        ` and the slow screams, laid over each other. the first one is at the very start. they take
+        ` turns, because one that is started again while it is still going is cut off, and each one
+        ` lasts for about as long as it takes for the other two to have their turns.
+        if finNow >= finScreamMs
+            finScreamMs = finNow + CORAL_DEEP_SCREAM_MS * 3 / 4 + rnd(CORAL_DEEP_SCREAM_MS / 2)
+            finLow# = 0 - rnd(101) * .01 * CORAL_DEEP_SCREAM_LOW#
+            coralLowShot(MUSIC_SHOT_DIRGE + finScreamTurn, CORAL_DEEP_SCREAM# * (.6 + rnd(41) * .01), finLow#)
+            finScreamTurn = (finScreamTurn + 1) mod MUSIC_DIRGE_COUNT
+        endif
+
+        ` the effect loses its parameters when it is reloaded, so they are all set on every frame
+        finCell# = CELL_SIZE
+        finWide# = WORLD_WIDTH
+        finTall# = WORLD_HEIGHT
+        set effect param float TENTACLE_FX_ID, "Time", finNow * .001
+        set effect param float2 TENTACLE_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT
+        set effect param float TENTACLE_FX_ID, "Rise", finRise#
+
+        ` the fish die where they are. each one has its own moment to turn into a skeleton: the lower down
+        ` the board it is, the sooner, give or take. a few bubbles come off of it, the color of bone.
+        ` a skeleton is a fish that is belly up, twice over. see SKELETONS in fish_headers.
+        for finI = 0 to CELL_COUNT - 1
+            if CELLS(finI).bellyUp < 2
+                finRow = finI / CELL_COLUMN_COUNT
+                finLow# = finRow
+                finRows# = CELL_ROW_COUNT
+                finTurns# = .12 + .55 * (1 - finLow# / finRows#) + ((finI * 37) mod 29) * .01
+                if finRise# >= finTurns#
+                    CELLS(finI).bellyUp = 2
+                    spawnBubbles(getCellX(finI mod CELL_COLUMN_COUNT), getCellY(finRow), CELL_SIZE / 4, 3, 0, rgb(225, 225, 200))
+                endif
+            endif
+        next
+
+        ` it gets dark, and the ground shakes: softly at first, and more and more as they come up. it
+        ` does not let up once they are there.
+        set sprite alpha CORAL_END_DIM_SPRITE, CORAL_END_DIM * finRise#
+        finShake# = CORAL_END_SHAKE_FROM# + (CORAL_END_SHAKE_TO# - CORAL_END_SHAKE_FROM#) * finRise#
+        set screen shake amount finShake#
+
+        ` the words come once the tentacles are up
+        finShown# = ((finAge# - finRiseMs#) - 300) / finWords#
+        if finShown# < 0 then finShown# = 0
+        if finShown# > 1 then finShown# = 1
+        set text alpha CORAL_END_TEXT_ID, 255 * finShown#
+        set text alpha CORAL_END_SUB_TEXT_ID, 255 * finShown#
+        set text position CORAL_END_TEXT_ID, WORLD_WIDTH / 2 + sin(finClock# * 31) * finShown# * .7, 150
+        set text position CORAL_END_SUB_TEXT_ID, WORLD_WIDTH / 2, 176
+
+        sync
+
+        ` the player can move on once they have had a look, and it moves on by itself after a while
+        if finAge# > CORAL_END_RISE_MS + 300 + CORAL_END_WORDS_MS + CORAL_END_HOLD_MS
+            if new action down(ACT_CONFIRM) then finDone = 1
+        endif
+        if finAge# > CORAL_END_RISE_MS + CORAL_END_MAX_MS then finDone = 1
+    until finDone
+
+    ` the words go. the tentacles and the dark stay, behind the menu that comes up, until the next game starts.
+    set screen shake amount 0
+    set text alpha CORAL_END_TEXT_ID, 0
+    set text alpha CORAL_END_SUB_TEXT_ID, 0
+return
+
+
+routines_coral_exit:
+
+
+` which way a step goes, across and down
+function coralDirX(coralDirA)
+    coralAcross = 0
+    if coralDirA = CORAL_RIGHT then coralAcross = 1
+    if coralDirA = CORAL_LEFT then coralAcross = -1
+endfunction coralAcross
+
+function coralDirY(coralDirB)
+    coralDown = 0
+    if coralDirB = CORAL_DOWN then coralDown = 1
+    if coralDirB = CORAL_UP then coralDown = -1
+endfunction coralDown
+
+` and the step that goes a given way
+function coralDirOf(coralGoX, coralGoY)
+    coralWay = CORAL_UP
+    if coralGoX > 0 then coralWay = CORAL_RIGHT
+    if coralGoX < 0 then coralWay = CORAL_LEFT
+    if coralGoY > 0 then coralWay = CORAL_DOWN
+endfunction coralWay
+
+
+` the pattern in CORAL_TRY_STEPS as one number: a 1, and then every step after it, as a digit in base 4.
+` the 1 in front is what says how many steps there are.
+function coralTryCode(coralCodeLength)
+    coralCodeNow = 1
+    for coralCodeN = 0 to coralCodeLength - 1
+        coralCodeNow = coralCodeNow * 4 + CORAL_TRY_STEPS(coralCodeN)
+    next
+endfunction coralCodeNow
+
+
+` does the walk in CORAL_TRY_STEPS come back to a cell that it has already been on? coral grows on the
+` cells of the walk, so a walk that crosses itself would grow less of it than its length says.
+function coralTryCrosses(coralCrossLength)
+    CORAL_TRY_X(0) = 0
+    CORAL_TRY_Y(0) = 0
+    for coralCrossN = 0 to coralCrossLength - 1
+        CORAL_TRY_X(coralCrossN + 1) = CORAL_TRY_X(coralCrossN) + coralDirX(CORAL_TRY_STEPS(coralCrossN))
+        CORAL_TRY_Y(coralCrossN + 1) = CORAL_TRY_Y(coralCrossN) + coralDirY(CORAL_TRY_STEPS(coralCrossN))
+    next
+
+    coralCrosses = 0
+    for coralCrossA = 0 to coralCrossLength - 1
+        for coralCrossB = coralCrossA + 1 to coralCrossLength
+            if CORAL_TRY_X(coralCrossA) = CORAL_TRY_X(coralCrossB)
+                if CORAL_TRY_Y(coralCrossA) = CORAL_TRY_Y(coralCrossB)
+                    coralCrosses = 1
+                endif
+            endif
+        next
+    next
+endfunction coralCrosses
+
+
+` a pattern can be walked from either end. walking it from the far end takes the same steps in the
+` other order, each one turned around: left, left, up is also down, right, right.
+
+` the step that goes the other way
+function coralTurnAround(coralTurnDir)
+endfunction (coralTurnDir + 2) mod 4
+
+` step `coralStepN` of the pattern in CORAL_TRY_STEPS, walked from the near end, or from the far end if `coralStepBack` is 1
+function coralTryStep(coralStepLength, coralStepN, coralStepBack)
+    coralStepIs = CORAL_TRY_STEPS(coralStepN)
+    if coralStepBack
+        coralStepIs = coralTurnAround(CORAL_TRY_STEPS((coralStepLength - 1) - coralStepN))
+    endif
+endfunction coralStepIs
+
+` and the same for the pattern in a slot
+function coralSeqStep(coralSeqSlot, coralSeqN, coralSeqBack)
+    coralSeqFirstStep = coralSeqSlot * CORAL_STEP_MAX
+    coralSeqIs = CORAL_SEQ_STEPS(coralSeqFirstStep + coralSeqN)
+    if coralSeqBack
+        coralSeqIs = coralTurnAround(CORAL_SEQ_STEPS(coralSeqFirstStep + ((CORAL_SEQ_LENGTH(coralSeqSlot) - 1) - coralSeqN)))
+    endif
+endfunction coralSeqIs
+
+` the pattern in CORAL_TRY_STEPS, walked from the far end, as one number. see coralTryCode.
+function coralTryBackCode(coralBackLength)
+    coralBackNow = 1
+    for coralBackN = 0 to coralBackLength - 1
+        coralBackNow = coralBackNow * 4 + coralTryStep(coralBackLength, coralBackN, 1)
+    next
+endfunction coralBackNow
+
+
+` would the pattern in CORAL_TRY_STEPS get mixed up with the one in a slot? it would if the shorter of the
+` two is how the longer one ends, because then walking the longer one walks the shorter one too. and
+` that goes for both of them walked from either end.
+function coralTryClashes(coralClashLength, coralClashSlot)
+    coralClash = 0
+    coralOtherLength = CORAL_SEQ_LENGTH(coralClashSlot)
+    if coralOtherLength > 0
+        coralShortest = coralClashLength
+        if coralOtherLength < coralShortest then coralShortest = coralOtherLength
+
+        for coralClashMine = 0 to 1
+            for coralClashTheirs = 0 to 1
+                coralClashSame = 1
+                for coralClashN = 1 to coralShortest
+                    coralMine = coralTryStep(coralClashLength, coralClashLength - coralClashN, coralClashMine)
+                    coralTheirs = coralSeqStep(coralClashSlot, coralOtherLength - coralClashN, coralClashTheirs)
+                    if coralMine <> coralTheirs
+                        coralClashSame = 0
+                    endif
+                next
+                if coralClashSame
+                    coralClash = 1
+                endif
+            next
+        next
+    endif
+endfunction coralClash
+
+
+` is the pattern in CORAL_TRY_STEPS one that can be given out?
+function coralTryIsGood(coralGoodLength)
+    coralGood = 1
+    if coralTryCrosses(coralGoodLength) then coralGood = 0
+
+    if coralGood
+        ` a pattern that has been cast never comes back, from either end
+        coralGoodCode = coralTryCode(coralGoodLength)
+        coralGoodBack = coralTryBackCode(coralGoodLength)
+        if CORAL_USED_COUNT > 0
+            for coralGoodN = 0 to CORAL_USED_COUNT - 1
+                if CORAL_USED(coralGoodN) = coralGoodCode
+                    coralGood = 0
+                endif
+                if CORAL_USED(coralGoodN) = coralGoodBack
+                    coralGood = 0
+                endif
+            next
+        endif
+
+        for coralGoodSlot = 0 to CORAL_LIVE_MAX - 1
+            if coralTryClashes(coralGoodLength, coralGoodSlot)
+                coralGood = 0
+            endif
+        next
+    endif
+endfunction coralGood
+
+
+` put the pattern that is in CORAL_TRY_STEPS into a slot
+function coralKeepTry(coralKeepSlot, coralKeepLength)
+    coralKeepFirst = coralKeepSlot * CORAL_STEP_MAX
+    for coralKeepN = 0 to coralKeepLength - 1
+        CORAL_SEQ_STEPS(coralKeepFirst + coralKeepN) = CORAL_TRY_STEPS(coralKeepN)
+    next
+    CORAL_SEQ_LENGTH(coralKeepSlot) = coralKeepLength
+    CORAL_SEQ_CODE(coralKeepSlot) = coralTryCode(coralKeepLength)
+endfunction
+
+
+` put a pattern into a slot from the number that stands for it. see coralTryCode. a number that does
+` not stand for a pattern leaves the slot empty.
+function coralSetSequence(coralSetSlot, coralSetCode)
+    CORAL_SEQ_LENGTH(coralSetSlot) = 0
+    CORAL_SEQ_CODE(coralSetSlot) = 0
+
+    coralSetLength = 0
+    coralSetRest = coralSetCode
+    while coralSetRest > 1
+        coralSetRest = coralSetRest / 4
+        coralSetLength = coralSetLength + 1
+    endwhile
+
+    if coralSetLength >= 1 and coralSetLength <= CORAL_STEP_MAX
+        ` the last step is the lowest digit, so they come off back to front
+        coralSetRest = coralSetCode
+        coralSetN = coralSetLength
+        while coralSetN > 0
+            coralSetN = coralSetN - 1
+            CORAL_TRY_STEPS(coralSetN) = coralSetRest mod 4
+            coralSetRest = coralSetRest / 4
+        endwhile
+        coralKeepTry(coralSetSlot, coralSetLength)
+    endif
+endfunction
+
+
+` make up a new pattern for a slot. the first ones of a game are short, and they get longer as more are made.
+function coralMakeSequence(coralMakeSlot)
+    coralMakeLength = CORAL_FIRST_LENGTH + CORAL_MADE / CORAL_LENGTH_EVERY
+    if coralMakeLength > CORAL_STEP_MAX then coralMakeLength = CORAL_STEP_MAX
+
+    ` roll for one, until a good one comes up
+    coralMakeFound = 0
+    coralMakeTries = 0
+    while coralMakeFound = 0 and coralMakeTries < 200
+        coralMakeTries = coralMakeTries + 1
+        for coralMakeN = 0 to coralMakeLength - 1
+            CORAL_TRY_STEPS(coralMakeN) = rnd(4)
+        next
+        coralMakeFound = coralTryIsGood(coralMakeLength)
+    endwhile
+
+    ` when luck runs out, every pattern of that length is tried in order, and then the longer ones
+    while coralMakeFound = 0 and coralMakeLength <= CORAL_STEP_MAX
+        coralMakeTotal = 1
+        for coralMakeN = 1 to coralMakeLength
+            coralMakeTotal = coralMakeTotal * 4
+        next
+
+        coralMakeAt = 0
+        while coralMakeFound = 0 and coralMakeAt < coralMakeTotal
+            coralMakeRest = coralMakeAt
+            for coralMakeN = 0 to coralMakeLength - 1
+                CORAL_TRY_STEPS(coralMakeN) = coralMakeRest mod 4
+                coralMakeRest = coralMakeRest / 4
+            next
+            coralMakeFound = coralTryIsGood(coralMakeLength)
+            coralMakeAt = coralMakeAt + 1
+        endwhile
+
+        if coralMakeFound = 0
+            coralMakeLength = coralMakeLength + 1
+        endif
+    endwhile
+
+    if coralMakeFound
+        coralKeepTry(coralMakeSlot, coralMakeLength)
+        CORAL_MADE = CORAL_MADE + 1
+    endif
+endfunction
+
+
+` give every slot that is empty a new pattern
+function coralFillSequences()
+    for coralFillSlot = 0 to CORAL_LIVE_COUNT - 1
+        if CORAL_SEQ_LENGTH(coralFillSlot) = 0
+            coralMakeSequence(coralFillSlot)
+        endif
+    next
+endfunction
+
+
+` count the coral, and see if the whole board has it
+function coralRecount()
+    CORAL_COUNT = 0
+    CORAL_SICK_COUNT = 0
+    for coralCountI = 0 to CELL_COUNT - 1
+        CORAL_COUNT = CORAL_COUNT + CORAL_CELLS(coralCountI)
+        CORAL_SICK_COUNT = CORAL_SICK_COUNT + CORAL_CELLS(coralCountI) * CORAL_SICK(coralCountI)
+    next
+
+    CORAL_COMPLETE = 0
+    if CORAL_COUNT >= CELL_COUNT then CORAL_COMPLETE = 1
+
+    ` one of the two endings may be due now: enough of the board has the one kind of coral on it.
+    ` the ancient one wins, if the board is ever both. a game only ever has the one ending.
+    ` see THE TWO ENDINGS in fish_headers.
+    if CORAL_ENDING = 0
+        coralNeed = coralEndNeed()
+        CORAL_ENDING_DUE = 0
+        coralHealthy = CORAL_COUNT - CORAL_SICK_COUNT
+        if coralHealthy >= coralNeed then CORAL_ENDING_DUE = CORAL_ENDING_REEF
+        if CORAL_SICK_COUNT >= coralNeed then CORAL_ENDING_DUE = CORAL_ENDING_ANCIENT
+    endif
+
+    coralPlaceInfo()
+
+    ` coral that has grown is in the codec from now on, and so is horror coral. see CODEC_ENTRY_CORAL in fish_headers.
+    if CORAL_COUNT > CORAL_SICK_COUNT
+        codecSeeCard(CODEC_ENTRY_CORAL)
+    endif
+    if CORAL_SICK_COUNT > 0
+        codecSeeCard(CODEC_ENTRY_HORROR)
+    endif
+endfunction
+
+
+` lay out the spots that info mode has over the board. while there is no coral, the spot that explains
+` the fish is the whole board. once there is some, the board is split down the middle: the left side
+` explains the fish, and the right side explains the coral. when there is horror coral too, the board is
+` split in three, and the horror coral has the part on the right. when all of the coral is horror coral,
+` it is back to two. they are side by side, and not one inside the other, so that the arrow keys can get
+` to all of them. resizeGrid calls this too, when the board changes size.
+function coralPlaceInfo()
+    ` the cells are centered on their position, so the board starts half a cell early
+    coralInfoLeft = getCellX(0) - CELL_SIZE / 2
+    coralInfoTop = getCellY(0) - CELL_SIZE / 2
+
+    ` which kinds of coral there are. the spots for them are only made once the coral has been set up.
+    coralInfoHealthy = 0
+    coralInfoSick = 0
+    if INFO_INDEX_CORAL >= 0
+        if CORAL_COUNT > CORAL_SICK_COUNT then coralInfoHealthy = 1
+        if CORAL_SICK_COUNT > 0 then coralInfoSick = 1
+    endif
+    coralInfoParts = 1 + coralInfoHealthy + coralInfoSick
+
+    ` the fish come first, then the coral, then the horror coral. every split is on the edge of a cell,
+    ` and when the columns do not share out evenly, the parts on the left get the ones that are left over.
+    coralInfoFrom = 0
+    coralInfoPart = 1
+    coralInfoTo = (CELL_COLUMN_COUNT * coralInfoPart + coralInfoParts - 1) / coralInfoParts
+
+    blob = INFOS(INFO_INDEX_GRID)
+    blob.topLeft.x = coralInfoLeft
+    blob.topLeft.y = coralInfoTop
+    blob.size.x = coralInfoTo * CELL_SIZE
+    blob.size.y = CELL_ROW_COUNT * CELL_SIZE
+    INFOS(INFO_INDEX_GRID) = blob
+
+    if INFO_INDEX_CORAL >= 0
+        if coralInfoHealthy
+            coralInfoFrom = coralInfoTo
+            coralInfoPart = coralInfoPart + 1
+            coralInfoTo = (CELL_COLUMN_COUNT * coralInfoPart + coralInfoParts - 1) / coralInfoParts
+
+            blob = INFOS(INFO_INDEX_CORAL)
+            blob.topLeft.x = coralInfoLeft + coralInfoFrom * CELL_SIZE
+            blob.topLeft.y = coralInfoTop
+            blob.size.x = (coralInfoTo - coralInfoFrom) * CELL_SIZE
+            blob.size.y = CELL_ROW_COUNT * CELL_SIZE
+            blob.enabled = 1
+            INFOS(INFO_INDEX_CORAL) = blob
+        else
+            setInfoBlobEnabled(INFO_INDEX_CORAL, 0)
+        endif
+
+        if coralInfoSick
+            coralInfoFrom = coralInfoTo
+            coralInfoPart = coralInfoPart + 1
+            coralInfoTo = (CELL_COLUMN_COUNT * coralInfoPart + coralInfoParts - 1) / coralInfoParts
+
+            blob = INFOS(INFO_INDEX_CORAL_SICK)
+            blob.topLeft.x = coralInfoLeft + coralInfoFrom * CELL_SIZE
+            blob.topLeft.y = coralInfoTop
+            blob.size.x = (coralInfoTo - coralInfoFrom) * CELL_SIZE
+            blob.size.y = CELL_ROW_COUNT * CELL_SIZE
+            blob.enabled = 1
+            INFOS(INFO_INDEX_CORAL_SICK) = blob
+        else
+            setInfoBlobEnabled(INFO_INDEX_CORAL_SICK, 0)
+        endif
+    endif
+endfunction
+
+
+` a new game. the coral is gone, and so is everything that was known about the patterns.
+function resetCoral()
+    for coralResetI = 0 to 399
+        CORAL_CELLS(coralResetI) = 0
+        CORAL_SICK(coralResetI) = 0
+        CORAL_SHOWN#(coralResetI) = 0
+        CORAL_SIT#(coralResetI) = 1
+        CORAL_SAT_VALUE(coralResetI) = 0
+    next
+    CORAL_COUNT = 0
+    CORAL_SICK_COUNT = 0
+    CORAL_COMPLETE = 0
+    CORAL_CASTS = 0
+    CORAL_MADE = 0
+    CORAL_USED_COUNT = 0
+    CORAL_TRAIL_COUNT = 0
+    CORAL_PENDING_SLOT = -1
+    CORAL_PENDING_COUNT = 0
+    CORAL_SWAP_A = -1
+    CORAL_SWAP_B = -1
+    CORAL_HELD_GROUPS = 0
+    CORAL_HINT_DUE = 0
+    coralClearHint()
+    coralPlaceInfo()
+    coralAllSung()
+
+    ` whatever ending the last game had is over with, and the notes that its requiem played low are put back
+    coralNotesBack()
+    SEABED_VOID# = 0
+    MUSIC_HUSH_TARGET# = 0
+
+    ` the cursor is back. these are what setup_selection, in fish_routines, gives it.
+    set sprite alpha SELECTION_SPRITE, 90
+    set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, 1
+    CORAL_ENDING = 0
+    CORAL_ENDING_DUE = 0
+    hide sprite TENTACLE_SPRITE
+    hide sprite CORAL_END_DIM_SPRITE
+    set text alpha CORAL_END_TEXT_ID, 0
+    set text alpha CORAL_END_SUB_TEXT_ID, 0
+
+    for coralResetI = 0 to CORAL_LIVE_MAX - 1
+        CORAL_SEQ_LENGTH(coralResetI) = 0
+        CORAL_SEQ_CODE(coralResetI) = 0
+    next
+    coralFillSequences()
+    coralDebugRefresh()
+    coralRunesRefresh()
+endfunction
+
+
+` forget the steps that the cursor has taken. anything that is not a step of the cursor does this.
+function coralTrailClear()
+    CORAL_TRAIL_COUNT = 0
+endfunction
+
+
+` the cursor has moved on its own, from a cell, by one step
+function coralCursorStepped(coralFromX, coralFromY, coralStepX, coralStepY)
+    ` only the last few steps are kept, so the oldest one makes room
+    if CORAL_TRAIL_COUNT >= CORAL_STEP_MAX
+        for coralShiftN = 1 to CORAL_STEP_MAX - 1
+            CORAL_TRAIL_DIR(coralShiftN - 1) = CORAL_TRAIL_DIR(coralShiftN)
+            CORAL_TRAIL_X(coralShiftN - 1) = CORAL_TRAIL_X(coralShiftN)
+            CORAL_TRAIL_Y(coralShiftN - 1) = CORAL_TRAIL_Y(coralShiftN)
+            CORAL_TRAIL_DEAD(coralShiftN - 1) = CORAL_TRAIL_DEAD(coralShiftN)
+        next
+        CORAL_TRAIL_COUNT = CORAL_STEP_MAX - 1
+    endif
+
+    ` was there a belly up fish on the way? the one that the cursor is coming to is about to pop, so
+    ` this is the last that is seen of it. in a zen game the step may have gone around the edge of the
+    ` board. see HORROR CORAL in fish_headers.
+    coralStepToX = (coralFromX + coralStepX + CELL_COLUMN_COUNT) mod CELL_COLUMN_COUNT
+    coralStepToY = (coralFromY + coralStepY + CELL_ROW_COUNT) mod CELL_ROW_COUNT
+    coralStepDead = 0
+    if CELLS(coralFromX + coralFromY * CELL_COLUMN_COUNT).bellyUp then coralStepDead = 1
+    if CELLS(coralStepToX + coralStepToY * CELL_COLUMN_COUNT).bellyUp then coralStepDead = 1
+
+    CORAL_TRAIL_DIR(CORAL_TRAIL_COUNT) = coralDirOf(coralStepX, coralStepY)
+    CORAL_TRAIL_X(CORAL_TRAIL_COUNT) = coralFromX
+    CORAL_TRAIL_Y(CORAL_TRAIL_COUNT) = coralFromY
+    CORAL_TRAIL_DEAD(CORAL_TRAIL_COUNT) = coralStepDead
+    CORAL_TRAIL_COUNT = CORAL_TRAIL_COUNT + 1
+endfunction
+
+
+` can a pattern be cast right now?
+function coralCanCastNow()
+    coralCanNow = 1
+
+    ` the very first game has enough going on. see THE FIRST DIVE, in fish_routines_intro.
+    if TUTORIAL_STAGE > 0 then coralCanNow = 0
+
+    ` a pattern that is still waiting on an earlier swap keeps its turn
+    if CORAL_PENDING_SLOT >= 0 then coralCanNow = 0
+endfunction coralCanNow
+
+
+` a swap has been made, from the cell that the cursor was on. if the steps that led up to it are
+` exactly a pattern, the pattern waits to hear if the swap pops anything. see judgeCoralCast.
+` this is the swap that is made from the end of the pattern. coralSwapStepped is what the game calls,
+` and it also takes a swap that is the last step of the pattern.
+function coralSwapMade(coralCursorX, coralCursorY)
+    coralMadeCan = coralCanCastNow()
+    coralMatchTrail(coralCursorX, coralCursorY)
+
+    ` steps that are not a pattern that is out may be one that has been cast already. its song shakes.
+    if coralMadeCan
+        if CORAL_PENDING_SLOT < 0
+            coralShakeUsedRunes()
+        endif
+    endif
+
+    CORAL_TRAIL_COUNT = 0
+endfunction
+
+
+` a swap has been made, from the cell that the cursor was on, and it took the cursor one step along
+` with it. a pattern can be finished two ways: by walking all of it and then swapping, from its last
+` cell, or by walking all of it but the last step, and making that step a swap. either way the
+` pattern waits to hear if the swap pops anything. see judgeCoralCast.
+function coralSwapStepped(coralFromX, coralFromY, coralStepX, coralStepY)
+    coralSteppedCan = coralCanCastNow()
+
+    ` the swap from the end of the pattern comes first
+    coralMatchTrail(coralFromX, coralFromY)
+
+    if coralSteppedCan
+        if CORAL_PENDING_SLOT < 0
+            coralShakeUsedRunes()
+
+            ` and then the swap as the last step of it. in a zen game the step may have gone around the edge of the board.
+            coralCursorStepped(coralFromX, coralFromY, coralStepX, coralStepY)
+            coralSteppedToX = (coralFromX + coralStepX + CELL_COLUMN_COUNT) mod CELL_COLUMN_COUNT
+            coralSteppedToY = (coralFromY + coralStepY + CELL_ROW_COUNT) mod CELL_ROW_COUNT
+            coralMatchTrail(coralSteppedToX, coralSteppedToY)
+            if CORAL_PENDING_SLOT < 0
+                coralShakeUsedRunes()
+            endif
+        endif
+    endif
+
+    CORAL_TRAIL_COUNT = 0
+endfunction
+
+
+` see if the steps that the cursor has taken are exactly a pattern that is out, and if they are, the
+` pattern waits on the swap. the last of the steps ended on the given cell.
+function coralMatchTrail(coralCursorX, coralCursorY)
+    coralCanCast = coralCanCastNow()
+
+    if coralCanCast
+        for coralSwapSlot = 0 to CORAL_LIVE_MAX - 1
+            coralSwapLength = CORAL_SEQ_LENGTH(coralSwapSlot)
+            coralSwapFits = 0
+            if coralSwapLength > 0
+                if coralSwapLength <= CORAL_TRAIL_COUNT then coralSwapFits = 1
+            endif
+
+            if coralSwapFits
+                ` the pattern can be walked from either end
+                coralTrailFirst = CORAL_TRAIL_COUNT - coralSwapLength
+                coralSame = 1
+                coralSameBack = 1
+                for coralSwapN = 0 to coralSwapLength - 1
+                    coralSwapDir = CORAL_TRAIL_DIR(coralTrailFirst + coralSwapN)
+                    if coralSwapDir <> coralSeqStep(coralSwapSlot, coralSwapN, 0)
+                        coralSame = 0
+                    endif
+                    if coralSwapDir <> coralSeqStep(coralSwapSlot, coralSwapN, 1)
+                        coralSameBack = 0
+                    endif
+                next
+                if coralSameBack then coralSame = 1
+
+                if coralSame
+                    ` the cells that were walked over: where every step started, and where the last one ended
+                    ` and if any of them had a belly up fish on it when the cursor got there
+                    CORAL_PENDING_SLOT = coralSwapSlot
+                    CORAL_PENDING_SICK = 0
+                    for coralSwapN = 0 to coralSwapLength - 1
+                        CORAL_PENDING_X(coralSwapN) = CORAL_TRAIL_X(coralTrailFirst + coralSwapN)
+                        CORAL_PENDING_Y(coralSwapN) = CORAL_TRAIL_Y(coralTrailFirst + coralSwapN)
+                        if CORAL_TRAIL_DEAD(coralTrailFirst + coralSwapN) then CORAL_PENDING_SICK = 1
+                    next
+                    CORAL_PENDING_X(coralSwapLength) = coralCursorX
+                    CORAL_PENDING_Y(coralSwapLength) = coralCursorY
+                    CORAL_PENDING_COUNT = coralSwapLength + 1
+                endif
+            endif
+        next
+    endif
+endfunction
+
+
+` the steps that led up to a swap are not a pattern that is out. if they are exactly a pattern that
+` has been cast, walked from either end, the song of it shakes. see THE SONGS in fish_headers.
+function coralShakeUsedRunes()
+    if CORAL_USED_COUNT = 0 then exitfunction
+
+    for coralRetryI = 0 to CORAL_USED_COUNT - 1
+        coralRetryLength = coralTryFromCode(CORAL_USED(coralRetryI))
+        coralRetryFits = 0
+        if coralRetryLength > 0
+            if coralRetryLength <= CORAL_TRAIL_COUNT then coralRetryFits = 1
+        endif
+
+        if coralRetryFits
+            coralRetryFirst = CORAL_TRAIL_COUNT - coralRetryLength
+            coralRetrySame = 1
+            coralRetryBack = 1
+            for coralRetryN = 0 to coralRetryLength - 1
+                coralRetryDir = CORAL_TRAIL_DIR(coralRetryFirst + coralRetryN)
+                if coralRetryDir <> coralTryStep(coralRetryLength, coralRetryN, 0)
+                    coralRetrySame = 0
+                endif
+                if coralRetryDir <> coralTryStep(coralRetryLength, coralRetryN, 1)
+                    coralRetryBack = 0
+                endif
+            next
+            if coralRetryBack then coralRetrySame = 1
+
+            if coralRetrySame
+                CORAL_RUNE_SHAKE_MS(coralRetryI) = game ms()
+            endif
+        endif
+    next
+endfunction
+
+
+` handle_combos has looked at the board, and `coralComboCount` groups of fish are popping. if a pattern was
+` waiting on the swap that led to this, it is cast when something popped, and left alone when nothing did.
+function judgeCoralCast(coralComboCount)
+    if CORAL_PENDING_SLOT >= 0
+        coralCastSlot = CORAL_PENDING_SLOT
+        CORAL_PENDING_SLOT = -1
+
+        if coralComboCount > 0
+            ` a song that was sung with a dead fish brings horror coral. it is, if the cursor passed over
+            ` a belly up fish on the way along the pattern, or if any of the fish that are popping is
+            ` belly up. see HORROR CORAL in fish_headers.
+            coralCastSick = CORAL_PENDING_SICK
+            for coralCastN = 0 to CELL_COUNT - 1
+                if CELLS(coralCastN).comboBlownUp
+                    if CELLS(coralCastN).bellyUp then coralCastSick = 1
+                endif
+            next
+            coralCastTint = rgb(255, 150, 140)
+            if coralCastSick then coralCastTint = rgb(150, 190, 90)
+
+            ` coral grows on every cell that was walked over, one after the other. coral that was there
+            ` already becomes the kind that this song brings.
+            for coralCastN = 0 to CORAL_PENDING_COUNT - 1
+                coralCastX = CORAL_PENDING_X(coralCastN)
+                coralCastY = CORAL_PENDING_Y(coralCastN)
+                coralOnBoard = 1
+                if coralCastX < 0 then coralOnBoard = 0
+                if coralCastX >= CELL_COLUMN_COUNT then coralOnBoard = 0
+                if coralCastY < 0 then coralOnBoard = 0
+                if coralCastY >= CELL_ROW_COUNT then coralOnBoard = 0
+
+                if coralOnBoard
+                    CORAL_CELLS(coralCastX + coralCastY * CELL_COLUMN_COUNT) = 1
+                    CORAL_SICK(coralCastX + coralCastY * CELL_COLUMN_COUNT) = coralCastSick
+                    spawnBubbles(getCellX(coralCastX), getCellY(coralCastY), CELL_SIZE / 3, 6, coralCastN * 70, coralCastTint)
+                endif
+            next
+            spawnShockwave(coralCastX, coralCastY, .6, 0)
+
+            ` the pattern is used up, and it never comes back. a new one takes its place.
+            ` only the last few are kept. the oldest one is forgotten to make room, and can be given out again.
+            if CORAL_USED_COUNT >= CORAL_USED_MAX
+                for coralCastN = 1 to CORAL_USED_MAX - 1
+                    CORAL_USED(coralCastN - 1) = CORAL_USED(coralCastN)
+                next
+                CORAL_USED_COUNT = CORAL_USED_MAX - 1
+            endif
+            CORAL_USED(CORAL_USED_COUNT) = CORAL_SEQ_CODE(coralCastSlot)
+            CORAL_USED_COUNT = CORAL_USED_COUNT + 1
+            CORAL_RUNE_NEW_MS = game ms()
+            CORAL_SEQ_LENGTH(coralCastSlot) = 0
+            CORAL_SEQ_CODE(coralCastSlot) = 0
+            CORAL_CASTS = CORAL_CASTS + 1
+
+            ` the music answers: praise for coral, and a lament for horror coral. see THE MUSIC OF THE CORAL in fish_headers.
+            playCoralMusic(coralCastSick)
+
+            ` a hint for it that was being drawn is for a pattern that is gone
+            if CORAL_HINT_SLOT = coralCastSlot
+                coralClearHint()
+            endif
+            coralFillSequences()
+
+            coralRecount()
+            coralDebugRefresh()
+            coralRunesRefresh()
+        endif
+    endif
+endfunction
+
+
+` THE FISH ON CORAL SING. see fish_headers.
+
+` does the coral hold the fish in this cell, so that it sings where it would have popped? `holdForce` is
+` the comboForce of the group that it is in, which is 0 for fish that matched.
+function coralHolds(holdIndex, holdForce)
+    holdIt = 0
+    if holdForce = 0
+        if CORAL_CELLS(holdIndex) > CORAL_SICK(holdIndex)
+            if CELLS(holdIndex).bellyUp = 0 then holdIt = 1
+        endif
+    endif
+endfunction holdIt
+
+` handle_combos is about to look at the board. a cell whose fish is not the one that sang there has
+` nothing to remember, and neither has one whose coral is gone, or has gone bad.
+function coralForgetSung()
+    for sungI = 0 to CELL_COUNT - 1
+        sungKeep = 0
+        if CORAL_CELLS(sungI) > CORAL_SICK(sungI)
+            if CELLS(sungI).value = CORAL_SUNG(sungI) then sungKeep = 1
+        endif
+        if sungKeep = 0 then CORAL_SUNG(sungI) = 0
+    next
+endfunction
+
+` every fish that is sitting on coral has sung already. a saved game starts this way, and so does a board
+` that has just grown, so that neither one makes the fish sing over again for nothing.
+function coralAllSung()
+    for sungI = 0 to 399
+        CORAL_SUNG(sungI) = 0
+        CORAL_SING_DUE(sungI) = 0
+        CORAL_SING_MS(sungI) = -100000
+    next
+    for sungI = 0 to CELL_COUNT - 1
+        if CORAL_CELLS(sungI) > CORAL_SICK(sungI)
+            CORAL_SUNG(sungI) = CELLS(sungI).value
+        endif
+    next
+endfunction
+
+` the fish in this cell sings, `singDelay` milliseconds from now. stepCoral makes it swell, and lights the
+` coral under it, when that moment comes.
+function coralSing(singIndex, singDelay)
+    CORAL_SUNG(singIndex) = CELLS(singIndex).value
+    CORAL_SING_MS(singIndex) = game ms() + singDelay
+    CORAL_SING_DUE(singIndex) = 1
+    coralHeartFrom(singIndex, singDelay)
+    singX = singIndex mod CELL_COLUMN_COUNT
+    singY = singIndex / CELL_COLUMN_COUNT
+    spawnBubbles(getCellX(singX), getCellY(singY), CELL_SIZE / 3, 6, singDelay, rgb(255, 170, 190))
+endfunction
+
+` how lit the coral of a cell is by the fish that is singing on it, from 0 to 255. it comes up fast, and
+` dies away slowly.
+function coralSingGlow(glowIndex)
+    glowLevel = 0
+    glowAge = game ms() - CORAL_SING_MS(glowIndex)
+    if glowAge >= 0
+        if glowAge < CORAL_SING_TIME
+            glowLevel = 255 - (glowAge * 255) / CORAL_SING_TIME
+            if glowAge < 90 then glowLevel = (glowAge * 255) / 90
+        endif
+    endif
+endfunction glowLevel
+
+
+` the board has grown. it used to have `coralOldColumns` columns, and `coralRowShift` is 1 if it got a new
+` row on the top, which pushes everything down by one. the coral stays with the cells that it was on.
+function coralBoardGrew(coralOldColumns, coralRowShift)
+    coralOldRows = CELL_ROW_COUNT - coralRowShift
+    coralOldCount = coralOldColumns * coralOldRows
+    for coralGrewI = 0 to coralOldCount - 1
+        CORAL_EXPAND(coralGrewI) = CORAL_CELLS(coralGrewI) + CORAL_SICK(coralGrewI) * 2 `and which kind it was
+    next
+
+    for coralGrewI = 0 to CELL_COUNT - 1
+        coralGrewX = coralGrewI mod CELL_COLUMN_COUNT
+        coralGrewY = coralGrewI / CELL_COLUMN_COUNT
+        coralGrewOldY = coralGrewY - coralRowShift
+        coralGrewHas = 0
+        if coralGrewX < coralOldColumns
+            if coralGrewOldY >= 0
+                coralGrewHas = CORAL_EXPAND(coralGrewX + coralGrewOldY * coralOldColumns)
+            endif
+        endif
+        CORAL_CELLS(coralGrewI) = coralGrewHas mod 2
+        CORAL_SICK(coralGrewI) = coralGrewHas / 2
+        CORAL_SHOWN#(coralGrewI) = CORAL_CELLS(coralGrewI)
+    next
+
+    ` the steps so far, and a pattern that is waiting, are on the cells that they were on too
+    if CORAL_TRAIL_COUNT > 0
+        for coralGrewI = 0 to CORAL_TRAIL_COUNT - 1
+            CORAL_TRAIL_Y(coralGrewI) = CORAL_TRAIL_Y(coralGrewI) + coralRowShift
+        next
+    endif
+    if CORAL_PENDING_COUNT > 0
+        for coralGrewI = 0 to CORAL_PENDING_COUNT - 1
+            CORAL_PENDING_Y(coralGrewI) = CORAL_PENDING_Y(coralGrewI) + coralRowShift
+        next
+    endif
+
+    ` a hint that was being drawn was laid out on the old board
+    coralClearHint()
+
+    ` the fish are in other cells now, and that is not a reason for them to sing again
+    coralAllSung()
+
+    coralRecount()
+    coralDebugRefresh()
+    coralRunesRefresh()
+endfunction
+
+
+` THE HINTS. see THE HINTS in fish_headers.
+
+` stop the hint that is playing
+function coralClearHint()
+    CORAL_HINT_TRAIL_ON = 0
+    CORAL_HINT_START_MS = -1
+    CORAL_HINT_SLOT = -1
+    CORAL_HINT_COUNT = 0
+endfunction
+
+` start a hint for the pattern of a slot: lay it on the board, somewhere that all of it fits, and send
+` something along it from one end to the other. this says 1 if it did. it does not if the slot is empty.
+function coralStartHint(coralHintSlotIn)
+    coralHintMade = 0
+    coralHintLength = CORAL_SEQ_LENGTH(coralHintSlotIn)
+    if coralHintLength > 0
+        coralClearHint()
+
+        ` from either end. it is the same shape both ways.
+        coralHintBack = rnd(2)
+
+        ` walk it from 0, 0 to find out how much room it takes
+        coralHintX = 0
+        coralHintY = 0
+        coralHintMinX = 0
+        coralHintMaxX = 0
+        coralHintMinY = 0
+        coralHintMaxY = 0
+        for coralHintN = 0 to coralHintLength - 1
+            coralHintDir = coralSeqStep(coralHintSlotIn, coralHintN, coralHintBack)
+            coralHintX = coralHintX + coralDirX(coralHintDir)
+            coralHintY = coralHintY + coralDirY(coralHintDir)
+            if coralHintX < coralHintMinX then coralHintMinX = coralHintX
+            if coralHintX > coralHintMaxX then coralHintMaxX = coralHintX
+            if coralHintY < coralHintMinY then coralHintMinY = coralHintY
+            if coralHintY > coralHintMaxY then coralHintMaxY = coralHintY
+        next
+        coralHintWide = (coralHintMaxX - coralHintMinX) + 1
+        coralHintTall = (coralHintMaxY - coralHintMinY) + 1
+
+        if coralHintWide <= CELL_COLUMN_COUNT and coralHintTall <= CELL_ROW_COUNT
+            ` anywhere that it fits
+            coralHintRoomX = (CELL_COLUMN_COUNT - coralHintWide) + 1
+            coralHintRoomY = (CELL_ROW_COUNT - coralHintTall) + 1
+            coralHintX = rnd(coralHintRoomX) - coralHintMinX
+            coralHintY = rnd(coralHintRoomY) - coralHintMinY
+
+            ` every cell that the walk goes over, in order
+            CORAL_HINT_X(0) = coralHintX
+            CORAL_HINT_Y(0) = coralHintY
+            for coralHintN = 0 to coralHintLength - 1
+                coralHintDir = coralSeqStep(coralHintSlotIn, coralHintN, coralHintBack)
+                coralHintX = coralHintX + coralDirX(coralHintDir)
+                coralHintY = coralHintY + coralDirY(coralHintDir)
+                CORAL_HINT_X(coralHintN + 1) = coralHintX
+                CORAL_HINT_Y(coralHintN + 1) = coralHintY
+            next
+            CORAL_HINT_COUNT = coralHintLength + 1
+            CORAL_HINT_SLOT = coralHintSlotIn
+            CORAL_HINT_START_MS = game ms()
+
+            ` a few bubbles come up where it sets out from, and a few more where it gets to, when it gets there
+            ` with the "listen" card there are more of them. see LISTEN in fish_headers.
+            coralHintTint = rgb(255, 205, 195)
+            coralHintBubbles = CORAL_HINT_BUBBLES
+            if isAbility_Listen()
+                coralHintBubbles = coralHintBubbles + CORAL_LISTEN_BUBBLES
+            endif
+            spawnBubbles(getCellX(CORAL_HINT_X(0)), getCellY(CORAL_HINT_Y(0)), CELL_SIZE / 4, coralHintBubbles, 0, coralHintTint)
+            spawnBubbles(getCellX(coralHintX), getCellY(coralHintY), CELL_SIZE / 4, coralHintBubbles, coralHintLength * CORAL_HINT_STEP_MS, coralHintTint)
+
+            coralHintMade = 1
+        endif
+    endif
+endfunction coralHintMade
+
+` start a hint for any pattern that is out. this says 1 if it did.
+function coralStartAnyHint()
+    coralAnyFirst = rnd(CORAL_LIVE_MAX)
+    coralAnyDone = 0
+    for coralAnyN = 0 to CORAL_LIVE_MAX - 1
+        if coralAnyDone = 0
+            coralAnyDone = coralStartHint((coralAnyFirst + coralAnyN) mod CORAL_LIVE_MAX)
+        endif
+    next
+endfunction coralAnyDone
+
+` which wave of the current is setting out from the top left of the board, counting from when the game
+` was started. see THE CURRENT in fish_headers.
+function coralWaveNow()
+    coralWavePeriod = CURRENT_PERIOD#
+    coralWaveNumber = game ms() / coralWavePeriod
+endfunction coralWaveNumber
+
+` see if it is time for a hint. this runs on every frame.
+function coralRollHint()
+    ` not while one is playing. and the very first game has enough going on. see THE FIRST DIVE, in fish_routines_intro.
+    coralRollOk = 1
+    if CORAL_HINT_START_MS >= 0 then coralRollOk = 0
+    if TUTORIAL_STAGE > 0 then coralRollOk = 0
+
+    ` every wave of the current gets one roll, as it sets out
+    coralRollYes = 0
+    coralRollLucky = 0
+    coralRollWave = coralWaveNow()
+    if coralRollWave <> CORAL_HINT_ROLLED
+        CORAL_HINT_ROLLED = coralRollWave
+        if rnd(100) < CORAL_HINT_CHANCE then coralRollYes = 1
+
+        ` with the "listen" card, a hint that comes on its own leaves a trail now and then. nothing
+        ` says how often. see LISTEN in fish_headers.
+        if coralRollYes
+            if isAbility_Listen()
+                if rnd(100) < CORAL_LISTEN_LUCK then coralRollLucky = 1
+            endif
+        endif
+
+        ` while the game is being worked on, every wave brings one
+        if CORAL_DEBUG then coralRollYes = 1
+    endif
+
+    ` and a big group of fish that popped is owed one, once the board has settled. with the "listen"
+    ` card, that one leaves a trail behind it. see LISTEN in fish_headers.
+    coralRollBig = 0
+    if CORAL_HINT_DUE
+        if REQUEST_COMBO_CHECK = 0
+            coralRollYes = 1
+            coralRollBig = 1
+        endif
+    endif
+
+    if coralRollOk
+        if coralRollYes
+            if coralStartAnyHint()
+                CORAL_HINT_DUE = 0
+                CORAL_HINT_TRAIL_ON = coralRollBig
+
+                ` the lucky trail of a hint that came on its own. the name of the card shakes when
+                ` there is one, and at no other time.
+                if coralRollBig = 0
+                    if coralRollLucky
+                        CORAL_HINT_TRAIL_ON = 1
+                        showPassiveUsed(ABILITY_INDEX_LISTEN)
+                    endif
+                endif
+            endif
+        endif
+    endif
+endfunction
+
+` work out where the hint is, `coralPointAge` milliseconds after it started. the answer goes in
+` CORAL_HINT_POINT_X# and CORAL_HINT_POINT_Y#, in pixels of the game.
+function coralHintPointAt(coralPointAge)
+    coralPointMs = coralPointAge
+    if coralPointMs < 0 then coralPointMs = 0
+
+    ` which two cells it is in between, and how far along. the cells are counted off one at a time,
+    ` because a time that has been divided is not a whole number that a list can be looked up with.
+    coralPointSeg = 0
+    coralPointLast = CORAL_HINT_COUNT - 2
+    coralPointRest# = coralPointMs
+    coralPointLen# = CORAL_HINT_STEP_MS
+    while coralPointRest# >= coralPointLen# and coralPointSeg < coralPointLast
+        coralPointRest# = coralPointRest# - coralPointLen#
+        coralPointSeg = coralPointSeg + 1
+    endwhile
+    coralPointFrac# = coralPointRest# / coralPointLen#
+    if coralPointFrac# > 1 then coralPointFrac# = 1
+
+    coralPointFromX# = getCellX(CORAL_HINT_X(coralPointSeg))
+    coralPointFromY# = getCellY(CORAL_HINT_Y(coralPointSeg))
+    coralPointToX# = getCellX(CORAL_HINT_X(coralPointSeg + 1))
+    coralPointToY# = getCellY(CORAL_HINT_Y(coralPointSeg + 1))
+    CORAL_HINT_POINT_X# = coralPointFromX# + (coralPointToX# - coralPointFromX#) * coralPointFrac#
+    CORAL_HINT_POINT_Y# = coralPointFromY# + (coralPointToY# - coralPointFromY#) * coralPointFrac#
+endfunction
+
+` move the hint that is playing along, and tell the effects where it is. this runs on every frame.
+` the effects lose their parameters when they are reloaded, so they are set even when there is no hint.
+function coralStepHint()
+    CORAL_HINT_POWER# = 0
+    coralStepHeadX# = 0
+    coralStepHeadY# = 0
+    coralStepTailX# = 0
+    coralStepTailY# = 0
+
+    if CORAL_HINT_START_MS >= 0
+        coralStepAge = game ms() - CORAL_HINT_START_MS
+        coralStepTravel = (CORAL_HINT_COUNT - 1) * CORAL_HINT_STEP_MS
+        if coralStepAge > coralStepTravel + CORAL_HINT_FADE_MS
+            coralClearHint()
+        else
+            ` it swells up as it sets out, and dies away once it has got to the end
+            coralStepFade# = CORAL_HINT_FADE_MS
+            CORAL_HINT_POWER# = 1
+            if coralStepAge < CORAL_HINT_FADE_MS
+                coralStepIn# = coralStepAge
+                CORAL_HINT_POWER# = coralStepIn# / coralStepFade#
+            endif
+            if coralStepAge > coralStepTravel
+                coralStepOut# = coralStepAge - coralStepTravel
+                CORAL_HINT_POWER# = 1 - coralStepOut# / coralStepFade#
+            endif
+            if CORAL_HINT_POWER# < 0 then CORAL_HINT_POWER# = 0
+
+            coralHintPointAt(coralStepAge - CORAL_HINT_TAIL_MS)
+            coralStepTailX# = CORAL_HINT_POINT_X#
+            coralStepTailY# = CORAL_HINT_POINT_Y#
+            ` the path that it took, for the trail of the "listen" card. see LISTEN in fish_headers.
+            ` every spot is the middle of where it was a little before, then, and a little after, which
+            ` rounds the corners off. there is no after for where it is now, so that one leans back.
+            for coralStepBack = 0 to 7
+                coralStepThen = coralStepAge - coralStepBack * CORAL_HINT_TRAIL_MS
+                coralStepLater = coralStepThen + CORAL_HINT_TAIL_MS
+                if coralStepLater > coralStepAge then coralStepLater = coralStepAge
+                coralHintPointAt(coralStepThen - CORAL_HINT_TAIL_MS)
+                coralStepSumX# = CORAL_HINT_POINT_X#
+                coralStepSumY# = CORAL_HINT_POINT_Y#
+                coralHintPointAt(coralStepThen)
+                coralStepSumX# = coralStepSumX# + CORAL_HINT_POINT_X# * 2
+                coralStepSumY# = coralStepSumY# + CORAL_HINT_POINT_Y# * 2
+                coralHintPointAt(coralStepLater)
+                coralStepSumX# = coralStepSumX# + CORAL_HINT_POINT_X#
+                coralStepSumY# = coralStepSumY# + CORAL_HINT_POINT_Y#
+                CORAL_HINT_TRAIL#(coralStepBack * 2) = coralStepSumX# * .25
+                CORAL_HINT_TRAIL#(coralStepBack * 2 + 1) = coralStepSumY# * .25
+            next
+
+            coralHintPointAt(coralStepAge)
+            coralStepHeadX# = CORAL_HINT_POINT_X#
+            coralStepHeadY# = CORAL_HINT_POINT_Y#
+        endif
+    endif
+
+    ` with the "listen" card, all of it is easier to see. see LISTEN in fish_headers.
+    coralStepGlow# = 1
+    coralStepReach# = 1
+    coralStepCalm# = 1
+    CORAL_HINT_LISTEN# = 0
+    if isAbility_Listen()
+        coralStepGlow# = CORAL_LISTEN_GLOW#
+        coralStepReach# = CORAL_LISTEN_REACH#
+        coralStepCalm# = CORAL_LISTEN_CALM#
+        CORAL_HINT_LISTEN# = 1
+    endif
+
+    ` the patch of calm water. the screen effect wants the middle of it from 0 to 1 across the screen.
+    coralStepWorldW# = WORLD_WIDTH
+    coralStepWorldH# = WORLD_HEIGHT
+    set effect param float4 1, "Wake", coralStepHeadX# / coralStepWorldW#, coralStepHeadY# / coralStepWorldH#, CELL_SIZE * CORAL_HINT_BULGE# * coralStepCalm#, CORAL_HINT_POWER#
+
+    ` and the specks behind the fish, which glow from where it is back to where it just was.
+    ` updateSeabed tells the specks effect, because it is what sets everything else of theirs.
+    CORAL_HINT_HEAD_X# = coralStepHeadX#
+    CORAL_HINT_HEAD_Y# = coralStepHeadY#
+    CORAL_HINT_TAIL_X# = coralStepTailX#
+    CORAL_HINT_TAIL_Y# = coralStepTailY#
+    CORAL_HINT_GLOW_REACH# = CELL_SIZE * CORAL_HINT_REACH# * coralStepReach#
+    CORAL_HINT_GLOW_POWER# = CORAL_HINT_POWER# * coralStepGlow#
+endfunction
+
+
+` draw the coral. this runs on every frame.
+function stepCoral()
+    coralRollHint()
+    coralStepHint()
+
+    if CORAL_SPRITE_COUNT > 0
+        for coralDrawI = 0 to CORAL_SPRITE_COUNT - 1
+            coralWant# = 0
+            if coralDrawI < CELL_COUNT then coralWant# = CORAL_CELLS(coralDrawI)
+
+            ` what is drawn chases the real thing, so that new coral grows in
+            coralNow# = CORAL_SHOWN#(coralDrawI)
+            coralNow# = coralNow# + (coralWant# - coralNow#) * .08
+            if abs(coralWant# - coralNow#) < .01 then coralNow# = coralWant#
+            CORAL_SHOWN#(coralDrawI) = coralNow#
+
+            ` the fish in the cell sits down onto the coral, and gets back up when it is over open water
+            coralSitWant# = 1 - CORAL_SIT_SHRINK# * coralWant#
+            coralSitNow# = CORAL_SIT#(coralDrawI)
+            coralSitNow# = coralSitNow# + (coralSitWant# - coralSitNow#) * .2
+            if abs(coralSitWant# - coralSitNow#) < .005 then coralSitNow# = coralSitWant#
+            CORAL_SIT#(coralDrawI) = coralSitNow#
+
+            if coralNow# > 0
+                coralDrawX = coralDrawI mod CELL_COLUMN_COUNT
+                coralDrawY = coralDrawI / CELL_COLUMN_COUNT
+                show sprite CORAL_SPRITES(coralDrawI)
+                position sprite CORAL_SPRITES(coralDrawI), getCellX(coralDrawX), getCellY(coralDrawY)
+                size sprite CORAL_SPRITES(coralDrawI), CELL_SIZE, CELL_SIZE
+
+                ` the square of horror coral has no green in it, which is how the effect knows. see CoralEffect.fx.
+                ` and the less blue there is in a square, the more its coral is lit by a fish that is singing on it.
+                if CORAL_SICK(coralDrawI)
+                    color sprite CORAL_SPRITES(coralDrawI), rgb(255, 0, 255)
+                else
+                    coralDrawBlue = 255 - coralSingGlow(coralDrawI)
+                    color sprite CORAL_SPRITES(coralDrawI), rgb(255, 255, coralDrawBlue)
+                endif
+                set sprite alpha CORAL_SPRITES(coralDrawI), coralNow# * 255
+            else
+                hide sprite CORAL_SPRITES(coralDrawI)
+            endif
+        next
+    endif
+
+    ` the shadows of the fish. each one is a picture of its fish, right where the fish is, wherever a swap
+    ` or a fall has it at the moment. a fish that is popping, or a new one that is dropping in, has none.
+    ` none of this is kept up while there is no coral for a shadow to fall on.
+    coralShadowsWanted = 0
+    if CORAL_COUNT > 0 then coralShadowsWanted = 1
+    if coralShadowsWanted
+        CORAL_SHADOWS_ON = 1
+        for coralDrawI = 0 to CORAL_SPRITE_COUNT - 1
+            coralShadowShow = 0
+            if coralDrawI < CELL_COUNT
+                if CELLS(coralDrawI).value > 0
+                    if CELLS(coralDrawI).comboBlownUp = 0 then coralShadowShow = 1
+                endif
+            endif
+
+            if coralShadowShow
+                sprite CORAL_SHADOW_SPRITES(coralDrawI), sprite x(CELLS(coralDrawI).spriteId), sprite y(CELLS(coralDrawI).spriteId), CELLS(coralDrawI).value
+                size sprite CORAL_SHADOW_SPRITES(coralDrawI), CELL_ART_SIZE * CORAL_SIT#(coralDrawI), CELL_ART_SIZE * CORAL_SIT#(coralDrawI)
+                show sprite CORAL_SHADOW_SPRITES(coralDrawI)
+            else
+                hide sprite CORAL_SHADOW_SPRITES(coralDrawI)
+            endif
+        next
+    else
+        if CORAL_SHADOWS_ON
+            CORAL_SHADOWS_ON = 0
+            for coralDrawI = 0 to CORAL_SPRITE_COUNT - 1
+                hide sprite CORAL_SHADOW_SPRITES(coralDrawI)
+            next
+        endif
+    endif
+    set effect param texture CORAL_FX_ID, "ShadowTexture", render target texture(TARGET_CORAL_SHADOW)
+
+    ` a fish that is due to sing swells, when its moment comes. see THE FISH ON CORAL SING in fish_headers.
+    coralSwellNow = game ms()
+    for coralDrawI = 0 to CELL_COUNT - 1
+        if CORAL_SING_DUE(coralDrawI)
+            if coralSwellNow >= CORAL_SING_MS(coralDrawI)
+                CORAL_SING_DUE(coralDrawI) = 0
+                create basic tween CELLS(coralDrawI).scaleWaveTweenId, 1.5, 1, 380, 0
+            endif
+        endif
+    next
+
+    coralStepHearts()
+    coralStepRunes()
+    coralStepBars()
+
+    ` the effect turns the squares into rock. it loses its parameters when it is reloaded, so they are
+    ` all set on every frame. it wants the top left corner of the board, and the sprites are centered on their cells.
+    coralFxTime# = game ms() * .001
+    coralFxCell# = CELL_SIZE
+    coralFxLeft# = getCellX(0)
+    coralFxTop# = getCellY(0)
+    set effect param float CORAL_FX_ID, "Time", coralFxTime#
+    set effect param float CORAL_FX_ID, "Mood", SEABED_MOOD#
+    set effect param float2 CORAL_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT
+    set effect param float4 CORAL_FX_ID, "Board", coralFxLeft# - coralFxCell# / 2, coralFxTop# - coralFxCell# / 2, coralFxCell#, 0
+    set effect param float2 CORAL_FX_ID, "Cells", CELL_COLUMN_COUNT, CELL_ROW_COUNT
+
+    ` the coral lights up where a hint is passing. see THE HINTS in fish_headers.
+    set effect param float4 CORAL_FX_ID, "Glow", CORAL_HINT_HEAD_X#, CORAL_HINT_HEAD_Y#, CORAL_HINT_TAIL_X#, CORAL_HINT_TAIL_Y#
+    set effect param float2 CORAL_FX_ID, "GlowPower", CORAL_HINT_GLOW_POWER#, CORAL_HINT_GLOW_REACH#
+
+    ` and the specks effect is told where the board is, for the same thing. updateSeabed hands these on.
+    CORAL_FX_LEFT# = coralFxLeft# - coralFxCell# / 2
+    CORAL_FX_TOP# = coralFxTop# - coralFxCell# / 2
+    CORAL_FX_CELL# = coralFxCell#
+    CORAL_FX_COLUMNS = CELL_COLUMN_COUNT
+    CORAL_FX_ROWS = CELL_ROW_COUNT
+
+    ` the screen effect is told where the coral is too, because the water wobbles less over it
+    set effect param texture 1, "CoralTexture", render target texture(TARGET_CORAL)
+    set effect param float4 1, "Board", coralFxLeft# - coralFxCell# / 2, coralFxTop# - coralFxCell# / 2, coralFxCell#, 0
+    set effect param float2 1, "Cells", CELL_COLUMN_COUNT, CELL_ROW_COUNT
+endfunction
+
+
+` THE SONGS. see THE SONGS in fish_headers.
+
+` put the pattern that a number stands for into CORAL_TRY_STEPS. see coralTryCode. this says how many
+` steps it has, or 0 if the number does not stand for a pattern.
+function coralTryFromCode(coralFromCode)
+    coralFromLength = 0
+    coralFromRest = coralFromCode
+    while coralFromRest > 1
+        coralFromRest = coralFromRest / 4
+        coralFromLength = coralFromLength + 1
+    endwhile
+    if coralFromLength > CORAL_STEP_MAX then coralFromLength = 0
+
+    ` the last step is the lowest digit, so they come off back to front
+    coralFromRest = coralFromCode
+    coralFromN = coralFromLength
+    while coralFromN > 0
+        coralFromN = coralFromN - 1
+        CORAL_TRY_STEPS(coralFromN) = coralFromRest mod 4
+        coralFromRest = coralFromRest / 4
+    endwhile
+endfunction coralFromLength
+
+` lay the songs out again. this is called whenever the list of patterns that have been cast changes.
+function coralRunesRefresh()
+    for coralRuneI = 0 to CORAL_USED_MAX - 1
+        coralRuneFirst = coralRuneI * CORAL_RUNE_DOTS
+        coralRuneLength = 0
+
+        ` every song is put back where it belongs, so one that was shaking is not any more
+        CORAL_RUNE_SHAKE_MS(coralRuneI) = -100000
+        CORAL_RUNE_OFFSET#(coralRuneI) = 0
+        if coralRuneI < CORAL_USED_COUNT
+            coralRuneLength = coralTryFromCode(CORAL_USED(coralRuneI))
+        endif
+
+        ` walk it from 0, 0 to find out how much room it takes
+        coralRuneAtX = 0
+        coralRuneAtY = 0
+        coralRuneMinX = 0
+        coralRuneMaxX = 0
+        coralRuneMinY = 0
+        coralRuneMaxY = 0
+        if coralRuneLength > 0
+            for coralRuneN = 0 to coralRuneLength - 1
+                coralRuneAtX = coralRuneAtX + coralDirX(CORAL_TRY_STEPS(coralRuneN))
+                coralRuneAtY = coralRuneAtY + coralDirY(CORAL_TRY_STEPS(coralRuneN))
+                if coralRuneAtX < coralRuneMinX then coralRuneMinX = coralRuneAtX
+                if coralRuneAtX > coralRuneMaxX then coralRuneMaxX = coralRuneAtX
+                if coralRuneAtY < coralRuneMinY then coralRuneMinY = coralRuneAtY
+                if coralRuneAtY > coralRuneMaxY then coralRuneMaxY = coralRuneAtY
+            next
+        endif
+
+        ` it goes in the middle of the room that it gets
+        coralRuneWide = (coralRuneMaxX - coralRuneMinX) * CORAL_RUNE_UNIT
+        coralRuneTall = (coralRuneMaxY - coralRuneMinY) * CORAL_RUNE_UNIT
+        coralRuneLeft = CORAL_RUNE_X + (coralRuneI mod CORAL_RUNE_COLUMNS) * CORAL_RUNE_WIDTH + (CORAL_RUNE_WIDTH - coralRuneWide) / 2
+        coralRuneTop = CORAL_RUNE_Y + (coralRuneI / CORAL_RUNE_COLUMNS) * CORAL_RUNE_HEIGHT + (CORAL_RUNE_HEIGHT - coralRuneTall) / 2
+
+        ` a dot for every cell of the walk, and a line from it to the next one, for the step that goes there.
+        ` the line fills the gap between the two dots, so it is one pixel shorter than they are apart.
+        coralRuneGap = CORAL_RUNE_UNIT - 1
+        coralRuneAtX = 0 - coralRuneMinX
+        coralRuneAtY = 0 - coralRuneMinY
+        CORAL_RUNE_SHOWN(coralRuneI) = 0
+        for coralRuneN = 0 to CORAL_RUNE_DOTS - 1
+            coralRuneDot = CORAL_RUNE_SPRITES(coralRuneFirst + coralRuneN)
+            coralRuneOn = 0
+            if coralRuneLength > 0
+                if coralRuneN <= coralRuneLength then coralRuneOn = 1
+            endif
+
+            if coralRuneOn
+                position sprite coralRuneDot, coralRuneLeft + coralRuneAtX * CORAL_RUNE_UNIT, coralRuneTop + coralRuneAtY * CORAL_RUNE_UNIT
+                set sprite alpha coralRuneDot, 0
+                show sprite coralRuneDot
+                CORAL_RUNE_SHOWN(coralRuneI) = coralRuneN + 1
+            else
+                hide sprite coralRuneDot
+            endif
+
+            coralRuneLink = CORAL_RUNE_LINKS(coralRuneFirst + coralRuneN)
+            if coralRuneOn = 1 and coralRuneN < coralRuneLength
+                coralRuneStepX = coralDirX(CORAL_TRY_STEPS(coralRuneN))
+                coralRuneStepY = coralDirY(CORAL_TRY_STEPS(coralRuneN))
+
+                ` it starts one pixel past the dot, the way that the step goes. going left or up, that
+                ` puts its far end there, so it starts a whole gap back from the dot.
+                coralRuneLinkX = coralRuneLeft + coralRuneAtX * CORAL_RUNE_UNIT
+                coralRuneLinkY = coralRuneTop + coralRuneAtY * CORAL_RUNE_UNIT
+                if coralRuneStepX > 0 then coralRuneLinkX = coralRuneLinkX + 1
+                if coralRuneStepX < 0 then coralRuneLinkX = coralRuneLinkX - coralRuneGap
+                if coralRuneStepY > 0 then coralRuneLinkY = coralRuneLinkY + 1
+                if coralRuneStepY < 0 then coralRuneLinkY = coralRuneLinkY - coralRuneGap
+
+                position sprite coralRuneLink, coralRuneLinkX, coralRuneLinkY
+                if coralRuneStepX <> 0
+                    size sprite coralRuneLink, coralRuneGap, 1
+                else
+                    size sprite coralRuneLink, 1, coralRuneGap
+                endif
+                set sprite alpha coralRuneLink, 0
+                show sprite coralRuneLink
+
+                coralRuneAtX = coralRuneAtX + coralRuneStepX
+                coralRuneAtY = coralRuneAtY + coralRuneStepY
+            else
+                hide sprite coralRuneLink
+            endif
+        next
+    next
+
+    ` info mode only explains them once there is one to explain
+    coralRuneAny = 0
+    if CORAL_USED_COUNT > 0 then coralRuneAny = 1
+    setInfoBlobEnabled(INFO_INDEX_SONGS, coralRuneAny)
+endfunction
+
+` the dots of the songs twinkle, each in its own time, and the song of the pattern that was cast last
+` fades in. this runs on every frame.
+function coralStepRunes()
+    if CORAL_USED_COUNT > 0
+        coralTwinkleNow = game ms()
+        coralTwinkleAge# = coralTwinkleNow - CORAL_RUNE_NEW_MS
+        coralTwinkleFade# = CORAL_RUNE_FADE_MS
+        coralTwinkleNew# = coralTwinkleAge# / coralTwinkleFade#
+        if coralTwinkleNew# > 1 then coralTwinkleNew# = 1
+        if coralTwinkleNew# < 0 then coralTwinkleNew# = 0
+
+        for coralTwinkleI = 0 to CORAL_USED_COUNT - 1
+            coralTwinkleDots = CORAL_RUNE_SHOWN(coralTwinkleI)
+            if coralTwinkleDots > 0
+                coralTwinkleShare# = 1
+                if coralTwinkleI = CORAL_USED_COUNT - 1 then coralTwinkleShare# = coralTwinkleNew#
+
+                ` a song that someone has just tried to sing again shakes from side to side, and the shake
+                ` dies away. the dots and the lines are moved by however much the song has to move on this frame.
+                coralShakeAge# = coralTwinkleNow - CORAL_RUNE_SHAKE_MS(coralTwinkleI)
+                coralShakeLife# = CORAL_RUNE_SHAKE_TIME
+                coralShakeWant# = 0
+                if coralShakeAge# >= 0
+                    if coralShakeAge# < coralShakeLife#
+                        coralShakeWant# = sin(coralTwinkleNow * .07) * HINT_SHAKE_SIZE# * (1 - coralShakeAge# / coralShakeLife#)
+                    endif
+                endif
+                coralShakeMove# = coralShakeWant# - CORAL_RUNE_OFFSET#(coralTwinkleI)
+                CORAL_RUNE_OFFSET#(coralTwinkleI) = coralShakeWant#
+
+                coralTwinkleFirst = coralTwinkleI * CORAL_RUNE_DOTS
+                for coralTwinkleN = 0 to coralTwinkleDots - 1
+                    coralTwinkleDot = coralTwinkleFirst + coralTwinkleN
+                    coralTwinkleBright# = 165 + 75 * sin(coralTwinkleNow * .0021 + coralTwinkleDot * 2.3)
+                    set sprite alpha CORAL_RUNE_SPRITES(coralTwinkleDot), coralTwinkleBright# * coralTwinkleShare#
+                    if coralShakeMove# <> 0
+                        position sprite CORAL_RUNE_SPRITES(coralTwinkleDot), sprite x(CORAL_RUNE_SPRITES(coralTwinkleDot)) + coralShakeMove#, sprite y(CORAL_RUNE_SPRITES(coralTwinkleDot))
+                    endif
+
+                    ` the line after the dot. the last dot has none.
+                    if coralTwinkleN < coralTwinkleDots - 1
+                        set sprite alpha CORAL_RUNE_LINKS(coralTwinkleDot), CORAL_RUNE_LINK_ALPHA * coralTwinkleShare#
+                        if coralShakeMove# <> 0
+                            position sprite CORAL_RUNE_LINKS(coralTwinkleDot), sprite x(CORAL_RUNE_LINKS(coralTwinkleDot)) + coralShakeMove#, sprite y(CORAL_RUNE_LINKS(coralTwinkleDot))
+                        endif
+                    endif
+                next
+            endif
+        next
+    endif
+endfunction
+
+
+` the hearts of the fish that are sitting on coral. see A FISH ON CORAL in fish_headers. this runs on every frame.
+function coralStepHearts()
+    if CORAL_COUNT > 0
+        ` a fish that has just come to sit on coral may send one up. the cell has a different fish in
+        ` it than it did on the last frame, or it has one where it had none.
+        for coralHeartI = 0 to CELL_COUNT - 1
+            ` nothing is happy on horror coral
+            coralHeartSat = 0
+            if CORAL_CELLS(coralHeartI) > CORAL_SICK(coralHeartI)
+                if CELLS(coralHeartI).comboBlownUp = 0 then coralHeartSat = CELLS(coralHeartI).value
+            endif
+
+            if coralHeartSat <> CORAL_SAT_VALUE(coralHeartI)
+                CORAL_SAT_VALUE(coralHeartI) = coralHeartSat
+                if coralHeartSat > 0
+                    if rnd(100) < CORAL_HEART_CHANCE
+                        coralHeartFrom(coralHeartI, rnd(450))
+                    endif
+                endif
+            endif
+        next
+
+        ` and now and then one comes from a fish that has been sitting for a while. any cell of the
+        ` board gets the turn, so the more coral there is, the more often there is a heart.
+        coralHeartNow = game ms()
+        if coralHeartNow >= CORAL_HEART_NEXT_MS
+            CORAL_HEART_NEXT_MS = coralHeartNow + CORAL_HEART_GAP_MIN + rnd(CORAL_HEART_GAP_MAX - CORAL_HEART_GAP_MIN)
+            coralHeartPick = rnd(CELL_COUNT)
+            if CORAL_SAT_VALUE(coralHeartPick) > 0
+                coralHeartFrom(coralHeartPick, 0)
+            endif
+        endif
+    endif
+endfunction
+
+` send a heart up from the fish in a cell, `coralHeartDelay` milliseconds from now. it starts at the top of the fish.
+function coralHeartFrom(coralHeartCell, coralHeartDelay)
+    coralHeartX = coralHeartCell mod CELL_COLUMN_COUNT
+    coralHeartY = coralHeartCell / CELL_COLUMN_COUNT
+    spawnHeart(getCellX(coralHeartX), getCellY(coralHeartY) - CELL_ART_SIZE / 2, coralHeartDelay)
+endfunction
+
+
+` play a note lower than it is written, for the ending with the ancient one. see the sounds of the two
+` endings, in fish_headers. `coralLowPitch#` is how much lower, in octaves, and -1 is as low as a sound
+` goes. the note stays that low until coralNotesBack is called.
+function coralLowNote(coralLowInstrument, coralLowWhich, coralLowVolume#, coralLowPitch#)
+    coralLowSfx = MUSIC_NOTE_SFX(coralLowInstrument * MUSIC_NOTE_SLOTS + coralLowWhich)
+    if coralLowSfx > 0
+        set sfx pitch coralLowSfx, coralLowPitch#
+        playMusicNote(coralLowInstrument, coralLowWhich, coralLowVolume#)
+    endif
+endfunction
+
+` play one of the shots lower than it is, the same way. `coralShotLoud#` is how loud it is, next to how
+` loud it usually is. a shot is put back where it belongs the next time that it plays on its own.
+function coralLowShot(coralShotWhich, coralShotLoud#, coralShotPitch#)
+    playMusicShot(coralShotWhich)
+    set sfx pitch MUSIC_SHOTS(coralShotWhich).sfxId, coralShotPitch#
+    set sfx volume MUSIC_SHOTS(coralShotWhich).sfxId, MUSIC_SHOTS(coralShotWhich).volume# * coralShotLoud#
+endfunction
+
+` put every note of every instrument back to where it is written, for the music of the next game
+function coralNotesBack()
+    for coralBackI = 0 to MUSIC_INSTRUMENT_COUNT * MUSIC_NOTE_SLOTS - 1
+        if MUSIC_NOTE_SFX(coralBackI) > 0
+            set sfx pitch MUSIC_NOTE_SFX(coralBackI), 0
+        endif
+    next
+endfunction
+
+
+` THE DEBUG KEYS. frame_dbg, in fish_routines, calls these. they are only for working on the game.
+
+` grow coral on a cell, or horror coral if `coralDebugSick` is 1
+function coralDebugGrow(coralDebugCell, coralDebugSick)
+    if coralDebugCell >= 0 and coralDebugCell < CELL_COUNT
+        CORAL_CELLS(coralDebugCell) = 1
+        CORAL_SICK(coralDebugCell) = coralDebugSick
+        coralRecount()
+        coralDebugRefresh()
+    endif
+endfunction
+
+` cover the whole board with coral, or with horror coral if `coralCoverSick` is 1. that is one of the
+` two endings, and it plays as soon as the board has settled. see THE TWO ENDINGS in fish_headers.
+function coralDebugCover(coralCoverSick)
+    for coralCoverI = 0 to CELL_COUNT - 1
+        CORAL_CELLS(coralCoverI) = 1
+        CORAL_SICK(coralCoverI) = coralCoverSick
+    next
+    coralRecount()
+    coralDebugRefresh()
+endfunction
+
+
+` write the patterns that are out onto the screen, for working on the game. see CORAL_DEBUG.
+function coralDebugRefresh()
+    if CORAL_DEBUG
+        coralWords$ = "coral " + str$(CORAL_COUNT) + " of " + str$(CELL_COUNT) + ":"
+        for coralWordSlot = 0 to CORAL_LIVE_MAX - 1
+            coralWordLength = CORAL_SEQ_LENGTH(coralWordSlot)
+            if coralWordLength > 0
+                coralWords$ = coralWords$ + "  "
+                for coralWordN = 0 to coralWordLength - 1
+                    coralWordDir = CORAL_SEQ_STEPS(coralWordSlot * CORAL_STEP_MAX + coralWordN)
+                    if coralWordDir = CORAL_UP then coralWords$ = coralWords$ + "U"
+                    if coralWordDir = CORAL_RIGHT then coralWords$ = coralWords$ + "R"
+                    if coralWordDir = CORAL_DOWN then coralWords$ = coralWords$ + "D"
+                    if coralWordDir = CORAL_LEFT then coralWords$ = coralWords$ + "L"
+                next
+            endif
+        next
+        set text CORAL_DEBUG_TEXT_ID, coralWords$
+        set text alpha CORAL_DEBUG_TEXT_ID, 255
+    endif
+endfunction
+
+
+` THE SAVED GAME. the coral on the board is saved with the cells, in save_game. this is the rest of it.
+function coralSave()
+    set pref SAVE_PREF_CORAL, CORAL_CASTS
+    set pref SAVE_PREF_CORAL + 1, CORAL_MADE
+    set pref SAVE_PREF_CORAL + 2, CORAL_USED_COUNT
+    for coralSaveI = 0 to CORAL_LIVE_MAX - 1
+        set pref SAVE_PREF_CORAL + 3 + coralSaveI, CORAL_SEQ_CODE(coralSaveI)
+    next
+    if CORAL_USED_COUNT > 0
+        for coralSaveI = 0 to CORAL_USED_COUNT - 1
+            set pref SAVE_PREF_CORAL + 20 + coralSaveI, CORAL_USED(coralSaveI)
+        next
+    endif
+endfunction
+
+` put the saved patterns back. load_game has already put the coral back on the cells. a game that was
+` saved before there was coral has no patterns, so it keeps the new ones that reset_game made.
+function coralLoad()
+    coralLoadAny = 0
+    for coralLoadI = 0 to CORAL_LIVE_MAX - 1
+        if get pref(SAVE_PREF_CORAL + 3 + coralLoadI, 0) > 1
+            coralLoadAny = 1
+        endif
+    next
+
+    if coralLoadAny
+        CORAL_CASTS = get pref(SAVE_PREF_CORAL, 0)
+        CORAL_MADE = get pref(SAVE_PREF_CORAL + 1, 0)
+        CORAL_USED_COUNT = get pref(SAVE_PREF_CORAL + 2, 0)
+        if CORAL_USED_COUNT > CORAL_USED_MAX then CORAL_USED_COUNT = CORAL_USED_MAX
+        if CORAL_USED_COUNT < 0 then CORAL_USED_COUNT = 0
+
+        for coralLoadI = 0 to CORAL_LIVE_MAX - 1
+            coralSetSequence(coralLoadI, get pref(SAVE_PREF_CORAL + 3 + coralLoadI, 0))
+        next
+        if CORAL_USED_COUNT > 0
+            for coralLoadI = 0 to CORAL_USED_COUNT - 1
+                CORAL_USED(coralLoadI) = get pref(SAVE_PREF_CORAL + 20 + coralLoadI, 0)
+            next
+        endif
+    endif
+
+    ` the coral that was saved is there from the start. it does not grow in again, and the fish that
+    ` were on it are sitting on it already, so they do not send up hearts as if they had just got there.
+    for coralLoadI = 0 to CELL_COUNT - 1
+        CORAL_SHOWN#(coralLoadI) = CORAL_CELLS(coralLoadI)
+        CORAL_SIT#(coralLoadI) = 1 - CORAL_SIT_SHRINK# * CORAL_CELLS(coralLoadI)
+        CORAL_SAT_VALUE(coralLoadI) = 0
+        if CORAL_CELLS(coralLoadI) > CORAL_SICK(coralLoadI) then CORAL_SAT_VALUE(coralLoadI) = CELLS(coralLoadI).value
+    next
+
+    ` and they have all sung. see THE FISH ON CORAL SING in fish_headers.
+    coralAllSung()
+
+    coralRecount()
+    coralDebugRefresh()
+    coralRunesRefresh()
+endfunction
+
+
+` WHAT HORROR CORAL DOES TO THE FISH. see fish_headers. a move has been made, and the board has settled.
+` rollBellyUpFish, in fish_funcs, calls this.
+function rollHorrorCoral()
+    if CORAL_SICK_COUNT = 0 then exitfunction
+
+    horrorCursor = getCellIndex(SELECTION_POS)
+    for horrorIndex = 0 to CELL_COUNT - 1
+        horrorHere = CORAL_CELLS(horrorIndex) * CORAL_SICK(horrorIndex)
+        if CELLS(horrorIndex).value <= 0 then horrorHere = 0
+
+        if horrorHere
+            ` a bottle never goes belly up, so it does not wait to. it is as good as belly up already.
+            horrorState = CELLS(horrorIndex).bellyUp
+            if CELLS(horrorIndex).value = TEX_BOTTLE
+                if horrorState = 0 then horrorState = 1
+            endif
+            horrorX = horrorIndex mod CELL_COLUMN_COUNT
+            horrorY = horrorIndex / CELL_COLUMN_COUNT
+
+            ` a fish that was belly up before this move may turn into a skeleton
+            if horrorState = 1
+                if rnd(100) < HORROR_SKELETON_CHANCE
+                    CELLS(horrorIndex).bellyUp = 2
+                    spawnBubbles(getCellX(horrorX), getCellY(horrorY), CELL_SIZE / 3, 10, 0, rgb(236, 232, 204))
+                endif
+            endif
+
+            ` and a fish that was fine may go belly up. it does not do both on the same move.
+            if horrorState = 0
+                if horrorIndex <> horrorCursor
+                    if rnd(100) < HORROR_BELLY_CHANCE
+                        CELLS(horrorIndex).bellyUp = 1
+                        spawnBubbles(getCellX(horrorX), getCellY(horrorY), CELL_SIZE / 3, 8, 0, rgb(150, 190, 90))
+                    endif
+                endif
+            endif
+        endif
+    next
+endfunction
+
+
+` SKELETONS. see fish_headers. handle_combos is about to search the board for groups of fish of a kind.
+` a skeleton is the kind of fish that it was, and the search finds it as that. but the group of a fish
+` that the swap that led to this has just moved can go on through skeletons of any kind, so for as long
+` as the search takes, the skeletons that such a group reaches are fish of the kind of the group.
+` skeletonsAfterCombos puts them all back.
+function skeletonsBeforeCombos()
+    for skeletonI = 0 to CELL_COUNT - 1
+        SKELETON_KIND(skeletonI) = 0
+    next
+
+    skeletonRequired = getRequiredComboCount()
+    skeletonWildFrom(SKELETON_WILD_A, skeletonRequired)
+    skeletonWildFrom(SKELETON_WILD_B, skeletonRequired)
+    SKELETON_WILD_A = -1
+    SKELETON_WILD_B = -1
+endfunction
+
+
+` the fish in this cell was just moved by a swap. its group can go on through skeletons. a fish that
+` is not a skeleton makes a group of its own kind. a skeleton makes a group of whichever kind makes
+` the biggest one, and of its own kind when nothing beats that. the skeletons are only taken into the
+` group when it is big enough to pop.
+function skeletonWildFrom(wildIndex, wildRequired)
+    if wildIndex < 0 then exitfunction
+    if wildIndex >= CELL_COUNT then exitfunction
+    if CELLS(wildIndex).value <= 0 then exitfunction
+
+    ` a skeleton that the group of the other fish of the swap has taken already is spoken for
+    if SKELETON_KIND(wildIndex) > 0 then exitfunction
+
+    wildBestKind = CELLS(wildIndex).value
+    wildBestCount = skeletonGroup(wildIndex, wildBestKind, 0)
+    if CELLS(wildIndex).bellyUp = 2
+        wildOwnKind = wildBestKind
+        for wildKind = 1 to TEX_BOTTLE
+            if wildKind <> wildOwnKind
+                wildCount = skeletonGroup(wildIndex, wildKind, 0)
+                if wildCount > wildBestCount
+                    wildBestCount = wildCount
+                    wildBestKind = wildKind
+                endif
+            endif
+        next
+    endif
+
+    if wildBestCount >= wildRequired
+        wildBestCount = skeletonGroup(wildIndex, wildBestKind, 1)
+    endif
+endfunction
+
+
+` how big the group of the fish in a cell would be, if that fish were of the given kind, and the group
+` could go on through skeletons: the cell itself, the fish of that kind and the skeletons that touch it,
+` the ones that touch those, and so on. a skeleton that another group has taken does not count, unless
+` it was taken as this same kind. when `wildClaim` is 1, every skeleton of the group is taken: it is
+` made a fish of that kind, and SKELETON_KIND remembers what it really is.
+function skeletonGroup(wildStart, wildAs, wildClaim)
+    ` a cell is marked with this number when it has been counted, so the marks never have to be wiped
+    NEW_FISH_STAMP = NEW_FISH_STAMP + 1
+    NEW_FISH_MARKS(wildStart) = NEW_FISH_STAMP
+    NEW_FISH_STACK(0) = wildStart
+    wildStackSize = 1
+
+    wildFound = 0
+    while wildStackSize > 0
+        wildStackSize = wildStackSize - 1
+        wildSpot = NEW_FISH_STACK(wildStackSize)
+        wildFound = wildFound + 1
+
+        if wildClaim
+            if CELLS(wildSpot).bellyUp = 2
+                if SKELETON_KIND(wildSpot) = 0
+                    SKELETON_KIND(wildSpot) = CELLS(wildSpot).value
+                    CELLS(wildSpot).value = wildAs
+                endif
+            endif
+        endif
+
+        wildSpotX = wildSpot mod CELL_COLUMN_COUNT
+        wildSpotY = wildSpot / CELL_COLUMN_COUNT
+        for wildSide = 0 to 3
+            wildNext = -1
+            if wildSide = 0
+                if wildSpotX > 0 then wildNext = wildSpot - 1
+            endif
+            if wildSide = 1
+                if wildSpotX < CELL_COLUMN_COUNT - 1 then wildNext = wildSpot + 1
+            endif
+            if wildSide = 2
+                if wildSpotY > 0 then wildNext = wildSpot - CELL_COLUMN_COUNT
+            endif
+            if wildSide = 3
+                if wildSpotY < CELL_ROW_COUNT - 1 then wildNext = wildSpot + CELL_COLUMN_COUNT
+            endif
+
+            if wildNext >= 0
+                if NEW_FISH_MARKS(wildNext) <> NEW_FISH_STAMP
+                    wildFits = 0
+                    if CELLS(wildNext).value = wildAs then wildFits = 1
+                    if CELLS(wildNext).bellyUp = 2
+                        if SKELETON_KIND(wildNext) = 0
+                            if CELLS(wildNext).value > 0 then wildFits = 1
+                        endif
+                    endif
+
+                    if wildFits
+                        NEW_FISH_MARKS(wildNext) = NEW_FISH_STAMP
+                        NEW_FISH_STACK(wildStackSize) = wildNext
+                        wildStackSize = wildStackSize + 1
+                    endif
+                endif
+            endif
+        next
+    endwhile
+endfunction wildFound
+
+
+` the search is over, and every skeleton is the kind of fish that it was again. one that was put in a
+` group stays in the group, and pops with it.
+function skeletonsAfterCombos()
+    for skeletonI = 0 to CELL_COUNT - 1
+        if SKELETON_KIND(skeletonI) > 0
+            CELLS(skeletonI).value = SKELETON_KIND(skeletonI)
+            SKELETON_KIND(skeletonI) = 0
+        endif
+    next
+endfunction
+
+
+` an ending has been reached. the main menu is different from now on, and the codec has the ending in it.
+` see THE MAIN MENU REMEMBERS in fish_headers, and CODEC_ENTRY_REEF.
+function coralEndingRemember(ending)
+    if ending = CORAL_ENDING_REEF
+        SURFACE_REEF = 1
+        set pref PREF_ENDING_REEF, 1
+        codecSeeCard(CODEC_ENTRY_REEF)
+    else
+        SURFACE_ANCIENT = 1
+        set pref PREF_ENDING_ANCIENT, 1
+        codecSeeCard(CODEC_ENTRY_ANCIENT)
+    endif
+endfunction

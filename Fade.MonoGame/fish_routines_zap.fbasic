@@ -1,0 +1,163 @@
+goto routines_zap_exit
+
+remstart
+    ZAPS
+    a little bolt of lightning that jumps from one spot on the board to another. a jellyfish that
+    stings a fish sends one to it. see JELLIES in fish_headers.
+
+    call spawnZap() to make one. that is all a caller has to do.
+
+    there is a fixed number of them, and they are all made at setup. a new zap takes the place of the
+    oldest one, so asking for more than there are is safe.
+
+    a bolt is drawn out of plain bars, the way that lightning is drawn in pixel art: it goes along
+    for a bit, jogs to one side, and goes along again. so it is made for two spots that are straight
+    across from each other, or straight above each other. the jogs are picked again every few frames,
+    which is what makes it crackle.
+
+    updateBubbles calls updateZaps on every frame, because everything that draws frames already goes there.
+remend
+
+setup_zaps:
+
+    for zapI = 0 to ZAP_COUNT * ZAP_BARS - 1
+        zapSprite = 0
+        reserve sprite id(zapSprite)
+        sprite zapSprite, 0, 0, TEX_PIXEL
+        set sprite offset zapSprite, 0, 0
+        order sprite zapSprite, ORDER_FLOAT_BUBBLES
+        hide sprite zapSprite
+        ZAP_SPRITES(zapI) = zapSprite
+    next
+
+return
+
+
+routines_zap_exit:
+
+
+` a bolt from one spot to another, in pixels of the game. it starts `delay` milliseconds from now.
+function spawnZap(fromX, fromY, toX, toY, delay)
+    zapSlot = ZAP_NEXT
+    ZAP_NEXT = (ZAP_NEXT + 1) mod ZAP_COUNT
+
+    if ZAP_ACTIVE(zapSlot) = 0 then ZAP_LIVE = ZAP_LIVE + 1
+    ZAP_ACTIVE(zapSlot) = 1
+    ZAP_START_MS(zapSlot) = game ms() + delay
+    ZAP_FROM_X(zapSlot) = fromX
+    ZAP_FROM_Y(zapSlot) = fromY
+    ZAP_TO_X(zapSlot) = toX
+    ZAP_TO_Y(zapSlot) = toY
+    ZAP_FLICKER(zapSlot) = -1
+
+    ` it may be taking the place of one that is still showing
+    hideZap(zapSlot)
+endfunction
+
+
+function hideZap(zapSlot)
+    zapFirst = zapSlot * ZAP_BARS
+    for zapBar = 0 to ZAP_BARS - 1
+        hide sprite ZAP_SPRITES(zapFirst + zapBar)
+    next
+endfunction
+
+
+` draw every bolt that is showing, and put away the ones that are over
+function updateZaps()
+    if ZAP_LIVE = 0 then exitfunction
+
+    zapNow = game ms()
+    for zapSlot = 0 to ZAP_COUNT - 1
+        if ZAP_ACTIVE(zapSlot) = 0 then skip
+
+        zapAge = zapNow - ZAP_START_MS(zapSlot)
+        if zapAge < 0 then skip `it has not started yet
+
+        if zapAge >= ZAP_LIFE
+            ZAP_ACTIVE(zapSlot) = 0
+            ZAP_LIVE = ZAP_LIVE - 1
+            hideZap(zapSlot)
+            skip
+        endif
+
+        ` the jogs are picked again every few frames
+        zapFlicker = zapAge / ZAP_FLICKER_MS
+        if zapFlicker = ZAP_FLICKER(zapSlot) then skip
+        ZAP_FLICKER(zapSlot) = zapFlicker
+
+        ` it is bright yellow and white by turns, and it fades as it goes
+        zapAlpha = 255 - (zapAge * 140) / ZAP_LIFE
+        zapColor = rgb(255, 244, 150, zapAlpha)
+        if zapFlicker mod 2 = 1 then zapColor = rgb(255, 255, 255, zapAlpha)
+
+        ` which way it goes. `along` is the way from the one spot to the other, and `side` is across that.
+        zapWide = 0
+        if abs(ZAP_TO_X(zapSlot) - ZAP_FROM_X(zapSlot)) >= abs(ZAP_TO_Y(zapSlot) - ZAP_FROM_Y(zapSlot)) then zapWide = 1
+        if zapWide
+            zapAlongFrom = ZAP_FROM_X(zapSlot)
+            zapAlongTo = ZAP_TO_X(zapSlot)
+            zapSideFrom = ZAP_FROM_Y(zapSlot)
+            zapSideTo = ZAP_TO_Y(zapSlot)
+        else
+            zapAlongFrom = ZAP_FROM_Y(zapSlot)
+            zapAlongTo = ZAP_TO_Y(zapSlot)
+            zapSideFrom = ZAP_FROM_X(zapSlot)
+            zapSideTo = ZAP_TO_X(zapSlot)
+        endif
+
+        ` every piece goes along for a bit, and then jogs to the side that the next piece is on.
+        ` the last piece ends up on the spot that the bolt is going to.
+        zapFirst = zapSlot * ZAP_BARS
+        zapAlong = zapAlongFrom
+        zapSide = zapSideFrom
+        for zapPiece = 1 to ZAP_PIECES
+            zapNextAlong = zapAlongFrom + ((zapAlongTo - zapAlongFrom) * zapPiece) / ZAP_PIECES
+            zapNextSide = zapSideTo
+            if zapPiece < ZAP_PIECES
+                zapNextSide = zapSideFrom + ((zapSideTo - zapSideFrom) * zapPiece) / ZAP_PIECES
+                zapNextSide = zapNextSide + rnd(ZAP_JOG * 2 + 1)
+                zapNextSide = zapNextSide - ZAP_JOG
+            endif
+
+            ` the bar that goes along
+            zapBarFrom = zapAlong
+            zapBarLength = zapNextAlong - zapAlong
+            if zapBarLength < 0
+                zapBarFrom = zapNextAlong
+                zapBarLength = 0 - zapBarLength
+            endif
+            zapBarId = ZAP_SPRITES(zapFirst + (zapPiece - 1) * 2)
+            if zapWide
+                position sprite zapBarId, zapBarFrom, zapSide
+                size sprite zapBarId, zapBarLength + ZAP_THICK, ZAP_THICK
+            else
+                position sprite zapBarId, zapSide, zapBarFrom
+                size sprite zapBarId, ZAP_THICK, zapBarLength + ZAP_THICK
+            endif
+            color sprite zapBarId, zapColor
+            show sprite zapBarId
+
+            ` and the bar that jogs to the side
+            zapJogFrom = zapSide
+            zapJogLength = zapNextSide - zapSide
+            if zapJogLength < 0
+                zapJogFrom = zapNextSide
+                zapJogLength = 0 - zapJogLength
+            endif
+            zapJogId = ZAP_SPRITES(zapFirst + (zapPiece - 1) * 2 + 1)
+            if zapWide
+                position sprite zapJogId, zapNextAlong, zapJogFrom
+                size sprite zapJogId, ZAP_THICK, zapJogLength + ZAP_THICK
+            else
+                position sprite zapJogId, zapJogFrom, zapNextAlong
+                size sprite zapJogId, zapJogLength + ZAP_THICK, ZAP_THICK
+            endif
+            color sprite zapJogId, zapColor
+            show sprite zapJogId
+
+            zapAlong = zapNextAlong
+            zapSide = zapNextSide
+        next
+    next
+endfunction

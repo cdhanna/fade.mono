@@ -107,17 +107,25 @@ function judgeMultiplierSwaps(comboCount)
                 spawnBubbles(MULT_POS.x + 24, MULT_POS.y + 30, 8, 14, 0, rgb(255, 255, 255))
             endif
         else
-            ` the player can swap while fish are still popping, so more than one swap can be waiting.
-            ` every one of them that popped nothing takes one off.
-            if SCORE_MULTIPLIER > 1 or MULT_PROGRESS > 0
-                MULT_PUNCH_DIR = -1
-                create basic tween MULT_PUNCH_TWEEN_ID, 1, 0, 400, 0
-            endif
+            ` a swap that put together a group that only coral kept from popping is let off. the bar does
+            ` not fill, and nothing is taken away. see CORAL in fish_headers.
+            if CORAL_HELD_GROUPS = 0
+                ` the player can swap while fish are still popping, so more than one swap can be waiting.
+                ` every one of them that popped nothing takes one off.
+                if SCORE_MULTIPLIER > 1 or MULT_PROGRESS > 0
+                    MULT_PUNCH_DIR = -1
+                    create basic tween MULT_PUNCH_TWEEN_ID, 1, 0, 400, 0
+                endif
 
-            SCORE_MULTIPLIER = SCORE_MULTIPLIER - pendingSwaps
-            if SCORE_MULTIPLIER < 1 then SCORE_MULTIPLIER = 1
-            MULT_PROGRESS = 0
+                SCORE_MULTIPLIER = SCORE_MULTIPLIER - pendingSwaps
+                if SCORE_MULTIPLIER < 1 then SCORE_MULTIPLIER = 1
+                MULT_PROGRESS = 0
+            endif
         endif
+
+        ` the swap has been heard about
+        CORAL_SWAP_A = -1
+        CORAL_SWAP_B = -1
 
         refreshMultiplier(150)
     endif

@@ -482,7 +482,9 @@ public partial class FadeMonoGameCommands
     /// <remarks>
     /// Screen shake is a great way to add impact to explosions, hits, or
     /// dramatic events. The magnitude controls how far the screen can move from
-    /// its normal position during a shake.
+    /// its normal position during a shake. It is in pixels of the game's own screen,
+    /// so a shake looks the same however big the window is: the screen moves up to
+    /// half of the magnitude in any direction.
     ///
     /// Pair this with <see cref="SetScreenShakeBounce">set screen shake bounce</see>
     /// to control how quickly the shake settles down. A high magnitude with low

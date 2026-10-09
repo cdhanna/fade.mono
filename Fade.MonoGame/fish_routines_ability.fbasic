@@ -99,14 +99,24 @@ setup_abilities:
     ` see JELLIES, RAYS and BOTTLES in fish_headers
     CARDS(ABILITY_INDEX_JELLIES) = {
         name$ = "jellies"
-        desc$ = "adds jellyfish. when one pops, each fish next to it has a " + str$(JELLY_STING_CHANCE) + "% chance to go belly up."
+        desc$ = str$(JELLY_SPAWN_CHANCE) + "% jellyfish, then " + str$(JELLY_SPAWN_CHANCE + JELLY_SPAWN_STEP) + ", then " + str$(JELLY_SPAWN_CHANCE + JELLY_SPAWN_STEP * 2) + ". rays thin them. a pop may flip fish next to it."
         obtained = 0
         abilityType = ABILITY_TYPE_PASSIVE
-        stackable = 0
+        stackable = 1
+        maxUses = JELLY_MAX
     }
     CARDS(ABILITY_INDEX_RAYS) = {
         name$ = "rays"
-        desc$ = "adds stingrays. one that lands on the bottom row shoots up, and pops its whole column."
+        desc$ = str$(RAY_SPAWN_CHANCE) + "% stingrays, then " + str$(RAY_SPAWN_CHANCE + RAY_SPAWN_STEP) + ", then " + str$(RAY_SPAWN_CHANCE + RAY_SPAWN_STEP * 2) + ". jellies thin them. a pop clears the column it faces."
+        obtained = 0
+        abilityType = ABILITY_TYPE_PASSIVE
+        stackable = 1
+        maxUses = RAY_MAX
+    }
+    ` see LISTEN in fish_headers
+    CARDS(ABILITY_INDEX_LISTEN) = {
+        name$ = "listen"
+        desc$ = "Stay awhile, and listen to the song of the sea."
         obtained = 0
         abilityType = ABILITY_TYPE_PASSIVE
         stackable = 0
@@ -194,7 +204,7 @@ setup_abilities:
     ` see THE WASTE BUCKET in fish_headers
     CARDS(ABILITY_INDEX_MOVE_WASTE_BUCKET) = {
         name$ = "waste bucket"
-        desc$ = "pops every belly up fish at once, for " + str$(WASTE_BUCKET_BONUS) + " times the points"
+        desc$ = "pops every belly up fish and every skeleton at once, for " + str$(WASTE_BUCKET_BONUS) + " times the points"
         obtained = 0
         abilityType = ABILITY_TYPE_MOVE
         stackable = 0
@@ -258,6 +268,7 @@ setup_ability_selection:
         reserve text id(a.titleTextId)
         reserve text id(a.typeTextId)
         reserve text id(a.descTextId)
+        reserve text id(a.slotTextId)
         a.border = createInfoBorder(ORDER_ABILITY_ART)
 
         reserve transform id(a.transformId)
@@ -268,6 +279,7 @@ setup_ability_selection:
         attach text to transform a.titleTextId, a.transformId
         attach text to transform a.typeTextId, a.transformId
         attach text to transform a.descTextId, a.transformId
+        attach text to transform a.slotTextId, a.transformId
         attach sprite to transform a.spriteId, a.transformId
         attach sprite to transform a.artSpriteId, a.transformId
 
@@ -313,6 +325,13 @@ setup_ability_selection:
         enable rich text a.descTextId
         color text a.descTextId, rgb(150, 190, 255)
         order text a.descTextId, ORDER_ABILITY_TEXT
+
+        ` a move card says how many slots are empty, just above the card. it is blank on the other cards.
+        ` it starts with words in it, because the size is worked out from them
+        text a.slotTextId, 0, -18, SCORE_FONT, "no slots left"
+        size text y a.slotTextId, 16
+        set text offset a.slotTextId, .5, 0
+        order text a.slotTextId, ORDER_ABILITY_TEXT
 
         set transform position a.transformId, -1000, -1000
 
@@ -553,6 +572,13 @@ handle_ability_selection:
 
     gosub assign_ability_selection
 
+    ` how many of the slots that are open have no move in them. a move that is picked goes straight
+    ` into one of those. when there are none, it has to be traded for a move that is in a slot.
+    slotsLeft = 0
+    for slotN = 0 to MOVE_SLOTS_OPEN - 1
+        if MOVE_ABILITY_BINDINGS(slotN).assigned = 0 then slotsLeft = slotsLeft + 1
+    next
+
     for i = 0 to choiceCount
         a = ABILITY_CHOICES(i)
 
@@ -591,6 +617,19 @@ handle_ability_selection:
                 set text a.typeTextId, "{instant} instant"
             endcase
         endselect
+
+        ` a move card says whether there is room for the move, before it is picked
+        slotLine$ = ""
+        if CARDS(a.abilityIndex).abilityType = ABILITY_TYPE_MOVE
+            slotLine$ = str$(slotsLeft) + " slots left"
+            color text a.slotTextId, rgb(150, 190, 255)
+            if slotsLeft = 1 then slotLine$ = "1 slot left"
+            if slotsLeft = 0
+                slotLine$ = "no slots left"
+                color text a.slotTextId, rgb(255, 190, 90)
+            endif
+        endif
+        set text a.slotTextId, slotLine$
 
         ABILITY_CHOICES(i) = a
     next
@@ -993,9 +1032,37 @@ endfunction CARDS(ABILITY_INDEX_RAYS).obtained > 0
 function isAbility_Bottles()
 endfunction CARDS(ABILITY_INDEX_BOTTLES).obtained > 0
 
+function isAbility_Listen()
+endfunction CARDS(ABILITY_INDEX_LISTEN).obtained > 0
+
 ` how many fish in a hundred pick up a fish from a pop next to them. the card adds to it every time it is taken.
 function getContagiousSmileChance()
 endfunction CARDS(ABILITY_INDEX_CONTAGIOUS_SMILE).uses * CONTAGIOUS_SMILE_CHANCE
+
+` how many new fish in a hundred are jellyfish. the card adds to it every time it is taken, and the
+` "rays" cards water it down. see JELLIES in fish_headers.
+function getJellyChance()
+    jellyCards = CARDS(ABILITY_INDEX_JELLIES).uses
+    jellyRivals = CARDS(ABILITY_INDEX_RAYS).uses
+    jellyChance = 0
+    if jellyCards > 0
+        ` the first card is worth more than the ones after it. see JELLIES in fish_headers.
+        jellyTotal = JELLY_SPAWN_CHANCE + (jellyCards - 1) * JELLY_SPAWN_STEP
+        jellyChance = (jellyTotal * jellyCards) / (jellyCards + jellyRivals)
+    endif
+endfunction jellyChance
+
+` and how many are stingrays, which the "jellies" cards water down the same way
+function getRayChance()
+    rayCards = CARDS(ABILITY_INDEX_RAYS).uses
+    rayRivals = CARDS(ABILITY_INDEX_JELLIES).uses
+    rayChance = 0
+    if rayCards > 0
+        ` the first card is worth more than the ones after it. see RAYS in fish_headers.
+        rayTotal = RAY_SPAWN_CHANCE + (rayCards - 1) * RAY_SPAWN_STEP
+        rayChance = (rayTotal * rayCards) / (rayCards + rayRivals)
+    endif
+endfunction rayChance
 
 ` how many moves in a hundred turn a fish belly up. the card adds to it every time it is taken.
 function getBottomsUpChance()

@@ -10,7 +10,11 @@ remstart
     whether or not it gets picked. what has been seen is kept in the preferences, so it stays
     unlocked for good.
 
-    the entries are the cards, in the order of CARDS. entry n is card n.
+    the entries are the cards, in the order of CARDS. entry n is card n. after the cards come the
+    entries that are not cards: coral, and horror coral. those are not on the upgrade screen. they are
+    seen when some of it grows on the board. see CODEC_ENTRY_CORAL in fish_headers. then the two
+    endings, and then the special fish (jellyfish, stingray, bottle) and what can happen to a fish
+    (belly up, skeletal, stacked), which are seen when one is on the board.
 
     there are more upgrades than fit in the grid, so the grid has pages. a page is CODEC_PAGE_SIZE
     tiles, and there are only that many tile sprites: they are given the pictures of whichever page is
@@ -26,14 +30,35 @@ remend
 
 ` setup_menu comes here, because all of this is drawn with the menu.
 setup_codec:
-    CODEC_COUNT = CARD_LENGTH
+    CODEC_ENTRY_CORAL = CARD_LENGTH
+    CODEC_ENTRY_HORROR = CARD_LENGTH + 1
+    CODEC_ENTRY_REEF = CARD_LENGTH + 2
+    CODEC_ENTRY_ANCIENT = CARD_LENGTH + 3
+    CODEC_ENTRY_JELLY = CARD_LENGTH + 4
+    CODEC_ENTRY_RAY = CARD_LENGTH + 5
+    CODEC_ENTRY_BOTTLE = CARD_LENGTH + 6
+    CODEC_ENTRY_BELLY = CARD_LENGTH + 7
+    CODEC_ENTRY_SKELETON = CARD_LENGTH + 8
+    CODEC_ENTRY_STACK = CARD_LENGTH + 9
+    CODEC_COUNT = CARD_LENGTH + CODEC_EXTRA_COUNT
 
     ` what has been seen, in every game that has ever been played
-    for codecI = 0 to CODEC_COUNT - 1
+    for codecI = 0 to CARD_LENGTH - 1
         CODEC_SEEN(codecI) = get pref(CODEC_PREF + codecI, 0)
     next
+    for codecI = 0 to CODEC_EXTRA_COUNT - 1
+        CODEC_SEEN(CARD_LENGTH + codecI) = get pref(CODEC_PREF_EXTRA + codecI, 0)
+    next
 
-    texture reserve texture id(TEX_LOCK), "Fish/Textures/Cards/lock"
+    ` an ending that was reached before the codec had an entry for it counts, too
+    if get pref(PREF_ENDING_REEF, 0) then codecSeeCard(CODEC_ENTRY_REEF)
+    if get pref(PREF_ENDING_ANCIENT, 0) then codecSeeCard(CODEC_ENTRY_ANCIENT)
+
+    texture reserve texture id(TEX_ENDING_REEF), "Fish/Textures/ending_reef"
+    texture reserve texture id(TEX_ENDING_ANCIENT), "Fish/Textures/ending_ancient"
+
+    ` what a locked entry has for a picture is a question mark, and not a lock, whatever the names say
+    texture reserve texture id(TEX_LOCK), "Fish/Textures/Cards/question"
 
     ` the tiles of one page. each one is the art of a card, with a lock to go on top of it while it is
     ` locked. refreshCodec gives them the pictures of the page that is showing.
@@ -62,6 +87,18 @@ setup_codec:
         set sprite render target codecSprite, TARGET_MENU
         hide sprite codecSprite
         CODEC_LOCK_SPRITES(codecI) = codecSprite
+    next
+
+    ` the fish behind the fish in the picture of "stacked". refreshCodec puts them where they go.
+    for codecI = 0 to 1
+        codecSprite = 0
+        reserve sprite id(codecSprite)
+        sprite codecSprite, 0, 0, TEX_LOCK
+        set sprite offset codecSprite, .5, .5
+        order sprite codecSprite, ORDER_MENU_TEXT - 1
+        set sprite render target codecSprite, TARGET_MENU
+        hide sprite codecSprite
+        CODEC_STACK_SPRITES(codecI) = codecSprite
     next
 
     ` the arrows at the two ends of the grid, and the page number in the corner of the panel
@@ -199,15 +236,60 @@ routines_codec_exit:
 
 
 ` a card has been seen in a game, so it is unlocked in the codec from now on. it was offered on the
-` upgrade screen, or it was given to the player.
+` upgrade screen, or it was given to the player. this unlocks the entries that are not cards, too.
 function codecSeeCard(cardIndex)
     if cardIndex >= 0 and cardIndex < CODEC_COUNT
         if CODEC_SEEN(cardIndex) = 0
             CODEC_SEEN(cardIndex) = 1
-            set pref CODEC_PREF + cardIndex, 1
+            seenPref = CODEC_PREF + cardIndex
+            if cardIndex >= CARD_LENGTH then seenPref = CODEC_PREF_EXTRA + (cardIndex - CARD_LENGTH)
+            set pref seenPref, 1
         endif
     endif
 endfunction
+
+
+` the board has settled. whatever is on it that the codec has an entry for is unlocked: the special
+` fish, and what can happen to a fish. handle_combos calls this.
+function codecSeeBoard()
+    for seeI = 0 to CELL_COUNT - 1
+        seeKind = CELLS(seeI).value
+        seeEntry = -1
+        if seeKind = TEX_JELLY then seeEntry = CODEC_ENTRY_JELLY
+        if seeKind = TEX_RAY then seeEntry = CODEC_ENTRY_RAY
+        if seeKind = TEX_BOTTLE then seeEntry = CODEC_ENTRY_BOTTLE
+        codecSeeCard(seeEntry)
+
+        seeEntry = -1
+        if CELLS(seeI).bellyUp = 1 then seeEntry = CODEC_ENTRY_BELLY
+        if CELLS(seeI).bellyUp = 2 then seeEntry = CODEC_ENTRY_SKELETON
+        codecSeeCard(seeEntry)
+
+        seeEntry = -1
+        if CELLS(seeI).stack > 0 then seeEntry = CODEC_ENTRY_STACK
+        codecSeeCard(seeEntry)
+    next
+endfunction
+
+
+` the picture of an entry. a card has its art. coral and horror coral have the badges that the table
+` of high scores gives to the two endings, which are 16 pixels across, where the art of a card is 48.
+` the two endings have a heart and an eye, which are 16 pixels across as well.
+function getCodecEntryTex(entryIndex)
+    entryTex = TEX_BADGE_CORAL
+    if entryIndex = CODEC_ENTRY_HORROR then entryTex = TEX_BADGE_TENTACLE
+    if entryIndex = CODEC_ENTRY_REEF then entryTex = TEX_ENDING_REEF
+    if entryIndex = CODEC_ENTRY_ANCIENT then entryTex = TEX_ENDING_ANCIENT
+
+    ` the special fish are their own pictures. the goldfish stands in for any fish that something has happened to.
+    if entryIndex = CODEC_ENTRY_JELLY then entryTex = TEX_JELLY
+    if entryIndex = CODEC_ENTRY_RAY then entryTex = TEX_RAY
+    if entryIndex = CODEC_ENTRY_BOTTLE then entryTex = TEX_BOTTLE
+    if entryIndex = CODEC_ENTRY_BELLY then entryTex = CODEC_FISH_TEX
+    if entryIndex = CODEC_ENTRY_SKELETON then entryTex = SKELETON_TEX(CODEC_FISH_TEX)
+    if entryIndex = CODEC_ENTRY_STACK then entryTex = CODEC_FISH_TEX
+    if entryIndex < CARD_LENGTH then entryTex = CARDS(entryIndex).artTexId
+endfunction entryTex
 
 
 ` how many pages the grid has
@@ -262,6 +344,8 @@ function closeCodec()
         hide sprite CODEC_ICON_SPRITES(i)
         hide sprite CODEC_LOCK_SPRITES(i)
     next
+    hide sprite CODEC_STACK_SPRITES(0)
+    hide sprite CODEC_STACK_SPRITES(1)
     hide text CODEC_COUNT_TEXT_ID
     hide text CODEC_PAGE_TEXT_ID
     hide text CODEC_ARROW_TEXTS(0)
@@ -297,12 +381,21 @@ function refreshCodec()
     color text CODEC_ARROW_TEXTS(0), arrowColor
     color text CODEC_ARROW_TEXTS(1), arrowColor
 
+    ` the fish behind the fish of "stacked" only show while that entry does, and is unlocked
+    hide sprite CODEC_STACK_SPRITES(0)
+    hide sprite CODEC_STACK_SPRITES(1)
+    rotate sprite CODEC_BIG_SPRITE, 0
+
     for i = 0 to CODEC_PAGE_SIZE - 1
         shownEntry = pageNow * CODEC_PAGE_SIZE + i
+        rotate sprite CODEC_ICON_SPRITES(i), 0
         if shownEntry < CODEC_COUNT
             ` the size is set again, because it is worked out from the size of the texture
-            set sprite texture CODEC_ICON_SPRITES(i), CARDS(shownEntry).artTexId
-            size sprite CODEC_ICON_SPRITES(i), 24, 24
+            ` the art of a card is drawn at half of its size, and a badge at twice its size
+            tileSize = 24
+            if shownEntry >= CARD_LENGTH then tileSize = 32
+            set sprite texture CODEC_ICON_SPRITES(i), getCodecEntryTex(shownEntry)
+            size sprite CODEC_ICON_SPRITES(i), tileSize, tileSize
             show sprite CODEC_ICON_SPRITES(i)
 
             if CODEC_SEEN(shownEntry)
@@ -312,11 +405,30 @@ function refreshCodec()
                 ` highlighted one is left white.
                 tileColor = rgb(150, 190, 255)
                 if shownEntry = CODEC_SELECTED then tileColor = rgb(255, 255, 255)
+
+                ` the picture of a fish has colors of its own, which a tint would muddy, so it is only dimmed
+                if shownEntry >= CODEC_ENTRY_JELLY and shownEntry <> CODEC_SELECTED
+                    tileColor = rgb(190, 190, 190)
+                endif
                 color sprite CODEC_ICON_SPRITES(i), tileColor
+
+                ` a belly up fish is upside down
+                if shownEntry = CODEC_ENTRY_BELLY
+                    rotate sprite CODEC_ICON_SPRITES(i), 3.14159
+                endif
+
+                ` and a stacked one has another fish behind it, up and to the left
+                if shownEntry = CODEC_ENTRY_STACK
+                    set sprite texture CODEC_STACK_SPRITES(0), CODEC_FISH_TEX
+                    size sprite CODEC_STACK_SPRITES(0), tileSize, tileSize
+                    position sprite CODEC_STACK_SPRITES(0), getCodecTileX(i) - 5, getCodecTileY(i) - 5
+                    color sprite CODEC_STACK_SPRITES(0), rgb(90, 115, 165)
+                    show sprite CODEC_STACK_SPRITES(0)
+                endif
             else
-                ` a locked tile is greyed out so far that only the lock on top of it shows
+                ` a locked tile is only a question mark. its picture would give it away.
                 show sprite CODEC_LOCK_SPRITES(i)
-                color sprite CODEC_ICON_SPRITES(i), rgb(30, 40, 70)
+                hide sprite CODEC_ICON_SPRITES(i)
             endif
         else
             ` the last page may not be full
@@ -338,14 +450,92 @@ function refreshCodec()
         color text CODEC_NAME_TEXT_ID, rgb(120, 140, 185)
         set text CODEC_KIND_TEXT_ID, "locked"
         set text CODEC_DESC_TEXT_ID, "Not found yet. It turns up on the upgrade screen."
+
+        ` the ones that are not cards do not turn up there, and nothing says where they do
+        if CODEC_SELECTED >= CARD_LENGTH
+            set text CODEC_DESC_TEXT_ID, "Not found yet. No upgrade will bring it."
+        endif
+
+        ` the special fish, and what can happen to a fish, are found on the board
+        if CODEC_SELECTED >= CODEC_ENTRY_JELLY
+            set text CODEC_DESC_TEXT_ID, "Not found yet. It turns up on the board."
+        endif
     else
         ` the size is set again, because it is worked out from the size of the texture
-        set sprite texture CODEC_BIG_SPRITE, CARDS(CODEC_SELECTED).artTexId
+        set sprite texture CODEC_BIG_SPRITE, getCodecEntryTex(CODEC_SELECTED)
         size sprite CODEC_BIG_SPRITE, 48, 48
         color sprite CODEC_BIG_SPRITE, rgb(255, 255, 255)
+        color text CODEC_NAME_TEXT_ID, rgb(255, 255, 255)
+
+        ` coral and horror coral say what info mode says about them in a game
+        if CODEC_SELECTED = CODEC_ENTRY_REEF
+            set text CODEC_NAME_TEXT_ID, "The Reef, Saved"
+            set text CODEC_DESC_TEXT_ID, "You listened."
+            set text CODEC_KIND_TEXT_ID, "ending"
+            exitfunction
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_ANCIENT
+            set text CODEC_NAME_TEXT_ID, "The Ancient One"
+            set text CODEC_DESC_TEXT_ID, "You listened to something dark."
+            set text CODEC_KIND_TEXT_ID, "ending"
+            exitfunction
+        endif
+        ` the special fish
+        if CODEC_SELECTED = CODEC_ENTRY_JELLY
+            set text CODEC_NAME_TEXT_ID, "Jellyfish"
+            set text CODEC_DESC_TEXT_ID, "Comes with the jellies card. When it pops, each fish next to it has a " + str$(JELLY_STING_CHANCE) + "% chance to go belly up, then skeletal."
+            set text CODEC_KIND_TEXT_ID, "special fish"
+            exitfunction
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_RAY
+            set text CODEC_NAME_TEXT_ID, "Stingray"
+            set text CODEC_DESC_TEXT_ID, "Comes with the rays card. When it pops, it clears its column the way it faces: up, or down if it is belly up."
+            set text CODEC_KIND_TEXT_ID, "special fish"
+            exitfunction
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_BOTTLE
+            set text CODEC_NAME_TEXT_ID, "Bottle"
+            set text CODEC_DESC_TEXT_ID, "With the bottles card, a group of " + str$(BOTTLE_GROUP_SIZE) + " or more leaves one behind. On the bottom row, it adds " + str$(BOTTLE_MULT_GAIN) + " to the multiplier."
+            set text CODEC_KIND_TEXT_ID, "special fish"
+            exitfunction
+        endif
+
+        ` and what can happen to a fish
+        if CODEC_SELECTED = CODEC_ENTRY_BELLY
+            rotate sprite CODEC_BIG_SPRITE, 3.14159
+            set text CODEC_NAME_TEXT_ID, "Belly Up"
+            set text CODEC_DESC_TEXT_ID, "A fish that floats upside down. It pops when the cursor comes to it, and so does every belly up fish next to it."
+            set text CODEC_KIND_TEXT_ID, "status"
+            exitfunction
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_SKELETON
+            set text CODEC_NAME_TEXT_ID, "Skeletal"
+            set text CODEC_DESC_TEXT_ID, "The bones of a fish. A fish that is swapped can make its group through skeletons of any kind."
+            set text CODEC_KIND_TEXT_ID, "status"
+            exitfunction
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_STACK
+            set sprite texture CODEC_STACK_SPRITES(1), CODEC_FISH_TEX
+            size sprite CODEC_STACK_SPRITES(1), 48, 48
+            position sprite CODEC_STACK_SPRITES(1), CODEC_X + 36, CODEC_DETAIL_TOP + 32
+            color sprite CODEC_STACK_SPRITES(1), rgb(90, 115, 165)
+            show sprite CODEC_STACK_SPRITES(1)
+            set text CODEC_NAME_TEXT_ID, "Stacked"
+            set text CODEC_DESC_TEXT_ID, "More fish, stacked up behind one. When it pops, each fish in the stack pops first, and scores, and does what that fish does."
+            set text CODEC_KIND_TEXT_ID, "status"
+            exitfunction
+        endif
+
+        if CODEC_SELECTED >= CARD_LENGTH
+            extraInfo = INFO_INDEX_CORAL
+            if CODEC_SELECTED = CODEC_ENTRY_HORROR then extraInfo = INFO_INDEX_CORAL_SICK
+            set text CODEC_NAME_TEXT_ID, INFOS(extraInfo).title$
+            set text CODEC_DESC_TEXT_ID, INFOS(extraInfo).desc$
+            set text CODEC_KIND_TEXT_ID, "secret"
+            exitfunction
+        endif
 
         set text CODEC_NAME_TEXT_ID, CARDS(CODEC_SELECTED).name$
-        color text CODEC_NAME_TEXT_ID, rgb(255, 255, 255)
         set text CODEC_DESC_TEXT_ID, CARDS(CODEC_SELECTED).desc$
         select CARDS(CODEC_SELECTED).abilityType
             case ABILITY_TYPE_PASSIVE

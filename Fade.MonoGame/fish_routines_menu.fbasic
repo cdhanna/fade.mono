@@ -191,6 +191,18 @@ setup_menu:
         ready = 1
     }
 
+    ` these two are only on the page once the main menu has them to show. see setMenuPage.
+    MENU_ITEMS(MENU_ITEM_SET_REEF) = {
+        name$ = "Menu reef"
+        desc$ = "The reef you saved, on the main menu."
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_SET_MONSTER) = {
+        name$ = "Menu monster"
+        desc$ = "The one you summoned, on the main menu."
+        ready = 1
+    }
+
     ` the lines of the page that "New Game" opens. refreshOptionLines writes the choice onto the end of the
     ` first three, and gives them a description of whatever is chosen.
     MENU_ITEMS(MENU_ITEM_GAME_LENGTH) = {
@@ -253,6 +265,12 @@ setup_menu:
     if OPTION_MUSIC < 0 then OPTION_MUSIC = 0
     if OPTION_FULLSCREEN <> 0 then OPTION_FULLSCREEN = 1
 
+    ` what the main menu remembers is shown, until the player says otherwise
+    OPTION_MENU_REEF = get pref(PREF_MENU_REEF, 1)
+    OPTION_MENU_MONSTER = get pref(PREF_MENU_MONSTER, 1)
+    if OPTION_MENU_REEF <> 0 then OPTION_MENU_REEF = 1
+    if OPTION_MENU_MONSTER <> 0 then OPTION_MENU_MONSTER = 1
+
     ` the kind of game that was picked the last time is what "New Game" starts out on
     OPTION_GAME_LENGTH = get pref(PREF_GAME_LENGTH, GAME_LENGTH_REGULAR)
     OPTION_GAME_ZEN = get pref(PREF_GAME_ZEN, 0)
@@ -301,6 +319,22 @@ setup_menu:
     enable text drop shadow MENU_HINT_TEXT_ID, 2, -2, rgb(0,0,0)
     order text MENU_HINT_TEXT_ID, ORDER_MENU_TEXT
     set text render target MENU_HINT_TEXT_ID, TARGET_MENU
+
+    ` which build this is, in the bottom left corner of the main menu: the last 8 characters of the
+    ` commit that it was built from, or "local" for one that was built on the machine it runs on.
+    ` Program.cs puts it in the FISH_VERSION environment variable. frame_menu_render shows it.
+    menuVersion$ = "local"
+    if is env set("FISH_VERSION")
+        menuVersion$ = env$("FISH_VERSION")
+    endif
+    reserve text id(MENU_VERSION_TEXT_ID)
+    text MENU_VERSION_TEXT_ID, 4, WORLD_HEIGHT - 2, SCORE_FONT, menuVersion$
+    set text offset MENU_VERSION_TEXT_ID, 0, 1
+    size text y MENU_VERSION_TEXT_ID, 12
+    color text MENU_VERSION_TEXT_ID, rgb(255, 255, 255)
+    set text alpha MENU_VERSION_TEXT_ID, 0
+    order text MENU_VERSION_TEXT_ID, ORDER_MENU_TEXT
+    set text render target MENU_VERSION_TEXT_ID, TARGET_MENU
 
     ` everything from here on is the wave of bubbles.
 
@@ -562,6 +596,12 @@ menu_pick:
         case MENU_ITEM_SET_FULLSCREEN
             changeMenuOption(MENU_ITEM_SET_FULLSCREEN, 1)
         endcase
+        case MENU_ITEM_SET_REEF
+            changeMenuOption(MENU_ITEM_SET_REEF, 1)
+        endcase
+        case MENU_ITEM_SET_MONSTER
+            changeMenuOption(MENU_ITEM_SET_MONSTER, 1)
+        endcase
 
         case MENU_ITEM_SET_BACK
             ` back to whichever menu the options were opened from, with "Options" highlighted again.
@@ -644,6 +684,14 @@ handle_game_end:
     showSurface(0)
 
     MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = str$(GAME_ROUND_CAP) + " rounds in " + str$(CURRENT_MOVE_COUNT) + " moves. Back to the title."
+
+    ` the game may have ended early, with one of the two endings of the hidden game. see THE TWO ENDINGS in fish_headers.
+    if CORAL_ENDING = CORAL_ENDING_REEF
+        MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = "The reef was saved in " + str$(CURRENT_MOVE_COUNT) + " moves. Back to the title."
+    endif
+    if CORAL_ENDING = CORAL_ENDING_ANCIENT
+        MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = "The ancient one rose after " + str$(CURRENT_MOVE_COUNT) + " moves. Back to the title."
+    endif
     setMenuPage(MENU_PAGE_GAME_OVER)
     selectMenuItem(0, 0)
 
@@ -847,8 +895,15 @@ menu_transition:
         bub.offsetY = bub.offsetY + (sweepLean * sweepX) / WORLD_WIDTH + sweepBow * sin(bub.x * .0055)
 
         size sprite bub.spriteId, bub.size, bub.size
-        set sprite all texcoord1 bub.spriteId, bub.size, 0, 0, 0
-        if transitionDown = 0
+        ` coming back up from a game that ended with the ancient one, the wave is eyes, in place of
+        ` the bubbles, and they come down the screen with the waterline. see THE TWO ENDINGS in fish_headers.
+        bubEyes = 0
+        if transitionDown
+            if CORAL_ENDING = CORAL_ENDING_ANCIENT then bubEyes = 1
+        endif
+
+        set sprite all texcoord1 bub.spriteId, bub.size, 0, 0, bubEyes * 2
+        if transitionDown = 0 or bubEyes = 1
             show sprite bub.spriteId
         endif
 
@@ -1073,6 +1128,13 @@ frame_menu_render:
     ` the title bobs up and down
     set text position MENU_TITLE_TEXT_ID, WORLD_WIDTH / 2, MENU_TITLE_Y + .5 + sin(menuMs * .002) * 3
 
+    ` the version is only on the main menu, and it is half see-through. it fades in with the rest.
+    menuVersionAlpha# = 0
+    if MENU_PAGE = MENU_PAGE_MAIN
+        if MENU_MODE <> MENU_MODE_PAUSE then menuVersionAlpha# = 128 * MENU_CHROME_ALPHA#
+    endif
+    set text alpha MENU_VERSION_TEXT_ID, menuVersionAlpha#
+
     ` the sea rolls, and the boat rocks on it
     gosub frame_surface
 
@@ -1164,6 +1226,7 @@ reset_game:
     create basic tween SCORE_BAR.progressTweenId, 0, 0, 1, 0
 
     resetMultiplier()
+    resetCoral()
 
     ` any score that was still floating up off of the fish
     for resetI = 0 to SCORE_TEXT_COUNT - 1
@@ -1279,6 +1342,21 @@ function setMenuPage(page)
             if page = MENU_PAGE_PAUSE then skip
         endif
 
+        ` and the options page has the reef and the monster of the main menu right under "Fullscreen",
+        ` each of them only once it is there to be turned off
+        if i = MENU_ITEM_SET_REEF
+            if page = MENU_PAGE_OPTIONS
+                if SURFACE_REEF = 0 then hide text MENU_ITEMS(i).textId
+                skip
+            endif
+        endif
+        if i = MENU_ITEM_SET_MONSTER
+            if page = MENU_PAGE_OPTIONS
+                if SURFACE_ANCIENT = 0 then hide text MENU_ITEMS(i).textId
+                skip
+            endif
+        endif
+
         if onPage
             MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = i
             MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
@@ -1289,6 +1367,21 @@ function setMenuPage(page)
                     MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_MOVES
                     MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
                     show text MENU_ITEMS(MENU_ITEM_MOVES).textId
+                endif
+            endif
+
+            if page = MENU_PAGE_OPTIONS
+                if i = MENU_ITEM_SET_FULLSCREEN
+                    if SURFACE_REEF
+                        MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_REEF
+                        MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+                        show text MENU_ITEMS(MENU_ITEM_SET_REEF).textId
+                    endif
+                    if SURFACE_ANCIENT
+                        MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_MONSTER
+                        MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+                        show text MENU_ITEMS(MENU_ITEM_SET_MONSTER).textId
+                    endif
                 endif
             endif
         else
@@ -1376,6 +1469,17 @@ function refreshOptionLines()
         set text MENU_ITEMS(MENU_ITEM_SET_FULLSCREEN).textId, "Fullscreen    off"
     endif
 
+    if OPTION_MENU_REEF
+        set text MENU_ITEMS(MENU_ITEM_SET_REEF).textId, "Menu reef    on"
+    else
+        set text MENU_ITEMS(MENU_ITEM_SET_REEF).textId, "Menu reef    off"
+    endif
+    if OPTION_MENU_MONSTER
+        set text MENU_ITEMS(MENU_ITEM_SET_MONSTER).textId, "Menu monster    on"
+    else
+        set text MENU_ITEMS(MENU_ITEM_SET_MONSTER).textId, "Menu monster    off"
+    endif
+
     ` and the kind of game onto the lines of the page that "New Game" opens
     lengthName$ = "regular"
     if OPTION_GAME_LENGTH = GAME_LENGTH_SHORT then lengthName$ = "short"
@@ -1438,6 +1542,14 @@ function changeMenuOption(item, change)
             endif
         endcase
 
+        ` the main menu looks at these on every frame, so there is nothing else to do
+        case MENU_ITEM_SET_REEF
+            OPTION_MENU_REEF = 1 - OPTION_MENU_REEF
+        endcase
+        case MENU_ITEM_SET_MONSTER
+            OPTION_MENU_MONSTER = 1 - OPTION_MENU_MONSTER
+        endcase
+
         ` the lengths go around: short, regular, long, and back to short
         case MENU_ITEM_GAME_LENGTH
             OPTION_GAME_LENGTH = OPTION_GAME_LENGTH + change
@@ -1461,6 +1573,8 @@ function changeMenuOption(item, change)
     set pref PREF_SOUND, OPTION_SOUND
     set pref PREF_MUSIC, OPTION_MUSIC
     set pref PREF_FULLSCREEN, OPTION_FULLSCREEN
+    set pref PREF_MENU_REEF, OPTION_MENU_REEF
+    set pref PREF_MENU_MONSTER, OPTION_MENU_MONSTER
 
     ` the lines have changed, so write them again. selecting the line again colors it and fills in its description.
     refreshOptionLines()

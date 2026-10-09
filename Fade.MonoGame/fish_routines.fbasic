@@ -132,6 +132,29 @@ load_textures:
 
     texture reserve texture id(TEX_NOISE), "Fish/Textures/Turbulence_13-256x256"
 
+    ` the skeleton of every kind of fish. see SKELETONS in fish_headers.
+    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Pufferfish"
+    SKELETON_TEX(TEX_PUFFER) = skeletonTexId
+    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Catfish"
+    SKELETON_TEX(TEX_CATFISH) = skeletonTexId
+    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Goldfish"
+    SKELETON_TEX(TEX_GOLDFISH) = skeletonTexId
+    CODEC_FISH_TEX = TEX_GOLDFISH `the codec shows what can happen to a fish on a goldfish
+    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Angelfish"
+    SKELETON_TEX(TEX_ANGELFISH) = skeletonTexId
+    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Crab - Dungeness"
+    SKELETON_TEX(TEX_CRAB) = skeletonTexId
+    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Bass"
+    SKELETON_TEX(TEX_BASS) = skeletonTexId
+    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Worm"
+    SKELETON_TEX(TEX_WORM) = skeletonTexId
+    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Jellyfish"
+    SKELETON_TEX(TEX_JELLY) = skeletonTexId
+    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Stingray"
+    SKELETON_TEX(TEX_RAY) = skeletonTexId
+    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Bottle"
+    SKELETON_TEX(TEX_BOTTLE) = skeletonTexId
+
     global dim FISH_COLORS(16)
     FISH_COLORS(getFishColorIndex(TEX_JELLY)) = rgb(200, 130, 255)
     FISH_COLORS(getFishColorIndex(TEX_RAY)) = rgb(120, 150, 200)
@@ -228,6 +251,7 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_JELLIES).artTexId), "Fish/Textures/Cards/jellies"
     texture reserve texture id(CARDS(ABILITY_INDEX_RAYS).artTexId), "Fish/Textures/Cards/rays"
     texture reserve texture id(CARDS(ABILITY_INDEX_BOTTLES).artTexId), "Fish/Textures/Cards/bottles"
+    texture reserve texture id(CARDS(ABILITY_INDEX_LISTEN).artTexId), "Fish/Textures/Cards/listen"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_WASTE_BUCKET).artTexId), "Fish/Textures/Cards/waste_bucket"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_BUNCH_UP).artTexId), "Fish/Textures/Cards/bunch_up"
 
@@ -489,6 +513,7 @@ update_frame:
     gosub frame_free_moves
     stepCursorShake()
     stepMultiplier()
+    stepCoral()
     gosub frame_hints
     updateBubbles()
     updateMusic()
@@ -598,6 +623,7 @@ frame_fish_fx:
 
         ` the fish leans one way as the wave gets to it, and the other way as it leaves. the 3.7 makes the most of that 1.
         currentLean# = sin(currentPhase#) * currentNear# * 3.7 * CURRENT_TILT#
+
         yaw# = yaw# + currentLean# * CURRENT_DIR_X#
         pitch# = pitch# - currentLean# * CURRENT_DIR_Y#
 
@@ -609,7 +635,33 @@ frame_fish_fx:
         if abs(bellyWant# - bellyShown#) < .01 then bellyShown# = bellyWant#
         CELLS(i).bellyShown# = bellyShown#
         pitch# = pitch# + bellyShown#
-        yaw# = yaw# + (sin(shockNow * .003 + i) * BELLY_UP_ROCK# * bellyShown#) / 3.14159
+
+        ` a skeleton turns the rest of the way over, back to the right way up, and stops rocking as it gets there
+        bellyRock# = bellyShown#
+        if bellyRock# > 3.14159 then bellyRock# = 6.28318 - bellyRock#
+        yaw# = yaw# + (sin(shockNow * .003 + i) * BELLY_UP_ROCK# * bellyRock#) / 3.14159
+
+        ` and it is drawn as its bones from the moment that it is edge on, so the fish goes over and the
+        ` skeleton comes around. see SKELETONS in fish_headers. whatever else sets the picture of a fish
+        ` only knows about its kind, so this puts the bones back on every frame, and takes them off
+        ` again when the fish in the cell is not a skeleton any more.
+        skeletonWant = 0
+        if c.bellyUp = 2
+            if c.value > 0
+                if bellyShown# > 4.71 then skeletonWant = 1
+            endif
+        endif
+        if skeletonWant
+            set sprite texture c.spriteId, SKELETON_TEX(c.value)
+            SKELETON_SHOWN(i) = 1
+        else
+            if SKELETON_SHOWN(i)
+                SKELETON_SHOWN(i) = 0
+                if c.value > 0
+                    set sprite texture c.spriteId, c.value
+                endif
+            endif
+        endif
 
         ` the count that is drawn chases the real one, so that a new fish slides out from behind
         stackWant# = c.stack + 1
@@ -629,6 +681,46 @@ return
 dbg# = 1.0
 dbg_str$ = "world2"
 frame_dbg:
+    ` the debug keys are only for working on the game. set the FISH_DEBUG environment variable to get them.
+    ` the debug panel also has a window that gives the player any card. see fish_routines_debug.
+    ` U turns the fish above the cursor belly up, and a second press turns it into a skeleton.
+    ` G grows coral on the cell that the cursor is on, and H grows horror coral there.
+    ` J plays a hint, right away.
+    ` R covers the whole board with coral, which saves the reef, and T covers it with horror coral, which
+    ` summons the ancient one. the ending plays, and then the game ends, the way that it would have.
+    if is env set("FISH_DEBUG")
+        if MENU_MODE = 0
+            gosub frame_debug_cards
+            if INFO_MODE = 0
+                if new key down(scancode("U"))
+                    if SELECTION_POS.y > 0
+                        dbgBellyIndex = SELECTION_POS.x + (SELECTION_POS.y - 1) * CELL_COLUMN_COUNT
+                        if CELLS(dbgBellyIndex).bellyUp < 2
+                            CELLS(dbgBellyIndex).bellyUp = CELLS(dbgBellyIndex).bellyUp + 1
+                        endif
+                    endif
+                endif
+
+                ` the hidden game. see CORAL in fish_headers.
+                if new key down(scancode("G"))
+                    coralDebugGrow(SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT, 0)
+                endif
+                if new key down(scancode("H"))
+                    coralDebugGrow(SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT, 1)
+                endif
+                if new key down(scancode("J"))
+                    coralClearHint()
+                    dbgHintMade = coralStartAnyHint()
+                endif
+                if new key down(scancode("R"))
+                    coralDebugCover(0)
+                endif
+                if new key down(scancode("T"))
+                    coralDebugCover(1)
+                endif
+            endif
+        endif
+    endif
 return
     begin debug window("Debug")
         debug inspector
@@ -759,7 +851,7 @@ frame_free_moves:
             color text txtId, rgb(190, 220, 255)
 
             ` every move that comes off gives the screen a little knock
-            create basic tween FREE_MOVES_SHAKE_TWEEN_ID, 0, 6, 180, 0
+            create basic tween FREE_MOVES_SHAKE_TWEEN_ID, 0, SHAKE_FREE_MOVE_AMOUNT#, 180, 0
             set tween type FREE_MOVES_SHAKE_TWEEN_ID, 1
             set screen shake bounce .5
             FREE_MOVES_SHAKING = 1
@@ -831,7 +923,8 @@ frame_scale_wave:
 
     for i = 0 to CELL_COUNT - 1
         c = CELLS(i)
-        scale = tweenVal(c.scaleWaveTweenId) * CELL_ART_SIZE
+        ` a fish that is sitting on coral is a little smaller. see A FISH ON CORAL in fish_headers.
+        scale = tweenVal(c.scaleWaveTweenId) * CELL_ART_SIZE * CORAL_SIT#(i)
         size sprite c.spriteId, scale, scale
     next
 
@@ -866,6 +959,9 @@ handle_combos:
         CELLS(i-1) = c
     next
 
+    ` the groups of the fish that a swap has just moved go through skeletons. see SKELETONS in fish_headers.
+    skeletonsBeforeCombos()
+
     groupId = 0
     for i = 1 to CELL_COUNT
         c = CELLS(i-1)
@@ -873,11 +969,14 @@ handle_combos:
         if c.comboFillMask > 0 then skip
 
         ` flood fill from this cell if it has not already been combo checked
-    
+
         CELLS(i-1).comboFillId = groupId
         findCombos(i - 1, groupId)
         groupId += 1
     next
+
+    ` the groups have been found, so the skeletons that were taken into one are the kinds of fish that they were again
+    skeletonsAfterCombos()
 
     ` handle forced explosions...
     maxComboForce = 0
@@ -889,6 +988,12 @@ handle_combos:
             print "FORCING EXPLO" + str$(c.comboForce) + " " + str$(CELLS(i).comboFillId)
         endif
     next
+
+    ` a stingray that pops makes a forced group of its own on the way through the groups, so there has to
+    ` be room for one in every column. see RAYS in fish_headers.
+    forceBase = groupId
+    rayForceMax = FORCE_RAY_DOWN + CELL_COLUMN_COUNT
+    if maxComboForce < rayForceMax then maxComboForce = rayForceMax
     groupId += maxComboForce
 
     ` DEBUG: just color the groups for debug visuals
@@ -900,7 +1005,11 @@ handle_combos:
     cellId = 0
 
 
+    ` a fish that has sung on coral is forgotten once it is gone. see THE FISH ON CORAL SING in fish_headers.
+    coralForgetSung()
+
     totalComboCount = 0
+    CORAL_HELD_GROUPS = 0
     explodePitch# = (rnd(4)*.02)
     explodeIndex = 0
     requiredComboCount = getRequiredComboCount()
@@ -908,22 +1017,51 @@ handle_combos:
 
         ` need to check if this group is big enough
         comboCount = 0
+        comboWhole = 0
+        comboOnCoral = 0 `1 when any fish of the group is on coral. the group has to be bigger then. see CORAL in fish_headers.
+        comboForced = 0
+        comboSwapped = 0
+        comboFresh = 0 `1 when any fish of the group has not sung on coral already, so there is something for the group to do
         groupForce = 0 `which kind of forced pop the group is, or 0 for fish that matched. see FORCED POPS in fish_headers.
         for i = 1 to CELL_COUNT
             cell = CELLS(i-1)
 
-            if comboCount >= requiredComboCount then skip  ` once we know there are enough, no need to check the rest of the group
             if cell.comboFillId <> g then skip
             if cell.comboForce > 0
                 print "FORCE COMBO COUNT"
-                comboCount = 99 `some really high number to force
+                comboForced = 1
                 groupForce = cell.comboForce
             endif
 
-            comboCount += 1
+            ` how many fish there are, if any of them is on coral, and if the last swap put one of them here
+            comboWhole = comboWhole + 1
+            if CORAL_CELLS(i-1) then comboOnCoral = 1
+            comboHeld = coralHolds(i - 1, cell.comboForce)
+            if comboHeld = 0 then comboFresh = 1
+            if CORAL_SUNG(i-1) <> cell.value then comboFresh = 1
+            comboAt = i - 1
+            if comboAt = CORAL_SWAP_A then comboSwapped = 1
+            if comboAt = CORAL_SWAP_B then comboSwapped = 1
         next
 
-        if comboCount < requiredComboCount then skip `if this group is not big enough, then we can skip rendering the explosion
+        ` a group with a fish on coral in it has to be bigger to pop. a forced pop goes whatever its size.
+        comboNeed = requiredComboCount
+        if comboOnCoral then comboNeed = requiredComboCount + CORAL_GROUP_EXTRA
+        comboCount = comboWhole
+        if comboForced then comboCount = comboWhole + 99
+
+        ` a group that the last swap put together, which only the coral kept from popping. the multiplier
+        ` does not hold that swap against the player. see CORAL in fish_headers.
+        if comboCount < comboNeed
+            if comboWhole >= requiredComboCount
+                if comboSwapped then CORAL_HELD_GROUPS = CORAL_HELD_GROUPS + 1
+            endif
+        endif
+
+        if comboCount < comboNeed then skip `if this group is not big enough, then we can skip rendering the explosion
+
+        ` every fish of the group is on coral, and has sung already. nothing has joined them, so they sit.
+        if comboFresh = 0 then skip
 
         ` the belly up fish of the waste bucket score more
         groupBonus = 1
@@ -952,6 +1090,22 @@ handle_combos:
             endif
         endif
 
+        ` a stingray that pops, for whatever reason, shoots up, and every fish above it pops too. see RAYS in fish_headers.
+        ` rayBottomRow is the lowest row of the group, which is where a column that was shot up starts to pop from.
+        rayBottomRow = 0
+        for i = 0 to CELL_COUNT - 1
+            if CELLS(i).comboFillId <> g then skip
+            if CELLS(i).coord.y > rayBottomRow then rayBottomRow = CELLS(i).coord.y
+            if groupForce = FORCE_BUNCH then skip
+
+            ` a stingray that sings on coral does not pop, so it does not shoot
+            rayHeld = coralHolds(i, groupForce)
+            if rayHeld then skip
+            if CELLS(i).value = TEX_RAY
+                shootRay(i, forceBase)
+            endif
+        next
+
         totalComboCount += 1
         scoreAdd = 0
 
@@ -969,12 +1123,39 @@ handle_combos:
             cell = CELLS(i-1)
             if cell.comboFillId <> g then skip
 
-            CELLS(i-1).comboBlownUp = 1
-            cellId = i-1
-
             groupSumX = groupSumX + cell.coord.x
             groupSumY = groupSumY + cell.coord.y
             groupSize# = groupSize# + 1
+
+            ` a fish that is on coral does not pop. it stays, and sings, and scores more than it would
+            ` have by popping. the fish of its stack score too, and stay. see THE FISH ON CORAL SING in fish_headers.
+            cellSings = coralHolds(i - 1, groupForce)
+            if cellSings
+                explodeIndex += 1
+                delay = explodeIndex * 50
+
+                singPoints = 0
+                singLeft = 1 + cell.stack
+                while singLeft > 0
+                    singLeft = singLeft - 1
+                    scoreAdd += 10
+                    singPoints = singPoints + scoreAdd * SCORE_MULTIPLIER * CORAL_SCORE_BONUS
+                endwhile
+
+                singPos as vec = {
+                    x = getCellX(cell.coord.x),
+                    y = getCellY(cell.coord.y)
+                }
+                singTxtId = spawnBoardScoreText(singPos, "+" + str$(singPoints), delay, 800)
+                color text singTxtId, rgb(255, 170, 190)
+                queueScore(singPoints, delay)
+
+                coralSing(i - 1, delay)
+            endif
+            if cellSings then skip
+
+            CELLS(i-1).comboBlownUp = 1
+            cellId = i-1
 
             ` fish that are going into a stack do not pop. they fade away, and score nothing. see BUNCH UP in fish_headers.
             ` the tween of the smoke is set to one that is over, because the loop further down waits on it.
@@ -991,19 +1172,26 @@ handle_combos:
             delay = explodeIndex * 50`rnd(3)*75+25 `TODO: somehow use the delay to "randomize" the animation
 
             ` a column that a stingray shot up pops from the bottom to the top. see RAYS in fish_headers.
+            ` one that a belly up stingray shot down pops from the top to the bottom, which is the order it has already.
             if groupForce >= FORCE_RAY and groupForce < FORCE_BOTTLE
-                rayStep = CELL_ROW_COUNT - cell.coord.y
+                rayStep = (rayBottomRow + 1) - cell.coord.y
                 delay = (groupFirstIndex + rayStep) * 50
             endif
 
-            ` a jellyfish stings the fish next to it, once all of the groups have been found
-            if cell.value = TEX_JELLY then CELLS(i-1).stings = 1
+            ` a jellyfish stings the fish next to it, once all of the groups have been found.
+            ` a stacked one stings once for itself, and once more for every jellyfish behind it.
+            if cell.value = TEX_JELLY then CELLS(i-1).stings = 1 + cell.stack
+            STING_DELAY(i-1) = delay
 
             ` a stacked fish pops the fish in its stack first, one at a time, and each of them scores
             ` as one more fish in the group. a score text comes out of the fish for every one of them.
             ` the loop that waits for the pops to finish, further down, takes them off of the stack
             ` at the same moments, so that the stack can be seen shrinking.
             ` the fish in front goes last, so everything of its own waits until the stack is gone.
+            ` a fish that pops on coral scores more, and so does every fish of its stack. see CORAL in fish_headers.
+            coralScore = 1
+            if CORAL_CELLS(i-1) then coralScore = CORAL_SCORE_BONUS
+
             stackLeft = cell.stack
             if stackLeft > BUNCH_STACK_MAX then stackLeft = BUNCH_STACK_MAX
             CELLS(i-1).stackPopMs = game ms() + delay
@@ -1015,7 +1203,7 @@ handle_combos:
                     y = getCellY(cell.coord.y)
                 }
                 scoreAdd += 10
-                scorePoints = scoreAdd * SCORE_MULTIPLIER * groupBonus `see THE MULTIPLIER in fish_headers
+                scorePoints = scoreAdd * SCORE_MULTIPLIER * groupBonus * coralScore `see THE MULTIPLIER in fish_headers
                 ` this one is gone by the time the next fish of the stack pops, so that each of them
                 ` gets a text of its own to be read
                 stackTxtId = spawnBoardScoreText(stackTxtPos, "+" + str$(scorePoints), delay, FISH_STACK_POP_GAP - 20)
@@ -1046,7 +1234,7 @@ handle_combos:
             create basic tween cell.comboDownShiftTweenId, 255, 0, 250, delay
 
             ` animate screen shake
-            create basic tween SHAKE_TWEEN_ID, 0, 15, 350, 0
+            create basic tween SHAKE_TWEEN_ID, 0, SHAKE_POP_AMOUNT#, 350, 0
             set tween type SHAKE_TWEEN_ID, 1
             set screen shake bounce .5
 
@@ -1056,7 +1244,7 @@ handle_combos:
                 y = getCellY(cell.coord.y)
             }
             scoreAdd += 10
-            scorePoints = scoreAdd * SCORE_MULTIPLIER * groupBonus
+            scorePoints = scoreAdd * SCORE_MULTIPLIER * groupBonus * coralScore
             txtId = spawnBoardScoreText(txtPos, "+" + str$(scorePoints), delay, 800)
             color text txtId, FISH_COLORS(getFishColorIndex(cell.value))
 
@@ -1077,6 +1265,9 @@ handle_combos:
             if groupShock# > 1 then groupShock# = 1
             spawnShockwave(groupMidX#, groupMidY#, groupShock#, groupDelay)
 
+            ` a big group brings a hint with the next wave of the current. see THE HINTS in fish_headers.
+            if groupSize# >= CORAL_HINT_GROUP_SIZE then CORAL_HINT_DUE = 1
+
             ` with the "bottles" card, a big group of fish that matched leaves a bottle behind, in the
             ` cell of the group that is closest to the middle of it. see BOTTLES in fish_headers.
             bottleOk = isAbility_Bottles()
@@ -1087,6 +1278,7 @@ handle_combos:
                 bottleBestDist# = 9999
                 for i = 0 to CELL_COUNT - 1
                     if CELLS(i).comboFillId <> g then skip
+                    if CELLS(i).comboBlownUp = 0 then skip `a fish that sang on coral is still there, so there is no room for a bottle
                     bottleDX# = CELLS(i).coord.x - groupMidX#
                     bottleDY# = CELLS(i).coord.y - groupMidY#
                     bottleDist# = bottleDX# * bottleDX# + bottleDY# * bottleDY#
@@ -1113,6 +1305,13 @@ handle_combos:
     ` popping now were scored with the multiplier as it was, and a new one counts from the next pop.
     judgeMultiplierSwaps(totalComboCount)
 
+    ` and if that swap came at the end of one of the hidden patterns, this is where coral grows. the fish
+    ` that are popping now were scored without it. see CORAL in fish_headers.
+    judgeCoralCast(totalComboCount)
+
+    ` the tests stop here. what pops has been decided and scored, and none of it has been animated yet.
+    _combos_judged:
+
     ` the first pops of the very first game bring the pieces of the game in. see THE FIRST DIVE, in
     ` fish_routines_intro. only the pop that a move makes counts, and not the ones that follow from it.
     if TUTORIAL_STAGE > 2
@@ -1132,6 +1331,9 @@ handle_combos:
         SEABED_COMBO = 0
         KNOWN_FILL_VALUE = 0 `a "known fill" swap that popped nothing has nothing to fill
         TUTORIAL_SCORE_HOLD = 0 `the fish that brought the bar of the round in have all popped, so the next ones score
+
+        ` the special fish on the board, and what has happened to the fish on it, are in the codec from now on
+        codecSeeBoard()
 
         ` the board has settled, so this is when a move gets its chance to turn a fish belly up
         rollBellyUpFish()
@@ -1168,9 +1370,19 @@ handle_combos:
     ` a jellyfish that popped stings the fish right next to it. see JELLIES in fish_headers.
     for i = 0 to CELL_COUNT - 1
         if CELLS(i).stings = 0 then skip
+        stingsLeft = CELLS(i).stings
         CELLS(i).stings = 0
-        stingJelly(i)
+        ` the jellyfish of a stack pop one after the other, and each one stings as it goes
+        stingWait = STING_DELAY(i)
+        while stingsLeft > 0
+            stingsLeft = stingsLeft - 1
+            stingJelly(i, stingWait)
+            stingWait = stingWait + FISH_STACK_POP_GAP
+        endwhile
     next
+
+    ` the tests stop here too. the fish around the ones that pop have had their chance to stack up or get stung.
+    _combos_spread:
 
     ` the player can keep moving the cursor and swapping fish through all of what follows, as long as
     ` they leave the fish that the combo is busy with alone. see LIVE MOVES in fish_headers.
@@ -1471,6 +1683,9 @@ handle_board_expansion:
         rowShift = 1
     endif
     resizeGrid(expandColumns, expandRows)
+
+    ` the coral stays with the cells that it was on
+    coralBoardGrew(oldColumns, rowShift)
 
     ` the fish that were already on the board keep their kind. a new row pushes them all down by one.
     ` comboBlownUp marks the cells that need a new fish, the same as it does after a combo.

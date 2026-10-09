@@ -1,0 +1,116 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+        Steam commands for Fade.MonoGame games: FadeSteamCommands, and the SteamSystem that
+        starts Steam and pumps it once a frame.
+
+        A separate assembly from Fade.MonoGame.Lib on purpose. Steam is an opt-in: a game
+        that is not on Steam should not carry the Steam API, and Lib is also what the
+        browser build references, where there is no Steam at all.
+
+        A game opts in with three edits:
+          1. a ProjectReference to this project
+          2. <FadeCommand Include="Fade.MonoGame.Steam" FullName="Fade.MonoGame.Steam.FadeSteamCommands" />
+          3. in Program.cs, `new FadeSteamCommands()` in the CommandCollection that the Debug
+             runtime compile uses, and a SteamSystem registered as an IFadeHostSystem
+
+        Steamworks itself comes from Facepunch.Steamworks, BY SOURCE, from External/, which
+        is not in git. build/fetch-steamworks fetches it at a pinned commit.
+    -->
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+
+        <!-- The command source generator reads /// trivia for command metadata. -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+        <!-- Not a package yet: a ProjectReference into External/ cannot be packed. -->
+        <IsPackable>false</IsPackable>
+
+        <!-- Declaring these is what makes the game's `-r <rid>` reach this project. A library
+             with no RuntimeIdentifiers is "RID agnostic", and the SDK strips the RID from it
+             when it is built as a reference. This project is not agnostic: which Facepunch
+             assembly and which native library it brings depends on the platform it is FOR.
+             Without this line a macOS publish from Windows ships the Windows interop layer. -->
+        <RuntimeIdentifiers>win-x64;osx-arm64;osx-x64;linux-x64</RuntimeIdentifiers>
+
+        <!-- The RID picks the references. It must not also stamp the assembly with a CPU,
+             which it does by default. The Fade build tasks LOAD this assembly to read its
+             commands, on whatever machine is building, and an x64 machine refuses to load
+             one that is stamped arm64. That is every macOS publish from Windows or CI. -->
+        <PlatformTarget>AnyCPU</PlatformTarget>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <!-- Overridable, so CI can clone it anywhere. -->
+        <FacepunchDir Condition="'$(FacepunchDir)' == ''">$(MSBuildThisFileDirectory)..\External\Facepunch.Steamworks</FacepunchDir>
+        <_SteamNativeDir>$(FacepunchDir)\UnityPlugin\redistributable_bin</_SteamNativeDir>
+    </PropertyGroup>
+
+    <Target Name="CheckFacepunchSteamworks" BeforeTargets="BeforeBuild">
+        <Error Condition="!Exists('$(FacepunchDir)\Facepunch.Steamworks\Facepunch.Steamworks.Posix.csproj')"
+               Text="Facepunch.Steamworks is missing from $(FacepunchDir). It is not in git. Run build\fetch-steamworks.ps1 (or ./build/fetch-steamworks.sh) and build again." />
+    </Target>
+
+    <ItemGroup>
+        <PackageReference Include="FadeBasic.Lang.Core" Version="$(FadeVersion)" />
+        <PackageReference Include="FadeBasic.Lang.CommandSourceGenerator" Version="$(FadeVersion)" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- For IFadeHostSystem. -->
+        <ProjectReference Include="..\Fade.MonoGame.Contracts\Fade.MonoGame.Contracts.csproj" />
+        <!-- For TextureSystem, which is where the icon of an achievement becomes a texture. -->
+        <ProjectReference Include="..\Fade.MonoGame.Game\Fade.MonoGame.Game.csproj" />
+    </ItemGroup>
+
+    <!-- The engine's types mention MonoGame's, so the compiler has to be able to see them.
+         COMPILE-ONLY, for the reason that Fade.MonoGame.Lib.csproj gives at length: the game
+         owns the MonoGame that ships, and which backend it is. -->
+    <ItemGroup>
+        <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)"
+                          PrivateAssets="all" IncludeAssets="compile" />
+    </ItemGroup>
+
+    <!-- Which platform is this being built FOR? The RuntimeIdentifier when there is one,
+         which is right when cross-building. The host OS for a plain `dotnet build`. -->
+    <PropertyGroup>
+        <_TargetsWindows Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier.StartsWith('win'))</_TargetsWindows>
+        <_TargetsOSX     Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier.StartsWith('osx'))</_TargetsOSX>
+        <_TargetsLinux   Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier.StartsWith('linux'))</_TargetsLinux>
+
+        <_TargetsWindows Condition="'$(RuntimeIdentifier)' == ''">$([MSBuild]::IsOSPlatform('Windows'))</_TargetsWindows>
+        <_TargetsOSX     Condition="'$(RuntimeIdentifier)' == ''">$([MSBuild]::IsOSPlatform('OSX'))</_TargetsOSX>
+        <_TargetsLinux   Condition="'$(RuntimeIdentifier)' == ''">$([MSBuild]::IsOSPlatform('Linux'))</_TargetsLinux>
+    </PropertyGroup>
+
+    <!-- Facepunch ships one assembly per platform and they are NOT interchangeable: the
+         native library name and the interop struct packing both differ. Same namespace
+         either way, so nothing in the code here has to change.
+
+         The Win64 project copies its own steam_api64.dll to the output. The Posix one
+         brings no native library, so the two below are copied from the same checkout,
+         which keeps them the version that this interop layer was generated for. -->
+    <ItemGroup Condition="'$(_TargetsWindows)' == 'true'">
+        <ProjectReference Include="$(FacepunchDir)\Facepunch.Steamworks\Facepunch.Steamworks.Win64.csproj" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(_TargetsWindows)' != 'true'">
+        <ProjectReference Include="$(FacepunchDir)\Facepunch.Steamworks\Facepunch.Steamworks.Posix.csproj" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(_TargetsOSX)' == 'true'">
+        <Content Include="$(_SteamNativeDir)\osx\libsteam_api.dylib" Link="libsteam_api.dylib">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(_TargetsLinux)' == 'true'">
+        <Content Include="$(_SteamNativeDir)\linux64\libsteam_api.so" Link="libsteam_api.so">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
+</Project>

@@ -28,14 +28,14 @@ remstart
 
     updateMusic() has to be called on every frame, the same as updateBubbles().
 
-    the sounds were made by Tools/ocean_music_gen.py.
+    the sounds were made by Tools/ocean_music_gen.py, and the voices of the coral by Tools/coral_voices_gen.py.
 remend
 
 
 ` THE MELODIES. this is the place to write new ones.
 `
 ` newMelody() starts one. it says how many milliseconds a beat lasts, which instrument plays it
-` (INSTRUMENT_BELL, INSTRUMENT_PLUCK or INSTRUMENT_SWELL), and which chord it wants underneath it
+` (INSTRUMENT_BELL, INSTRUMENT_PLUCK, INSTRUMENT_SWELL, INSTRUMENT_CHOIR or INSTRUMENT_WAIL), and which chord it wants underneath it
 ` (MUSIC_CHORD_DM, MUSIC_CHORD_BB, or MUSIC_CHORD_ANY if it does not care). a melody that wants
 ` a chord brings that chord in before it starts, and keeps it there until it is over.
 `
@@ -90,6 +90,146 @@ setup_melodies:
     newMelody(1000, INSTRUMENT_SWELL, MUSIC_CHORD_BB)
     melodyBar(A5, C6, Bb5, A5, E5, D5, E5, F5)
     melodyBar(C5, REST, REST, REST, REST, REST, A4, REST)
+
+    ` the melodies up to here take turns on their own. the ones from here on only play when the game asks for them.
+    MELODY_AUTO_COUNT = MELODY_COUNT
+
+    ` THE MUSIC OF THE CORAL. see fish_headers. a note that is played again while it is still ringing
+    ` starts over, which cuts it short, so these tunes hold a note where the real thing says it twice.
+
+    ` the tunes of praise, for when coral grows. the choir sings them. they are glad, and a little sad
+    ` with it: slow, with long notes that are left to ring into each other, and most of them fall
+    ` more than they rise. and they are short. each one is a single phrase, a handful of notes, with
+    ` the last note starting within about five seconds of the first, so that it is an answer to the
+    ` coral growing and is over while that is still what just happened.
+    MELODY_CORAL_FIRST = MELODY_COUNT
+
+    ` "going home", the slow tune of the new world symphony, by dvorak (1893). the first two bars.
+    newMelody(420, INSTRUMENT_CHOIR, MUSIC_CHORD_BB)
+    melodyBar(A4, REST, REST, C5, REST, REST, REST, REST)
+    melodyBar(A4, REST, REST, G4, F4, REST, REST, REST)
+
+    ` the londonderry air, an old irish tune. the way in, and the first climb.
+    newMelody(520, INSTRUMENT_CHOIR, MUSIC_CHORD_BB)
+    melodyBar(E4, F4, G4, A4, REST, REST, G4, A4)
+    melodyBar(D5, C5, A4, REST, REST, REST, REST, REST)
+
+    ` "amazing grace", to the tune "new britain" (1829). the first three words. a beat is half of a step of it.
+    newMelody(520, INSTRUMENT_CHOIR, MUSIC_CHORD_BB)
+    melodyBar9(C5, REST, F5, REST, REST, REST, A5, F5, A5)
+
+    ` "abide with me", to the tune "eventide" (1861). the first bar and a half.
+    newMelody(700, INSTRUMENT_CHOIR, MUSIC_CHORD_BB)
+    melodyBar(A4, REST, REST, G4, F4, REST, C5, REST)
+
+    ` the canon in d, by pachelbel (about 1680). the start of the line that walks down, turned back home.
+    newMelody(900, INSTRUMENT_CHOIR, MUSIC_CHORD_BB)
+    melodyBar(A5, G5, F5, E5, F5, REST, REST, REST)
+
+    ` the canon by tallis (1567). the first line.
+    newMelody(650, INSTRUMENT_CHOIR, MUSIC_CHORD_BB)
+    melodyBar(F4, REST, E4, F4, REST, G4, REST, A4)
+
+    ` the lullaby by brahms (1868). the first few notes.
+    newMelody(520, INSTRUMENT_CHOIR, MUSIC_CHORD_BB)
+    melodyBar(A4, REST, C5, REST, REST, REST, A4, REST)
+    melodyBar(C5, REST, REST, REST, REST, REST, REST, REST)
+
+    ` the rest of these are not from anywhere.
+
+    ` up the chord, to the top
+    newMelody(650, INSTRUMENT_CHOIR, MUSIC_CHORD_BB)
+    melodyBar(F4, REST, A4, REST, C5, REST, F5, REST)
+
+    ` a sigh that falls, leans on the note above, and settles
+    newMelody(600, INSTRUMENT_CHOIR, MUSIC_CHORD_BB)
+    melodyBar(C5, REST, REST, A4, REST, REST, Bb4, REST)
+    melodyBar(A4, REST, REST, REST, REST, REST, REST, REST)
+
+    ` a climb, and a drop that stops short of home
+    newMelody(650, INSTRUMENT_CHOIR, MUSIC_CHORD_BB)
+    melodyBar(F4, REST, A4, REST, C5, REST, REST, G4)
+
+    ` from high up, down through the one note that aches, to rest
+    newMelody(650, INSTRUMENT_CHOIR, MUSIC_CHORD_BB)
+    melodyBar(A5, REST, REST, G5, REST, E5, REST, F5)
+
+    MELODY_CORAL_COUNT = MELODY_COUNT - MELODY_CORAL_FIRST
+
+    ` the laments, for when horror coral grows. the wail sings them, an octave below where they are
+    ` written. they are as short as the tunes of praise are.
+    MELODY_HORROR_FIRST = MELODY_COUNT
+
+    ` "dies irae", the chant for the dead, from the 1200s. the first line.
+    newMelody(650, INSTRUMENT_WAIL, MUSIC_CHORD_DM)
+    melodyBar(F5, E5, F5, D5, E5, C5, D5, REST)
+
+    ` a walk down to the bottom of the scale. this one is not from anywhere.
+    newMelody(650, INSTRUMENT_WAIL, MUSIC_CHORD_DM)
+    melodyBar(A5, REST, G5, REST, F5, REST, E5, D5)
+
+    ` "veni, veni, emmanuel", a chant from the 1400s. the first line.
+    newMelody(600, INSTRUMENT_WAIL, MUSIC_CHORD_DM)
+    melodyBar(D5, F5, A5, REST, REST, G5, Bb5, A5)
+
+    ` the funeral march, by chopin (1839). the first bar, and the step up that follows it.
+    newMelody(520, INSTRUMENT_WAIL, MUSIC_CHORD_DM)
+    melodyBar(D5, REST, REST, D5, D5, REST, REST, D5)
+    melodyBar(F5, REST, REST, REST, REST, REST, REST, REST)
+
+    ` the rest of these are not from anywhere either.
+
+    ` sighs, two notes at a time, each pair lower than the last
+    newMelody(700, INSTRUMENT_WAIL, MUSIC_CHORD_DM)
+    melodyBar(A5, G5, REST, F5, E5, REST, D5, REST)
+
+    ` up the chord, as if there was hope, and back down
+    newMelody(650, INSTRUMENT_WAIL, MUSIC_CHORD_DM)
+    melodyBar(D5, REST, F5, REST, A5, REST, G5, F5)
+
+    ` a cry up to the top, and a fall that does not get all of the way home
+    newMelody(650, INSTRUMENT_WAIL, MUSIC_CHORD_DM)
+    melodyBar(D5, REST, REST, Bb5, REST, A5, REST, G5)
+
+    ` low down, turning around one note, and sinking
+    newMelody(650, INSTRUMENT_WAIL, MUSIC_CHORD_DM)
+    melodyBar(A4, REST, Bb4, A4, REST, G4, REST, D4)
+
+    MELODY_HORROR_COUNT = MELODY_COUNT - MELODY_HORROR_FIRST
+
+    ` the tunes that are made up on the spot are written into this one. see makeCoralTune.
+    MELODY_MADE = MELODY_COUNT
+    newMelody(500, INSTRUMENT_CHOIR, MUSIC_CHORD_BB)
+    for madeBeat = 1 to MELODY_MADE_BEATS
+        melodyBeat(REST)
+    next
+
+    ` a tune of praise is made up out of these notes, which sound fine over anything
+    CORAL_TUNE_SCALE(0) = D4
+    CORAL_TUNE_SCALE(1) = F4
+    CORAL_TUNE_SCALE(2) = G4
+    CORAL_TUNE_SCALE(3) = A4
+    CORAL_TUNE_SCALE(4) = C5
+    CORAL_TUNE_SCALE(5) = D5
+    CORAL_TUNE_SCALE(6) = F5
+    CORAL_TUNE_SCALE(7) = G5
+    CORAL_TUNE_SCALE(8) = A5
+    CORAL_TUNE_SCALE(9) = C6
+
+    ` and it comes to rest on an A or a C, which are these places in that list. it does not go all
+    ` of the way home to F, so it is left hanging a little. there is room here for six.
+    CORAL_TUNE_ENDS(0) = 3
+    CORAL_TUNE_ENDS(1) = 4
+    CORAL_TUNE_ENDS(2) = 8
+    CORAL_TUNE_ENDS(3) = 9
+    CORAL_TUNE_ENDS(4) = 3
+    CORAL_TUNE_ENDS(5) = 4
+
+    ` a lament uses every note, and comes to rest on a D or an A
+    CORAL_TUNE_ENDS(6) = D4
+    CORAL_TUNE_ENDS(7) = A4
+    CORAL_TUNE_ENDS(8) = D5
+    CORAL_TUNE_ENDS(9) = A5
 
 return
 
@@ -147,6 +287,33 @@ setup_music:
     addMusicInstrument(INSTRUMENT_BELL, "Fish/Audio/Music/note", 1)
     addMusicInstrument(INSTRUMENT_PLUCK, "Fish/Audio/Music/pluck", 1)
     addMusicInstrument(INSTRUMENT_SWELL, "Fish/Audio/Music/swell", 1)
+    addMusicInstrument(INSTRUMENT_CHOIR, "Fish/Audio/Music/choir", 1)
+    addMusicInstrument(INSTRUMENT_WAIL, "Fish/Audio/Music/wail", 1)
+
+    ` the screams that come with horror coral. they have no wait, so they never play on their own.
+    addMusicShot(MUSIC_SHOT_SCREAM, "Fish/Audio/Music/shot-scream", CORAL_SCREAM_VOLUME#, 5, 0, 0, MUSIC_SCENE_BOTH)
+    addMusicShot(MUSIC_SHOT_SCREAM_2, "Fish/Audio/Music/shot-scream-2", CORAL_SCREAM_VOLUME#, 5, 0, 0, MUSIC_SCENE_BOTH)
+    addMusicShot(MUSIC_SHOT_SCREAM_3, "Fish/Audio/Music/shot-scream-3", CORAL_SCREAM_VOLUME#, 5, 0, 0, MUSIC_SCENE_BOTH)
+    addMusicShot(MUSIC_SHOT_SCREAM_4, "Fish/Audio/Music/shot-scream-4", CORAL_SCREAM_VOLUME#, 5, 0, 0, MUSIC_SCENE_BOTH)
+    addMusicShot(MUSIC_SHOT_SCREAM_5, "Fish/Audio/Music/shot-scream-5", CORAL_SCREAM_VOLUME#, 5, 0, 0, MUSIC_SCENE_BOTH)
+    addMusicShot(MUSIC_SHOT_SCREAM_6, "Fish/Audio/Music/shot-scream-6", CORAL_SCREAM_VOLUME#, 5, 0, 0, MUSIC_SCENE_BOTH)
+
+    ` and the slow ones, for the ending with the ancient one
+    addMusicShot(MUSIC_SHOT_DIRGE, "Fish/Audio/Music/shot-dirge-1", CORAL_SCREAM_VOLUME#, 0, 0, 0, MUSIC_SCENE_BOTH)
+    addMusicShot(MUSIC_SHOT_DIRGE_2, "Fish/Audio/Music/shot-dirge-2", CORAL_SCREAM_VOLUME#, 0, 0, 0, MUSIC_SCENE_BOTH)
+    addMusicShot(MUSIC_SHOT_DIRGE_3, "Fish/Audio/Music/shot-dirge-3", CORAL_SCREAM_VOLUME#, 0, 0, 0, MUSIC_SCENE_BOTH)
+
+    ` the phrases that are sung when coral grows. see THE RECORDED PRAISE in fish_headers.
+    for praiseN = 0 to CORAL_PRAISE_COUNT - 1
+        praiseClipId = 0
+        praiseSfxId = 0
+        reserve sfx clip id(praiseClipId)
+        load sfx clip praiseClipId, "Fish/Audio/Music/praise-" + str$(praiseN + 1)
+        reserve sfx id(praiseSfxId)
+        sfx praiseSfxId, praiseClipId
+        set sfx group praiseSfxId, SFX_GROUP_MUSIC
+        CORAL_PRAISE_SFX(praiseN) = praiseSfxId
+    next
 
     gosub setup_melodies
 
@@ -212,6 +379,18 @@ function updateMusic()
         endif
     endif
 
+    ` the hush comes on, or lifts, a little at a time. see MUSIC_HUSH in fish_headers.
+    if MUSIC_HUSH# <> MUSIC_HUSH_TARGET#
+        change# = seconds# / MUSIC_HUSH_SECONDS#
+        if MUSIC_HUSH# < MUSIC_HUSH_TARGET#
+            MUSIC_HUSH# = MUSIC_HUSH# + change#
+            if MUSIC_HUSH# > MUSIC_HUSH_TARGET# then MUSIC_HUSH# = MUSIC_HUSH_TARGET#
+        else
+            MUSIC_HUSH# = MUSIC_HUSH# - change#
+            if MUSIC_HUSH# < MUSIC_HUSH_TARGET# then MUSIC_HUSH# = MUSIC_HUSH_TARGET#
+        endif
+    endif
+
     for i = 0 to MUSIC_LAYER_COUNT - 1
         l = MUSIC_LAYERS(i)
 
@@ -239,8 +418,17 @@ function updateMusic()
         heard# = l.level# * l.mix#
         if l.scene = MUSIC_SCENE_SURFACE then heard# = heard# * (1 - MUSIC_DEPTH#)
         if l.scene = MUSIC_SCENE_DEEP then heard# = heard# * MUSIC_DEPTH#
+        ` a hush takes every layer away but the two that are the sound of deep water, and those come up
+        if i = MUSIC_LAYER_RUMBLE or i = MUSIC_LAYER_DEEP
+            heard# = heard# + (l.mix# - heard#) * MUSIC_HUSH#
+        else
+            heard# = heard# * (1 - MUSIC_HUSH#)
+        endif
         set sfx volume l.sfxId, heard#
     next
+
+    ` while it is hushed, nothing starts on its own
+    if MUSIC_HUSH_TARGET# > 0 then exitfunction
 
     for i = 0 to MUSIC_SHOT_COUNT - 1
         s = MUSIC_SHOTS(i)
@@ -264,7 +452,7 @@ function updateMusic()
             m = MELODY_PLAYING
 
             ` every note is a little louder or quieter than the last, the way that a person would play it
-            playMusicNote(MELODY_INSTRUMENT(m), MELODY_NOTES(MELODY_FIRST(m) + MELODY_STEP), MELODY_VOLUME# * (.8 + rnd(21) * .01))
+            playMusicNote(MELODY_INSTRUMENT(m), MELODY_NOTES(MELODY_FIRST(m) + MELODY_STEP), MELODY_VOLUME# * MELODY_GAIN# * (.8 + rnd(21) * .01))
 
             ` the next beat is timed from when this one was due, so that the beats do not drift.
             ` but if the game stalled, the beats that were missed are not all played at once.
@@ -373,6 +561,7 @@ function playMelody(index)
     MELODY_LAST = index
     MELODY_STEP = 0
     MELODY_NEXT_MS = now
+    MELODY_GAIN# = 1
 
     chord = MELODY_CHORD(index)
     if chord <> MUSIC_CHORD_ANY
@@ -390,12 +579,238 @@ endfunction
 
 
 ` start a melody that is picked at random. it is never the one that played last.
+` only the melodies that take turns on their own are picked from. see MELODY_AUTO_COUNT.
 function playRandomMelody()
-    if MELODY_COUNT = 0 then exitfunction
+    if MELODY_AUTO_COUNT = 0 then exitfunction
 
-    index = rnd(MELODY_COUNT)
-    if index = MELODY_LAST then index = (index + 1) mod MELODY_COUNT
+    index = rnd(MELODY_AUTO_COUNT)
+    if index = MELODY_LAST then index = (index + 1) mod MELODY_AUTO_COUNT
     playMelody(index)
+endfunction
+
+
+` THE MUSIC OF THE CORAL. see fish_headers. a song has been cast, and coral has grown: the choir sings
+` one of the tunes of praise. or, when `isHorror` is 1, it was horror coral: there is a scream from far
+` away, and then one of the laments. either one takes the place of a melody that was playing.
+function playCoralMusic(isHorror)
+    if MELODY_MADE < 0 then exitfunction
+
+    ` the praise is a recording of a woman singing. see THE RECORDED PRAISE in fish_headers.
+    if isHorror = 0
+        if CORAL_PRAISE_RECORDED
+            playCoralPraise()
+            exitfunction
+        endif
+    endif
+
+    coralTuneFirst = MELODY_CORAL_FIRST
+    coralTuneCount = MELODY_CORAL_COUNT
+    coralTuneChord = MUSIC_CHORD_BB
+    if isHorror
+        coralTuneFirst = MELODY_HORROR_FIRST
+        coralTuneCount = MELODY_HORROR_COUNT
+        coralTuneChord = MUSIC_CHORD_DM
+    endif
+
+    ` one of the tunes that has not been heard yet, since the game was opened
+    coralTuneLeft = 0
+    if coralTuneCount > 0
+        for coralTuneN = 0 to coralTuneCount - 1
+            if MELODY_HEARD(coralTuneFirst + coralTuneN) = 0 then coralTuneLeft = coralTuneLeft + 1
+        next
+    endif
+
+    coralTune = MELODY_MADE
+    if coralTuneLeft > 0
+        coralTunePick = rnd(coralTuneLeft)
+        for coralTuneN = 0 to coralTuneCount - 1
+            if MELODY_HEARD(coralTuneFirst + coralTuneN) = 0
+                if coralTunePick = 0 then coralTune = coralTuneFirst + coralTuneN
+                coralTunePick = coralTunePick - 1
+            endif
+        next
+        MELODY_HEARD(coralTune) = 1
+    else
+        ` they have all been heard, so from here on every tune is a new one
+        makeCoralTune(isHorror)
+    endif
+
+    ` the chord comes in with the tune, and not ahead of it, because this is an answer to what the player just did
+    setMusicChord(coralTuneChord, 3)
+    playMelody(coralTune)
+    MELODY_GAIN# = CORAL_MUSIC_VOLUME#
+
+    if isHorror
+        ` one of the screams is heard first, and the lament comes in under the end of it
+        playMusicShot(MUSIC_SHOT_SCREAM + rnd(MUSIC_SCREAM_COUNT))
+        MELODY_NEXT_MS = MELODY_NEXT_MS + CORAL_LAMENT_WAIT
+        MUSIC_CHORD_MS = MUSIC_CHORD_MS + CORAL_LAMENT_WAIT
+    endif
+endfunction
+
+
+` THE RECORDED PRAISE. see fish_headers. sing one of the phrases, over the brighter chord. it takes the
+` place of a melody that was playing, and no other melody starts until it has had time to finish.
+function playCoralPraise()
+    if CORAL_PRAISE_COUNT = 0 then exitfunction
+
+    ` how many have not had their turn yet. when they all have, they all get another, but the one that
+    ` just played does not go first.
+    praiseLeft = 0
+    for praiseI = 0 to CORAL_PRAISE_COUNT - 1
+        if CORAL_PRAISE_HEARD(praiseI) = 0 then praiseLeft = praiseLeft + 1
+    next
+    praiseHeldBack = -1
+    if praiseLeft = 0
+        for praiseI = 0 to CORAL_PRAISE_COUNT - 1
+            CORAL_PRAISE_HEARD(praiseI) = 0
+        next
+        praiseLeft = CORAL_PRAISE_COUNT
+        if CORAL_PRAISE_COUNT > 1
+            if CORAL_PRAISE_LAST >= 0
+                praiseHeldBack = CORAL_PRAISE_LAST
+                CORAL_PRAISE_HEARD(praiseHeldBack) = 1
+                praiseLeft = praiseLeft - 1
+            endif
+        endif
+    endif
+
+    praisePick = rnd(praiseLeft)
+    praiseNow = -1
+    for praiseI = 0 to CORAL_PRAISE_COUNT - 1
+        if CORAL_PRAISE_HEARD(praiseI) = 0
+            if praisePick = 0 then praiseNow = praiseI
+            praisePick = praisePick - 1
+        endif
+    next
+
+    ` the one that was held back is in for the rest of this time around
+    if praiseHeldBack >= 0
+        CORAL_PRAISE_HEARD(praiseHeldBack) = 0
+    endif
+    if praiseNow < 0 then exitfunction
+    CORAL_PRAISE_HEARD(praiseNow) = 1
+    CORAL_PRAISE_LAST = praiseNow
+
+    ` the brighter chord comes in under it, and stays. a melody that was playing stops, and none starts for a while.
+    praiseMs = game ms()
+    praiseUntil = praiseMs + CORAL_PRAISE_HOLD
+    setMusicChord(MUSIC_CHORD_BB, 3)
+    if MUSIC_CHORD_MS < praiseUntil then MUSIC_CHORD_MS = praiseUntil
+    MELODY_PLAYING = -1
+    if MELODY_AUTO_MS < praiseUntil + MELODY_GAP_MIN then MELODY_AUTO_MS = praiseUntil + MELODY_GAP_MIN
+
+    set sfx volume CORAL_PRAISE_SFX(praiseNow), CORAL_PRAISE_VOLUME#
+    set sfx pan CORAL_PRAISE_SFX(praiseNow), 0
+    play sfx CORAL_PRAISE_SFX(praiseNow)
+endfunction
+
+
+` make up a tune for the coral, and write it into the melody MELODY_MADE. see THE MUSIC OF THE CORAL in fish_headers.
+`
+` a tune of praise is an arch: it starts low, climbs for the first half, and comes back down to rest
+` on a note of the chord. it only uses the notes that sound fine over anything, and it mostly goes
+` from one of them to the next. it is slow, with long notes.
+` a lament starts high and sinks, a step at a time, with a step back up now and then, like a sob. it
+` uses every note of the scale, it has longer waits in it, and it comes to rest on a D or an A.
+`
+` either way it is one bar long, and short, like the ones that were written.
+function makeCoralTune(isHorror)
+    madeFirst = MELODY_FIRST(MELODY_MADE)
+    ` one bar, like the ones that were written, and the last note is on the last beat of it
+    madeLength = 8
+    if madeLength > MELODY_MADE_BEATS then madeLength = MELODY_MADE_BEATS
+    madeLastNote = madeLength - 1
+    madeHalf = madeLastNote / 2
+
+    ` where it is: a place in CORAL_TUNE_SCALE for praise, and a note for a lament
+    madeLowest = 0
+    madeHighest = 9
+    madeAt = 1 + rnd(3)
+    madeAfterRest = 55
+    madeAfterNote = 12
+    MELODY_BEAT(MELODY_MADE) = 550 + rnd(3) * 50
+    MELODY_INSTRUMENT(MELODY_MADE) = INSTRUMENT_CHOIR
+    MELODY_CHORD(MELODY_MADE) = MUSIC_CHORD_BB
+    if isHorror
+        madeLowest = D4
+        madeHighest = C6
+        madeAt = D5 + rnd(3) * 2
+        madeAfterRest = 60
+        madeAfterNote = 20
+        MELODY_BEAT(MELODY_MADE) = 600 + rnd(3) * 50
+        MELODY_INSTRUMENT(MELODY_MADE) = INSTRUMENT_WAIL
+        MELODY_CHORD(MELODY_MADE) = MUSIC_CHORD_DM
+    endif
+
+    madeRested = 1
+    for madeN = 0 to madeLength - 1
+        ` is there a note on this beat? the first beat has one, and the last note is where it comes to rest.
+        madePlay = 0
+        if madeN = 0 then madePlay = 1
+        if madeN > 0
+            if madeN < madeLastNote
+                madeChance = madeAfterNote
+                if madeRested then madeChance = madeAfterRest
+                if rnd(100) < madeChance then madePlay = 1
+            endif
+        endif
+        if madeN = madeLastNote then madePlay = 2
+
+        ` which way it goes from the note before
+        if madePlay = 1
+            if madeN > 0
+                madeRoll = rnd(100)
+                madeMove = 1
+                if isHorror
+                    madeMove = -1
+                    if madeRoll < 10 then madeMove = -2
+                    if madeRoll >= 75 then madeMove = 1
+                else
+                    if madeRoll < 15 then madeMove = 2
+                    if madeRoll >= 85 then madeMove = -1
+                    if madeN >= madeHalf then madeMove = 0 - madeMove
+                endif
+
+                ` it turns around at the top and at the bottom
+                madeTo = madeAt + madeMove
+                if madeTo > madeHighest then madeTo = madeAt - 1
+                if madeTo < madeLowest then madeTo = madeAt + 1
+                madeAt = madeTo
+            endif
+        endif
+
+        ` the closest place to rest
+        if madePlay = 2
+            madeEndFirst = 0
+            madeEndLast = 5
+            if isHorror
+                madeEndFirst = 6
+                madeEndLast = 9
+            endif
+            madeBest = CORAL_TUNE_ENDS(madeEndFirst)
+            for madeEnd = madeEndFirst to madeEndLast
+                madeEndAt = CORAL_TUNE_ENDS(madeEnd)
+                if abs(madeEndAt - madeAt) < abs(madeBest - madeAt)
+                    madeBest = madeEndAt
+                endif
+            next
+            madeAt = madeBest
+        endif
+
+        madeNote = REST
+        if madePlay > 0
+            madeNote = madeAt
+            if isHorror = 0
+                madeNote = CORAL_TUNE_SCALE(madeAt)
+            endif
+        endif
+        MELODY_NOTES(madeFirst + madeN) = madeNote
+
+        madeRested = 1
+        if madePlay > 0 then madeRested = 0
+    next
+    MELODY_LENGTH(MELODY_MADE) = madeLength
 endfunction
 
 

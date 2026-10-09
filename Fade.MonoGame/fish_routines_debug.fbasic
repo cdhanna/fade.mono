@@ -1,0 +1,110 @@
+goto routines_debug_exit
+
+remstart
+    THE DEBUG CARDS
+    a window in the debug panel, for working on the game, that gives the player any card there is.
+    it is only there when the FISH_DEBUG environment variable is set, and only while a game is being
+    played. frame_dbg, in fish_routines, comes here on every frame.
+
+    there is a button for every card, under the kind of card that it is. a card that is owned has
+    how many times it has been taken after its name.
+    - a passive is given the way that the upgrade screen gives it. one that can be taken more than
+      once is taken once more for every press, with no limit.
+    - a move goes into the slot that the slider is on, and whatever was in that slot is gone.
+    - an instant happens right away, the way that it does when it is picked.
+
+    debugGiveCard does the passives and the moves, so that the tests can call it.
+remend
+
+frame_debug_cards:
+    debugLabel$ = "" `debug_card_label, further down, fills this in
+    begin debug window("Cards")
+
+    debug text "passives"
+    for debugCardI = 0 to CARD_LENGTH - 1
+        if CARDS(debugCardI).abilityType = ABILITY_TYPE_PASSIVE
+            gosub debug_card_label
+            if debug button(debugLabel$) = 1
+                debugGiveCard(debugCardI, 0)
+            endif
+        endif
+    next
+
+    debug separator
+    debug text "moves"
+    if DEBUG_MOVE_SLOT > MOVE_SLOTS_OPEN then DEBUG_MOVE_SLOT = MOVE_SLOTS_OPEN
+    debugSlotMoved = debug int slider("into slot", DEBUG_MOVE_SLOT, 1, MOVE_SLOTS_OPEN)
+    for debugCardI = 0 to CARD_LENGTH - 1
+        if CARDS(debugCardI).abilityType = ABILITY_TYPE_MOVE
+            gosub debug_card_label
+            if debug button(debugLabel$) = 1
+                debugGiveCard(debugCardI, DEBUG_MOVE_SLOT - 1)
+            endif
+        endif
+    next
+
+    ` these go through the same routine that the upgrade screen uses, which looks at selectedAbilityIndex
+    debug separator
+    debug text "instants"
+    for debugCardI = 0 to CARD_LENGTH - 1
+        if CARDS(debugCardI).abilityType = ABILITY_TYPE_INSTANT
+            gosub debug_card_label
+            if debug button(debugLabel$) = 1
+                selectedAbilityIndex = debugCardI
+                CARDS(debugCardI).uses = CARDS(debugCardI).uses + 1
+                codecSeeCard(debugCardI)
+                gosub handle_ability_instant_effect
+            endif
+        endif
+    next
+
+    end debug window
+return
+
+
+` what the button of the card debugCardI says: its name, and how many times it has been taken, if it has been
+debug_card_label:
+    debugLabel$ = CARDS(debugCardI).name$
+    if CARDS(debugCardI).uses > 0
+        debugLabel$ = debugLabel$ + "  x" + str$(CARDS(debugCardI).uses)
+    else
+        if CARDS(debugCardI).obtained > 0 then debugLabel$ = debugLabel$ + "  (owned)"
+    endif
+return
+
+
+routines_debug_exit:
+
+
+` give the player a passive, or put a move in a slot, counting from 0. the slot does not matter for a
+` passive. a passive that is owned, and can only be taken once, is left alone. a move takes the place
+` of whatever was in the slot, and a move that is in some other slot already is moved from there.
+function debugGiveCard(giveCard, giveSlot)
+    if giveCard < 0 or giveCard >= CARD_LENGTH then exitfunction
+
+    if CARDS(giveCard).abilityType = ABILITY_TYPE_PASSIVE
+        giveOk = 1
+        if CARDS(giveCard).obtained > 0 and CARDS(giveCard).stackable = 0 then giveOk = 0
+        if giveOk
+            grantPassive(giveCard)
+        endif
+    endif
+
+    if CARDS(giveCard).abilityType = ABILITY_TYPE_MOVE
+        if giveSlot >= 0 and giveSlot < MOVE_SLOTS_OPEN
+            ` whatever is in the slot is gone, and so is this move from wherever else it was
+            lastSlot = MOVE_SLOT_COUNT - 1
+            for giveN = 0 to lastSlot
+                giveGone = 0
+                if MOVE_ABILITY_BINDINGS(giveN).assigned
+                    if giveN = giveSlot then giveGone = 1
+                    if MOVE_ABILITY_BINDINGS(giveN).abilityIndex = giveCard then giveGone = 1
+                endif
+                if giveGone
+                    ejectMove(giveN)
+                endif
+            next
+            grantMoveToSlot(giveCard, giveSlot)
+        endif
+    endif
+endfunction

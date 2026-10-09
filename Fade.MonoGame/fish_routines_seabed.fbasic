@@ -5,8 +5,11 @@ remstart
     what is behind the board while the game is being played: the water, shafts of light coming down
     from the surface, ridges of rock, and specks drifting down.
 
-    all of it is one sprite that covers the whole screen, underneath everything else, drawn by the
-    seabed effect. see SeabedEffect.fx. nothing in it is a picture.
+    all of it but the specks is one sprite that covers the whole screen, underneath everything else,
+    drawn by the seabed effect. see SeabedEffect.fx. nothing in it is a picture.
+
+    the specks are a sprite of their own, drawn by the specks effect, so that they can be in front of
+    the coral. see SpecksEffect.fx, and CORAL in fish_headers.
 
     a few more specks drift in front of the fish. they are a second sprite, on top of the fish, drawn
     by the snow effect.
@@ -34,6 +37,17 @@ setup_seabed:
     size sprite SEABED_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
     order sprite SEABED_SPRITE, ORDER_SEABED
     set sprite effect SEABED_SPRITE, SEABED_FX_ID
+
+    ` the specks that drift down behind the fish. they are in front of the coral, which is behind the fish too.
+    reserve effect id(SPECKS_FX_ID)
+    effect SPECKS_FX_ID, "Fish/Shaders/SpecksEffect"
+
+    reserve sprite id(SPECKS_SPRITE)
+    sprite SPECKS_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset SPECKS_SPRITE, 0, 0
+    size sprite SPECKS_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    order sprite SPECKS_SPRITE, ORDER_SPECKS
+    set sprite effect SPECKS_SPRITE, SPECKS_FX_ID
 
     reserve effect id(SNOW_FX_ID)
     effect SNOW_FX_ID, "Fish/Shaders/SnowEffect"
@@ -144,8 +158,27 @@ function updateSeabed()
     set effect param float SEABED_FX_ID, "Time", seabedTime#
     set effect param float2 SEABED_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT
     set effect param float SEABED_FX_ID, "Mood", SEABED_MOOD#
-    set effect param float SEABED_FX_ID, "Rainbow", SEABED_RAINBOW#
-    set effect param float SEABED_FX_ID, "Clock", SEABED_SNOW_CLOCK#
+    set effect param float SEABED_FX_ID, "Void", SEABED_VOID# `the stars, for when the ancient one comes. see THE TWO ENDINGS in fish_headers.
+
+    ` the specks behind the fish, and the hint that makes some of them glow. see THE HINTS in fish_headers.
+    set effect param float SPECKS_FX_ID, "Time", seabedTime#
+    set effect param float2 SPECKS_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT
+    set effect param float SPECKS_FX_ID, "Rainbow", SEABED_RAINBOW#
+    set effect param float SPECKS_FX_ID, "Clock", SEABED_SNOW_CLOCK#
+    set effect param float SPECKS_FX_ID, "Mood", SEABED_MOOD#
+    set effect param float4 SPECKS_FX_ID, "Glow", CORAL_HINT_HEAD_X#, CORAL_HINT_HEAD_Y#, CORAL_HINT_TAIL_X#, CORAL_HINT_TAIL_Y#
+    set effect param float2 SPECKS_FX_ID, "GlowPower", CORAL_HINT_GLOW_POWER#, CORAL_HINT_GLOW_REACH#
+
+    ` the specks of a hint glow more over coral, so the effect is told where the coral is
+    set effect param texture SPECKS_FX_ID, "CoralTexture", render target texture(TARGET_CORAL)
+    set effect param float4 SPECKS_FX_ID, "Board", CORAL_FX_LEFT#, CORAL_FX_TOP#, CORAL_FX_CELL#, 0
+    set effect param float2 SPECKS_FX_ID, "Cells", CORAL_FX_COLUMNS, CORAL_FX_ROWS
+    ` the trail is only for a hint that a big group of fish brought. see LISTEN in fish_headers.
+    set effect param float SPECKS_FX_ID, "Listen", CORAL_HINT_LISTEN# * CORAL_HINT_TRAIL_ON
+    set effect param float4 SPECKS_FX_ID, "Trail0", CORAL_HINT_TRAIL#(0), CORAL_HINT_TRAIL#(1), CORAL_HINT_TRAIL#(2), CORAL_HINT_TRAIL#(3)
+    set effect param float4 SPECKS_FX_ID, "Trail1", CORAL_HINT_TRAIL#(4), CORAL_HINT_TRAIL#(5), CORAL_HINT_TRAIL#(6), CORAL_HINT_TRAIL#(7)
+    set effect param float4 SPECKS_FX_ID, "Trail2", CORAL_HINT_TRAIL#(8), CORAL_HINT_TRAIL#(9), CORAL_HINT_TRAIL#(10), CORAL_HINT_TRAIL#(11)
+    set effect param float4 SPECKS_FX_ID, "Trail3", CORAL_HINT_TRAIL#(12), CORAL_HINT_TRAIL#(13), CORAL_HINT_TRAIL#(14), CORAL_HINT_TRAIL#(15)
 
     set effect param float SNOW_FX_ID, "Time", seabedTime#
     set effect param float2 SNOW_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT

@@ -1,0 +1,2591 @@
+remstart
+    THE TESTS
+    these are the test blocks of the game. `dotnet test` runs them, and `dotnet run -- --list-tests`
+    lists them. none of this is part of the game when it is played.
+
+    every test starts from `fishBoard`, which boots the game straight past the menu, mutes it, and lays
+    out a board that has no matches on it, not even a pair, and no swap on it that would make one. a
+    test then puts the fish it cares about on that board. the board only uses the kinds 1 to 5, so the
+    tests use 6 and 7 for their own fish, and nothing on the board gets in the way.
+
+    most tests ask handle_combos to look at the board, and stop at one of the two labels in it:
+        _combos_judged   what pops has been decided and scored, and none of it has been animated yet
+        _combos_spread   and the fish around the pops have had their chance to stack up or get stung
+    so they are quick. the ones that need the fish to fall, and new ones to drop in, run on to `_loop`.
+
+    a test has to finish with `end`. without it, the game carries on from wherever the test left it,
+    and the test never finishes.
+
+    everything that a test declares starts with a `t`, because a test shares its names with the game
+    once it has run to a label, and a name that the game already uses is an error.
+
+    the dice are mocked where a test depends on them: `mock rnd` with 0 makes every "so many in a
+    hundred" chance come up. a mock of rnd cannot see what it was asked to roll out of, so it cannot
+    roll high for one thing and low for another, except by counting the rolls. see the stock market.
+remend
+
+abstract test fishBoard
+
+    ` go straight to the game, with no splash screen and no menu
+    mock is env set(tEnvName$)
+    endmock tEnvName$ = "FISH_SKIP_MENU"
+
+    ` the tests do not read the player's options or saved game, and they never write over them.
+    ` with nothing remembered, the sound and the music options both read as 0, so the game boots muted.
+    mock get pref
+    endmock 0
+    mock set pref
+    endmock
+    mock begin pref batch
+    endmock
+    mock end pref batch
+    endmock
+
+    ` and nobody is at the keyboard. a key that is pressed while the tests run does nothing.
+    mock action down
+    endmock 0
+    mock new action down
+    endmock 0
+
+    runto _loop
+
+    ` mute the sounds and the music, whatever the options said
+    OPTION_SOUND = 0
+    OPTION_MUSIC = 0
+    set sfx group volume SFX_GROUP_SFX, 0
+    set sfx group volume SFX_GROUP_MUSIC, 0
+
+    ` the round never ends, so the upgrade screen never comes up in the middle of a test
+    SCORE_BAR.endVal = 100000000
+    PROGRESS_BARS(0) = SCORE_BAR
+
+    testBoard()
+
+    ` a board with no matches on it, not even a pair. it only uses the fish kinds 1 to 5.
+    function testBoard()
+        tLast = CELL_COUNT - 1
+        for tIndex = 0 to tLast
+            tColumn = tIndex mod CELL_COLUMN_COUNT
+            tRow = tIndex / CELL_COLUMN_COUNT
+            CELLS(tIndex).value = ((tColumn + tRow * 2) mod 5) + 1
+            CELLS(tIndex).comboForce = 0
+            clearCellStack(tIndex)
+            updateCell(CELLS(tIndex))
+        next
+    endfunction
+
+    ` put a kind of fish in a cell
+    function testPut(tColumn, tRow, tKind)
+        tIndex = tColumn + tRow * CELL_COLUMN_COUNT
+        CELLS(tIndex).value = tKind
+        updateCell(CELLS(tIndex))
+    endfunction
+
+    ` is the fish in this cell popping?
+    function testPops(tColumn, tRow)
+        tIndex = tColumn + tRow * CELL_COLUMN_COUNT
+    endfunction CELLS(tIndex).comboBlownUp
+
+    ` how many fish on the board are popping
+    function testPopCount()
+        tCount = 0
+        tLast = CELL_COUNT - 1
+        for tIndex = 0 to tLast
+            if CELLS(tIndex).comboBlownUp then tCount = tCount + 1
+        next
+    endfunction tCount
+
+    ` which cell of the board this is
+    function testIndex(tColumn, tRow)
+    endfunction tColumn + tRow * CELL_COLUMN_COUNT
+
+    ` put the cursor on a cell
+    function testCursor(tColumn, tRow)
+        SELECTION_POS.x = tColumn
+        SELECTION_POS.y = tRow
+    endfunction
+
+    ` ask for a move, the way that the keys do. `tSwap` is 1 for a swap, and 0 to only move the cursor.
+    ` `tSlot` is the slot of the special move to use, or -1 for none.
+    function testQueueMove(tDirX, tDirY, tSwap, tSlot)
+        tQueueDir as vec = {
+            x = tDirX,
+            y = tDirY
+        }
+        QUEUED_MOVES(QUEUED_MOVE_NUM) = {
+            dir = tQueueDir
+            swap = tSwap,
+            moveBindingIndex = tSlot
+        }
+        QUEUED_MOVE_NUM = QUEUED_MOVE_NUM + 1
+    endfunction
+endtest
+
+
+test match_three_in_a_row from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "three in a row is one group"
+    assert testPopCount() = 3, "only the three fish pop"
+    assert CURRENT_SCORE = 60, "three fish score 10 + 20 + 30"
+    end
+endtest
+
+test match_pair_does_not_pop from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 0, "a pair is not a group"
+    assert testPopCount() = 0, "nothing pops"
+    assert CURRENT_SCORE = 0, "nothing scores"
+    end
+endtest
+
+test tests_run_muted from fishBoard
+    assert sfx group volume(SFX_GROUP_SFX) = 0, "the sounds are muted"
+    assert sfx group volume(SFX_GROUP_MUSIC) = 0, "the music is muted"
+    assert MENU_MODE = 0, "the game is past the menu"
+    end
+endtest
+
+
+` PLAIN MATCHING
+
+test match_three_in_a_column from fishBoard
+    testPut(4, 2, 6)
+    testPut(4, 3, 6)
+    testPut(4, 4, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "three in a column is one group"
+    assert testPopCount() = 3, "only the three fish pop"
+    end
+endtest
+
+test match_bent_group_is_one_group from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(2, 1, 6)
+    testPut(2, 2, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "a group that goes around a corner is still one group"
+    assert testPopCount() = 5, "all five fish pop"
+    assert CURRENT_SCORE = 150, "five fish score 10 + 20 + 30 + 40 + 50"
+    end
+endtest
+
+test match_diagonal_does_not_connect from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 1, 6)
+    testPut(2, 2, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 0, "fish that only touch at the corners are not a group"
+    assert testPopCount() = 0, "nothing pops"
+    end
+endtest
+
+test match_does_not_run_on_to_the_next_row from fishBoard
+    ` the last two cells of the top row, and the first cell of the row under it, are next to each
+    ` other in the list of cells, but not on the board
+    tLastColumn = CELL_COLUMN_COUNT - 1
+    testPut(tLastColumn - 1, 0, 6)
+    testPut(tLastColumn, 0, 6)
+    testPut(0, 1, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 0, "the end of one row does not connect to the start of the next"
+    assert testPopCount() = 0, "nothing pops"
+    end
+endtest
+
+test match_two_kinds_are_two_groups from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(0, 1, 7)
+    testPut(1, 1, 7)
+    testPut(2, 1, 7)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 2, "two kinds that touch are two groups"
+    assert testPopCount() = 6, "all six fish pop"
+    assert CURRENT_SCORE = 120, "every group starts counting from 10 again"
+    end
+endtest
+
+test match_same_kind_apart_is_two_groups from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(0, 4, 6)
+    testPut(1, 4, 6)
+    testPut(2, 4, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 2, "the same kind in two places is two groups"
+    assert CURRENT_SCORE = 120, "and they score as two groups of three, not one of six"
+    end
+endtest
+
+
+` THE MULTIPLIER
+
+test multiplier_scales_the_score from fishBoard
+    SCORE_MULTIPLIER = 3
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert CURRENT_SCORE = 180, "three fish at x3 score 30 + 60 + 90"
+    end
+endtest
+
+test multiplier_goes_up_after_the_fish_are_scored from fishBoard
+    ` one more swap that pops something fills the bar
+    MULT_PROGRESS = getMultiplierRequired() - 1
+    multiplierSwapMade()
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert SCORE_MULTIPLIER = 2, "the swap filled the bar, so the multiplier went up"
+    assert MULT_PROGRESS = 0, "and the bar starts again"
+    assert CURRENT_SCORE = 60, "the fish that filled it were scored with the multiplier as it was"
+    end
+endtest
+
+test multiplier_drops_when_a_swap_pops_nothing from fishBoard
+    SCORE_MULTIPLIER = 3
+    MULT_PROGRESS = 1
+    multiplierSwapMade()
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 0, "nothing popped"
+    assert SCORE_MULTIPLIER = 2, "so the swap took one off of the multiplier"
+    assert MULT_PROGRESS = 0, "and emptied the bar"
+    end
+endtest
+
+test multiplier_ignores_pops_that_no_swap_made from fishBoard
+    MULT_PROGRESS = 1
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the fish popped"
+    assert MULT_PROGRESS = 1, "but no swap made them, so the bar did not move"
+    assert SCORE_MULTIPLIER = 1, "and neither did the multiplier"
+    end
+endtest
+
+
+` THINK BIGGER
+
+test think_bigger_three_does_not_pop from fishBoard
+    grantPassive(ABILITY_INDEX_THINK_BIGGER)
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 0, "three fish are not enough any more"
+    assert testPopCount() = 0, "nothing pops"
+    end
+endtest
+
+test think_bigger_four_pops from fishBoard
+    grantPassive(ABILITY_INDEX_THINK_BIGGER)
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(3, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "four fish are a group"
+    assert CURRENT_SCORE = 100, "four fish score 10 + 20 + 30 + 40"
+    end
+endtest
+
+
+` STACKS
+
+test stack_scores_as_more_fish from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    CELLS(1).stack = 2
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert testPopCount() = 3, "three cells pop"
+    assert CURRENT_SCORE = 150, "but they score as five fish, counting the two in the stack"
+    end
+endtest
+
+test stack_does_not_make_a_pair_a_group from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    CELLS(0).stack = FISH_STACK_MAX
+    CELLS(1).stack = FISH_STACK_MAX
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 0, "the fish in a stack do not count toward the size of a group"
+    assert CELLS(0).stack = FISH_STACK_MAX, "and the stacks are still there"
+    end
+endtest
+
+
+` STOCK MARKET
+
+test stock_market_adds_a_fish from fishBoard
+    grantPassive(ABILITY_INDEX_PASSIVE_STOCK_MARKET)
+
+    ` the stock market wants a high roll, and everything else that rolls wants a number that is not
+    ` too big to pick from a list with. handle_combos rolls for the pitch of the pops first, and for
+    ` the stock market second, so the first two rolls are high, and the rest are 0.
+    global tRolls = 0
+    mock rnd
+        tRolls = tRolls + 1
+        tRoll = 0
+        if tRolls <= 2
+            tRoll = 9
+        endif
+    endmock tRoll
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    ` it looks for a fish that is not in any group, starting from cell 0, and the first one is (3, 0)
+    assert totalComboCount = 1, "it is still one group"
+    assert testPopCount() = 4, "with one more fish in it"
+    assert testPops(3, 0), "the fish that the stock market picked"
+    assert CURRENT_SCORE = 100, "and it scores as a group of four"
+    end
+endtest
+
+test stock_market_does_nothing_on_a_low_roll from fishBoard
+    grantPassive(ABILITY_INDEX_PASSIVE_STOCK_MARKET)
+    mock rnd
+    endmock 0
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert testPopCount() = 3, "only the three fish pop"
+    end
+endtest
+
+
+` CONTAGIOUS SMILE
+
+test smile_stacks_the_fish_next_to_a_pop from fishBoard
+    grantPassive(ABILITY_INDEX_CONTAGIOUS_SMILE)
+    mock rnd
+    endmock 0
+    testPut(1, 1, 6)
+    testPut(2, 1, 6)
+    testPut(3, 1, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_spread
+
+    assert CELLS(testIndex(0, 1)).stack = 1, "the fish to the left of the group"
+    assert CELLS(testIndex(4, 1)).stack = 1, "the fish to the right of it"
+    assert CELLS(testIndex(2, 0)).stack = 1, "a fish above it"
+    assert CELLS(testIndex(2, 2)).stack = 1, "a fish under it"
+    assert CELLS(testIndex(0, 0)).stack = 0, "a fish that only touches a corner is left alone"
+    assert CELLS(testIndex(2, 1)).stack = 0, "and so is a fish that is popping"
+    end
+endtest
+
+test smile_does_not_stack_past_the_most from fishBoard
+    grantPassive(ABILITY_INDEX_CONTAGIOUS_SMILE)
+    mock rnd
+    endmock 0
+    testPut(1, 1, 6)
+    testPut(2, 1, 6)
+    testPut(3, 1, 6)
+    CELLS(testIndex(2, 0)).stack = FISH_STACK_MAX
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_spread
+
+    assert CELLS(testIndex(2, 0)).stack = FISH_STACK_MAX, "a full stack stays as it is"
+    end
+endtest
+
+
+` JELLIES
+
+test jelly_stings_the_fish_next_to_it from fishBoard
+    mock rnd
+    endmock 0
+    testPut(1, 1, TEX_JELLY)
+    testPut(2, 1, TEX_JELLY)
+    testPut(3, 1, TEX_JELLY)
+    testPut(2, 2, TEX_BOTTLE)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_spread
+
+    assert totalComboCount = 1, "three jellyfish are a group like any other"
+    assert CELLS(testIndex(2, 0)).bellyUp = 1, "the fish above a jellyfish is stung"
+    assert CELLS(testIndex(0, 1)).bellyUp = 1, "and so is the fish at the end of the row"
+    assert CELLS(testIndex(0, 0)).bellyUp = 0, "a fish that only touches a corner is not"
+    assert CELLS(testIndex(2, 1)).bellyUp = 0, "a jellyfish that is popping is not"
+    assert CELLS(testIndex(2, 2)).bellyUp = 0, "and a bottle is never stung"
+    end
+endtest
+
+
+` RAYS
+
+test ray_pops_the_fish_above_it from fishBoard
+    testPut(0, 3, TEX_RAY)
+    testPut(1, 3, TEX_RAY)
+    testPut(2, 3, TEX_RAY)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 4, "the stingrays are a group, and so is the column above each of them"
+    assert testPopCount() = 12, "three stingrays, and the three fish above each"
+    assert testPops(0, 0), "the fish at the top of the column pops"
+    assert testPops(0, 4) = 0, "a fish under a stingray does not"
+    assert testPops(3, 0) = 0, "and neither does a column with no stingray in it"
+    end
+endtest
+
+test ray_on_the_top_row_has_nothing_to_pop from fishBoard
+    testPut(0, 0, TEX_RAY)
+    testPut(1, 0, TEX_RAY)
+    testPut(2, 0, TEX_RAY)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "only the stingrays are a group"
+    assert testPopCount() = 3, "and only they pop"
+    end
+endtest
+
+
+` BOTTLES
+
+test bottle_is_left_by_a_group_of_five from fishBoard
+    grantPassive(ABILITY_INDEX_BOTTLES)
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(3, 0, 6)
+    testPut(4, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert CELLS(2).bottleDue = 1, "the bottle goes where the middle of the group was"
+    assert CELLS(0).bottleDue = 0, "and nowhere else"
+    assert CELLS(4).bottleDue = 0, "and nowhere else"
+    end
+endtest
+
+test bottle_is_not_left_by_a_group_of_four from fishBoard
+    grantPassive(ABILITY_INDEX_BOTTLES)
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(3, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the four fish pop"
+    assert CELLS(1).bottleDue = 0, "but four is not enough for a bottle"
+    assert CELLS(2).bottleDue = 0, "but four is not enough for a bottle"
+    end
+endtest
+
+test bottle_is_not_left_without_the_card from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(3, 0, 6)
+    testPut(4, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the five fish pop"
+    assert CELLS(2).bottleDue = 0, "but there is no bottle without the card"
+    end
+endtest
+
+test bottle_on_the_bottom_row_pays_out from fishBoard
+    tBottomRow = CELL_ROW_COUNT - 1
+    testPut(4, tBottomRow, TEX_BOTTLE)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert SCORE_MULTIPLIER = 1 + BOTTLE_MULT_GAIN, "the bottle added to the multiplier"
+    assert testPops(4, tBottomRow), "and it pops"
+    assert testPopCount() = 1, "all on its own"
+    end
+endtest
+
+test bottle_above_the_bottom_row_waits from fishBoard
+    testPut(4, 3, TEX_BOTTLE)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert SCORE_MULTIPLIER = 1, "a bottle that has not sunk to the bottom pays nothing"
+    assert testPopCount() = 0, "and it does not pop"
+    end
+endtest
+
+
+` BOTTOMS UP, AND THE WASTE BUCKET
+
+test belly_up_fish_pops_with_the_ones_next_to_it from fishBoard
+    CELLS(testIndex(4, 4)).bellyUp = 1
+    CELLS(testIndex(5, 4)).bellyUp = 1
+    CELLS(testIndex(4, 5)).bellyUp = 1
+    CELLS(testIndex(7, 7)).bellyUp = 1
+
+    popBellyUpFish(testIndex(4, 4))
+    assert REQUEST_COMBO_CHECK = 1, "touching a belly up fish asks for a look at the board"
+    runto _combos_judged
+
+    assert totalComboCount = 1, "they pop as one group"
+    assert testPopCount() = 3, "the fish that was touched, and the two belly up fish next to it"
+    assert testPops(7, 7) = 0, "a belly up fish somewhere else is left alone"
+    assert CURRENT_SCORE = 60, "they score like a group of three"
+    end
+endtest
+
+test belly_up_pop_does_not_spread_down_a_line from fishBoard
+    CELLS(testIndex(4, 4)).bellyUp = 1
+    CELLS(testIndex(5, 4)).bellyUp = 1
+    CELLS(testIndex(6, 4)).bellyUp = 1
+
+    popBellyUpFish(testIndex(4, 4))
+    runto _combos_judged
+
+    assert testPopCount() = 2, "only the fish right next to the one that was touched goes with it"
+    assert testPops(6, 4) = 0, "the one two cells away stays"
+    end
+endtest
+
+test touching_a_fish_that_is_not_belly_up_does_nothing from fishBoard
+    CELLS(testIndex(5, 4)).bellyUp = 1
+
+    popBellyUpFish(testIndex(4, 4))
+
+    assert REQUEST_COMBO_CHECK = 0, "nothing was asked for"
+    assert CELLS(testIndex(5, 4)).comboForce = 0, "and the belly up fish next to it is not going to pop"
+    end
+endtest
+
+test waste_bucket_pops_every_belly_up_fish_for_double from fishBoard
+    CELLS(testIndex(0, 0)).bellyUp = 1
+    CELLS(testIndex(4, 2)).bellyUp = 1
+    CELLS(testIndex(8, 8)).bellyUp = 1
+    tWay as vec = { x = 1, y = 0 }
+
+    doWasteBucket(SELECTION_POS, tWay)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "they pop as one group, wherever they are"
+    assert testPopCount() = 3, "all three of them"
+    assert CURRENT_SCORE = 60 * WASTE_BUCKET_BONUS, "and they score more than a group of three does"
+    assert CURRENT_MOVE_COUNT = 1, "it counts as a move"
+    end
+endtest
+
+
+` BUNCH UP
+
+test bunch_up_stacks_the_group_instead_of_popping_it from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 1, 6)
+    tAt as vec = { x = 2, y = 1 }
+    tWay as vec = { x = 0, y = -1 }
+
+    doBunchUp(tAt, tWay)
+    assert CELLS(2).value = 6, "the fish was swapped up into the row"
+    assert CELLS(2).stack = 2, "and the other two went into its stack"
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert testPops(0, 0), "the fish that went into the stack leave their cells"
+    assert testPops(1, 0), "the fish that went into the stack leave their cells"
+    assert testPops(2, 0) = 0, "the fish that has the stack stays"
+    assert CURRENT_SCORE = 0, "and none of it scores"
+    end
+endtest
+
+test bunch_up_keeps_the_stacks_of_the_fish_it_takes from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 1, 6)
+    CELLS(0).stack = 1
+    tAt as vec = { x = 2, y = 1 }
+    tWay as vec = { x = 0, y = -1 }
+
+    doBunchUp(tAt, tWay)
+
+    assert CELLS(2).stack = 3, "two fish, and the one that was stacked behind one of them"
+    end
+endtest
+
+test bunch_up_does_nothing_to_a_pair from fishBoard
+    testPut(1, 0, 6)
+    testPut(2, 1, 6)
+    tAt as vec = { x = 2, y = 1 }
+    tWay as vec = { x = 0, y = -1 }
+
+    doBunchUp(tAt, tWay)
+
+    assert CELLS(2).stack = 0, "a pair is not enough to stack"
+    assert CELLS(1).comboForce = 0, "and the other fish stays where it is"
+    end
+endtest
+
+
+` KNOWN FILL
+
+test known_fill_drops_in_the_kind_that_was_moved from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    KNOWN_FILL_VALUE = 7
+
+    ` all the way through the pop, the fall, and the new fish
+    REQUEST_COMBO_CHECK = 1
+    runto _loop
+
+    assert CELLS(0).value = 7, "the new fish are the kind that was asked for"
+    assert CELLS(1).value = 7, "the new fish are the kind that was asked for"
+    assert CELLS(2).value = 7, "the new fish are the kind that was asked for"
+    assert KNOWN_FILL_VALUE = 0, "and it only lasts for the one fill"
+    end
+endtest
+
+test known_fill_is_lost_when_nothing_pops from fishBoard
+    KNOWN_FILL_VALUE = 7
+
+    REQUEST_COMBO_CHECK = 1
+    runto _loop
+
+    assert KNOWN_FILL_VALUE = 0, "a known fill that popped nothing has nothing to fill"
+    end
+endtest
+
+
+` THE MOVES THAT MAKE FISH
+
+test bomb_in_the_corner_only_reaches_the_board from fishBoard
+    testPut(0, 0, 6)
+    tAt as vec = { x = 0, y = 0 }
+    tWay as vec = { x = 1, y = 0 }
+
+    doBomb(tAt, tWay)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the fish that the bomb made are one group"
+    assert testPopCount() = 4, "a bomb in the corner only has four cells to fill"
+    assert CURRENT_MOVE_COUNT = 1, "it counts as a move"
+    end
+endtest
+
+test bomb_in_the_middle_pops_nine from fishBoard
+    testPut(4, 4, 6)
+    tAt as vec = { x = 4, y = 4 }
+    tWay as vec = { x = 1, y = 0 }
+
+    doBomb(tAt, tWay)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the fish that the bomb made are one group"
+    assert testPopCount() = 9, "three rows of three"
+    assert CURRENT_SCORE = 450, "nine fish score 10 + 20 + ... + 90"
+    end
+endtest
+
+test line_out_sideways_pops_the_row from fishBoard
+    testPut(4, 4, 6)
+    tAt as vec = { x = 4, y = 4 }
+    tWay as vec = { x = 1, y = 0 }
+
+    doLineOut(tAt, tWay)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert testPopCount() = CELL_COLUMN_COUNT, "the whole row pops"
+    assert testPops(0, 4), "from one end"
+    assert testPops(CELL_COLUMN_COUNT - 1, 4), "to the other"
+    assert testPops(4, 3) = 0, "and not the row above it"
+    end
+endtest
+
+test line_out_up_or_down_pops_the_column from fishBoard
+    testPut(4, 4, 6)
+    tAt as vec = { x = 4, y = 4 }
+    tWay as vec = { x = 0, y = 1 }
+
+    doLineOut(tAt, tWay)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert testPopCount() = CELL_ROW_COUNT, "the whole column pops"
+    assert testPops(4, 0), "from the top"
+    assert testPops(4, CELL_ROW_COUNT - 1), "to the bottom"
+    assert testPops(3, 4) = 0, "and not the column next to it"
+    end
+endtest
+
+test clone_can_finish_a_group from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    tAt as vec = { x = 1, y = 0 }
+    tWay as vec = { x = 1, y = 0 }
+
+    doClone(tAt, tWay)
+    assert CELLS(2).value = 6, "the fish was copied into the next cell"
+    assert CELLS(1).value = 6, "and it is still where it was"
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the copy made a group of three"
+    assert testPopCount() = 3, "and they pop"
+    end
+endtest
+
+test shift_moves_the_row_around_and_can_finish_a_group from fishBoard
+    testPut(3, 0, 6)
+    testPut(3, 1, 6)
+    testPut(2, 2, 6)
+    tLastColumn = CELL_COLUMN_COUNT - 1
+    tWasLast = CELLS(testIndex(tLastColumn, 2)).value
+    tAt as vec = { x = 2, y = 2 }
+    tWay as vec = { x = 1, y = 0 }
+
+    doShift(tAt, tWay)
+    assert CELLS(testIndex(3, 2)).value = 6, "the fish moved one cell along"
+    assert CELLS(testIndex(0, 2)).value = tWasLast, "and the fish that fell off of the end came back on at the start"
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the shift lined up a column of three"
+    assert testPopCount() = 3, "and they pop"
+    end
+endtest
+
+
+` SWAPS. these go through the queue of moves, the way that the keys do.
+
+test swap_can_finish_a_group from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 1, 6)
+    testCursor(2, 1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the swap made a group of three"
+    assert testPops(2, 0), "with the fish that was swapped up"
+    assert SELECTION_POS.y = 0, "the cursor went along with it"
+    assert CURRENT_MOVE_COUNT = 1, "it counts as a move"
+    assert MULT_PROGRESS = 1, "and it fills the bar of the multiplier"
+    end
+endtest
+
+test swap_that_pops_nothing_costs_the_multiplier from fishBoard
+    SCORE_MULTIPLIER = 2
+    testCursor(4, 4)
+    testQueueMove(1, 0, 1, -1)
+
+    runto _combos_judged
+
+    assert totalComboCount = 0, "nothing popped"
+    assert CURRENT_MOVE_COUNT = 1, "it still counts as a move"
+    assert SCORE_MULTIPLIER = 1, "and it took one off of the multiplier"
+    end
+endtest
+
+test swap_off_of_the_board_is_not_a_move from fishBoard
+    tWas = CELLS(0).value
+    testCursor(0, 0)
+    testQueueMove(-1, 0, 1, -1)
+
+    runto _loop
+    runto _loop
+    runto _loop
+
+    assert CELLS(0).value = tWas, "the fish is where it was"
+    assert SELECTION_POS.x = 0, "and so is the cursor"
+    assert CURRENT_MOVE_COUNT = 0, "it was not a move"
+    end
+endtest
+
+test seamless_swap_goes_around_the_edge from fishBoard
+    grantPassive(ABILITY_INDEX_WRAP)
+    tLastColumn = CELL_COLUMN_COUNT - 1
+    testPut(0, 0, 6)
+    testPut(tLastColumn, 1, 6)
+    testPut(tLastColumn, 2, 6)
+    testCursor(0, 0)
+    testQueueMove(-1, 0, 1, -1)
+
+    runto _combos_judged
+
+    assert SELECTION_POS.x = tLastColumn, "the cursor came out on the other side"
+    assert totalComboCount = 1, "and the fish that went with it made a group there"
+    assert testPops(tLastColumn, 0), "with the fish that was swapped around"
+    end
+endtest
+
+test seamless_does_not_match_around_the_edge from fishBoard
+    ` the card moves fish around the edges. it does not make the two edges touch.
+    grantPassive(ABILITY_INDEX_WRAP)
+    testPut(CELL_COLUMN_COUNT - 1, 0, 6)
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 0, "fish on both sides of an edge are not a group"
+    end
+endtest
+
+test free_move_costs_no_move_and_no_multiplier from fishBoard
+    grantMoveToSlot(ABILITY_INDEX_MOVE_FREE, 0)
+    SCORE_MULTIPLIER = 2
+    tWasHere = CELLS(testIndex(4, 4)).value
+    testCursor(4, 4)
+    testQueueMove(1, 0, 1, 0)
+
+    runto _combos_judged
+
+    assert CELLS(testIndex(5, 4)).value = tWasHere, "the fish was swapped"
+    assert totalComboCount = 0, "and it popped nothing"
+    assert CURRENT_MOVE_COUNT = 0, "but it did not count as a move"
+    assert SCORE_MULTIPLIER = 2, "and the multiplier did not care"
+    assert MOVE_ABILITY_BINDINGS(0).movesLeft > 0, "the free move has to recharge"
+    end
+endtest
+
+
+` THE ROBOT
+
+test robot_makes_the_swap_that_pops from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 1, 6)
+    tAt as vec = { x = 1, y = 1 }
+    tWay as vec = { x = 1, y = 0 }
+
+    doRobot(tAt, tWay)
+    assert ROBOT_LAST_COUNT = 1, "there is one good swap near the cursor, and it found it"
+    assert CELLS(2).value = 6, "the fish was swapped up into the row"
+    assert CURRENT_MOVE_COUNT = 1, "all of it counts as one move"
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the group that it made pops"
+    end
+endtest
+
+test robot_with_nothing_to_do_is_not_a_move from fishBoard
+    tAt as vec = { x = 4, y = 4 }
+    tWay as vec = { x = 1, y = 0 }
+
+    doRobot(tAt, tWay)
+
+    assert ROBOT_LAST_COUNT = 0, "there is no swap on this board that pops anything"
+    assert CURRENT_MOVE_COUNT = 0, "so it was not a move"
+    end
+endtest
+
+test stacked_bottle_pays_twice from fishBoard
+    tBottleRow = CELL_ROW_COUNT - 1
+    testPut(0, tBottleRow, TEX_BOTTLE)
+    CELLS(tBottleRow * CELL_COLUMN_COUNT).stack = 1
+    tMultBefore = SCORE_MULTIPLIER
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert SCORE_MULTIPLIER = tMultBefore + BOTTLE_MULT_GAIN * 2, "a bottle with one more behind it pays out twice"
+    end
+endtest
+
+test stacked_jelly_stings_twice from fishBoard
+    testPut(0, 0, TEX_JELLY)
+    testPut(1, 0, TEX_JELLY)
+    testPut(2, 0, TEX_JELLY)
+    CELLS(1).stack = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert CELLS(0).stings = 1, "a jellyfish stings once"
+    assert CELLS(1).stings = 2, "a jellyfish with one more behind it stings twice"
+    end
+endtest
+
+test bomb_copies_the_stack from fishBoard
+    CELLS(testIndex(4, 4)).stack = 2
+    tAt as vec = { x = 4, y = 4 }
+    tWay as vec = { x = 1, y = 0 }
+
+    doBomb(tAt, tWay)
+
+    assert CELLS(testIndex(3, 3)).stack = 2, "the fish in the corner of the bomb has the stack too"
+    assert CELLS(testIndex(5, 4)).stack = 2, "and so does the one next to the middle"
+    assert CELLS(testIndex(4, 4)).stack = 2, "the fish in the middle keeps its own"
+    assert CELLS(testIndex(6, 4)).stack = 0, "a fish that the bomb did not reach has no stack"
+    end
+endtest
+
+test clone_copies_the_stack from fishBoard
+    CELLS(1).stack = 2
+    tAt as vec = { x = 1, y = 0 }
+    tWay as vec = { x = 1, y = 0 }
+
+    doClone(tAt, tWay)
+
+    assert CELLS(2).stack = 2, "the copy has the stack too"
+    assert CELLS(1).stack = 2, "and the fish that was copied keeps its own"
+    end
+endtest
+
+
+` JELLY AND RAY BUILDS
+
+test jelly_cards_add_up from fishBoard
+    grantPassive(ABILITY_INDEX_JELLIES)
+    assert getJellyChance() = 10, "the first card is 10 in a hundred"
+    grantPassive(ABILITY_INDEX_JELLIES)
+    assert getJellyChance() = 15, "the second raises it to 15"
+    grantPassive(ABILITY_INDEX_JELLIES)
+    assert getJellyChance() = 20, "and the last raises it to 20"
+    assert getRayChance() = 0, "and there are no stingrays without their card"
+    end
+endtest
+
+test ray_cards_step_up from fishBoard
+    grantPassive(ABILITY_INDEX_RAYS)
+    assert getRayChance() = 10, "the first card is 10 in a hundred"
+    grantPassive(ABILITY_INDEX_RAYS)
+    assert getRayChance() = 15, "the second raises it to 15"
+    grantPassive(ABILITY_INDEX_RAYS)
+    assert getRayChance() = 20, "and the last raises it to 20"
+    end
+endtest
+
+test jelly_and_ray_cards_water_each_other_down from fishBoard
+    grantPassive(ABILITY_INDEX_JELLIES)
+    grantPassive(ABILITY_INDEX_RAYS)
+    assert getJellyChance() = JELLY_SPAWN_CHANCE / 2, "one card of each halves the jellyfish"
+    assert getRayChance() = RAY_SPAWN_CHANCE / 2, "and the stingrays"
+
+    grantPassive(ABILITY_INDEX_JELLIES)
+    grantPassive(ABILITY_INDEX_JELLIES)
+    assert getJellyChance() = 15, "three jellies cards keep three quarters of their 20"
+    assert getRayChance() = RAY_SPAWN_CHANCE / 4, "and the one rays card keeps a quarter of its own"
+    end
+endtest
+
+
+` CORAL. the hidden game. see CORAL in fish_headers.
+` the pattern that these tests walk is up, left, up, which is the number 76. see coralTryCode.
+
+test coral_fish_sings_and_the_rest_of_its_group_pops from fishBoard
+    CORAL_CELLS(testIndex(0, 0)) = 1
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "three are a group, with or without coral"
+    assert testPopCount() = 2, "the two fish over open water pop"
+    assert testPops(0, 0) = 0, "and the one on coral stays"
+    assert CORAL_SUNG(testIndex(0, 0)) = 6, "it sang"
+    assert CURRENT_SCORE = 10 * CORAL_SCORE_BONUS + 50, "and scored more for it, and the rest score 20 + 30"
+    end
+endtest
+
+test coral_one_on_and_three_off_pops from fishBoard
+    CORAL_CELLS(testIndex(0, 0)) = 1
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(3, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "four fish are a group"
+    assert testPopCount() = 3, "and the three that are not on coral pop"
+    assert CURRENT_SCORE = 10 * CORAL_SCORE_BONUS + 90, "the fish on coral scores more, and the rest score 20 + 30 + 40"
+    end
+endtest
+
+test coral_two_on_and_two_off_pops from fishBoard
+    CORAL_CELLS(testIndex(0, 0)) = 1
+    CORAL_CELLS(testIndex(1, 0)) = 1
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(3, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "four fish are a group"
+    assert testPopCount() = 2, "the two on coral sing, and the other two pop"
+    end
+endtest
+
+test coral_three_all_on_coral_sing_and_stay from fishBoard
+    for tColumn = 0 to 2
+        CORAL_CELLS(testIndex(tColumn, 0)) = 1
+        testPut(tColumn, 0, 6)
+    next
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "three fish on coral are a group"
+    assert testPopCount() = 0, "but none of them pops"
+    assert CURRENT_SCORE = 60 * CORAL_SCORE_BONUS, "every one of them scores: 10 to 30 is 60, and more for the coral"
+    end
+endtest
+
+test coral_group_that_has_sung_does_not_sing_again from fishBoard
+    for tColumn = 0 to 2
+        CORAL_CELLS(testIndex(tColumn, 0)) = 1
+        testPut(tColumn, 0, 6)
+        CORAL_SUNG(testIndex(tColumn, 0)) = 6
+    next
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 0, "the same fish in the same cells have nothing new to sing about"
+    assert CURRENT_SCORE = 0, "so they score nothing"
+    end
+endtest
+
+test coral_group_sings_again_when_a_fish_joins_it from fishBoard
+    for tColumn = 0 to 3
+        CORAL_CELLS(testIndex(tColumn, 0)) = 1
+        testPut(tColumn, 0, 6)
+    next
+    for tColumn = 0 to 2
+        CORAL_SUNG(testIndex(tColumn, 0)) = 6
+    next
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "a fourth fish that has not sung makes it a group again"
+    assert testPopCount() = 0, "and nothing pops"
+    assert CURRENT_SCORE = 100 * CORAL_SCORE_BONUS, "all four of them score: 10 to 40 is 100"
+    end
+endtest
+
+test coral_does_not_hold_a_dead_fish from fishBoard
+    for tColumn = 0 to 2
+        CORAL_CELLS(testIndex(tColumn, 0)) = 1
+        testPut(tColumn, 0, 6)
+    next
+    CELLS(testIndex(1, 0)).bellyUp = 2
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert testPopCount() = 1, "the skeleton pops, and the two that are well sing"
+    assert testPops(1, 0) = 1, "it is the skeleton that went"
+    end
+endtest
+
+test horror_coral_does_not_hold_a_fish from fishBoard
+    for tColumn = 0 to 2
+        CORAL_CELLS(testIndex(tColumn, 0)) = 1
+        CORAL_SICK(testIndex(tColumn, 0)) = 1
+        testPut(tColumn, 0, 6)
+    next
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "three are a group"
+    assert testPopCount() = 3, "and on horror coral all of them pop"
+    end
+endtest
+
+test coral_does_not_hold_a_fish_from_a_stingray from fishBoard
+    ` three stingrays over open water, and a fish on coral above the first of them
+    CORAL_CELLS(testIndex(0, 1)) = 1
+    testPut(0, 3, TEX_RAY)
+    testPut(1, 3, TEX_RAY)
+    testPut(2, 3, TEX_RAY)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert testPops(0, 1) = 1, "a pop that is forced takes the fish on coral with it"
+    end
+endtest
+
+test coral_four_all_on_coral_pop from fishBoard
+    for tColumn = 0 to 3
+        CORAL_CELLS(testIndex(tColumn, 0)) = 1
+        testPut(tColumn, 0, 6)
+    next
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "four fish on coral are a group"
+    assert testPopCount() = 0, "and all four of them sing"
+    end
+endtest
+
+test coral_group_needs_one_more_with_think_bigger from fishBoard
+    grantPassive(ABILITY_INDEX_THINK_BIGGER)
+    CORAL_CELLS(testIndex(0, 0)) = 1
+    for tColumn = 0 to 3
+        testPut(tColumn, 0, 6)
+    next
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert totalComboCount = 1, "four is what any group needs with the card, and coral does not ask for more"
+    assert testPopCount() = 3, "the one on coral sings, and the other three pop"
+    end
+endtest
+
+test coral_does_not_stop_a_forced_pop from fishBoard
+    CORAL_CELLS(testIndex(4, 4)) = 1
+    CELLS(testIndex(4, 4)).bellyUp = 1
+
+    popBellyUpFish(testIndex(4, 4))
+    runto _combos_judged
+
+    assert testPopCount() = 1, "a belly up fish on coral still pops when the cursor comes to it"
+    end
+endtest
+
+test coral_six_on_coral_pop_and_score_more from fishBoard
+    for tColumn = 0 to 5
+        CORAL_CELLS(testIndex(tColumn, 0)) = 1
+        testPut(tColumn, 0, 6)
+    next
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "six fish on coral are a group"
+    assert testPopCount() = 0, "and all six of them sing"
+    assert CURRENT_SCORE = 210 * CORAL_SCORE_BONUS, "every one of them scores more: 10 to 60 is 210"
+    assert CORAL_SCORE_BONUS = 3, "and more is three times as much"
+    end
+endtest
+
+test coral_grows_where_a_pattern_was_walked from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` the swap at the end of the walk makes three in a row
+    testPut(1, 3, 6)
+    testPut(2, 3, 6)
+    testPut(3, 4, 6)
+    testCursor(4, 6)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(0, -1, 1, -1)
+
+    ` the board is looked at after every one of them
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+    assert CORAL_COUNT = 0, "walking the pattern does nothing on its own"
+    assert INFOS(INFO_INDEX_CORAL).enabled = 0, "and info mode has nothing to say about coral yet"
+    assert INFOS(INFO_INDEX_GRID).size.x = CELL_COLUMN_COUNT * CELL_SIZE, "the spot for the fish is the whole board"
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the swap popped something"
+    assert CURRENT_SCORE = 60, "and that was scored before there was any coral"
+    assert CORAL_COUNT = 4, "coral grew on the four cells that the cursor walked over"
+    assert CORAL_CELLS(testIndex(4, 6)) = 1, "where the walk started"
+    assert CORAL_CELLS(testIndex(4, 5)) = 1, "and after the step up"
+    assert CORAL_CELLS(testIndex(3, 5)) = 1, "and after the step left"
+    assert CORAL_CELLS(testIndex(3, 4)) = 1, "and where it ended"
+    assert CORAL_CELLS(testIndex(3, 3)) = 0, "but not where the swap went"
+    assert CORAL_CASTS = 1, "one pattern has been cast"
+    assert CORAL_USED(0) = 76, "and it is written down as used"
+    assert CORAL_SEQ_LENGTH(0) > 0, "a new pattern took its place"
+    assert CORAL_SEQ_CODE(0) <> 76, "which is not the same one"
+    assert INFOS(INFO_INDEX_CORAL).enabled = 1, "and info mode has a spot for the coral now"
+    assert CORAL_PRAISE_LAST >= 0, "the music answers with a phrase of praise"
+    assert INFOS(INFO_INDEX_GRID).size.x + INFOS(INFO_INDEX_CORAL).size.x = CELL_COLUMN_COUNT * CELL_SIZE, "the board is split between the fish and the coral"
+    assert INFOS(INFO_INDEX_CORAL).topLeft.x = INFOS(INFO_INDEX_GRID).topLeft.x + INFOS(INFO_INDEX_GRID).size.x, "side by side"
+    end
+endtest
+
+test coral_cast_with_a_belly_up_fish_is_horror_coral from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` the same walk and swap, but one of the three fish that the swap pops is belly up
+    testPut(1, 3, 6)
+    testPut(2, 3, 6)
+    testPut(3, 4, 6)
+    CELLS(testIndex(1, 3)).bellyUp = 1
+    testCursor(4, 6)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the swap popped something"
+    assert CORAL_COUNT = 4, "coral grew on the four cells that the cursor walked over"
+    assert CORAL_SICK_COUNT = 4, "and all of it is horror coral"
+    assert CORAL_SICK(testIndex(4, 6)) = 1, "where the walk started"
+    assert CORAL_SICK(testIndex(3, 4)) = 1, "and where it ended"
+    assert INFOS(INFO_INDEX_CORAL_SICK).enabled = 1, "info mode has a spot for the horror coral"
+    assert INFOS(INFO_INDEX_CORAL).enabled = 0, "and none for coral, because there is none that is well"
+    assert INFOS(INFO_INDEX_GRID).size.x + INFOS(INFO_INDEX_CORAL_SICK).size.x = CELL_COLUMN_COUNT * CELL_SIZE, "the board is split between the two"
+    end
+endtest
+
+test coral_walked_over_a_belly_up_fish_is_horror_coral from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` a belly up fish in the middle of the walk: up, left, up, from 4, 6
+    CELLS(testIndex(3, 5)).bellyUp = 1
+    coralTrailClear()
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+
+    ` it pops when the cursor comes to it, and it is gone by the time that the walk is over
+    CELLS(testIndex(3, 5)).bellyUp = 0
+    coralCursorStepped(3, 5, 0, -1)
+    coralSwapMade(3, 4)
+    judgeCoralCast(1)
+
+    assert CORAL_COUNT = 4, "coral grew on the four cells that the cursor walked over"
+    assert CORAL_SICK_COUNT = 4, "and all of it is horror coral, though none of the fish that popped was belly up"
+    assert MELODY_PLAYING >= MELODY_HORROR_FIRST, "and the music answers with a lament"
+    end
+endtest
+
+test coral_praise_phrases_take_turns from fishBoard
+    ` every phrase is sung once before any of them is sung again
+    for tHeard = 0 to CORAL_PRAISE_COUNT - 1
+        CORAL_PRAISE_HEARD(tHeard) = 0
+    next
+    CORAL_PRAISE_LAST = -1
+    tRepeats = 0
+    for tPlay = 1 to CORAL_PRAISE_COUNT
+        tBefore = CORAL_PRAISE_LAST
+        playCoralMusic(0)
+        if CORAL_PRAISE_LAST = tBefore then tRepeats = tRepeats + 1
+    next
+    tHeardCount = 0
+    for tHeard = 0 to CORAL_PRAISE_COUNT - 1
+        tHeardCount = tHeardCount + CORAL_PRAISE_HEARD(tHeard)
+    next
+    assert tHeardCount = CORAL_PRAISE_COUNT, "all of them have been sung"
+    assert tRepeats = 0, "and none of them twice in a row"
+    assert MELODY_PLAYING = -1, "a phrase is not a melody"
+
+    ` the next time around does not start with the one that just ended the last
+    tBefore = CORAL_PRAISE_LAST
+    playCoralMusic(0)
+    assert CORAL_PRAISE_LAST <> tBefore, "the same phrase is not sung twice in a row, even then"
+    end
+endtest
+
+test coral_music_never_plays_a_tune_twice from fishBoard
+    ` this is about the choir and its tunes, which the recorded praise has taken the place of
+    CORAL_PRAISE_RECORDED = 0
+
+    ` every tune of praise that was written by hand is played once
+    for tHeard = 0 to MELODY_MAX - 1
+        MELODY_HEARD(tHeard) = 0
+    next
+    tRepeats = 0
+    for tPlay = 1 to MELODY_CORAL_COUNT
+        playCoralMusic(0)
+        tWrong = 0
+        if MELODY_PLAYING < MELODY_CORAL_FIRST then tWrong = 1
+        if MELODY_PLAYING >= MELODY_HORROR_FIRST then tWrong = 1
+        if tWrong then tRepeats = tRepeats + 1
+    next
+    tHeardCount = 0
+    for tHeard = 0 to MELODY_CORAL_COUNT - 1
+        tHeardCount = tHeardCount + MELODY_HEARD(MELODY_CORAL_FIRST + tHeard)
+    next
+    assert tRepeats = 0, "they are all tunes of praise"
+    assert tHeardCount = MELODY_CORAL_COUNT, "and every one of them has been heard, so none was played twice"
+
+    ` and after that, the tunes are made up
+    playCoralMusic(0)
+    assert MELODY_PLAYING = MELODY_MADE, "the next one is made up on the spot"
+    assert MELODY_INSTRUMENT(MELODY_MADE) = INSTRUMENT_CHOIR, "for the choir"
+    assert MELODY_NOTES(MELODY_FIRST(MELODY_MADE)) <> REST, "and it starts with a note"
+
+    ` the laments have not been touched
+    playCoralMusic(1)
+    assert MELODY_PLAYING >= MELODY_HORROR_FIRST, "a lament is still one of the ones that were written"
+    assert MELODY_PLAYING < MELODY_MADE, "and not one that is made up"
+    end
+endtest
+
+test horror_coral_turns_fish_belly_up_and_then_to_skeletons from fishBoard
+    ` every roll comes up
+    mock rnd
+    endmock 0
+
+    CORAL_CELLS(testIndex(3, 3)) = 1
+    CORAL_SICK(testIndex(3, 3)) = 1
+    CORAL_CELLS(testIndex(5, 5)) = 1
+    coralRecount()
+    testCursor(0, 0)
+
+    BELLY_UP_ROLL_DUE = 1
+    rollBellyUpFish()
+    assert CELLS(testIndex(3, 3)).bellyUp = 1, "a move turns the fish on horror coral belly up"
+    assert CELLS(testIndex(5, 5)).bellyUp = 0, "but not the fish on coral that is well"
+    assert CELLS(testIndex(4, 4)).bellyUp = 0, "or a fish that is on no coral at all"
+
+    rollBellyUpFish()
+    assert CELLS(testIndex(3, 3)).bellyUp = 1, "nothing more happens until there is another move"
+
+    BELLY_UP_ROLL_DUE = 1
+    rollBellyUpFish()
+    assert CELLS(testIndex(3, 3)).bellyUp = 2, "the next move turns the belly up fish into a skeleton"
+    end
+endtest
+
+test skeleton_swapped_into_place_finishes_a_combo from fishBoard
+    ` two of a kind, and a skeleton of another kind below where the third would go
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 1, 7)
+    CELLS(testIndex(2, 1)).bellyUp = 2
+    testCursor(2, 1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the skeleton finished the group"
+    assert testPopCount() = 3, "the two fish and the skeleton pop"
+    assert testPops(2, 0) = 1, "the skeleton is one of them"
+    assert CELLS(testIndex(2, 0)).value = 7, "and it is still the kind of fish that it was"
+    end
+endtest
+
+test skeleton_matches_its_own_kind_like_any_fish from fishBoard
+    ` three of a kind in a row, and one of them is a skeleton
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    CELLS(testIndex(2, 0)).bellyUp = 2
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "a skeleton is still the kind of fish that it was"
+    assert testPopCount() = 3, "so the three of them pop"
+    end
+endtest
+
+test skeleton_of_another_kind_does_nothing_on_its_own from fishBoard
+    ` worm, worm, skeleton, worm. no swap has touched it.
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(3, 0, 7)
+    testPut(4, 0, 6)
+    CELLS(testIndex(3, 0)).bellyUp = 2
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 0, "nothing pops because of a skeleton that nobody moved"
+    assert CELLS(testIndex(3, 0)).value = 7, "and it is still the kind of fish that it was"
+    end
+endtest
+
+test skeleton_swapped_onto_a_line_takes_the_skeleton_in_it_too from fishBoard
+    ` worm, worm, skeleton, worm, and another skeleton below the cell at the end of the line
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(3, 0, 7)
+    testPut(4, 0, 6)
+    CELLS(testIndex(3, 0)).bellyUp = 2
+    testPut(0, 1, 7)
+    CELLS(testIndex(0, 1)).bellyUp = 2
+    testCursor(0, 1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+
+    assert totalComboCount = 1, "it is all one group"
+    assert testPopCount() = 5, "of five: the skeleton that was moved, two worms, the other skeleton, and the last worm"
+    assert CELLS(testIndex(3, 0)).value = 7, "the skeleton in the line is still the kind of fish that it was"
+    assert CELLS(testIndex(0, 0)).value = 7, "and so is the one that was moved"
+    end
+endtest
+
+test fish_swapped_onto_a_line_goes_through_the_skeleton_in_it from fishBoard
+    ` worm, skeleton, worm, and a worm below the cell at the end of the line
+    testPut(1, 0, 6)
+    testPut(2, 0, 7)
+    testPut(3, 0, 6)
+    CELLS(testIndex(2, 0)).bellyUp = 2
+    testPut(0, 1, 6)
+    testCursor(0, 1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the worm that was moved makes a group"
+    assert testPopCount() = 4, "of four: three worms, and the skeleton in between"
+    end
+endtest
+
+test skeleton_bottle_pays_double from fishBoard
+    tBottomRow = CELL_ROW_COUNT - 1
+    testPut(4, tBottomRow, TEX_BOTTLE)
+    CELLS(testIndex(4, tBottomRow)).bellyUp = 2
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert SCORE_MULTIPLIER = 1 + BOTTLE_SKELETON_GAIN, "the skeleton of a bottle adds two to the multiplier"
+    assert testPops(4, tBottomRow), "and it pops"
+    end
+endtest
+
+test bomb_copies_a_skeleton from fishBoard
+    CELLS(testIndex(4, 4)).bellyUp = 2
+    tAt as vec = { x = 4, y = 4 }
+    tWay as vec = { x = 1, y = 0 }
+
+    doBomb(tAt, tWay)
+
+    assert CELLS(testIndex(3, 3)).bellyUp = 2, "the fish in the corner of the bomb is a skeleton too"
+    assert CELLS(testIndex(5, 4)).bellyUp = 2, "and so is the one next to the middle"
+    assert CELLS(testIndex(6, 4)).bellyUp = 0, "a fish that the bomb did not reach is not"
+    end
+endtest
+
+test clone_copies_a_skeleton from fishBoard
+    CELLS(1).bellyUp = 2
+    tAt as vec = { x = 1, y = 0 }
+    tWay as vec = { x = 1, y = 0 }
+
+    doClone(tAt, tWay)
+
+    assert CELLS(2).bellyUp = 2, "the copy is a skeleton too"
+    end
+endtest
+
+test skeleton_stacks_and_never_goes_belly_up from fishBoard
+    ` every roll comes up
+    mock rnd
+    endmock 0
+
+    CELLS(testIndex(4, 4)).bellyUp = 2
+    CORAL_CELLS(testIndex(4, 4)) = 1
+    CORAL_SICK(testIndex(4, 4)) = 1
+    coralRecount()
+    testCursor(0, 0)
+
+    tryStackFish(testIndex(4, 4), 100, 0, ABILITY_INDEX_CONTAGIOUS_SMILE)
+    assert CELLS(testIndex(4, 4)).stack = 1, "a skeleton picks up a fish for its stack like any other"
+
+    stingFish(testIndex(4, 4))
+    assert CELLS(testIndex(4, 4)).bellyUp = 2, "a jellyfish does not turn a skeleton belly up"
+
+    BELLY_UP_ROLL_DUE = 1
+    rollBellyUpFish()
+    assert CELLS(testIndex(4, 4)).bellyUp = 2, "and neither does the horror coral that it is on"
+    end
+endtest
+
+test skeleton_does_not_pop_when_the_cursor_comes_to_it from fishBoard
+    CELLS(testIndex(4, 4)).bellyUp = 2
+    CELLS(testIndex(5, 4)).bellyUp = 1
+    REQUEST_COMBO_CHECK = 0
+
+    popBellyUpFish(testIndex(4, 4))
+    assert CELLS(testIndex(4, 4)).comboForce = 0, "the skeleton is not going to pop"
+    assert CELLS(testIndex(5, 4)).comboForce = 0, "and neither is the belly up fish next to it"
+    assert REQUEST_COMBO_CHECK = 0, "nothing asks for a look at the board"
+
+    popBellyUpFish(testIndex(5, 4))
+    assert CELLS(testIndex(5, 4)).comboForce = 1, "the belly up fish pops when it is touched"
+    assert CELLS(testIndex(4, 4)).comboForce = 0, "and it does not take the skeleton with it"
+    assert countBellyUpFish() = 2, "but the waste bucket counts them both"
+    end
+endtest
+
+test walking_a_used_pattern_shakes_its_song from fishBoard
+    ` up, left, up has been cast already, and none of the patterns that are out is anything like it
+    CORAL_SEQ_LENGTH(0) = 0
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    CORAL_USED(0) = 76
+    CORAL_USED(1) = 85
+    CORAL_USED_COUNT = 2
+    coralRunesRefresh()
+    assert CORAL_RUNE_SHAKE_MS(0) < 0, "nothing is shaking to start with"
+
+    ` some other walk does nothing
+    coralTrailClear()
+    coralCursorStepped(4, 6, 1, 0)
+    coralCursorStepped(5, 6, 1, 0)
+    coralCursorStepped(6, 6, 0, -1)
+    coralSwapMade(6, 5)
+    assert CORAL_RUNE_SHAKE_MS(0) < 0, "a walk that is not a used pattern shakes nothing"
+
+    ` the used one, walked from the far end: down, right, down
+    coralCursorStepped(3, 4, 0, 1)
+    coralCursorStepped(3, 5, 1, 0)
+    coralCursorStepped(4, 5, 0, 1)
+    coralSwapMade(4, 6)
+    assert CORAL_RUNE_SHAKE_MS(0) >= 0, "the song of the pattern that was walked again shakes"
+    assert CORAL_RUNE_SHAKE_MS(1) < 0, "and the other song does not"
+    assert CORAL_COUNT = 0, "no coral grows from a pattern that is used up"
+    assert CORAL_PENDING_SLOT = -1, "and nothing is waiting on the swap"
+    end
+endtest
+
+test coral_cast_overwrites_the_kind_of_the_coral_it_crosses from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` horror coral where the walk starts, and some more that the walk does not go near
+    CORAL_CELLS(testIndex(4, 6)) = 1
+    CORAL_SICK(testIndex(4, 6)) = 1
+    CORAL_CELLS(testIndex(0, 0)) = 1
+    CORAL_SICK(testIndex(0, 0)) = 1
+
+    ` none of the fish that the swap pops is belly up
+    testPut(1, 3, 6)
+    testPut(2, 3, 6)
+    testPut(3, 4, 6)
+    testCursor(4, 6)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+
+    assert CORAL_COUNT = 5, "the four cells of the walk, and the one in the corner"
+    assert CORAL_SICK(testIndex(4, 6)) = 0, "the horror coral that the walk crossed is well again"
+    assert CORAL_SICK(testIndex(0, 0)) = 1, "and the horror coral in the corner is as it was"
+    assert CORAL_SICK_COUNT = 1, "so there is one cell of it left"
+    assert INFOS(INFO_INDEX_CORAL).enabled = 1, "info mode has a spot for the coral"
+    assert INFOS(INFO_INDEX_CORAL_SICK).enabled = 1, "and one for the horror coral"
+    assert INFOS(INFO_INDEX_GRID).size.x + INFOS(INFO_INDEX_CORAL).size.x + INFOS(INFO_INDEX_CORAL_SICK).size.x = CELL_COLUMN_COUNT * CELL_SIZE, "the board is split between the three"
+    assert INFOS(INFO_INDEX_CORAL_SICK).topLeft.x = INFOS(INFO_INDEX_CORAL).topLeft.x + INFOS(INFO_INDEX_CORAL).size.x, "side by side"
+    end
+endtest
+
+test coral_does_not_grow_when_the_swap_pops_nothing from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    testCursor(4, 6)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+
+    assert totalComboCount = 0, "the swap popped nothing"
+    assert CORAL_COUNT = 0, "so no coral grew"
+    assert CORAL_SEQ_CODE(0) = 76, "and the pattern is still there to be cast"
+    assert CORAL_PENDING_SLOT = -1, "but it is not waiting on that swap any more"
+    assert CORAL_TRAIL_COUNT = 0, "and the walk has to be done again"
+    end
+endtest
+
+test coral_step_into_the_edge_is_not_a_step from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` the third thing that is asked for goes nowhere, because the cursor is on the left edge by then
+    testPut(1, 3, 6)
+    testPut(2, 3, 6)
+    testPut(0, 4, 6)
+    testCursor(1, 6)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the swap popped something"
+    assert CORAL_COUNT = 4, "and the pattern was cast, as if the step into the edge was never asked for"
+    end
+endtest
+
+test coral_wrong_steps_are_not_the_pattern from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` up, up, left
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, 0, -1)
+    coralCursorStepped(4, 4, -1, 0)
+    coralSwapMade(3, 4)
+
+    assert CORAL_PENDING_SLOT = -1, "steps in the wrong order are not the pattern"
+    end
+endtest
+
+test coral_only_the_last_steps_have_to_be_the_pattern from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` right, down, and then up, left, up
+    coralCursorStepped(3, 5, 1, 0)
+    coralCursorStepped(4, 5, 0, 1)
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+    coralCursorStepped(3, 5, 0, -1)
+    coralSwapMade(3, 4)
+
+    assert CORAL_PENDING_SLOT = 0, "the steps before the pattern do not matter"
+    assert CORAL_PENDING_COUNT = 4, "and only the cells of the pattern are walked over"
+    assert CORAL_PENDING_X(0) = 4, "starting from where the pattern did"
+    assert CORAL_PENDING_Y(0) = 6, "and not from where the cursor first moved"
+    end
+endtest
+
+test coral_patterns_are_all_different from fishBoard
+    ` with the dice stuck, the patterns have to be found by going through them in order
+    mock rnd
+    endmock 0
+    resetCoral()
+
+    assert CORAL_SEQ_LENGTH(0) = CORAL_FIRST_LENGTH, "the first patterns are short"
+    assert CORAL_SEQ_LENGTH(1) = CORAL_FIRST_LENGTH, "all of them"
+    assert CORAL_SEQ_LENGTH(2) = CORAL_FIRST_LENGTH, "that are out"
+    assert CORAL_SEQ_CODE(0) <> CORAL_SEQ_CODE(1), "and no two are the same"
+    assert CORAL_SEQ_CODE(1) <> CORAL_SEQ_CODE(2), "whichever two"
+    assert CORAL_SEQ_CODE(0) <> CORAL_SEQ_CODE(2), "they are"
+
+    ` cast the first one. the stuck dice only ever roll that same pattern again.
+    tCastCode = CORAL_SEQ_CODE(0)
+    CORAL_PENDING_SLOT = 0
+    CORAL_PENDING_COUNT = 0
+    judgeCoralCast(1)
+
+    assert CORAL_USED(0) = tCastCode, "the pattern that was cast is written down"
+    assert CORAL_SEQ_LENGTH(0) > 0, "and a new one took its place"
+    assert CORAL_SEQ_CODE(0) <> tCastCode, "which is not the one that was cast"
+    assert CORAL_SEQ_CODE(1) <> tCastCode, "and neither is"
+    assert CORAL_SEQ_CODE(2) <> tCastCode, "any other"
+    end
+endtest
+
+test coral_group_that_sings_is_a_good_swap_for_the_multiplier from fishBoard
+    SCORE_MULTIPLIER = 3
+    CORAL_CELLS(testIndex(2, 0)) = 1
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 1, 6)
+    testCursor(2, 1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the swap made a group of three, and the one on coral sings"
+    assert testPopCount() = 2, "the other two pop"
+    assert CURRENT_MOVE_COUNT = 1, "it was a move"
+    assert SCORE_MULTIPLIER >= 3, "and a good one, so the multiplier is not taken down"
+    end
+endtest
+
+test coral_group_from_before_does_not_spare_the_multiplier from fishBoard
+    ` three in a row that are already sitting there on coral, and have sung
+    SCORE_MULTIPLIER = 3
+    for tColumn = 0 to 2
+        CORAL_CELLS(testIndex(tColumn, 0)) = 1
+        testPut(tColumn, 0, 6)
+        CORAL_SUNG(testIndex(tColumn, 0)) = 6
+    next
+
+    ` and a swap somewhere else that makes nothing
+    testCursor(4, 4)
+    testQueueMove(1, 0, 1, -1)
+
+    runto _combos_judged
+
+    assert totalComboCount = 0, "nothing popped, and nothing sang"
+    assert SCORE_MULTIPLIER = 2, "and the swap did not make the group, so it costs the multiplier as usual"
+    end
+endtest
+
+test coral_works_in_a_zen_game from fishBoard
+    ` a zen game has the one passive, which lets the cursor go around the edges of the board
+    GAME_ZEN = 1
+    grantPassive(ABILITY_INDEX_WRAP)
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` the step to the left goes around the edge, and the swap at the end makes three in a row
+    tLastColumn = CELL_COLUMN_COUNT - 1
+    testPut(tLastColumn - 2, 3, 6)
+    testPut(tLastColumn - 1, 3, 6)
+    testPut(tLastColumn, 4, 6)
+    testCursor(0, 6)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the swap popped something"
+    assert CORAL_COUNT = 4, "and the pattern was cast"
+    assert CORAL_CELLS(testIndex(0, 6)) = 1, "where the walk started"
+    assert CORAL_CELLS(testIndex(0, 5)) = 1, "and on the left edge"
+    assert CORAL_CELLS(testIndex(tLastColumn, 5)) = 1, "and on the right edge, where the step around came out"
+    assert CORAL_CELLS(testIndex(tLastColumn, 4)) = 1, "and where it ended"
+    end
+endtest
+
+test coral_hint_lays_the_pattern_on_the_board from fishBoard
+    ` with the dice stuck, the pattern goes as far up and to the left as it fits
+    mock rnd
+    endmock 0
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    tMade = coralStartHint(0)
+
+    assert tMade = 1, "the hint was started"
+    assert CORAL_HINT_START_MS >= 0, "and it is playing"
+    assert CORAL_HINT_COUNT = 4, "it goes over the four cells of the pattern"
+    assert CORAL_HINT_X(0) = 1, "from the cell that the walk starts on"
+    assert CORAL_HINT_Y(0) = 2, "which is two rows down, so that the rest fits above it"
+    assert CORAL_HINT_X(1) = 1, "then the one above that"
+    assert CORAL_HINT_Y(1) = 1, "one row up"
+    assert CORAL_HINT_X(2) = 0, "then the one to the left of that"
+    assert CORAL_HINT_Y(2) = 1, "in the same row"
+    assert CORAL_HINT_X(3) = 0, "and it ends on the one above that"
+    assert CORAL_HINT_Y(3) = 0, "in the top row"
+
+    ` it sets out from the first cell, and it is on the next one a step later, and in between the two halfway
+    tColumn0# = getCellX(0)
+    tColumn1# = getCellX(1)
+    tRow0# = getCellY(0)
+    tRow1# = getCellY(1)
+    tRow2# = getCellY(2)
+    coralHintPointAt(0)
+    assert CORAL_HINT_POINT_X# = tColumn1#, "it starts on the first cell"
+    assert CORAL_HINT_POINT_Y# = tRow2#, "of the walk"
+    coralHintPointAt(CORAL_HINT_STEP_MS)
+    assert CORAL_HINT_POINT_Y# = tRow1#, "a step later it is on the second"
+    coralHintPointAt(CORAL_HINT_STEP_MS / 2)
+    tBetween = 0
+    if CORAL_HINT_POINT_Y# < tRow2#
+        if CORAL_HINT_POINT_Y# > tRow1#
+            tBetween = 1
+        endif
+    endif
+    assert tBetween = 1, "and halfway there it is in between the two"
+    coralHintPointAt(CORAL_HINT_STEP_MS * 50)
+    assert CORAL_HINT_POINT_X# = tColumn0#, "and it stops on the last cell"
+    assert CORAL_HINT_POINT_Y# = tRow0#, "however long it has been"
+
+    ` and it plays out on the screen without anything going wrong
+    runto _loop
+    runto _loop
+    tShowing = 0
+    if CORAL_HINT_POWER# > 0
+        tShowing = 1
+    endif
+    assert tShowing = 1, "it is showing"
+    end
+endtest
+
+test coral_pattern_can_be_walked_from_the_far_end from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` up, left, up from the far end is down, right, down
+    coralCursorStepped(3, 4, 0, 1)
+    coralCursorStepped(3, 5, 1, 0)
+    coralCursorStepped(4, 5, 0, 1)
+    coralSwapMade(4, 6)
+
+    assert CORAL_PENDING_SLOT = 0, "the pattern was walked, from its other end"
+    assert CORAL_PENDING_COUNT = 4, "over the same four cells"
+    assert CORAL_PENDING_X(0) = 3, "starting from where the pattern ends"
+    assert CORAL_PENDING_Y(0) = 4, "when it is walked the usual way"
+    end
+endtest
+
+test coral_turned_around_steps_are_not_the_pattern from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` down, left, down has every step turned around, but not the order. it is a different shape.
+    coralCursorStepped(4, 4, 0, 1)
+    coralCursorStepped(4, 5, -1, 0)
+    coralCursorStepped(3, 5, 0, 1)
+    coralSwapMade(3, 6)
+
+    assert CORAL_PENDING_SLOT = -1, "turning the steps around without walking them backwards is not the pattern"
+    end
+endtest
+
+test coral_same_pattern_from_the_far_end_is_not_a_new_one from fishBoard
+    ` down, right, down is up, left, up from the far end
+    CORAL_TRY_STEPS(0) = CORAL_DOWN
+    CORAL_TRY_STEPS(1) = CORAL_RIGHT
+    CORAL_TRY_STEPS(2) = CORAL_DOWN
+
+    CORAL_SEQ_LENGTH(0) = 0
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    assert coralTryIsGood(3) = 1, "with nothing else out, it is a fine pattern"
+
+    coralSetSequence(0, 76)
+    CORAL_TRY_STEPS(0) = CORAL_DOWN
+    CORAL_TRY_STEPS(1) = CORAL_RIGHT
+    CORAL_TRY_STEPS(2) = CORAL_DOWN
+    assert coralTryIsGood(3) = 0, "but not while the same pattern is out"
+
+    CORAL_SEQ_LENGTH(0) = 0
+    CORAL_USED(0) = 76
+    CORAL_USED_COUNT = 1
+    assert coralTryIsGood(3) = 0, "and not once the same pattern has been cast"
+    end
+endtest
+
+test coral_big_group_brings_a_hint from fishBoard
+    for tColumn = 0 to 4
+        testPut(tColumn, 0, 6)
+    next
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert CORAL_HINT_DUE = 1, "five fish popping means that a hint is owed"
+
+    ` no wave of the current is setting out, so the only hint that can start is the one that is owed
+    mock rnd
+    endmock 0
+    coralClearHint()
+    CORAL_HINT_ROLLED = coralWaveNow()
+
+    coralRollHint()
+    assert CORAL_HINT_START_MS = -1, "it waits while the fish are still popping"
+
+    REQUEST_COMBO_CHECK = 0
+    coralRollHint()
+    assert CORAL_HINT_START_MS >= 0, "and it starts as soon as the board has settled"
+    assert CORAL_HINT_DUE = 0, "and then it is not owed any more"
+    end
+endtest
+
+test coral_small_group_does_not_bring_a_hint from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(3, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "four fish popped"
+    assert CORAL_HINT_DUE = 0, "but that is not a big enough group to bring a hint"
+    end
+endtest
+
+test coral_only_the_last_songs_are_kept from fishBoard
+    ` cast one more pattern than there is room to remember
+    tFirstCode = CORAL_SEQ_CODE(0)
+    tLastCode = 0
+    for tCast = 0 to CORAL_USED_MAX
+        tLastCode = CORAL_SEQ_CODE(0)
+        CORAL_PENDING_SLOT = 0
+        CORAL_PENDING_COUNT = 0
+        judgeCoralCast(1)
+    next
+
+    assert CORAL_CASTS = CORAL_USED_MAX + 1, "every one of them was cast"
+    assert CORAL_USED_COUNT = CORAL_USED_MAX, "but only so many are remembered"
+    assert CORAL_USED(CORAL_USED_MAX - 1) = tLastCode, "the one that was cast last is at the end"
+
+    tStillThere = 0
+    for tSong = 0 to CORAL_USED_MAX - 1
+        if CORAL_USED(tSong) = tFirstCode
+            tStillThere = 1
+        endif
+    next
+    assert tStillThere = 0, "and the one that was cast first has been forgotten, so it can be given out again"
+    assert CORAL_RUNE_SHOWN(0) > 0, "every one that is remembered has a song drawn for it"
+    assert INFOS(INFO_INDEX_SONGS).enabled = 1, "and info mode explains the songs now that there are some"
+    end
+endtest
+
+test coral_songs_are_not_explained_before_there_are_any from fishBoard
+    assert CORAL_USED_COUNT = 0, "nothing has been cast"
+    assert INFOS(INFO_INDEX_SONGS).enabled = 0, "so info mode has nothing to say about songs"
+    assert INFOS(INFO_INDEX_SONGS).title$ = "Songs", "it will call them songs when it does"
+    end
+endtest
+
+test listen_makes_a_hint_easier_to_see from fishBoard
+    mock rnd
+    endmock 0
+    assert isAbility_Listen() = 0, "the card is not owned to start with"
+
+    ` without the card
+    coralClearHint()
+    tMade = coralStartHint(0)
+    runto _loop
+    runto _loop
+    tPlain# = CORAL_HINT_GLOW_REACH#
+    tPlainOn = 0
+    if CORAL_HINT_LISTEN# > 0
+        tPlainOn = 1
+    endif
+    assert tPlainOn = 0, "the specks are not told about a card that is not owned"
+
+    ` and with it
+    grantPassive(ABILITY_INDEX_LISTEN)
+    assert isAbility_Listen() = 1, "now it is owned"
+    coralClearHint()
+    tMade = coralStartHint(0)
+    runto _loop
+    runto _loop
+
+    tListenOn = 0
+    if CORAL_HINT_LISTEN# > 0
+        tListenOn = 1
+    endif
+    tFurther = 0
+    if CORAL_HINT_GLOW_REACH# > tPlain#
+        tFurther = 1
+    endif
+    tBrighter = 0
+    if CORAL_HINT_GLOW_POWER# > CORAL_HINT_POWER#
+        tBrighter = 1
+    endif
+    assert tListenOn = 1, "the specks are told about the card"
+    assert tFurther = 1, "they glow further out from the hint"
+    assert tBrighter = 1, "and brighter"
+    end
+endtest
+
+` THE TWO ENDINGS. these only look at which ending is due. playing one out waits on the player.
+
+test ending_enough_coral_saves_the_reef from fishBoard
+    tNeed = coralEndNeed()
+    tNeedShare = tNeed * 100
+    tBoardShare = CELL_COUNT * CORAL_END_SHARE
+    assert tNeedShare >= tBoardShare, "the share of the board that an ending needs, in whole cells"
+    assert tNeed < CELL_COUNT, "which is not the whole board"
+
+    for tCell = 0 to tNeed - 2
+        CORAL_CELLS(tCell) = 1
+    next
+    coralRecount()
+    assert CORAL_ENDING_DUE = 0, "one cell short is not an ending"
+    assert coralBarFill(0) < 1000, "and the bar of the reef is not full"
+
+    CORAL_CELLS(tNeed - 1) = 1
+    coralRecount()
+    assert CORAL_ENDING_DUE = CORAL_ENDING_REEF, "enough coral saves the reef"
+    assert coralBarFill(0) = 1000, "and its bar is full"
+    assert coralBarFill(1) = 0, "the bar of the ancient one has nothing in it"
+    end
+endtest
+
+test ending_enough_horror_coral_summons_the_ancient_one from fishBoard
+    tNeed = coralEndNeed()
+    for tCell = 0 to tNeed - 2
+        CORAL_CELLS(tCell) = 1
+        CORAL_SICK(tCell) = 1
+    next
+    coralRecount()
+    assert CORAL_ENDING_DUE = 0, "one cell short is not an ending"
+
+    CORAL_CELLS(tNeed - 1) = 1
+    CORAL_SICK(tNeed - 1) = 1
+    coralRecount()
+    assert CORAL_ENDING_DUE = CORAL_ENDING_ANCIENT, "enough horror coral summons the ancient one"
+    assert coralBarFill(1) = 1000, "and its bar is full"
+    end
+endtest
+
+test ending_horror_coral_does_not_count_toward_the_reef from fishBoard
+    ` the whole board has coral on it, and half of that is horror coral, so neither kind has enough
+    for tCell = 0 to CELL_COUNT - 1
+        CORAL_CELLS(tCell) = 1
+        CORAL_SICK(tCell) = tCell mod 2
+    next
+    coralRecount()
+    assert CORAL_COMPLETE = 1, "the whole board has coral on it"
+    assert CORAL_ENDING_DUE = 0, "but neither kind has its share, so there is no ending"
+    end
+endtest
+
+test ending_goes_on_the_table_as_a_badge from fishBoard
+    tInitials = packInitials(2, 7, 4)
+    tPlace = insertHighscore(0, tInitials + CORAL_ENDING_ANCIENT * HISCORE_BADGE_STEP, 1, 3)
+
+    assert tPlace = 0, "a game of one move goes to the top of the table"
+    assert getScoreBadge(HISCORE_NAMES(0)) = CORAL_ENDING_ANCIENT, "its row has the badge of its ending"
+    assert getScoreInitials(HISCORE_NAMES(0)) = tInitials, "and the initials are the ones that were entered"
+    assert getScoreBadge(HISCORE_NAMES(1)) = 0, "the row that it pushed down has no badge"
+    assert getScoreBadge(tInitials) = 0, "and neither does a game that ended the usual way"
+    end
+endtest
+
+test coral_stays_put_when_the_board_grows from fishBoard
+    tLastRow = CELL_ROW_COUNT - 1
+    tLastColumn = CELL_COLUMN_COUNT - 1
+    CORAL_CELLS(testIndex(0, tLastRow)) = 1
+    CORAL_CELLS(testIndex(tLastColumn, 0)) = 1
+
+    ` the first one adds a column on the right, and the second one adds a row on the top
+    PENDING_BOARD_EXPANSIONS = 2
+    runto _loop
+    runto _loop
+
+    assert CELL_COLUMN_COUNT = tLastColumn + 2, "the board got a column"
+    assert CELL_ROW_COUNT = tLastRow + 2, "and a row"
+    assert CORAL_COUNT = 2, "the coral is all still there"
+    assert CORAL_CELLS(testIndex(0, tLastRow + 1)) = 1, "the coral in the bottom corner is still in the bottom corner"
+    assert CORAL_CELLS(testIndex(tLastColumn, 1)) = 1, "and the coral in the top row was pushed down with its row"
+    assert CORAL_CELLS(testIndex(tLastColumn, 0)) = 0, "so the new row has none"
+    end
+endtest
+
+
+` KNOWN FILL AND BOTTLES
+
+test known_fill_is_turned_down_for_a_bottle from fishBoard
+    grantMoveToSlot(ABILITY_INDEX_MOVE_KNOWN_FILL, 0)
+    MOVE_ABILITY_BINDINGS(0).movesLeft = 0
+    testPut(4, 4, TEX_BOTTLE)
+    tWasNext = CELLS(testIndex(5, 4)).value
+    testCursor(4, 4)
+    testQueueMove(1, 0, 1, 0)
+
+    runto _loop
+    runto _loop
+    runto _loop
+
+    assert CELLS(testIndex(4, 4)).value = TEX_BOTTLE, "the bottle is where it was"
+    assert CELLS(testIndex(5, 4)).value = tWasNext, "and so is the fish next to it"
+    assert MOVE_ABILITY_BINDINGS(0).movesLeft = 0, "the move was not used up"
+    assert CURRENT_MOVE_COUNT = 0, "and it was not a move"
+    end
+endtest
+
+test known_fill_is_turned_down_for_a_swap_onto_a_bottle from fishBoard
+    grantMoveToSlot(ABILITY_INDEX_MOVE_KNOWN_FILL, 0)
+    MOVE_ABILITY_BINDINGS(0).movesLeft = 0
+    testPut(5, 4, TEX_BOTTLE)
+    tWasHere = CELLS(testIndex(4, 4)).value
+    testCursor(4, 4)
+    testQueueMove(1, 0, 1, 0)
+
+    runto _loop
+    runto _loop
+    runto _loop
+
+    assert CELLS(testIndex(5, 4)).value = TEX_BOTTLE, "the bottle is where it was"
+    assert CELLS(testIndex(4, 4)).value = tWasHere, "and so is the fish that was under the cursor"
+    assert MOVE_ABILITY_BINDINGS(0).movesLeft = 0, "the move was not used up"
+    end
+endtest
+
+test known_fill_still_works_without_a_bottle from fishBoard
+    grantMoveToSlot(ABILITY_INDEX_MOVE_KNOWN_FILL, 0)
+    MOVE_ABILITY_BINDINGS(0).movesLeft = 0
+    tWasHere = CELLS(testIndex(4, 4)).value
+    testCursor(4, 4)
+    testQueueMove(1, 0, 1, 0)
+
+    runto _loop
+    runto _loop
+    runto _loop
+
+    assert CELLS(testIndex(5, 4)).value = tWasHere, "the fish was swapped"
+    assert MOVE_ABILITY_BINDINGS(0).movesLeft > 0, "and the move has to recharge"
+    end
+endtest
+
+
+` THE CODEC
+
+test codec_has_entries_for_coral_after_the_cards from fishBoard
+    assert CODEC_COUNT = CARD_LENGTH + 10, "every card, coral, horror coral, the two endings, three special fish, and three things that happen to a fish"
+    assert CODEC_ENTRY_JELLY = CARD_LENGTH + 4, "the special fish come after the endings"
+    assert CODEC_ENTRY_STACK = CARD_LENGTH + 9, "and stacked is last"
+    assert CODEC_ENTRY_REEF = CARD_LENGTH + 2, "the reef that was saved comes after those"
+    assert CODEC_ENTRY_ANCIENT = CARD_LENGTH + 3, "and the ancient one is last"
+    assert CODEC_ENTRY_CORAL = CARD_LENGTH, "coral comes after the cards"
+    assert CODEC_ENTRY_HORROR = CARD_LENGTH + 1, "and horror coral after that"
+    assert CODEC_SEEN(CODEC_ENTRY_CORAL) = 0, "coral is locked to begin with"
+    assert CODEC_SEEN(CODEC_ENTRY_HORROR) = 0, "and so is horror coral"
+    end
+endtest
+
+test codec_unlocks_what_is_on_the_board from fishBoard
+    assert CODEC_SEEN(CODEC_ENTRY_RAY) = 0, "the stingray is locked to begin with"
+    assert CODEC_SEEN(CODEC_ENTRY_BELLY) = 0, "and so is belly up"
+
+    testPut(0, 0, TEX_RAY)
+    CELLS(testIndex(2, 2)).bellyUp = 1
+    CELLS(testIndex(4, 4)).stack = 1
+    codecSeeBoard()
+
+    assert CODEC_SEEN(CODEC_ENTRY_RAY) = 1, "a stingray on the board is in the codec"
+    assert CODEC_SEEN(CODEC_ENTRY_BELLY) = 1, "and so is a fish that is belly up"
+    assert CODEC_SEEN(CODEC_ENTRY_STACK) = 1, "and one that is stacked"
+    assert CODEC_SEEN(CODEC_ENTRY_JELLY) = 0, "but not a jellyfish, when there is none"
+    assert CODEC_SEEN(CODEC_ENTRY_BOTTLE) = 0, "or a bottle"
+    assert CODEC_SEEN(CODEC_ENTRY_SKELETON) = 0, "or a skeleton"
+    end
+endtest
+
+test codec_unlocks_coral_when_some_grows from fishBoard
+    CORAL_CELLS(0) = 1
+    coralRecount()
+
+    assert CODEC_SEEN(CODEC_ENTRY_CORAL) = 1, "coral that has grown is in the codec"
+    assert CODEC_SEEN(CODEC_ENTRY_HORROR) = 0, "but horror coral is not, until there is some"
+    end
+endtest
+
+test codec_unlocks_horror_coral_on_its_own from fishBoard
+    CORAL_CELLS(0) = 1
+    CORAL_SICK(0) = 1
+    coralRecount()
+
+    assert CODEC_SEEN(CODEC_ENTRY_HORROR) = 1, "horror coral that has grown is in the codec"
+    assert CODEC_SEEN(CODEC_ENTRY_CORAL) = 0, "and coral is not, when all of it is horror coral"
+    end
+endtest
+
+
+` THE DOUBLE STING
+
+test second_sting_turns_a_belly_up_fish_into_a_skeleton from fishBoard
+    mock rnd
+    endmock 0
+    testPut(1, 1, TEX_JELLY)
+    testPut(2, 1, TEX_JELLY)
+    testPut(3, 1, TEX_JELLY)
+    CELLS(testIndex(2, 0)).bellyUp = 1
+    CELLS(testIndex(1, 0)).bellyUp = 2
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_spread
+
+    assert CELLS(testIndex(2, 0)).bellyUp = 2, "a belly up fish that is stung turns into a skeleton"
+    assert CELLS(testIndex(3, 0)).bellyUp = 1, "a fish that was fine only goes belly up"
+    assert CELLS(testIndex(1, 0)).bellyUp = 2, "and a skeleton stays a skeleton"
+    end
+endtest
+
+test stacked_jelly_stings_a_fish_to_the_bone from fishBoard
+    mock rnd
+    endmock 0
+    testPut(1, 1, TEX_JELLY)
+    testPut(2, 1, TEX_JELLY)
+    testPut(3, 1, TEX_JELLY)
+    CELLS(testIndex(2, 1)).stack = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_spread
+
+    assert CELLS(testIndex(2, 0)).bellyUp = 2, "two stings from the one stack make a skeleton"
+    assert CELLS(testIndex(1, 0)).bellyUp = 1, "the fish next to a jellyfish with no stack is only belly up"
+    assert CELLS(testIndex(2, 2)).bellyUp = 2, "the fish under the stack is a skeleton too"
+    end
+endtest
+
+test sting_that_lands_sends_a_bolt from fishBoard
+    mock rnd
+    endmock 0
+    testPut(4, 4, TEX_JELLY)
+    tZapsBefore = ZAP_LIVE
+
+    stingJelly(testIndex(4, 4), 0)
+
+    assert ZAP_LIVE = tZapsBefore + 4, "one bolt for each of the four fish around it"
+    end
+endtest
+
+
+` THE ENDINGS, IN THE CODEC AND ON THE OPTIONS PAGE
+
+test codec_unlocks_an_ending_when_it_is_reached from fishBoard
+    tWasReef = SURFACE_REEF
+    tWasAncient = SURFACE_ANCIENT
+    CODEC_SEEN(CODEC_ENTRY_REEF) = 0
+    CODEC_SEEN(CODEC_ENTRY_ANCIENT) = 0
+
+    coralEndingRemember(CORAL_ENDING_REEF)
+    assert CODEC_SEEN(CODEC_ENTRY_REEF) = 1, "saving the reef is in the codec"
+    assert CODEC_SEEN(CODEC_ENTRY_ANCIENT) = 0, "and the other ending is still locked"
+
+    coralEndingRemember(CORAL_ENDING_ANCIENT)
+    assert CODEC_SEEN(CODEC_ENTRY_ANCIENT) = 1, "summoning the ancient one is in the codec"
+
+    SURFACE_REEF = tWasReef
+    SURFACE_ANCIENT = tWasAncient
+    end
+endtest
+
+test options_page_only_has_what_the_menu_remembers from fishBoard
+    tWasReef = SURFACE_REEF
+    tWasAncient = SURFACE_ANCIENT
+
+    SURFACE_REEF = 0
+    SURFACE_ANCIENT = 0
+    setMenuPage(MENU_PAGE_OPTIONS)
+    tPlain = MENU_PAGE_LENGTH
+    tHasReef = 0
+    tHasMonster = 0
+    for tI = 0 to MENU_PAGE_LENGTH - 1
+        if MENU_PAGE_ITEMS(tI) = MENU_ITEM_SET_REEF then tHasReef = 1
+        if MENU_PAGE_ITEMS(tI) = MENU_ITEM_SET_MONSTER then tHasMonster = 1
+    next
+    assert tHasReef = 0, "no line for the reef before it has been saved"
+    assert tHasMonster = 0, "and none for the monster before it has been summoned"
+
+    SURFACE_REEF = 1
+    setMenuPage(MENU_PAGE_OPTIONS)
+    assert MENU_PAGE_LENGTH = tPlain + 1, "the reef gets a line once it is there"
+    assert MENU_PAGE_ITEMS(MENU_PAGE_LENGTH - 2) = MENU_ITEM_SET_REEF, "just above Back"
+    assert MENU_PAGE_ITEMS(MENU_PAGE_LENGTH - 1) = MENU_ITEM_SET_BACK, "and Back is still last"
+
+    SURFACE_ANCIENT = 1
+    setMenuPage(MENU_PAGE_OPTIONS)
+    assert MENU_PAGE_LENGTH = tPlain + 2, "and so does the monster"
+    assert MENU_PAGE_ITEMS(MENU_PAGE_LENGTH - 2) = MENU_ITEM_SET_MONSTER, "under the reef"
+
+    tWasOn = OPTION_MENU_MONSTER
+    changeMenuOption(MENU_ITEM_SET_MONSTER, 1)
+    assert OPTION_MENU_MONSTER = 1 - tWasOn, "picking the line turns the monster off or on"
+    changeMenuOption(MENU_ITEM_SET_MONSTER, 1)
+    assert OPTION_MENU_MONSTER = tWasOn, "and picking it again puts it back"
+
+    SURFACE_REEF = tWasReef
+    SURFACE_ANCIENT = tWasAncient
+    end
+endtest
+
+
+` THE STREAKS OF THE LISTEN CARD
+
+test hint_from_a_big_group_is_the_one_that_streaks from fishBoard
+    grantPassive(ABILITY_INDEX_LISTEN)
+
+    ` a hint that anything else brought
+    coralClearHint()
+    tMade = coralStartHint(0)
+    assert tMade = 1, "there is a hint"
+    assert CORAL_HINT_TRAIL_ON = 0, "but no big group of fish brought it, so it leaves no streaks"
+
+    ` and one that a big group of fish is owed
+    coralClearHint()
+    CORAL_HINT_DUE = 1
+    runto _loop
+    runto _loop
+    assert CORAL_HINT_DUE = 0, "the hint that was owed has set out"
+    assert CORAL_HINT_TRAIL_ON = 1, "and it is the kind that leaves streaks"
+
+    coralClearHint()
+    assert CORAL_HINT_TRAIL_ON = 0, "which is over when the hint is"
+    end
+endtest
+
+
+` THE DEBUG CARDS. see fish_routines_debug.
+
+test debug_gives_a_passive from fishBoard
+    debugGiveCard(ABILITY_INDEX_THINK_BIGGER, 0)
+    assert CARDS(ABILITY_INDEX_THINK_BIGGER).obtained = 1, "the passive is owned"
+    tPassives = PASSIVE_COUNT
+
+    debugGiveCard(ABILITY_INDEX_THINK_BIGGER, 0)
+    assert PASSIVE_COUNT = tPassives, "a passive that can only be taken once is not given twice"
+
+    debugGiveCard(ABILITY_INDEX_CONTAGIOUS_SMILE, 0)
+    debugGiveCard(ABILITY_INDEX_CONTAGIOUS_SMILE, 0)
+    assert CARDS(ABILITY_INDEX_CONTAGIOUS_SMILE).uses = 2, "one that stacks is taken once more every time"
+    end
+endtest
+
+test debug_puts_a_move_in_a_slot from fishBoard
+    debugGiveCard(ABILITY_INDEX_MOVE_BOMB3x3, 1)
+    assert MOVE_ABILITY_BINDINGS(1).assigned = 1, "the slot has a move in it"
+    assert MOVE_ABILITY_BINDINGS(1).abilityIndex = ABILITY_INDEX_MOVE_BOMB3x3, "and it is the one that was asked for"
+    assert MOVE_ABILITY_COUNT = 1, "that is one move"
+
+    ` another move into the same slot
+    debugGiveCard(ABILITY_INDEX_MOVE_CLONER, 1)
+    assert MOVE_ABILITY_BINDINGS(1).abilityIndex = ABILITY_INDEX_MOVE_CLONER, "the new move took its place"
+    assert CARDS(ABILITY_INDEX_MOVE_BOMB3x3).obtained = 0, "and the old one is not owned any more"
+    assert MOVE_ABILITY_COUNT = 1, "so it is still one move"
+
+    ` the same move into a different slot
+    debugGiveCard(ABILITY_INDEX_MOVE_CLONER, 0)
+    assert MOVE_ABILITY_BINDINGS(0).abilityIndex = ABILITY_INDEX_MOVE_CLONER, "the move is in its new slot"
+    assert MOVE_ABILITY_BINDINGS(1).assigned = 0, "and it is gone from the old one"
+    assert MOVE_ABILITY_COUNT = 1, "so it is still one move"
+
+    ` a slot that is not open
+    debugGiveCard(ABILITY_INDEX_MOVE_BOMB3x3, MOVE_SLOTS_OPEN)
+    assert CARDS(ABILITY_INDEX_MOVE_BOMB3x3).obtained = 0, "a slot that is not open gets nothing"
+    end
+endtest
+
+
+` A SWAP AS THE LAST STEP OF A PATTERN
+
+test coral_swap_can_be_the_last_step_of_a_pattern from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` up and left are walked, and the last step up is the swap
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+    coralSwapStepped(3, 5, 0, -1)
+
+    assert CORAL_PENDING_SLOT = 0, "the swap finished the pattern"
+    assert CORAL_PENDING_COUNT = 4, "over all four of its cells"
+    assert CORAL_PENDING_X(0) = 4, "starting from where the walk did"
+    assert CORAL_PENDING_Y(0) = 6, "starting from where the walk did"
+    assert CORAL_PENDING_X(3) = 3, "and ending on the cell that the swap went into"
+    assert CORAL_PENDING_Y(3) = 4, "and ending on the cell that the swap went into"
+    assert CORAL_TRAIL_COUNT = 0, "the steps are forgotten, the same as after any swap"
+    end
+endtest
+
+test coral_swap_from_the_end_of_a_pattern_still_works from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+    coralCursorStepped(3, 5, 0, -1)
+    coralSwapStepped(3, 4, 1, 0)
+
+    assert CORAL_PENDING_SLOT = 0, "the whole pattern was walked, and then the swap was made"
+    assert CORAL_PENDING_COUNT = 4, "so it is the four cells of the walk"
+    assert CORAL_PENDING_X(3) = 3, "ending where the swap was made from, and not where it went"
+    assert CORAL_PENDING_Y(3) = 4, "ending where the swap was made from, and not where it went"
+    end
+endtest
+
+test coral_swap_as_the_wrong_last_step_is_not_the_pattern from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` up and left are walked, but the swap goes left again, where the pattern goes up
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+    coralSwapStepped(3, 5, -1, 0)
+
+    assert CORAL_PENDING_SLOT = -1, "a swap that goes the wrong way does not finish the pattern"
+    end
+endtest
+
+test coral_swap_as_the_last_step_grows_coral from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` the swap up into the last cell of the walk makes three in a row there
+    testPut(1, 4, 6)
+    testPut(2, 4, 6)
+    testPut(3, 5, 6)
+    testCursor(4, 6)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the swap popped something"
+    assert CORAL_COUNT = 4, "and coral grew on the four cells of the pattern"
+    assert CORAL_CELLS(testIndex(4, 6)) = 1, "where the walk started"
+    assert CORAL_CELLS(testIndex(3, 5)) = 1, "where the swap was made from"
+    assert CORAL_CELLS(testIndex(3, 4)) = 1, "and where it went"
+    end
+endtest
+
+
+` THE LUCKY TRAIL OF THE LISTEN CARD
+
+test listen_lucky_hint_leaves_a_trail from fishBoard
+    grantPassive(ABILITY_INDEX_LISTEN)
+
+    ` every roll comes up: the wave of the current brings a hint, and the hint is a lucky one
+    mock rnd
+    endmock 0
+    coralClearHint()
+    CORAL_HINT_ROLLED = -1
+    runto _loop
+    runto _loop
+
+    assert CORAL_HINT_START_MS >= 0, "a hint came on its own"
+    assert CORAL_HINT_TRAIL_ON = 1, "and it was a lucky one, so it leaves a trail"
+    end
+endtest
+
+test listen_unlucky_hint_leaves_no_trail from fishBoard
+    grantPassive(ABILITY_INDEX_LISTEN)
+
+    ` the first roll brings the hint, and the second one is the luck, which does not come up
+    global tLuckRolls = 0
+    mock rnd
+        tLuckRolls = tLuckRolls + 1
+        tLuckRoll = 0
+        if tLuckRolls = 2
+            tLuckRoll = 50
+        endif
+    endmock tLuckRoll
+    coralClearHint()
+    CORAL_HINT_ROLLED = -1
+    runto _loop
+    runto _loop
+
+    assert CORAL_HINT_START_MS >= 0, "a hint came on its own"
+    assert CORAL_HINT_TRAIL_ON = 0, "but it was not a lucky one, so it leaves no trail"
+    end
+endtest
+
+test listen_hint_without_the_card_is_never_lucky from fishBoard
+    mock rnd
+    endmock 0
+    coralClearHint()
+    CORAL_HINT_ROLLED = -1
+    runto _loop
+    runto _loop
+
+    assert CORAL_HINT_START_MS >= 0, "a hint came on its own"
+    assert CORAL_HINT_TRAIL_ON = 0, "and without the card there is no trail, whatever the luck"
+    end
+endtest

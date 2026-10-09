@@ -83,10 +83,14 @@ save_game:
     next
 
     ` the board. everything about a cell is packed into one number: the kind of fish, then
-    ` how many are stacked behind it, then whether it is belly up.
+    ` how many are stacked behind it, then whether it is belly up, then whether the cell has coral on it:
+    ` 1 for coral, and 2 for horror coral.
     for saveI = 0 to CELL_COUNT - 1
-        set pref SAVE_PREF_CELLS + saveI, CELLS(saveI).value + CELLS(saveI).stack * 100 + CELLS(saveI).bellyUp * 100000
+        set pref SAVE_PREF_CELLS + saveI, CELLS(saveI).value + CELLS(saveI).stack * 100 + CELLS(saveI).bellyUp * 100000 + CORAL_CELLS(saveI) * (1 + CORAL_SICK(saveI)) * 1000000
     next
+
+    ` the hidden patterns. see CORAL in fish_headers.
+    coralSave()
 
     end pref batch
 
@@ -140,10 +144,17 @@ load_game:
         loadPacked = get pref(SAVE_PREF_CELLS + saveI, 1)
         CELLS(saveI).value = loadPacked mod 100
         CELLS(saveI).stack = (loadPacked / 100) mod 1000
-        CELLS(saveI).bellyUp = loadPacked / 100000
+        CELLS(saveI).bellyUp = (loadPacked / 100000) mod 10
+        CELLS(saveI).bellyShown# = CELLS(saveI).bellyUp * 3.14159 `it is over already, and a skeleton is all the way around
+        loadCoral = loadPacked / 1000000
+        CORAL_CELLS(saveI) = 0
+        CORAL_SICK(saveI) = 0
+        if loadCoral > 0 then CORAL_CELLS(saveI) = 1
+        if loadCoral > 1 then CORAL_SICK(saveI) = 1
         updateCell(CELLS(saveI))
         set sprite alpha CELLS(saveI).spriteId, 255
     next
+    coralLoad()
 
     SELECTION_POS.x = get pref(SAVE_PREF + 11)
     SELECTION_POS.y = get pref(SAVE_PREF + 12)
@@ -258,6 +269,7 @@ function saveSignature()
     signature = signature + CELL_COUNT * 3 + PASSIVE_COUNT * 17 + MOVE_ABILITY_COUNT * 19
     signature = signature + PENDING_FREE_MOVES * 23 + PENDING_BOARD_EXPANSIONS * 29 + REQUEST_ABILITY_SELECTION * 31
     signature = signature + SCORE_MULTIPLIER * 41 + MULT_PROGRESS * 43 + GAME_LOG_COUNT * 61
+    signature = signature + CORAL_COUNT * 67 + CORAL_CASTS * 71
     for i = 0 to CARD_LENGTH - 1
         signature = signature + CARDS(i).uses * (37 + i)
     next

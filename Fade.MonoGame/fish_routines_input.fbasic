@@ -167,6 +167,21 @@ process_input:
                 endif
             endif
 
+            ` "known fill" does not work on a bottle. when either fish of the swap is one, the move is
+            ` not used, and its row shakes to say so. the cursor still moves, the same as above.
+            if moveAbility.moveValue = [MOVE_KNOWN_FILL]
+                if moveAbility.movesLeft <= 0
+                    fillBottle = 0
+                    if CELLS(getCellIndex(SELECTION_POS)).value = TEX_BOTTLE then fillBottle = 1
+                    if CELLS(getCellIndex(target)).value = TEX_BOTTLE then fillBottle = 1
+                    if fillBottle
+                        create basic tween MOVE_ABILITY_BINDINGS(move.moveBindingIndex).useShakeTweenId, 1, 0, 500, 0
+                        liveStarted = startLiveMove(swapDir.x, swapDir.y, 0)
+                        return
+                    endif
+                endif
+            endif
+
             if moveAbility.movesLeft <= 0
                 usedAbility = 1
                 print "FOUND MOVE", moveAbility.moveValue
@@ -242,6 +257,9 @@ process_input:
         endif
 
         ` only a special move gets to here. it stopped the game until it had played out.
+
+        ` a special move is not a step of a hidden pattern, so the steps so far are forgotten. see CORAL in fish_headers.
+        coralTrailClear()
 
         REQUEST_COMBO_CHECK = 1
 

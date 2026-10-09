@@ -53,6 +53,10 @@
 
         <ProjectReference Include="..\Fade.MonoGame.Lib\Fade.MonoGame.Lib.csproj" />
 
+        <!-- Steam: FadeSteamCommands, and the SteamSystem that Program.cs registers.
+             See steam/SETUP.md, "Steamworks API". -->
+        <ProjectReference Include="..\Fade.MonoGame.Steam\Fade.MonoGame.Steam.csproj" />
+
         <!-- Debug desktop: the content pipeline, injected into Game.Services in
              Program.cs (under FADE_CONTENT_HOTRELOAD) so the engine builds +
              hot-reloads assets in-process. Same seam the dotnet-new template uses. -->
@@ -68,6 +72,9 @@
 
         <FadeCommand Include="FadeBasic.Lib.Standard" FullName="FadeBasic.Lib.Standard.StandardCommands" />
         <FadeCommand Include="Fade.MonoGame.Lib" FullName="Fade.MonoGame.Lib.FadeMonoGameCommands" />
+        <!-- Must be mirrored in the CommandCollection in Program.cs, which is what the
+             Debug runtime compile uses. -->
+        <FadeCommand Include="Fade.MonoGame.Steam" FullName="Fade.MonoGame.Steam.FadeSteamCommands" />
         
         
         
@@ -192,15 +199,81 @@
         <FadeSource Include="fish_routines_highscores.fbasic" />
         <FadeSource Include="fish_routines_codec.fbasic" />
         <FadeSource Include="fish_routines_bubbles.fbasic" />
+        <FadeSource Include="fish_routines_zap.fbasic" />
+        <FadeSource Include="fish_routines_coralbars.fbasic" />
+        <FadeSource Include="fish_routines_debug.fbasic" />
         <FadeSource Include="fish_routines_multiplier.fbasic" />
+        <FadeSource Include="fish_routines_coral.fbasic" />
         <FadeSource Include="fish_routines_music.fbasic" />
 
 
         <FadeSource Include="fish_funcs.fbasic" />
         <FadeSource Include="fish_types.fbasic" />
+        <FadeSource Include="fish_tests.fbasic" />
         <!-- <FadeSource Include="game.fbasic" /> -->
     </ItemGroup>
     
+    <!-- THE LEADERBOARDS: which ones this build uses, and the secret that it checks scores with.
+         Program.cs reads both back and hands them to the SteamSystem.
+
+         Two environment variables decide it, and the Steam workflow sets both:
+           FISH_SCORE_KEY       a GitHub secret, so it is in a shipped build and nowhere in the source
+           FISH_DEPLOY_BRANCH   the Steam branch that the build is for: "default", "test" or "none"
+
+         A build for the default branch uses the "live_" leaderboards. A build for any other
+         branch uses that branch's own: "test_". Each checks its scores with the secret and the
+         name of the branch together, so a score from one branch also fails the check of the
+         other. "none" is an upload that is set live by hand later, and it counts as "test".
+
+         A build without the secret, which is every build on a dev machine, uses the "dev_"
+         leaderboards with a key that is no secret at all.
+
+         The secret should be letters and digits only: it passes through MSBuild, which gives
+         a meaning to % and ; and $. -->
+    <PropertyGroup>
+        <FishScoreSecret Condition="'$(FishScoreSecret)' == ''">$(FISH_SCORE_KEY)</FishScoreSecret>
+        <FishDeployBranch Condition="'$(FishDeployBranch)' == ''">$(FISH_DEPLOY_BRANCH)</FishDeployBranch>
+        <FishDeployBranch Condition="'$(FishDeployBranch)' == '' OR '$(FishDeployBranch)' == 'none'">test</FishDeployBranch>
+
+        <FishLeaderboardPrefix>dev_</FishLeaderboardPrefix>
+        <FishScoreKey>dev</FishScoreKey>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(FishScoreSecret)' != ''">
+        <FishLeaderboardPrefix>$(FishDeployBranch)_</FishLeaderboardPrefix>
+        <FishLeaderboardPrefix Condition="'$(FishDeployBranch)' == 'default'">live_</FishLeaderboardPrefix>
+        <FishScoreKey>$(FishScoreSecret).$(FishDeployBranch)</FishScoreKey>
+    </PropertyGroup>
+    <!-- Which commit a build was made from, for the version in the corner of the main menu.
+         GITHUB_SHA is an environment variable that GitHub Actions sets, so a CI build has it
+         and a build on a dev machine does not, and says "local". Program.cs reads it. -->
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+            <_Parameter1>BuildCommit</_Parameter1>
+            <_Parameter2>$(GITHUB_SHA)</_Parameter2>
+        </AssemblyAttribute>
+    </ItemGroup>
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+            <_Parameter1>LeaderboardPrefix</_Parameter1>
+            <_Parameter2>$(FishLeaderboardPrefix)</_Parameter2>
+        </AssemblyAttribute>
+        <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+            <_Parameter1>ScoreKey</_Parameter1>
+            <_Parameter2>$(FishScoreKey)</_Parameter2>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+    <!-- Says which Steam game a build that was NOT started by Steam is: one line, the app id.
+         It is not in git, and a CI build never has one, so it cannot reach a depot. It must
+         not: with it, the game starts without a license. Without it, a build on a dev machine
+         simply runs with no Steam. -->
+    <ItemGroup Condition="Exists('steam_appid.txt')">
+        <None Remove="steam_appid.txt" />
+        <Content Include="steam_appid.txt">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
     <ItemGroup>
       <Folder Include="Launch\" />
     </ItemGroup>

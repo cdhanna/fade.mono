@@ -20,9 +20,9 @@ type cell
     stack `how many more fish are stacked up behind this one
     stackShown# `how many fish are being drawn. it chases stack + 1, so that a new one slides out.
     stackPopMs `while the fish is popping, when the next fish of its stack goes
-    bellyUp `1 when the fish is floating upside down. see BOTTOMS UP in fish_headers.
+    bellyUp `1 when the fish is floating upside down. see BOTTOMS UP in fish_headers. 2 when it is a skeleton. see SKELETONS.
     bellyShown# `how far over it is being drawn, in radians. it chases the real thing, so that the fish rolls over.
-    stings `1 when a jellyfish is popping here, and has not stung the fish next to it yet. see JELLIES in fish_headers.
+    stings `how many times the jellyfish that is popping here has yet to sting the fish next to it. a stack stings once each. see JELLIES in fish_headers.
     bottleDue `1 when the fish that is popping here leaves a bottle behind. see BOTTLES in fish_headers.
 endtype
 
@@ -148,6 +148,7 @@ type abilityChoice
     titleTextId
     typeTextId
     descTextId
+    slotTextId `the line above a move card that says how many slots are empty. see handle_ability_selection.
 
     spriteId
     artSpriteId
@@ -215,6 +216,7 @@ type floatBubble
     loud `1 if it makes a sound when it pops
     alpha `255 for a solid bubble, and less for a faint one
     star `1 if it is a sparkle and not a bubble. a sparkle twinkles where it is, and does not float up or pop.
+    heart `1 if it is a heart and not a bubble. a heart fades in and out, and drifts up slowly without a sound.
 endtype
 
 ` a ring that spreads across the board and tilts the fish as it passes. see SHOCKWAVES in fish_headers.

@@ -28,6 +28,32 @@ remstart
 
     all of this is drawn into the menu's render target, in place of the list of the menu, the same
     way that the credits are.
+
+    THE SCORES ON STEAM
+    every table has a leaderboard on Steam, too. a third row of tabs, on top of the other two, says
+    whose scores are showing: the ones made on this machine, the ones of the player's friends on
+    Steam, or everybody's. the tables on this machine work the same with or without Steam.
+
+    when a game ends, it is sent to the leaderboard of its table, whether or not it got onto the
+    table on this machine. Steam keeps one score for a player on a leaderboard, their best.
+
+    Steam puts scores in order by one number, so a game is sent as its moves times 1000, plus 999
+    less its multiplier. fewer moves always wins, and of two games with the same moves, the one with
+    the higher multiplier is the lower number. everything else about the game goes into the 64 extra
+    numbers that Steam keeps with a score: the initials, the multiplier, and the log of upgrades.
+    THE SCORES ON STEAM in fish_headers says which bits are what. a log of 100 upgrades does not
+    fit as 100 numbers, so every upgrade is written as its card and how many moves it came after
+    the one before it, in as few bits as the biggest of those gaps needs.
+
+    every score also carries a check, which Steam's commands work out from the score and a secret
+    that the game was built with. a score that fails it was not made by the game, and is left out.
+    that is why more of everybody's scores are asked for than the table has rows.
+
+    the scores that come back are unpacked into one more table, after the six real ones, so that the
+    same code draws them. the column of initials shows the player's name on Steam instead.
+
+    nothing on Steam answers straight away. asking only starts it, and highscore_online_poll, which
+    runs on every frame that a table is up, fills the table in when the answer is there.
 remend
 
 
@@ -55,16 +81,36 @@ setup_highscores:
         loadHighscoreTable(hsTable)
     next
 
+    ` the leaderboard of every table, on Steam. table n has leaderboard n + 1. one that is not there
+    ` yet is made, with the lowest score at the top. without Steam, none of this does anything.
+    for hsTable = 0 to HISCORE_TABLE_COUNT - 1
+        hsBoardName$ = "normal_"
+        if hsTable mod 2 = 1 then hsBoardName$ = "zen_"
+        hsBoardLength = hsTable / 2
+        if hsBoardLength = GAME_LENGTH_SHORT then hsBoardName$ = hsBoardName$ + "short"
+        if hsBoardLength = GAME_LENGTH_REGULAR then hsBoardName$ = hsBoardName$ + "regular"
+        if hsBoardLength = GAME_LENGTH_LONG then hsBoardName$ = hsBoardName$ + "long"
+        steam leaderboard hsTable + 1, hsBoardName$, 1
+        set steam leaderboard check hsTable + 1, STEAM_DETAIL_CHECK
+    next
+    clearOnlineTable()
+
     hsPanelX = (WORLD_WIDTH - HISCORE_WIDTH) / 2
 
-    ` the tabs. the modes are the top row, and the lengths are the row that sits on the table.
+    ` the tabs. whose scores they are is the top row, the modes are under that, and the lengths are
+    ` the row that sits on the table.
     createHighscoreTab(0, hsPanelX, 149, "Normal")
     createHighscoreTab(1, hsPanelX + 151, 149, "Zen")
     createHighscoreTab(2, hsPanelX, 98, "Short")
     createHighscoreTab(3, hsPanelX + 101, 98, "Regular")
     createHighscoreTab(4, hsPanelX + 202, 98, "Long")
+    createHighscoreTab(5, hsPanelX, 98, "Local")
+    createHighscoreTab(6, hsPanelX + 101, 98, "Friends")
+    createHighscoreTab(7, hsPanelX + 202, 98, "Global")
 
     HISCORE_NOTE_TEXT_ID = createHighscoreText(WORLD_WIDTH / 2, 0, 16, "note")
+    HISCORE_STATUS_TEXT_ID = createHighscoreText(WORLD_WIDTH / 2, HISCORE_TOP + 24 + 3 * HISCORE_ROW_HEIGHT, 16, "status")
+    color text HISCORE_STATUS_TEXT_ID, rgb(150, 190, 255)
 
     ` the columns. every row has a text in each of them, and the initials are a text for every letter.
     ` chr$ makes a letter out of a number. putting that straight onto a text works, but joining three of
@@ -77,8 +123,24 @@ setup_highscores:
         color text HISCORE_HEAD_TEXTS(hsI), rgb(64, 128, 255)
     next
 
+    ` the badges, for the games that ended with one of the two endings of the hidden game. see HISCORE_BADGE_STEP in fish_headers.
+    texture reserve texture id(TEX_BADGE_CORAL), "Fish/Textures/badge_coral"
+    texture reserve texture id(TEX_BADGE_TENTACLE), "Fish/Textures/badge_tentacle"
+
     for hsI = 0 to HISCORE_ROWS - 1
         hsRowY = HISCORE_TOP + 24 + hsI * HISCORE_ROW_HEIGHT
+
+        ` the badge goes in between the place and the initials
+        hsBadgeId = 0
+        reserve sprite id(hsBadgeId)
+        sprite hsBadgeId, hsPanelX + 54, hsRowY + 1, TEX_BADGE_CORAL
+        set sprite offset hsBadgeId, 0, 0
+        size sprite hsBadgeId, 16, 16
+        order sprite hsBadgeId, ORDER_MENU_TEXT
+        set sprite render target hsBadgeId, TARGET_MENU
+        hide sprite hsBadgeId
+        HISCORE_BADGE_SPRITES(hsI) = hsBadgeId
+
         HISCORE_CELL_TEXTS(hsI * 6) = createHighscoreText(hsPanelX + 34, hsRowY, 20, "1")
         HISCORE_CELL_TEXTS(hsI * 6 + 1) = createHighscoreText(hsPanelX + 90, hsRowY, 20, "A")
         HISCORE_CELL_TEXTS(hsI * 6 + 2) = createHighscoreText(hsPanelX + 100, hsRowY, 20, "A")
@@ -156,6 +218,8 @@ menu_run_highscores:
     hsLoopTabs = 1
     hsLoopNote = 0
     hsFocus = 0
+    HISCORE_SCOPE = HISCORE_SCOPE_LOCAL
+    requestOnlineScores(hsLoopTable)
 
     gosub highscore_table_open
     gosub highscore_table_loop
@@ -190,10 +254,12 @@ return
 
 
 ` the table is showing. let the player look around it until they back out with the pause button.
-` hsFocus is what the outline is on: 0 is the row of tabs for the modes, 1 is the row of tabs for the
-` lengths, and from 2 on it is a row of the table. up and down move it.
+` hsFocus is what the outline is on: -1 is the row of tabs that says whose scores they are, 0 is the
+` row of tabs for the modes, 1 is the row of tabs for the lengths, and from 2 on it is a row of the
+` table. up and down move it.
 ` on a row of tabs, left and right change the tab, and so the table. hsLoopTabs is 0 when the table
-` cannot be changed, and then the outline stays on the rows of the table.
+` cannot be changed for another kind of game, and then the outline skips those two rows of tabs.
+` whose scores they are can always be changed.
 ` on a row of the table, the confirm button shows the upgrades of that game.
 highscore_table_loop:
     do
@@ -204,19 +270,25 @@ highscore_table_loop:
         if new action down(ACT_PAUSE) then exit
 
         hsLoopChanged = 0
+        hsLoopAsk = 0
         hsLoopStep = 0
         if new action down(ACT_DOWN) then hsLoopStep = 1
         if new action down(ACT_UP) then hsLoopStep = -1
         if hsLoopStep <> 0
-            hsFocusFirst = 2
-            if hsLoopTabs then hsFocusFirst = 0
             hsFocus = hsFocus + hsLoopStep
-            if hsFocus > HISCORE_ROWS + 1 then hsFocus = hsFocusFirst
-            if hsFocus < hsFocusFirst then hsFocus = HISCORE_ROWS + 1
+            if hsLoopTabs = 0
+                ` over the two rows of tabs that cannot be changed
+                if hsFocus = 0 or hsFocus = 1
+                    hsFocus = -1
+                    if hsLoopStep > 0 then hsFocus = 2
+                endif
+            endif
+            if hsFocus > HISCORE_ROWS + 1 then hsFocus = -1
+            if hsFocus < -1 then hsFocus = HISCORE_ROWS + 1
             hsLoopChanged = 1
         endif
 
-        ` left and right change the tab on a row of tabs. both rows go around at the ends.
+        ` left and right change the tab on a row of tabs. all three rows go around at the ends.
         hsLoopStep = 0
         if new action down(ACT_RIGHT) then hsLoopStep = 1
         if new action down(ACT_LEFT) then hsLoopStep = -1
@@ -224,22 +296,37 @@ highscore_table_loop:
             if hsFocus < 2
                 hsLoopZen = hsLoopTable mod 2
                 hsLoopLength = hsLoopTable / 2
+                if hsFocus = -1
+                    HISCORE_SCOPE = HISCORE_SCOPE + hsLoopStep
+                    if HISCORE_SCOPE > HISCORE_SCOPE_GLOBAL then HISCORE_SCOPE = HISCORE_SCOPE_LOCAL
+                    if HISCORE_SCOPE < HISCORE_SCOPE_LOCAL then HISCORE_SCOPE = HISCORE_SCOPE_GLOBAL
+                endif
                 if hsFocus = 0
                     hsLoopZen = 1 - hsLoopZen
-                else
+                endif
+                if hsFocus = 1
                     hsLoopLength = hsLoopLength + hsLoopStep
                     if hsLoopLength > GAME_LENGTH_LONG then hsLoopLength = GAME_LENGTH_SHORT
                     if hsLoopLength < GAME_LENGTH_SHORT then hsLoopLength = GAME_LENGTH_LONG
                 endif
                 hsLoopTable = getHighscoreTable(hsLoopLength, hsLoopZen)
                 hsLoopChanged = 1
+                hsLoopAsk = 1
             endif
         endif
+
+        ` a different table, or somebody else's scores, has to be asked for from Steam
+        if hsLoopAsk
+            requestOnlineScores(hsLoopTable)
+        endif
+
+        ` and what was asked for is put on the table when it gets here
+        gosub highscore_online_poll
 
         ` the upgrades of the game on the row. a row that nobody has taken has no game to show.
         if new action down(ACT_CONFIRM)
             if hsFocus >= 2
-                hsDetailIndex = hsLoopTable * HISCORE_ROWS + (hsFocus - 2)
+                hsDetailIndex = getShownHighscoreTable(hsLoopTable) * HISCORE_ROWS + (hsFocus - 2)
                 if HISCORE_MOVES(hsDetailIndex) < HISCORE_EMPTY_MOVES
                     gosub highscore_details
                     gosub highscore_table_open
@@ -402,12 +489,16 @@ highscore_game_end:
     ` the game goes on its table, if it is good enough. the table is only saved when it has changed.
     hsEndPlace = -1
     if hsEndTable >= 0
-        hsEndPlace = insertHighscore(hsEndTable, hsPacked, CURRENT_MOVE_COUNT, BEST_MULTIPLIER)
+        ` a game that ended with one of the two endings of the hidden game takes its badge with it
+        hsEndPlace = insertHighscore(hsEndTable, hsPacked + CORAL_ENDING * HISCORE_BADGE_STEP, CURRENT_MOVE_COUNT, BEST_MULTIPLIER)
         if hsEndPlace >= 0
             ` the upgrades that were picked go onto the table with it
             takeGameLog(hsEndTable * HISCORE_ROWS + hsEndPlace)
             saveHighscoreTable(hsEndTable)
         endif
+
+        ` and it goes to Steam, whether or not it got onto the table here. see THE SCORES ON STEAM.
+        sendGameToSteam(hsEndTable, hsPacked)
     endif
 
     ` the game is over and it has been counted, so it must not be there to carry on with. if it were, then
@@ -423,6 +514,8 @@ highscore_game_end:
     hsLoopTabs = 0
     hsLoopNote = 1
     hsFocus = 2
+    HISCORE_SCOPE = HISCORE_SCOPE_LOCAL
+    requestOnlineScores(hsLoopTable)
     if hsEndPlace >= 0
         hsFocus = hsEndPlace + 2
         hsNote$ = "A new high score! Number " + str$(hsEndPlace + 1) + " of " + str$(HISCORE_ROWS) + "."
@@ -430,6 +523,16 @@ highscore_game_end:
     else
         hsNote$ = "Not a high score this time: " + str$(CURRENT_MOVE_COUNT) + " moves, and a multiplier of x" + str$(BEST_MULTIPLIER) + "."
         hsNoteColor = rgb(150, 190, 255)
+    endif
+
+    ` a game that ended with one of the two endings of the hidden game says so
+    if CORAL_ENDING = CORAL_ENDING_REEF
+        hsNote$ = "You saved the reef, in " + str$(CURRENT_MOVE_COUNT) + " moves."
+        hsNoteColor = rgb(255, 170, 185)
+    endif
+    if CORAL_ENDING = CORAL_ENDING_ANCIENT
+        hsNote$ = "You summoned the ancient one, in " + str$(CURRENT_MOVE_COUNT) + " moves."
+        hsNoteColor = rgb(200, 150, 255)
     endif
 
     gosub highscore_table_open
@@ -445,6 +548,33 @@ frame_highscores:
     endif
 
     gosub frame_menu_render
+return
+
+
+` Steam answers when it answers. this runs on every frame that a table is up, and puts the scores that
+` were asked for onto the table once they are there. see THE SCORES ON STEAM, at the top of this file.
+highscore_online_poll:
+
+    ` a game that was on its way has landed, so the scores that are showing may be missing it
+    if HISCORE_SEND_BOARD > 0
+        if steam submit state(HISCORE_SEND_BOARD) > 1
+            hsPollBoard = HISCORE_SEND_BOARD
+            HISCORE_SEND_BOARD = 0
+            if HISCORE_ONLINE_BOARD = hsPollBoard
+                requestOnlineScores(hsLoopTable)
+            endif
+        endif
+    endif
+
+    ` the table is filled in again whenever what Steam says about the scores has changed
+    if HISCORE_ONLINE_BOARD > 0
+        hsPollState = steam scores state(HISCORE_ONLINE_BOARD)
+        if hsPollState <> HISCORE_ONLINE_STATE
+            HISCORE_ONLINE_STATE = hsPollState
+            fillOnlineTable(HISCORE_ONLINE_BOARD)
+            refreshHighscoreTable(hsLoopTable, hsLoopMarked, hsFocus)
+        endif
+    endif
 return
 
 
@@ -466,6 +596,21 @@ endfunction
 
 ` three letters, as numbers from 0 (A) to 25 (Z), packed into one number. the first letter is worth
 ` the most, the way that the first digit of a number is.
+` which badge the row of a game has: 0 for none, or one of the CORAL_ENDING constants. it is kept in
+` the same number as the initials. see HISCORE_BADGE_STEP in fish_headers.
+function getScoreBadge(packedName)
+    scoreBadge = 0
+    if packedName > 0 then scoreBadge = packedName / HISCORE_BADGE_STEP
+    if scoreBadge > CORAL_ENDING_ANCIENT then scoreBadge = 0
+endfunction scoreBadge
+
+` and the initials that are in that number, without the badge, packed the way that packInitials packs them
+function getScoreInitials(packedName)
+    scoreInitials = 0
+    if packedName > 0 then scoreInitials = packedName mod HISCORE_BADGE_STEP
+    if scoreInitials > 17575 then scoreInitials = 0
+endfunction scoreInitials
+
 function packInitials(first, second, third)
     packed = first * 676 + second * 26 + third
 endfunction packed
@@ -505,6 +650,179 @@ endfunction tableIndex
 function getHighscorePref(tableIndex)
     prefIndex = HISCORE_PREF + tableIndex * 100
 endfunction prefIndex
+
+
+` which table the rows on the screen are read from. the scores from Steam are in a table of their own.
+function getShownHighscoreTable(tableIndex)
+    shownTable = tableIndex
+    if HISCORE_SCOPE <> HISCORE_SCOPE_LOCAL then shownTable = HISCORE_ONLINE_TABLE
+endfunction shownTable
+
+
+` empty the table that the scores from Steam are written into
+function clearOnlineTable()
+    stmFirst = HISCORE_ONLINE_TABLE * HISCORE_ROWS
+    for i = 0 to HISCORE_ROWS - 1
+        HISCORE_NAMES(stmFirst + i) = 0
+        HISCORE_MOVES(stmFirst + i) = HISCORE_EMPTY_MOVES
+        HISCORE_MULTS(stmFirst + i) = 0
+        HISCORE_LOGS((stmFirst + i) * HISCORE_LOG_STRIDE) = 0
+        HISCORE_ONLINE_ROWS(i) = -1
+    next
+    HISCORE_ONLINE_COUNT = 0
+    HISCORE_ONLINE_ME = -1
+endfunction
+
+
+` ask Steam for the scores of a table: the friends', or everybody's, whichever the top row of tabs
+` says. the scores made on this machine need no asking. highscore_online_poll puts them on the table.
+function requestOnlineScores(tableIndex)
+    clearOnlineTable()
+    HISCORE_ONLINE_BOARD = 0
+    HISCORE_ONLINE_STATE = -1
+
+    if HISCORE_SCOPE <> HISCORE_SCOPE_LOCAL
+        HISCORE_ONLINE_BOARD = tableIndex + 1
+        if HISCORE_SCOPE = HISCORE_SCOPE_FRIENDS
+            load steam friend scores HISCORE_ONLINE_BOARD
+        else
+            ` more than the table has rows, because the ones that fail their check are left out
+            load steam scores HISCORE_ONLINE_BOARD, 1, STEAM_GLOBAL_FETCH
+        endif
+    endif
+endfunction
+
+
+` write the scores that Steam sent back for a leaderboard into their table, best first, until it is
+` full. a score that fails its check, or that this version of the game cannot read, is left out.
+function fillOnlineTable(boardId)
+    clearOnlineTable()
+    stmFirst = HISCORE_ONLINE_TABLE * HISCORE_ROWS
+
+    stmFound = 0
+    if steam scores state(boardId) = 2
+        stmFound = steam score count(boardId)
+    endif
+    if stmFound > 0
+        for stmRow = 0 to stmFound - 1
+            if HISCORE_ONLINE_COUNT < HISCORE_ROWS
+                stmGood = steam score checked(boardId, stmRow)
+                stmVersion = steam score bits(boardId, stmRow, STEAM_BIT_VERSION, 4)
+                if stmVersion <> STEAM_PACK_VERSION then stmGood = 0
+                stmMoves = steam score(boardId, stmRow) / 1000
+                if stmMoves < 1 or stmMoves >= HISCORE_EMPTY_MOVES then stmGood = 0
+
+                if stmGood
+                    unpackSteamScore(boardId, stmRow, stmFirst + HISCORE_ONLINE_COUNT)
+                    HISCORE_ONLINE_ROWS(HISCORE_ONLINE_COUNT) = stmRow
+                    stmMine = steam score is me(boardId, stmRow)
+                    if stmMine then HISCORE_ONLINE_ME = HISCORE_ONLINE_COUNT
+                    HISCORE_ONLINE_COUNT = HISCORE_ONLINE_COUNT + 1
+                endif
+            endif
+        next
+    endif
+endfunction
+
+
+` turn one of the scores that Steam sent back into an entry of a table, with its log of upgrades.
+` this is sendGameToSteam, backwards.
+function unpackSteamScore(boardId, steamRow, scoreIndex)
+    stmInitials = steam score bits(boardId, steamRow, STEAM_BIT_INITIALS, 15)
+    if stmInitials > 17575 then stmInitials = 0
+    stmMult = steam score detail(boardId, steamRow, STEAM_DETAIL_MULT)
+    if stmMult < 0 then stmMult = 0
+
+    ` which ending the game had is the first two of the flags
+    stmBadge = steam score bits(boardId, steamRow, STEAM_DETAIL_FLAGS * 32, 2)
+    if stmBadge > CORAL_ENDING_ANCIENT then stmBadge = 0
+    if stmBadge < 0 then stmBadge = 0
+
+    HISCORE_NAMES(scoreIndex) = stmInitials + stmBadge * HISCORE_BADGE_STEP
+    HISCORE_MOVES(scoreIndex) = steam score(boardId, steamRow) / 1000
+    HISCORE_MULTS(scoreIndex) = stmMult
+
+    ` the log. every upgrade is its card, and how many moves it came after the one before it.
+    stmLogCount = steam score bits(boardId, steamRow, STEAM_BIT_LOG_COUNT, 7)
+    if stmLogCount > HISCORE_LOG_MAX then stmLogCount = HISCORE_LOG_MAX
+    stmGapBits = steam score bits(boardId, steamRow, STEAM_BIT_GAP_WIDTH, 4)
+    if stmGapBits > STEAM_GAP_BITS_MAX then stmLogCount = 0
+
+    stmLogStart = scoreIndex * HISCORE_LOG_STRIDE
+    HISCORE_LOGS(stmLogStart) = stmLogCount
+    if stmLogCount > 0
+        stmBit = STEAM_BIT_LOG
+        stmMove = 0
+        for k = 1 to stmLogCount
+            stmCard = steam score bits(boardId, steamRow, stmBit, STEAM_CARD_BITS)
+            stmGap = 0
+            if stmGapBits > 0
+                stmGap = steam score bits(boardId, steamRow, stmBit + STEAM_CARD_BITS, stmGapBits)
+            endif
+            stmMove = stmMove + stmGap
+            HISCORE_LOGS(stmLogStart + k) = stmMove * 100 + stmCard
+            stmBit = stmBit + STEAM_CARD_BITS + stmGapBits
+        next
+    endif
+endfunction
+
+
+` send the game that has just ended to the leaderboard of its table. see THE SCORES ON STEAM, at
+` the top of this file, for how it is packed. without Steam, this does nothing.
+function sendGameToSteam(tableIndex, packedName)
+    sendBoard = tableIndex + 1
+
+    ` how far apart the upgrades are, in moves, and how many bits the biggest of those gaps needs
+    sendWidest = 0
+    sendLast = 0
+    if GAME_LOG_COUNT > 0
+        for i = 0 to GAME_LOG_COUNT - 1
+            sendGap = GAME_LOG(i) / 100 - sendLast
+            if sendGap < 0 then sendGap = 0
+            if sendGap > 8191 then sendGap = 8191
+            if sendGap > sendWidest then sendWidest = sendGap
+            sendLast = sendLast + sendGap
+        next
+    endif
+    sendGapBits = 1
+    sendHolds = 2
+    while sendHolds <= sendWidest
+        sendHolds = sendHolds * 2
+        sendGapBits = sendGapBits + 1
+    endwhile
+
+    clear steam score details
+    set steam score bits STEAM_BIT_VERSION, 4, STEAM_PACK_VERSION
+    set steam score bits STEAM_BIT_INITIALS, 15, packedName
+    set steam score bits STEAM_BIT_LOG_COUNT, 7, GAME_LOG_COUNT
+    set steam score bits STEAM_BIT_GAP_WIDTH, 4, sendGapBits
+    set steam score detail STEAM_DETAIL_MULT, BEST_MULTIPLIER
+    set steam score detail STEAM_DETAIL_SEED, 0
+    set steam score detail STEAM_DETAIL_FLAGS, CORAL_ENDING `which of the two endings of the hidden game it had, or 0. the other flags are 0.
+    set steam score detail STEAM_DETAIL_SPARE, 0
+
+    sendBit = STEAM_BIT_LOG
+    sendLast = 0
+    if GAME_LOG_COUNT > 0
+        for i = 0 to GAME_LOG_COUNT - 1
+            sendGap = GAME_LOG(i) / 100 - sendLast
+            if sendGap < 0 then sendGap = 0
+            if sendGap > 8191 then sendGap = 8191
+            sendLast = sendLast + sendGap
+
+            set steam score bits sendBit, STEAM_CARD_BITS, GAME_LOG(i) mod 100
+            set steam score bits sendBit + STEAM_CARD_BITS, sendGapBits, sendGap
+            sendBit = sendBit + STEAM_CARD_BITS + sendGapBits
+        next
+    endif
+
+    ` fewer moves is a lower score, and of two games with the same moves, the higher multiplier is lower
+    sendMult = BEST_MULTIPLIER
+    if sendMult > 999 then sendMult = 999
+    if sendMult < 0 then sendMult = 0
+    submit steam score sendBoard, CURRENT_MOVE_COUNT * 1000 + (999 - sendMult)
+    HISCORE_SEND_BOARD = sendBoard
+endfunction
 
 
 ` write down that an upgrade was picked, on the move that the game is up to. see THE LOG OF UPGRADES in fish_headers.
@@ -723,16 +1041,20 @@ endfunction
 
 
 function hideHighscoreTexts()
-    for i = 0 to 4
+    for i = 0 to 7
         hide text HISCORE_TAB_TEXTS(i)
         hide sprite HISCORE_TAB_SPRITES(i)
     next
     hide text HISCORE_NOTE_TEXT_ID
+    hide text HISCORE_STATUS_TEXT_ID
     for i = 0 to 3
         hide text HISCORE_HEAD_TEXTS(i)
     next
     for i = 0 to HISCORE_ROWS * 6 - 1
         hide text HISCORE_CELL_TEXTS(i)
+    next
+    for i = 0 to HISCORE_ROWS - 1
+        hide sprite HISCORE_BADGE_SPRITES(i)
     next
     for i = 0 to 2
         hide text HISCORE_LETTER_TEXTS(i)
@@ -760,7 +1082,7 @@ function openHighscoreTable(tableIndex, markedRow, cursorAt)
     set text MENU_TITLE_TEXT_ID, "Highscores"
     size text y MENU_TITLE_TEXT_ID, 36
 
-    for i = 0 to 4
+    for i = 0 to 7
         show text HISCORE_TAB_TEXTS(i)
         show sprite HISCORE_TAB_SPRITES(i)
     next
@@ -779,13 +1101,52 @@ endfunction
 
 ` write a table onto the rows, and light up its tabs. the row at markedRow is the game that was just
 ` added, so it is gold. -1 is none of them.
-` cursorAt is what the outline goes around: 0 is the lit tab of the modes, 1 is the lit tab of the lengths,
-` and from 2 on it is a row of the table, which is white. -1 is nothing.
+` cursorAt is what the outline goes around: -1 is the lit tab of whose scores they are, 0 is the lit tab
+` of the modes, 1 is the lit tab of the lengths, and from 2 on it is a row of the table, which is white.
 function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
-    firstEntry = tableIndex * HISCORE_ROWS
+
+    ` the scores from Steam are in a table of their own. the row that is gold there is the player's own.
+    isOnline = 0
+    if HISCORE_SCOPE <> HISCORE_SCOPE_LOCAL then isOnline = 1
+    if isOnline then markedRow = HISCORE_ONLINE_ME
+    firstEntry = getShownHighscoreTable(tableIndex) * HISCORE_ROWS
+
+    ` with nothing from Steam to show, the rows are left blank, and a line says why
+    statusWords$ = ""
+    hasStatus = 0
+    if isOnline
+        if HISCORE_ONLINE_COUNT = 0
+            hasStatus = 1
+            statusWords$ = "Loading..."
+            if HISCORE_ONLINE_STATE = 2
+                statusWords$ = "Nobody has a score here yet."
+                if HISCORE_SCOPE = HISCORE_SCOPE_FRIENDS then statusWords$ = "No scores from you or your friends yet."
+            endif
+            if HISCORE_ONLINE_STATE = 3
+                statusWords$ = "Could not reach Steam."
+                if steam available() = 0 then statusWords$ = "Steam is not running."
+            endif
+        endif
+    endif
+    set text HISCORE_STATUS_TEXT_ID, statusWords$
+    if hasStatus
+        show text HISCORE_STATUS_TEXT_ID
+    else
+        hide text HISCORE_STATUS_TEXT_ID
+    endif
+
+    if isOnline
+        set text HISCORE_HEAD_TEXTS(1), "Player"
+    else
+        set text HISCORE_HEAD_TEXTS(1), "Initials"
+    endif
+
     for i = 0 to HISCORE_ROWS - 1
         scoreIndex = firstEntry + i
         cellText = i * 6
+
+        ` only a game that ended with one of the two endings of the hidden game has a badge
+        hide sprite HISCORE_BADGE_SPRITES(i)
 
         ` the place, the three letters of the initials, the moves, and the multiplier
         set text HISCORE_CELL_TEXTS(cellText), str$(i + 1)
@@ -793,15 +1154,43 @@ function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
             for col = 1 to 5
                 set text HISCORE_CELL_TEXTS(cellText + col), "-"
             next
+            ` a name is one text and not three letters, so an empty row gets one dash for it
+            if isOnline
+                set text HISCORE_CELL_TEXTS(cellText + 1), ""
+                set text HISCORE_CELL_TEXTS(cellText + 3), ""
+            endif
+            if hasStatus
+                for col = 0 to 5
+                    set text HISCORE_CELL_TEXTS(cellText + col), ""
+                next
+            endif
         else
-            packed = HISCORE_NAMES(scoreIndex)
-            if packed < 0 or packed > 17575 then packed = 0
+            packed = getScoreInitials(HISCORE_NAMES(scoreIndex))
+            rowBadge = getScoreBadge(HISCORE_NAMES(scoreIndex))
+            if rowBadge = CORAL_ENDING_REEF
+                set sprite texture HISCORE_BADGE_SPRITES(i), TEX_BADGE_CORAL
+                color sprite HISCORE_BADGE_SPRITES(i), rgb(255, 140, 155)
+                show sprite HISCORE_BADGE_SPRITES(i)
+            endif
+            if rowBadge = CORAL_ENDING_ANCIENT
+                set sprite texture HISCORE_BADGE_SPRITES(i), TEX_BADGE_TENTACLE
+                color sprite HISCORE_BADGE_SPRITES(i), rgb(190, 130, 255)
+                show sprite HISCORE_BADGE_SPRITES(i)
+            endif
             firstLetter = packed / 676
             secondLetter = (packed / 26) mod 26
             thirdLetter = packed mod 26
             set text HISCORE_CELL_TEXTS(cellText + 1), chr$(65 + firstLetter)
             set text HISCORE_CELL_TEXTS(cellText + 2), chr$(65 + secondLetter)
             set text HISCORE_CELL_TEXTS(cellText + 3), chr$(65 + thirdLetter)
+
+            ` a score from Steam shows the player's name there, on the text of the middle letter.
+            ` only the plain letters of it, because that is all that the font has.
+            if isOnline
+                set text HISCORE_CELL_TEXTS(cellText + 1), ""
+                set text HISCORE_CELL_TEXTS(cellText + 2), steam score plain name$(HISCORE_ONLINE_BOARD, HISCORE_ONLINE_ROWS(i), 10)
+                set text HISCORE_CELL_TEXTS(cellText + 3), ""
+            endif
             set text HISCORE_CELL_TEXTS(cellText + 4), str$(HISCORE_MOVES(scoreIndex))
             set text HISCORE_CELL_TEXTS(cellText + 5), "x" + str$(HISCORE_MULTS(scoreIndex))
         endif
@@ -818,12 +1207,16 @@ function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
     tableX = (WORLD_WIDTH - HISCORE_WIDTH) / 2
     litMode = tableIndex mod 2
     litLength = tableIndex / 2
-    for i = 0 to 4
+    for i = 0 to 7
         isLit = 0
         if i < 2
             if i = litMode then isLit = 1
-        else
+        endif
+        if i >= 2 and i < 5
             if i = litLength + 2 then isLit = 1
+        endif
+        if i >= 5
+            if i = HISCORE_SCOPE + 5 then isLit = 1
         endif
 
         if isLit
@@ -849,15 +1242,20 @@ function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
         HISCORE_CURSOR_ON = 1
         movePageOutline(HISCORE_CURSOR, tableX + litLength * 101, getHighscoreTabY(2), 98, HISCORE_TAB_HEIGHT)
     endif
+    if cursorAt = -1
+        HISCORE_CURSOR_ON = 1
+        movePageOutline(HISCORE_CURSOR, tableX + HISCORE_SCOPE * 101, getHighscoreTabY(5), 98, HISCORE_TAB_HEIGHT)
+    endif
     showInfoBorder(HISCORE_CURSOR, HISCORE_CURSOR_ON)
 endfunction
 
 
-` how far down the screen a tab is. the row of the lengths sits right on top of the table, and the row
-` of the modes sits on top of that.
+` how far down the screen a tab is. the row of the lengths sits right on top of the table, the row
+` of the modes sits on top of that, and the row that says whose scores they are sits on top of that.
 function getHighscoreTabY(tabIndex)
     tabY = HISCORE_TOP - HISCORE_TAB_HEIGHT
     if tabIndex < 2 then tabY = tabY - (HISCORE_TAB_HEIGHT + 2)
+    if tabIndex >= 5 then tabY = tabY - (HISCORE_TAB_HEIGHT + 2) * 2
 endfunction tabY
 
 
@@ -926,8 +1324,7 @@ function openHighscoreDetails(scoreIndex, place)
     size text y MENU_TITLE_TEXT_ID, 36
 
     ` whose game it is, and how it did. the initials are the letters from the page where they are entered.
-    packed = HISCORE_NAMES(scoreIndex)
-    if packed < 0 or packed > 17575 then packed = 0
+    packed = getScoreInitials(HISCORE_NAMES(scoreIndex))
     firstLetter = packed / 676
     secondLetter = (packed / 26) mod 26
     thirdLetter = packed mod 26

@@ -195,6 +195,32 @@ public class TextureSystem
 #endif
     }
     
+    /// <summary>
+    /// Make a texture out of pixels that did not come from a content file: an image that was
+    /// downloaded, or drawn in code. Four bytes for every pixel, in the order red, green, blue,
+    /// alpha, a row at a time from the top. The alpha is straight, not premultiplied.
+    ///
+    /// A texture id that already has a texture gets the new one in its place. Returns false,
+    /// and leaves the id alone, when the pixels do not fit the size.
+    /// </summary>
+    public static bool LoadTextureFromPixels(int textureId, int width, int height, byte[] rgba)
+    {
+        if (width <= 0 || height <= 0 || rgba == null || rgba.Length < width * height * 4)
+        {
+            Console.Error.WriteLine($"[fade] texture {textureId} was given {rgba?.Length ?? 0} bytes for {width} x {height} pixels");
+            return false;
+        }
+
+        var texture = new Texture2D(GameSystem.game.GraphicsDevice, width, height, false, SurfaceFormat.Color);
+        texture.SetData(rgba, 0, width * height * 4);
+
+        GetTextureIndex(textureId, out var index, out var runtimeTex);
+        runtimeTex.descriptor = new TextureDescriptor();
+        runtimeTex.SetComputedTexture(texture);
+        textures[index] = runtimeTex;
+        return true;
+    }
+
     public static void LoadSpriteFontFromContent(int fontId, string path)
     {
         var xnaFont = GameSystem.game.Content.Load<SpriteFontXna>(path);

@@ -7,42 +7,6 @@ if is os mac()
     SCREEN_HEIGHT = display height() * .5 - 75
 endif
 
-test sampleTest
-    waitSeconds = 2
-    gosub runforseconds
-
-    ` the game opens on the main menu, and the test is about the game
-    skipMainMenu()
-
-    ` force a combo by setting the first 3 cells to the same value...
-    CELLS(1).value = CELLS(0).value
-    CELLS(2).value = CELLS(0).value
-    updateCell(CELLS(1))
-    updateCell(CELLS(2))
-
-    waitSeconds = 1
-    gosub runforseconds
-
-    REQUEST_COMBO_CHECK = 1
-    assert CURRENT_SCORE = 0 ` assert there is no score at the start.
-
-    waitSeconds = 2
-    gosub runforseconds
-
-    ` assert that score was awarded for the combo
-    assert CURRENT_SCORE > 0
-    
-    end `end the test
-    runForSeconds:
-        endFrame = frame number() + (60 * waitSeconds)
-        while frame number() <= endFrame
-            runto _loop
-        endwhile
-    return
-endtest
-
-
-
 set screen size SCREEN_WIDTH, SCREEN_HEIGHT
 `set fullscreen 1
 ` sprite 100, 0, 0, 0
@@ -111,6 +75,7 @@ gosub setup_selection
 gosub setup_swap_tweens
 gosub setup_score
 gosub setup_multiplier
+gosub setup_coral
 gosub setup_passives
 gosub setup_moves
 gosub setup_ability_selection
@@ -124,6 +89,7 @@ gosub setup_seabed `before the menu, because the menu draws frames as soon as it
 gosub setup_menu
 gosub setup_upgrade_wipe `this uses the menu's effect, and the cards and rows of the upgrade screen
 gosub setup_float_bubbles `these use the bubble effect, which the menu loads
+gosub setup_zaps
 
 
 
@@ -175,6 +141,9 @@ do
             endif
 
             ` when the last round has been won, the game is over
+            ` the hidden game has two endings of its own, and each of them ends the game. see THE TWO ENDINGS in fish_headers.
+            gosub handle_coral_ending
+
             gosub handle_game_end
 
         endif

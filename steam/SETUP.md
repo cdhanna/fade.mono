@@ -30,6 +30,7 @@ Budget about an hour, most of it waiting on Steamworks.
 | Builder account `config.vdf`, base64 | GitHub secret `STEAM_CONFIG_VDF` | required |
 | Cloudflare R2 token (read only) | GitHub secret `CLOUDFLARE_API_TOKEN` | required |
 | Cloudflare account id | GitHub secret `CLOUDFLARE_ACCOUNT_ID` | required |
+| Leaderboard score key, made up by you | GitHub secret `FISH_SCORE_KEY` | required to deploy (see "Leaderboards") |
 | R2 bucket name | `build/assets-config.sh`, `build/push-assets.ps1`, `build/fetch-assets.ps1` (all three say `fish-game-assets`) | only if you pick another name |
 | macOS bundle id | `BUNDLE_ID` in `build/make-macos-app.sh` (`com.fishfishpop.game`) | optional |
 
@@ -102,6 +103,7 @@ for.
 |---|---|
 | Changed, added or deleted art, audio or fonts | `.\build\push-assets.ps1`, then commit `build/assets.lock` |
 | Cloned the repo, or pulled a commit with a new lock | `.\build\fetch-assets.ps1` |
+| Cloned the repo, or pulled a commit that changes `build/steamworks.lock` | `.\build\fetch-steamworks.ps1` |
 | Want to drop local files that are not in the bundle | `.\build\fetch-assets.ps1 -Clean` |
 
 A build fails with a message naming `fetch-assets` if the folders are missing. `fetch-assets`
@@ -284,12 +286,105 @@ Not checked, because it needs your accounts or other hardware:
   inside the `.app`, that the OpenGL shaders behave on Apple Silicon, and that saving works.
 - `build/push-assets.sh` (the non-Windows push) was not run; this machine has no `zip`.
 
+## The Steamworks API
+
+The game links the Steam API through `Fade.MonoGame.Steam`, which gives the Fade program
+the `steam ...` commands: who is playing, achievements, stats, leaderboards, rich presence
+and the overlay. `Program.cs` registers a `SteamSystem`, which starts Steam before the first
+frame and pumps it once a frame.
+
+**Steam is optional at runtime.** Started outside Steam, or with the Steam client closed,
+the game still runs: `steam available()` is 0 and every other Steam command does nothing.
+`log.txt` says why, on a line that starts with `[steam]`.
+
+**After cloning the repo**, fetch the Steamworks wrapper once, or nothing builds:
+
+```powershell
+.\build\fetch-steamworks.ps1
+```
+
+It clones [Facepunch.Steamworks](https://github.com/Facepunch/Facepunch.Steamworks) into
+`External/`, which is not in git, at the commit in `build/steamworks.lock`. The workflow
+runs the `.sh` twin. To move to a newer version, change the commit in the lock and run it
+again. The native Steam libraries come from that same checkout, so they always match.
+
+**To use Steam in a build that you start yourself**, the build has to be told which game
+it is. Steam tells a game that it launches; a build from `dotnet run` gets it from a file:
+
+```powershell
+Set-Content Fade.MonoGame\steam_appid.txt YOUR_APP_ID
+```
+
+The file is ignored by git and is copied next to the executable when it exists. The Steam
+client has to be running, logged in to an account that owns the game. Without the file a
+local build runs with no Steam, which is fine for everything that is not a Steam feature.
+
+> **`steam_appid.txt` must never reach a depot.** With it, the game starts without a
+> license. A CI build never has one, and the workflow fails if one turns up in a payload.
+
+What ships: `Facepunch.Steamworks.Win64.dll` and `steam_api64.dll` on Windows,
+`Facepunch.Steamworks.Posix.dll` and `libsteam_api.dylib` (in `Contents/MacOS`) on macOS.
+The workflow checks for all four.
+
+Not verified: Steam has only been started from a Windows build. The macOS build gets the
+right files, but whether it loads `libsteam_api.dylib` from inside the `.app` has not been
+tried on a Mac.
+
+---
+
+## Leaderboards
+
+Every highscore table has a leaderboard on Steam, and the Highscores page has a row of tabs
+for whose scores to show: **Local**, **Friends** or **Global**. A game that ends is sent to
+the leaderboard of its table. The game makes a leaderboard the first time it needs it, so
+there is nothing to create in Steamworks.
+
+**Which leaderboards a build uses depends on where it was built:**
+
+| Build | Leaderboards | Score key |
+|---|---|---|
+| The workflow, **set_live** = `default` | `live_normal_short`, `live_zen_long`, ... | the secret + `.default` |
+| The workflow, **set_live** = `test` or `none` | `test_normal_short`, `test_zen_long`, ... | the secret + `.test` |
+| Anything else: a dev machine, or the workflow without the `FISH_SCORE_KEY` secret | `dev_normal_short`, `dev_zen_long`, ... | the word `dev` |
+
+So scores from a dev machine or from the `test` branch never show up for players, and a
+score from one kind of build also fails the check of the others.
+
+> **A build belongs to the branch it was built for.** Setting a `test` build live on
+> `default` by hand in Steamworks gives players the `test_` leaderboards. To release, run
+> the workflow again with **set_live** = `default`. The same goes for `none`, which builds
+> as `test`: that includes the manual step when there is no `STEAM_PUBLISHER_KEY`, where a
+> `default` run is safe to set live by hand but a `none` run is not.
+
+**Set the key once**, before the first deploy that has leaderboards. Make it up, 16 or more
+letters and digits, and add it as the GitHub secret `FISH_SCORE_KEY`:
+
+```powershell
+-join ((48..57) + (65..90) + (97..122) | Get-Random -Count 40 | ForEach-Object { [char]$_ })
+```
+
+The workflow refuses to deploy without it. **Do not change it afterwards**: every score is
+signed with it, and a build with a new key hides every score that was made with the old one.
+Keep a copy somewhere safe, because GitHub will not show it to you again.
+
+**What the key is for.** Anyone can post any number to a Steam leaderboard with a tool. Every
+score that the game sends carries a check that is worked out from the score, the player, the
+leaderboard and the key, and the game leaves out the scores whose check is wrong. It does not
+stop someone who takes the game apart to find the key.
+
+**Moderating.** The game can only hide a bad score, not remove it. To remove one, or to see
+every score: Steamworks, **App Admin, Stats & Achievements, Leaderboards**. To empty the
+`dev_` leaderboards, delete them there; the next dev build makes them again.
+
+How a game is packed into a score is written up at the top of
+`Fade.MonoGame/fish_routines_highscores.fbasic`, under THE SCORES ON STEAM.
+
+---
+
 ## Things you may want later
 
 - **Steam Cloud**: Auto-Cloud can sync `prefs.json` with no code. Windows root
   `WinAppDataRoaming`, macOS root `MacAppSupport`, subdirectory `FishFishPop` for both.
-- **Steamworks API**: the game does not link the Steam API, so no achievements or rich
-  presence, and it also runs when started outside Steam. Nothing above depends on it.
 - **Intel Macs**: only Apple Silicon is built. Intel needs a second publish with
   `-r osx-x64` and its own bundle.
 - **macOS icon**: the bundle has no `.icns`, so it shows the generic app icon in the Dock.
@@ -306,6 +401,14 @@ committed.
 Run `push-assets` again and commit the lock.
 
 **`Fade.MonoGame/Assets/Fish/Textures is missing`** on a local build: run `fetch-assets`.
+
+**`Facepunch.Steamworks is missing`**, or restore cannot find
+`Facepunch.Steamworks.Win64.csproj`: run `fetch-steamworks`.
+
+**The game runs but Steam features do nothing**: look for the `[steam]` line near the top of
+`log.txt`. "No Steam app id" means the game was started outside Steam with no
+`steam_appid.txt`. "Steam could not start" means the client is closed, or the account does
+not own the game.
 
 **Login asks for a Steam Guard code in CI, or `Two-factor code mismatch`**: the saved login
 did not carry over or has expired. Redo step 3, and make sure the second local login was

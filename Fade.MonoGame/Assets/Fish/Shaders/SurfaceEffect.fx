@@ -21,6 +21,12 @@ float3 Boat;     // the middle of the boat's hull, its waterline, and half of ho
 
 float Day;       // which colors to use. 0 is the sun going down, and 1 is the middle of the day.
 
+// what the main menu remembers of the hidden game. see THE MAIN MENU REMEMBERS in fish_headers.
+// x is not used any more. the reefs of the main menu are drawn by ReefEffect.fx, on sprites of their own.
+// y is 1 once the ancient one has been summoned, and then it is out on the horizon, coming toward the boat.
+float2 Endings;
+float Coming;    // how far it has come, from 0 (where it sets out from) to 1 (which it never gets to)
+
 // every color has two versions, one for each time of day. the first is for the evening.
 #define PICK(evening, day) lerp(evening, day, Day)
 
@@ -49,6 +55,47 @@ float Day;       // which colors to use. 0 is the sun going down, and 1 is the m
 #define FoamColor   PICK(float3(0.560, 0.700, 1.000), float3(0.880, 0.960, 1.000))
 #define HullColor   PICK(float3(0.055, 0.063, 0.133), float3(0.740, 0.840, 0.920))
 
+// THE THING ON THE HORIZON. where it sets out from and where it is headed for, across the screen in
+// pixels, and how many times as big as its picture it is at each. the boat is at about 450, and the
+// menu is in the middle of the screen, so it keeps to the left of that, where the sun is.
+#define THING_FROM 26.0
+#define THING_TO 122.0
+#define THING_SMALL 0.45
+#define THING_BIG 1.0
+#define ThingColor  PICK(float3(0.016, 0.008, 0.030), float3(0.014, 0.020, 0.040))
+
+// THE DARK BEHIND IT. there is a hole in the sky behind the thing, and it stands in the mouth of it. what
+// is in the hole is another sky: deep blue and violet, with a swirl of stars and dust in it that turns.
+// it is not black. the thing is, so it is darker than the night that it came out of.
+// the hole has no edge. it is torn, and what is in it leaks out into the sky around it in wisps, which
+// drift. the hole grows as the thing comes.
+//   RIFT_SIZE    about how far it is from the middle of the hole to where it gives out, in the pixels of the thing's picture
+//   RIFT_UP      how far above the sea the middle of the hole is, the same way
+//   RIFT_TORN    how ragged the edge of it is. 0 is a clean circle, and 1 is torn to shreds.
+//   RIFT_WISP    how big the wisps are, in pixels
+//   RIFT_DRIFT   how fast the wisps drift
+// while the thing is there, the sky is darker toward the side that it is on. and in the day, the sky
+// is not blue. it is a dark, sick green, the sea is green under it, and the sun is a hole like the one
+// behind the thing, with the same other sky in it.
+//   SICK_SKY     how much of the color of the sky in the day is the sick green, from 0 to 1
+//   SICK_LEFT    how much darker the left edge of the sky is than the right, from 0 to 1
+#define SICK_SKY 0.92
+#define SICK_LEFT 0.62
+#define SickHigh    float3(0.020, 0.070, 0.040)
+#define SickLow     float3(0.210, 0.300, 0.110)
+#define SickCloud   float3(0.085, 0.150, 0.075)
+#define RIFT_SIZE 62.0
+#define RIFT_UP 20.0
+#define RIFT_TORN 0.8
+#define RIFT_WISP 17.0
+#define RIFT_DRIFT 2.6
+#define RIFT_LIT 0.10 // how wide the lit edge of the hole is. more is wider.
+#define RiftSpace   float3(0.070, 0.045, 0.180)
+#define RiftWarm    float3(0.420, 0.100, 0.440)
+#define RiftCold    float3(0.080, 0.240, 0.520)
+#define RiftRing    PICK(float3(1.000, 0.560, 0.300), float3(0.860, 0.700, 1.000))
+#define ThingEye    PICK(float3(1.000, 0.780, 0.300), float3(0.950, 0.900, 0.450))
+
 // a number from 0 to 1 that is different for every pixel. the usual one-liner that is built on sin()
 // leaves streaks and rows that can be seen in a field of stars, and this one does not.
 float hash(float2 p)
@@ -63,6 +110,106 @@ float bands(float v, float count, float2 px)
 {
 	float checker = frac((px.x + px.y) * 0.5) * 2.0;
 	return floor(v * count + checker * 0.5) / count;
+}
+
+// smooth clouds, from 0 to 1. `p` is in pixels, and a cloud is `size` pixels across.
+float clouds(float2 p, float size, float seed)
+{
+	float2 q = p / size;
+	float2 i = floor(q);
+	float2 f = frac(q);
+	f = f * f * (3.0 - 2.0 * f);
+	float top = lerp(hash(i + seed), hash(i + float2(1.0, 0.0) + seed), f.x);
+	float low = lerp(hash(i + float2(0.0, 1.0) + seed), hash(i + float2(1.0, 1.0) + seed), f.x);
+	return lerp(top, low, f.y);
+}
+
+// a smooth line of bumps
+float bumps1(float x, float seed)
+{
+	float i = floor(x);
+	float f = frac(x);
+	f = f * f * (3.0 - 2.0 * f);
+	return lerp(hash(float2(i, seed)), hash(float2(i + 1.0, seed)), f);
+}
+
+// the thing on the horizon. rgb is its color on this pixel, and a is 1 if it is on this pixel.
+// it is a long way off, so it is only a dark shape, the color of the haze, with two eyes. the head
+// of it is a dome that stands out of the sea, and tentacles stand out of the sea around it and wave.
+// it gets bigger as it comes.
+float4 thing(float2 px)
+{
+	float big = lerp(THING_SMALL, THING_BIG, Coming);
+	float2 at = float2(lerp(THING_FROM, THING_TO, Coming), Horizon + 3.0 + sin(Time * 0.45) * 1.5);
+	float2 p = (px - at) / big;
+
+	// the head, which is not quite round. it has a brow.
+	float head = step(length(p * float2(1.0 / 34.0, 1.0 / 29.0)), 1.0);
+	head = max(head, step(length((p - float2(-9.0, -19.0)) * float2(1.0 / 18.0, 1.0 / 15.0)), 1.0));
+
+	// the tentacles. up is how far above the sea this pixel is, in the pixels of its picture.
+	float up = (Horizon - px.y) / big;
+	float arms = 0.0;
+	float2 arm = float2(-66.0, 46.0);
+	float sway = sin(up * 0.085 + Time * 0.8 + 1.0) * 6.0 * saturate(up / arm.y);
+	arms = max(arms, step(abs(p.x - arm.x - sway), lerp(4.6, 0.8, saturate(up / arm.y))) * step(up, arm.y));
+	arm = float2(-47.0, 30.0);
+	sway = sin(up * 0.110 - Time * 0.7 + 2.3) * 5.0 * saturate(up / arm.y);
+	arms = max(arms, step(abs(p.x - arm.x - sway), lerp(3.8, 0.8, saturate(up / arm.y))) * step(up, arm.y));
+	arm = float2(46.0, 36.0);
+	sway = sin(up * 0.095 + Time * 0.9 + 4.1) * 5.5 * saturate(up / arm.y);
+	arms = max(arms, step(abs(p.x - arm.x - sway), lerp(4.0, 0.8, saturate(up / arm.y))) * step(up, arm.y));
+	arm = float2(64.0, 54.0);
+	sway = sin(up * 0.075 - Time * 0.6 + 0.4) * 7.0 * saturate(up / arm.y);
+	arms = max(arms, step(abs(p.x - arm.x - sway), lerp(5.0, 0.8, saturate(up / arm.y))) * step(up, arm.y));
+	arm = float2(88.0, 26.0);
+	sway = sin(up * 0.120 + Time * 1.0 + 5.2) * 4.0 * saturate(up / arm.y);
+	arms = max(arms, step(abs(p.x - arm.x - sway), lerp(3.4, 0.8, saturate(up / arm.y))) * step(up, arm.y));
+
+	// the hole in the sky behind it. see THE DARK BEHIND IT, further up.
+	float2 q = p - float2(0.0, -RIFT_UP);
+	float out0 = length(q * float2(1.0, 1.12));
+	float around = atan2(q.y, q.x);
+	float spiral = 0.5 + 0.5 * cos(around * 2.0 - log(max(out0, 1.0)) * 4.5 + Time * 0.35);
+	spiral = spiral * spiral * spiral;
+	float dust = 0.5 + 0.5 * sin(q.x * 0.13 + sin(q.y * 0.17 + Time * 0.2) * 2.0);
+	float3 hole = RiftSpace + lerp(RiftWarm, RiftCold, dust) * bands(spiral * saturate(1.15 - out0 / RIFT_SIZE), 5.0, px);
+
+	// everything that is looked up by where a pixel is, is looked up by where it is from the horizon,
+	// and not by where it is on the screen. the horizon goes up the screen when the camera goes under,
+	// and the stars and the torn edge have to go with it, or they would crawl over the hole.
+	float2 skyPx = float2(px.x, px.y - floor(Horizon));
+	hole += step(0.972 - 0.02 * spiral, hash(skyPx + 17.0)) * (0.4 + 0.6 * hash(skyPx + 3.0)) * (0.7 + 0.3 * sin(Time * 2.0 + hash(skyPx + 7.0) * 40.0));
+
+	// how much of the hole there is on this pixel. it is whole in the middle, and it gives out toward
+	// the edge, sooner in some places than in others, so the edge is torn. the wisps of it that are
+	// past the edge drift outward, and up.
+	float2 wispAt = skyPx - q * 0.25 + float2(Time * RIFT_DRIFT * 0.6, Time * RIFT_DRIFT);
+	float torn = clouds(wispAt, RIFT_WISP, 23.0) * 0.6 + clouds(wispAt * 1.9, RIFT_WISP, 47.0) * 0.4;
+	float much = (1.25 - out0 / RIFT_SIZE) * 1.6 + (torn - 0.5) * 2.4 * RIFT_TORN;
+
+	// the edge of it is sharp: a pixel is in the hole, or it is not. the very edge is lit, where it is tearing.
+	float inHole = step(0.5, much);
+	hole = lerp(hole, RiftRing, step(much, 0.5 + RIFT_LIT) * 0.7);
+	float3 dark = hole;
+
+	// only what is above the sea shows
+	float above = step(px.y, Horizon);
+	float there = max(head, arms) * above;
+
+	// the thing itself is as dark as the hole. it is only seen because of what is behind it.
+	float3 color = ThingColor;
+
+	// its eyes, which are narrow, and which it shuts now and then
+	float open = step(0.07, frac(Time * 0.13));
+	float eyes = step(length((p - float2(-13.0, -11.0)) * float2(1.0 / 5.0, 1.0 / 1.6)), 1.0)
+	           + step(length((p - float2(10.0, -10.0)) * float2(1.0 / 5.0, 1.0 / 1.6)), 1.0);
+	color = lerp(color, ThingEye, saturate(eyes) * open * head);
+
+	// the hole, and then the thing, standing in the mouth of it
+	float4 seen = float4(dark, inHole * above);
+	seen = float4(lerp(seen.rgb, color, there), max(seen.a, there));
+	return seen;
 }
 
 float3 sky(float2 px)
@@ -109,7 +256,11 @@ float3 sky(float2 px)
 	float2 sunPos = float2(SunX, Horizon - SunHeight);
 	float sunDist = length(px - sunPos);
 	float glow = bands(saturate(1.0 - sunDist / 150.0), 8.0, px);
-	color += SunGlow * glow * glow;
+
+	// in the day, with the thing there, the sky is a dark, sick green. see THE DARK BEHIND IT, further up.
+	float sick = Endings.y * Day;
+	color = lerp(color, lerp(SickLow, SickHigh, smoothstep(0.0, 0.75, h)), sick * SICK_SKY);
+	color += SunGlow * glow * glow * (1.0 - 0.75 * sick);
 
 	// long thin clouds, drifting. the bottom edge of a cloud is another color: in the evening the sun
 	// lights it from underneath, and in the day that is where its shadow is.
@@ -118,11 +269,23 @@ float3 sky(float2 px)
 	float cloudBand = saturate(1.0 - abs((Horizon - px.y) - 78.0) / 46.0);
 	float cloudHere = step(1.62 - cloudBand * 0.95, cloud);
 	float cloudUnder = step(1.62 - cloudBand * 0.95, sin((cp.x) * 0.040 + 1.7 * sin((cp.y + 5.0) * 0.031)) + 0.6 * sin(cp.x * 0.093 + (cp.y + 5.0) * 0.11 + 2.0));
-	float3 cloudColor = lerp(CloudEdge, CloudColor, cloudUnder);
+	float3 cloudColor = lerp(lerp(CloudEdge, CloudColor, cloudUnder), SickCloud * (0.8 + 0.4 * cloudUnder), sick);
 	color = lerp(color, cloudColor, cloudHere * 0.85);
 
 	float sun = step(sunDist, SunRadius);
-	color = lerp(color, SunColor, sun);
+
+	// and then the sun is a hole, with the other sky in it: a swirl of dust that turns, a few stars,
+	// and a lit edge
+	float2 inSun = px - sunPos;
+	float turn = 0.5 + 0.5 * cos(atan2(inSun.y, inSun.x) * 2.0 - log(max(sunDist, 1.0)) * 4.5 + Time * 0.5);
+	float3 sunHole = RiftSpace + lerp(RiftWarm, RiftCold, 0.5 + 0.5 * sin(inSun.x * 0.4)) * bands(turn * turn, 4.0, px);
+	sunHole += step(0.93, hash(float2(px.x, px.y - floor(Horizon)) + 5.0)) * 0.8;
+	sunHole = lerp(sunHole, RiftRing, step(SunRadius - 1.5, sunDist));
+	color = lerp(color, lerp(SunColor, sunHole, sick), sun);
+
+	// while the thing is there, the sky is darker toward the side that it is on
+	float left = saturate(1.0 - px.x / (Size.x * 0.7));
+	color *= 1.0 - SICK_LEFT * Endings.y * left * sqrt(left);
 
 	return color;
 }
@@ -137,6 +300,10 @@ float3 sea(float2 px)
 
 	float3 color = lerp(SeaFar, SeaMid, smoothstep(0.0, 0.22, shade));
 	color = lerp(color, SeaNear, smoothstep(0.15, 0.8, shade));
+
+	// under a sick sky, the sea is green. see THE DARK BEHIND IT, further up.
+	color *= lerp(float3(1.0, 1.0, 1.0), float3(0.42, 0.80, 0.44), Endings.y * Day * SICK_SKY);
+
 
 	// the ripples are rows of short dashes. they are small and close together at the horizon,
 	// and get longer and further apart toward the camera.
@@ -173,11 +340,22 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 
 	float3 color = lerp(sky(px), sea(px), step(Horizon, px.y));
 
+	// the thing on the horizon, once the ancient one has been summoned. the sea under it is darker.
+	float4 seen = thing(px);
+	color = lerp(color, seen.rgb, seen.a * Endings.y);
+	float2 underIt = float2(px.x - lerp(THING_FROM, THING_TO, Coming), px.y - Horizon) / lerp(THING_SMALL, THING_BIG, Coming);
+	float shadow = step(abs(underIt.x), 40.0 - underIt.y * 1.3) * step(0.0, underIt.y) * step(underIt.y, 22.0);
+	color *= 1.0 - 0.30 * shadow * step(0.0, sin(underIt.y * 1.7 - Time * 1.4)) * Endings.y;
+
 	// the camera is right at the surface, so the water in front of it rolls by as one dark swell
 	// across the bottom of the screen, with a pale line of foam along the top of it
 	float crest = Swell + sin(px.x * 0.018 + Time * 0.9) * 6.0 + sin(px.x * 0.047 - Time * 1.3) * 2.5;
 	float under = px.y - crest;
 	float3 swell = lerp(SwellColor, SwellDeep, saturate(under / 40.0));
+
+	// under a sick sky, this water is green too. see THE DARK BEHIND IT, further up.
+	swell *= lerp(float3(1.0, 1.0, 1.0), float3(0.42, 0.80, 0.44), Endings.y * Day * SICK_SKY);
+
 	swell = lerp(swell, FoamColor, step(under, 1.5) * 0.9);
 	float fleck = step(0.8, sin(px.x * 0.21 + Time * 1.7 + under * 0.9)) * step(3.0, under) * step(under, 8.0);
 	swell = lerp(swell, FoamColor, fleck * 0.35);

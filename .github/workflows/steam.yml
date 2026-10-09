@@ -17,6 +17,8 @@ name: Steam (Fish Fish Pop)
 #   CLOUDFLARE_API_TOKEN    R2 token, Object Read only
 #   CLOUDFLARE_ACCOUNT_ID   the Cloudflare account the bucket lives in
 #   STEAM_PUBLISHER_KEY     optional: publisher Web API key, for set_live = default
+#   FISH_SCORE_KEY          the secret that leaderboard scores are checked with. letters and
+#                           digits only. required to deploy. see "Leaderboards" in SETUP.md.
 
 on:
   workflow_dispatch:
@@ -80,8 +82,15 @@ jobs:
           STEAM_DEPOT_MAC: ${{ vars.STEAM_DEPOT_MAC || secrets.STEAM_DEPOT_MAC }}
           STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
           STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+          FISH_SCORE_KEY: ${{ secrets.FISH_SCORE_KEY }}
         run: |
           fail=0
+          # Without the key the build would use the dev leaderboards, with a key that is in
+          # the source. That must not go out to players.
+          if ! [[ "$FISH_SCORE_KEY" =~ ^[A-Za-z0-9]{16,}$ ]]; then
+            echo "::error::FISH_SCORE_KEY must be set as a repository secret: 16 or more letters and digits. See steam/SETUP.md."
+            fail=1
+          fi
           for name in STEAM_APP_ID STEAM_DEPOT_WINDOWS STEAM_DEPOT_MAC; do
             if ! [[ "${!name}" =~ ^[0-9]+$ ]]; then
               echo "::error::Repository variable $name is not set to a number. See steam/SETUP.md."
@@ -124,6 +133,13 @@ jobs:
           fi
           bash build/fetch-assets.sh
 
+      # Fade.MonoGame.Steam references Facepunch.Steamworks by source, from External/, which is
+      # not in git. build/steamworks.lock pins the commit. It also carries the macOS Steam
+      # library that goes into the bundle. Must run before any dotnet build: restore fails on
+      # the missing project.
+      - name: Fetch Facepunch.Steamworks
+        run: bash build/fetch-steamworks.sh
+
       # Same setup as ci.yml. See https://docs.monogame.net/errors/mgfx0001?tab=linux
       - name: Setup Wine for MGFXC (shader compilation)
         run: |
@@ -133,6 +149,12 @@ jobs:
           echo "MGFXC_WINE_PATH=$HOME/.winemonogame" >> "$GITHUB_ENV"
 
       - name: Publish win-x64
+        env:
+          # Both are read by Fade.MonoGame.csproj, which bakes them into the game: the
+          # leaderboards are the ones of this Steam branch, and scores are checked with the
+          # secret and the branch together. Without the secret, the "dev_" ones are used.
+          FISH_SCORE_KEY: ${{ secrets.FISH_SCORE_KEY }}
+          FISH_DEPLOY_BRANCH: ${{ inputs.set_live || 'test' }}
         run: |
           dotnet publish "$GAME_PROJECT" \
             -c Release \
@@ -144,6 +166,12 @@ jobs:
       # Apple Silicon only. An Intel Mac would need a second publish (-r osx-x64) and its
       # own bundle.
       - name: Publish osx-arm64
+        env:
+          # Both are read by Fade.MonoGame.csproj, which bakes them into the game: the
+          # leaderboards are the ones of this Steam branch, and scores are checked with the
+          # secret and the branch together. Without the secret, the "dev_" ones are used.
+          FISH_SCORE_KEY: ${{ secrets.FISH_SCORE_KEY }}
+          FISH_DEPLOY_BRANCH: ${{ inputs.set_live || 'test' }}
         run: |
           dotnet publish "$GAME_PROJECT" \
             -c Release \
@@ -169,6 +197,19 @@ jobs:
           need publish/osx-arm64 "$EXE_NAME"
           need publish/osx-arm64 'MonoGame.Framework.dll'
           need publish/osx-arm64 'libSDL2*.dylib'
+          # Steam. Each platform needs its own interop assembly AND its own native library:
+          # the Windows pair in a macOS build, or the other way round, fails on the first
+          # Steam call and not before.
+          need publish/win-x64   'Facepunch.Steamworks.Win64.dll'
+          need publish/win-x64   'steam_api64.dll'
+          need publish/osx-arm64 'Facepunch.Steamworks.Posix.dll'
+          need publish/osx-arm64 'libsteam_api.dylib'
+          # steam_appid.txt lets the game start without a license. It is not in git, so it
+          # should never be here, and this is what makes sure.
+          if [ -n "$(find publish -name steam_appid.txt -print -quit)" ]; then
+            echo "::error::steam_appid.txt is in the publish output. It must not reach a depot."
+            fail=1
+          fi
           for rid in win-x64 osx-arm64; do
             count=$(find "publish/$rid/Content" -name '*.xnb' 2>/dev/null | wc -l)
             echo "$rid: $count content files"
@@ -312,6 +353,16 @@ jobs:
             +login "$STEAM_USERNAME" \
             +run_app_build "$GITHUB_WORKSPACE/steam/app_build.vdf" \
             +quit | tee "$RUNNER_TEMP/steamcmd.log"
+
+          # Say where the build ended up on every run, so that a run that went to "test" cannot
+          # be mistaken for a release. The default branch has its own messages below.
+          if [ "$PROMOTE_DEFAULT" != "1" ]; then
+            if [ -n "$SET_LIVE" ]; then
+              echo "::notice::Build \"${DESC}\" is live on the \"${SET_LIVE}\" branch only. Players on the default branch did NOT get it: for that, run again with set_live = default."
+            else
+              echo "::notice::Build \"${DESC}\" is uploaded and not live on any branch."
+            fi
+          fi
 
           if [ "$PROMOTE_DEFAULT" = "1" ]; then
             BUILDS_PAGE="https://partner.steamgames.com/apps/builds/${STEAM_APP_ID}"

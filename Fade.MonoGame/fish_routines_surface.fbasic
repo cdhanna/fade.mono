@@ -48,6 +48,16 @@ setup_surface:
         texture reserve texture id(TEX_DIVE_BOAT), "Fish/Textures/Menu/dive_boat"
     endif
 
+    ` what the main menu remembers of the hidden game. see THE MAIN MENU REMEMBERS in fish_headers.
+    SURFACE_REEF = get pref(PREF_ENDING_REEF, 0)
+    SURFACE_ANCIENT = get pref(PREF_ENDING_ANCIENT, 0)
+    if is env set("FISH_MENU_REEF")
+        SURFACE_REEF = 1
+    endif
+    if is env set("FISH_MENU_ANCIENT")
+        SURFACE_ANCIENT = 1
+    endif
+
     reserve sprite id(SURFACE_SPRITE)
     sprite SURFACE_SPRITE, 0, 0, TEX_PIXEL
     set sprite offset SURFACE_SPRITE, 0, 0
@@ -61,6 +71,58 @@ setup_surface:
     sprite SURFACE_BOAT_SPRITE, 0, 0, TEX_DIVE_BOAT
     order sprite SURFACE_BOAT_SPRITE, ORDER_MENU_SURFACE + 1
     set sprite render target SURFACE_BOAT_SPRITE, TARGET_MENU
+
+    ` the two reefs, once the reef has been saved. see THE REEFS OF THE MAIN MENU in fish_headers.
+    SURFACE_REEF_AT_X(0) = 98
+    SURFACE_REEF_AT_DOWN(0) = 66
+    SURFACE_REEF_AT_SCALE(0) = 30
+    SURFACE_REEF_AT_FLIP(0) = 1
+    SURFACE_REEF_SEED#(0) = 0
+    SURFACE_REEF_AT_X(1) = 452
+    SURFACE_REEF_AT_DOWN(1) = 104
+    SURFACE_REEF_AT_SCALE(1) = 37
+    SURFACE_REEF_AT_FLIP(1) = -1
+    SURFACE_REEF_SEED#(1) = 2.6
+    for surfaceReefI = 0 to 1
+        reserve effect id(surfaceReefFx)
+        if surfaceReefI = 0
+            effect surfaceReefFx, "Fish/Shaders/ReefEffect"
+        else
+            effect surfaceReefFx, "Fish/Shaders/ReefEffectB"
+        endif
+        SURFACE_REEF_FX(surfaceReefI) = surfaceReefFx
+
+        reserve sprite id(surfaceReefId)
+        sprite surfaceReefId, 0, 0, TEX_PIXEL
+        set sprite offset surfaceReefId, 0, 0
+        size sprite surfaceReefId, WORLD_WIDTH, WORLD_HEIGHT
+        order sprite surfaceReefId, ORDER_MENU_SURFACE + 2
+        set sprite effect surfaceReefId, surfaceReefFx
+        set sprite render target surfaceReefId, TARGET_MENU
+        hide sprite surfaceReefId
+        SURFACE_REEF_SPRITES(surfaceReefI) = surfaceReefId
+    next
+
+    ` the fish that swim over the reef, once the reef has been saved. see THE MAIN MENU REMEMBERS in
+    ` fish_headers. they are the fish of the game: a kind of fish is the number of its picture.
+    for surfaceFishI = 0 to SURFACE_FISH_COUNT - 1
+        reserve sprite id(surfaceFishId)
+        sprite surfaceFishId, 0, 0, surfaceFishI + 1
+        size sprite surfaceFishId, SURFACE_FISH_SIZE, SURFACE_FISH_SIZE
+        color sprite surfaceFishId, rgb(190, 215, 255)
+
+        ` the crab and the worm are out of the water, so they are their own colors
+        if surfaceFishI + 1 = TEX_CRAB or surfaceFishI + 1 = TEX_WORM
+            color sprite surfaceFishId, rgb(255, 255, 255)
+        endif
+        order sprite surfaceFishId, ORDER_MENU_SURFACE + 3 `on top of the reefs
+        set sprite render target surfaceFishId, TARGET_MENU
+        hide sprite surfaceFishId
+        SURFACE_FISH_SPRITES(surfaceFishI) = surfaceFishId
+
+        ` they start out spread across the reef
+        SURFACE_FISH_GO#(surfaceFishI) = (surfaceFishI * .37) - (surfaceFishI * 37) / 100
+    next
 
     ` the camera that slides the main menu up the screen as the game goes under. a camera in the
     ` middle of its render target does not move anything.
@@ -110,6 +172,90 @@ frame_surface:
     set effect param float SURFACE_FX_ID, "Horizon", surfaceHorizon#
     set effect param float SURFACE_FX_ID, "Swell", surfaceSwell#
 
+    ` the reef, and the thing on the horizon. see THE MAIN MENU REMEMBERS in fish_headers. the thing sets
+    ` out again whenever the main menu has been away, and it comes on quickly at first and then slower
+    ` and slower, so it is always coming and it never arrives.
+    surfaceNow = game ms()
+    if surfaceNow - SURFACE_MONSTER_SEEN_MS > 1500 then SURFACE_MONSTER_START_MS = surfaceNow
+    SURFACE_MONSTER_SEEN_MS = surfaceNow
+    surfaceComing# = (surfaceNow - SURFACE_MONSTER_START_MS) * .001
+    surfaceComing# = surfaceComing# / (surfaceComing# + SURFACE_MONSTER_HALF#)
+    ` the reef fades away as the camera goes under, and so do its fish
+    surfaceReef# = 1 - surfaceSink# * SURFACE_REEF_FADE#
+    if surfaceReef# < 0 then surfaceReef# = 0
+    ` the options page can turn either of them off. see OPTION_MENU_REEF in fish_headers.
+    surfaceReef# = surfaceReef# * SURFACE_REEF * OPTION_MENU_REEF
+    surfaceAncient = SURFACE_ANCIENT * OPTION_MENU_MONSTER
+    set effect param float2 SURFACE_FX_ID, "Endings", surfaceReef#, surfaceAncient
+
+    ` the two reefs. each has a sprite and an effect of its own, and is put wherever the camera is
+    ` looking, the same as the sky and the sea are. the sea is green in the day once the ancient one has come.
+    for surfaceReefI = 0 to 1
+        if surfaceReef# > 0
+            show sprite SURFACE_REEF_SPRITES(surfaceReefI)
+        else
+            hide sprite SURFACE_REEF_SPRITES(surfaceReefI)
+        endif
+        position sprite SURFACE_REEF_SPRITES(surfaceReefI), 0, surfaceShift
+
+        set effect param float SURFACE_REEF_FX(surfaceReefI), "Time", surfaceTime#
+        set effect param float2 SURFACE_REEF_FX(surfaceReefI), "Size", WORLD_WIDTH, WORLD_HEIGHT
+        set effect param float SURFACE_REEF_FX(surfaceReefI), "Horizon", surfaceHorizon#
+        set effect param float SURFACE_REEF_FX(surfaceReefI), "Swell", surfaceSwell#
+        set effect param float SURFACE_REEF_FX(surfaceReefI), "Day", SURFACE_DAY
+        set effect param float4 SURFACE_REEF_FX(surfaceReefI), "Where", SURFACE_REEF_AT_X(surfaceReefI), SURFACE_REEF_AT_DOWN(surfaceReefI), SURFACE_REEF_AT_SCALE(surfaceReefI), SURFACE_REEF_AT_FLIP(surfaceReefI)
+        set effect param float SURFACE_REEF_FX(surfaceReefI), "Seed", SURFACE_REEF_SEED#(surfaceReefI)
+        set effect param float SURFACE_REEF_FX(surfaceReefI), "Fade", surfaceReef#
+        set effect param float SURFACE_REEF_FX(surfaceReefI), "Sick", surfaceAncient * SURFACE_DAY
+    next
+
+    ` the fish swim across the reef from left to right, the way that they face, each at its own
+    ` depth and its own speed, and bob a little. each one fades in on the way on and out on the way off.
+    surfaceFishStep# = (surfaceNow - SURFACE_FISH_MS) * .001
+    SURFACE_FISH_MS = surfaceNow
+    if surfaceFishStep# > .05 then surfaceFishStep# = .05
+    if surfaceFishStep# < 0 then surfaceFishStep# = 0
+    for surfaceFishI = 0 to SURFACE_FISH_COUNT - 1
+        ` each one goes a little further across on every frame, and comes back on at the left when it gets to the right
+        surfaceFishGo# = SURFACE_FISH_GO#(surfaceFishI) + surfaceFishStep# / (SURFACE_FISH_LAP# - surfaceFishI * 1.5)
+        if surfaceFishGo# >= 1 then surfaceFishGo# = surfaceFishGo# - 1
+        SURFACE_FISH_GO#(surfaceFishI) = surfaceFishGo#
+        ` the fish swim across a reef, and they take turns at which one: every other fish has the reef
+        ` on the right. a - b + c comes out as a - (b + c), so the subtraction has brackets of its own.
+        surfaceFishMid = SURFACE_REEF_X
+        surfaceFishDown = SURFACE_REEF_DOWN
+        if surfaceFishI mod 2 = 1
+            surfaceFishMid = SURFACE_REEF2_X
+            surfaceFishDown = SURFACE_REEF2_DOWN
+        endif
+        surfaceFishX# = (surfaceFishMid - 100) + surfaceFishGo# * 200
+        surfaceFishY# = surfaceHorizon# + surfaceFishDown + 8 + surfaceFishI * 4 + sin(surfaceTime# * 1.4 + surfaceFishI * 2) * 2
+        surfaceFishSeen# = 210 * sin(surfaceFishGo# * 3.14159)
+
+        ` the crab and the worm do not swim, and they do not fade in and out. each one goes slowly back
+        ` and forth on the rock of its reef that stands out of the water. see SURFACE_CRAB_X in fish_headers.
+        if surfaceFishI + 1 = TEX_CRAB
+            surfaceFishX# = SURFACE_CRAB_X + sin(surfaceTime# * .45) * SURFACE_WALK
+            surfaceFishY# = surfaceHorizon# + SURFACE_CRAB_DOWN
+            surfaceFishSeen# = 255
+        endif
+        if surfaceFishI + 1 = TEX_WORM
+            surfaceFishX# = SURFACE_WORM_X + sin(surfaceTime# * .33 + 2) * SURFACE_WALK
+            surfaceFishY# = surfaceHorizon# + SURFACE_WORM_DOWN
+            surfaceFishSeen# = 255
+        endif
+        position sprite SURFACE_FISH_SPRITES(surfaceFishI), surfaceFishX#, surfaceFishY# + surfaceShift
+
+        ` they are only there while there is a reef for them to be over
+        if surfaceReef# > 0
+            show sprite SURFACE_FISH_SPRITES(surfaceFishI)
+        else
+            hide sprite SURFACE_FISH_SPRITES(surfaceFishI)
+        endif
+        set sprite alpha SURFACE_FISH_SPRITES(surfaceFishI), surfaceFishSeen# * surfaceReef#
+    next
+    set effect param float SURFACE_FX_ID, "Coming", surfaceComing#
+
     ` the hull is not in the middle of the picture, because the diver's fins stick out of the back
     set effect param float3 SURFACE_FX_ID, "Boat", SURFACE_BOAT_X - 10, surfaceBoatY#, 60
 return
@@ -126,6 +272,15 @@ function showSurface(isVisible)
     else
         hide sprite SURFACE_SPRITE
         hide sprite SURFACE_BOAT_SPRITE
+    endif
+
+    ` the reefs and their fish go when the surface does. frame_surface brings them back.
+    if isVisible = 0
+        hide sprite SURFACE_REEF_SPRITES(0)
+        hide sprite SURFACE_REEF_SPRITES(1)
+        for i = 0 to SURFACE_FISH_COUNT - 1
+            hide sprite SURFACE_FISH_SPRITES(i)
+        next
     endif
 endfunction
 

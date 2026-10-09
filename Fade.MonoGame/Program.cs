@@ -2,8 +2,10 @@
 using System.Linq;
 using System.Threading.Tasks;
 using Fade.MonoGame;
+using Fade.MonoGame.Contracts;
 using Fade.MonoGame.Core;
 using Fade.MonoGame.Lib;
+using Fade.MonoGame.Steam;
 using FadeBasic;
 using FadeBasic.Launch;
 using FadeBasic.Lib.Standard;
@@ -16,6 +18,8 @@ public class Program
     public static async Task<int> Main(string[] args)
 #pragma warning restore CS1998
     {
+        SetVersionForGame();
+
 #if FADE_CONTENT_HOTRELOAD
         // Debug desktop: compile the .fbasic from source at runtime and watch it, so the
         // game hot-reloads. Compiled out of Release, which runs GeneratedFade (below).
@@ -26,7 +30,8 @@ public class Program
         {
             var commandCollection = new CommandCollection(
                 new StandardCommands(),
-                new FadeMonoGameCommands()
+                new FadeMonoGameCommands(),
+                new FadeSteamCommands()
             );
 
             // ILaunchable fade = new GeneratedFade();
@@ -85,6 +90,7 @@ public class Program
                 GameReloader.WatchFiles(csProjPath, commandCollection);
                 var fade = GameReloader.LatestBuild;
                 var game = new Game1(fade);
+                game.Services.AddService(typeof(IFadeHostSystem), NewSteamSystem());
 #if FADE_CONTENT_HOTRELOAD
                 game.Services.AddService(typeof(Fade.MonoGame.Content.IContentBuilder),
                     new Fade.MonoGame.Content.FadeContentBuilder());
@@ -104,8 +110,56 @@ public class Program
         StartLog();
 #endif
         using var shipped = new Game1(new GeneratedFade());
+        shipped.Services.AddService(typeof(IFadeHostSystem), NewSteamSystem());
         shipped.Run();
         return 0;
+    }
+
+    // The version that the main menu shows in its corner. The game reads it from the
+    // FISH_VERSION environment variable, with env$. A CI build has the commit that it was made
+    // from baked in as assembly metadata, by Fade.MonoGame.csproj, and shows the last 8
+    // characters of it. A build from a dev machine has none, and shows "local".
+    static void SetVersionForGame()
+    {
+        var commit = "";
+        foreach (var attribute in System.Reflection.CustomAttributeExtensions
+                     .GetCustomAttributes<System.Reflection.AssemblyMetadataAttribute>(typeof(Program).Assembly))
+        {
+            if (attribute.Key == "BuildCommit" && !string.IsNullOrEmpty(attribute.Value)) commit = attribute.Value.Trim();
+        }
+
+        var version = "local";
+        if (commit.Length > 0) version = commit.Length > 8 ? commit.Substring(commit.Length - 8) : commit;
+        Environment.SetEnvironmentVariable("FISH_VERSION", version);
+    }
+
+    // Steam, with the two things that the build decided for the leaderboards. Both are baked
+    // into this assembly by Fade.MonoGame.csproj, as assembly metadata:
+    //
+    //   LeaderboardPrefix   goes in front of the name of every leaderboard. A CI build for
+    //                       the default Steam branch says "live_", one for the test branch
+    //                       says "test_", and a build from a dev machine says "dev_", so
+    //                       test scores never land where players can see them.
+    //   ScoreKey            the secret that the check on every score is made with. CI makes
+    //                       it from a GitHub secret and the name of the Steam branch. A dev
+    //                       build has the word "dev".
+    //
+    // See "Leaderboards" in steam/SETUP.md.
+    static SteamSystem NewSteamSystem()
+    {
+        string Baked(string key, string fallback)
+        {
+            foreach (var attribute in System.Reflection.CustomAttributeExtensions
+                         .GetCustomAttributes<System.Reflection.AssemblyMetadataAttribute>(typeof(Program).Assembly))
+            {
+                if (attribute.Key == key && !string.IsNullOrEmpty(attribute.Value)) return attribute.Value;
+            }
+            return fallback;
+        }
+
+        return new SteamSystem(
+            leaderboardPrefix: Baked("LeaderboardPrefix", "dev_"),
+            scoreKey: Baked("ScoreKey", "dev"));
     }
 
     // The engine saves prefs.json (the saved game and the options) in the working directory.

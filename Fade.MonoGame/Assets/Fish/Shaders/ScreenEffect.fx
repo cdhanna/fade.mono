@@ -77,6 +77,38 @@ float4 Ripple7;
 // how much the wobble of the water bends a ring out of shape. 0 leaves it a perfect circle.
 #define RIPPLE_BEND 5.0
 
+// something small that swims along under the water, now and then. nothing is drawn for it. the water is
+// still where it is: the wobble dies away there, and so do the ripples of light, so there is a patch of
+// calm, clear water that moves along. x and y are the middle of it, from 0 to 1 across the screen. z is
+// how big it is, in pixels of the game, from the middle to the edge, and w is how strong it is, from
+// 0 to 1. see THE HINTS in fish_headers.
+float4 Wake;
+
+// how much of the wobble is taken away in the very middle of the patch, and how much of the ripples of
+// light. 1 is all of it, and 0 is none.
+#define WAKE_STILL 1.0
+#define WAKE_DIM 0.7
+
+// the water wobbles less over the coral, too. see CORAL in fish_headers. this is the same picture of
+// where the coral is that CoralEffect.fx is given: a white square for every cell of the board that has
+// coral on it. Board and Cells say where the board is: xy is its top left corner, in pixels of the
+// game, and z is how big a cell is, and then how many columns and rows it has.
+Texture2D CoralTexture;
+sampler2D CoralTextureSampler = sampler_state
+{
+	Texture = <CoralTexture>;
+	MinFilter = Point;
+	MagFilter = Point;
+	MipFilter = Point;
+	AddressU = Clamp;
+	AddressV = Clamp;
+};
+float4 Board;
+float2 Cells;
+
+// how much of the wobble is taken away over coral. 1 is all of it, and 0 is none.
+#define CORAL_STILL 0.75
+
 // the words and the bars around the board get brighter along with the water, during a run of pops.
 // they are all drawn in one blue, so this finds them by their color: anything that is that blue, and
 // bright, is lightened. 0 leaves them alone, and 1 is as light as they get.
@@ -101,6 +133,37 @@ float3 ripple(float2 uv, float4 ring)
     float push = sin(ahead * 3.14159) * strength * RIPPLE_PUSH;
     float crest = (0.5 + 0.5 * cos(ahead * 3.14159)) * strength;
     return float3((away / dist) * push / grid, crest);
+}
+
+// how calm the water is on this pixel, from 0 to 1. it is calmest in the middle of the patch, and it
+// goes back to how the water is everywhere else, smoothly, by the edge.
+float wake(float2 uv)
+{
+    float2 grid = max(Grid, 1.0);
+    float dist = length((uv - Wake.xy) * grid);
+    float inside = saturate(1.0 - dist / max(Wake.z, 1.0));
+    return inside * inside * (3.0 - 2.0 * inside) * saturate(Wake.w);
+}
+
+// how much coral a cell of the board has, from 0 to 1. a cell that is off of the board has none.
+float coralCell(float2 cell)
+{
+    float onBoard = step(0.0, cell.x) * step(0.0, cell.y) * step(cell.x, Cells.x - 1.0) * step(cell.y, Cells.y - 1.0);
+    float2 at = (Board.xy + (cell + 0.5) * Board.z) / max(Grid, 1.0);
+    return tex2D(CoralTextureSampler, at).r * onBoard;
+}
+
+// how much coral there is under this pixel, from 0 to 1. it goes smoothly from the middle of one cell
+// to the middle of the next, so that the wobble does not tear along the edges of the cells.
+float coralUnder(float2 uv)
+{
+    float2 spot = (uv * max(Grid, 1.0) - Board.xy) / max(Board.z, 1.0) - 0.5;
+    float2 cell = floor(spot);
+    float2 f = spot - cell;
+    f = f * f * (3.0 - 2.0 * f);
+    float top = lerp(coralCell(cell), coralCell(cell + float2(1.0, 0.0)), f.x);
+    float low = lerp(coralCell(cell + float2(0.0, 1.0)), coralCell(cell + float2(1.0, 1.0)), f.x);
+    return lerp(top, low, f.y);
 }
 
 struct VertexShaderOutput
@@ -166,6 +229,13 @@ float2 uv = texCoord;
 
     float2 p = float2(result, result2) * 0.001 + 0.05 * sin(uv * 16.0 - cos(uv.yx * 16.0 + Time * TimeSpeed)) * 0.1;
 
+    // the patch of calm water. the wobble dies away in it.
+    float calm = wake(uv);
+    p *= 1.0 - calm * WAKE_STILL;
+
+    // and it wobbles less over the coral
+    p *= 1.0 - coralUnder(uv) * CORAL_STILL;
+
     // how much of this pixel is under the water
     float water = lerp(Submerged, tex2D(MaskTextureSampler, uv).r, UseMask);
     water = lerp(water, step(0.012, underLine(uv)), WaterLine.w);
@@ -182,7 +252,8 @@ float2 uv = texCoord;
     float hud = smoothstep(0.990, 0.998, dot(tex.rgb / max(length(tex.rgb), 0.001), HUD_BLUE)) * smoothstep(0.6, 0.78, tex.b);
     tex.rgb += HUD_LIFT * hud * HudGlow * water;
 
-    float4 finalColor = float4(.45, 0.4, .8, 1.0) * result * 0.08 * water + tex;
+    // the ripples of light fade out over the calm water too
+    float4 finalColor = float4(.45, 0.4, .8, 1.0) * result * 0.08 * water * (1.0 - calm * WAKE_DIM) + tex;
 
     // the crest of a ring catches a little light
     finalColor.rgb += float3(.35, .55, .7) * min(rings.z, 1.0) * 0.025 * water;
