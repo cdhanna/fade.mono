@@ -1988,12 +1988,19 @@ function coralLoad()
 
         for coralLoadI = 0 to CORAL_LIVE_MAX - 1
             coralSetSequence(coralLoadI, get pref(SAVE_PREF_CORAL + 3 + coralLoadI, 0))
+
+            ` a game that was saved when the patterns could be shorter gets new ones in place of those
+            if CORAL_SEQ_LENGTH(coralLoadI) < CORAL_FIRST_LENGTH
+                CORAL_SEQ_LENGTH(coralLoadI) = 0
+                CORAL_SEQ_CODE(coralLoadI) = 0
+            endif
         next
         if CORAL_USED_COUNT > 0
             for coralLoadI = 0 to CORAL_USED_COUNT - 1
                 CORAL_USED(coralLoadI) = get pref(SAVE_PREF_CORAL + 20 + coralLoadI, 0)
             next
         endif
+        coralFillSequences()
     endif
 
     ` the coral that was saved is there from the start. it does not grow in again, and the fish that
