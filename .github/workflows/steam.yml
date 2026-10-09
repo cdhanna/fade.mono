@@ -5,7 +5,8 @@ name: Steam (Fish Fish Pop)
 #
 # One-time setup, and every value that has to be swapped in, is in steam/SETUP.md.
 #
-# Repository VARIABLES (Settings -> Secrets and variables -> Actions -> Variables):
+# Repository VARIABLES (Settings -> Secrets and variables -> Actions -> Variables).
+# Secrets of the same names are accepted too; the ids are then masked in the logs.
 #   STEAM_APP_ID          the app id
 #   STEAM_DEPOT_WINDOWS   the Windows depot id
 #   STEAM_DEPOT_MAC       the macOS depot id
@@ -68,9 +69,9 @@ jobs:
       - name: Require Steam ids and credentials
         if: inputs.deploy
         env:
-          STEAM_APP_ID: ${{ vars.STEAM_APP_ID }}
-          STEAM_DEPOT_WINDOWS: ${{ vars.STEAM_DEPOT_WINDOWS }}
-          STEAM_DEPOT_MAC: ${{ vars.STEAM_DEPOT_MAC }}
+          STEAM_APP_ID: ${{ vars.STEAM_APP_ID || secrets.STEAM_APP_ID }}
+          STEAM_DEPOT_WINDOWS: ${{ vars.STEAM_DEPOT_WINDOWS || secrets.STEAM_DEPOT_WINDOWS }}
+          STEAM_DEPOT_MAC: ${{ vars.STEAM_DEPOT_MAC || secrets.STEAM_DEPOT_MAC }}
           STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
           STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
         run: |
@@ -258,9 +259,9 @@ jobs:
         id: steam_upload
         env:
           STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
-          STEAM_APP_ID: ${{ vars.STEAM_APP_ID }}
-          STEAM_DEPOT_WINDOWS: ${{ vars.STEAM_DEPOT_WINDOWS }}
-          STEAM_DEPOT_MAC: ${{ vars.STEAM_DEPOT_MAC }}
+          STEAM_APP_ID: ${{ vars.STEAM_APP_ID || secrets.STEAM_APP_ID }}
+          STEAM_DEPOT_WINDOWS: ${{ vars.STEAM_DEPOT_WINDOWS || secrets.STEAM_DEPOT_WINDOWS }}
+          STEAM_DEPOT_MAC: ${{ vars.STEAM_DEPOT_MAC || secrets.STEAM_DEPOT_MAC }}
           # Passed through env rather than inlined into the script, to keep the input out
           # of the shell it would otherwise be interpolated into.
           SET_LIVE: ${{ inputs.set_live || 'test' }}
