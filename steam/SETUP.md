@@ -238,9 +238,21 @@ upload sets nothing live.
 4. Install it: in your Steam library, the game → Properties → Betas → `test`.
 
 **set_live** is a dropdown: `test`, `default` or `none`. `default` is the branch every player
-gets, and Steam only lets it be set by hand: an upload that asks for it is rejected whole
-("Failed to commit build"). So choosing `default` uploads the build with nothing set live,
-and the run summary links to the Builds page, where you set that build live on default.
+gets. Steam does not let the upload itself set it: an upload that asks for it is rejected
+whole ("Failed to commit build"). So choosing `default` uploads the build with nothing set
+live, and then:
+
+- **With the `STEAM_PUBLISHER_KEY` secret**, the workflow sets the build live on default
+  through the Steamworks Web API (`ISteamApps/SetAppBuildLive`).
+- **Without it**, the run summary links to the Builds page, where you set it live by hand.
+
+To get the key: in Steamworks, **Users & Permissions → Manage Groups**, create a group (or
+open one), add this app to it, and use **Create WebAPI Key** on the group's page. Add it as
+the GitHub secret `STEAM_PUBLISHER_KEY`. It is a powerful key; it goes nowhere else.
+
+Once the game is **released**, Steam also wants a person to approve changes to default in
+the Steam mobile app, and this call will be refused until the workflow is taught to name
+that person. Before release it needs no approval.
 
 ---
 

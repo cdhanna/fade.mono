@@ -172,7 +172,18 @@ public class TextureSystem
         runtimeTex.SetComputedTexture(texture);
         textures[index] = runtimeTex;
 #else
-        var texture = GameSystem.game.ContentWatcher.Watch<Texture2D>(path);
+        WatchedAsset<Texture2D> texture;
+        try
+        {
+            texture = GameSystem.game.ContentWatcher.Watch<Texture2D>(path);
+        }
+        catch (Exception ex)
+        {
+            // Say which one, so that a build that shipped without an asset can be told from its
+            // log. The texture stays unset, and the renderer skips sprites that use it.
+            Console.Error.WriteLine($"[fade] texture load failed: '{path}': {ex.Message}");
+            return;
+        }
 
         GetTextureIndex(textureId, out var index, out var runtimeTex);
         runtimeTex.descriptor = new TextureDescriptor

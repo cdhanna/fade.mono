@@ -16,12 +16,13 @@ name: Steam (Fish Fish Pop)
 #   STEAM_CONFIG_VDF        base64 of that account's steamcmd config.vdf
 #   CLOUDFLARE_API_TOKEN    R2 token, Object Read only
 #   CLOUDFLARE_ACCOUNT_ID   the Cloudflare account the bucket lives in
+#   STEAM_PUBLISHER_KEY     optional: publisher Web API key, for set_live = default
 
 on:
   workflow_dispatch:
     inputs:
       set_live:
-        description: 'Steam branch to set the build live on. "default" (what every player gets) can only be set by hand in Steamworks, so it uploads the build and links you to the page. "none" uploads without setting anything live.'
+        description: 'Steam branch to set the build live on. "default" is what every player gets; it needs the STEAM_PUBLISHER_KEY secret, and without it the build is uploaded and you set it live by hand. "none" uploads without setting anything live.'
         type: choice
         required: false
         default: test
@@ -270,6 +271,9 @@ jobs:
           # Passed through env rather than inlined into the script, to keep the input out
           # of the shell it would otherwise be interpolated into.
           SET_LIVE: ${{ inputs.set_live || 'test' }}
+          # Optional. A Steamworks publisher Web API key, used only to set a build live on
+          # the default branch.
+          STEAM_PUBLISHER_KEY: ${{ secrets.STEAM_PUBLISHER_KEY }}
         run: |
           # "none" is the sentinel for "don't set live" -- an empty workflow input can't be
           # distinguished from an absent one.
@@ -281,13 +285,19 @@ jobs:
           # Steam does not let a build script set the default branch live, and it does not
           # fail gently: with "setlive" "default" the whole commit is rejected ("Failed to
           # commit build ... Failure") and no build is created at all. So "default" uploads
-          # the build with nothing set live, and the last click is done by hand.
-          PROMOTE_BY_HAND=0
+          # the build with nothing set live, and then promotes it through the Steamworks
+          # Web API (ISteamApps/SetAppBuildLive), which is allowed to. That needs the
+          # STEAM_PUBLISHER_KEY secret; without it the last click is done by hand.
+          PROMOTE_DEFAULT=0
           if [ "$SET_LIVE" = "default" ]; then
             SET_LIVE=""
-            PROMOTE_BY_HAND=1
+            PROMOTE_DEFAULT=1
           fi
           echo "setlive target: '${SET_LIVE:-<none>}'"
+
+          # pipefail: steamcmd is piped through tee below, and without this a failed upload
+          # would take tee's exit code and read as a success.
+          set -o pipefail
 
           DESC="${GITHUB_REF_NAME//[^A-Za-z0-9_.\/-]/_} ${GITHUB_SHA:0:7} (run ${GITHUB_RUN_NUMBER})"
           sed -i \
@@ -301,10 +311,33 @@ jobs:
           "$HOME/steamcmd/steamcmd.sh" \
             +login "$STEAM_USERNAME" \
             +run_app_build "$GITHUB_WORKSPACE/steam/app_build.vdf" \
-            +quit
+            +quit | tee "$RUNNER_TEMP/steamcmd.log"
 
-          if [ "$PROMOTE_BY_HAND" = "1" ]; then
-            echo "::notice::Build \"${DESC}\" is uploaded but NOT live. Steam only allows the default branch to be set by hand: open https://partner.steamgames.com/apps/builds/${STEAM_APP_ID} and set this build live on default."
+          if [ "$PROMOTE_DEFAULT" = "1" ]; then
+            BUILDS_PAGE="https://partner.steamgames.com/apps/builds/${STEAM_APP_ID}"
+            # steamcmd ends a good upload with "... build (BuildID 1234567)".
+            BUILD_ID=$(grep -oE 'BuildID [0-9]+' "$RUNNER_TEMP/steamcmd.log" | tail -1 | grep -oE '[0-9]+' || true)
+            if [ -z "$STEAM_PUBLISHER_KEY" ]; then
+              echo "::notice::Build \"${DESC}\" is uploaded but NOT live. Set it live on default at ${BUILDS_PAGE}, or add the STEAM_PUBLISHER_KEY secret to have this done for you (see steam/SETUP.md)."
+            elif [ -z "$BUILD_ID" ]; then
+              echo "::error::Uploaded, but could not read the BuildID from the steamcmd output, so nothing was set live. Set the build live on default at ${BUILDS_PAGE}."
+              exit 1
+            else
+              # "public" is what the Web API calls the default branch.
+              HTTP=$(curl -sS -o "$RUNNER_TEMP/setlive.json" -w '%{http_code}' -X POST \
+                "https://partner.steam-api.com/ISteamApps/SetAppBuildLive/v2/" \
+                --data-urlencode "key=${STEAM_PUBLISHER_KEY}" \
+                --data-urlencode "appid=${STEAM_APP_ID}" \
+                --data-urlencode "buildid=${BUILD_ID}" \
+                --data-urlencode "betakey=public" \
+                --data-urlencode "description=${DESC}")
+              echo "SetAppBuildLive: HTTP ${HTTP}"; cat "$RUNNER_TEMP/setlive.json" || true; echo
+              if [ "$HTTP" != "200" ]; then
+                echo "::error::The build is uploaded (BuildID ${BUILD_ID}) but Steam refused to set it live on default (HTTP ${HTTP}). Set it live by hand at ${BUILDS_PAGE}."
+                exit 1
+              fi
+              echo "::notice::Build ${BUILD_ID} \"${DESC}\" is live on the default branch."
+            fi
           fi
 
       - name: Dump SteamPipe logs on failure

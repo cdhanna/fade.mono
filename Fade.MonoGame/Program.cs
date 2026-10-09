@@ -101,6 +101,7 @@ public class Program
         // This is what ships. See steam/SETUP.md.
 #if !FADE_CONTENT_HOTRELOAD
         UseSaveDirectory();
+        StartLog();
 #endif
         using var shipped = new Game1(new GeneratedFade());
         shipped.Run();
@@ -129,6 +130,121 @@ public class Program
         catch (Exception ex)
         {
             Console.Error.WriteLine("could not use the save directory: " + ex.Message);
+        }
+    }
+
+    // A shipped game has no console, so what it prints, and what it dies of, is gone unless it is
+    // written down. This writes both into the save directory (see UseSaveDirectory):
+    //
+    //   log.txt        the run that is going on, or the last one
+    //   log.prev.txt   the run before that
+    //
+    // After a crash, log.txt ends with the exception. Starting the game again moves it to
+    // log.prev.txt, so a player who has already restarted should send both.
+    //
+    // A warning that repeats on every frame would grow the file without end, so the log stops
+    // taking lines at LogLimit characters. A crash is always written, whatever the size.
+    const long LogLimit = 2_000_000;
+    static long _logLength;
+
+    static void StartLog()
+    {
+        try
+        {
+            if (System.IO.File.Exists("log.txt"))
+            {
+                System.IO.File.Copy("log.txt", "log.prev.txt", overwrite: true);
+            }
+
+            var file = new System.IO.StreamWriter("log.txt", append: false) { AutoFlush = true };
+            Console.SetOut(new LogWriter(Console.Out, file));
+            Console.SetError(new LogWriter(Console.Error, file));
+
+            var version = System.Reflection.CustomAttributeExtensions
+                .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(Program).Assembly)
+                ?.InformationalVersion ?? "unknown";
+            Console.WriteLine($"[log] started {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            Console.WriteLine($"[log] version {version}");
+            Console.WriteLine($"[log] os {System.Runtime.InteropServices.RuntimeInformation.OSDescription} " +
+                              $"{System.Runtime.InteropServices.RuntimeInformation.OSArchitecture}");
+
+            // The runtime prints an unhandled exception straight to the real stderr, which the
+            // log does not see, so it is written here too. This does not stop the crash.
+            AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            {
+                lock (file)
+                {
+                    file.WriteLine($"[log] CRASHED {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                    file.WriteLine(e.ExceptionObject?.ToString() ?? "no exception object");
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("could not start the log: " + ex.Message);
+        }
+    }
+
+    // Writes everything to the log file, and on to wherever it was going before.
+    sealed class LogWriter : System.IO.TextWriter
+    {
+        readonly System.IO.TextWriter _inner;
+        readonly System.IO.TextWriter _file;
+
+        public LogWriter(System.IO.TextWriter inner, System.IO.TextWriter file)
+        {
+            _inner = inner;
+            _file = file;
+        }
+
+        public override System.Text.Encoding Encoding => System.Text.Encoding.UTF8;
+
+        // Is there room in the log for this many more characters? The line that goes over the
+        // limit is replaced by a note that says so, and nothing is written after it.
+        bool HasRoom(int length)
+        {
+            if (_logLength > LogLimit) return false;
+            _logLength += length;
+            if (_logLength > LogLimit)
+            {
+                _file.WriteLine();
+                _file.WriteLine("[log] the log is full. nothing more is written, except a crash.");
+                return false;
+            }
+            return true;
+        }
+
+        public override void Write(char value)
+        {
+            _inner.Write(value);
+            lock (_file)
+            {
+                if (HasRoom(1)) _file.Write(value);
+            }
+        }
+
+        public override void Write(string value)
+        {
+            _inner.Write(value);
+            lock (_file)
+            {
+                if (HasRoom(value?.Length ?? 0)) _file.Write(value);
+            }
+        }
+
+        public override void WriteLine(string value)
+        {
+            _inner.WriteLine(value);
+            lock (_file)
+            {
+                if (HasRoom((value?.Length ?? 0) + 1)) _file.WriteLine(value);
+            }
+        }
+
+        public override void Flush()
+        {
+            _inner.Flush();
+            lock (_file) _file.Flush();
         }
     }
 }

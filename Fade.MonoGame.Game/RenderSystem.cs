@@ -926,6 +926,10 @@ public static class RenderSystem
 
                         var tex = runtimeTex.texture;
 
+                        // A texture that failed to load (see LoadTextureFromContent) draws nothing,
+                        // instead of taking the whole game down the first time a sprite uses it.
+                        if (tex == null) break;
+
                         var src = TextureSystem.GetSourceRect(ref runtimeTex, ref sprite);
                         var origin = new Vector2(src.Width * sprite.origin.X, src.Height * sprite.origin.Y);
 
