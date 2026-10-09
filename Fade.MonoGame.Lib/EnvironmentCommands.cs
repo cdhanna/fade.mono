@@ -90,4 +90,40 @@ public partial class FadeMonoGameCommands
                 return 1;
         }
     }
+
+    /// <summary>
+    /// <para>Returns the hour of the day on the player's clock, from <c>0</c> to <c>23</c>.</para>
+    /// <para><c>0</c> is midnight, <c>12</c> is noon, and <c>18</c> is six in the evening.</para>
+    /// </summary>
+    /// <remarks>
+    /// This is the time where the player is, by the clock of the computer the game is running
+    /// on. It is a good way to make a game feel like it knows what time it is: a title screen
+    /// that is sunny in the day and dark at night, say.
+    ///
+    /// It is not for measuring how long something took. Use <see cref="GameTime">game ms</see>
+    /// for that.
+    /// </remarks>
+    /// <example>
+    /// Say good evening when it is the evening:
+    /// <code>
+    /// font 1, "font"
+    ///
+    /// IF clock hour() >= 17
+    ///   text 1, 470, 200, 1, "good evening"
+    /// ELSE
+    ///   text 1, 470, 200, 1, "hello"
+    /// ENDIF
+    ///
+    /// do
+    ///   sync
+    /// loop
+    /// </code>
+    /// </example>
+    /// <returns>The hour of the day, from <c>0</c> to <c>23</c>.</returns>
+    /// <seealso cref="GameTime">game ms</seealso>
+    [FadeBasicCommand("clock hour")]
+    public static int GetClockHour()
+    {
+        return DateTime.Now.Hour;
+    }
 }

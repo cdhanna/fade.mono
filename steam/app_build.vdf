@@ -1,0 +1,28 @@
+// SteamPipe build script for Fish Fish Pop.
+//
+// Relative paths below resolve against this file's directory. The workflow
+// (.github/workflows/steam.yml) stages the platform payloads into
+// steam/content/{windows,mac} before invoking steamcmd.
+//
+// Every __NAME__ is substituted by the workflow at deploy time. The ids come from the
+// repository variables STEAM_APP_ID, STEAM_DEPOT_WINDOWS and STEAM_DEPOT_MAC, so there is
+// nothing to edit in this file. See steam/SETUP.md.
+"appbuild"
+{
+	"appid"		"__APP_ID__"
+	"desc"		"__DESC__"
+
+	"buildoutput"	"output"
+	"contentroot"	"content"
+
+	// Empty means "upload but don't set live anywhere".
+	// Beta branches can be set live from a build script; "default" cannot --
+	// Valve requires promoting to default through the partner site by hand.
+	"setlive"	"__SETLIVE__"
+
+	"depots"
+	{
+		"__DEPOT_WINDOWS__"	"depot_windows.vdf"
+		"__DEPOT_MAC__"		"depot_mac.vdf"
+	}
+}

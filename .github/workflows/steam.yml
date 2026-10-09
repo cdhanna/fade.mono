@@ -1,0 +1,300 @@
+name: Steam (Fish Fish Pop)
+
+# Builds the fish game (Fade.MonoGame/) for Windows and macOS and uploads both to Steam.
+# Run by hand: Actions -> Steam (Fish Fish Pop) -> Run workflow.
+#
+# One-time setup, and every value that has to be swapped in, is in steam/SETUP.md.
+#
+# Repository VARIABLES (Settings -> Secrets and variables -> Actions -> Variables):
+#   STEAM_APP_ID          the app id
+#   STEAM_DEPOT_WINDOWS   the Windows depot id
+#   STEAM_DEPOT_MAC       the macOS depot id
+#
+# Repository SECRETS:
+#   STEAM_USERNAME          login name of the Steam builder account
+#   STEAM_CONFIG_VDF        base64 of that account's steamcmd config.vdf
+#   CLOUDFLARE_API_TOKEN    R2 token, Object Read only
+#   CLOUDFLARE_ACCOUNT_ID   the Cloudflare account the bucket lives in
+
+on:
+  workflow_dispatch:
+    inputs:
+      set_live:
+        description: 'Steam branch to set the build live on. Use "none" to upload without setting live (required for the very first build, before the branch can be created).'
+        required: false
+        default: test
+      deploy:
+        description: 'Upload to Steam. Untick to only build: the two builds are then attached to the run as artifacts, and no Steam secret is needed.'
+        type: boolean
+        required: false
+        default: true
+
+concurrency:
+  group: steam-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GAME_PROJECT: Fade.MonoGame/Fade.MonoGame.csproj
+  # The executable `dotnet publish` produces: the assembly name. The Windows launch option in
+  # Steamworks is "<EXE_NAME>.exe".
+  EXE_NAME: Fade.MonoGame
+  # The macOS bundle is "<APP_NAME>.app", which is the macOS launch option in Steamworks.
+  APP_NAME: FishFishPop
+  DISPLAY_NAME: Fish Fish Pop
+
+  # NOTE: the graphics backend is OpenGL (MonoGame DesktopGL), which is what
+  # $(FadeMonoGamePlatform) defaults to and what the game's shaders are written for. OpenGL
+  # shaders compile through MGFXC, which shells out to the Windows fxc.exe, hence the Wine
+  # step below. -p:FadeEngineShaderVariants=Desktop on both publishes stops the engine from
+  # also baking a Vulkan variant of its sprite shader that this game never loads.
+
+jobs:
+  build:
+    # ONE Linux runner produces both platforms. `dotnet publish -r <rid> --self-contained`
+    # cross-builds, the macOS bundle is assembled by a shell script, and Linux keeps the
+    # executable bit on the macOS binary, which a Windows runner would lose.
+    name: build and deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Before the slow part, so a missing id costs seconds and not a whole build.
+      - name: Require Steam ids and credentials
+        if: inputs.deploy
+        env:
+          STEAM_APP_ID: ${{ vars.STEAM_APP_ID }}
+          STEAM_DEPOT_WINDOWS: ${{ vars.STEAM_DEPOT_WINDOWS }}
+          STEAM_DEPOT_MAC: ${{ vars.STEAM_DEPOT_MAC }}
+          STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
+          STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+        run: |
+          fail=0
+          for name in STEAM_APP_ID STEAM_DEPOT_WINDOWS STEAM_DEPOT_MAC; do
+            if ! [[ "${!name}" =~ ^[0-9]+$ ]]; then
+              echo "::error::Repository variable $name is not set to a number. See steam/SETUP.md."
+              fail=1
+            fi
+          done
+          if [ -z "$STEAM_CONFIG_VDF" ] || [ -z "$STEAM_USERNAME" ]; then
+            echo "::error::STEAM_USERNAME and STEAM_CONFIG_VDF must be set as repository secrets. See steam/SETUP.md."
+            fail=1
+          fi
+          [ "$fail" = "0" ] || exit 1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-steam-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.*.props') }}
+          restore-keys: |
+            nuget-steam-${{ runner.os }}-
+
+      # The textures, audio and fonts live in Cloudflare R2, not git. build/assets.lock pins
+      # the exact bundle this commit builds against, so CI compiles the same bytes the author
+      # pushed. Must run before any dotnet build: the game's CheckBucketAssets target fails
+      # the build outright when the folders are missing.
+      - name: Fetch bucket assets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set as repository secrets. See steam/SETUP.md."
+            exit 1
+          fi
+          bash build/fetch-assets.sh
+
+      # Same setup as ci.yml. See https://docs.monogame.net/errors/mgfx0001?tab=linux
+      - name: Setup Wine for MGFXC (shader compilation)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wine64
+          wget -qO- https://monogame.net/downloads/net8_mgfxc_wine_setup.sh | bash
+          echo "MGFXC_WINE_PATH=$HOME/.winemonogame" >> "$GITHUB_ENV"
+
+      - name: Publish win-x64
+        run: |
+          dotnet publish "$GAME_PROJECT" \
+            -c Release \
+            -p:FadeEngineShaderVariants=Desktop \
+            -r win-x64 \
+            --self-contained true \
+            -o publish/win-x64
+
+      # Apple Silicon only. An Intel Mac would need a second publish (-r osx-x64) and its
+      # own bundle.
+      - name: Publish osx-arm64
+        run: |
+          dotnet publish "$GAME_PROJECT" \
+            -c Release \
+            -p:FadeEngineShaderVariants=Desktop \
+            -r osx-arm64 \
+            --self-contained true \
+            -o publish/osx-arm64
+
+      # A publish that leaves these out still succeeds, and produces a game that dies at
+      # launch. The payload itself is the evidence.
+      - name: Verify the payloads
+        run: |
+          fail=0
+          need() {
+            if [ -z "$(find "$1" -maxdepth 1 -iname "$2" -print -quit)" ]; then
+              echo "::error::$1 has no $2"
+              fail=1
+            fi
+          }
+          need publish/win-x64   "$EXE_NAME.exe"
+          need publish/win-x64   'MonoGame.Framework.dll'
+          need publish/win-x64   'SDL2.dll'
+          need publish/osx-arm64 "$EXE_NAME"
+          need publish/osx-arm64 'MonoGame.Framework.dll'
+          need publish/osx-arm64 'libSDL2*.dylib'
+          for rid in win-x64 osx-arm64; do
+            count=$(find "publish/$rid/Content" -name '*.xnb' 2>/dev/null | wc -l)
+            echo "$rid: $count content files"
+            if [ "$count" -lt 20 ]; then
+              echo "::error::publish/$rid/Content has $count .xnb files; the content build produced next to nothing"
+              fail=1
+            fi
+            # One of each kind that comes from the bucket, so a bundle that is missing a
+            # whole folder cannot upload.
+            for probe in 'Fish/Textures/Goldfish.xnb' 'Fish/Fonts/ZeroCool.xnb' 'Fish/Audio/bubble-pop-2.xnb' 'Fish/Shaders/FishEffect.xnb'; do
+              if [ ! -f "publish/$rid/Content/$probe" ]; then
+                echo "::error::publish/$rid/Content/$probe is missing"
+                fail=1
+              fi
+            done
+          done
+          [ "$fail" = "0" ] || exit 1
+
+      # arm64 macOS SIGKILLs an unsigned binary. `codesign` does not exist here, hence the
+      # Mach-O parser.
+      - name: Verify the macOS apphost is signed
+        run: python3 build/check-macho-signed.py "publish/osx-arm64/$EXE_NAME"
+
+      - name: Stage Windows payload
+        run: |
+          mkdir -p steam/content/windows
+          cp -R publish/win-x64/. steam/content/windows/
+          find steam/content/windows -maxdepth 1 \( -name '*.pdb' -o -name '_lastRun.log' \) -delete
+
+      # Steam's macOS launch option needs a .app.
+      - name: Package macOS app bundle
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          mkdir -p steam/content/mac
+          bash build/make-macos-app.sh publish/osx-arm64 steam/content/mac
+          APP="steam/content/mac/$APP_NAME.app"
+          test -x "$APP/Contents/MacOS/$EXE_NAME" \
+            || { echo "::error::macOS executable lost its +x bit"; exit 1; }
+          # A bundled game only sees content in Contents/Resources.
+          test -f "$APP/Contents/Resources/Content/Fish/Textures/Goldfish.xnb" \
+            || { echo "::error::macOS bundle has no content in Contents/Resources/Content"; exit 1; }
+          test ! -d "$APP/Contents/MacOS/Content" \
+            || { echo "::error::Content staged in Contents/MacOS -- a bundled app cannot see it"; exit 1; }
+
+      # Build-only runs: hand the two builds over as artifacts instead. Tarred, because the
+      # artifact zip would strip the executable bit from the macOS bundle.
+      - name: Pack builds for download
+        if: ${{ !inputs.deploy }}
+        run: |
+          mkdir -p artifacts-out
+          ( cd steam/content/windows && zip -qr "$GITHUB_WORKSPACE/artifacts-out/$APP_NAME-windows-x64.zip" . )
+          tar -czf "artifacts-out/$APP_NAME-macos-arm64.tar.gz" -C steam/content/mac "$APP_NAME.app"
+
+      - name: Upload builds as artifacts
+        if: ${{ !inputs.deploy }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: fishfishpop-builds
+          path: artifacts-out/
+          retention-days: 7
+          compression-level: 0
+
+      - name: Install steamcmd
+        if: inputs.deploy
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends lib32gcc-s1 lib32stdc++6
+          mkdir -p "$HOME/steamcmd"
+          curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+            | tar -xz -C "$HOME/steamcmd"
+          # First run bootstraps and self-updates; it exits non-zero by design.
+          "$HOME/steamcmd/steamcmd.sh" +quit || true
+
+      - name: Restore Steam login
+        if: inputs.deploy
+        env:
+          STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
+        run: |
+          # The tarball build of steamcmd roots itself at ~/Steam, while the Debian package
+          # uses ~/.local/share/Steam. Write both so a layout change can't silently turn
+          # into an auth failure.
+          for dir in "$HOME/Steam/config" "$HOME/.local/share/Steam/config"; do
+            mkdir -p "$dir"
+            echo "$STEAM_CONFIG_VDF" | base64 -d > "$dir/config.vdf"
+            chmod 600 "$dir/config.vdf"
+          done
+          test -s "$HOME/Steam/config/config.vdf" \
+            || { echo "::error::STEAM_CONFIG_VDF did not base64-decode to anything"; exit 1; }
+
+      - name: Upload build to Steam
+        if: inputs.deploy
+        id: steam_upload
+        env:
+          STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+          STEAM_APP_ID: ${{ vars.STEAM_APP_ID }}
+          STEAM_DEPOT_WINDOWS: ${{ vars.STEAM_DEPOT_WINDOWS }}
+          STEAM_DEPOT_MAC: ${{ vars.STEAM_DEPOT_MAC }}
+          # Passed through env rather than inlined into the script, to keep the input out
+          # of the shell it would otherwise be interpolated into.
+          SET_LIVE: ${{ inputs.set_live || 'test' }}
+        run: |
+          # "none" is the sentinel for "don't set live" -- an empty workflow input can't be
+          # distinguished from an absent one.
+          if [ "$SET_LIVE" = "none" ]; then SET_LIVE=""; fi
+          if ! [[ "$SET_LIVE" =~ ^[A-Za-z0-9_.-]*$ ]]; then
+            echo "::error::set_live must be a Steam branch name (letters, digits, - _ .) or \"none\""
+            exit 1
+          fi
+          if [ "$SET_LIVE" = "default" ] || [ "$SET_LIVE" = "public" ]; then
+            echo "::error::Steam does not allow a build script to set the default branch live. Upload to a beta branch and promote it on the Steamworks Builds page."
+            exit 1
+          fi
+          echo "setlive target: '${SET_LIVE:-<none>}'"
+
+          DESC="${GITHUB_REF_NAME//[^A-Za-z0-9_.\/-]/_} ${GITHUB_SHA:0:7} (run ${GITHUB_RUN_NUMBER})"
+          sed -i \
+            -e "s|__APP_ID__|${STEAM_APP_ID}|g" \
+            -e "s|__DEPOT_WINDOWS__|${STEAM_DEPOT_WINDOWS}|g" \
+            -e "s|__DEPOT_MAC__|${STEAM_DEPOT_MAC}|g" \
+            -e "s|__DESC__|${DESC}|g" \
+            -e "s|__SETLIVE__|${SET_LIVE}|g" \
+            steam/app_build.vdf steam/depot_windows.vdf steam/depot_mac.vdf
+
+          "$HOME/steamcmd/steamcmd.sh" \
+            +login "$STEAM_USERNAME" \
+            +run_app_build "$GITHUB_WORKSPACE/steam/app_build.vdf" \
+            +quit
+
+      - name: Dump SteamPipe logs on failure
+        if: failure() && steps.steam_upload.outcome == 'failure'
+        run: |
+          for f in steam/output/*.log "$HOME"/Steam/logs/*.txt; do
+            [ -f "$f" ] && { echo "===== $f ====="; cat "$f"; }
+          done || true
