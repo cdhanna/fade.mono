@@ -9,7 +9,7 @@ global SCORE_POS as vec = {
 
 
 global dim CARDS(32) as ability
-global CARD_LENGTH = 23
+global CARD_LENGTH = 24
 
 global CURRENT_MOVE_COUNT = 0
 global MOVE_COUNT_TEXT_ID
@@ -38,12 +38,14 @@ global ABILITY_INDEX_CONTAGIOUS_SMILE = 13
 global ABILITY_INDEX_BOTTOMS_UP = 14
 global ABILITY_INDEX_MOVE_FREE = 15
 global ABILITY_INDEX_MOVE_ROBOT = 16
-global ABILITY_INDEX_MOVE_ERASER = 17
+global ABILITY_INDEX_MOVE_KNOWN_FILL = 17
 global ABILITY_INDEX_JELLIES = 18
 global ABILITY_INDEX_RAYS = 19
 global ABILITY_INDEX_BOTTLES = 20
 global ABILITY_INDEX_MOVE_WASTE_BUCKET = 21
 global ABILITY_INDEX_MOVE_BUNCH_UP = 22
+` an instant, so it is a constant, like the other two instants. handle_ability_instant_effect picks between them by number.
+#constant ABILITY_INDEX_MOVE_SLOT 23
 
 ` THE NEW KINDS OF FISH. three cards each put a new kind of thing on the board. each one is a kind of
 ` fish like any other: it has a picture, it can be swapped, and three of it in a row pop. load_textures,
@@ -102,18 +104,14 @@ global ROBOT_SWAP_TIME = 170 `how long each of its swaps takes, in milliseconds
 global ROBOT_STAMP = 1000000 `a number that is different for every search that it makes. see robotGroupSize.
 global ROBOT_LAST_COUNT = 0 `how many swaps it made the last time. 0 means that it found nothing to do.
 
-` THE ERASER. a special move that sorts the whole board, with a flurry of quick swaps, so that every
-` kind of fish ends up all together, and then all of it pops.
-` it sorts along a path that snakes through the board: left to right along the top row, back from right
-` to left along the next one, and so on down. two cells that are next to each other on the path are
-` next to each other on the board, so every swap that it makes is one that the player could have made.
-` once the path is sorted, each kind of fish is one unbroken stretch of it, and so one group.
-` a kind that there are too few of to pop on their own gets popped anyway, so that nothing is left over.
-` doEraser, in fish_funcs, does it.
-global ERASER_COOLDOWN = 6 `how many moves it takes to recharge
-global ERASER_SPEED_START# = 1 `how many swaps it makes on its first frame
-global ERASER_SPEED_GROW# = .35 `how many more it makes on every frame after that, so that it starts slow enough to follow and then tears through
-global ERASER_SPEED_MAX# = 60 `the most that it makes on a frame
+` KNOWN FILL. a special move that is a swap. when the swap pops fish, the new fish that drop in to
+` fill the gaps are all the same kind as the fish that was moved, instead of being picked at random.
+` that only goes for the first time the board fills back in. if those fish pop in turn, what fills in
+` after them is picked at random again, or it would never stop.
+` a bottle is not copied this way. a swap of a bottle fills in at random, like any other swap.
+` doKnownFill, in fish_funcs, starts it, and handle_combos does the filling.
+global KNOWN_FILL_COOLDOWN = 4 `how many moves it takes to recharge
+global KNOWN_FILL_VALUE = 0 `the kind of fish that the next fill is made of, or 0 when it is picked at random
 
 ` ability type enum constants
 ` global ABILITY_TYPE_PASSIVE = 0
@@ -147,9 +145,10 @@ global MOVE_SLOT_COUNT = 4
 global dim ACT_ABILITY(MOVE_SLOT_COUNT)
 
 ` how many of the slots can be used. a new game starts with MOVE_SLOT_START_COUNT of them, and
-` MOVE_SLOTS_OPEN can go up from there, as far as MOVE_SLOT_COUNT. nothing raises it yet.
-global MOVE_SLOT_START_COUNT = 4
-global MOVE_SLOTS_OPEN = 4
+` MOVE_SLOTS_OPEN can go up from there, as far as MOVE_SLOT_COUNT. the "tackle box" card opens one more
+` every time that it is taken, so it can be taken as many times as there are slots that start out shut.
+global MOVE_SLOT_START_COUNT = 1
+global MOVE_SLOTS_OPEN = 1
 
 ` which device the input icons were last set up for. -1 means that they have not been set up at all.
 global INPUT_ICON_DEVICE = -1

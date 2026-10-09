@@ -465,11 +465,10 @@ function bunchGroup(keepIndex, required)
     create basic tween CELLS(keepIndex).scaleWaveTweenId, 1.6, 1, 300, 0
 endfunction
 
-` swap the fish under the cursor with the one next to it, and then stack up whatever that connects.
-` this stops the game until it has played out, the same as the other special moves do.
-function doBunchUp(start as vec, dir as vec)
+` the fish in the `start` cell and the one in the `target` cell trade places, and the cursor goes along
+` with the first one. the special moves that are swaps use this. it stops the game until it has played out.
+function playSpecialSwap(start as vec, target as vec)
     spawnCursorWake(start.x, start.y)
-    target as vec = addCoordinates(start, dir)
     aIndex = getCellIndex(start)
     bIndex = getCellIndex(target)
 
@@ -511,11 +510,18 @@ function doBunchUp(start as vec, dir as vec)
     swapCellStacks(aIndex, bIndex)
     updateCell(CELLS(aIndex))
     updateCell(CELLS(bIndex))
+endfunction
+
+` swap the fish under the cursor with the one next to it, and then stack up whatever that connects.
+` this stops the game until it has played out, the same as the other special moves do.
+function doBunchUp(start as vec, dir as vec)
+    target as vec = addCoordinates(start, dir)
+    playSpecialSwap(start, target)
 
     ` the fish that went with the cursor gets its stack first, and then the one that came back the other way
     required = getRequiredComboCount()
-    bunchGroup(bIndex, required)
-    bunchGroup(aIndex, required)
+    bunchGroup(getCellIndex(target), required)
+    bunchGroup(getCellIndex(start), required)
 
     registerMove(1)
 endfunction
@@ -1878,116 +1884,20 @@ function doRobot(start as vec, dir as vec)
     endif
 endfunction
 
-` THE ERASER. see the notes in fish_headers.
+` KNOWN FILL. see the notes in fish_headers.
 
-` the cell that is this far along the path that snakes through the board
-function getSnakeCell(pathAt)
-    snakeRow = pathAt / CELL_COLUMN_COUNT
-    snakeCol = pathAt mod CELL_COLUMN_COUNT
-
-    ` every other row runs backwards, so that the end of one row is right above the start of the next
-    if snakeRow mod 2 = 1 then snakeCol = CELL_COLUMN_COUNT - 1 - snakeCol
-endfunction snakeRow * CELL_COLUMN_COUNT + snakeCol
-
-` sort the whole board along the snaking path, with swaps of fish that are next to each other, and
-` then see to it that all of it pops.
+` swap the fish under the cursor with the one next to it. if that pops anything, the new fish that
+` drop in are all the kind that was moved. handle_combos does that part.
 ` this stops the game until it has played out, the same as the other special moves do.
-function doEraser(start as vec, dir as vec)
-    spawnCursorWake(start.x, start.y)
+function doKnownFill(start as vec, dir as vec)
     target as vec = addCoordinates(start, dir)
-    required = getRequiredComboCount()
+    movedValue = CELLS(getCellIndex(start)).value
 
-    set sfx volume SFX_SWAP, 1
+    playSpecialSwap(start, target)
 
-    ` sweep down the path over and over, swapping any two neighbors that are the wrong way around,
-    ` until a whole sweep finds nothing to swap. a few swaps are made on every frame, and more and
-    ` more of them as it goes.
-    eraserSpeed# = ERASER_SPEED_START#
-    swapsThisFrame = 0
-    swapsEver = 0
-    lastStep = CELL_COUNT - 2
-    sorting = 1
-    while sorting
-        sorting = 0
-        for pathAt = 0 to lastStep
-            aIndex = getSnakeCell(pathAt)
-            bIndex = getSnakeCell(pathAt + 1)
-            if CELLS(aIndex).value > CELLS(bIndex).value
-                sorting = 1
-
-                swapValue = CELLS(aIndex).value
-                CELLS(aIndex).value = CELLS(bIndex).value
-                CELLS(bIndex).value = swapValue
-                swapCellStacks(aIndex, bIndex)
-                updateCell(CELLS(aIndex))
-                updateCell(CELLS(bIndex))
-
-                ` a bubble now and then, so that the swaps leave a trail
-                swapsEver = swapsEver + 1
-                if swapsEver mod 12 = 0
-                    spawnBubbles(getCellX(CELLS(bIndex).coord.x), getCellY(CELLS(bIndex).coord.y), CELL_SIZE / 4, 1, 0, rgb(255, 255, 255))
-                endif
-
-                ` that is enough for this frame, so show it
-                swapsThisFrame = swapsThisFrame + 1
-                if swapsThisFrame >= eraserSpeed#
-                    swapsThisFrame = 0
-                    eraserSpeed# = eraserSpeed# + ERASER_SPEED_GROW#
-                    if eraserSpeed# > ERASER_SPEED_MAX# then eraserSpeed# = ERASER_SPEED_MAX#
-
-                    ` the cursor chases the swaps
-                    position sprite SELECTION_SPRITE, getCellX(CELLS(bIndex).coord.x), getCellY(CELLS(bIndex).coord.y)
-
-                    collectInput()
-                    updateBubbles()
-                    sync
-                endif
-            endif
-        next
-    endwhile
-
-    set sfx volume SFX_SWAP, 0
-
-    ` every kind of fish is one unbroken stretch of the path now. a stretch that is too short to pop on
-    ` its own gets popped anyway.
-    runStart = 0
-    lastCell = CELL_COUNT - 1
-    for pathAt = 1 to CELL_COUNT
-        runEnds = 0
-        if pathAt = CELL_COUNT
-            runEnds = 1
-        else
-            hereCell = getSnakeCell(pathAt)
-            runCell = getSnakeCell(runStart)
-            if CELLS(hereCell).value <> CELLS(runCell).value then runEnds = 1
-        endif
-
-        if runEnds
-            runLength = pathAt - runStart
-            if runLength < required
-                runLast = pathAt - 1
-                for runAt = runStart to runLast
-                    forceCell = getSnakeCell(runAt)
-                    CELLS(forceCell).comboForce = 1
-                next
-            endif
-            runStart = pathAt
-        endif
-    next
-
-    ` the cursor goes to where it ends up, one cell over from where it started
-    cursorX = sprite x(SELECTION_SPRITE)
-    cursorY = sprite y(SELECTION_SPRITE)
-    endX = getCellX(target.x)
-    endY = getCellY(target.y)
-    create basic tween TWEEN_SWAP_AX, 0, 1, 150, 0
-    while is tween done(TWEEN_SWAP_AX) < 1
-        glide# = tweenVal(TWEEN_SWAP_AX)
-        position sprite SELECTION_SPRITE, cursorX + (endX - cursorX) * glide#, cursorY + (endY - cursorY) * glide#
-        collectInput()
-        updateBubbles()
-        sync
-    endwhile
+    ` a bottle is not copied
+    KNOWN_FILL_VALUE = movedValue
+    if movedValue = TEX_BOTTLE then KNOWN_FILL_VALUE = 0
 
     registerMove(1)
 endfunction

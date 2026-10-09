@@ -222,7 +222,8 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_LINE_OUT).artTexId), "Fish/Textures/Cards/line_out"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_FREE).artTexId), "Fish/Textures/Cards/free_swap"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_ROBOT).artTexId), "Fish/Textures/Cards/robot"
-    texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_ERASER).artTexId), "Fish/Textures/Cards/eraser"
+    texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_KNOWN_FILL).artTexId), "Fish/Textures/Cards/known_fill"
+    texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_SLOT).artTexId), "Fish/Textures/Cards/tackle_box"
     texture reserve texture id(CARDS(ABILITY_INDEX_JELLIES).artTexId), "Fish/Textures/Cards/jellies"
     texture reserve texture id(CARDS(ABILITY_INDEX_RAYS).artTexId), "Fish/Textures/Cards/rays"
     texture reserve texture id(CARDS(ABILITY_INDEX_BOTTLES).artTexId), "Fish/Textures/Cards/bottles"
@@ -1128,6 +1129,7 @@ handle_combos:
     if totalComboCount = 0
         REQUEST_COMBO_CHECK = 0
         SEABED_COMBO = 0
+        KNOWN_FILL_VALUE = 0 `a "known fill" swap that popped nothing has nothing to fill
         TUTORIAL_SCORE_HOLD = 0 `the fish that brought the bar of the round in have all popped, so the next ones score
 
         ` the board has settled, so this is when a move gets its chance to turn a fish belly up
@@ -1367,6 +1369,9 @@ handle_combos:
         targetAlpha = 255
         if cell.comboBlownUp > 0
             CELLS(i-1).value = getImpossibleRandomValueForCell(i - 1)
+
+            ` after a "known fill" swap, the new fish are all the kind that was moved. see KNOWN FILL in fish_headers.
+            if KNOWN_FILL_VALUE > 0 then CELLS(i-1).value = KNOWN_FILL_VALUE
             set sprite texture cell.spriteId, CELLS(i-1).value
             targetY = y - CELL_SIZE * 2
             startAlpha = 0
@@ -1385,6 +1390,8 @@ handle_combos:
         create basic tween cell.comboAlphaTweenId, startAlpha, targetAlpha, 150, delay
     next
 
+    ` that was the one fill that a "known fill" swap gets
+    KNOWN_FILL_VALUE = 0
 
     ` wait for all exit animations to finish
     COMBO_PHASE = 3

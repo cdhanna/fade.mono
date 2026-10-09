@@ -20,6 +20,14 @@ setup_abilities:
         stackable = 1
         maxUses = BOARD_EXPANSION_MAX
     }
+    CARDS(ABILITY_INDEX_MOVE_SLOT) = {
+        name$ = "tackle box"
+        desc$ = "Opens another slot, so that one more special move can be carried."
+        obtained = 0
+        abilityType = ABILITY_TYPE_INSTANT,
+        stackable = 1
+        maxUses = MOVE_SLOT_COUNT - MOVE_SLOT_START_COUNT
+    }
 
     ` passives
     CARDS(ABILITY_INDEX_WRAP) = {
@@ -172,15 +180,15 @@ setup_abilities:
         moveValue = [MOVE_ROBOT]
     }
 
-    ` see THE ERASER in fish_headers
-    CARDS(ABILITY_INDEX_MOVE_ERASER) = {
-        name$ = "the eraser"
-        desc$ = "sorts the whole board with a flurry of swaps, so that all of it pops"
+    ` see KNOWN FILL in fish_headers
+    CARDS(ABILITY_INDEX_MOVE_KNOWN_FILL) = {
+        name$ = "known fill"
+        desc$ = "a swap. if it pops fish, the new fish that drop in are all the kind that was moved"
         obtained = 0
         abilityType = ABILITY_TYPE_MOVE
         stackable = 0
-        moveClock = ERASER_COOLDOWN
-        moveValue = [MOVE_ERASER]
+        moveClock = KNOWN_FILL_COOLDOWN
+        moveValue = [MOVE_KNOWN_FILL]
     }
 
     ` see THE WASTE BUCKET in fish_headers
@@ -460,6 +468,11 @@ assign_ability_selection:
                     valid = 0
                 endif
 
+                ` the "tackle box" has nothing to open once every slot is open
+                if candidate = ABILITY_INDEX_MOVE_SLOT and MOVE_SLOTS_OPEN >= MOVE_SLOT_COUNT
+                    valid = 0
+                endif
+
                 ` some cards can only be taken so many times
                 if CARDS(candidate).maxUses > 0 and CARDS(candidate).uses >= CARDS(candidate).maxUses
                     valid = 0
@@ -496,6 +509,10 @@ handle_ability_instant_effect:
         case ABILITY_INDEX_MIND_EXPANSION
             ` the board grows in handle_board_expansion, once the upgrade screen is out of the way
             PENDING_BOARD_EXPANSIONS = PENDING_BOARD_EXPANSIONS + 1
+        endcase
+        case ABILITY_INDEX_MOVE_SLOT
+            ` the new slot is empty, and the next move that gets picked goes straight into it
+            if MOVE_SLOTS_OPEN < MOVE_SLOT_COUNT then MOVE_SLOTS_OPEN = MOVE_SLOTS_OPEN + 1
         endcase
     endselect
 return
