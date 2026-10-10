@@ -174,6 +174,121 @@ handle_coral_ending:
 return
 
 
+` THE FISH GO HOME. see fish_headers. handle_game_end, in fish_routines_menu, comes here when a game has
+` been won the usual way. like the two endings, it draws frames of its own, and everything in it starts with "fin".
+finale_goodbye:
+    set text CORAL_END_TEXT_ID, "The fish need to go home, now. Bye bye!"
+    color text CORAL_END_TEXT_ID, rgb(200, 228, 255)
+    set text CORAL_END_SUB_TEXT_ID, "If they had a home..."
+    color text CORAL_END_SUB_TEXT_ID, rgb(140, 165, 215)
+
+    ` these words are longer than the words of the other endings, so they are made to fit
+    size text y CORAL_END_TEXT_ID, 32
+    finRoom = WORLD_WIDTH - 40
+    if get text size x(CORAL_END_TEXT_ID) > finRoom
+        size text y CORAL_END_TEXT_ID, 26
+    endif
+    if get text size x(CORAL_END_TEXT_ID) > finRoom
+        size text y CORAL_END_TEXT_ID, 22
+    endif
+
+    ` every fish starts from its cell. it heads off to the right, and up or down a little, by how far
+    ` above or below the middle of the board it is, so that they fan out. the columns set off one
+    ` after another, from the right, so that no fish swims through the ones ahead of it.
+    finRows# = CELL_ROW_COUNT
+    finMidY# = getCellY(0) + (finRows# - 1) * CELL_SIZE / 2
+    for finI = 0 to CELL_COUNT - 1
+        finCol = finI mod CELL_COLUMN_COUNT
+        CORAL_DANCE_X#(finI) = getCellX(finCol)
+        CORAL_DANCE_Y#(finI) = getCellY(finI / CELL_COLUMN_COUNT)
+        finFan# = (CORAL_DANCE_Y#(finI) - finMidY#) / (finRows# * CELL_SIZE)
+        CORAL_DANCE_VX#(finI) = GOODBYE_SPEED# * (.8 + rnd(41) * .01)
+        CORAL_DANCE_VY#(finI) = CORAL_DANCE_VX#(finI) * finFan# * .6
+        CORAL_DANCE_SLOT(finI) = ((CELL_COLUMN_COUNT - 1) - finCol) * GOODBYE_STAGGER_MS + rnd(400)
+    next
+
+    ` the key hints go, and the full bar stops fizzing
+    hintShow(0)
+    SCORE_BAR_FIZZ_MS = game ms() + 10000000
+
+    finStart = game ms()
+    finLast = finStart
+    finWords# = CORAL_END_WORDS_MS
+    finHud# = GOODBYE_HUD_MS
+    finDone = 0
+    repeat
+        ` the things around the board fade away. update_frame draws them, and then fades them by this much.
+        finAge# = game ms() - finStart
+        HUD_KEEP# = 1 - finAge# / finHud#
+        if HUD_KEEP# < 0 then HUD_KEEP# = 0
+
+        gosub update_frame
+
+        finNow = game ms()
+        finAge# = finNow - finStart
+        finBob# = sin(finAge# * .003) * 3
+
+        ` the cursor fades away, the same way that it does for the other endings
+        finCursor# = 1 - finAge# / CORAL_END_CURSOR_MS
+        if finCursor# < 0 then finCursor# = 0
+        set sprite alpha SELECTION_SPRITE, 90 * finCursor#
+        set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, finCursor#
+
+        ` how long this frame is, in seconds. the game can stall, and the fish should not leap when it comes back.
+        finStep# = (finNow - finLast) * .001
+        finLast = finNow
+        if finStep# > .05 then finStep# = .05
+
+        ` a fish that has set off gets up to speed gently, and wanders up and down a little as it goes
+        for finI = 0 to CELL_COUNT - 1
+            finGone# = finAge# - CORAL_DANCE_SLOT(finI)
+            if finGone# > 0
+                finPace# = finGone# / 1500
+                if finPace# > 1 then finPace# = 1
+                finDrift# = sin(finAge# * .004 + finI * 1.7) * 5
+                CORAL_DANCE_X#(finI) = CORAL_DANCE_X#(finI) + CORAL_DANCE_VX#(finI) * finPace# * finStep#
+                CORAL_DANCE_Y#(finI) = CORAL_DANCE_Y#(finI) + (CORAL_DANCE_VY#(finI) + finDrift#) * finPace# * finStep#
+                position sprite CELLS(finI).spriteId, CORAL_DANCE_X#(finI), CORAL_DANCE_Y#(finI)
+            endif
+        next
+
+        ` the words fade in, and bob a little. the smaller ones come a moment after.
+        finShown# = (finAge# - 700) / finWords#
+        if finShown# < 0 then finShown# = 0
+        if finShown# > 1 then finShown# = 1
+        finSubShown# = (finAge# - 700 - CORAL_END_WORDS_MS - GOODBYE_SUB_MS) / finWords#
+        if finSubShown# < 0 then finSubShown# = 0
+        if finSubShown# > 1 then finSubShown# = 1
+        set text alpha CORAL_END_TEXT_ID, 255 * finShown#
+        set text alpha CORAL_END_SUB_TEXT_ID, 255 * finSubShown#
+        set text position CORAL_END_TEXT_ID, WORLD_WIDTH / 2, 150 + finBob#
+        set text position CORAL_END_SUB_TEXT_ID, WORLD_WIDTH / 2, 176 + finBob#
+
+        sync
+
+        ` the player can move on once all of the words have been there for a moment, and it moves on by itself after a while
+        if finAge# > 700 + CORAL_END_WORDS_MS * 2 + GOODBYE_SUB_MS + 1200
+            if new action down(ACT_CONFIRM) then finDone = 1
+        endif
+        if finAge# > GOODBYE_MAX_MS then finDone = 1
+    until finDone
+
+    ` the words go, and are the size that the other endings want them again. the fish that have not
+    ` got off of the screen yet are gone too: the board is empty under the menu that comes up next.
+    set text alpha CORAL_END_TEXT_ID, 0
+    set text alpha CORAL_END_SUB_TEXT_ID, 0
+    size text y CORAL_END_TEXT_ID, 32
+    for finI = 0 to CELL_COUNT - 1
+        position sprite CELLS(finI).spriteId, WORLD_WIDTH + 200, CORAL_DANCE_Y#(finI)
+    next
+    FISH_AWAY = 1
+
+    ` and the things around the board are gone for good, however early the player moved on
+    HUD_KEEP# = 0
+    applyHudFade()
+return
+
+
 ` the reef is saved. there is a fanfare. the fish leave their cells and swim off, every one its own way,
 ` and wander around among the coral, and then they find their own kind and school. see THE SCHOOLS in
 ` fish_headers. now and then one hops, and hearts come up from them, and the water is as bright as it gets.
@@ -940,6 +1055,15 @@ function resetCoral()
     CORAL_SWAP_B = -1
     CORAL_HELD_GROUPS = 0
     CORAL_HINT_DUE = 0
+    CORAL_SHOW_TIME_LEFT = 0
+    FISH_AWAY = 0
+
+    ` and whatever faded away around the board when the fish went home is back. see THE FISH GO HOME in fish_headers.
+    if HUD_KEEP# < 1
+        HUD_KEEP# = 1
+        SCORE_BAR_FIZZ_MS = 0
+        applyHudFade()
+    endif
     coralClearHint()
     coralPlaceInfo()
     coralAllSung()
@@ -1489,9 +1613,21 @@ function coralRollHint()
 
     if coralRollOk
         if coralRollYes
+            ` with "show time", this one is the easy kind, whatever brought it. the hint has to know
+            ` before it starts, for its bubbles. see SHOW TIME in fish_headers.
+            coralRollShow = 0
+            if CORAL_SHOW_TIME_LEFT > 0
+                coralRollShow = 1
+                CORAL_HINT_AS_LISTEN = 1
+            endif
+
             if coralStartAnyHint()
                 CORAL_HINT_DUE = 0
                 CORAL_HINT_TRAIL_ON = coralRollBig
+                if coralRollShow
+                    CORAL_HINT_TRAIL_ON = 1
+                    CORAL_SHOW_TIME_LEFT = CORAL_SHOW_TIME_LEFT - 1
+                endif
 
                 ` the lucky trail of a hint that came on its own. the name of the card shakes when
                 ` there is one, and at no other time.
@@ -1501,6 +1637,9 @@ function coralRollHint()
                         showPassiveUsed(ABILITY_INDEX_LISTEN)
                     endif
                 endif
+            else
+                ` there was no pattern to give a hint for, so "show time" has not been used
+                if coralRollShow then CORAL_HINT_AS_LISTEN = 0
             endif
         endif
     endif
@@ -2093,6 +2232,7 @@ function coralSave()
     set pref SAVE_PREF_CORAL, CORAL_CASTS
     set pref SAVE_PREF_CORAL + 1, CORAL_MADE
     set pref SAVE_PREF_CORAL + 2, CORAL_USED_COUNT
+    set pref SAVE_PREF_CORAL + 12, CORAL_SHOW_TIME_LEFT
     for coralSaveI = 0 to CORAL_LIVE_MAX - 1
         set pref SAVE_PREF_CORAL + 3 + coralSaveI, CORAL_SEQ_CODE(coralSaveI)
     next
@@ -2106,6 +2246,7 @@ endfunction
 ` put the saved patterns back. load_game has already put the coral back on the cells. a game that was
 ` saved before there was coral has no patterns, so it keeps the new ones that reset_game made.
 function coralLoad()
+    CORAL_SHOW_TIME_LEFT = get pref(SAVE_PREF_CORAL + 12, 0)
     coralLoadAny = 0
     for coralLoadI = 0 to CORAL_LIVE_MAX - 1
         if get pref(SAVE_PREF_CORAL + 3 + coralLoadI, 0) > 1
@@ -2152,6 +2293,93 @@ function coralLoad()
     coralRecount()
     coralDebugRefresh()
     coralRunesRefresh()
+endfunction
+
+
+` THE FISH GO HOME. see fish_headers. fade the things around the board to HUD_KEEP# of what they are.
+` update_frame calls this at the end of every frame that they are not all there, after everything has
+` drawn them the way that it usually does. the count of moves and the multiplier are left alone.
+` with HUD_KEEP# at 1, this puts back the ones that nothing else draws again on every frame.
+function applyHudFade()
+    hudKeep# = HUD_KEEP#
+
+    ` the bar of the round, and the rounds that are left
+    set sprite alpha SCORE_BAR.backgroundSpriteId, 128 * hudKeep#
+    hudBarAlpha = 200
+    if SCORE_BAR_HOLD > 0 then hudBarAlpha = 255
+    set sprite alpha SCORE_BAR.foregroundSpriteId, hudBarAlpha * hudKeep#
+    set text alpha SCORE_BAR.textNumId, 200 * hudKeep#
+    set text alpha SCORE_BAR.textTitleId, 200 * hudKeep#
+    set text alpha ROUNDS_LABEL_TEXT_ID, 200 * hudKeep#
+    set text alpha ROUND_COUNT_TEXT_ID, 200 * hudKeep#
+
+    ` the bar of the multiplier, and the numbers under it. the multiplier itself stays.
+    set sprite alpha MULT_BAR_BACK_SPRITE, 128 * hudKeep#
+    set sprite alpha MULT_BAR_FILL_SPRITE, 200 * hudKeep#
+    set text alpha MULT_NUM_TEXT_ID, 200 * hudKeep#
+
+    ` the passives
+    if PASSIVE_COUNT > 0
+        for hudN = 0 to PASSIVE_COUNT - 1
+            set text alpha PASSIVE_BINDINGS(hudN).titleTextId, tweenVal(PASSIVE_BINDINGS(hudN).fadeTweenId) * 255 * hudKeep#
+        next
+    endif
+
+    ` the special moves, their keys, and the numbers of the ones that are recharging
+    for hudN = 0 to MOVE_SLOT_COUNT - 1
+        if MOVE_ABILITY_BINDINGS(hudN).assigned
+            hudMove# = tweenVal(MOVE_ABILITY_BINDINGS(hudN).fadeTweenId) * hudKeep#
+            set text alpha MOVE_ABILITY_BINDINGS(hudN).titleTextId, hudMove# * 255
+            if MOVE_ABILITY_BINDINGS(hudN).movesLeft > 0
+                set text alpha MOVE_ABILITY_BINDINGS(hudN).keyTextId, hudMove# * 70
+                set text alpha MOVE_ABILITY_BINDINGS(hudN).timerTextId, hudMove# * 240
+            else
+                set text alpha MOVE_ABILITY_BINDINGS(hudN).keyTextId, hudMove# * 255
+                set text alpha MOVE_ABILITY_BINDINGS(hudN).timerTextId, 0
+            endif
+        endif
+    next
+    set sprite alpha COOLDOWN_CLOCK_SPRITE, 200 * tweenVal(COOLDOWN_CLOCK_TWEEN_ID) * hudKeep#
+
+    ` the songs, and the two bars under them. the ones that are not showing are hidden, and stay hidden.
+    if CORAL_USED_COUNT > 0
+        for hudN = 0 to CORAL_USED_COUNT * CORAL_RUNE_DOTS - 1
+            set sprite alpha CORAL_RUNE_SPRITES(hudN), 200 * hudKeep#
+            set sprite alpha CORAL_RUNE_LINKS(hudN), CORAL_RUNE_LINK_ALPHA * hudKeep#
+        next
+    endif
+    set sprite alpha CORAL_BAR_BACKS(0), 128 * hudKeep#
+    set sprite alpha CORAL_BAR_BACKS(1), 170 * hudKeep#
+    set sprite alpha CORAL_BAR_FILLS(0), 225 * hudKeep#
+    set sprite alpha CORAL_BAR_FILLS(1), 225 * hudKeep#
+    for hudN = 0 to CORAL_BAR_DRIP_COUNT - 1
+        set sprite alpha CORAL_BAR_DRIPS(hudN), 255 * hudKeep#
+    next
+    for hudN = 0 to CORAL_BAR_WISP_COUNT * CORAL_BAR_WISP_TALL - 1
+        set sprite alpha CORAL_BAR_WISPS(hudN), 255 * hudKeep#
+    next
+endfunction
+
+
+` THE FISH GO HOME. see fish_headers. the fish left when the game was won, and the game is being
+` carried on with, so they are back in their cells, and the cursor is back. this does nothing when
+` they never left.
+function fishComeHome()
+    if FISH_AWAY = 0 then exitfunction
+    FISH_AWAY = 0
+
+    for homeI = 0 to CELL_COUNT - 1
+        updateCell(CELLS(homeI))
+    next
+    set sprite alpha SELECTION_SPRITE, 90
+    set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, 1
+endfunction
+
+
+` SHOW TIME. see fish_headers. the card has been taken, so the next few hints are the easy kind.
+` handle_ability_instant_effect, in fish_routines_ability, calls this.
+function takeShowTime()
+    CORAL_SHOW_TIME_LEFT = CORAL_SHOW_TIME_LEFT + SHOW_TIME_HINTS
 endfunction
 
 

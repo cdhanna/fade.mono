@@ -9,7 +9,7 @@ global SCORE_POS as vec = {
 
 
 global dim CARDS(32) as ability
-global CARD_LENGTH = 28
+global CARD_LENGTH = 29
 
 global CURRENT_MOVE_COUNT = 0
 global MOVE_COUNT_TEXT_ID
@@ -52,6 +52,8 @@ global ABILITY_INDEX_LISTEN = 24 `see LISTEN, with THE HINTS, further down
 ` the two cards of the hidden game. see THE OPENING SWAP, with CORAL, further down.
 global ABILITY_INDEX_QUICK_SONG = 26
 global ABILITY_INDEX_MOVE_SONG = 27
+` an instant, so it is a constant, like the other instants. see SHOW TIME, with THE HINTS, further down.
+#constant ABILITY_INDEX_SHOW_TIME 28
 
 ` THE NEW KINDS OF FISH. three cards each put a new kind of thing on the board. each one is a kind of
 ` fish like any other: it has a picture, it can be swapped, and three of it in a row pop. load_textures,
@@ -142,16 +144,22 @@ global FORCE_RAY = 10 `the fish above a stingray that popped. the column is adde
 global FORCE_BOTTLE = 40 `a bottle that paid out. the column is added to this too.
 global FORCE_RAY_DOWN = 70 `the fish below a belly up stingray that popped. the column is added to this too.
 
-` THE ROBOT. a special move that makes swaps for the player. it looks at the fish near the cursor, picks
-` the swap that would pop the most fish, makes it, and then does that again, a few times over.
+` THE ROBOT. a special move that makes swaps for the player. the cursor goes in a straight line, the
+` way that the move was pointed, from the cell that it is on to the edge of the board.
+` on every cell that it comes to, it makes the swap with a fish next to it that pops the most. the
+` cursor rides out with the swap and comes back. when no swap there pops anything, it goes on to the
+` next cell. the cursor ends up at the edge of the board.
+` with the "seamless" card, it goes around the edge of the board and carries on, through every cell
+` of its row or column, and the cursor ends up back on the cell that it started on.
+` it can be used anywhere, and it is used up even when it finds no swap to make.
+` the cursor really does come to every cell on its way, so a belly up fish that it comes to pops.
 ` the swaps do not count as moves of their own, and they do not touch the multiplier. the whole thing
 ` counts as the one move. doRobot, in fish_funcs, does it.
-global ROBOT_SWAPS = 3 `how many swaps it makes
-global ROBOT_REACH = 2 `how many cells away from the cursor it looks, in every direction
-global ROBOT_COOLDOWN = 2 `how many moves it takes to recharge
-global ROBOT_SWAP_TIME = 170 `how long each of its swaps takes, in milliseconds
+global ROBOT_COOLDOWN = 4 `how many moves it takes to recharge
+global ROBOT_HOP_TIME = 70 `how long the cursor takes to go from one cell to the next, in milliseconds
+global ROBOT_SWAP_TIME = 170 `how long each of the swaps on its way takes, in milliseconds
 global ROBOT_STAMP = 1000000 `a number that is different for every search that it makes. see robotGroupSize.
-global ROBOT_LAST_COUNT = 0 `how many swaps it made the last time. 0 means that it found nothing to do.
+global ROBOT_LAST_COUNT = 0 `how many swaps it made the last time. 0 means that it found none to make.
 
 ` KNOWN FILL. a special move that is a swap. when the swap pops fish, the new fish that drop in to
 ` fill the gaps are all the same kind as the fish that was moved, instead of being picked at random.
@@ -254,6 +262,20 @@ global LIVE_MOVE_DIR_Y = 0
 global LIVE_MOVE_FREE = 0 `1 if it is the swap of the "free move" card, which is not counted as a move
 global LIVE_MOVE_HOLD = 0 `1 when no new one may start, because a part of a combo is done and waiting to move on
 global COMBO_PHASE = 0 `what a combo is doing right now. 0 is nothing, 1 is popping, 2 is falling, and 3 is filling back in.
+
+` how long a live move takes to play out, in milliseconds. when more moves are waiting in the queue,
+` the one that is starting gets quicker, so that fast presses do not pile up behind it.
+global LIVE_MOVE_TIME = 150
+global LIVE_MOVE_MIN_TIME = 30 `it never gets quicker than this
+global LIVE_MOVE_PACE = 150 `how long the last move of a run took. the next one starts from here.
+
+` the cursor swells as it moves, which is its punch. in a run of moves, one right after another, the
+` punch is softer, so that the cursor does not flicker. it is at its softest when a move starts this
+` soon after the one before it started, and back to full when this long has gone by. in milliseconds.
+global LIVE_PUNCH_RAPID_GAP# = 250.0
+global LIVE_PUNCH_CALM_GAP# = 500.0
+global LIVE_PUNCH_SOFT# = 0.3 `how much of the full punch the softest one is
+global LIVE_MOVE_LAST_MS# = 0.0 `when the last move started
 
 ` a move that cannot be made gives the cursor a quick shake, toward the way that it was asked to go and
 ` back, so that the press does not look like it was missed. stepCursorShake, in fish_funcs, plays it.
@@ -731,7 +753,10 @@ global OPTION_GAME_ZEN = 0
 global GAME_ROUND_CAP = 100 `how many rounds the game that is being played has
 global GAME_ZEN = 0 `1 when the game that is being played is a zen game
 
-` KEEP PLAYING. when the last round has been won, and the game has been put on its table, the player
+` KEEP PLAYING. this is not offered any more: a game that is won ends with the fish going home, and
+` that is the end of it. see THE FISH GO HOME. the rest of this is how it worked, and the page and its
+` lines are still there.
+` when the last round has been won, and the game has been put on its table, the player
 ` can carry on with the same board, for as long as they like. the game has been counted already, so it
 ` is never counted again: no round is the last one any more, and the rounds that are played from then
 ` on are shown as "+1", "+2", and so on, where the rounds that were left used to be. it is saved with
@@ -739,6 +764,28 @@ global GAME_ZEN = 0 `1 when the game that is being played is a zen game
 ` with, and one of those endings in a game that is being carried on goes straight back to the title.
 global GAME_ENDLESS = 0 `1 when the game that is being played was won, and is being carried on with
 global REQUEST_GAME_END = 0 `1 when the last round has been won, and the end of the game has not come up yet
+
+` THE FISH GO HOME. a game that is won the usual way, by getting through its rounds, ends with the fish
+` leaving. the cursor fades away, and the fish swim off of the board, slowly, to the right, the ones
+` nearest to that side first, fanning out a little as they go. the words come up over that: "The fish
+` need to go home, now. Bye bye!", and then, a moment later and smaller, "If they had a home...".
+` and while they go, everything around the board that was about playing fades away: the bar of the round,
+` which was full and fizzing, and the rounds that were left, the bar of the multiplier, the passives and
+` the special moves, the songs and their bars, and the key hints. what is left is the count of moves, and
+` the multiplier: the score. HUD_KEEP# is how much of the rest is still there, and applyHudFade, in
+` fish_routines_coral, is what fades it, at the end of every frame, after everything has been drawn the
+` way that it usually is.
+` then the end of the game comes up as it always did, over an empty board, and after the table of high
+` scores it is back to the title. a game that ended this way is over, and cannot be carried on with.
+` finale_goodbye, in fish_routines_coral, plays it, and it borrows the words and the lists of the two
+` endings of the hidden game. see THE TWO ENDINGS.
+global GOODBYE_SPEED# = 46 `how fast a fish swims off, in pixels a second, give or take
+global GOODBYE_STAGGER_MS = 260 `how much later each column sets off than the one to the right of it, in milliseconds
+global GOODBYE_SUB_MS = 1500 `how long after the first words the smaller ones start to come up
+global GOODBYE_MAX_MS = 13000 `how long it lasts, if the player does not move it on
+global FISH_AWAY = 0 `1 while the fish have left the board, and have not been put back. see fishComeHome.
+global GOODBYE_HUD_MS = 1400 `how long the things around the board take to fade away
+global HUD_KEEP# = 1 `how much of the things around the board is there, from 1 (all of it, as always) to 0 (none)
 
 global OPTION_SOUND = 10 `how loud the sound effects are, from 0 to 10
 global OPTION_MUSIC = 10 `how loud the music is, from 0 to 10
@@ -1022,7 +1069,9 @@ global STEAM_BIT_LOG_COUNT = 19 `7 bits: how many upgrades are in the log
 global STEAM_BIT_GAP_WIDTH = 26 `4 bits: how many bits every gap of the log takes
 global STEAM_DETAIL_MULT = 1 `the highest that the multiplier got
 global STEAM_DETAIL_SEED = 2 `the seed of the board. there is no such thing yet, so it is 0.
-global STEAM_DETAIL_FLAGS = 3 `32 flags for later. all 0 for now.
+global STEAM_DETAIL_FLAGS = 3 `32 flags. the lowest two bits are the ending of the hidden game, and then STEAM_FLAG_DEBUG. the rest are 0.
+global STEAM_FLAG_DEBUG = 4 `the game was played with one of the debug environment variables set. see isDebugEnvSet.
+global GAME_DEBUG_USED = 0 `1 when the game that is being played has had one of them set at any time. it is saved with the game.
 global STEAM_DETAIL_CHECK = 4 `the check, which Steam's commands fill in. see "set steam leaderboard check".
 global STEAM_DETAIL_SPARE = 5
 global STEAM_BIT_LOG = 192 `the log of upgrades starts at detail 6. every upgrade is 5 bits of card, and then its gap.
@@ -1764,6 +1813,13 @@ global dim CORAL_PENDING_Y(16)
 ` in the list of passives. see CORAL_HINT_TRAIL_ON. the
 ` patch of calm water is bigger. more bubbles come up at each end. and the name of the card shakes in
 ` the list of passives when a hint starts. it does not make hints come any more often.
+` SHOW TIME. an instant card. the next SHOW_TIME_HINTS hints, however they come about, are the kind that a
+` big group of fish brings with the "listen" card: bright, with more bubbles, and with the trail of light
+` behind them. it does not take the "listen" card to see them, and it does not make hints come any sooner.
+` taking it again adds that many more. coralRollHint, in fish_routines_coral, counts them down.
+global SHOW_TIME_HINTS = 2
+global CORAL_SHOW_TIME_LEFT = 0 `how many of those hints are still to come
+
 global CORAL_LISTEN_GLOW# = 2.2 `how many times as bright the specks glow
 global CORAL_LISTEN_REACH# = 1.2 `how many times as far out from the hint they glow
 global CORAL_LISTEN_CALM# = 1.4 `how many times as big the patch of calm water is
@@ -1772,7 +1828,7 @@ global CORAL_HINT_GLOW_POWER# = 0 `how strongly the specks glow on this frame. i
 global CORAL_HINT_LISTEN# = 0 `1 on a frame that the card is owned, for the specks effect
 global dim CORAL_HINT_TRAIL#(16) `eight spots along the path of the hint, from where it is to where it was, each CORAL_HINT_TRAIL_MS before the last, with the corners rounded off. x and then y of each.
 global CORAL_HINT_TRAIL_MS = 320
-global CORAL_HINT_AS_LISTEN = 0 `1 while the hint that is playing is drawn as if the card were owned. only the K debug key does this.
+global CORAL_HINT_AS_LISTEN = 0 `1 while the hint that is playing is drawn as if the card were owned. "show time" does this, and so does the K debug key.
 global CORAL_HINT_TRAIL_ON = 0 `1 while the hint that is playing is one that leaves a trail, with the card
 global CORAL_LISTEN_LUCK = 10 `how many of the hints that come on their own in a hundred leave a trail too, with the card. nothing says so.
 

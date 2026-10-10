@@ -935,33 +935,130 @@ endtest
 
 ` THE ROBOT
 
-test robot_makes_the_swap_that_pops from fishBoard
-    testPut(0, 0, 6)
-    testPut(1, 0, 6)
-    testPut(2, 1, 6)
-    tAt as vec = { x = 1, y = 1 }
-    tWay as vec = { x = 1, y = 0 }
+test robot_swaps_on_its_way from fishBoard
+    ` two groups that are one swap away, next to the column that the cursor is in. the 6s are next to
+    ` row 1, and the 7s are next to row 4.
+    testPut(4, 1, 6)
+    testPut(5, 0, 6)
+    testPut(5, 2, 6)
+    testPut(4, 4, 7)
+    testPut(3, 3, 7)
+    testPut(3, 5, 7)
+    tAt as vec = { x = 4, y = 0 }
+    tWay as vec = { x = 0, y = 1 }
 
     doRobot(tAt, tWay)
-    assert ROBOT_LAST_COUNT = 1, "there is one good swap near the cursor, and it found it"
-    assert CELLS(2).value = 6, "the fish was swapped up into the row"
+    assert ROBOT_LAST_COUNT = 2, "it made both of the swaps that pop something"
+    assert CELLS(testIndex(5, 1)).value = 6, "one to the right"
+    assert CELLS(testIndex(3, 4)).value = 7, "and one to the left, further down"
     assert CURRENT_MOVE_COUNT = 1, "all of it counts as one move"
 
     REQUEST_COMBO_CHECK = 1
     runto _combos_judged
 
-    assert totalComboCount = 1, "the group that it made pops"
+    assert totalComboCount = 2, "both of the groups that it made pop"
     end
 endtest
 
-test robot_with_nothing_to_do_is_not_a_move from fishBoard
-    tAt as vec = { x = 4, y = 4 }
+test robot_leaves_the_fish_behind_it_alone from fishBoard
+    ` the same 6s, but the cursor starts underneath them, and goes down
+    testPut(4, 1, 6)
+    testPut(5, 0, 6)
+    testPut(5, 2, 6)
+    tAt as vec = { x = 4, y = 3 }
+    tWay as vec = { x = 0, y = 1 }
+
+    doRobot(tAt, tWay)
+
+    assert ROBOT_LAST_COUNT = 0, "it only goes the one way, so it never came to the fish that could be swapped"
+    assert CELLS(testIndex(4, 1)).value = 6, "and that fish is where it was"
+    end
+endtest
+
+test robot_with_no_swap_to_make_is_still_a_move from fishBoard
+    grantMoveToSlot(ABILITY_INDEX_MOVE_ROBOT, 0)
+    MOVE_ABILITY_BINDINGS(0).movesLeft = 0
+    tWasHere = CELLS(testIndex(4, 4)).value
+    tWasNext = CELLS(testIndex(5, 4)).value
+    testCursor(4, 4)
+    testQueueMove(1, 0, 1, 0)
+
+    runto _loop
+    runto _loop
+    runto _loop
+
+    assert ROBOT_LAST_COUNT = 0, "there was no swap that pops anything"
+    assert CELLS(testIndex(4, 4)).value = tWasHere, "so the fish under the cursor is where it was"
+    assert CELLS(testIndex(5, 4)).value = tWasNext, "and so is the fish next to it"
+    assert MOVE_ABILITY_BINDINGS(0).movesLeft > 0, "the move was used all the same, and has to recharge"
+    assert CURRENT_MOVE_COUNT = 1, "and it was a move"
+    tLastColumn = CELL_COLUMN_COUNT - 1
+    assert SELECTION_POS.x = tLastColumn, "the cursor went to the edge of the board, the way that it was pointed"
+    assert SELECTION_POS.y = 4, "and stayed in its row"
+    end
+endtest
+
+test robot_goes_the_way_it_is_pointed from fishBoard
+    ` three 7s that are one swap away from being a group, to the left of the cursor
+    testPut(4, 4, 7)
+    testPut(3, 3, 7)
+    testPut(3, 5, 7)
+    tAt as vec = { x = 5, y = 4 }
+    tWay as vec = { x = -1, y = 0 }
+
+    doRobot(tAt, tWay)
+
+    assert ROBOT_LAST_COUNT = 1, "it came to the fish on its way to the left, and made the swap"
+    assert CELLS(testIndex(3, 4)).value = 7, "which joined up the three fish"
+    end
+endtest
+
+test robot_goes_around_the_edge_with_seamless from fishBoard
+    ` the same three 7s. going right from here, the cursor only comes to them by going around the edge.
+    grantPassive(ABILITY_INDEX_WRAP)
+    testPut(1, 4, 7)
+    testPut(2, 3, 7)
+    testPut(2, 5, 7)
+    tAt as vec = { x = 5, y = 4 }
     tWay as vec = { x = 1, y = 0 }
 
     doRobot(tAt, tWay)
 
-    assert ROBOT_LAST_COUNT = 0, "there is no swap on this board that pops anything"
-    assert CURRENT_MOVE_COUNT = 0, "so it was not a move"
+    assert ROBOT_LAST_COUNT = 1, "it went around the edge, came to the fish, and made the swap"
+    assert CELLS(testIndex(2, 4)).value = 7, "which joined up the three fish"
+    end
+endtest
+
+test robot_comes_back_to_where_it_started_with_seamless from fishBoard
+    grantPassive(ABILITY_INDEX_WRAP)
+    grantMoveToSlot(ABILITY_INDEX_MOVE_ROBOT, 0)
+    MOVE_ABILITY_BINDINGS(0).movesLeft = 0
+    testCursor(4, 0)
+    testQueueMove(0, -1, 1, 0)
+
+    runto _loop
+    runto _loop
+    runto _loop
+
+    assert MOVE_ABILITY_BINDINGS(0).movesLeft > 0, "it can be pointed off the board, because it goes around the edge"
+    assert CURRENT_MOVE_COUNT = 1, "and it was a move"
+    assert SELECTION_POS.x = 4, "the cursor stayed in its column"
+    assert SELECTION_POS.y = 0, "and went all the way around it, back to where it was"
+    end
+endtest
+
+test robot_is_not_used_when_it_is_pointed_off_the_board from fishBoard
+    grantMoveToSlot(ABILITY_INDEX_MOVE_ROBOT, 0)
+    MOVE_ABILITY_BINDINGS(0).movesLeft = 0
+    testCursor(0, 0)
+    testQueueMove(-1, 0, 1, 0)
+
+    runto _loop
+    runto _loop
+    runto _loop
+
+    assert MOVE_ABILITY_BINDINGS(0).movesLeft = 0, "there is nowhere to go, so the move was not used up"
+    assert CURRENT_MOVE_COUNT = 0, "and it was not a move"
     end
 endtest
 
@@ -1634,6 +1731,74 @@ test walking_a_used_pattern_shakes_its_song from fishBoard
     assert CORAL_RUNE_SHAKE_MS(1) < 0, "and the other song does not"
     assert CORAL_COUNT = 0, "no coral grows from a pattern that is used up"
     assert CORAL_PENDING_SLOT = -1, "and nothing is waiting on the swap"
+    end
+endtest
+
+test things_around_the_board_come_back_for_a_new_game from fishBoard
+    ` the fish went home, and everything around the board faded away with them
+    HUD_KEEP# = 0
+    applyHudFade()
+    FISH_AWAY = 1
+
+    ` a new game puts all of it back
+    resetCoral()
+    tBack = 0
+    if HUD_KEEP# = 1 then tBack = 1
+    assert tBack = 1, "the things around the board are all there again"
+    assert FISH_AWAY = 0, "and the fish are not away"
+    end
+endtest
+
+test fish_come_home_when_the_game_is_carried_on from fishBoard
+    ` the fish have gone, the way that they do when a game is won
+    tSprite = CELLS(testIndex(2, 3)).spriteId
+    position sprite tSprite, WORLD_WIDTH + 200, 40
+    FISH_AWAY = 1
+
+    fishComeHome()
+    assert FISH_AWAY = 0, "the fish are not away any more"
+    assert sprite x(tSprite) = getCellX(2), "a fish is back in its column"
+    assert sprite y(tSprite) = getCellY(3), "and in its row"
+
+    ` and when they never left, nothing is moved
+    position sprite tSprite, 7, 9
+    fishComeHome()
+    assert sprite x(tSprite) = 7, "a fish that did not go anywhere is left where it is"
+    end
+endtest
+
+test show_time_makes_the_next_two_hints_the_easy_kind from fishBoard
+    assert CARDS(ABILITY_INDEX_SHOW_TIME).abilityType = ABILITY_TYPE_INSTANT, "show time is an instant"
+    assert CORAL_SHOW_TIME_LEFT = 0, "nothing is owed to start with"
+
+    ` taking the card
+    takeShowTime()
+    assert CORAL_SHOW_TIME_LEFT = SHOW_TIME_HINTS, "taking it owes two easy hints"
+
+    ` a hint is owed, for a big group, and the board has settled. three times over.
+    coralClearHint()
+    CORAL_HINT_AS_LISTEN = 0
+    CORAL_HINT_DUE = 1
+    REQUEST_COMBO_CHECK = 0
+    coralRollHint()
+    assert CORAL_HINT_START_MS >= 0, "a hint started"
+    assert CORAL_HINT_AS_LISTEN = 1, "and it is drawn the way that the listen card draws one"
+    assert CORAL_HINT_TRAIL_ON = 1, "with the trail"
+    assert CORAL_SHOW_TIME_LEFT = 1, "that was the first of the two"
+
+    coralClearHint()
+    CORAL_HINT_AS_LISTEN = 0
+    CORAL_HINT_DUE = 1
+    coralRollHint()
+    assert CORAL_HINT_AS_LISTEN = 1, "the second one is the easy kind too"
+    assert CORAL_SHOW_TIME_LEFT = 0, "and that is both of them"
+
+    coralClearHint()
+    CORAL_HINT_AS_LISTEN = 0
+    CORAL_HINT_DUE = 1
+    coralRollHint()
+    assert CORAL_HINT_START_MS >= 0, "the third hint starts like any other"
+    assert CORAL_HINT_AS_LISTEN = 0, "but it is back to the usual kind"
     end
 endtest
 

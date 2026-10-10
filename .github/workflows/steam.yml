@@ -315,6 +315,9 @@ jobs:
           # Optional. A Steamworks publisher Web API key, used only to set a build live on
           # the default branch.
           STEAM_PUBLISHER_KEY: ${{ secrets.STEAM_PUBLISHER_KEY }}
+          # Optional. The SteamID of the person who approves a release in the Steam mobile
+          # app. Only a released app needs it.
+          STEAM_APPROVER_ID: ${{ vars.STEAM_APPROVER_ID || secrets.STEAM_APPROVER_ID }}
         run: |
           # "none" is the sentinel for "don't set live" -- an empty workflow input can't be
           # distinguished from an absent one.
@@ -374,17 +377,46 @@ jobs:
               echo "::error::Uploaded, but could not read the BuildID from the steamcmd output, so nothing was set live. Set the build live on default at ${BUILDS_PAGE}."
               exit 1
             else
+              # A secret that was pasted with a newline on the end is a different key to Steam.
+              KEY=$(printf '%s' "$STEAM_PUBLISHER_KEY" | tr -d '[:space:]')
+              # A publisher key is 32 letters and digits. Anything else is some other number
+              # from Steamworks. This says so without printing any of it.
+              if ! [[ "$KEY" =~ ^[0-9A-Fa-f]{32}$ ]]; then
+                echo "::warning::STEAM_PUBLISHER_KEY is ${#KEY} characters and a publisher Web API key is 32 (0-9, A-F). It may not be one. See steam/SETUP.md."
+              fi
+
+              # A RELEASED app wants a person to approve a change to default, in the Steam
+              # mobile app. STEAM_APPROVER_ID names that person: their 17 digit SteamID.
+              APPROVER=()
+              if [ -n "$STEAM_APPROVER_ID" ]; then
+                APPROVER=(--data-urlencode "steamid=${STEAM_APPROVER_ID}")
+              fi
+
               # "public" is what the Web API calls the default branch.
               HTTP=$(curl -sS -o "$RUNNER_TEMP/setlive.json" -w '%{http_code}' -X POST \
                 "https://partner.steam-api.com/ISteamApps/SetAppBuildLive/v2/" \
-                --data-urlencode "key=${STEAM_PUBLISHER_KEY}" \
+                --data-urlencode "key=${KEY}" \
                 --data-urlencode "appid=${STEAM_APP_ID}" \
                 --data-urlencode "buildid=${BUILD_ID}" \
                 --data-urlencode "betakey=public" \
+                "${APPROVER[@]}" \
                 --data-urlencode "description=${DESC}")
               echo "SetAppBuildLive: HTTP ${HTTP}"; cat "$RUNNER_TEMP/setlive.json" || true; echo
               if [ "$HTTP" != "200" ]; then
-                echo "::error::The build is uploaded (BuildID ${BUILD_ID}) but Steam refused to set it live on default (HTTP ${HTTP}). Set it live by hand at ${BUILDS_PAGE}."
+                # Steam answers 403 the same way for a key that is wrong and for a key that is
+                # right but may not do this. Reading the branches with the same key tells the
+                # two apart: it needs the key to be good for this app, and nothing more.
+                PROBE=$(curl -sS -o /dev/null -w '%{http_code}' -G \
+                  "https://partner.steam-api.com/ISteamApps/GetAppBetas/v1/" \
+                  --data-urlencode "key=${KEY}" \
+                  --data-urlencode "appid=${STEAM_APP_ID}" || true)
+                echo "GetAppBetas with the same key: HTTP ${PROBE}"
+                if [ "$PROBE" = "200" ]; then
+                  WHY="The key is good for this app, so the refusal is about this call: the app is released and needs STEAM_APPROVER_ID, or the key's group may not publish."
+                else
+                  WHY="The key itself was refused (reading the branches gave HTTP ${PROBE}): it is not a publisher key, or its group does not have this app."
+                fi
+                echo "::error::The build is uploaded (BuildID ${BUILD_ID}) but Steam refused to set it live on default (HTTP ${HTTP}). ${WHY} Set it live by hand at ${BUILDS_PAGE}. See steam/SETUP.md."
                 exit 1
               fi
               echo "::notice::Build ${BUILD_ID} \"${DESC}\" is live on the default branch."

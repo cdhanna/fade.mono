@@ -241,6 +241,7 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_QUICK_SONG).artTexId), "Fish/Textures/Cards/quick_song"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_SONG).artTexId), "Fish/Textures/Cards/easy_song"
     texture reserve texture id(CARDS(ABILITY_INDEX_DEEP_POCKETS).artTexId), "Fish/Textures/Cards/deep_pockets"
+    texture reserve texture id(CARDS(ABILITY_INDEX_SHOW_TIME).artTexId), "Fish/Textures/Cards/show_time"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_WASTE_BUCKET).artTexId), "Fish/Textures/Cards/waste_bucket"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_BUNCH_UP).artTexId), "Fish/Textures/Cards/bunch_up"
 
@@ -509,6 +510,12 @@ update_frame:
     updateMusic()
     gosub frame_dbg
 
+    ` when the fish go home, the things around the board fade away. this comes last, so that it has
+    ` the last word on how they look. see THE FISH GO HOME in fish_headers.
+    if HUD_KEEP# < 1
+        applyHudFade()
+    endif
+
 return
 
 ` tell the fish effect how to draw every fish on the board. see FishEffect.fx for what the numbers mean.
@@ -679,6 +686,7 @@ frame_dbg:
     ` that it looks with the card, after a group of five or more: brighter, with more bubbles, and a trail.
     ` R covers the whole board with coral, which saves the reef, and T covers it with horror coral, which
     ` summons the ancient one. the ending plays, and then the game ends, the way that it would have.
+    ` Y wins the game the usual way, as if the last round had been got through, so the fish go home.
     if is env set("FISH_DEBUG")
         if MENU_MODE = 0
             gosub frame_debug_cards
@@ -715,6 +723,13 @@ frame_dbg:
                 endif
                 if new key down(scancode("T"))
                     coralDebugCover(1)
+                endif
+                if new key down(scancode("Y"))
+                    ` as if the last round had just been won. a game that was being carried on with is won again.
+                    if CORAL_ENDING = 0
+                        GAME_ENDLESS = 0
+                        REQUEST_GAME_END = 1
+                    endif
                 endif
             endif
         endif

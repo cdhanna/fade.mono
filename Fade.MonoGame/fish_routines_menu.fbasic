@@ -552,6 +552,9 @@ menu_pick:
             ` see KEEP PLAYING in fish_headers.
             GAME_ENDLESS = 1
             showRoundsLeft()
+
+            ` the fish went home when the game was won, and now they are wanted again. see THE FISH GO HOME in fish_headers.
+            fishComeHome()
             gosub menu_close_pause
             if GAME_ZEN
                 advanceScoreBar()
@@ -699,6 +702,14 @@ handle_game_end:
     if LIVE_MOVE_ACTIVE then return
     REQUEST_GAME_END = 0
 
+    ` a game that was won the usual way ends with the fish going home. see THE FISH GO HOME in fish_headers.
+    ` one of the two endings of the hidden game has had an ending of its own already.
+    if CORAL_ENDING = 0
+        if GAME_ENDLESS = 0
+            gosub finale_goodbye
+        endif
+    endif
+
     MENU_MODE = MENU_MODE_PAUSE
 
     hide sprite MENU_BG_SPRITE
@@ -738,6 +749,16 @@ handle_game_end:
     if CORAL_ENDING > 0
         gosub menu_fade_out
         closeHighscores()
+        gosub menu_quit_to_title
+        return
+    endif
+
+    ` and so is a game that was won the usual way: the fish have gone home. there is nothing to carry
+    ` on with, so the saved game is forgotten too. see THE FISH GO HOME in fish_headers.
+    if FISH_AWAY
+        gosub menu_fade_out
+        closeHighscores()
+        gosub forget_saved_game
         gosub menu_quit_to_title
         return
     endif
@@ -1250,6 +1271,7 @@ reset_game:
     REQUEST_ABILITY_SELECTION = 0
     REQUEST_GAME_END = 0
     GAME_ENDLESS = 0
+    GAME_DEBUG_USED = 0
     BELLY_UP_ROLL_DUE = 0
 
     ` the score

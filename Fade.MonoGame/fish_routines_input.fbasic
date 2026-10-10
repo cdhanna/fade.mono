@@ -139,10 +139,10 @@ process_input:
 
         target as vec = addCoordinates(SELECTION_POS, swapDir)
 
-        if target.x < 0 then return 
-        if target.x >= CELL_COLUMN_COUNT then return 
-        if target.y < 0 then return 
-        if target.y >= CELL_ROW_COUNT then return 
+        if target.x < 0 then return
+        if target.x >= CELL_COLUMN_COUNT then return
+        if target.y < 0 then return
+        if target.y >= CELL_ROW_COUNT then return
 
 
         usedAbility = 0
@@ -232,11 +232,11 @@ process_input:
                     case [MOVE_ROBOT]
                         doRobot(SELECTION_POS, swapDir)
 
-                        ` it found nothing to swap, so it is not used up. its cooldown number shakes to say so.
-                        if ROBOT_LAST_COUNT = 0
-                            MOVE_ABILITY_BINDINGS(move.moveBindingIndex).movesLeft = 0
-                            create basic tween MOVE_ABILITY_BINDINGS(move.moveBindingIndex).shakeTweenId, 1, 0, 500, 0
-                        endif
+                        ` it took the cursor all the way to the edge of the board, the way that it was pointed.
+                        ` with the "seamless" card, that is all the way around, and back to where it was.
+                        robotWent = robotStrides(SELECTION_POS, swapDir)
+                        target.x = robotLineX(SELECTION_POS.x, swapDir.x, robotWent)
+                        target.y = robotLineY(SELECTION_POS.y, swapDir.y, robotWent)
                     endcase
                     case default 
                         print "DOING NOTHING"

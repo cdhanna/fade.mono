@@ -252,9 +252,19 @@ To get the key: in Steamworks, **Users & Permissions → Manage Groups**, create
 open one), add this app to it, and use **Create WebAPI Key** on the group's page. Add it as
 the GitHub secret `STEAM_PUBLISHER_KEY`. It is a powerful key; it goes nowhere else.
 
+The key is 32 characters, digits and the letters A to F. A shorter number, or one that is
+only digits, is something else from Steamworks (an app id, a group id, a SteamID) and Steam
+answers it with **HTTP 403**. So does a key from `steamcommunity.com/dev/apikey`, which is a
+personal key and not a publisher one, and so does a publisher key whose group does not have
+this app in it.
+
 Once the game is **released**, Steam also wants a person to approve changes to default in
-the Steam mobile app, and this call will be refused until the workflow is taught to name
-that person. Before release it needs no approval.
+the Steam mobile app. Name that person with the repository variable `STEAM_APPROVER_ID`:
+their 17 digit SteamID, for an account that has the Steam Guard mobile authenticator and
+may publish this app. The run then waits on their phone. Before release it needs no approval.
+
+When the call is refused, the run reads the app's branches with the same key and says which
+it was: the key itself, or what the key may do.
 
 ---
 

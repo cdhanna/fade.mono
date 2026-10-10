@@ -68,6 +68,11 @@ save_game:
     ` and whether it was won already, and is being carried on with. see KEEP PLAYING in fish_headers.
     set pref SAVE_PREF + 23, GAME_ENDLESS
 
+    ` and whether a debug environment variable has been set at any time while it was played, so that
+    ` carrying it on without one does not hide that. see STEAM_FLAG_DEBUG in fish_headers.
+    if isDebugEnvSet() then GAME_DEBUG_USED = 1
+    set pref SAVE_PREF + 24, GAME_DEBUG_USED
+
     ` and the upgrades that have been picked, with the move that each was picked on
     set pref SAVE_PREF_LOG, GAME_LOG_COUNT
     if GAME_LOG_COUNT > 0
@@ -172,6 +177,7 @@ load_game:
     GAME_ROUND_CAP = get pref(SAVE_PREF + 20, 100)
     GAME_ZEN = get pref(SAVE_PREF + 21, 0)
     GAME_ENDLESS = get pref(SAVE_PREF + 23, 0)
+    GAME_DEBUG_USED = get pref(SAVE_PREF + 24, 0)
     CURRENT_MOVE_COUNT = get pref(SAVE_PREF + 6)
     PENDING_FREE_MOVES = get pref(SAVE_PREF + 7)
     PENDING_BOARD_EXPANSIONS = get pref(SAVE_PREF + 8)
@@ -225,6 +231,11 @@ frame_autosave:
 
     ` not while fish are still popping and falling. the board is saved once it has settled.
     if REQUEST_COMBO_CHECK then return
+
+    ` and not while a move is playing, or more are waiting behind it. writing the file takes a while, and
+    ` a run of quick moves would write it over and over. it is saved once, when they are all done.
+    if LIVE_MOVE_ACTIVE then return
+    if QUEUED_MOVE_NUM > 0 then return
 
     saveNow = saveSignature()
     if saveNow <> SAVE_SIGNATURE

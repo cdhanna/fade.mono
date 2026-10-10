@@ -1564,7 +1564,52 @@ function startLiveMove(dirX, dirY, wantSwap)
         startY = getCellY(SELECTION_POS.y)
         endX = getCellX(liveTarget.x)
         endY = getCellY(liveTarget.y)
-        duration = 150
+        duration = LIVE_MOVE_TIME
+        punchDelay = 50
+
+        ` a move that comes right after another one has a softer punch. see LIVE_PUNCH_RAPID_GAP in fish_headers.
+        livePunch# = 1.0
+        liveNowMs# = game ms()
+        liveSinceLast# = liveNowMs# - LIVE_MOVE_LAST_MS#
+        LIVE_MOVE_LAST_MS# = liveNowMs#
+        if liveSinceLast# < LIVE_PUNCH_CALM_GAP#
+            livePunchOver# = liveSinceLast# - LIVE_PUNCH_RAPID_GAP#
+            livePunchSpan# = LIVE_PUNCH_CALM_GAP# - LIVE_PUNCH_RAPID_GAP#
+            livePunch# = livePunchOver# / livePunchSpan#
+            if livePunch# < LIVE_PUNCH_SOFT# then livePunch# = LIVE_PUNCH_SOFT#
+        endif
+
+        ` the moves that are waiting behind this one hurry it along. this one is already off of the queue.
+        ` the pace does not jump to what the queue asks for. it goes half of the way there on every move,
+        ` so that a run of moves speeds up and slows down smoothly. see LIVE_MOVE_TIME in fish_headers.
+        liveBacklog = QUEUED_MOVE_NUM - QUEUED_MOVE_TAIL
+        liveInRun = 0
+        if liveSinceLast# < LIVE_PUNCH_CALM_GAP# then liveInRun = 1
+        if liveInRun = 0 then LIVE_MOVE_PACE = LIVE_MOVE_TIME `the run before this one is over
+        if liveBacklog > 0 then liveInRun = 1
+        if liveInRun
+            livePaceWant = LIVE_MOVE_TIME / (1 + liveBacklog)
+            if livePaceWant < LIVE_MOVE_MIN_TIME then livePaceWant = LIVE_MOVE_MIN_TIME
+            LIVE_MOVE_PACE = (LIVE_MOVE_PACE + livePaceWant) / 2
+            duration = LIVE_MOVE_PACE
+
+            ` the punch does not lag behind a move that is part of a run
+            punchDelay = 0
+
+            ` and the quicker the move, the softer the punch gets
+            liveDuration# = duration
+            liveFullTime# = LIVE_MOVE_TIME
+            liveSpeed# = liveDuration# / liveFullTime#
+            if liveSpeed# < livePunch# then livePunch# = liveSpeed#
+        else
+            ` a move on its own starts a new run, at the usual pace
+            LIVE_MOVE_PACE = LIVE_MOVE_TIME
+        endif
+
+        ` at its fullest, the cursor swells to one and a half times its size
+        liveCell# = CELL_SIZE
+        punchGrow# = liveCell# * livePunch# * 0.5
+        punchSize# = liveCell# + punchGrow#
 
         ` the fish that the cursor is on goes along with it, and the other one comes back the other way
         create basic tween TWEEN_SWAP_AX, startX, endX, duration, 0
@@ -1572,10 +1617,11 @@ function startLiveMove(dirX, dirY, wantSwap)
         create basic tween TWEEN_SWAP_BX, endX, startX, duration, 0
         create basic tween TWEEN_SWAP_BY, endY, startY, duration, 0
 
-        create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, CELL_SIZE * 1.5, 150, 50
+        ` the punch and the sound last as long as the move does
+        create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, punchSize#, duration, punchDelay
         set tween type SELECTION_TWEEN_PUNCH_ID, 1
 
-        create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
+        create basic tween SWAP_TWEEN_SFX, 0, 1, duration, 0
         set tween type SWAP_TWEEN_SFX, 1
 
         LIVE_MOVE_ACTIVE = 1
@@ -1789,6 +1835,10 @@ function robotSwapScore(aIndex, bIndex, required)
     if CELLS(aIndex).comboFillMask then usable = 0
     if CELLS(bIndex).comboFillMask then usable = 0
 
+    ` a fish that is going to pop anyway, like a belly up one that the cursor came to, stays where it is
+    if CELLS(aIndex).comboForce > 0 then usable = 0
+    if CELLS(bIndex).comboForce > 0 then usable = 0
+
     if usable
         ` try it out, count, and put them back
         tryValue = CELLS(aIndex).value
@@ -1808,159 +1858,198 @@ function robotSwapScore(aIndex, bIndex, required)
     endif
 endfunction score
 
-` the robot makes its swaps. the cursor rides along on each one, and ends up one cell over, the way
-` that it was pointed, like it does after any other special move.
-` this stops the game until it has played out, the same as the other special moves do.
-function doRobot(start as vec, dir as vec)
-    spawnCursorWake(start.x, start.y)
-    target as vec = addCoordinates(start, dir)
-    required = getRequiredComboCount()
-
-    cursorX = getCellX(start.x)
-    cursorY = getCellY(start.y)
-    made = 0
-    looking = 1
-
-    ` the square of cells that it looks at
-    lookLeft = start.x - ROBOT_REACH
-    lookRight = start.x + ROBOT_REACH
-    lookTop = start.y - ROBOT_REACH
-    lookBottom = start.y + ROBOT_REACH
-
-    for robotTurn = 1 to ROBOT_SWAPS
-        ` find the swap near the cursor that would pop the most fish
-        bestScore = 0
-        bestA = 0
-        bestB = 0
-        if looking
-            for lookY = lookTop to lookBottom
-                for lookX = lookLeft to lookRight
-                    onBoard = 1
-                    if lookX < 0 then onBoard = 0
-                    if lookY < 0 then onBoard = 0
-                    if lookX >= CELL_COLUMN_COUNT then onBoard = 0
-                    if lookY >= CELL_ROW_COUNT then onBoard = 0
-
-                    if onBoard
-                        lookIndex = lookX + lookY * CELL_COLUMN_COUNT
-
-                        ` with the fish to the right of it
-                        if lookX < CELL_COLUMN_COUNT - 1
-                            lookScore = robotSwapScore(lookIndex, lookIndex + 1, required)
-                            if lookScore > bestScore
-                                bestScore = lookScore
-                                bestA = lookIndex
-                                bestB = lookIndex + 1
-                            endif
-                        endif
-
-                        ` and with the fish underneath it
-                        if lookY < CELL_ROW_COUNT - 1
-                            lookScore = robotSwapScore(lookIndex, lookIndex + CELL_COLUMN_COUNT, required)
-                            if lookScore > bestScore
-                                bestScore = lookScore
-                                bestA = lookIndex
-                                bestB = lookIndex + CELL_COLUMN_COUNT
-                            endif
-                        endif
-                    endif
-                next
-            next
-        endif
-
-        if bestScore = 0
-            ` there is nothing good left to do
-            looking = 0
-        else
-            made = made + 1
-
-            ` the two fish trade places, and the cursor goes along with the first one
-            fromX = getCellX(CELLS(bestA).coord.x)
-            fromY = getCellY(CELLS(bestA).coord.y)
-            toX = getCellX(CELLS(bestB).coord.x)
-            toY = getCellY(CELLS(bestB).coord.y)
-
-            ` the cursor hops over to where the swap is first
-            create basic tween TWEEN_SWAP_AX, 0, 1, 90, 0
-            while is tween done(TWEEN_SWAP_AX) < 1
-                hop# = tweenVal(TWEEN_SWAP_AX)
-                position sprite SELECTION_SPRITE, cursorX + (fromX - cursorX) * hop#, cursorY + (fromY - cursorY) * hop#
-                collectInput()
-                updateBubbles()
-                sync
-            endwhile
-
-            create basic tween TWEEN_SWAP_BX, 0, 1, ROBOT_SWAP_TIME, 0
-            create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, CELL_SIZE * 1.5, ROBOT_SWAP_TIME, 0
-            set tween type SELECTION_TWEEN_PUNCH_ID, 1
-            create basic tween SWAP_TWEEN_SFX, 0, 1, ROBOT_SWAP_TIME, 0
-            set tween type SWAP_TWEEN_SFX, 1
-
-            while is tween done(TWEEN_SWAP_BX) < 1
-                slide# = tweenVal(TWEEN_SWAP_BX)
-                slideX = fromX + (toX - fromX) * slide#
-                slideY = fromY + (toY - fromY) * slide#
-                backX = toX + (fromX - toX) * slide#
-                backY = toY + (fromY - toY) * slide#
-
-                position sprite CELLS(bestA).spriteId, slideX, slideY
-                position sprite CELLS(bestB).spriteId, backX, backY
-                position sprite SELECTION_SPRITE, slideX, slideY
-                scale sprite SELECTION_SPRITE, tweenVal(SELECTION_TWEEN_PUNCH_ID), tweenVal(SELECTION_TWEEN_PUNCH_ID)
-                set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
-
-                collectInput()
-                updateBubbles()
-                sync
-            endwhile
-
-            cursorX = toX
-            cursorY = toY
-
-            ` they really do trade places now
-            tradeValue = CELLS(bestB).value
-            CELLS(bestB).value = CELLS(bestA).value
-            CELLS(bestA).value = tradeValue
-            swapCellStacks(bestA, bestB)
-            updateCell(CELLS(bestA))
-            updateCell(CELLS(bestB))
-
-            ` the groups that it made are spoken for, so that the next swap leaves them alone
-            ROBOT_STAMP = ROBOT_STAMP + 1
-            madeSize = robotGroupSize(bestA, CELLS(bestA).value, ROBOT_STAMP)
-            if madeSize >= required
-                robotClaimGroup(bestA, CELLS(bestA).value)
-            endif
-            ROBOT_STAMP = ROBOT_STAMP + 1
-            madeSize = robotGroupSize(bestB, CELLS(bestB).value, ROBOT_STAMP)
-            if madeSize >= required
-                robotClaimGroup(bestB, CELLS(bestB).value)
-            endif
-
-            ` a few bubbles, so that each swap gets noticed
-            spawnBubbles(toX, toY, CELL_SIZE / 4, 4, 0, rgb(255, 255, 255))
-        endif
+` forget which fish are spoken for. handle_combos leaves marks of its own in comboFillMask, so the
+` robot does this before it looks at anything.
+function robotClearClaims()
+    lastClaim = CELL_COUNT - 1
+    for claimIndex = 0 to lastClaim
+        CELLS(claimIndex).comboFillMask = 0
     next
+endfunction
 
-    ` the cursor goes to where it ends up
-    endX = getCellX(target.x)
-    endY = getCellY(target.y)
-    create basic tween TWEEN_SWAP_AX, 0, 1, 120, 0
+` if the fish in this cell is in a group that is big enough to pop, the group is spoken for
+function robotClaimMade(index, required)
+    ROBOT_STAMP = ROBOT_STAMP + 1
+    madeSize = robotGroupSize(index, CELLS(index).value, ROBOT_STAMP)
+    if madeSize >= required
+        robotClaimGroup(index, CELLS(index).value)
+    endif
+endfunction
+
+` the cursor goes from one spot on the screen to another
+function robotHop(fromX, fromY, toX, toY)
+    create basic tween TWEEN_SWAP_AX, 0, 1, ROBOT_HOP_TIME, 0
     while is tween done(TWEEN_SWAP_AX) < 1
         hop# = tweenVal(TWEEN_SWAP_AX)
-        position sprite SELECTION_SPRITE, cursorX + (endX - cursorX) * hop#, cursorY + (endY - cursorY) * hop#
+        position sprite SELECTION_SPRITE, fromX + (toX - fromX) * hop#, fromY + (toY - fromY) * hop#
         collectInput()
         updateBubbles()
         sync
     endwhile
-    scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
-    set sfx volume SFX_SWAP, 0
+    position sprite SELECTION_SPRITE, toX, toY
+endfunction
 
-    ` all of its swaps count as the one move. if it found nothing to do, it was not a move at all.
-    ROBOT_LAST_COUNT = made
-    if made > 0
-        registerMove(1)
+` how many cells the robot takes the cursor along, going this way from this cell. that is as far as
+` the edge of the board. with the "seamless" card it goes around the edge and carries on, all the way
+` back to the cell that it started on.
+function robotStrides(start as vec, dir as vec)
+    strides = 0
+    if isAbility_Wrap()
+        if dir.x <> 0 then strides = CELL_COLUMN_COUNT
+        if dir.y <> 0 then strides = CELL_ROW_COUNT
+    else
+        if dir.x > 0 then strides = CELL_COLUMN_COUNT - 1 - start.x
+        if dir.x < 0 then strides = start.x
+        if dir.y > 0 then strides = CELL_ROW_COUNT - 1 - start.y
+        if dir.y < 0 then strides = start.y
     endif
+endfunction strides
+
+` which column, and which row, the robot is in when it has gone this many cells. going off one edge
+` of the board comes back on at the other.
+function robotLineX(startX, dirX, strides)
+    lineX = (startX + dirX * strides + CELL_COLUMN_COUNT) mod CELL_COLUMN_COUNT
+endfunction lineX
+
+function robotLineY(startY, dirY, strides)
+    lineY = (startY + dirY * strides + CELL_ROW_COUNT) mod CELL_ROW_COUNT
+endfunction lineY
+
+` the robot takes the cursor in a straight line, the way that it was pointed, from the cell that it
+` is on to the edge of the board. on every cell that it comes to, it makes the swaps that pop
+` something, and when there are none left to make, it goes on to the next one. a swap takes the cursor
+` along with it, and it comes back.
+` the cursor ends up at the edge of the board. with the "seamless" card it goes around the edge
+` instead, and ends up back where it started. process_input puts it there. see robotStrides.
+` this stops the game until it has played out, the same as the other special moves do.
+function doRobot(start as vec, dir as vec)
+    required = getRequiredComboCount()
+    robotClearClaims()
+    spawnCursorWake(start.x, start.y)
+
+    made = 0
+    strideCount = robotStrides(start, dir)
+    cursorX = getCellX(start.x)
+    cursorY = getCellY(start.y)
+    lastX = start.x
+    lastY = start.y
+
+    for robotStride = 0 to strideCount
+        atX = robotLineX(start.x, dir.x, robotStride)
+        atY = robotLineY(start.y, dir.y, robotStride)
+        atIndex = atX + atY * CELL_COLUMN_COUNT
+        hopX = getCellX(atX)
+        hopY = getCellY(atY)
+
+        if robotStride > 0
+            ` going around the edge, the cursor does not slide back across the whole board. it is
+            ` just there, on the other side.
+            aroundEdge = 0
+            lineJump = (atX - lastX) + (atY - lastY)
+            if lineJump > 1 then aroundEdge = 1
+            if lineJump < -1 then aroundEdge = 1
+            if aroundEdge
+                position sprite SELECTION_SPRITE, hopX, hopY
+            else
+                robotHop(cursorX, cursorY, hopX, hopY)
+            endif
+            cursorX = hopX
+            cursorY = hopY
+            lastX = atX
+            lastY = atY
+
+            ` it leaves bubbles on every cell that it comes to, so that the way it went can be seen
+            spawnCursorWake(atX, atY)
+
+            ` with the "bottoms up" card, a fish that is belly up pops when the cursor comes to it
+            popBellyUpFish(atIndex)
+        endif
+
+        searching = 1
+        while searching
+            ` of the fish next to this one, find the one to swap with that would pop the most
+            bestScore = 0
+            bestB = 0
+            for ringSide = 0 to 3
+                sideX = atX
+                sideY = atY
+                if ringSide = 0 then sideX = atX + 1
+                if ringSide = 1 then sideY = atY + 1
+                if ringSide = 2 then sideX = atX - 1
+                if ringSide = 3 then sideY = atY - 1
+
+                sideOnBoard = 1
+                if sideX < 0 then sideOnBoard = 0
+                if sideY < 0 then sideOnBoard = 0
+                if sideX >= CELL_COLUMN_COUNT then sideOnBoard = 0
+                if sideY >= CELL_ROW_COUNT then sideOnBoard = 0
+
+                if sideOnBoard
+                    sideIndex = sideX + sideY * CELL_COLUMN_COUNT
+                    sideScore = robotSwapScore(atIndex, sideIndex, required)
+                    if sideScore > bestScore
+                        bestScore = sideScore
+                        bestB = sideIndex
+                    endif
+                endif
+            next
+
+            if bestScore = 0
+                ` there is nothing left to do here, so it goes on
+                searching = 0
+            else
+                made = made + 1
+
+                ` the two fish trade places, and the cursor rides along with the first one
+                toX = getCellX(CELLS(bestB).coord.x)
+                toY = getCellY(CELLS(bestB).coord.y)
+
+                create basic tween TWEEN_SWAP_BX, 0, 1, ROBOT_SWAP_TIME, 0
+                create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, CELL_SIZE * 1.5, ROBOT_SWAP_TIME, 0
+                set tween type SELECTION_TWEEN_PUNCH_ID, 1
+                create basic tween SWAP_TWEEN_SFX, 0, 1, ROBOT_SWAP_TIME, 0
+                set tween type SWAP_TWEEN_SFX, 1
+
+                while is tween done(TWEEN_SWAP_BX) < 1
+                    slide# = tweenVal(TWEEN_SWAP_BX)
+                    position sprite CELLS(atIndex).spriteId, hopX + (toX - hopX) * slide#, hopY + (toY - hopY) * slide#
+                    position sprite CELLS(bestB).spriteId, toX + (hopX - toX) * slide#, toY + (hopY - toY) * slide#
+                    position sprite SELECTION_SPRITE, hopX + (toX - hopX) * slide#, hopY + (toY - hopY) * slide#
+                    scale sprite SELECTION_SPRITE, tweenVal(SELECTION_TWEEN_PUNCH_ID), tweenVal(SELECTION_TWEEN_PUNCH_ID)
+                    set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
+
+                    collectInput()
+                    updateBubbles()
+                    sync
+                endwhile
+                scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+                set sfx volume SFX_SWAP, 0
+
+                ` they really do trade places now
+                tradeValue = CELLS(bestB).value
+                CELLS(bestB).value = CELLS(atIndex).value
+                CELLS(atIndex).value = tradeValue
+                swapCellStacks(atIndex, bestB)
+                updateCell(CELLS(atIndex))
+                updateCell(CELLS(bestB))
+
+                ` the groups that it made are spoken for, so that the next swap leaves them alone
+                robotClaimMade(atIndex, required)
+                robotClaimMade(bestB, required)
+
+                ` a few bubbles on both fish, so that each swap gets noticed
+                spawnBubbles(hopX, hopY, CELL_SIZE / 4, 4, 0, rgb(255, 255, 255))
+                spawnBubbles(toX, toY, CELL_SIZE / 4, 4, 0, rgb(255, 255, 255))
+
+                ` and the cursor comes back to its line
+                robotHop(toX, toY, hopX, hopY)
+            endif
+        endwhile
+    next
+
+    ` all of it counts as one move, even when it found no swap to make
+    ROBOT_LAST_COUNT = made
+    registerMove(1)
 endfunction
 
 ` KNOWN FILL. see the notes in fish_headers.

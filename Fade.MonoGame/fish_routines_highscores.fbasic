@@ -800,6 +800,23 @@ function unpackSteamScore(boardId, steamRow, scoreIndex)
 endfunction
 
 
+` is the game running with one of the environment variables that are only for working on it? they
+` skip parts of the game, or show things that a player should not see, and FISH_DEBUG can win a game
+` with a key. a score from a game that had one set says so, in STEAM_FLAG_DEBUG.
+` FISH_VERSION is not one of them: every shipped game has it.
+function isDebugEnvSet()
+    debugSet = 0
+    if is env set("FISH_DEBUG") then debugSet = 1
+    if is env set("FISH_CORAL_DEBUG") then debugSet = 1
+    if is env set("FISH_SKIP_MENU") then debugSet = 1
+    if is env set("FISH_SKIP_SPLASH") then debugSet = 1
+    if is env set("FISH_INTRO") then debugSet = 1
+    if is env set("FISH_SKY") then debugSet = 1
+    if is env set("FISH_MENU_REEF") then debugSet = 1
+    if is env set("FISH_MENU_ANCIENT") then debugSet = 1
+endfunction debugSet
+
+
 ` send the game that has just ended to the leaderboard of its table. see THE SCORES ON STEAM, at
 ` the top of this file, for how it is packed. without Steam, this does nothing.
 function sendGameToSteam(tableIndex, packedName)
@@ -831,7 +848,10 @@ function sendGameToSteam(tableIndex, packedName)
     set steam score bits STEAM_BIT_GAP_WIDTH, 4, sendGapBits
     set steam score detail STEAM_DETAIL_MULT, BEST_MULTIPLIER
     set steam score detail STEAM_DETAIL_SEED, 0
-    set steam score detail STEAM_DETAIL_FLAGS, CORAL_ENDING `which of the two endings of the hidden game it had, or 0. the other flags are 0.
+    ` the flags: which of the two endings of the hidden game it had, or 0, and whether it was played with
+    ` a debug environment variable set, now or before it was saved and carried on with
+    if isDebugEnvSet() then GAME_DEBUG_USED = 1
+    set steam score detail STEAM_DETAIL_FLAGS, CORAL_ENDING + GAME_DEBUG_USED * STEAM_FLAG_DEBUG
     set steam score detail STEAM_DETAIL_SPARE, 0
 
     sendBit = STEAM_BIT_LOG

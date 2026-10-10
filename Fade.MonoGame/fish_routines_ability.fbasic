@@ -40,6 +40,15 @@ setup_abilities:
         maxUses = UPGRADE_CHOICES_MAX - UPGRADE_CHOICES_START
     }
 
+    ` see SHOW TIME in fish_headers
+    CARDS(ABILITY_INDEX_SHOW_TIME) = {
+        name$ = "show time"
+        desc$ = "The next " + str$(SHOW_TIME_HINTS) + " songs will be easier."
+        obtained = 0
+        abilityType = ABILITY_TYPE_INSTANT,
+        stackable = 1
+    }
+
     ` passives
     CARDS(ABILITY_INDEX_WRAP) = {
         name$ = "seamless"
@@ -212,7 +221,7 @@ setup_abilities:
     ` see THE ROBOT in fish_headers
     CARDS(ABILITY_INDEX_MOVE_ROBOT) = {
         name$ = "robot"
-        desc$ = "makes " + str$(ROBOT_SWAPS) + " good swaps near the cursor, all for one move"
+        desc$ = "Send a helpful robot to do swaps where it can."
         obtained = 0
         abilityType = ABILITY_TYPE_MOVE
         stackable = 0
@@ -579,6 +588,9 @@ handle_ability_instant_effect:
         case ABILITY_INDEX_MOVE_SLOT
             ` the new slot is empty, and the next move that gets picked goes straight into it
             if MOVE_SLOTS_OPEN < MOVE_SLOT_COUNT then MOVE_SLOTS_OPEN = MOVE_SLOTS_OPEN + 1
+        endcase
+        case ABILITY_INDEX_SHOW_TIME
+            takeShowTime()
         endcase
     endselect
 return
@@ -1003,7 +1015,10 @@ frame_ability_selection:
     ` or it is around the line underneath the cards, that takes none of them
     if UPGRADE_SKIP_SELECTED
         if UPGRADE_ROW_PICK = 1
-            layoutInfoBorder(ABILITY_CURSOR, UPGRADE_REROLL_X - 76, UPGRADE_SKIP_Y - 3, 152, 26)
+            ` the words of this line change with the price, so the outline is as wide as they are, and no narrower than it used to be
+            rerollBoxW = get text size x(UPGRADE_REROLL_TEXT_ID) + 16
+            if rerollBoxW < 152 then rerollBoxW = 152
+            layoutInfoBorder(ABILITY_CURSOR, UPGRADE_REROLL_X - rerollBoxW / 2, UPGRADE_SKIP_Y - 3, rerollBoxW, 26)
         else
             layoutInfoBorder(ABILITY_CURSOR, UPGRADE_SKIP_X - 64, UPGRADE_SKIP_Y - 3, 128, 26)
         endif
