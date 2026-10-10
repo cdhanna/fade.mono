@@ -283,7 +283,7 @@ test multiplier_goes_up_after_the_fish_are_scored from fishBoard
     end
 endtest
 
-test multiplier_drops_when_a_swap_pops_nothing from fishBoard
+test multiplier_first_miss_only_empties_the_bar from fishBoard
     SCORE_MULTIPLIER = 3
     MULT_PROGRESS = 1
     multiplierSwapMade()
@@ -292,8 +292,36 @@ test multiplier_drops_when_a_swap_pops_nothing from fishBoard
     runto _combos_judged
 
     assert totalComboCount = 0, "nothing popped"
-    assert SCORE_MULTIPLIER = 2, "so the swap took one off of the multiplier"
-    assert MULT_PROGRESS = 0, "and emptied the bar"
+    assert MULT_PROGRESS = 0, "so the swap emptied the bar"
+    assert SCORE_MULTIPLIER = 3, "and that is all that it cost"
+    end
+endtest
+
+test multiplier_miss_on_an_empty_bar_takes_one_off from fishBoard
+    SCORE_MULTIPLIER = 4
+    MULT_PROGRESS = 0
+    multiplierSwapMade()
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 0, "nothing popped"
+    assert SCORE_MULTIPLIER = 3, "the bar was empty already, so the swap took one off of the multiplier, and only one"
+    end
+endtest
+
+test multiplier_two_misses_cost_the_bar_and_then_one from fishBoard
+    ` two swaps that were made while fish were still popping are looked at together
+    SCORE_MULTIPLIER = 4
+    MULT_PROGRESS = 2
+    multiplierSwapMade()
+    multiplierSwapMade()
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert MULT_PROGRESS = 0, "the first miss emptied the bar"
+    assert SCORE_MULTIPLIER = 3, "and the second one took one off of the multiplier"
     end
 endtest
 
@@ -2109,6 +2137,35 @@ test coral_group_from_before_does_not_spare_the_multiplier from fishBoard
 
     assert totalComboCount = 0, "nothing popped, and nothing sang"
     assert SCORE_MULTIPLIER = 2, "and the swap did not make the group, so it costs the multiplier as usual"
+    end
+endtest
+
+test coral_fish_that_have_sung_can_not_be_moved_around_to_sing_again from fishBoard
+    ` a square of coral, two by two, with three fish in it that have sung already. any three cells
+    ` of the square are a group, so moving one of the fish to the empty corner makes a group again.
+    SCORE_MULTIPLIER = 3
+    CORAL_CELLS(testIndex(0, 0)) = 1
+    CORAL_CELLS(testIndex(1, 0)) = 1
+    CORAL_CELLS(testIndex(0, 1)) = 1
+    CORAL_CELLS(testIndex(1, 1)) = 1
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(0, 1, 6)
+    CORAL_SUNG(testIndex(0, 0)) = 6
+    CORAL_SUNG(testIndex(1, 0)) = 6
+    CORAL_SUNG(testIndex(0, 1)) = 6
+
+    testCursor(1, 0)
+    testQueueMove(0, 1, 1, -1)
+
+    runto _combos_judged
+
+    assert CELLS(testIndex(1, 1)).value = 6, "the fish was moved to the empty corner"
+    assert CORAL_SUNG(testIndex(1, 1)) = 6, "and it has still sung"
+    assert totalComboCount = 0, "so nothing sang"
+    assert CURRENT_SCORE = 0, "and nothing was scored"
+    assert CORAL_HELD_GROUPS = 1, "the swap did put a group together"
+    assert SCORE_MULTIPLIER = 3, "so the multiplier does not hold it against the player"
     end
 endtest
 

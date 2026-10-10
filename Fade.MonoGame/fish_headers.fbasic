@@ -426,8 +426,9 @@ global dim SCORE_TICK_POINTS(SCORE_TICK_MAX) `and how many points it is worth
 
 ` THE MULTIPLIER. every fish that pops scores this many times what it would have.
 ` a swap that makes something pop fills the multiplier's bar a little. when the bar is full, the multiplier
-` goes up by one, and the bar starts again from empty. a swap that pops nothing empties the bar, and takes
-` one off of the multiplier, down to 1 at the least.
+` goes up by one, and the bar starts again from empty. a swap that pops nothing empties the bar. if the
+` bar is empty already, it takes one off of the multiplier instead, down to 1 at the least. so the first
+` miss only costs the bar, and it is the next one in a row that costs a multiplier.
 ` the bar takes 3 more swaps in a row to fill every time: 2 to get to x2, 5 to get to x3, 8 to get to x4.
 ` how many it takes follows from the multiplier, so when the multiplier goes down, so does how many it takes.
 ` there is no top to the multiplier. the higher it is, the longer the next one takes, and the more every pop is worth.
@@ -1395,10 +1396,14 @@ global CORAL_PRAISE_HOLD = 8000 `the chord stays, and no other melody starts, fo
 ` are and sing: each one swells, a heart comes up from it, the coral under it lights up,
 ` and it scores CORAL_SCORE_BONUS times what it would have
 ` scored by popping. a stack behind it scores too, and stays.
-` a group that has sung does not sing again for as long as it is the same fish in the same cells, so it
-` does not score every time that the board is looked at. it sings again when a fish joins it: one that a
-` swap brought, or one that fell in. CORAL_SUNG is how that is known. a group of fish that have all
-` sung already is not a group at all, as far as the multiplier and the songs are concerned.
+` a group of fish that have all sung does not sing again, so it does not score every time that the
+` board is looked at. it sings again when a fish that has not sung joins it: one that a swap brought,
+` or one that fell in. CORAL_SUNG is how that is known. having sung goes with the fish when a swap
+` moves it, for as long as it stays on coral that is well, so fish that have sung can not be moved
+` around on the coral to sing over and over. swapCellStacks, in fish_funcs, takes it along.
+` a group of fish that have all sung already is not a group at all, as far as the songs are concerned.
+` when a swap puts one together, a heart comes up from each of its fish, and the multiplier lets the
+` swap off, the same as it does for CORAL_HELD_GROUPS. it scores nothing.
 ` a fish that is belly up, or a skeleton, pops on coral like anywhere else. so does every fish on horror
 ` coral. and a pop that is forced takes the fish on coral with it: a stingray's column, the bomb, the
 ` waste bucket, a bottle that pays out. see FORCED POPS. coralHolds, in fish_routines_coral, is the rule.

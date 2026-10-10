@@ -1087,6 +1087,19 @@ handle_combos:
         if comboCount < comboNeed then skip `if this group is not big enough, then we can skip rendering the explosion
 
         ` every fish of the group is on coral, and has sung already. nothing has joined them, so they sit.
+        ` when it was the last swap that put them together, out of fish that had all sung, they are
+        ` happy about it: a heart comes up from each of them, and the multiplier does not hold the swap
+        ` against the player. it scores nothing.
+        if comboFresh = 0
+            if comboSwapped
+                CORAL_HELD_GROUPS = CORAL_HELD_GROUPS + 1
+                for i = 1 to CELL_COUNT
+                    if CELLS(i-1).comboFillId = g
+                        coralHeartFrom(i - 1, 0)
+                    endif
+                next
+            endif
+        endif
         if comboFresh = 0 then skip
 
         ` a group with a skeleton in it waits for the ghost of the skeleton to be seen, and so does

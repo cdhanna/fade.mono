@@ -59,7 +59,7 @@ setup_multiplier:
     create basic tween MULT_FILL_TWEEN_ID, 0, 0, 1, 0
     create basic tween MULT_PUNCH_TWEEN_ID, 0, 0, 1, 0
 
-    infoIndex = allocateInfoBlob(MULT_POS.x - 4, MULT_POS.y - 2, MULT_BAR_WIDTH + 8, 66, "Multiplier", "Every fish that pops scores this many times as much. A swap that pops fish fills the bar, and a full bar adds one. A swap that pops nothing empties the bar, and takes one away.")
+    infoIndex = allocateInfoBlob(MULT_POS.x - 4, MULT_POS.y - 2, MULT_BAR_WIDTH + 8, 66, "Multiplier", "Every fish that pops scores this many times as much. A swap that pops fish fills the bar, and a full bar adds one. A swap that pops nothing empties the bar. If the bar is already empty, it takes one away.")
     INFO_INDEX_MULTIPLIER = infoIndex
 
 return
@@ -111,15 +111,23 @@ function judgeMultiplierSwaps(comboCount)
             ` not fill, and nothing is taken away. see CORAL in fish_headers.
             if CORAL_HELD_GROUPS = 0
                 ` the player can swap while fish are still popping, so more than one swap can be waiting.
-                ` every one of them that popped nothing takes one off.
+                ` every one of them that popped nothing costs one thing: the bar, if there is anything in
+                ` it, and one off of the multiplier only when the bar is already empty.
                 if SCORE_MULTIPLIER > 1 or MULT_PROGRESS > 0
                     MULT_PUNCH_DIR = -1
                     create basic tween MULT_PUNCH_TWEEN_ID, 1, 0, 400, 0
                 endif
 
-                SCORE_MULTIPLIER = SCORE_MULTIPLIER - pendingSwaps
+                missesLeft = pendingSwaps
+                while missesLeft > 0
+                    missesLeft = missesLeft - 1
+                    if MULT_PROGRESS > 0
+                        MULT_PROGRESS = 0
+                    else
+                        SCORE_MULTIPLIER = SCORE_MULTIPLIER - 1
+                    endif
+                endwhile
                 if SCORE_MULTIPLIER < 1 then SCORE_MULTIPLIER = 1
-                MULT_PROGRESS = 0
             endif
         endif
 
