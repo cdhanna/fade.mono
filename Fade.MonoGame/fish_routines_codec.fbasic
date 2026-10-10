@@ -14,7 +14,7 @@ remstart
     entries that are not cards: coral, and horror coral. those are not on the upgrade screen. they are
     seen when some of it grows on the board. see CODEC_ENTRY_CORAL in fish_headers. then the two
     endings, and then the special fish (jellyfish, stingray, bottle) and what can happen to a fish
-    (belly up, skeletal, stacked), which are seen when one is on the board.
+    (belly up, skeletal, stacked, heart home), which are seen when one is on the board.
 
     there are more upgrades than fit in the grid, so the grid has pages. a page is CODEC_PAGE_SIZE
     tiles, and there are only that many tile sprites: they are given the pictures of whichever page is
@@ -40,14 +40,12 @@ setup_codec:
     CODEC_ENTRY_BELLY = CARD_LENGTH + 7
     CODEC_ENTRY_SKELETON = CARD_LENGTH + 8
     CODEC_ENTRY_STACK = CARD_LENGTH + 9
+    CODEC_ENTRY_HOME = CARD_LENGTH + 10
     CODEC_COUNT = CARD_LENGTH + CODEC_EXTRA_COUNT
 
     ` what has been seen, in every game that has ever been played
-    for codecI = 0 to CARD_LENGTH - 1
-        CODEC_SEEN(codecI) = get pref(CODEC_PREF + codecI, 0)
-    next
-    for codecI = 0 to CODEC_EXTRA_COUNT - 1
-        CODEC_SEEN(CARD_LENGTH + codecI) = get pref(CODEC_PREF_EXTRA + codecI, 0)
+    for codecI = 0 to CODEC_COUNT - 1
+        CODEC_SEEN(codecI) = get pref(getCodecPref(codecI), 0)
     next
 
     ` an ending that was reached before the codec had an entry for it counts, too
@@ -99,6 +97,19 @@ setup_codec:
         set sprite render target codecSprite, TARGET_MENU
         hide sprite codecSprite
         CODEC_STACK_SPRITES(codecI) = codecSprite
+    next
+
+    ` the heart over the fish in the picture of "heart home". refreshCodec puts them where they go.
+    for codecI = 0 to 1
+        codecSprite = 0
+        reserve sprite id(codecSprite)
+        sprite codecSprite, 0, 0, TEX_ENDING_REEF
+        set sprite offset codecSprite, .5, .5
+        color sprite codecSprite, rgb(255, 125, 155)
+        order sprite codecSprite, ORDER_MENU_TEXT + 1
+        set sprite render target codecSprite, TARGET_MENU
+        hide sprite codecSprite
+        CODEC_HEART_SPRITES(codecI) = codecSprite
     next
 
     ` the arrows at the two ends of the grid, and the page number in the corner of the panel
@@ -241,12 +252,25 @@ function codecSeeCard(cardIndex)
     if cardIndex >= 0 and cardIndex < CODEC_COUNT
         if CODEC_SEEN(cardIndex) = 0
             CODEC_SEEN(cardIndex) = 1
-            seenPref = CODEC_PREF + cardIndex
-            if cardIndex >= CARD_LENGTH then seenPref = CODEC_PREF_EXTRA + (cardIndex - CARD_LENGTH)
-            set pref seenPref, 1
+            set pref getCodecPref(cardIndex), 1
         endif
     endif
 endfunction
+
+
+` where the preferences keep whether an entry has been seen. the cards have a run of them, and the first
+` few of the entries that are not cards have another. the ones after those have a third, because the
+` second one ran out of room.
+function getCodecPref(prefEntry)
+    prefSlot = CODEC_PREF + prefEntry
+    if prefEntry >= CARD_LENGTH
+        prefExtra = prefEntry - CARD_LENGTH
+        prefSlot = CODEC_PREF_EXTRA + prefExtra
+        if prefExtra >= CODEC_PREF_EXTRA_ROOM
+            prefSlot = CODEC_PREF_MORE + (prefExtra - CODEC_PREF_EXTRA_ROOM)
+        endif
+    endif
+endfunction prefSlot
 
 
 ` the board has settled. whatever is on it that the codec has an entry for is unlocked: the special
@@ -268,6 +292,13 @@ function codecSeeBoard()
         seeEntry = -1
         if CELLS(seeI).stack > 0 then seeEntry = CODEC_ENTRY_STACK
         codecSeeCard(seeEntry)
+
+        ` a fish that is sitting on coral that is well
+        seeEntry = -1
+        if CORAL_CELLS(seeI) > CORAL_SICK(seeI)
+            if seeKind > 0 then seeEntry = CODEC_ENTRY_HOME
+        endif
+        codecSeeCard(seeEntry)
     next
 endfunction
 
@@ -288,6 +319,7 @@ function getCodecEntryTex(entryIndex)
     if entryIndex = CODEC_ENTRY_BELLY then entryTex = CODEC_FISH_TEX
     if entryIndex = CODEC_ENTRY_SKELETON then entryTex = SKELETON_TEX(CODEC_FISH_TEX)
     if entryIndex = CODEC_ENTRY_STACK then entryTex = CODEC_FISH_TEX
+    if entryIndex = CODEC_ENTRY_HOME then entryTex = CODEC_FISH_TEX
     if entryIndex < CARD_LENGTH then entryTex = CARDS(entryIndex).artTexId
 endfunction entryTex
 
@@ -346,6 +378,8 @@ function closeCodec()
     next
     hide sprite CODEC_STACK_SPRITES(0)
     hide sprite CODEC_STACK_SPRITES(1)
+    hide sprite CODEC_HEART_SPRITES(0)
+    hide sprite CODEC_HEART_SPRITES(1)
     hide text CODEC_COUNT_TEXT_ID
     hide text CODEC_PAGE_TEXT_ID
     hide text CODEC_ARROW_TEXTS(0)
@@ -386,6 +420,10 @@ function refreshCodec()
     hide sprite CODEC_STACK_SPRITES(1)
     rotate sprite CODEC_BIG_SPRITE, 0
 
+    ` and the same goes for the heart of "heart home"
+    hide sprite CODEC_HEART_SPRITES(0)
+    hide sprite CODEC_HEART_SPRITES(1)
+
     for i = 0 to CODEC_PAGE_SIZE - 1
         shownEntry = pageNow * CODEC_PAGE_SIZE + i
         rotate sprite CODEC_ICON_SPRITES(i), 0
@@ -424,6 +462,13 @@ function refreshCodec()
                     position sprite CODEC_STACK_SPRITES(0), getCodecTileX(i) - 5, getCodecTileY(i) - 5
                     color sprite CODEC_STACK_SPRITES(0), rgb(90, 115, 165)
                     show sprite CODEC_STACK_SPRITES(0)
+                endif
+
+                ` and one that is at home has a heart coming up from it
+                if shownEntry = CODEC_ENTRY_HOME
+                    size sprite CODEC_HEART_SPRITES(0), 12, 12
+                    position sprite CODEC_HEART_SPRITES(0), getCodecTileX(i) + 9, getCodecTileY(i) - 12
+                    show sprite CODEC_HEART_SPRITES(0)
                 endif
             else
                 ` a locked tile is only a question mark. its picture would give it away.
@@ -510,7 +555,7 @@ function refreshCodec()
         endif
         if CODEC_SELECTED = CODEC_ENTRY_SKELETON
             set text CODEC_NAME_TEXT_ID, "Skeletal"
-            set text CODEC_DESC_TEXT_ID, "The bones of a fish. A fish that is swapped can make its group through skeletons of any kind."
+            set text CODEC_DESC_TEXT_ID, "The bones of a fish. A fish that is swapped can make its group through skeletons of any kind. Death is the great equalizer."
             set text CODEC_KIND_TEXT_ID, "status"
             exitfunction
         endif
@@ -522,6 +567,16 @@ function refreshCodec()
             show sprite CODEC_STACK_SPRITES(1)
             set text CODEC_NAME_TEXT_ID, "Stacked"
             set text CODEC_DESC_TEXT_ID, "More fish, stacked up behind one. When it pops, each fish in the stack pops first, and scores, and does what that fish does."
+            set text CODEC_KIND_TEXT_ID, "status"
+            exitfunction
+        endif
+
+        if CODEC_SELECTED = CODEC_ENTRY_HOME
+            size sprite CODEC_HEART_SPRITES(1), 20, 20
+            position sprite CODEC_HEART_SPRITES(1), CODEC_X + 60, CODEC_DETAIL_TOP + 18
+            show sprite CODEC_HEART_SPRITES(1)
+            set text CODEC_NAME_TEXT_ID, "Coral Home"
+            set text CODEC_DESC_TEXT_ID, "Happy fish come from happy coral homes. They don't leave, they just score " + str$(CORAL_SCORE_BONUS) + " times as much."
             set text CODEC_KIND_TEXT_ID, "status"
             exitfunction
         endif

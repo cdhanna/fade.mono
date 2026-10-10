@@ -268,7 +268,7 @@ highscore_table_loop:
 
         ` these are checked after the frame, so that the press that brought the table up is not used twice
         if new action down(ACT_PAUSE) then exit
-
+    
         hsLoopChanged = 0
         hsLoopAsk = 0
         hsLoopStep = 0
@@ -431,14 +431,46 @@ highscore_game_end:
     show sprite MENU_COMPOSITE_SPRITE
     create basic tween MENU_FADE_TWEEN_ID, 0, 1, 150, 0
 
+    ` once the initials are picked, the player is asked if they are right. yes takes them, and the
+    ` pause key goes back to change them. hsAsking is 1 while that question is up.
+    hsAsking = 0
     do
-        refreshHighscoreInitials(hsSlot)
+        if hsAsking
+            refreshHighscoreInitials(-1)
+        else
+            refreshHighscoreInitials(hsSlot)
+        endif
         gosub frame_highscores
         sync
 
-        if new action down(ACT_CONFIRM) then exit
+        hsConfirmed = new action down(ACT_CONFIRM)
+        hsBackedOut = new action down(ACT_PAUSE)
+            if hsAsking
+            if hsConfirmed then exit
+            if hsBackedOut
+                hsAsking = 0
+                noteHighscoreInitials(hsIsHighscore, 0)
+                create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
+                set tween type SWAP_TWEEN_SFX, 1
+            endif
+        else
+            if hsConfirmed
+                hsAsking = 1
+                noteHighscoreInitials(hsIsHighscore, 1)
+                create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
+                set tween type SWAP_TWEEN_SFX, 1
+            endif
+        endif
 
+        ` the letters cannot be changed while the question is up. a direction that is still held
+        ` when it goes away is not a new press, so it does not change a letter then either.
         hsChanged = 0
+        if hsAsking
+            hsHeldDir = 0
+            if action down(ACT_UP) then hsHeldDir = -1
+            if action down(ACT_DOWN) then hsHeldDir = 1
+            hsRepeatMs = game ms() + 350
+        else
         if new action down(ACT_RIGHT)
             hsSlot = hsSlot + 1
             if hsSlot > 2 then hsSlot = 0
@@ -474,6 +506,7 @@ highscore_game_end:
             if hsLetter < 0 then hsLetter = 25
             HISCORE_LETTERS(hsSlot) = hsLetter
             hsChanged = 1
+        endif
         endif
 
         if hsChanged
@@ -1287,19 +1320,12 @@ function openHighscoreInitials(isHighscore)
     ` what the game came to, and what to do about it
     show text HISCORE_NOTE_TEXT_ID
     set text position HISCORE_NOTE_TEXT_ID, WORLD_WIDTH / 2, 94
-    if isHighscore
-        set text HISCORE_NOTE_TEXT_ID, "A new high score! Enter your initials."
-        color text HISCORE_NOTE_TEXT_ID, rgb(255, 220, 96)
-    else
-        set text HISCORE_NOTE_TEXT_ID, "Enter your initials."
-        color text HISCORE_NOTE_TEXT_ID, rgb(150, 190, 255)
-    endif
 
     show text MENU_DESC_TEXT_ID
     set text position MENU_DESC_TEXT_ID, WORLD_WIDTH / 2, 198
     set text MENU_DESC_TEXT_ID, str$(GAME_ROUND_CAP) + " rounds in " + str$(CURRENT_MOVE_COUNT) + " moves. The multiplier got to x" + str$(BEST_MULTIPLIER) + "."
 
-    set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} done"
+    noteHighscoreInitials(isHighscore, 0)
     size text y MENU_HINT_TEXT_ID, 16
 
     ` the page of one game's upgrades uses these letters too, smaller, so they are put back here
@@ -1412,18 +1438,44 @@ function refreshHighscoreDetails(scoreIndex, firstShown)
 endfunction
 
 
+` what the page where the initials are entered says above the letters, and in its hint. it asks for
+` the initials, or, when `asking` is 1, it asks if the ones that were picked are right.
+function noteHighscoreInitials(isHighscore, asking)
+    if asking
+        set text HISCORE_NOTE_TEXT_ID, "Are these right?"
+        color text HISCORE_NOTE_TEXT_ID, rgb(255, 255, 255)
+        set text MENU_HINT_TEXT_ID, "{confirm} yes    {pause} go back"
+        exitfunction
+    endif
+
+    if isHighscore
+        set text HISCORE_NOTE_TEXT_ID, "A new high score! Enter your initials."
+        color text HISCORE_NOTE_TEXT_ID, rgb(255, 220, 96)
+    else
+        set text HISCORE_NOTE_TEXT_ID, "Enter your initials."
+        color text HISCORE_NOTE_TEXT_ID, rgb(150, 190, 255)
+    endif
+    set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} done"
+endfunction
+
+
 ` write the initials that are being entered onto the page. the letter at `slot` is the one that the
-` directions change, so it is white and it has the outline around it.
+` directions change, so it is white and it has the outline around it. a slot of -1 is all three of
+` them at once, which is how they look while the player is asked if they are right.
 function refreshHighscoreInitials(slot)
     for i = 0 to 2
         set text HISCORE_LETTER_TEXTS(i), chr$(65 + HISCORE_LETTERS(i))
 
         letterColor = rgb(150, 190, 255)
-        if i = slot then letterColor = rgb(255, 255, 255)
+        if i = slot or slot < 0 then letterColor = rgb(255, 255, 255)
         color text HISCORE_LETTER_TEXTS(i), letterColor
     next
 
-    movePageOutline(HISCORE_CURSOR, WORLD_WIDTH / 2 + (slot - 1) * 56 - 22, 128, 44, 56)
+    if slot < 0
+        movePageOutline(HISCORE_CURSOR, WORLD_WIDTH / 2 - 78, 128, 156, 56)
+    else
+        movePageOutline(HISCORE_CURSOR, WORLD_WIDTH / 2 + (slot - 1) * 56 - 22, 128, 44, 56)
+    endif
 endfunction
 
 

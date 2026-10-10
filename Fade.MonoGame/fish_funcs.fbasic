@@ -746,6 +746,16 @@ function getRoundsLeft()
 
 endfunction GAME_ROUND_CAP - CURRENT_ROUND
 
+` write how many rounds are left onto the screen. a game that was won, and is being carried on with,
+` says how many rounds past the end it is. see KEEP PLAYING in fish_headers.
+function showRoundsLeft()
+    roundsWords$ = str$(getRoundsLeft())
+    if GAME_ENDLESS
+        roundsWords$ = "+" + str$(CURRENT_ROUND - GAME_ROUND_CAP)
+    endif
+    set text ROUND_COUNT_TEXT_ID, roundsWords$
+endfunction
+
 ` how many rounds a game of the given length has. the length is one of the GAME_LENGTH constants.
 function getGameLengthRounds(length)
     rounds = 30

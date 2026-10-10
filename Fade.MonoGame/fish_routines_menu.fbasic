@@ -231,10 +231,15 @@ setup_menu:
         ready = 1
     }
 
-    ` the only line on the page that comes up when the last round has been won
+    ` the lines on the page that comes up when the last round has been won. see KEEP PLAYING in fish_headers.
     MENU_ITEMS(MENU_ITEM_OVER_DONE) = {
         name$ = "Done"
         desc$ = "Back to the title."
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_OVER_CONTINUE) = {
+        name$ = "Keep Playing"
+        desc$ = "Carry on with this board, for as long as you like. Your score is already in."
         ready = 1
     }
 
@@ -541,6 +546,21 @@ menu_pick:
             gosub menu_quit_to_title
         endcase
 
+        case MENU_ITEM_OVER_CONTINUE
+            ` the game goes on, and no round is the last one any more. the round that was the last one
+            ` is over the way that any round is: with an upgrade, or with the next round, in a zen game.
+            ` see KEEP PLAYING in fish_headers.
+            GAME_ENDLESS = 1
+            showRoundsLeft()
+            gosub menu_close_pause
+            if GAME_ZEN
+                advanceScoreBar()
+            else
+                REQUEST_ABILITY_SELECTION = 1
+                SCORE_BAR_HOLD = 2
+            endif
+        endcase
+
         case MENU_ITEM_QUIT
             if MENU_MODE = MENU_MODE_PAUSE
                 gosub menu_quit_to_title
@@ -660,7 +680,7 @@ return
 apply_game_options:
     GAME_ROUND_CAP = getGameLengthRounds(OPTION_GAME_LENGTH)
     GAME_ZEN = OPTION_GAME_ZEN
-    set text ROUND_COUNT_TEXT_ID, str$(getRoundsLeft())
+    showRoundsLeft()
 
     ` a zen game has the one passive, and never gets another
     if GAME_ZEN
@@ -700,14 +720,33 @@ handle_game_end:
     hintShow(0)
     set screen shake amount 0
 
+    ` a game that was won already, and was being carried on with, has been counted. the only way that
+    ` it ends again is with one of the two endings of the hidden game, and then it is back to the title.
+    ` see KEEP PLAYING in fish_headers.
+    if GAME_ENDLESS
+        gosub forget_saved_game
+        gosub menu_quit_to_title
+        return
+    endif
+
     ` the player is asked for their initials, and shown the table of high scores. that takes the place
     ` of the list of the menu, and it fades the menu in. see fish_routines_highscores.
     gosub highscore_game_end
 
-    ` and then it is back to the title. the high scores fade out before they are put away.
-    gosub menu_fade_out
+    ` a game that ended with one of the two endings of the hidden game is over for good. it is back to
+    ` the title. the high scores fade out before they are put away.
+    if CORAL_ENDING > 0
+        gosub menu_fade_out
+        closeHighscores()
+        gosub menu_quit_to_title
+        return
+    endif
+
+    ` any other game can be carried on with. the list of the menu comes back, in place of the high
+    ` scores, and asks: "Keep Playing", or "Done". frame_menu takes it from here.
     closeHighscores()
-    gosub menu_quit_to_title
+    setMenuPage(MENU_PAGE_GAME_OVER)
+    selectMenuItem(0, 0)
 return
 
 
@@ -1210,6 +1249,7 @@ reset_game:
     REQUEST_COMBO_CHECK = 0
     REQUEST_ABILITY_SELECTION = 0
     REQUEST_GAME_END = 0
+    GAME_ENDLESS = 0
     BELLY_UP_ROLL_DUE = 0
 
     ` the score
@@ -1220,7 +1260,7 @@ reset_game:
     GAME_LOG_COUNT = 0 `no upgrades have been picked yet
     PENDING_FREE_MOVES = 0
     set text MOVE_COUNT_TEXT_ID, "0"
-    set text ROUND_COUNT_TEXT_ID, str$(getRoundsLeft())
+    showRoundsLeft()
 
     SCORE_BAR.startVal = 0
     SCORE_BAR.endVal = getRoundSpan(0)
@@ -1261,8 +1301,11 @@ function setMenuPage(page)
     MENU_PAGE = page
 
     ` the main menu
+    ` the name of the game is bigger than the title of any other page, and its shadow is thicker.
+    ` 48 is three times the size that the font is drawn at, so it is sharp.
     title$ = "Fish Fish Pop"
-    titleSize = 44
+    titleSize = 48
+    titleShadow = 4
     hint$ = "{dir} choose    {confirm} select"
     first = MENU_ITEM_NEW_GAME
     last = MENU_ITEM_QUIT
@@ -1303,7 +1346,7 @@ function setMenuPage(page)
     if page = MENU_PAGE_GAME_OVER
         title$ = "You won, buddy!"
         titleSize = 36
-        hint$ = "{confirm} select"
+        hint$ = "{dir} choose    {confirm} select"
         first = MENU_ITEM_OVER_DONE
         last = MENU_ITEM_OVER_DONE
     endif
@@ -1342,6 +1385,18 @@ function setMenuPage(page)
         ` the pause menu has "Inventory" right under "Resume"
         if i = MENU_ITEM_MOVES
             if page = MENU_PAGE_PAUSE then skip
+        endif
+
+        ` and the page for a game that was won has "Keep Playing" right above "Done"
+        if i = MENU_ITEM_OVER_DONE
+            if page = MENU_PAGE_GAME_OVER
+                MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_OVER_CONTINUE
+                MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+                show text MENU_ITEMS(MENU_ITEM_OVER_CONTINUE).textId
+            endif
+        endif
+        if i = MENU_ITEM_OVER_CONTINUE
+            if page = MENU_PAGE_GAME_OVER then skip
         endif
 
         ` and the options page has the reef and the monster of the main menu right under "Fullscreen",
@@ -1403,6 +1458,8 @@ function setMenuPage(page)
 
     set text MENU_TITLE_TEXT_ID, title$
     size text y MENU_TITLE_TEXT_ID, titleSize
+    if page <> MENU_PAGE_MAIN then titleShadow = 2
+    enable text drop shadow MENU_TITLE_TEXT_ID, titleShadow, 0 - titleShadow, rgb(64, 128, 255)
 
     set text position MENU_DESC_TEXT_ID, WORLD_WIDTH / 2, panelY + panelH + 6
 

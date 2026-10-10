@@ -65,6 +65,9 @@ save_game:
     ` the highest that the multiplier has been, for the table of high scores
     set pref SAVE_PREF + 22, BEST_MULTIPLIER
 
+    ` and whether it was won already, and is being carried on with. see KEEP PLAYING in fish_headers.
+    set pref SAVE_PREF + 23, GAME_ENDLESS
+
     ` and the upgrades that have been picked, with the move that each was picked on
     set pref SAVE_PREF_LOG, GAME_LOG_COUNT
     if GAME_LOG_COUNT > 0
@@ -168,6 +171,7 @@ load_game:
     ` the kind of game that it is. a game that was saved before there were kinds is a long, normal one.
     GAME_ROUND_CAP = get pref(SAVE_PREF + 20, 100)
     GAME_ZEN = get pref(SAVE_PREF + 21, 0)
+    GAME_ENDLESS = get pref(SAVE_PREF + 23, 0)
     CURRENT_MOVE_COUNT = get pref(SAVE_PREF + 6)
     PENDING_FREE_MOVES = get pref(SAVE_PREF + 7)
     PENDING_BOARD_EXPANSIONS = get pref(SAVE_PREF + 8)
@@ -208,7 +212,7 @@ load_game:
     refreshMultiplier(1)
 
     registerMove(0) `this writes the number of moves onto the screen
-    set text ROUND_COUNT_TEXT_ID, str$(getRoundsLeft())
+    showRoundsLeft()
 
     ` what was just loaded is what is saved, so there is nothing new to save yet
     SAVE_SIGNATURE = saveSignature()
@@ -269,7 +273,7 @@ function saveSignature()
     signature = signature + CELL_COUNT * 3 + PASSIVE_COUNT * 17 + MOVE_ABILITY_COUNT * 19
     signature = signature + PENDING_FREE_MOVES * 23 + PENDING_BOARD_EXPANSIONS * 29 + REQUEST_ABILITY_SELECTION * 31
     signature = signature + SCORE_MULTIPLIER * 41 + MULT_PROGRESS * 43 + GAME_LOG_COUNT * 61
-    signature = signature + CORAL_COUNT * 67 + CORAL_CASTS * 71
+    signature = signature + CORAL_COUNT * 67 + CORAL_CASTS * 71 + GAME_ENDLESS * 73
     for i = 0 to CARD_LENGTH - 1
         signature = signature + CARDS(i).uses * (37 + i)
     next

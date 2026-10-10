@@ -100,6 +100,16 @@ setup_credits:
     hide text SPLASH_TEXT_ID
 
     reserve tween id(SPLASH_TWEEN_ID)
+
+    ` the black that the game fades in from when it starts. it is on the screen itself, on top of the
+    ` menu and everything else. see splash_cover.
+    reserve sprite id(SPLASH_BLACK_SPRITE)
+    sprite SPLASH_BLACK_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset SPLASH_BLACK_SPRITE, 0, 0
+    size sprite SPLASH_BLACK_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    color sprite SPLASH_BLACK_SPRITE, rgb(0, 0, 0)
+    order sprite SPLASH_BLACK_SPRITE, ORDER_MENU + 20
+    hide sprite SPLASH_BLACK_SPRITE
 return
 
 
@@ -148,7 +158,11 @@ menu_run_splash:
 
     ` the screen is drawn before the menu's render target is, so the very first frame has no sky
     ` to show yet. the cover hides the game for that one frame.
+    ` and on top of all of it there is black, which fades away, so that the game starts by fading in
+    ` from black. splash_cover does the fading.
     color sprite MENU_COVER_SPRITE, rgb(4, 4, 12)
+    set sprite alpha SPLASH_BLACK_SPRITE, 255
+    show sprite SPLASH_BLACK_SPRITE
     show sprite MENU_COMPOSITE_SPRITE
     show sprite MENU_COVER_SPRITE
     gosub frame_menu_render
@@ -156,13 +170,20 @@ menu_run_splash:
     hide sprite MENU_COVER_SPRITE
     color sprite MENU_COVER_SPRITE, rgb(32, 40, 64)
 
-    create basic tween SPLASH_TWEEN_ID, 0, 255, 400, 0
+    ` first the black fades away, and there is nothing but the stars. then the logos fade in, and stay
+    ` for a while. and then the camera comes down.
     splashStart = game ms()
     do
         ` the main loop sets this every frame, but the splash screen comes before the main loop
         set effect param float 1, "TimeSpeed", 1
+        gosub splash_cover
 
-        splashAlpha = tweenVal(SPLASH_TWEEN_ID)
+        ` the logos wait for the black to go, and a moment more
+        splashAge = game ms() - splashStart
+        splashLogoAge = splashAge - (SPLASH_FADE_IN + SPLASH_LOGO_WAIT)
+        splashAlpha = (splashLogoAge * 255) / SPLASH_LOGO_FADE
+        if splashAlpha < 0 then splashAlpha = 0
+        if splashAlpha > 255 then splashAlpha = 255
         set sprite alpha SPLASH_FADE_SPRITE, splashAlpha
         set sprite alpha SPLASH_MONOGAME_SPRITE, splashAlpha
         set text alpha SPLASH_TEXT_ID, splashAlpha
@@ -171,8 +192,7 @@ menu_run_splash:
         sync
 
         ` it does not have to be sat through
-        splashAge = game ms() - splashStart
-        if splashAge > SPLASH_DURATION then exit
+        if splashAge > SPLASH_FADE_IN + SPLASH_LOGO_WAIT + SPLASH_DURATION then exit
         if new action down(ACT_CONFIRM) then exit
     loop
 
@@ -196,11 +216,15 @@ menu_run_splash:
         if splashChrome# > 1 then splashChrome# = 1
         setMenuChromeAlpha(splashChrome#)
 
+        ` the logos may have been skipped before the black had gone
+        gosub splash_cover
+
         gosub frame_menu_render
         sync
     endwhile
 
     ` the camera is down, so the splash screen can be put away, back where it started
+    hide sprite SPLASH_BLACK_SPRITE
     SURFACE_PAN# = 0
     hide sprite SPLASH_FADE_SPRITE
     hide sprite SPLASH_MONOGAME_SPRITE
@@ -212,6 +236,18 @@ menu_run_splash:
     ` and the main menu is all the way there. selecting the line again puts the colors of the lines back.
     setMenuChromeAlpha(1)
     selectMenuItem(MENU_SELECTED, 0)
+return
+
+
+` the black that the game starts from fades away, over SPLASH_FADE_IN milliseconds from splashStart.
+` menu_run_splash comes here on every frame.
+splash_cover:
+    splashCover = 255 - ((game ms() - splashStart) * 255) / SPLASH_FADE_IN
+    if splashCover <= 0
+        hide sprite SPLASH_BLACK_SPRITE
+    else
+        set sprite alpha SPLASH_BLACK_SPRITE, splashCover
+    endif
 return
 
 

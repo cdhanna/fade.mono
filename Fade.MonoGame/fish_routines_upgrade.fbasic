@@ -44,13 +44,24 @@ setup_upgrade_wipe:
     setInfoBorderTarget(ABILITY_CURSOR, TARGET_UPGRADE)
 
     ` the line underneath the cards, that takes none of them. see UPGRADE_SKIP_SELECTED in fish_headers.
+    UPGRADE_SKIP_X = WORLD_WIDTH / 2 + 80
+    UPGRADE_REROLL_X = WORLD_WIDTH / 2 - 80
     reserve text id(UPGRADE_SKIP_TEXT_ID)
-    text UPGRADE_SKIP_TEXT_ID, WORLD_WIDTH / 2, UPGRADE_SKIP_Y, SCORE_FONT, "take nothing"
+    text UPGRADE_SKIP_TEXT_ID, UPGRADE_SKIP_X, UPGRADE_SKIP_Y, SCORE_FONT, "take nothing"
     size text y UPGRADE_SKIP_TEXT_ID, 20
     set text offset UPGRADE_SKIP_TEXT_ID, .5, 0
     order text UPGRADE_SKIP_TEXT_ID, ORDER_ABILITY_TEXT
     set text render target UPGRADE_SKIP_TEXT_ID, TARGET_UPGRADE
     hide text UPGRADE_SKIP_TEXT_ID
+
+    ` and the line next to it, that deals new cards. see THE REROLL in fish_headers.
+    reserve text id(UPGRADE_REROLL_TEXT_ID)
+    text UPGRADE_REROLL_TEXT_ID, UPGRADE_REROLL_X, UPGRADE_SKIP_Y, SCORE_FONT, "reroll  +5 moves"
+    size text y UPGRADE_REROLL_TEXT_ID, 20
+    set text offset UPGRADE_REROLL_TEXT_ID, .5, 0
+    order text UPGRADE_REROLL_TEXT_ID, ORDER_ABILITY_TEXT
+    set text render target UPGRADE_REROLL_TEXT_ID, TARGET_UPGRADE
+    hide text UPGRADE_REROLL_TEXT_ID
 
     ` the cards
     for wipeI = 0 to ABILITY_CHOICE_LENGTH - 1

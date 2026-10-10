@@ -29,6 +29,17 @@ setup_abilities:
         maxUses = MOVE_SLOT_COUNT - MOVE_SLOT_START_COUNT
     }
 
+    ` see DEEP POCKETS in fish_headers. taking it is all that it takes: getUpgradeChoiceCount looks at how
+    ` many times it has been taken, so handle_ability_instant_effect has nothing to do for it.
+    CARDS(ABILITY_INDEX_DEEP_POCKETS) = {
+        name$ = "deep pockets"
+        desc$ = "Every upgrade from now on has " + str$(UPGRADE_CHOICES_MAX) + " cards to pick from."
+        obtained = 0
+        abilityType = ABILITY_TYPE_INSTANT,
+        stackable = 1
+        maxUses = UPGRADE_CHOICES_MAX - UPGRADE_CHOICES_START
+    }
+
     ` passives
     CARDS(ABILITY_INDEX_WRAP) = {
         name$ = "seamless"
@@ -121,6 +132,14 @@ setup_abilities:
         abilityType = ABILITY_TYPE_PASSIVE
         stackable = 0
     }
+    ` see THE OPENING SWAP in fish_headers
+    CARDS(ABILITY_INDEX_QUICK_SONG) = {
+        name$ = "quick song"
+        desc$ = "A song no longer needs its opening swap."
+        obtained = 0
+        abilityType = ABILITY_TYPE_PASSIVE
+        stackable = 0
+    }
     CARDS(ABILITY_INDEX_BOTTLES) = {
         name$ = "bottles"
         desc$ = "a group of " + str$(BOTTLE_GROUP_SIZE) + " or more leaves a bottle. on the bottom row, it adds " + str$(BOTTLE_MULT_GAIN) + " to the multiplier."
@@ -177,6 +196,17 @@ setup_abilities:
         stackable = 0
         moveClock = 2
         moveValue = [MOVE_FREE]
+    }
+
+    ` see THE OPENING SWAP in fish_headers. the cursor moves on its own, so this does not stop the game either.
+    CARDS(ABILITY_INDEX_MOVE_SONG) = {
+        name$ = "easy song"
+        desc$ = "Begin a song. Walk it, and it is sung."
+        obtained = 0
+        abilityType = ABILITY_TYPE_MOVE
+        stackable = 0
+        moveClock = CORAL_SONG_COOLDOWN
+        moveValue = [MOVE_SONG]
     }
 
     ` see THE ROBOT in fish_headers
@@ -468,7 +498,7 @@ assign_ability_selection:
         maxIter = 100
         forceCandidate = -1`ABILITY_INDEX_MOVE_BOMB3x3
         while found = 0 AND maxIter > 0
-            maxIter = maxIter + 1
+            maxIter = maxIter - 1
 
             candidate = rnd(CARD_LENGTH)
 
@@ -487,6 +517,11 @@ assign_ability_selection:
                     valid = 0
                 endif
 
+                ` the two cards of the hidden game only come once it has been found. see THE OPENING SWAP in fish_headers.
+                if candidate = ABILITY_INDEX_QUICK_SONG or candidate = ABILITY_INDEX_MOVE_SONG
+                    if CORAL_CASTS < CORAL_SONG_CARDS_AFTER then valid = 0
+                endif
+
                 ` the "tackle box" has nothing to open once every slot is open
                 if candidate = ABILITY_INDEX_MOVE_SLOT and MOVE_SLOTS_OPEN >= MOVE_SLOT_COUNT
                     valid = 0
@@ -502,6 +537,18 @@ assign_ability_selection:
                         exit
                     endif
                 next
+
+                ` cards that are being dealt again are not the ones that were thrown away. after enough
+                ` tries that is given up on, because there may not be any others. see THE REROLL in fish_headers.
+                if UPGRADE_REROLLING
+                    if maxIter > 50
+                        for j = 0 to choiceCount
+                            if CARD_CHOICE_OLD(j) = candidate
+                                valid = 0
+                            endif
+                        next
+                    endif
+                endif
                 if valid
                     found = 1
                     CARD_CHOICE_INDEXES(i) = candidate
@@ -536,39 +583,12 @@ handle_ability_instant_effect:
     endselect
 return
 
-handle_ability_selection:
-
-    if REQUEST_ABILITY_SELECTION = 0 then return
-
-    ` let a swap that is playing out finish first, so that it is not left hanging behind the cards
-    if LIVE_MOVE_ACTIVE then return
-    REQUEST_ABILITY_SELECTION = 0
-
-
-    remstart
-        need to do several animations
-        fade out game with sprite or shader effect
-        select 3 random abilities and show them
-        allow user to use arrow keys to select one
-        space key should accept the ability
-        fade out, and move the ability to an on screen inventory
-    remend
-
-
-    ` clear any old choices
-    for i = 0 to ABILITY_CHOICE_LENGTH - 1
-        ABILITY_CHOICES(i).available = 0
-    next
-
-    ` the screen where a move gets put in a slot changes the title
-    set text ABILITY_SELECT_LABEL_TEXT_ID, "Select Upgrade"
-    size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
-
-    ` set the ability choices
-    choiceCount = 1
+` deal the cards of the upgrade screen: pick them, and put their names, pictures and words on them.
+` handle_ability_selection comes here when the screen opens, and reroll_ability_choices when the cards
+` are dealt again.
+bind_ability_choices:
     cardPadding = 16
     startX = WORLD_WIDTH / 2 - ((choiceCount) * (CARD_WIDTH + cardPadding)) * .5
-    ABILITY_SELECTION_INDEX = rnd(choiceCount) + 1
 
     gosub assign_ability_selection
 
@@ -634,6 +654,74 @@ handle_ability_selection:
         ABILITY_CHOICES(i) = a
     next
 
+    ` the line that deals new cards says what the next time costs. see THE REROLL in fish_headers.
+    if UPGRADE_REROLLS >= UPGRADE_REROLL_MAX
+        set text UPGRADE_REROLL_TEXT_ID, "no rerolls left"
+    else
+        set text UPGRADE_REROLL_TEXT_ID, "reroll for " + str$(getRerollCost()) + " moves"
+    endif
+return
+
+
+` the player picked the line that deals new cards. it costs moves, and more every time. see THE REROLL
+` in fish_headers. the new cards pop in one after the other, and the screen stays up.
+reroll_ability_choices:
+    if UPGRADE_REROLLS >= UPGRADE_REROLL_MAX then return
+
+    registerMove(getRerollCost())
+    UPGRADE_REROLLS = UPGRADE_REROLLS + 1
+
+    for i = 0 to choiceCount
+        CARD_CHOICE_OLD(i) = CARD_CHOICE_INDEXES(i)
+    next
+    UPGRADE_REROLLING = 1
+    gosub bind_ability_choices
+    UPGRADE_REROLLING = 0
+
+    for i = 0 to choiceCount
+        rerollX = get local transform x(ABILITY_CHOICES(i).transformId)
+        create basic tween ABILITY_CHOICES(i).sizeTweenId, .6, .95, 250, i * 70
+        spawnWakeBubbles(rerollX - CARD_WIDTH / 2, CARD_TOP, CARD_WIDTH, CARD_HEIGHT, 10, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
+    next
+return
+
+
+handle_ability_selection:
+
+    if REQUEST_ABILITY_SELECTION = 0 then return
+
+    ` let a swap that is playing out finish first, so that it is not left hanging behind the cards
+    if LIVE_MOVE_ACTIVE then return
+    REQUEST_ABILITY_SELECTION = 0
+
+
+    remstart
+        need to do several animations
+        fade out game with sprite or shader effect
+        select 3 random abilities and show them
+        allow user to use arrow keys to select one
+        space key should accept the ability
+        fade out, and move the ability to an on screen inventory
+    remend
+
+
+    ` clear any old choices
+    for i = 0 to ABILITY_CHOICE_LENGTH - 1
+        ABILITY_CHOICES(i).available = 0
+    next
+
+    ` the screen where a move gets put in a slot changes the title
+    set text ABILITY_SELECT_LABEL_TEXT_ID, "Select Upgrade"
+    size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
+
+    ` set the ability choices. there is one more of them with the "deep pockets" card. choiceCount is
+    ` the number of the last one, counting from 0. see DEEP POCKETS in fish_headers.
+    choiceCount = getUpgradeChoiceCount() - 1
+    ABILITY_SELECTION_INDEX = rnd(choiceCount) + 1
+    UPGRADE_REROLLS = 0
+    UPGRADE_REROLLING = 0
+    gosub bind_ability_choices
+
     ` the cards are there from the start, because the wave of bubbles is what brings them in.
     ` the selected one is a little bigger than the rest.
     for i = 0 to choiceCount
@@ -665,9 +753,11 @@ handle_ability_selection:
     free tween id(titleDropTweenId)
     create basic tween titleDropTweenId, 64, 64, 1, 0
 
-    ` the line underneath the cards, that takes none of them
+    ` the lines underneath the cards: one takes none of them, and one deals new ones
     UPGRADE_SKIP_SELECTED = 0
+    UPGRADE_ROW_PICK = 0
     show text UPGRADE_SKIP_TEXT_ID
+    show text UPGRADE_REROLL_TEXT_ID
 
     TRANSITION_FOR_UPGRADE = 1
     TRANSITION_TO_MENU = 1
@@ -682,24 +772,40 @@ handle_ability_selection:
         if new action down(ACT_RIGHT) then dir = 1
         if new action down(ACT_LEFT) then dir = -1
 
-        ` down goes to the line that takes nothing, and up comes back from it. left and right come
-        ` back from it too, to the card that was highlighted before, without moving along.
+        ` down goes to the two lines under the cards, and it starts on the one that takes nothing.
+        ` left and right go between the two of them, and up comes back to the card that was
+        ` highlighted before. see THE REROLL in fish_headers.
         skipWas = UPGRADE_SKIP_SELECTED
+        rowWas = UPGRADE_ROW_PICK
         skipLeft = 0
         if UPGRADE_SKIP_SELECTED
-            if dir <> 0 or new action down(ACT_UP)
+            if dir < 0 then UPGRADE_ROW_PICK = 1
+            if dir > 0 then UPGRADE_ROW_PICK = 0
+            dir = 0
+            if new action down(ACT_UP)
                 UPGRADE_SKIP_SELECTED = 0
                 skipLeft = 1
-                dir = 0
             endif
         else
-            if new action down(ACT_DOWN) then UPGRADE_SKIP_SELECTED = 1
+            if new action down(ACT_DOWN)
+                UPGRADE_SKIP_SELECTED = 1
+                UPGRADE_ROW_PICK = 0
+            endif
+        endif
+
+        ` where the line that was highlighted is, for the bubbles that the outline leaves behind
+        rowWasX = UPGRADE_SKIP_X
+        if rowWas = 1 then rowWasX = UPGRADE_REROLL_X
+        if UPGRADE_SKIP_SELECTED = skipWas
+            if UPGRADE_ROW_PICK <> rowWas
+                spawnWakeBubbles(rowWasX - 60, UPGRADE_SKIP_Y, 120, 20, 8, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
+            endif
         endif
 
         if UPGRADE_SKIP_SELECTED <> skipWas
             ` the outline leaves some bubbles behind on whatever it was around
             if skipWas
-                spawnWakeBubbles(WORLD_WIDTH / 2 - 60, UPGRADE_SKIP_Y, 120, 20, 8, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
+                spawnWakeBubbles(rowWasX - 60, UPGRADE_SKIP_Y, 120, 20, 8, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
             else
                 spawnWakeBubbles(tweenVal(ABILITY_SELECTION_INDICATOR_TWEEN_ID) - CARD_WIDTH / 2, CARD_TOP, CARD_WIDTH, CARD_HEIGHT, 10, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
             endif
@@ -744,6 +850,16 @@ handle_ability_selection:
         if new action down(ACT_CONFIRM) then upgradePicked = 1
         if new action down(ACT_UP) and skipLeft = 0 then upgradePicked = 1
 
+        ` the line that deals new cards does that, and the screen stays up
+        if upgradePicked
+            if UPGRADE_SKIP_SELECTED
+                if UPGRADE_ROW_PICK = 1
+                    upgradePicked = 0
+                    gosub reroll_ability_choices
+                endif
+            endif
+        endif
+
         if upgradePicked
             
             ` add the passive. when the line that takes nothing was picked, there is nothing to add,
@@ -772,7 +888,8 @@ handle_ability_selection:
 
                 ` a move has to be put in a slot, and the player picks which. see fish_routines_equip.
                 case ABILITY_TYPE_MOVE
-                    hide text UPGRADE_SKIP_TEXT_ID `the page that comes next has rows where this line is
+                    hide text UPGRADE_SKIP_TEXT_ID `the page that comes next has rows where these lines are
+                    hide text UPGRADE_REROLL_TEXT_ID
                     gosub handle_move_equip
                 endcase
             endselect
@@ -787,6 +904,7 @@ handle_ability_selection:
             endwhile
             hide sprite UPGRADE_COMPOSITE_SPRITE
             hide text UPGRADE_SKIP_TEXT_ID
+            hide text UPGRADE_REROLL_TEXT_ID
             UPGRADE_SKIP_SELECTED = 0
 
             ` none of it is being drawn any more, so it can all be put away
@@ -835,10 +953,18 @@ frame_ability_selection:
     set effect param float MENU_FX_ID, "Invert", UPGRADE_INVERT
 
     ` the line that takes none of the cards is white when it is the one that is highlighted
+    ` and so is the line that deals new cards. it is dim once there are none left to deal.
+    color text UPGRADE_SKIP_TEXT_ID, rgb(150, 190, 255, 200)
+    color text UPGRADE_REROLL_TEXT_ID, rgb(150, 190, 255, 200)
+    if UPGRADE_REROLLS >= UPGRADE_REROLL_MAX
+        color text UPGRADE_REROLL_TEXT_ID, rgb(150, 190, 255, 90)
+    endif
     if UPGRADE_SKIP_SELECTED
-        color text UPGRADE_SKIP_TEXT_ID, rgb(255, 255, 255)
-    else
-        color text UPGRADE_SKIP_TEXT_ID, rgb(150, 190, 255, 200)
+        if UPGRADE_ROW_PICK = 1
+            color text UPGRADE_REROLL_TEXT_ID, rgb(255, 255, 255)
+        else
+            color text UPGRADE_SKIP_TEXT_ID, rgb(255, 255, 255)
+        endif
     endif
 
     ` TODO: stupid FX system loses parameters between reloads, so best to set them in a loop.
@@ -876,7 +1002,11 @@ frame_ability_selection:
 
     ` or it is around the line underneath the cards, that takes none of them
     if UPGRADE_SKIP_SELECTED
-        layoutInfoBorder(ABILITY_CURSOR, WORLD_WIDTH / 2 - 64, UPGRADE_SKIP_Y - 3, 128, 26)
+        if UPGRADE_ROW_PICK = 1
+            layoutInfoBorder(ABILITY_CURSOR, UPGRADE_REROLL_X - 76, UPGRADE_SKIP_Y - 3, 152, 26)
+        else
+            layoutInfoBorder(ABILITY_CURSOR, UPGRADE_SKIP_X - 64, UPGRADE_SKIP_Y - 3, 128, 26)
+        endif
     endif
 
     ` it pulses the same way that the info mode cursor does
@@ -1032,8 +1162,21 @@ endfunction CARDS(ABILITY_INDEX_RAYS).obtained > 0
 function isAbility_Bottles()
 endfunction CARDS(ABILITY_INDEX_BOTTLES).obtained > 0
 
+` how many cards the upgrade screen offers. see DEEP POCKETS in fish_headers.
+function getUpgradeChoiceCount()
+    pocketCount = UPGRADE_CHOICES_START + CARDS(ABILITY_INDEX_DEEP_POCKETS).uses
+    if pocketCount > UPGRADE_CHOICES_MAX then pocketCount = UPGRADE_CHOICES_MAX
+endfunction pocketCount
+
+` how many moves it costs to deal the cards of the upgrade screen again. see THE REROLL in fish_headers.
+function getRerollCost()
+endfunction (UPGRADE_REROLLS + 1) * UPGRADE_REROLL_STEP
+
 function isAbility_Listen()
 endfunction CARDS(ABILITY_INDEX_LISTEN).obtained > 0
+
+function isAbility_QuickSong()
+endfunction CARDS(ABILITY_INDEX_QUICK_SONG).obtained > 0
 
 ` how many fish in a hundred pick up a fish from a pop next to them. the card adds to it every time it is taken.
 function getContagiousSmileChance()

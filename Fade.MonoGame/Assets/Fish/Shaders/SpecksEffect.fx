@@ -27,6 +27,7 @@ float Mood;      // how long the run of pops that is going on is, from 0 to 1. t
 // the specks glow all the way from the one to the other, and a lot less toward where it was, so that
 // the glow dies away quickly behind it. that is what says which way it is going.
 float4 Glow;
+float2 Flow;      // how far the specks that it brings out have drifted the way that it is going, in pixels
 float2 GlowPower; // x is how strong it is, from 0 to 1, or more with the "listen" card, and y is how far from it the specks glow, in pixels
 
 // 1 when the player has the "listen" card, and the thing was brought by a big group of fish that
@@ -137,9 +138,15 @@ float glowAt(float2 px)
 {
 	float2 along = Glow.zw - Glow.xy;
 	float back = saturate(dot(px - Glow.xy, along) / max(dot(along, along), 0.001));
-	float dist = length(px - (Glow.xy + along * back));
-	float close = saturate(1.0 - dist / max(GlowPower.y, 1.0));
-	return close * (2.0 - close) * (1.0 - back) * (1.0 - back) * clamp(GlowPower.x, 0.0, 4.0);
+	// the lit patch is a square, the shape of a cell, and it is as bright near its edge as in the
+	// middle. the fish covers the middle of its cell, so the corners are where the specks show. it
+	// stops short at the edge, so that the cells next door stay dark, which is what lets a path
+	// that doubles back be read.
+	float2 off = abs(px - (Glow.xy + along * back));
+	float dist = max(off.x, off.y);
+	float edge = max(GlowPower.y, 1.0);
+	float close = 1.0 - smoothstep(edge * 0.8, edge, dist);
+	return close * (1.0 - back) * (1.0 - back) * clamp(GlowPower.x, 0.0, 4.0);
 }
 
 // one piece of the path that the thing took, from a to b, and how much of the trail this pixel gets
@@ -200,6 +207,9 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 	// added: no more specks, and no light in the water. it is only the ones that were there anyway.
 	// they are whiter as well as brighter.
 	float glow = glowAt(px);
+
+	// and it brings out a few more of its own, only where it is. they drift the way that it is going.
+	specks += snow(px - Flow, 11.0, float2(0.5, 1.0), 300.0, 0.4, 1.0) * saturate(glow) * 0.6;
 	bright += specks * glow * GLOW_SPECKS * (1.0 + GLOW_OVER_CORAL * coralUnder(px));
 
 	// with the "listen" card, the thing leaves a trail of light behind it, along the path that it took.

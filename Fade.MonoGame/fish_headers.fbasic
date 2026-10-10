@@ -9,7 +9,7 @@ global SCORE_POS as vec = {
 
 
 global dim CARDS(32) as ability
-global CARD_LENGTH = 25
+global CARD_LENGTH = 28
 
 global CURRENT_MOVE_COUNT = 0
 global MOVE_COUNT_TEXT_ID
@@ -47,6 +47,11 @@ global ABILITY_INDEX_MOVE_BUNCH_UP = 22
 ` an instant, so it is a constant, like the other two instants. handle_ability_instant_effect picks between them by number.
 #constant ABILITY_INDEX_MOVE_SLOT 23
 global ABILITY_INDEX_LISTEN = 24 `see LISTEN, with THE HINTS, further down
+` an instant, like "tackle box". see DEEP POCKETS, with the upgrade screen, further down.
+#constant ABILITY_INDEX_DEEP_POCKETS 25
+` the two cards of the hidden game. see THE OPENING SWAP, with CORAL, further down.
+global ABILITY_INDEX_QUICK_SONG = 26
+global ABILITY_INDEX_MOVE_SONG = 27
 
 ` THE NEW KINDS OF FISH. three cards each put a new kind of thing on the board. each one is a kind of
 ` fish like any other: it has a picture, it can be swapped, and three of it in a row pop. load_textures,
@@ -100,8 +105,8 @@ global BOTTLE_MULT_GAIN = 1 `how much a bottle adds to the multiplier
 global ZAP_COUNT = 16 `how many there can be at once
 global ZAP_PIECES = 4 `how many pieces a bolt is made of. every piece goes along, and then jogs to the side.
 global ZAP_BARS = 8 `how many sprites that takes, which is two for every piece
-global ZAP_LIFE = 260 `how long a bolt lasts, in milliseconds
-global ZAP_FLICKER_MS = 45 `how long it is before the jogs are picked again
+global ZAP_LIFE = 650 `how long a bolt lasts, in milliseconds
+global ZAP_FLICKER_MS = 80 `how long it is before the jogs are picked again
 global ZAP_JOG = 4 `how far to the side a jog can go, in pixels
 global ZAP_THICK = 2 `how thick the bars are, in pixels
 global ZAP_NEXT = 0 `the one that the next bolt takes
@@ -439,6 +444,28 @@ global TRANSITION_FOR_UPGRADE = 0 `1 when menu_transition is wiping the upgrade 
 global UPGRADE_SKIP_TEXT_ID
 global UPGRADE_SKIP_SELECTED = 0 `1 while the line that takes nothing is the one that is highlighted
 global UPGRADE_SKIP_Y = 268
+global UPGRADE_SKIP_X = 0 `where the middle of that line is. setup_upgrade_wipe works it out.
+
+` DEEP POCKETS. the upgrade screen offers two cards. the "deep pockets" card is an instant, and once it
+` has been taken, every upgrade screen from then on offers three. getUpgradeChoiceCount, in
+` fish_routines_ability, says how many.
+global UPGRADE_CHOICES_START = 2
+global UPGRADE_CHOICES_MAX = 3
+
+` THE REROLL. next to the line that takes nothing there is a line that throws the cards away and deals
+` new ones, for a price in moves, which are added to the count of moves. the first time on an upgrade
+` screen costs UPGRADE_REROLL_STEP moves, and every time after that costs that much more than the
+` last, up to UPGRADE_REROLL_MAX times. the next upgrade screen starts from the first price again.
+` the new cards are not the ones that were thrown away, as long as there are others to deal.
+` down goes from the cards to these two lines, left and right go between them, and up goes back.
+global UPGRADE_REROLL_STEP = 5
+global UPGRADE_REROLL_MAX = 4
+global UPGRADE_REROLLS = 0 `how many times the cards of this upgrade screen have been dealt again
+global UPGRADE_REROLLING = 0 `1 while the cards are being dealt again
+global UPGRADE_ROW_PICK = 0 `which of the two lines is highlighted, while one of them is: 0 takes nothing, and 1 deals again
+global UPGRADE_REROLL_TEXT_ID
+global UPGRADE_REROLL_X = 0 `where the middle of the line is. setup_upgrade_wipe works it out.
+global dim CARD_CHOICE_OLD(10) `the cards that are being thrown away
 
 ` FLOATING BUBBLES. the routines are in fish_routines_bubbles.
 global FLOAT_BUBBLE_COUNT = 300
@@ -622,7 +649,9 @@ global MENU_PAGE = 0
 ` for it to turn off. see OPTION_MENU_REEF, further down.
 #constant MENU_ITEM_SET_REEF 20
 #constant MENU_ITEM_SET_MONSTER 21
-global MENU_ITEM_COUNT = 22
+` and one more for the page that comes up when the last round has been won, above "Done". see KEEP PLAYING.
+#constant MENU_ITEM_OVER_CONTINUE 22
+global MENU_ITEM_COUNT = 23
 global dim MENU_ITEMS(MENU_ITEM_COUNT) as menuItem
 
 global MENU_PAGE_FIRST = 0 `the first item on the page
@@ -701,6 +730,14 @@ global OPTION_GAME_LENGTH = 1
 global OPTION_GAME_ZEN = 0
 global GAME_ROUND_CAP = 100 `how many rounds the game that is being played has
 global GAME_ZEN = 0 `1 when the game that is being played is a zen game
+
+` KEEP PLAYING. when the last round has been won, and the game has been put on its table, the player
+` can carry on with the same board, for as long as they like. the game has been counted already, so it
+` is never counted again: no round is the last one any more, and the rounds that are played from then
+` on are shown as "+1", "+2", and so on, where the rounds that were left used to be. it is saved with
+` the game. a game that ended with one of the two endings of the hidden game cannot be carried on
+` with, and one of those endings in a game that is being carried on goes straight back to the title.
+global GAME_ENDLESS = 0 `1 when the game that is being played was won, and is being carried on with
 global REQUEST_GAME_END = 0 `1 when the last round has been won, and the end of the game has not come up yet
 
 global OPTION_SOUND = 10 `how loud the sound effects are, from 0 to 10
@@ -1012,7 +1049,11 @@ global CODEC_COUNT = 16 `how many entries there are: one for every card, and the
 ` stingray and the bottle. then what can happen to a fish: belly up, skeletal and stacked. each of them
 ` is unlocked the first time that there is one on a board that has settled. codecSeeBoard, in
 ` fish_routines_codec, does that. new entries go on the end, so that the ones before them keep their preferences.
-global CODEC_EXTRA_COUNT = 10
+` the last of what can happen to a fish is heart home: a fish that is sitting on coral that is well, where
+` it is happy, and sends up hearts. see A FISH ON CORAL, further down.
+global CODEC_EXTRA_COUNT = 11
+global CODEC_ENTRY_HOME = -1
+global dim CODEC_HEART_SPRITES(2) `the heart over the fish, in the picture of "heart home": one for its tile, and one for the big picture
 global CODEC_ENTRY_CORAL = -1 `which entry each of them is, once setup_codec has run
 global CODEC_ENTRY_HORROR = -1
 global CODEC_ENTRY_REEF = -1
@@ -1032,6 +1073,9 @@ global dim CODEC_SEEN(64) `1 for every entry that has been seen in a game, and s
 ` where in the preferences what has been seen is kept, one number for every entry. it must not move.
 global CODEC_PREF = 57
 global CODEC_PREF_EXTRA = 90 `and the same for the entries that are not cards, so that a new card does not move them
+` there is only room for ten there, before the saved game starts. the ones after the tenth are kept from here on.
+global CODEC_PREF_EXTRA_ROOM = 10
+global CODEC_PREF_MORE = 40
 
 ` where the codec goes on the screen
 global CODEC_COLUMNS = 8 `how many upgrades there are on a row of the grid
@@ -1075,7 +1119,11 @@ global SPLASH_FADE_SPRITE
 global SPLASH_MONOGAME_SPRITE
 global SPLASH_TEXT_ID
 global SPLASH_TWEEN_ID
-global SPLASH_DURATION = 2400 `how long the logos stay up, in milliseconds
+global SPLASH_BLACK_SPRITE `the black that the game fades in from when it starts
+global SPLASH_DURATION = 2400 `how long the logos stay up, in milliseconds, counting the time that they take to fade in
+global SPLASH_FADE_IN = 1100 `how long the game takes to fade in from black when it starts, in milliseconds. there are only stars then.
+global SPLASH_LOGO_WAIT = 300 `how long the stars are there on their own, once the black has gone, before the logos start to fade in
+global SPLASH_LOGO_FADE = 600 `and how long the logos take to fade in
 
 ` the wave of bubbles. the first few are big, and sit in a row to make the front of the wave.
 ` the rest are small, and are scattered ahead of the front and behind it.
@@ -1517,9 +1565,32 @@ global HORROR_SKELETON_CHANCE = 30 `and how many of the belly up ones in a hundr
 ` five. a skeleton that is swapped makes a group of whichever kind makes the biggest one.
 ` a group that no swap has just touched does not go through skeletons, so nothing pops on its own
 ` because of one. skeletonsBeforeCombos and skeletonsAfterCombos, in fish_routines_coral, do that,
-` around the search for groups in handle_combos. the pictures were made by Tools/fish_skeleton_gen.py.
+` around the search for groups in handle_combos. see EVERY SKELETON IS THE SAME PILE OF BONES, further down.
 ` a bottle that is a skeleton pays out BOTTLE_SKELETON_GAIN when it gets to the bottom, in place of BOTTLE_MULT_GAIN.
 global BOTTLE_SKELETON_GAIN = 2
+
+` EVERY SKELETON IS THE SAME PILE OF BONES, whatever kind of fish it was. it is not bound to what it
+` used to be. SKELETON_TEX still has a picture for every kind, but they are all TEX_BONES.
+global TEX_BONES `the pile of bones
+global TEX_GHOST `the ghost, which is white, so that it can be drawn in the color of any fish
+
+` THE GHOST OF A SKELETON. when a skeleton is part of a group of fish that matched, nothing about a
+` pile of bones says what it matched as, and a skeleton that a swap brought in can stand for any kind.
+` so before the group pops, the skeleton pops into a ghost: the bones are gone, with a puff of
+` bubbles, and there is a ghost in their place, in the color of the kind of fish that the group is.
+` every ghost is the same ghost, and only the color is different. it stays for SKELETON_GHOST_MS, and
+` then it pops with the rest of the group, the way that any fish does. the pops of that group, and of
+` every group after it, wait for that long, so all of it can be seen. a pop that is forced, like the
+` waste bucket, matches nothing, and has no ghosts. handle_combos asks for them, and the routines are
+` in fish_routines_coral, with the rest of the skeletons.
+global SKELETON_GHOST_MS = 800 `how long the ghost is there before the pop, in milliseconds
+global SKELETON_GHOST_POP = 200 `how long the ghost takes to settle to its size, when it pops out of the bones
+global SKELETON_GHOST_MAX = 48 `how many there can be at once
+global dim SKELETON_GHOST_SPRITES(48)
+global dim SKELETON_GHOST_CELL(48) `the cell that each one is over
+global dim SKELETON_GHOST_FROM(48) `when each one pops out of its bones
+global dim SKELETON_GHOST_UNTIL(48) `and when it goes, which is when its skeleton pops. 0 for one that is not in use.
+global dim SKELETON_AS(400) `the kind of fish that the skeleton in every cell stood for, the last time that the board was searched for groups, or 0
 global dim SKELETON_TEX(16) `the picture of the skeleton of every kind of fish
 global dim SKELETON_SHOWN(400) `1 for every cell whose fish is being drawn as a skeleton. frame_fish_fx keeps it.
 global dim SKELETON_KIND(400) `while handle_combos searches for groups, the kind of fish that a skeleton that a group has taken really is, or 0
@@ -1545,6 +1616,12 @@ global CORAL_VIEW_SPRITE
 global TARGET_CORAL_SHADOW
 global dim CORAL_SHADOW_SPRITES(400)
 global CORAL_SHADOWS_ON = 0 `1 while the shadows are being kept up, which is only while there is coral
+` stepCoral runs on every frame, so it keeps track of what there is nothing to do for.
+global dim CORAL_DRAWN(400) `1 for every cell whose square of coral is showing
+global CORAL_DRAW_IDLE = 0 `1 while there is no coral, and every square has been put away, so the squares are not looked at
+global CORAL_SING_WAITING = 0 `1 while some fish has yet to swell. see CORAL_SING_DUE.
+global dim CORAL_SHADOW_DRAWN(400) `1 for every cell whose fish has its shadow showing
+global dim CORAL_NEAR(400) `1 for every cell that has coral, or is right next to some. only the fish of these have shadows. coralRecount works it out.
 
 ` A FISH ON CORAL sits down on it. it is drawn a little smaller than a fish that is over open water, and it
 ` shrinks down to that as it gets there. frame_scale_wave, in fish_routines, sizes the fish.
@@ -1569,9 +1646,9 @@ global CORAL_SING_TIME = 900 `how long the coral under a fish that sings stays l
 global CORAL_SCORE_BONUS = 3 `how many times as much a fish scores when it sings, or pops, on coral
 
 global CORAL_STEP_MAX = 8 `the most steps that a pattern can have
-global CORAL_FIRST_LENGTH = 4 `how many steps the first patterns of a game have. three were too easy to walk by accident.
+global CORAL_FIRST_LENGTH = 3 `how many steps the first patterns of a game have. see THE OPENING SWAP, which is what keeps three from being walked by accident.
 global CORAL_LENGTH_EVERY = 3 `and how many patterns are made before they get one step longer
-global CORAL_LIVE_COUNT = 3 `how many patterns are out at once
+global CORAL_LIVE_COUNT = 1 `how many patterns are out at once. more than one was too much to follow.
 global CORAL_LIVE_MAX = 8
 global dim CORAL_SEQ_LENGTH(CORAL_LIVE_MAX) `how many steps the pattern in every slot has, or 0 if the slot is empty
 global dim CORAL_SEQ_STEPS(64) `the steps of every pattern. each slot has room for CORAL_STEP_MAX of them.
@@ -1621,6 +1698,37 @@ global dim CORAL_EXPAND(400) `where the coral was, from before the board grew
 #constant CORAL_DOWN 2
 #constant CORAL_LEFT 3
 
+` THE OPENING SWAP. players kept walking patterns by accident, so a song is now all of the steps between
+` two swaps, and nothing else: a swap, then the pattern, step for step, then a swap that pops. a walk
+` that only ends with the pattern does not count. the start of a game counts as the opening swap.
+` and a pattern has to double back on itself: somewhere in it there is a step one way, and a step the
+` other way. nobody walks like that to get from one fish to another.
+`
+` two cards bend the rule. neither is offered until CORAL_SONG_CARDS_AFTER patterns have been cast in
+` the game, which is all of the first ones, so they only come to a player who has found the hidden game.
+`   "quick song", a passive: no opening swap. a walk that ends with the pattern counts, the way it used to.
+`   "easy song", a move: it opens a song right where the cursor is, and takes the first step of it. the
+`       pattern is walked step for step from there, and it is cast on its last step, with no swap at all,
+`       and nothing has to pop. a step that is not of any pattern loses it, and so does a swap.
+`       the outline of the cursor is the color of coral while a song is open.
+global CORAL_DOUBLE_BACK = 1 `1 if every pattern has to double back on itself
+global CORAL_SONG_CARDS_AFTER = 3 `how many patterns have to be cast in a game before the two cards are offered
+global CORAL_SONG_COOLDOWN = 8 `how many moves "easy song" takes to be ready again
+global CORAL_TRAIL_TOTAL = 0 `how many steps the cursor has taken since the last swap, or since "easy song" opened a song
+#constant CORAL_TRAIL_SPOILED 99
+global CORAL_OPEN = 0 `1 while a song that "easy song" opened is being walked
+` the opening swap takes the cursor one step along with it, and that step can be the first step of
+` the pattern, or not, as the player likes. starting a pattern from where a swap left the cursor was
+` too hard to line up. the closing swap is still not a step.
+global CORAL_TRAIL_SWAP_FIRST = 0 `1 while the first step since the last swap is the step of that swap
+
+` a hint brings out a few more specks where it is, and they drift the way that it is going. this is how
+` far they have drifted, in pixels. it only ever adds up, so that they do not jump when it turns.
+global CORAL_HINT_FLOW# = 16 `how fast they drift, in pixels a second
+global CORAL_HINT_FLOW_X# = 0
+global CORAL_HINT_FLOW_Y# = 0
+global CORAL_HINT_FLOW_MS = 0 `when it was last added to
+
 ` the last steps that the cursor took on its own, oldest first, and the cell that each one started from
 global CORAL_TRAIL_COUNT = 0
 global dim CORAL_TRAIL_DIR(CORAL_STEP_MAX)
@@ -1657,24 +1765,26 @@ global dim CORAL_PENDING_Y(16)
 ` patch of calm water is bigger. more bubbles come up at each end. and the name of the card shakes in
 ` the list of passives when a hint starts. it does not make hints come any more often.
 global CORAL_LISTEN_GLOW# = 2.2 `how many times as bright the specks glow
-global CORAL_LISTEN_REACH# = 1.5 `how many times as far out from the hint they glow
+global CORAL_LISTEN_REACH# = 1.2 `how many times as far out from the hint they glow
 global CORAL_LISTEN_CALM# = 1.4 `how many times as big the patch of calm water is
 global CORAL_LISTEN_BUBBLES = 3 `how many more bubbles come up at each end
 global CORAL_HINT_GLOW_POWER# = 0 `how strongly the specks glow on this frame. it is CORAL_HINT_POWER#, and more with the card.
 global CORAL_HINT_LISTEN# = 0 `1 on a frame that the card is owned, for the specks effect
 global dim CORAL_HINT_TRAIL#(16) `eight spots along the path of the hint, from where it is to where it was, each CORAL_HINT_TRAIL_MS before the last, with the corners rounded off. x and then y of each.
 global CORAL_HINT_TRAIL_MS = 320
+global CORAL_HINT_AS_LISTEN = 0 `1 while the hint that is playing is drawn as if the card were owned. only the K debug key does this.
 global CORAL_HINT_TRAIL_ON = 0 `1 while the hint that is playing is one that leaves a trail, with the card
 global CORAL_LISTEN_LUCK = 10 `how many of the hints that come on their own in a hundred leave a trail too, with the card. nothing says so.
 
 global CORAL_HINT_CHANCE = 30 `how many waves of the current in a hundred bring a hint
 global CORAL_HINT_GROUP_SIZE = 5 `a group of this many fish that pops always brings one
-global CORAL_HINT_STEP_MS = 900 `how long it takes to get from one cell to the next, in milliseconds
+global CORAL_HINT_STEP_MS = 1400 `how long it takes to get from one cell to the next, in milliseconds
 global CORAL_HINT_FADE_MS = 450 `how long it takes to swell up at the start, and to die away at the end
-global CORAL_HINT_TAIL_MS = 450 `the specks glow this far behind it
+global CORAL_HINT_TAIL_MS = 750 `the specks glow this far behind it
 global CORAL_HINT_BUBBLES = 2 `how many bubbles come up at each end
 global CORAL_HINT_BULGE# = 1.3 `how wide the patch of calm water is, in cells, from the middle of it to the edge
-global CORAL_HINT_REACH# = .75 `and how far from it the specks glow, the same way
+global CORAL_HINT_REACH# = .5 `and how far from it the specks glow, the same way. the lit patch is a square, so .5 is exactly one cell.
+global CORAL_HINT_SPECK_GLOW# = 1.8 `how many times as bright the specks glow as the coral does. the specks effect stops at 4, with the card and all.
 global CORAL_HINT_ROLLED = -1 `the last wave of the current that has had its roll for a hint
 global CORAL_HINT_DUE = 0 `1 when a hint is owed, for a big group of fish that popped
 global CORAL_HINT_SLOT = -1 `the slot of the pattern that the hint is for

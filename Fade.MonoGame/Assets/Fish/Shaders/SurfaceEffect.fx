@@ -69,6 +69,9 @@ float Coming;    // how far it has come, from 0 (where it sets out from) to 1 (w
 // it is not black. the thing is, so it is darker than the night that it came out of.
 // the hole has no edge. it is torn, and what is in it leaks out into the sky around it in wisps, which
 // drift. the hole grows as the thing comes.
+// in the evening the sun is down on the horizon, right by the thing, and the hole has it: the hole
+// reaches all the way across to the sun, and closes around it, so the sun is gone into that other sky.
+//   RIFT_SUN     how far past the edge of the sun the hole closes around it, in pixels
 //   RIFT_SIZE    about how far it is from the middle of the hole to where it gives out, in the pixels of the thing's picture
 //   RIFT_UP      how far above the sea the middle of the hole is, the same way
 //   RIFT_TORN    how ragged the edge of it is. 0 is a clean circle, and 1 is torn to shreds.
@@ -84,11 +87,12 @@ float Coming;    // how far it has come, from 0 (where it sets out from) to 1 (w
 #define SickHigh    float3(0.020, 0.070, 0.040)
 #define SickLow     float3(0.210, 0.300, 0.110)
 #define SickCloud   float3(0.085, 0.150, 0.075)
-#define RIFT_SIZE 62.0
+#define RIFT_SIZE 92.0
 #define RIFT_UP 20.0
 #define RIFT_TORN 0.8
 #define RIFT_WISP 17.0
 #define RIFT_DRIFT 2.6
+#define RIFT_SUN 12.0
 #define RIFT_LIT 0.10 // how wide the lit edge of the hole is. more is wider.
 #define RiftSpace   float3(0.070, 0.045, 0.180)
 #define RiftWarm    float3(0.420, 0.100, 0.440)
@@ -168,7 +172,14 @@ float4 thing(float2 px)
 
 	// the hole in the sky behind it. see THE DARK BEHIND IT, further up.
 	float2 q = p - float2(0.0, -RIFT_UP);
-	float out0 = length(q * float2(1.0, 1.12));
+
+	// in the evening it is not round. it is stretched out from behind the thing to the sun, so how far
+	// out a pixel is, is how far it is from the line between the two.
+	float evening = 1.0 - Day;
+	float2 sunPos = float2(SunX, Horizon - SunHeight);
+	float2 toSun = ((sunPos - at) / big + float2(0.0, RIFT_UP)) * evening;
+	float along = saturate(dot(q, toSun) / max(dot(toSun, toSun), 0.001));
+	float out0 = length((q - toSun * along) * float2(1.0, 1.12));
 	float around = atan2(q.y, q.x);
 	float spiral = 0.5 + 0.5 * cos(around * 2.0 - log(max(out0, 1.0)) * 4.5 + Time * 0.35);
 	spiral = spiral * spiral * spiral;
@@ -187,6 +198,10 @@ float4 thing(float2 px)
 	float2 wispAt = skyPx - q * 0.25 + float2(Time * RIFT_DRIFT * 0.6, Time * RIFT_DRIFT);
 	float torn = clouds(wispAt, RIFT_WISP, 23.0) * 0.6 + clouds(wispAt * 1.9, RIFT_WISP, 47.0) * 0.4;
 	float much = (1.25 - out0 / RIFT_SIZE) * 1.6 + (torn - 0.5) * 2.4 * RIFT_TORN;
+
+	// and it closes all the way around the sun, however torn it is anywhere else
+	float aroundSun = (1.0 - length(px - sunPos) / (SunRadius + RIFT_SUN)) * 6.0 + 0.5 + (torn - 0.5);
+	much = max(much, aroundSun * evening + (evening - 1.0) * 10.0);
 
 	// the edge of it is sharp: a pixel is in the hole, or it is not. the very edge is lit, where it is tearing.
 	float inHole = step(0.5, much);

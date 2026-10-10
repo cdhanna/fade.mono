@@ -132,28 +132,14 @@ load_textures:
 
     texture reserve texture id(TEX_NOISE), "Fish/Textures/Turbulence_13-256x256"
 
-    ` the skeleton of every kind of fish. see SKELETONS in fish_headers.
-    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Pufferfish"
-    SKELETON_TEX(TEX_PUFFER) = skeletonTexId
-    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Catfish"
-    SKELETON_TEX(TEX_CATFISH) = skeletonTexId
-    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Goldfish"
-    SKELETON_TEX(TEX_GOLDFISH) = skeletonTexId
+    ` every skeleton is the same pile of bones, whatever kind of fish it was. and the ghost that one
+    ` turns into when it is matched. see EVERY SKELETON IS THE SAME PILE OF BONES in fish_headers.
+    texture reserve texture id(TEX_BONES), "Fish/Textures/Bones"
+    texture reserve texture id(TEX_GHOST), "Fish/Textures/Ghost"
+    for skeletonTexN = 0 to 15
+        SKELETON_TEX(skeletonTexN) = TEX_BONES
+    next
     CODEC_FISH_TEX = TEX_GOLDFISH `the codec shows what can happen to a fish on a goldfish
-    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Angelfish"
-    SKELETON_TEX(TEX_ANGELFISH) = skeletonTexId
-    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Crab - Dungeness"
-    SKELETON_TEX(TEX_CRAB) = skeletonTexId
-    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Bass"
-    SKELETON_TEX(TEX_BASS) = skeletonTexId
-    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Worm"
-    SKELETON_TEX(TEX_WORM) = skeletonTexId
-    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Jellyfish"
-    SKELETON_TEX(TEX_JELLY) = skeletonTexId
-    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Stingray"
-    SKELETON_TEX(TEX_RAY) = skeletonTexId
-    texture reserve texture id(skeletonTexId), "Fish/Textures/Skeleton Bottle"
-    SKELETON_TEX(TEX_BOTTLE) = skeletonTexId
 
     global dim FISH_COLORS(16)
     FISH_COLORS(getFishColorIndex(TEX_JELLY)) = rgb(200, 130, 255)
@@ -252,6 +238,9 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_RAYS).artTexId), "Fish/Textures/Cards/rays"
     texture reserve texture id(CARDS(ABILITY_INDEX_BOTTLES).artTexId), "Fish/Textures/Cards/bottles"
     texture reserve texture id(CARDS(ABILITY_INDEX_LISTEN).artTexId), "Fish/Textures/Cards/listen"
+    texture reserve texture id(CARDS(ABILITY_INDEX_QUICK_SONG).artTexId), "Fish/Textures/Cards/quick_song"
+    texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_SONG).artTexId), "Fish/Textures/Cards/easy_song"
+    texture reserve texture id(CARDS(ABILITY_INDEX_DEEP_POCKETS).artTexId), "Fish/Textures/Cards/deep_pockets"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_WASTE_BUCKET).artTexId), "Fish/Textures/Cards/waste_bucket"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_BUNCH_UP).artTexId), "Fish/Textures/Cards/bunch_up"
 
@@ -514,6 +503,7 @@ update_frame:
     stepCursorShake()
     stepMultiplier()
     stepCoral()
+    stepSkeletonGhosts()
     gosub frame_hints
     updateBubbles()
     updateMusic()
@@ -685,7 +675,8 @@ frame_dbg:
     ` the debug panel also has a window that gives the player any card. see fish_routines_debug.
     ` U turns the fish above the cursor belly up, and a second press turns it into a skeleton.
     ` G grows coral on the cell that the cursor is on, and H grows horror coral there.
-    ` J plays a hint, right away.
+    ` J plays a hint, right away, the way that it looks without the "listen" card. K plays one the way
+    ` that it looks with the card, after a group of five or more: brighter, with more bubbles, and a trail.
     ` R covers the whole board with coral, which saves the reef, and T covers it with horror coral, which
     ` summons the ancient one. the ending plays, and then the game ends, the way that it would have.
     if is env set("FISH_DEBUG")
@@ -710,7 +701,14 @@ frame_dbg:
                 endif
                 if new key down(scancode("J"))
                     coralClearHint()
+                    CORAL_HINT_AS_LISTEN = 0
                     dbgHintMade = coralStartAnyHint()
+                endif
+                if new key down(scancode("K"))
+                    coralClearHint()
+                    CORAL_HINT_AS_LISTEN = 1
+                    dbgHintMade = coralStartAnyHint()
+                    CORAL_HINT_TRAIL_ON = dbgHintMade
                 endif
                 if new key down(scancode("R"))
                     coralDebugCover(0)
@@ -740,7 +738,7 @@ frame_score:
         
         ` update the rounds left
         CURRENT_ROUND = CURRENT_ROUND + 1
-        set text ROUND_COUNT_TEXT_ID, str$(getRoundsLeft())
+        showRoundsLeft()
 
 
         ` the bar stays full until an upgrade has been picked. then advanceScoreBar starts it on the next round.
@@ -752,7 +750,12 @@ frame_score:
 
         ` show ability upgrade! but not while fish are still popping. it waits for the board to settle.
         if SCORE_BAR_HOLD = 1 and REQUEST_COMBO_CHECK = 0 and LIVE_MOVE_ACTIVE = 0
+            roundWasLast = 0
             if getRoundsLeft() <= 0
+                ` a game that was won already, and is being carried on with, has no last round. see KEEP PLAYING in fish_headers.
+                if GAME_ENDLESS = 0 then roundWasLast = 1
+            endif
+            if roundWasLast
                 ` that was the last round, so the game is over. handle_game_end, in fish_routines_menu, says so.
                 REQUEST_GAME_END = 1
                 SCORE_BAR_HOLD = 2
@@ -1008,6 +1011,10 @@ handle_combos:
     ` a fish that has sung on coral is forgotten once it is gone. see THE FISH ON CORAL SING in fish_headers.
     coralForgetSung()
 
+    ` how long the pops are held back for the ghosts of the skeletons so far, in milliseconds. every
+    ` group that has a skeleton in it adds to this. see THE GHOST OF A SKELETON in fish_headers.
+    ghostWait = 0
+
     totalComboCount = 0
     CORAL_HELD_GROUPS = 0
     explodePitch# = (rnd(4)*.02)
@@ -1021,6 +1028,7 @@ handle_combos:
         comboOnCoral = 0 `1 when any fish of the group is on coral. the group has to be bigger then. see CORAL in fish_headers.
         comboForced = 0
         comboSwapped = 0
+        comboBones = 0 `1 when a skeleton is part of the group, and the group is fish that matched
         comboFresh = 0 `1 when any fish of the group has not sung on coral already, so there is something for the group to do
         groupForce = 0 `which kind of forced pop the group is, or 0 for fish that matched. see FORCED POPS in fish_headers.
         for i = 1 to CELL_COUNT
@@ -1036,6 +1044,9 @@ handle_combos:
             ` how many fish there are, if any of them is on coral, and if the last swap put one of them here
             comboWhole = comboWhole + 1
             if CORAL_CELLS(i-1) then comboOnCoral = 1
+            if cell.bellyUp = 2
+                if cell.comboForce = 0 then comboBones = 1
+            endif
             comboHeld = coralHolds(i - 1, cell.comboForce)
             if comboHeld = 0 then comboFresh = 1
             if CORAL_SUNG(i-1) <> cell.value then comboFresh = 1
@@ -1062,6 +1073,10 @@ handle_combos:
 
         ` every fish of the group is on coral, and has sung already. nothing has joined them, so they sit.
         if comboFresh = 0 then skip
+
+        ` a group with a skeleton in it waits for the ghost of the skeleton to be seen, and so does
+        ` every group after it. see THE GHOST OF A SKELETON in fish_headers.
+        if comboBones then ghostWait = ghostWait + SKELETON_GHOST_MS
 
         ` the belly up fish of the waste bucket score more
         groupBonus = 1
@@ -1116,7 +1131,7 @@ handle_combos:
         groupSumX = 0
         groupSumY = 0
         groupSize# = 0
-        groupDelay = (explodeIndex + 1) * 50
+        groupDelay = (explodeIndex + 1) * 50 + ghostWait
         groupFirstIndex = explodeIndex
 
         for i = 1 to CELL_COUNT
@@ -1132,7 +1147,7 @@ handle_combos:
             cellSings = coralHolds(i - 1, groupForce)
             if cellSings
                 explodeIndex += 1
-                delay = explodeIndex * 50
+                delay = explodeIndex * 50 + ghostWait
 
                 singPoints = 0
                 singLeft = 1 + cell.stack
@@ -1169,13 +1184,13 @@ handle_combos:
             smoke = SMOKE_ANIMS(smokeIndex)
 
             explodeIndex += 1
-            delay = explodeIndex * 50`rnd(3)*75+25 `TODO: somehow use the delay to "randomize" the animation
+            delay = explodeIndex * 50 + ghostWait `rnd(3)*75+25 `TODO: somehow use the delay to "randomize" the animation
 
             ` a column that a stingray shot up pops from the bottom to the top. see RAYS in fish_headers.
             ` one that a belly up stingray shot down pops from the top to the bottom, which is the order it has already.
             if groupForce >= FORCE_RAY and groupForce < FORCE_BOTTLE
                 rayStep = (rayBottomRow + 1) - cell.coord.y
-                delay = (groupFirstIndex + rayStep) * 50
+                delay = (groupFirstIndex + rayStep) * 50 + ghostWait
             endif
 
             ` a jellyfish stings the fish next to it, once all of the groups have been found.
@@ -1195,6 +1210,16 @@ handle_combos:
             stackLeft = cell.stack
             if stackLeft > BUNCH_STACK_MAX then stackLeft = BUNCH_STACK_MAX
             CELLS(i-1).stackPopMs = game ms() + delay
+
+            ` a skeleton pops into a ghost, in the color of what it is standing for, a while before it
+            ` pops with its group. see THE GHOST OF A SKELETON in fish_headers.
+            cellGhost = 0
+            if cell.bellyUp = 2
+                if groupForce = 0
+                    cellGhost = 1
+                    spawnSkeletonGhost(i - 1, delay - SKELETON_GHOST_MS, delay)
+                endif
+            endif
             while stackLeft > 0
                 stackLeft = stackLeft - 1
 
@@ -1230,11 +1255,16 @@ handle_combos:
             ` a puff of bubbles, in the color of the fish
             spawnBubbles(getCellX(cell.coord.x), getCellY(cell.coord.y), CELL_SIZE / 4, 5, delay, FISH_COLORS(getFishColorIndex(cell.value)))
 
-            ` animate fade out
-            create basic tween cell.comboDownShiftTweenId, 255, 0, 250, delay
+            ` animate fade out. the bones of a skeleton are gone as soon as its ghost is there.
+            if cellGhost
+                create basic tween cell.comboDownShiftTweenId, 255, 0, 40, delay - SKELETON_GHOST_MS
+            else
+                create basic tween cell.comboDownShiftTweenId, 255, 0, 250, delay
+            endif
 
             ` animate screen shake
-            create basic tween SHAKE_TWEEN_ID, 0, SHAKE_POP_AMOUNT#, 350, 0
+            ` the knock comes when the pops do, and not while the ghosts are still showing
+            create basic tween SHAKE_TWEEN_ID, 0, SHAKE_POP_AMOUNT#, 350, ghostWait
             set tween type SHAKE_TWEEN_ID, 1
             set screen shake bounce .5
 

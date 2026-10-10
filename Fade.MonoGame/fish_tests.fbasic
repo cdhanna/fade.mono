@@ -1337,7 +1337,7 @@ test coral_walked_over_a_belly_up_fish_is_horror_coral from fishBoard
 
     ` a belly up fish in the middle of the walk: up, left, up, from 4, 6
     CELLS(testIndex(3, 5)).bellyUp = 1
-    coralTrailClear()
+    coralSwapMade(0, 0)
     coralCursorStepped(4, 6, 0, -1)
     coralCursorStepped(4, 5, -1, 0)
 
@@ -1694,7 +1694,7 @@ test coral_does_not_grow_when_the_swap_pops_nothing from fishBoard
     assert CORAL_COUNT = 0, "so no coral grew"
     assert CORAL_SEQ_CODE(0) = 76, "and the pattern is still there to be cast"
     assert CORAL_PENDING_SLOT = -1, "but it is not waiting on that swap any more"
-    assert CORAL_TRAIL_COUNT = 0, "and the walk has to be done again"
+    assert CORAL_TRAIL_COUNT = 1, "and the walk has to be done again. only the step of that swap is left."
     end
 endtest
 
@@ -1739,7 +1739,7 @@ test coral_wrong_steps_are_not_the_pattern from fishBoard
     end
 endtest
 
-test coral_only_the_last_steps_have_to_be_the_pattern from fishBoard
+test coral_walk_has_to_be_the_pattern_and_no_more from fishBoard
     CORAL_SEQ_LENGTH(1) = 0
     CORAL_SEQ_LENGTH(2) = 0
     coralSetSequence(0, 76)
@@ -1752,10 +1752,129 @@ test coral_only_the_last_steps_have_to_be_the_pattern from fishBoard
     coralCursorStepped(3, 5, 0, -1)
     coralSwapMade(3, 4)
 
-    assert CORAL_PENDING_SLOT = 0, "the steps before the pattern do not matter"
+    assert CORAL_PENDING_SLOT < 0, "a walk that only ends with the pattern is not the pattern"
+    assert CORAL_TRAIL_TOTAL = 0, "but the swap is the opening one for the next walk"
+
+    ` and now only the pattern
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+    coralCursorStepped(3, 5, 0, -1)
+    coralSwapMade(3, 4)
+    assert CORAL_PENDING_SLOT = 0, "the pattern, between two swaps, is"
+    end
+endtest
+
+test coral_quick_song_takes_away_the_opening_swap from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+    CARDS(ABILITY_INDEX_QUICK_SONG).obtained = 1
+
+    ` right, down, and then up, left, up
+    coralCursorStepped(3, 5, 1, 0)
+    coralCursorStepped(4, 5, 0, 1)
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+    coralCursorStepped(3, 5, 0, -1)
+    coralSwapMade(3, 4)
+    CARDS(ABILITY_INDEX_QUICK_SONG).obtained = 0
+
+    assert CORAL_PENDING_SLOT = 0, "with the card, the steps before the pattern do not matter"
     assert CORAL_PENDING_COUNT = 4, "and only the cells of the pattern are walked over"
     assert CORAL_PENDING_X(0) = 4, "starting from where the pattern did"
     assert CORAL_PENDING_Y(0) = 6, "and not from where the cursor first moved"
+    end
+endtest
+
+test coral_a_special_move_is_not_an_opening_swap from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    coralTrailClear()
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+    coralCursorStepped(3, 5, 0, -1)
+    coralSwapMade(3, 4)
+
+    assert CORAL_PENDING_SLOT < 0, "the pattern after a special move is not between two swaps"
+    end
+endtest
+
+test coral_easy_song_casts_on_the_last_step from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` a long walk first, which would spoil it without the move
+    coralCursorStepped(3, 5, 1, 0)
+    coralCursorStepped(4, 5, 0, 1)
+
+    coralOpenSong()
+    assert CORAL_OPEN = 1, "the move opens a song"
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+    assert CORAL_OPEN = 1, "it stays open while the steps are the steps of a pattern"
+    assert CORAL_COUNT = 0, "and nothing grows until the last one"
+    coralCursorStepped(3, 5, 0, -1)
+
+    assert CORAL_OPEN = 0, "the last step closes it"
+    assert CORAL_COUNT = 4, "and coral grew on the four cells, with no swap at all"
+    assert CORAL_CELLS(testIndex(4, 6)) = 1, "from where the song was opened"
+    assert CORAL_CELLS(testIndex(3, 4)) = 1, "to where the cursor ended up"
+    assert CORAL_CASTS = 1, "the pattern is cast"
+    end
+endtest
+
+test coral_easy_song_is_lost_on_a_wrong_step from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    coralOpenSong()
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, 1, 0)
+    assert CORAL_OPEN = 0, "a step that is not of any pattern loses the song"
+
+    ` and the pattern after that is not between two swaps
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+    coralCursorStepped(3, 5, 0, -1)
+    assert CORAL_COUNT = 0, "walking it now does nothing"
+    coralSwapMade(3, 4)
+    assert CORAL_PENDING_SLOT < 0, "and neither does a swap at the end of it"
+    end
+endtest
+
+test coral_easy_song_walks_a_pattern_from_the_far_end from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` up, left, up is down, right, down from the far end
+    coralOpenSong()
+    coralCursorStepped(3, 4, 0, 1)
+    assert CORAL_OPEN = 1, "the first step from the far end keeps it open"
+    coralCursorStepped(3, 5, 1, 0)
+    coralCursorStepped(4, 5, 0, 1)
+    assert CORAL_COUNT = 4, "and the whole of it from the far end casts it"
+    end
+endtest
+
+test coral_first_patterns_are_short_and_double_back from fishBoard
+    resetCoral()
+    for tSlot = 0 to CORAL_LIVE_COUNT - 1
+        tLength = coralTryFromCode(CORAL_SEQ_CODE(tSlot))
+        assert tLength = 3, "the first patterns of a game have three steps"
+        assert coralTryDoublesBack(tLength) = 1, "and each one doubles back on itself"
+    next
+
+    CORAL_TRY_STEPS(0) = CORAL_UP
+    CORAL_TRY_STEPS(1) = CORAL_LEFT
+    CORAL_TRY_STEPS(2) = CORAL_UP
+    assert coralTryDoublesBack(3) = 0, "a staircase does not"
+    CORAL_TRY_STEPS(2) = CORAL_DOWN
+    assert coralTryDoublesBack(3) = 1, "and a hook does"
     end
 endtest
 
@@ -1763,6 +1882,9 @@ test coral_patterns_are_all_different from fishBoard
     ` with the dice stuck, the patterns have to be found by going through them in order
     mock rnd
     endmock 0
+
+    ` this is about having more than one pattern out, which the game can still do
+    CORAL_LIVE_COUNT = 3
     resetCoral()
 
     assert CORAL_SEQ_LENGTH(0) = CORAL_FIRST_LENGTH, "the first patterns are short"
@@ -1783,6 +1905,7 @@ test coral_patterns_are_all_different from fishBoard
     assert CORAL_SEQ_CODE(0) <> tCastCode, "which is not the one that was cast"
     assert CORAL_SEQ_CODE(1) <> tCastCode, "and neither is"
     assert CORAL_SEQ_CODE(2) <> tCastCode, "any other"
+    CORAL_LIVE_COUNT = 1
     end
 endtest
 
@@ -1947,6 +2070,9 @@ test coral_turned_around_steps_are_not_the_pattern from fishBoard
 endtest
 
 test coral_same_pattern_from_the_far_end_is_not_a_new_one from fishBoard
+    ` this is about a pattern that does not double back, so that rule is put aside
+    CORAL_DOUBLE_BACK = 0
+
     ` down, right, down is up, left, up from the far end
     CORAL_TRY_STEPS(0) = CORAL_DOWN
     CORAL_TRY_STEPS(1) = CORAL_RIGHT
@@ -1967,6 +2093,7 @@ test coral_same_pattern_from_the_far_end_is_not_a_new_one from fishBoard
     CORAL_USED(0) = 76
     CORAL_USED_COUNT = 1
     assert coralTryIsGood(3) = 0, "and not once the same pattern has been cast"
+    CORAL_DOUBLE_BACK = 1
     end
 endtest
 
@@ -2231,9 +2358,12 @@ endtest
 ` THE CODEC
 
 test codec_has_entries_for_coral_after_the_cards from fishBoard
-    assert CODEC_COUNT = CARD_LENGTH + 10, "every card, coral, horror coral, the two endings, three special fish, and three things that happen to a fish"
+    assert CODEC_COUNT = CARD_LENGTH + 11, "every card, coral, horror coral, the two endings, three special fish, and four things that happen to a fish"
     assert CODEC_ENTRY_JELLY = CARD_LENGTH + 4, "the special fish come after the endings"
-    assert CODEC_ENTRY_STACK = CARD_LENGTH + 9, "and stacked is last"
+    assert CODEC_ENTRY_STACK = CARD_LENGTH + 9, "stacked comes after the other things that happen to a fish"
+    assert CODEC_ENTRY_HOME = CARD_LENGTH + 10, "and heart home is last"
+    assert getCodecPref(CODEC_ENTRY_STACK) = CODEC_PREF_EXTRA + 9, "stacked is remembered where it always was"
+    assert getCodecPref(CODEC_ENTRY_HOME) = CODEC_PREF_MORE, "and heart home is not remembered where the saved game starts"
     assert CODEC_ENTRY_REEF = CARD_LENGTH + 2, "the reef that was saved comes after those"
     assert CODEC_ENTRY_ANCIENT = CARD_LENGTH + 3, "and the ancient one is last"
     assert CODEC_ENTRY_CORAL = CARD_LENGTH, "coral comes after the cards"
@@ -2258,6 +2388,16 @@ test codec_unlocks_what_is_on_the_board from fishBoard
     assert CODEC_SEEN(CODEC_ENTRY_JELLY) = 0, "but not a jellyfish, when there is none"
     assert CODEC_SEEN(CODEC_ENTRY_BOTTLE) = 0, "or a bottle"
     assert CODEC_SEEN(CODEC_ENTRY_SKELETON) = 0, "or a skeleton"
+    assert CODEC_SEEN(CODEC_ENTRY_HOME) = 0, "or a fish at home, when there is no coral"
+
+    ` a fish on horror coral is not at home, and one on coral that is well is
+    CORAL_CELLS(testIndex(1, 1)) = 1
+    CORAL_SICK(testIndex(1, 1)) = 1
+    codecSeeBoard()
+    assert CODEC_SEEN(CODEC_ENTRY_HOME) = 0, "a fish on horror coral is not at home"
+    CORAL_CELLS(testIndex(3, 3)) = 1
+    codecSeeBoard()
+    assert CODEC_SEEN(CODEC_ENTRY_HOME) = 1, "a fish on coral that is well is in the codec"
     end
 endtest
 
@@ -2459,7 +2599,7 @@ endtest
 
 ` A SWAP AS THE LAST STEP OF A PATTERN
 
-test coral_swap_can_be_the_last_step_of_a_pattern from fishBoard
+test coral_swap_is_not_a_step_of_a_pattern from fishBoard
     CORAL_SEQ_LENGTH(1) = 0
     CORAL_SEQ_LENGTH(2) = 0
     coralSetSequence(0, 76)
@@ -2469,13 +2609,60 @@ test coral_swap_can_be_the_last_step_of_a_pattern from fishBoard
     coralCursorStepped(4, 5, -1, 0)
     coralSwapStepped(3, 5, 0, -1)
 
-    assert CORAL_PENDING_SLOT = 0, "the swap finished the pattern"
+    assert CORAL_PENDING_SLOT < 0, "the swap does not finish the pattern. all of it is walked first."
+    assert CORAL_TRAIL_COUNT = 1, "the steps are forgotten, and the step of the swap is the first of the next walk"
+    end
+endtest
+
+test coral_opening_swap_can_be_the_first_step from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` the swap goes up, and then left and up are walked
+    coralSwapStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+    coralCursorStepped(3, 5, 0, -1)
+    coralSwapMade(3, 4)
+
+    assert CORAL_PENDING_SLOT = 0, "the opening swap was the first step of the pattern"
     assert CORAL_PENDING_COUNT = 4, "over all four of its cells"
-    assert CORAL_PENDING_X(0) = 4, "starting from where the walk did"
-    assert CORAL_PENDING_Y(0) = 6, "starting from where the walk did"
-    assert CORAL_PENDING_X(3) = 3, "and ending on the cell that the swap went into"
-    assert CORAL_PENDING_Y(3) = 4, "and ending on the cell that the swap went into"
-    assert CORAL_TRAIL_COUNT = 0, "the steps are forgotten, the same as after any swap"
+    assert CORAL_PENDING_X(0) = 4, "starting from where the swap was made"
+    assert CORAL_PENDING_Y(0) = 6, "starting from where the swap was made"
+    end
+endtest
+
+test coral_opening_swap_does_not_have_to_be_a_step from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` the swap goes up to where the pattern starts, and then all of it is walked
+    coralSwapStepped(4, 7, 0, -1)
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+    coralCursorStepped(3, 5, 0, -1)
+    coralSwapMade(3, 4)
+
+    assert CORAL_PENDING_SLOT = 0, "the pattern after the swap counts too"
+    assert CORAL_PENDING_COUNT = 4, "and the cell that the swap was made from is not one of its cells"
+    assert CORAL_PENDING_Y(0) = 6, "it starts where the walk did"
+    end
+endtest
+
+test coral_a_step_between_the_swap_and_the_pattern_spoils_it from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    coralSwapStepped(5, 7, 0, -1)
+    coralCursorStepped(5, 6, -1, 0)
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+    coralCursorStepped(3, 5, 0, -1)
+    coralSwapMade(3, 4)
+
+    assert CORAL_PENDING_SLOT < 0, "a step that is not of the pattern, after the swap, is one too many"
     end
 endtest
 
@@ -2510,31 +2697,6 @@ test coral_swap_as_the_wrong_last_step_is_not_the_pattern from fishBoard
     end
 endtest
 
-test coral_swap_as_the_last_step_grows_coral from fishBoard
-    CORAL_SEQ_LENGTH(1) = 0
-    CORAL_SEQ_LENGTH(2) = 0
-    coralSetSequence(0, 76)
-
-    ` the swap up into the last cell of the walk makes three in a row there
-    testPut(1, 4, 6)
-    testPut(2, 4, 6)
-    testPut(3, 5, 6)
-    testCursor(4, 6)
-    testQueueMove(0, -1, 0, -1)
-    testQueueMove(-1, 0, 0, -1)
-    testQueueMove(0, -1, 1, -1)
-
-    runto _combos_judged
-    runto _combos_judged
-    runto _combos_judged
-
-    assert totalComboCount = 1, "the swap popped something"
-    assert CORAL_COUNT = 4, "and coral grew on the four cells of the pattern"
-    assert CORAL_CELLS(testIndex(4, 6)) = 1, "where the walk started"
-    assert CORAL_CELLS(testIndex(3, 5)) = 1, "where the swap was made from"
-    assert CORAL_CELLS(testIndex(3, 4)) = 1, "and where it went"
-    end
-endtest
 
 
 ` THE LUCKY TRAIL OF THE LISTEN CARD
@@ -2587,5 +2749,99 @@ test listen_hint_without_the_card_is_never_lucky from fishBoard
 
     assert CORAL_HINT_START_MS >= 0, "a hint came on its own"
     assert CORAL_HINT_TRAIL_ON = 0, "and without the card there is no trail, whatever the luck"
+    end
+endtest
+
+
+` DEEP POCKETS, AND THE REROLL
+
+test deep_pockets_adds_a_card_to_the_upgrade_screen from fishBoard
+    assert getUpgradeChoiceCount() = 2, "the upgrade screen offers two cards"
+
+    CARDS(ABILITY_INDEX_DEEP_POCKETS).uses = 1
+    assert getUpgradeChoiceCount() = 3, "and three once the card has been taken"
+
+    CARDS(ABILITY_INDEX_DEEP_POCKETS).uses = 5
+    assert getUpgradeChoiceCount() = 3, "and never more than that"
+    assert CARDS(ABILITY_INDEX_DEEP_POCKETS).maxUses = 1, "the card is only offered until it has been taken"
+    assert CARDS(ABILITY_INDEX_DEEP_POCKETS).abilityType = ABILITY_TYPE_INSTANT, "and it is an instant"
+    end
+endtest
+
+test reroll_costs_more_every_time from fishBoard
+    UPGRADE_REROLLS = 0
+    assert getRerollCost() = 5, "the first one costs 5 moves"
+    UPGRADE_REROLLS = 1
+    assert getRerollCost() = 10, "the second costs 10"
+    UPGRADE_REROLLS = 2
+    assert getRerollCost() = 15, "the third costs 15"
+    UPGRADE_REROLLS = 3
+    assert getRerollCost() = 20, "and the fourth costs 20"
+    assert UPGRADE_REROLL_MAX = 4, "which is the last one"
+    end
+endtest
+
+
+` WHAT stepCoral LEAVES ALONE
+
+test coral_shadows_are_only_for_fish_next_to_coral from fishBoard
+    CORAL_CELLS(testIndex(4, 4)) = 1
+    coralRecount()
+
+    assert CORAL_NEAR(testIndex(4, 4)) = 1, "the cell with the coral"
+    assert CORAL_NEAR(testIndex(5, 5)) = 1, "and the ones around it, corners too"
+    assert CORAL_NEAR(testIndex(3, 4)) = 1, "on every side"
+    assert CORAL_NEAR(testIndex(6, 4)) = 0, "but not the ones further off"
+    assert CORAL_NEAR(testIndex(0, 0)) = 0, "or the far corner"
+
+    stepCoral()
+    assert CORAL_DRAWN(testIndex(4, 4)) = 1, "the square of coral is showing"
+    assert CORAL_DRAWN(testIndex(0, 0)) = 0, "and there is none where there is no coral"
+    assert CORAL_SHADOW_DRAWN(testIndex(4, 5)) = 1, "the fish next to the coral has a shadow"
+    assert CORAL_SHADOW_DRAWN(testIndex(0, 0)) = 0, "and the one in the far corner has none"
+
+    resetCoral()
+    stepCoral()
+    assert CORAL_DRAWN(testIndex(4, 4)) = 0, "the square is put away when the coral is gone"
+    assert CORAL_SHADOW_DRAWN(testIndex(4, 5)) = 0, "and so is the shadow"
+    end
+endtest
+
+
+test coral_easy_song_move_opens_and_casts_through_the_input from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+    grantMoveToSlot(ABILITY_INDEX_MOVE_SONG, 0)
+    MOVE_ABILITY_BINDINGS(0).movesLeft = 0
+
+    ` up with the move, which opens the song and takes its first step, and then left, and up
+    testCursor(4, 6)
+    testQueueMove(0, -1, 1, 0)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(0, -1, 0, -1)
+    for tI = 1 to 120
+        runto _loop
+    next
+
+    assert MOVE_ABILITY_BINDINGS(0).movesLeft > 0, "the move has to recharge"
+    assert CORAL_OPEN = 0, "the song is over"
+    assert CORAL_COUNT = 4, "and coral grew on the four cells that the cursor walked, with no swap"
+    assert CORAL_CELLS(testIndex(4, 6)) = 1, "from where the move was used"
+    assert CORAL_CELLS(testIndex(3, 4)) = 1, "to where the cursor ended up"
+    end
+endtest
+
+test coral_only_one_pattern_is_out_at_a_time from fishBoard
+    resetCoral()
+    assert CORAL_SEQ_LENGTH(0) > 0, "there is a pattern"
+    assert CORAL_SEQ_LENGTH(1) = 0, "and only the one"
+    assert CORAL_SEQ_LENGTH(2) = 0, "and only the one"
+
+    CORAL_PENDING_SLOT = 0
+    CORAL_PENDING_COUNT = 0
+    judgeCoralCast(1)
+    assert CORAL_SEQ_LENGTH(0) > 0, "a new one takes its place when it is cast"
+    assert CORAL_SEQ_LENGTH(1) = 0, "and there is still only the one"
     end
 endtest

@@ -157,6 +157,19 @@ process_input:
                 endif
             endif
 
+            ` "easy song" opens a song where the cursor is, and the cursor takes the first step of it.
+            ` it is a step like any other, so it plays out the same way. see THE OPENING SWAP in fish_headers.
+            if moveAbility.moveValue = [MOVE_SONG]
+                if moveAbility.movesLeft <= 0
+                    MOVE_ABILITY_BINDINGS(move.moveBindingIndex).movesLeft = moveAbility.resetTimer
+                    gosub update_ability_texts
+                    create basic tween MOVE_ABILITY_BINDINGS(move.moveBindingIndex).useShakeTweenId, 1, 0, 500, 0
+                    coralOpenSong()
+                    liveStarted = startLiveMove(swapDir.x, swapDir.y, 0)
+                    return
+                endif
+            endif
+
             ` the "waste bucket" has nothing to do when no fish are belly up. it is not used, and its
             ` row shakes to say so. the cursor still moves, the same as for a move that is not ready.
             if moveAbility.moveValue = [MOVE_WASTE_BUCKET]
