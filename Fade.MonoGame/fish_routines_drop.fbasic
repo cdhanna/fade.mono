@@ -1,0 +1,549 @@
+goto routines_drop_exit
+
+remstart
+    DROPPING A PASSIVE
+    the page of the upgrade screen that gives a passive up, in place of taking a card.
+    see DROPPING A PASSIVE in fish_headers for the rules.
+
+    like the page that puts a move in a slot, it borrows the title and the bright outline of the upgrade
+    screen, and it is drawn to the same render target. see THE UPGRADE WIPE in fish_routines_upgrade.
+
+    handle_ability_selection comes to handle_passive_drop when the line under the cards is picked. when
+    this is done, DROP_DONE says how it went: 1 if a passive was dropped, and the upgrade screen closes,
+    and 0 if the player went back, and the cards are there again.
+
+    the names in here all start with "drop", because this runs in the middle of
+    handle_ability_selection, and it must not touch anything that it is in the middle of using.
+remend
+
+` this comes after setup_upgrade_wipe, because everything here is drawn to the render target of the upgrade screen
+setup_passive_drop:
+
+    ` the fade goes from 0 (put away) to 1 (showing)
+    reserve tween id(DROP_FADE_TWEEN_ID)
+    create basic tween DROP_FADE_TWEEN_ID, 0, 0, 1, 0
+
+    ` the rows are put where they go when the page is opened, by drop_build_rows, because how many
+    ` there are depends on how many passives are owned
+    for dropN = 0 to DROP_ROW_MAX - 1
+        reserve sprite id(dropPanelId)
+        reserve text id(dropNameId)
+        dropEdge as infoBorder = createInfoBorder(ORDER_ABILITY_ART)
+
+        ` the row is a dark panel with a faint outline, like a card
+        sprite dropPanelId, 0, 0, TEX_PIXEL
+        set sprite offset dropPanelId, 0, 0
+        size sprite dropPanelId, DROP_ROW_WIDTH, DROP_ROW_HEIGHT
+        order sprite dropPanelId, ORDER_ABILITY_CARD
+        set sprite render target dropPanelId, TARGET_UPGRADE
+        hide sprite dropPanelId
+
+        text dropNameId, 0, 0, SCORE_FONT, "passive"
+        set text offset dropNameId, 0, 0
+        size text x dropNameId, 150, .1, .3
+        order text dropNameId, ORDER_ABILITY_TEXT
+        set text render target dropNameId, TARGET_UPGRADE
+        hide text dropNameId
+
+        setInfoBorderTarget(dropEdge, TARGET_UPGRADE)
+        showInfoBorder(dropEdge, 0)
+
+        DROP_ROW_PANEL(dropN) = dropPanelId
+        DROP_ROW_NAME(dropN) = dropNameId
+        DROP_ROW_BORDER(dropN) = dropEdge
+        DROP_ROW_CARD(dropN) = -1
+    next
+
+    ` what the highlighted passive does, above the rows
+    reserve text id(DROP_DESC_TEXT_ID)
+    text DROP_DESC_TEXT_ID, WORLD_WIDTH / 2, 90, SCORE_FONT, "desc"
+    size text y DROP_DESC_TEXT_ID, 16
+    set text offset DROP_DESC_TEXT_ID, .5, 0
+    set text wrap DROP_DESC_TEXT_ID, 440
+    set text align DROP_DESC_TEXT_ID, .5
+    enable rich text DROP_DESC_TEXT_ID
+    color text DROP_DESC_TEXT_ID, rgb(150, 190, 255)
+    order text DROP_DESC_TEXT_ID, ORDER_ABILITY_TEXT
+    set text render target DROP_DESC_TEXT_ID, TARGET_UPGRADE
+    hide text DROP_DESC_TEXT_ID
+
+    ` the question takes the place of that, when the player has to be asked if they are sure
+    reserve text id(DROP_PROMPT_TEXT_ID)
+    text DROP_PROMPT_TEXT_ID, WORLD_WIDTH / 2, 90, SCORE_FONT, "sure?"
+    size text y DROP_PROMPT_TEXT_ID, 16
+    set text offset DROP_PROMPT_TEXT_ID, .5, 0
+    set text wrap DROP_PROMPT_TEXT_ID, 440
+    set text align DROP_PROMPT_TEXT_ID, .5
+    color text DROP_PROMPT_TEXT_ID, rgb(255, 255, 255)
+    order text DROP_PROMPT_TEXT_ID, ORDER_ABILITY_TEXT
+    set text render target DROP_PROMPT_TEXT_ID, TARGET_UPGRADE
+    hide text DROP_PROMPT_TEXT_ID
+
+    ` and the two answers go side by side underneath the rows, with "no" on the left
+    reserve text id(DROP_NO_TEXT_ID)
+    text DROP_NO_TEXT_ID, getDropAnswerX(0), getDropAnswerY(), SCORE_FONT, "No"
+    size text y DROP_NO_TEXT_ID, 20
+    set text offset DROP_NO_TEXT_ID, .5, 0
+    order text DROP_NO_TEXT_ID, ORDER_ABILITY_TEXT
+    set text render target DROP_NO_TEXT_ID, TARGET_UPGRADE
+    hide text DROP_NO_TEXT_ID
+
+    reserve text id(DROP_YES_TEXT_ID)
+    text DROP_YES_TEXT_ID, getDropAnswerX(1), getDropAnswerY(), SCORE_FONT, "Yes"
+    size text y DROP_YES_TEXT_ID, 20
+    set text offset DROP_YES_TEXT_ID, .5, 0
+    order text DROP_YES_TEXT_ID, ORDER_ABILITY_TEXT
+    set text render target DROP_YES_TEXT_ID, TARGET_UPGRADE
+    hide text DROP_YES_TEXT_ID
+
+return
+
+
+` the player picked the line that drops a passive. the cards go away, and the list of passives takes
+` their place. DROP_DONE says how it went.
+handle_passive_drop:
+
+    DROP_DONE = 0
+    gosub drop_build_rows
+
+    ` with nothing to drop, there is no page
+    if DROP_ROW_COUNT <= 1
+        gosub drop_hide_rows
+        return
+    endif
+
+    ` the cards shrink away, and the title goes with them, because it is about to say something else
+    for dropN = 0 to choiceCount
+        create basic tween ABILITY_CHOICES(dropN).sizeTweenId, get local transform scale x(ABILITY_CHOICES(dropN).transformId), 0, 200, 0
+    next
+    showInfoBorder(ABILITY_CURSOR, 0)
+    hide text UPGRADE_SKIP_TEXT_ID `the page has rows where these lines are
+    hide text UPGRADE_REROLL_TEXT_ID
+    hide text UPGRADE_DROP_TEXT_ID
+    create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 1, 0, 200, 0
+    while is tween done(ABILITY_SELECT_LABEL_FADE_TWEEN_ID) < 1
+        gosub frame_ability_selection
+        sync
+    endwhile
+
+    set text ABILITY_SELECT_LABEL_TEXT_ID, "Drop a Passive"
+    size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
+
+    DROP_SELECTED = 0
+    gosub drop_refresh
+    showInfoBorder(ABILITY_CURSOR, 1)
+
+    create basic tween DROP_FADE_TWEEN_ID, 0, 1, 200, 0
+    create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 0, 1, 200, 0
+
+    gosub drop_run
+
+    ` put the page away. when a passive was dropped, handle_ability_selection closes the rest of the
+    ` screen after this, and the title stays until it does.
+    showInfoBorder(ABILITY_CURSOR, 0)
+    create basic tween DROP_FADE_TWEEN_ID, 1, 0, 200, 0
+    if DROP_DONE = 0
+        create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 1, 0, 200, 0
+    endif
+    while is tween done(DROP_FADE_TWEEN_ID) < 1
+        gosub frame_ability_selection
+        gosub frame_passive_drop
+        sync
+    endwhile
+    gosub drop_hide_rows
+
+    ` the player went back, so the cards come back, just as they were, with the outline on the line
+    ` that it was on
+    if DROP_DONE = 0
+        set text ABILITY_SELECT_LABEL_TEXT_ID, "Select Upgrade"
+        size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
+        create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 0, 1, 200, 0
+        for dropN = 0 to choiceCount
+            create basic tween ABILITY_CHOICES(dropN).sizeTweenId, 0, .95, 200, dropN * 50
+        next
+        show text UPGRADE_SKIP_TEXT_ID
+        show text UPGRADE_REROLL_TEXT_ID
+        show text UPGRADE_DROP_TEXT_ID
+        set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} take it"
+        showInfoBorder(ABILITY_CURSOR, 1)
+    endif
+
+return
+
+
+` decide which rows the page has, put them where they go, and show them. there is a row for every
+` passive that can be dropped, in the order that they are listed at the side of the board, and the last
+` row is the one that goes back.
+drop_build_rows:
+
+    buildDropList()
+
+    for dropN = 0 to DROP_ROW_COUNT - 1
+        dropPlaceX = getDropRowX(dropN)
+        dropPlaceY = getDropRowY(dropN)
+        dropPlaceCard = DROP_ROW_CARD(dropN)
+
+        ` a passive that has been taken more than once says how many times, the same as in the list
+        dropPlaceName$ = "go back"
+        if dropPlaceCard >= 0
+            dropPlaceName$ = CARDS(dropPlaceCard).name$
+            if CARDS(dropPlaceCard).uses > 1
+                dropPlaceName$ = dropPlaceName$ + " x" + str$(CARDS(dropPlaceCard).uses)
+            endif
+        endif
+
+        position sprite DROP_ROW_PANEL(dropN), dropPlaceX, dropPlaceY
+        layoutInfoBorder(DROP_ROW_BORDER(dropN), dropPlaceX, dropPlaceY, DROP_ROW_WIDTH, DROP_ROW_HEIGHT)
+        set text DROP_ROW_NAME(dropN), dropPlaceName$
+        size text x DROP_ROW_NAME(dropN), 150, .1, .3 `fit the name to the row
+        set text position DROP_ROW_NAME(dropN), dropPlaceX + 10, dropPlaceY + 1
+
+        show sprite DROP_ROW_PANEL(dropN)
+        show text DROP_ROW_NAME(dropN)
+        showInfoBorder(DROP_ROW_BORDER(dropN), 1)
+    next
+
+    DROP_CONFIRMING = 0
+    DROP_CONFIRM_YES = 0
+    show text DROP_DESC_TEXT_ID
+
+return
+
+
+` write what the highlighted row is, and which keys do what. this is called whenever that changes.
+drop_refresh:
+
+    dropAboutCard = DROP_ROW_CARD(DROP_SELECTED)
+    dropAbout$ = "Back to the cards."
+    if dropAboutCard >= 0
+        dropAbout$ = CARDS(dropAboutCard).name$ + ": " + CARDS(dropAboutCard).desc$
+    endif
+    set text DROP_DESC_TEXT_ID, dropAbout$
+
+    set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} drop it    {pause} go back"
+
+return
+
+
+` let the player look through the passives, until they drop one, or go back
+drop_run:
+
+    dropLeave = 0
+    while dropLeave = 0
+
+        ` what the player pressed on this frame
+        dropPressConfirm = new action down(ACT_CONFIRM)
+        dropPressBack = new action down(ACT_PAUSE)
+        dropSide = 0
+        if new action down(ACT_RIGHT) then dropSide = 1
+        if new action down(ACT_LEFT) then dropSide = -1
+        dropDir = 0
+        if new action down(ACT_DOWN) then dropDir = 1
+        if new action down(ACT_UP) then dropDir = -1
+
+        if DROP_CONFIRMING
+            ` the player is being asked if they are sure. the answers are side by side, and "yes" is the
+            ` far one, so it takes a press of right to get to it. it cannot be picked by leaning on one button.
+            if dropSide > 0 then DROP_CONFIRM_YES = 1
+            if dropSide < 0 then DROP_CONFIRM_YES = 0
+
+            dropAnswered = dropPressConfirm
+
+            ` the pause key backs out, the same as it does on the menus
+            if dropPressBack
+                dropAnswered = 1
+                DROP_CONFIRM_YES = 0
+            endif
+
+            if dropAnswered
+                if DROP_CONFIRM_YES
+                    dropPassive(DROP_ROW_CARD(DROP_SELECTED))
+                    DROP_DONE = 1
+                    dropLeave = 1
+                else
+                    ` back to the rows
+                    DROP_CONFIRMING = 0
+                    hide text DROP_PROMPT_TEXT_ID
+                    hide text DROP_NO_TEXT_ID
+                    hide text DROP_YES_TEXT_ID
+                    show text DROP_DESC_TEXT_ID
+                    dropBackRow = DROP_ROW_COUNT - 1
+                    show sprite DROP_ROW_PANEL(dropBackRow)
+                    show text DROP_ROW_NAME(dropBackRow)
+                    showInfoBorder(DROP_ROW_BORDER(dropBackRow), 1)
+                    gosub drop_refresh
+                endif
+            endif
+        else
+            ` up and down go through the rows, one after another, and around from the last to the first.
+            ` the row that goes back is the last one, and it sits by itself under the passives.
+            ` left and right go to the same row of the column next door, or to the last passive when
+            ` that column is not as long. they do nothing on the row that goes back.
+            dropWas = DROP_SELECTED
+            if dropDir <> 0
+                DROP_SELECTED = DROP_SELECTED + dropDir
+                if DROP_SELECTED < 0 then DROP_SELECTED = DROP_ROW_COUNT - 1
+                if DROP_SELECTED >= DROP_ROW_COUNT then DROP_SELECTED = 0
+            endif
+            dropLastRow = DROP_ROW_COUNT - 2 `the last row that is a passive
+            if DROP_SELECTED > dropLastRow then dropSide = 0
+            if dropSide <> 0
+                dropJump = DROP_SELECTED + dropSide * DROP_ROWS_PER_COLUMN
+                if dropJump > dropLastRow
+                    if getDropRowColumn(dropLastRow) > getDropRowColumn(DROP_SELECTED)
+                        dropJump = dropLastRow
+                    else
+                        dropJump = DROP_SELECTED
+                    endif
+                endif
+                if dropJump >= 0 then DROP_SELECTED = dropJump
+            endif
+            if DROP_SELECTED <> dropWas
+                ` the outline leaves some bubbles behind on the row that it was around
+                spawnWakeBubbles(getDropRowX(dropWas), getDropRowY(dropWas), DROP_ROW_WIDTH, DROP_ROW_HEIGHT, 8, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
+                gosub drop_refresh
+            endif
+
+            if dropPressBack then dropLeave = 1
+
+            if dropPressConfirm
+                dropPickCard = DROP_ROW_CARD(DROP_SELECTED)
+                if dropPickCard < 0
+                    dropLeave = 1
+                else
+                    ` a passive is about to be given up, so ask first
+                    DROP_CONFIRMING = 1
+                    DROP_CONFIRM_YES = 0 `start on "no", so that leaning on the button does not lose a passive
+
+                    set text DROP_PROMPT_TEXT_ID, "Drop " + CARDS(dropPickCard).name$ + "? You lose it until an upgrade offers it again, and you take no card this time."
+                    hide text DROP_DESC_TEXT_ID
+                    show text DROP_PROMPT_TEXT_ID
+                    show text DROP_NO_TEXT_ID
+                    show text DROP_YES_TEXT_ID
+
+                    ` the answers go where the row that goes back is, so it steps aside for them
+                    dropBackRow = DROP_ROW_COUNT - 1
+                    hide sprite DROP_ROW_PANEL(dropBackRow)
+                    hide text DROP_ROW_NAME(dropBackRow)
+                    showInfoBorder(DROP_ROW_BORDER(dropBackRow), 0)
+                    set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} answer    {pause} go back"
+                endif
+            endif
+        endif
+
+        gosub frame_ability_selection
+        gosub frame_passive_drop
+        sync
+    endwhile
+
+return
+
+
+drop_hide_rows:
+    for dropN = 0 to DROP_ROW_MAX - 1
+        hide sprite DROP_ROW_PANEL(dropN)
+        hide text DROP_ROW_NAME(dropN)
+        showInfoBorder(DROP_ROW_BORDER(dropN), 0)
+    next
+    hide text DROP_DESC_TEXT_ID
+    hide text DROP_PROMPT_TEXT_ID
+    hide text DROP_NO_TEXT_ID
+    hide text DROP_YES_TEXT_ID
+    DROP_CONFIRMING = 0
+    DROP_ROW_COUNT = 0
+return
+
+
+` everything on this page that changes from frame to frame. this comes after frame_ability_selection,
+` which puts the bright outline around a card, so that the outline ends up where this page wants it.
+frame_passive_drop:
+
+    dropFade# = tweenVal(DROP_FADE_TWEEN_ID)
+
+    ` the rows are grey, and the highlighted one is white
+    if DROP_ROW_COUNT > 0
+        for dropN = 0 to DROP_ROW_COUNT - 1
+            dropTone = 140
+            if dropN = DROP_SELECTED then dropTone = 255
+
+            color sprite DROP_ROW_PANEL(dropN), rgb(20, 20, 24, 235 * dropFade#)
+            colorInfoBorder(DROP_ROW_BORDER(dropN), rgb(130, 130, 135, 160 * dropFade#))
+            color text DROP_ROW_NAME(dropN), rgb(dropTone, dropTone, dropTone)
+            set text alpha DROP_ROW_NAME(dropN), 255 * dropFade#
+        next
+
+        set text alpha DROP_DESC_TEXT_ID, 255 * dropFade#
+        set text alpha DROP_PROMPT_TEXT_ID, 255 * dropFade#
+
+        ` the bright outline is around the highlighted row, or around the highlighted answer
+        if DROP_CONFIRMING
+            dropNoTone = 255
+            dropYesTone = 140
+            if DROP_CONFIRM_YES
+                dropNoTone = 140
+                dropYesTone = 255
+            endif
+            color text DROP_NO_TEXT_ID, rgb(dropNoTone, dropNoTone, dropNoTone)
+            set text alpha DROP_NO_TEXT_ID, 255 * dropFade#
+            color text DROP_YES_TEXT_ID, rgb(dropYesTone, dropYesTone, dropYesTone)
+            set text alpha DROP_YES_TEXT_ID, 255 * dropFade#
+
+            layoutInfoBorder(ABILITY_CURSOR, getDropAnswerX(DROP_CONFIRM_YES) - DROP_OPTION_WIDTH / 2, getDropAnswerY() - 3, DROP_OPTION_WIDTH, DROP_ROW_HEIGHT + 6)
+        else
+            layoutInfoBorder(ABILITY_CURSOR, getDropRowX(DROP_SELECTED) - 2, getDropRowY(DROP_SELECTED) - 2, DROP_ROW_WIDTH + 4, DROP_ROW_HEIGHT + 4)
+        endif
+    endif
+
+return
+
+
+routines_drop_exit:
+
+
+` 1 if the player can give this passive up. a zen game is given "seamless", and keeps it.
+function canDropPassive(dropAskCard)
+    dropCan = 1
+    if dropAskCard = ABILITY_INDEX_WRAP
+        if GAME_ZEN then dropCan = 0
+    endif
+endfunction dropCan
+
+
+` how many passives the player has that can be given up
+function getDroppableCount()
+    dropTotal = 0
+    if PASSIVE_COUNT > 0
+        for dropCountN = 0 to PASSIVE_COUNT - 1
+            if canDropPassive(PASSIVE_BINDINGS(dropCountN).abilityIndex) then dropTotal = dropTotal + 1
+        next
+    endif
+endfunction dropTotal
+
+
+` work out which rows the page has: DROP_ROW_CARD says what every row stands for, and DROP_ROW_COUNT is
+` how many there are, which is what this says too.
+function buildDropList()
+    DROP_ROW_COUNT = 0
+    if PASSIVE_COUNT > 0
+        for dropListN = 0 to PASSIVE_COUNT - 1
+            dropListCard = PASSIVE_BINDINGS(dropListN).abilityIndex
+            if canDropPassive(dropListCard)
+                DROP_ROW_CARD(DROP_ROW_COUNT) = dropListCard
+                DROP_ROW_COUNT = DROP_ROW_COUNT + 1
+            endif
+        next
+    endif
+    DROP_ROW_CARD(DROP_ROW_COUNT) = -1
+    DROP_ROW_COUNT = DROP_ROW_COUNT + 1
+endfunction DROP_ROW_COUNT
+
+
+` which column of the page a row is in, counting from 0. the rows fill one column, and then the next.
+function getDropRowColumn(dropIndex)
+    dropColumn = 0
+    dropRest = dropIndex
+    while dropRest >= DROP_ROWS_PER_COLUMN
+        dropRest = dropRest - DROP_ROWS_PER_COLUMN
+        dropColumn = dropColumn + 1
+    endwhile
+endfunction dropColumn
+
+
+` where the left edge of a row is. the columns of passives that there are sit in the middle of the
+` screen, together. the row that goes back, which is the last one, is in the middle by itself.
+function getDropRowX(dropIndex)
+    dropColumns = getDropRowColumn(DROP_ROW_COUNT - 2) + 1
+    dropAllWidth = dropColumns * DROP_ROW_WIDTH + (dropColumns - 1) * DROP_COLUMN_GAP
+    dropLeft = (WORLD_WIDTH - dropAllWidth) / 2
+    dropLeft = dropLeft + getDropRowColumn(dropIndex) * (DROP_ROW_WIDTH + DROP_COLUMN_GAP)
+    if dropIndex >= DROP_ROW_COUNT - 1 then dropLeft = (WORLD_WIDTH - DROP_ROW_WIDTH) / 2
+endfunction dropLeft
+
+
+` and where the top of it is. the row that goes back is at the bottom of the page, under the longest
+` that a column can be, whatever the number of passives.
+function getDropRowY(dropIndex)
+    dropDown = dropIndex
+    while dropDown >= DROP_ROWS_PER_COLUMN
+        dropDown = dropDown - DROP_ROWS_PER_COLUMN
+    endwhile
+    dropTop = DROP_ROWS_TOP + dropDown * (DROP_ROW_HEIGHT + DROP_ROW_GAP)
+    if dropIndex >= DROP_ROW_COUNT - 1 then dropTop = getDropAnswerY()
+endfunction dropTop
+
+
+` where the middle of an answer is: "no" is 0, and "yes" is 1
+function getDropAnswerX(dropIsYes)
+    dropAnswerX = WORLD_WIDTH / 2 - 36
+    if dropIsYes then dropAnswerX = WORLD_WIDTH / 2 + 36
+endfunction dropAnswerX
+
+
+` the answers go under the longest that a column can be
+function getDropAnswerY()
+    dropAnswerY = DROP_ROWS_TOP + DROP_ROWS_PER_COLUMN * (DROP_ROW_HEIGHT + DROP_ROW_GAP) + 4
+endfunction dropAnswerY
+
+
+` write the name of the passive that is in a row of the list at the side of the board onto that row, and
+` have info mode explain it. the row has to have a passive in it.
+function showPassiveRow(dropShowRow)
+    dropShowCard = PASSIVE_BINDINGS(dropShowRow).abilityIndex
+    dropShowName$ = CARDS(dropShowCard).name$
+    if CARDS(dropShowCard).uses > 1
+        dropShowName$ = dropShowName$ + " x" + str$(CARDS(dropShowCard).uses)
+    endif
+    set text PASSIVE_BINDINGS(dropShowRow).titleTextId, dropShowName$
+    size text x PASSIVE_BINDINGS(dropShowRow).titleTextId, 100, .1, .3
+
+    dropShowInfo = PASSIVE_INFO(dropShowRow)
+    if dropShowInfo > 0
+        INFOS(dropShowInfo).title$ = CARDS(dropShowCard).name$
+        INFOS(dropShowInfo).desc$ = CARDS(dropShowCard).desc$
+    endif
+endfunction
+
+
+` take one passive away from the player, every copy of it. the passives under it in the list at the side
+` of the board move up a row, and the last row of the list is empty again.
+function dropPassiveRow(dropCard)
+    dropRow = -1
+    if PASSIVE_COUNT > 0
+        for dropFind = 0 to PASSIVE_COUNT - 1
+            if PASSIVE_BINDINGS(dropFind).abilityIndex = dropCard then dropRow = dropFind
+        next
+    endif
+
+    if dropRow >= 0
+        CARDS(dropCard).obtained = 0
+        CARDS(dropCard).uses = 0
+
+        dropEndRow = PASSIVE_COUNT - 1
+        dropAt = dropRow
+        while dropAt < dropEndRow
+            dropFromRow = dropAt + 1
+            PASSIVE_BINDINGS(dropAt).abilityIndex = PASSIVE_BINDINGS(dropFromRow).abilityIndex
+            showPassiveRow(dropAt)
+            dropAt = dropAt + 1
+        endwhile
+
+        PASSIVE_BINDINGS(dropEndRow).assigned = 0
+        create basic tween PASSIVE_BINDINGS(dropEndRow).fadeTweenId, 0, 0, 1, 0
+        set text alpha PASSIVE_BINDINGS(dropEndRow).titleTextId, 0
+        if PASSIVE_INFO(dropEndRow) > 0
+            setInfoBlobEnabled(PASSIVE_INFO(dropEndRow), 0)
+        endif
+        PASSIVE_COUNT = dropEndRow
+    endif
+endfunction
+
+
+` the player gives a passive up. see DROPPING A PASSIVE in fish_headers.
+function dropPassive(dropWhich)
+    dropPassiveRow(dropWhich)
+
+    ` the second copy of "bottom feeder" is nothing without the first
+    if dropWhich = ABILITY_INDEX_BOTTOM_FEEDER
+        dropPassiveRow(ABILITY_INDEX_BOTTOM_FEEDER_2)
+    endif
+endfunction

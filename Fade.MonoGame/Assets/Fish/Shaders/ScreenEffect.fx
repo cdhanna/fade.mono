@@ -116,6 +116,79 @@ float HudGlow;
 #define HUD_BLUE float3(0.2182, 0.4364, 0.8729) // rgb(64, 128, 255), as a direction
 #define HUD_LIFT float3(0.42, 0.34, 0.0)        // what is added to it at the most
 
+// the QR code that the fish make when TUNA is typed. see TUNA in fish_headers.
+// a pool of light falls on the water, and the fish in it go dark, like fish seen against the light.
+// there is a fish for every dark module of the code, and open water where a module is light, so a
+// phone reads the dark fish on the light water.
+// the pool has a soft edge, and the edge is not straight: it reaches further out where the ripples of
+// light are bright, so it moves with them.
+// xy is the middle of the pool, in pixels of the game, z is how far it goes from the middle to an
+// edge, and w is how much of it shows, from 0 to 1.
+float4 Qr;
+
+// how much of the shadows of the fish show, from 0 to 1. the pool of light comes first, and the
+// shadows come on in it as the fish get to their places.
+float QrDeep;
+
+// the color of the light, and what a fish in it is multiplied by. the light is faint: the water in
+// it is only a little lighter than the water around it, so the pool does not stand out from the
+// sea. it does not have to be bright. it only has to be lighter than the fish and their shadows.
+#define QR_LIGHT float3(0.06, 0.13, 0.20)
+#define QR_FISH float3(0.08, 0.10, 0.17)
+
+// where the fish of the code are: the game draws a black square for every one, on white, the same
+// size as the screen.
+Texture2D QrTexture;
+sampler2D QrTextureSampler = sampler_state
+{
+	Texture = <QrTexture>;
+	MinFilter = Linear;
+	MagFilter = Linear;
+	MipFilter = Linear;
+	AddressU = Clamp;
+	AddressV = Clamp;
+};
+
+// a fish does not fill its module, and a phone wants the whole module dark. so every fish has a soft
+// shadow under it: the water is darker there. QR_SHADOW is how much darker, where 0 is no shadow and 1
+// is black. QR_BLUR is how soft the edge of a shadow is, in pixels of the game. how big a shadow is
+// is TUNA_SHADOW, in fish_headers.
+// with no shadow, or too faint or too small a one, a phone has a hard time with the code.
+#define QR_SHADOW 0.7
+#define QR_BLUR 1.5
+
+// how much the light flickers with the ripples of light. 0 is a flat color.
+#define QR_FLICKER 0.2
+
+// how far the pool takes to fade out past its edge, in pixels of the game, and how much further out
+// the brightest ripple of light pushes it
+#define QR_SOFT 40.0
+#define QR_REACH 10.0
+
+// how much of the wobble of the water is taken away over the code, so that a phone can still read it.
+// 1 is all of it, and 0 is none.
+#define QR_STILL 0.9
+
+// how much light there is on this pixel, from 0 in the middle of the shadow of a fish to 1 out of it
+float qrLight(float2 uv)
+{
+    float2 one = QR_BLUR / max(Grid, 1.0);
+    float lit = tex2D(QrTextureSampler, uv + float2(one.x, one.y)).r
+              + tex2D(QrTextureSampler, uv + float2(-one.x, one.y)).r
+              + tex2D(QrTextureSampler, uv + float2(one.x, -one.y)).r
+              + tex2D(QrTextureSampler, uv + float2(-one.x, -one.y)).r;
+    return lerp(1.0, smoothstep(0.2, 0.8, lit * 0.25), saturate(QrDeep));
+}
+
+// how much of the pool of light is on this pixel, from 0 to 1
+float qrShade(float2 uv, float light)
+{
+    float2 away = abs(uv * max(Grid, 1.0) - Qr.xy) - Qr.z;
+    float dist = length(max(away, 0.0)) + min(max(away.x, away.y), 0.0);
+    dist -= saturate(light) * QR_REACH;
+    return (1.0 - smoothstep(0.0, QR_SOFT, dist)) * saturate(Qr.w);
+}
+
 // what the corners of the screen are multiplied by, to make them darker and bluer than the middle
 #define VIGNETTE_TINT float3(0.60, 0.67, 0.84)
 
@@ -236,6 +309,10 @@ float2 uv = texCoord;
     // and it wobbles less over the coral
     p *= 1.0 - coralUnder(uv) * CORAL_STILL;
 
+    // and hardly at all over the QR code
+    float shade = qrShade(texCoord, result);
+    p *= 1.0 - shade * QR_STILL;
+
     // how much of this pixel is under the water
     float water = lerp(Submerged, tex2D(MaskTextureSampler, uv).r, UseMask);
     water = lerp(water, step(0.012, underLine(uv)), WaterLine.w);
@@ -248,9 +325,18 @@ float2 uv = texCoord;
                  + ripple(ringUv, Ripple4) + ripple(ringUv, Ripple5) + ripple(ringUv, Ripple6) + ripple(ringUv, Ripple7);
     rings.xy *= 0.45 + 1.6 * result;
 
-    float4 tex = tex2D(SpriteTextureSampler, uv + (p + rings.xy) * water);
+    float2 texUv = uv + (p + rings.xy) * water;
+    float4 tex = tex2D(SpriteTextureSampler, texUv);
     float hud = smoothstep(0.990, 0.998, dot(tex.rgb / max(length(tex.rgb), 0.001), HUD_BLUE)) * smoothstep(0.6, 0.78, tex.b);
     tex.rgb += HUD_LIFT * hud * HudGlow * water;
+
+    // the pool of light of the QR code. what has little red or green in it is the water, which is lit
+    // a little, and the rest is fish, which go dark. the water is darker in the shadow of a fish.
+    float qrWater = 1.0 - smoothstep(0.3, 0.6, max(tex.r, tex.g));
+    float qrGlow = 1.0 - QR_FLICKER * 0.5 + QR_FLICKER * result;
+    float3 qrLit = tex.rgb * lerp(QR_FISH, float3(1.0, 1.0, 1.0), qrWater) + QR_LIGHT * qrGlow * qrWater;
+    qrLit *= lerp(1.0 - QR_SHADOW, 1.0, lerp(1.0, qrLight(texCoord), qrWater));
+    tex.rgb = lerp(tex.rgb, qrLit, shade);
 
     // the ripples of light fade out over the calm water too
     float4 finalColor = float4(.45, 0.4, .8, 1.0) * result * 0.08 * water * (1.0 - calm * WAKE_DIM) + tex;
@@ -266,6 +352,7 @@ float2 uv = texCoord;
     float checker = frac((cell.x + cell.y) * 0.5) * 2.0;
     corner = floor(corner * 12.0 + checker * 0.5) / 12.0;
     finalColor.rgb *= lerp(float3(1.0, 1.0, 1.0), VIGNETTE_TINT, corner * water);
+
    // finalColor.rg *= Example.rg;
     return finalColor;
 }

@@ -1,0 +1,268 @@
+remstart
+    DIAGONALS
+    the other hidden thing. see DIAGONALS in fish_headers for the rules.
+
+    the rest of the game only has to do three things:
+    - call judgeDiagonals() when handle_combos has found the groups, before it scores any of them, and
+      hold the pops back for DIAGONAL_WAIT
+    - let judgeMultiplierSwaps know about DIAGONAL_LINES
+    - take DIAGONAL_PAID along when a fish moves. the routines for the stacks, in fish_funcs, do.
+    - call stepDiagonalHints() on every frame, and lean and light the fish by what it worked out. frame_fish_fx does.
+remend
+
+
+` how many fish a line takes to pay out. the "lower the bar" card takes one off.
+function getDiagonalLength()
+    diagNeed = DIAGONAL_LENGTH
+    if CARDS(ABILITY_INDEX_LOWER_BAR).obtained > 0 then diagNeed = DIAGONAL_LENGTH - 1
+endfunction diagNeed
+
+
+` the kind of the fish in this cell, if it is one that can be part of a line, and 0 if it is not.
+` only the fish can: a jellyfish, a stingray and a bottle can not, and neither can a skeleton, which has no
+` color to it.
+function diagonalKind(diagKindCell)
+    diagKindIs = CELLS(diagKindCell).value
+    if diagKindIs = TEX_JELLY then diagKindIs = 0
+    if diagKindIs = TEX_RAY then diagKindIs = 0
+    if diagKindIs = TEX_BOTTLE then diagKindIs = 0
+    if CELLS(diagKindCell).bellyUp = 2 then diagKindIs = 0
+endfunction diagKindIs
+
+
+` 1 if this spot is on the board, and the fish there is of this kind
+function diagonalSame(diagAtX, diagAtY, diagWant)
+    diagSameIs = 0
+    if diagAtX >= 0
+        if diagAtX < CELL_COLUMN_COUNT
+            if diagAtY >= 0
+                if diagAtY < CELL_ROW_COUNT
+                    diagSameKind = diagonalKind(diagAtX + diagAtY * CELL_COLUMN_COUNT)
+                    if diagSameKind = diagWant then diagSameIs = 1
+                endif
+            endif
+        endif
+    endif
+endfunction diagSameIs
+
+
+` the line of fish of one kind that goes through this cell, corner to corner. `diagSlope` is 1 for the
+` line that goes down to the right, and -1 for the one that goes up to the right. the cells of it go
+` into DIAGONAL_LINE, from its left end to its right end, and this says how many there are.
+function diagonalLineThrough(diagCell, diagSlope)
+    DIAGONAL_LINE_COUNT = 0
+    diagLineKind = diagonalKind(diagCell)
+    if diagLineKind > 0
+        diagX = CELLS(diagCell).coord.x
+        diagY = CELLS(diagCell).coord.y
+
+        ` back to the left end of it
+        diagOn = 1
+        while diagOn
+            diagBackX = diagX - 1
+            diagBackY = diagY - diagSlope
+            diagOn = diagonalSame(diagBackX, diagBackY, diagLineKind)
+            if diagOn
+                diagX = diagBackX
+                diagY = diagBackY
+            endif
+        endwhile
+
+        ` and along it to the right end
+        diagOn = 1
+        while diagOn
+            DIAGONAL_LINE(DIAGONAL_LINE_COUNT) = diagX + diagY * CELL_COLUMN_COUNT
+            DIAGONAL_LINE_COUNT = DIAGONAL_LINE_COUNT + 1
+            diagX = diagX + 1
+            diagY = diagY + diagSlope
+            diagOn = diagonalSame(diagX, diagY, diagLineKind)
+        endwhile
+    endif
+endfunction DIAGONAL_LINE_COUNT
+
+
+` if the line through this cell is long enough, it pays out, one fish after another from the left end of
+` the line to the right. bubbles come up from every fish of it.
+` when any fish of the line has not paid out before, the whole line pays: every fish of it picks up one
+` more for its stack, and scores a point, and is marked as paid. with the "sneaking death" card they do
+` not pick up a fish: each goes belly up, or turns into a skeleton if it is belly up already.
+` when every fish of it has paid out already, the bubbles are all that there is.
+function diagonalPayThrough(diagPayCell, diagPaySlope)
+    diagPayCount = diagonalLineThrough(diagPayCell, diagPaySlope)
+    diagPayNeed = getDiagonalLength()
+    diagDeath = CARDS(ABILITY_INDEX_SNEAKING_DEATH).obtained
+    if diagPayCount >= diagPayNeed
+        DIAGONAL_LINES = DIAGONAL_LINES + 1
+
+        ` is there a fish in it that has not paid out?
+        diagFresh = 0
+        diagPayN = 0
+        while diagPayN < diagPayCount
+            diagPayAt = DIAGONAL_LINE(diagPayN)
+            if DIAGONAL_PAID(diagPayAt) <> CELLS(diagPayAt).value then diagFresh = diagFresh + 1
+            diagPayN = diagPayN + 1
+        endwhile
+
+        ` it is scored with the multiplier as it was
+        diagPoints = DIAGONAL_POINTS * SCORE_MULTIPLIER
+
+        diagPayN = 0
+        while diagPayN < diagPayCount
+            diagPayAt = DIAGONAL_LINE(diagPayN)
+            diagFish = CELLS(diagPayAt)
+            diagDelay = diagPayN * DIAGONAL_STEP_MS
+
+            diagPos as vec = {
+                x = getCellX(diagFish.coord.x),
+                y = getCellY(diagFish.coord.y)
+            }
+            diagTint = FISH_COLORS(getFishColorIndex(diagFish.value))
+            spawnBubbles(diagPos.x, diagPos.y, CELL_SIZE / 3, 10, diagDelay, diagTint)
+
+            if diagFresh > 0
+                DIAGONAL_PAID(diagPayAt) = diagFish.value
+
+                if diagDeath > 0
+                    if diagFish.bellyUp < 2
+                        CELLS(diagPayAt).bellyUp = diagFish.bellyUp + 1
+                    endif
+                else
+                    if diagFish.stack < FISH_STACK_MAX
+                        CELLS(diagPayAt).stack = diagFish.stack + 1
+                    endif
+                endif
+
+                diagTxtId = spawnBoardScoreText(diagPos, "+" + str$(diagPoints), diagDelay, 800)
+                color text diagTxtId, diagTint
+                queueScore(diagPoints, diagDelay)
+            endif
+
+            diagPayN = diagPayN + 1
+        endwhile
+
+        if diagFresh > 0
+            ` the multiplier gets one for a line that is just long enough, and one more for every fish past that
+            diagShort = diagPayNeed - 1
+            diagGain = diagPayCount - diagShort
+            DIAGONAL_GAIN = DIAGONAL_GAIN + diagGain * DIAGONAL_MULT_GAIN
+
+            ` whatever pops because of the same swap waits until the line has had its turn
+            diagWait = diagPayCount * DIAGONAL_STEP_MS + DIAGONAL_AFTER_MS
+            if diagWait > DIAGONAL_WAIT then DIAGONAL_WAIT = diagWait
+
+            ` the codec has an entry for it, from the first one on
+            codecSeeCard(CODEC_ENTRY_CROOKED)
+
+            ` the names of the cards that had a hand in it shake, in the list of passives
+            if diagDeath > 0
+                showPassiveUsed(ABILITY_INDEX_SNEAKING_DEATH)
+            endif
+            if diagPayCount < DIAGONAL_LENGTH
+                showPassiveUsed(ABILITY_INDEX_LOWER_BAR)
+            endif
+        endif
+    endif
+endfunction
+
+
+` handle_combos has found the groups of fish on the board, and has not scored any of them yet. if a
+` swap was made since the last time, this is where the lines that it made pay out, before anything pops:
+` the stacks are there when the fish of a group are scored, and so is what the lines add to the
+` multiplier. DIAGONAL_LINES is how many lines there were, for judgeMultiplierSwaps, which lets the swap
+` off. DIAGONAL_WAIT is how long the pops are held back for, in milliseconds, so that the line is seen first.
+function judgeDiagonals()
+    DIAGONAL_LINES = 0
+    DIAGONAL_GAIN = 0
+    DIAGONAL_WAIT = 0
+    if MULT_PENDING_SWAPS > 0
+        if CORAL_SWAP_A >= 0
+            ` two fish of the same kind that trade places have not made anything
+            if CELLS(CORAL_SWAP_A).value <> CELLS(CORAL_SWAP_B).value
+                diagonalPayThrough(CORAL_SWAP_A, 1)
+                diagonalPayThrough(CORAL_SWAP_A, -1)
+                diagonalPayThrough(CORAL_SWAP_B, 1)
+                diagonalPayThrough(CORAL_SWAP_B, -1)
+            endif
+        endif
+    endif
+
+    if DIAGONAL_GAIN > 0
+        addMultiplier(DIAGONAL_GAIN)
+        DIAGONAL_GAIN = 0
+    endif
+endfunction
+
+
+` THE HINTS OF THE DIAGONALS. work out, for every fish, which way it leans when a wave of the current
+` gets to it, and if it lights up. it is done a few times a second, and not on every frame.
+function stepDiagonalHints()
+    diagHintNow = game ms()
+    if diagHintNow >= DIAGONAL_HINT_MS
+        DIAGONAL_HINT_MS = diagHintNow + DIAGONAL_HINT_EVERY
+
+        ` there are no lines to be made until there is a multiplier, so nothing hints at them either
+        diagHintOn = 1
+        if tutorialMovesOff() then diagHintOn = 0
+
+        diagHintLast = CELL_COUNT - 1
+        for diagHintCell = 0 to diagHintLast
+            diagHintX = 0
+            diagHintY = 0
+            diagHintSlope = 0
+            diagHintDelay = 0
+            diagHintSpot = 0
+
+            diagHintKind = 0
+            if diagHintOn then diagHintKind = diagonalKind(diagHintCell)
+            if diagHintKind > 0
+                diagHintColumn = CELLS(diagHintCell).coord.x
+                diagHintRow = CELLS(diagHintCell).coord.y
+
+                ` it leans toward every corner that has one of its own kind at it. a fish with one on
+                ` both sides of it is pulled both ways, and does not lean at all.
+                if diagonalSame(diagHintColumn - 1, diagHintRow - 1, diagHintKind)
+                    diagHintX = diagHintX - 1
+                    diagHintY = diagHintY - 1
+                endif
+                if diagonalSame(diagHintColumn + 1, diagHintRow - 1, diagHintKind)
+                    diagHintX = diagHintX + 1
+                    diagHintY = diagHintY - 1
+                endif
+                if diagonalSame(diagHintColumn - 1, diagHintRow + 1, diagHintKind)
+                    diagHintX = diagHintX - 1
+                    diagHintY = diagHintY + 1
+                endif
+                if diagonalSame(diagHintColumn + 1, diagHintRow + 1, diagHintKind)
+                    diagHintX = diagHintX + 1
+                    diagHintY = diagHintY + 1
+                endif
+
+                ` and it shuffles when it is in a line that is one fish short, or longer. the fish at the
+                ` left end goes when the wave of the current gets to it, and each one after it goes a
+                ` little later than the one before, however the line lies to the wave.
+                diagHintNeed = getDiagonalLength() - 1
+                diagHintWay = -1
+                while diagHintWay <= 1
+                    diagHintRun = diagonalLineThrough(diagHintCell, diagHintWay)
+                    if diagHintRun >= diagHintNeed
+                        diagHintHead = DIAGONAL_LINE(0)
+                        diagHintAlong# = CELLS(diagHintHead).coord.x * CURRENT_DIR_X# + CELLS(diagHintHead).coord.y * CURRENT_DIR_Y#
+                        diagHintWave# = (diagHintAlong# * CURRENT_SPREAD# * CURRENT_PERIOD#) / 6.28318
+                        diagHintPlace = diagHintColumn - CELLS(diagHintHead).coord.x
+                        diagHintSlope = diagHintWay
+                        diagHintSpot = diagHintPlace
+                        diagHintDelay = diagHintWave#
+                        diagHintDelay = diagHintDelay + diagHintPlace * DIAGONAL_HINT_STEP_MS
+                    endif
+                    diagHintWay = diagHintWay + 2
+                endwhile
+            endif
+
+            DIAGONAL_HINT_X(diagHintCell) = diagHintX
+            DIAGONAL_HINT_Y(diagHintCell) = diagHintY
+            DIAGONAL_HINT_SLOPE(diagHintCell) = diagHintSlope
+            DIAGONAL_HINT_DELAY(diagHintCell) = diagHintDelay
+            DIAGONAL_HINT_PLACE(diagHintCell) = diagHintSpot
+        next
+    endif
+endfunction

@@ -1,0 +1,471 @@
+goto routines_beat_exit
+
+remstart
+    THE DANCE
+    moving the cursor in time to a tune. see THE DANCE in fish_headers. this is a prototype.
+
+    startBeatDance picks a tune and sets up the dance. updateMusic, in fish_routines_music, sounds the
+    ding and keeps track of where the beat is. collectInput, in fish_funcs, hands every move of the
+    cursor to beatJudgeMove, and beatJudge says if it was in time. stepBeatLook draws what there is
+    to see of it, and pays out the bubbles that are left when the tune is over.
+remend
+
+` the bubbles of the beat. they are drawn the way that the floating bubbles are, with the bubble effect.
+setup_beat:
+    for beatSetupI = 0 to BEAT_BUBBLE_MAX - 1
+        beatSetupSprite = 0
+        reserve sprite id(beatSetupSprite)
+        sprite beatSetupSprite, 0, 0, TEX_PIXEL
+        set sprite effect beatSetupSprite, BUBBLE_FX_ID
+        order sprite beatSetupSprite, ORDER_FLOAT_BUBBLES
+        hide sprite beatSetupSprite
+        BEAT_BUBBLE_SPRITE(beatSetupI) = beatSetupSprite
+        BEAT_BUBBLE_STATE(beatSetupI) = BEAT_BUBBLE_OFF
+    next
+return
+
+` a window in the debug panel. frame_dbg, in fish_routines, comes here on every frame, with FISH_DEBUG.
+frame_debug_beat:
+    begin debug window("Dance")
+    if debug button("ding  (M)") = 1
+        startBeatDance(1)
+    endif
+    if BEAT_ON
+        debug text "dancing, a beat is " + str$(BEAT_PULSE) + " ms"
+    else
+        debug text "no dance"
+    endif
+    debug text "in a row: " + str$(BEAT_STREAK)
+    debug text "last move was off by " + str$(BEAT_LAST_OFF) + " ms"
+    debugBeatHanging = 0
+    for debugBeatI = 0 to BEAT_BUBBLE_MAX - 1
+        if BEAT_BUBBLE_STATE(debugBeatI) = BEAT_BUBBLE_HANGING then debugBeatHanging = debugBeatHanging + 1
+    next
+    debug text "bubbles hanging: " + str$(debugBeatHanging)
+    end debug window
+return
+
+routines_beat_exit:
+
+
+` how many beats of a melody make one beat of the dance. 1 for a tune that can be moved to as it is,
+` 2 for a quick one that is counted at half speed, and 0 for one that is not a dance at all.
+function beatPulseSteps(beatMelody)
+    beatSteps = 0
+    beatMs = MELODY_BEAT(beatMelody)
+    beatTwiceMs = beatMs * 2
+    if beatMs >= BEAT_PULSE_MIN
+        if beatMs <= BEAT_PULSE_MAX then beatSteps = 1
+    else
+        if beatTwiceMs >= BEAT_PULSE_MIN
+            if beatTwiceMs <= BEAT_PULSE_MAX then beatSteps = 2
+        endif
+    endif
+endfunction beatSteps
+
+
+` start one of the tunes that take turns on their own, the way that playRandomMelody does, and make a
+` dance of it if it can be one. when `beatForced` is 1, the tune is always one that can be, the ding
+` sounds right away, and it does not matter if a game is being played.
+function startBeatDance(beatForced)
+    if MELODY_AUTO_COUNT = 0 then exitfunction
+
+    beatPick = rnd(MELODY_AUTO_COUNT)
+    if beatPick = MELODY_LAST then beatPick = (beatPick + 1) mod MELODY_AUTO_COUNT
+
+    if beatForced
+        ` the next one along that can be danced to
+        beatFound = 0
+        for beatTry = 1 to MELODY_AUTO_COUNT
+            if beatFound = 0
+                if beatPulseSteps(beatPick) > 0
+                    beatFound = 1
+                else
+                    beatPick = (beatPick + 1) mod MELODY_AUTO_COUNT
+                endif
+            endif
+        next
+    endif
+
+    ` this ends a dance that was going on
+    playMelody(beatPick)
+
+    beatDanceSteps = beatPulseSteps(beatPick)
+    if beatForced = 0
+        if MENU_MODE then beatDanceSteps = 0
+    endif
+    if beatDanceSteps = 0 then exitfunction
+
+    beatNow = game ms()
+    BEAT_PULSE_STEPS = beatDanceSteps
+    BEAT_PULSE = MELODY_BEAT(beatPick) * beatDanceSteps
+    beatLead = BEAT_PULSE * BEAT_LEAD_PULSES
+
+    ` the first note waits for the ding. a tune that is waiting for its chord has longer than that
+    ` to wait anyway, unless the ding was asked for, and then the chord comes in under the tune.
+    beatFirstMs = beatNow + beatLead
+    if MELODY_NEXT_MS < beatFirstMs then MELODY_NEXT_MS = beatFirstMs
+    if beatForced then MELODY_NEXT_MS = beatFirstMs
+
+    BEAT_DING_MS = MELODY_NEXT_MS - beatLead
+    BEAT_LAST_MS = BEAT_DING_MS
+    BEAT_HIT_MS = -1
+    BEAT_STREAK = 0
+    BEAT_ON = 1
+
+    ` every beat after the ding has a place for its bubble: the ones before the first note, and then
+    ` the beats of the tune. a quick tune has half as many, and an odd one out at the end counts.
+    beatTuneBeats = (MELODY_LENGTH(beatPick) + beatDanceSteps - 1) / beatDanceSteps
+    BEAT_BUBBLE_SLOTS = (BEAT_LEAD_PULSES + beatTuneBeats) - 1
+    if BEAT_BUBBLE_SLOTS < 1 then BEAT_BUBBLE_SLOTS = 1
+    BEAT_BUBBLE_SLOT = 0
+    BEAT_BUBBLE_BEAT_MS = BEAT_DING_MS - BEAT_PULSE
+endfunction
+
+
+` where the place of a beat is, in thousandths of a pixel from the left of the screen. the places are
+` evenly spaced, from one margin to the other, and that does not always come to a whole pixel. a
+` dance with only one place has it in the middle.
+function beatSlotMilli(slotN)
+    slotSpan = WORLD_WIDTH - BEAT_BUBBLE_MARGIN * 2
+    slotMilli = WORLD_WIDTH * 500
+    if BEAT_BUBBLE_SLOTS > 1
+        slotGaps = BEAT_BUBBLE_SLOTS - 1
+        slotAlong = (slotSpan * slotN * 1000) / slotGaps
+        slotMilli = BEAT_BUBBLE_MARGIN * 1000 + slotAlong
+    endif
+endfunction slotMilli
+
+
+` the same, in whole pixels
+function beatSlotX(slotPlace)
+    slotWhole = beatSlotMilli(slotPlace) / 1000
+endfunction slotWhole
+
+
+` the part of the dance that goes on from frame to frame. updateMusic calls this, with the time.
+function stepBeat(beatStepMs)
+    if BEAT_ON = 0 then exitfunction
+
+    ` something stopped the tune before the ding. there is nothing to dance to.
+    if MELODY_PLAYING < 0
+        if BEAT_DING_MS >= 0
+            BEAT_ON = 0
+            BEAT_DING_MS = -1
+            exitfunction
+        endif
+    endif
+
+    ` the ding
+    if BEAT_DING_MS >= 0
+        if beatStepMs >= BEAT_DING_MS
+            BEAT_LAST_MS = BEAT_DING_MS
+            BEAT_DING_MS = -1
+            playMusicShot(MUSIC_SHOT_PING)
+        endif
+    endif
+
+    ` the tune is over. a move that is right on its last beat still counts.
+    if MELODY_PLAYING < 0
+        beatOverMs = BEAT_LAST_MS + BEAT_PULSE + BEAT_WINDOW
+        if beatStepMs > beatOverMs
+            BEAT_ON = 0
+            BEAT_STREAK = 0
+        endif
+    endif
+endfunction
+
+
+` the cursor was moved, `beatAt` milliseconds into the game. this says 1 if the move was in time, 0 if
+` it was not, and -1 if it does not count either way: there is no dance, or the ding has not sounded
+` yet, or it is the second move on the one beat.
+function beatJudge(beatAt)
+    beatResult = -1
+
+    beatOpen = BEAT_ON
+    if BEAT_DING_MS >= 0 then beatOpen = 0
+    if BEAT_PULSE <= 0 then beatOpen = 0
+
+    if beatOpen
+        ` how far it is past the beat before it, and which beat that was
+        beatSince = beatAt - BEAT_LAST_MS
+        if beatSince < 0 then beatSince = 0
+        beatOff = beatSince mod BEAT_PULSE
+        beatNear = beatAt - beatOff
+        BEAT_LAST_OFF = beatOff
+
+        ` or it is closer to the beat after it
+        beatOffTwice = beatOff * 2
+        if beatOffTwice > BEAT_PULSE
+            beatOff = BEAT_PULSE - beatOff
+            beatNear = beatNear + BEAT_PULSE
+            BEAT_LAST_OFF = 0 - beatOff
+        endif
+
+        ` the outline of the cursor flashes. it is whiter the closer the move was to the beat, and a
+        ` move halfway between two beats does not flash at all.
+        beatOffNow# = beatOff
+        beatHalf# = BEAT_PULSE * .5
+        beatClose# = 1 - beatOffNow# / beatHalf#
+        if beatClose# < 0 then beatClose# = 0
+        BEAT_FLASH# = beatClose# * beatClose#
+        if beatOff <= BEAT_PERFECT then BEAT_FLASH# = 1
+        BEAT_FLASH_AT = beatAt
+        BEAT_FLASHING = 1
+
+        if beatOff <= BEAT_WINDOW
+            if beatNear <> BEAT_HIT_MS
+                BEAT_HIT_MS = beatNear
+                BEAT_STREAK = BEAT_STREAK + 1
+                beatResult = 1
+
+                ` the bubble that came up for this beat freezes where it is. it pops right on the beat,
+                ` so if the move was a little late, it has started to pop, and it comes back.
+                beatHalfPulse = BEAT_PULSE / 2
+                for beatBub = 0 to BEAT_BUBBLE_MAX - 1
+                    beatBubLive = 0
+                    if BEAT_BUBBLE_STATE(beatBub) = BEAT_BUBBLE_RISING then beatBubLive = 1
+                    if BEAT_BUBBLE_STATE(beatBub) = BEAT_BUBBLE_POPPING then beatBubLive = 1
+                    if beatBubLive
+                        beatBubGap = abs(BEAT_BUBBLE_DUE_MS(beatBub) - beatNear)
+                        if beatBubGap < beatHalfPulse
+                            BEAT_BUBBLE_STATE(beatBub) = BEAT_BUBBLE_HANGING
+                        endif
+                    endif
+                next
+            endif
+        else
+            BEAT_STREAK = 0
+            beatResult = 0
+            beatPopDrifting(beatAt)
+        endif
+    endif
+endfunction beatResult
+
+
+` the bubble `cashBubble`, which was frozen when the tune ended, has popped. it makes the sound that a
+` bubble makes when it pops, from the side of the screen that it is on. and the bar of the multiplier
+` goes up by one, the way that it does for a swap that pops fish, and wiggles and fizzes. the very
+` first game has no multiplier.
+function beatCashBubble(cashBubble)
+    playBubblePop(BEAT_BUBBLE_X(cashBubble), BEAT_BUBBLE_SIZE(cashBubble), BEAT_POP_VOLUME#)
+
+    if tutorialMovesOff() then exitfunction
+    fillMultiplierBar()
+    wiggleMultiplierBar()
+    refreshMultiplier(150)
+endfunction
+
+
+` every bubble of the beat that is still drifting up pops. the ones that are frozen stay. `beatPopMs`
+` is the time.
+function beatPopDrifting(beatPopMs)
+    for beatPopN = 0 to BEAT_BUBBLE_MAX - 1
+        if BEAT_BUBBLE_STATE(beatPopN) = BEAT_BUBBLE_RISING
+            BEAT_BUBBLE_STATE(beatPopN) = BEAT_BUBBLE_POPPING
+            BEAT_BUBBLE_FROM_MS(beatPopN) = beatPopMs
+        endif
+    next
+endfunction
+
+
+` the cursor was moved just now. collectInput calls this. it can run many times on a frame, and a
+` press of a key is new for all of that frame, so only the first one is looked at.
+function beatJudgeMove()
+    if BEAT_ON = 0 then exitfunction
+    if frame number() = BEAT_JUDGED_FRAME then exitfunction
+    BEAT_JUDGED_FRAME = frame number()
+
+    beatMoveResult = beatJudge(game ms())
+endfunction
+
+
+` a bubble of the beat comes up from the bottom of the screen, in the place `upSlot`, and drifts up. it
+` set out at `upFromMs`, and `upDueMs` is the beat that it is for.
+function beatBubbleUp(upFromMs, upDueMs, upSlot)
+    upI = BEAT_BUBBLE_NEXT
+    BEAT_BUBBLE_NEXT = (BEAT_BUBBLE_NEXT + 1) mod BEAT_BUBBLE_MAX
+
+    upSize = 7 + rnd(6)
+
+    BEAT_BUBBLE_STATE(upI) = BEAT_BUBBLE_RISING
+    BEAT_BUBBLE_FROM_MS(upI) = upFromMs
+    BEAT_BUBBLE_DUE_MS(upI) = upDueMs
+    BEAT_BUBBLE_X(upI) = beatSlotX(upSlot)
+    BEAT_BUBBLE_EXACT_X#(upI) = beatSlotMilli(upSlot) * .001
+    BEAT_BUBBLE_SHOW_X#(upI) = BEAT_BUBBLE_EXACT_X#(upI)
+    BEAT_BUBBLE_RISE(upI) = BEAT_BUBBLE_RISE_MIN + rnd((BEAT_BUBBLE_RISE_MAX - BEAT_BUBBLE_RISE_MIN) + 1)
+    BEAT_BUBBLE_SIZE(upI) = upSize
+    BEAT_BUBBLE_Y#(upI) = WORLD_HEIGHT + upSize
+
+    ` it is not shown until stepBeatLook has put it where it belongs
+    color sprite BEAT_BUBBLE_SPRITE(upI), rgb(200, 230, 255)
+endfunction
+
+
+` what a dance looks like: the flash of the cursor, and the bubbles of the beat. update_frame, in fish_routines, calls this on every frame.
+function stepBeatLook()
+    lookNow = game ms()
+
+    ` THE FLASH. the outline goes from white back to its own color, which is the color of coral while
+    ` a song is open. see coralOpenSong.
+    if BEAT_FLASHING
+        lookWhite# = 0
+        lookFlashAge = lookNow - BEAT_FLASH_AT
+        if lookFlashAge < 0 then lookFlashAge = 0
+        if lookFlashAge < BEAT_FLASH_TIME
+            lookFlashAge# = lookFlashAge
+            lookFlashTime# = BEAT_FLASH_TIME
+            lookWhite# = BEAT_FLASH# * (1 - lookFlashAge# / lookFlashTime#)
+        else
+            BEAT_FLASHING = 0
+        endif
+
+        ` the cursor is fading away, or it is faded out. see stepTuna, and the endings of the hidden game.
+        lookFlashOk = 1
+        if TUNA_CURSOR_FADED then lookFlashOk = 0
+        if CORAL_ENDING then lookFlashOk = 0
+
+        if lookFlashOk
+            lookR# = 112 / 255.0
+            lookG# = 140 / 255.0
+            lookB# = 224 / 255.0
+            if CORAL_OPEN
+                lookR# = 1
+                lookG# = 150 / 255.0
+                lookB# = 140 / 255.0
+            endif
+
+            ` a move that was close to the beat makes the outline thicker for a moment, as well
+            lookThick = 1
+            if lookWhite# > .5 then lookThick = 2
+
+            lookR# = lookR# + (1 - lookR#) * lookWhite#
+            lookG# = lookG# + (1 - lookG#) * lookWhite#
+            lookB# = lookB# + (1 - lookB#) * lookWhite#
+            set sprite all texcoord1 SELECTION_SPRITE, lookR#, lookG#, lookB#, lookThick
+        endif
+    endif
+
+    ` THE BUBBLES OF THE BEAT. one comes up on every beat, in the place of the beat after, as long as
+    ` one of the last few beats had a move in time with it.
+    lookDancing = BEAT_ON
+    if BEAT_DING_MS >= 0 then lookDancing = 0
+    if BEAT_PULSE <= 0 then lookDancing = 0
+    if lookDancing
+        ` the beat that went by last
+        lookSince = lookNow - BEAT_LAST_MS
+        if lookSince < 0 then lookSince = 0
+        lookPast = lookSince mod BEAT_PULSE
+        lookBeat = lookNow - lookPast
+
+        ` half a beat of room, because the beats shift a little if the game stalls
+        lookGap = lookBeat - BEAT_BUBBLE_BEAT_MS
+        lookHalf = BEAT_PULSE / 2
+        if lookGap > lookHalf
+            BEAT_BUBBLE_BEAT_MS = lookBeat
+
+            lookRecent = 0
+            if BEAT_HIT_MS >= 0
+                lookSinceHit = lookBeat - BEAT_HIT_MS
+                lookRecentMs = BEAT_PULSE * BEAT_BUBBLE_RECENT - lookHalf
+                if lookSinceHit < lookRecentMs then lookRecent = 1
+            endif
+            if BEAT_BUBBLE_SLOT >= BEAT_BUBBLE_SLOTS then lookRecent = 0
+            if lookRecent
+                beatBubbleUp(lookBeat, lookBeat + BEAT_PULSE, BEAT_BUBBLE_SLOT)
+            endif
+
+            ` the place is used up, with a bubble in it or not
+            BEAT_BUBBLE_SLOT = BEAT_BUBBLE_SLOT + 1
+        endif
+    else
+        ` the tune is over. the ones that are frozen pop one at a time, from left to right, and each
+        ` one is worth a step of the bar of the multiplier. one that was still drifting up just pops.
+        lookLeft = -1
+        lookLeftX = 0
+        for lookI = 0 to BEAT_BUBBLE_MAX - 1
+            if BEAT_BUBBLE_STATE(lookI) = BEAT_BUBBLE_RISING
+                BEAT_BUBBLE_STATE(lookI) = BEAT_BUBBLE_POPPING
+                BEAT_BUBBLE_FROM_MS(lookI) = lookNow
+            endif
+            if BEAT_BUBBLE_STATE(lookI) = BEAT_BUBBLE_HANGING
+                lookFurther = 0
+                if lookLeft < 0 then lookFurther = 1
+                if BEAT_BUBBLE_X(lookI) < lookLeftX then lookFurther = 1
+                if lookFurther
+                    lookLeft = lookI
+                    lookLeftX = BEAT_BUBBLE_X(lookI)
+                endif
+            endif
+        next
+        if lookLeft >= 0
+            if lookNow >= BEAT_CASH_MS
+                BEAT_BUBBLE_STATE(lookLeft) = BEAT_BUBBLE_POPPING
+                BEAT_BUBBLE_FROM_MS(lookLeft) = lookNow
+                BEAT_CASH_MS = lookNow + BEAT_CASH_GAP
+                beatCashBubble(lookLeft)
+            endif
+        endif
+    endif
+
+    for lookI = 0 to BEAT_BUBBLE_MAX - 1
+        lookState = BEAT_BUBBLE_STATE(lookI)
+        if lookState <> BEAT_BUBBLE_OFF
+            lookSprite = BEAT_BUBBLE_SPRITE(lookI)
+            lookScale# = 1
+            lookAlpha# = 1
+            lookDrawY# = BEAT_BUBBLE_Y#(lookI)
+
+            lookAge = lookNow - BEAT_BUBBLE_FROM_MS(lookI)
+            if lookAge < 0 then lookAge = 0
+            lookAge# = lookAge
+
+            if lookState = BEAT_BUBBLE_RISING
+                ` it drifts up, wobbling from side to side, and it is fainter until it has been earned
+                lookStartY# = WORLD_HEIGHT + BEAT_BUBBLE_SIZE(lookI)
+                lookUp# = BEAT_BUBBLE_RISE(lookI) * lookAge# * .001
+                lookDrawY# = lookStartY# - lookUp#
+                BEAT_BUBBLE_Y#(lookI) = lookDrawY#
+                BEAT_BUBBLE_SHOW_X#(lookI) = BEAT_BUBBLE_EXACT_X#(lookI) + sin(lookNow * .004 + lookI) * 2
+                lookAlpha# = .55
+                if lookAge < 90 then lookScale# = lookAge# / 90
+
+                ` its beat has come, and the cursor has not been moved in time with it. it pops right
+                ` on the beat, which shows when the move should have been. see beatJudge for a late one.
+                lookLate = lookNow - BEAT_BUBBLE_DUE_MS(lookI)
+                if lookLate >= 0
+                    BEAT_BUBBLE_STATE(lookI) = BEAT_BUBBLE_POPPING
+                    BEAT_BUBBLE_FROM_MS(lookI) = lookNow
+                endif
+            endif
+
+            ` one that is frozen is drawn where it was when the move was made, and so is one that is popping
+
+            if lookState = BEAT_BUBBLE_POPPING
+                ` it swells and fades, the way that the other bubbles pop
+                lookPopTime# = BEAT_BUBBLE_POP_MS
+                lookPop# = lookAge# / lookPopTime#
+                if lookPop# >= 1
+                    BEAT_BUBBLE_STATE(lookI) = BEAT_BUBBLE_OFF
+                else
+                    lookScale# = 1 + .6 * lookPop#
+                    lookAlpha# = 1 - lookPop#
+                endif
+            endif
+
+            if BEAT_BUBBLE_STATE(lookI) = BEAT_BUBBLE_OFF
+                hide sprite lookSprite
+            else
+                lookSize# = BEAT_BUBBLE_SIZE(lookI) * lookScale#
+                show sprite lookSprite
+                position sprite lookSprite, BEAT_BUBBLE_SHOW_X#(lookI), lookDrawY#
+                size sprite lookSprite, lookSize#, lookSize#
+                set sprite all texcoord1 lookSprite, lookSize#, 0, 0, 0
+                set sprite alpha lookSprite, 255 * lookAlpha#
+            endif
+        endif
+    next
+endfunction
+
+

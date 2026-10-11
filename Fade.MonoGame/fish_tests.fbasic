@@ -1795,6 +1795,17 @@ test fish_come_home_when_the_game_is_carried_on from fishBoard
     end
 endtest
 
+test fish_on_coral_stay_when_the_others_go_home from fishBoard
+    assert fishStaysHome(testIndex(2, 3)) = 0, "a fish with no coral under it leaves"
+
+    CORAL_CELLS(testIndex(2, 3)) = 1
+    assert fishStaysHome(testIndex(2, 3)) = 1, "a fish on coral stays"
+
+    CORAL_SICK(testIndex(2, 3)) = 1
+    assert fishStaysHome(testIndex(2, 3)) = 0, "and a fish on horror coral leaves"
+    end
+endtest
+
 test show_time_makes_the_next_two_hints_the_easy_kind from fishBoard
     assert CARDS(ABILITY_INDEX_SHOW_TIME).abilityType = ABILITY_TYPE_INSTANT, "show time is an instant"
     assert CORAL_SHOW_TIME_LEFT = 0, "nothing is owed to start with"
@@ -2580,7 +2591,7 @@ endtest
 ` THE CODEC
 
 test codec_has_entries_for_coral_after_the_cards from fishBoard
-    assert CODEC_COUNT = CARD_LENGTH + 11, "every card, coral, horror coral, the two endings, three special fish, and four things that happen to a fish"
+    assert CODEC_COUNT = CARD_LENGTH + 13, "every card, coral, horror coral, the two endings, three special fish, four things that happen to a fish, the QR code, and the crooked bar"
     assert CODEC_ENTRY_JELLY = CARD_LENGTH + 4, "the special fish come after the endings"
     assert CODEC_ENTRY_STACK = CARD_LENGTH + 9, "stacked comes after the other things that happen to a fish"
     assert CODEC_ENTRY_HOME = CARD_LENGTH + 10, "and heart home is last"
@@ -3065,5 +3076,401 @@ test coral_only_one_pattern_is_out_at_a_time from fishBoard
     judgeCoralCast(1)
     assert CORAL_SEQ_LENGTH(0) > 0, "a new one takes its place when it is cast"
     assert CORAL_SEQ_LENGTH(1) = 0, "and there is still only the one"
+    end
+endtest
+
+
+` DIAGONALS. see fish_headers.
+
+test diagonal_swap_stacks_the_line_and_adds_to_the_multiplier from fishBoard
+    SCORE_MULTIPLIER = 2
+    MULT_PROGRESS = 1
+    testPut(2, 2, 6)
+    testPut(3, 3, 6)
+    testPut(4, 4, 6)
+    testPut(5, 4, 6)
+    testCursor(5, 4)
+    testQueueMove(0, 1, 1, -1)
+
+    runto _combos_judged
+
+    assert totalComboCount = 0, "nothing popped"
+    assert CELLS(testIndex(5, 5)).value = 6, "the swap put the fourth fish on the end of the line"
+    assert CELLS(testIndex(2, 2)).stack = 1, "the fish at the far end of the line picked up a fish"
+    assert CELLS(testIndex(3, 3)).stack = 1, "and the next one"
+    assert CELLS(testIndex(4, 4)).stack = 1, "and the next one"
+    assert CELLS(testIndex(5, 5)).stack = 1, "and the one that the swap brought"
+    assert CELLS(testIndex(5, 4)).stack = 0, "the fish that it traded places with did not"
+    assert CURRENT_SCORE = 8, "four fish score one point each, times the multiplier as it was"
+    assert SCORE_MULTIPLIER = 3, "the multiplier went up by one"
+    assert MULT_PROGRESS = 1, "and the swap was not held against the bar, though it popped nothing"
+    assert CURRENT_MOVE_COUNT = 1, "it is a move like any other"
+    end
+endtest
+
+test diagonal_goes_either_way from fishBoard
+    testPut(2, 6, 6)
+    testPut(3, 5, 6)
+    testPut(4, 4, 6)
+    testPut(5, 4, 6)
+    testCursor(5, 4)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+
+    assert CELLS(testIndex(2, 6)).stack = 1, "a line that goes up to the right pays out too"
+    assert CELLS(testIndex(5, 3)).stack = 1, "all the way along"
+    assert SCORE_MULTIPLIER = 2, "and the multiplier went up by one"
+    end
+endtest
+
+test diagonal_of_three_is_a_swap_that_popped_nothing from fishBoard
+    SCORE_MULTIPLIER = 2
+    testPut(2, 2, 6)
+    testPut(3, 3, 6)
+    testPut(4, 3, 6)
+    testCursor(4, 3)
+    testQueueMove(0, 1, 1, -1)
+
+    runto _combos_judged
+
+    assert CELLS(testIndex(4, 4)).value = 6, "the swap made a line of three"
+    assert CELLS(testIndex(4, 4)).stack = 0, "which is one short, so nothing is stacked"
+    assert CURRENT_SCORE = 0, "and nothing scores"
+    assert SCORE_MULTIPLIER = 1, "and the swap cost the multiplier as usual"
+    end
+endtest
+
+test diagonal_that_was_already_there_pays_nothing from fishBoard
+    SCORE_MULTIPLIER = 2
+    testPut(2, 2, 6)
+    testPut(3, 3, 6)
+    testPut(4, 4, 6)
+    testPut(5, 5, 6)
+    testCursor(7, 1)
+    testQueueMove(1, 0, 1, -1)
+
+    runto _combos_judged
+
+    assert CELLS(testIndex(2, 2)).stack = 0, "a swap somewhere else did not make the line"
+    assert CURRENT_SCORE = 0, "so nothing scores"
+    assert SCORE_MULTIPLIER = 1, "and the swap cost the multiplier as usual"
+    end
+endtest
+
+test diagonal_is_not_made_by_trading_two_of_a_kind from fishBoard
+    SCORE_MULTIPLIER = 2
+    testPut(2, 2, 6)
+    testPut(3, 3, 6)
+    testPut(4, 4, 6)
+    testPut(5, 5, 6)
+    testPut(6, 5, 6)
+    testCursor(5, 5)
+    testQueueMove(1, 0, 1, -1)
+
+    runto _combos_judged
+
+    assert totalComboCount = 0, "nothing popped"
+    assert CELLS(testIndex(5, 5)).stack = 0, "the line is the same as it was, so it does not pay out again"
+    assert SCORE_MULTIPLIER = 1, "and the swap cost the multiplier as usual"
+    end
+endtest
+
+test diagonal_fish_that_was_paid_is_let_off_and_not_paid_again from fishBoard
+    ` the fourth fish is taken off of the end of a line that has paid out, and put back
+    SCORE_MULTIPLIER = 3
+    MULT_PROGRESS = 1
+    testPut(2, 2, 6)
+    testPut(3, 3, 6)
+    testPut(4, 4, 6)
+    testPut(5, 4, 6)
+    for tColumn = 2 to 4
+        DIAGONAL_PAID(testIndex(tColumn, tColumn)) = 6
+        CELLS(testIndex(tColumn, tColumn)).stack = 1
+    next
+    DIAGONAL_PAID(testIndex(5, 4)) = 6
+    CELLS(testIndex(5, 4)).stack = 1
+    testCursor(5, 4)
+    testQueueMove(0, 1, 1, -1)
+
+    runto _combos_judged
+
+    assert CELLS(testIndex(5, 5)).value = 6, "the swap put the line back together"
+    assert DIAGONAL_PAID(testIndex(5, 5)) = 6, "having paid out went along with the fish"
+    assert CELLS(testIndex(5, 5)).stack = 1, "so it does not pick up another fish"
+    assert CELLS(testIndex(2, 2)).stack = 1, "and neither does the rest of the line"
+    assert CURRENT_SCORE = 0, "nothing scores"
+    assert SCORE_MULTIPLIER = 3, "the multiplier does not go up again, and nothing is taken off of it"
+    assert MULT_PROGRESS = 1, "and the bar is left alone"
+    end
+endtest
+
+test diagonal_of_five_adds_two_to_the_multiplier from fishBoard
+    testPut(1, 1, 6)
+    testPut(2, 2, 6)
+    testPut(3, 2, 6)
+    testPut(4, 4, 6)
+    testPut(5, 5, 6)
+    testCursor(3, 2)
+    testQueueMove(0, 1, 1, -1)
+
+    runto _combos_judged
+
+    assert totalComboCount = 0, "nothing popped"
+    assert CELLS(testIndex(1, 1)).stack = 1, "the line of five pays out from one end"
+    assert CELLS(testIndex(5, 5)).stack = 1, "to the other"
+    assert CURRENT_SCORE = 5, "five fish score a point each"
+    assert SCORE_MULTIPLIER = 3, "and the fifth fish is one more for the multiplier"
+    end
+endtest
+
+test diagonal_of_six_adds_three_to_the_multiplier from fishBoard
+    testPut(1, 1, 6)
+    testPut(2, 2, 6)
+    testPut(3, 3, 6)
+    testPut(4, 3, 6)
+    testPut(5, 5, 6)
+    testPut(6, 6, 6)
+    testCursor(4, 3)
+    testQueueMove(0, 1, 1, -1)
+
+    runto _combos_judged
+
+    assert CELLS(testIndex(6, 6)).stack = 1, "the line of six pays out"
+    assert SCORE_MULTIPLIER = 4, "and adds three to the multiplier"
+    end
+endtest
+
+test diagonal_that_a_new_fish_joins_pays_out_in_full from fishBoard
+    ` a line of four that has paid out, and a fifth fish that is swapped onto the end of it
+    SCORE_MULTIPLIER = 2
+    testPut(1, 1, 6)
+    testPut(2, 2, 6)
+    testPut(3, 3, 6)
+    testPut(4, 4, 6)
+    testPut(5, 4, 6)
+    for tColumn = 1 to 4
+        DIAGONAL_PAID(testIndex(tColumn, tColumn)) = 6
+        CELLS(testIndex(tColumn, tColumn)).stack = 1
+    next
+    testCursor(5, 4)
+    testQueueMove(0, 1, 1, -1)
+
+    runto _combos_judged
+
+    assert CELLS(testIndex(5, 5)).stack = 1, "the new fish picks up a fish"
+    assert CELLS(testIndex(1, 1)).stack = 2, "and so do the ones that had paid out, because a new fish makes the whole line good again"
+    assert CURRENT_SCORE = 10, "all five fish score"
+    assert SCORE_MULTIPLIER = 4, "and the multiplier gets all that a line of five is worth"
+    assert DIAGONAL_PAID(testIndex(5, 5)) = 6, "the new fish has paid out now, like the rest"
+    end
+endtest
+
+test diagonal_paid_is_forgotten_when_the_fish_is_gone from fishBoard
+    DIAGONAL_PAID(testIndex(3, 3)) = 6
+    DIAGONAL_PAID(testIndex(4, 4)) = 6
+    swapCellStacks(testIndex(3, 3), testIndex(3, 4))
+    clearCellStack(testIndex(4, 4))
+
+    assert DIAGONAL_PAID(testIndex(3, 4)) = 6, "it goes where the fish goes"
+    assert DIAGONAL_PAID(testIndex(3, 3)) = 0, "and is not left behind"
+    assert DIAGONAL_PAID(testIndex(4, 4)) = 0, "and a new fish has not paid out"
+    end
+endtest
+
+test diagonal_hints_lean_a_pair_together_and_shuffle_a_three from fishBoard
+    testPut(1, 1, 6)
+    testPut(2, 2, 6)
+    testPut(5, 5, 7)
+    testPut(6, 4, 7)
+    testPut(7, 3, 7)
+
+    DIAGONAL_HINT_MS = 0
+    stepDiagonalHints()
+
+    assert DIAGONAL_HINT_X(testIndex(1, 1)) = 1, "the upper fish of a pair leans to the right"
+    assert DIAGONAL_HINT_Y(testIndex(1, 1)) = 1, "and down, toward the other one"
+    assert DIAGONAL_HINT_X(testIndex(2, 2)) = -1, "which leans back to the left"
+    assert DIAGONAL_HINT_Y(testIndex(2, 2)) = -1, "and up"
+    assert DIAGONAL_HINT_SLOPE(testIndex(1, 1)) = 0, "a pair does not shuffle"
+    assert DIAGONAL_HINT_X(testIndex(6, 4)) = 0, "the middle fish of three is pulled both ways, and does not lean"
+    assert DIAGONAL_HINT_SLOPE(testIndex(5, 5)) = -1, "a line that is one short shuffles along the way that it goes, which is up to the right"
+    assert DIAGONAL_HINT_SLOPE(testIndex(6, 4)) = -1, "every fish of it"
+    assert DIAGONAL_HINT_SLOPE(testIndex(7, 3)) = -1, "to the far end"
+    tFirst = DIAGONAL_HINT_DELAY(testIndex(5, 5))
+    tSecond = DIAGONAL_HINT_DELAY(testIndex(6, 4))
+    tThird = DIAGONAL_HINT_DELAY(testIndex(7, 3))
+    assert tSecond = tFirst + DIAGONAL_HINT_STEP_MS, "each fish goes a little after the one before it"
+    assert tThird = tSecond + DIAGONAL_HINT_STEP_MS, "all the way along"
+    assert DIAGONAL_HINT_SLOPE(testIndex(4, 4)) = 0, "and a fish with none of its own kind at a corner is left alone"
+    end
+endtest
+
+test diagonal_pays_out_before_the_group_that_the_same_swap_made from fishBoard
+    ` the fish that is swapped down finishes a line of four, corner to corner, and a row of three
+    SCORE_MULTIPLIER = 2
+    testPut(2, 2, 6)
+    testPut(3, 3, 6)
+    testPut(4, 4, 6)
+    testPut(5, 4, 6)
+    testPut(6, 5, 6)
+    testPut(7, 5, 6)
+    testCursor(5, 4)
+    testQueueMove(0, 1, 1, -1)
+
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the row of three pops"
+    assert testPops(5, 5), "with the fish that the swap brought"
+    assert CELLS(testIndex(2, 2)).stack = 1, "and the line paid out as well"
+    assert CELLS(testIndex(5, 5)).stack = 1, "to the fish that is popping, too"
+    assert SCORE_MULTIPLIER = 3, "the line added one to the multiplier"
+    ` the line: four fish at one point each, times 2. the row: 10 + 20 + 30 for the three fish, and 40
+    ` for the fish that is stacked behind one of them, all of it times 3.
+    assert CURRENT_SCORE = 308, "the line was scored first, and the group with the multiplier that it raised"
+    assert DIAGONAL_WAIT > 0, "and the pops wait for the line"
+    assert CODEC_SEEN(CODEC_ENTRY_CROOKED) = 1, "the codec has an entry for it now"
+    end
+endtest
+
+test diagonal_is_locked_in_the_codec_until_one_is_made from fishBoard
+    assert CODEC_ENTRY_CROOKED = CARD_LENGTH + 12, "the crooked bar comes after everything else in the codec"
+    assert getCodecPref(CODEC_ENTRY_CROOKED) = CODEC_PREF_MORE + 2, "and it is remembered right after the QR code"
+    CODEC_SEEN(CODEC_ENTRY_CROOKED) = 0
+
+    testPut(2, 2, 6)
+    testPut(3, 3, 6)
+    testPut(4, 3, 6)
+    testCursor(4, 3)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+
+    assert CODEC_SEEN(CODEC_ENTRY_CROOKED) = 0, "a line that is one short does not unlock it"
+    end
+endtest
+
+
+` THE CARDS OF THE DIAGONALS. see DIAGONALS in fish_headers.
+
+test sneaking_death_turns_the_line_belly_up from fishBoard
+    grantPassive(ABILITY_INDEX_SNEAKING_DEATH)
+    testPut(2, 2, 6)
+    testPut(3, 3, 6)
+    testPut(4, 4, 6)
+    testPut(5, 4, 6)
+    CELLS(testIndex(3, 3)).bellyUp = 1
+    testCursor(5, 4)
+    testQueueMove(0, 1, 1, -1)
+
+    runto _combos_judged
+
+    assert CELLS(testIndex(2, 2)).bellyUp = 1, "a fish of the line goes belly up"
+    assert CELLS(testIndex(5, 5)).bellyUp = 1, "and so does the one that the swap brought"
+    assert CELLS(testIndex(3, 3)).bellyUp = 2, "the one that was belly up already is a skeleton now"
+    assert CELLS(testIndex(2, 2)).stack = 0, "none of them picks up a fish"
+    assert CURRENT_SCORE = 4, "they still score a point each"
+    assert SCORE_MULTIPLIER = 2, "and the multiplier still goes up"
+    end
+endtest
+
+test lower_the_bar_makes_a_line_of_three_pay_out from fishBoard
+    grantPassive(ABILITY_INDEX_LOWER_BAR)
+    testPut(2, 2, 6)
+    testPut(3, 3, 6)
+    testPut(4, 3, 6)
+    testCursor(4, 3)
+    testQueueMove(0, 1, 1, -1)
+
+    runto _combos_judged
+
+    assert getDiagonalLength() = DIAGONAL_LENGTH - 1, "a line takes one fish less"
+    assert CELLS(testIndex(4, 4)).stack = 1, "so a line of three pays out"
+    assert CELLS(testIndex(2, 2)).stack = 1, "all the way along"
+    assert CURRENT_SCORE = 3, "three fish score a point each"
+    assert SCORE_MULTIPLIER = 2, "and the multiplier goes up by one"
+    end
+endtest
+
+test lower_the_bar_makes_a_line_of_four_add_two from fishBoard
+    grantPassive(ABILITY_INDEX_LOWER_BAR)
+    testPut(2, 2, 6)
+    testPut(3, 3, 6)
+    testPut(4, 4, 6)
+    testPut(5, 4, 6)
+    testCursor(5, 4)
+    testQueueMove(0, 1, 1, -1)
+
+    runto _combos_judged
+
+    assert SCORE_MULTIPLIER = 3, "a line that is one longer than it has to be adds two to the multiplier"
+    end
+endtest
+
+
+` DROPPING A PASSIVE. see fish_headers.
+
+test passive_drop_takes_it_away_and_moves_the_rest_up from fishBoard
+    grantPassive(ABILITY_INDEX_THINK_BIGGER)
+    grantPassive(ABILITY_INDEX_JELLIES)
+    grantPassive(ABILITY_INDEX_JELLIES)
+    grantPassive(ABILITY_INDEX_BOTTLES)
+    assert PASSIVE_COUNT = 3, "three passives, and one of them twice"
+    tInfos = INFO_LENGTH
+
+    dropPassive(ABILITY_INDEX_JELLIES)
+
+    assert PASSIVE_COUNT = 2, "there is one passive less"
+    assert CARDS(ABILITY_INDEX_JELLIES).obtained = 0, "the one that was dropped is not owned any more"
+    assert CARDS(ABILITY_INDEX_JELLIES).uses = 0, "not either copy of it"
+    assert getJellyChance() = 0, "so it does nothing"
+    assert PASSIVE_BINDINGS(0).abilityIndex = ABILITY_INDEX_THINK_BIGGER, "the one above it in the list stays where it was"
+    assert PASSIVE_BINDINGS(1).abilityIndex = ABILITY_INDEX_BOTTLES, "and the one under it moves up a row"
+    assert getRequiredComboCount() = 4, "the others still do what they do"
+
+    grantPassive(ABILITY_INDEX_JELLIES)
+
+    assert PASSIVE_COUNT = 3, "it can be taken again"
+    assert CARDS(ABILITY_INDEX_JELLIES).uses = 1, "and it starts again from one copy"
+    assert PASSIVE_BINDINGS(2).abilityIndex = ABILITY_INDEX_JELLIES, "at the end of the list"
+    assert INFO_LENGTH = tInfos, "and info mode uses the spot that the row had before"
+    end
+endtest
+
+test passive_drop_of_bottom_feeder_takes_its_second_copy from fishBoard
+    grantPassive(ABILITY_INDEX_BOTTOM_FEEDER)
+    grantPassive(ABILITY_INDEX_WRAP)
+    grantPassive(ABILITY_INDEX_BOTTOM_FEEDER_2)
+
+    dropPassive(ABILITY_INDEX_BOTTOM_FEEDER)
+
+    assert PASSIVE_COUNT = 1, "both of the bottom feeders are gone"
+    assert PASSIVE_BINDINGS(0).abilityIndex = ABILITY_INDEX_WRAP, "and the one that was between them is what is left"
+    assert getBottomFeederChance() = 0, "nothing stacks up on the bottom row any more"
+    end
+endtest
+
+test passive_drop_leaves_seamless_alone_in_a_zen_game from fishBoard
+    grantPassive(ABILITY_INDEX_WRAP)
+    grantPassive(ABILITY_INDEX_BOTTLES)
+    assert getDroppableCount() = 2, "both can be dropped in the usual game"
+
+    GAME_ZEN = 1
+    assert canDropPassive(ABILITY_INDEX_WRAP) = 0, "a zen game keeps the passive that it was given"
+    assert getDroppableCount() = 1, "and the other one can still be dropped"
+    GAME_ZEN = 0
+    end
+endtest
+
+test passive_drop_page_lists_what_can_be_dropped from fishBoard
+    grantPassive(ABILITY_INDEX_WRAP)
+    grantPassive(ABILITY_INDEX_BOTTLES)
+    grantPassive(ABILITY_INDEX_LISTEN)
+
+    tRows = buildDropList()
+
+    assert tRows = 4, "a row for every passive, and one that goes back"
+    assert DROP_ROW_CARD(0) = ABILITY_INDEX_WRAP, "in the order that they were taken"
+    assert DROP_ROW_CARD(2) = ABILITY_INDEX_LISTEN, "to the last of them"
+    assert DROP_ROW_CARD(3) = -1, "and the row that goes back is at the end"
     end
 endtest

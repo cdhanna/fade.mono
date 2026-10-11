@@ -92,24 +92,13 @@ function judgeMultiplierSwaps(comboCount)
         MULT_PENDING_SWAPS = 0
 
         if comboCount > 0
-            MULT_PROGRESS = MULT_PROGRESS + 1
-            requiredNow = getMultiplierRequired()
-            if MULT_PROGRESS >= requiredNow
-                ` the bar is full, so the multiplier goes up, and the bar starts again. there is no top to it.
-                SCORE_MULTIPLIER = SCORE_MULTIPLIER + 1
-                MULT_PROGRESS = 0
-
-                ` the highest that it gets goes on the table of high scores
-                if SCORE_MULTIPLIER > BEST_MULTIPLIER then BEST_MULTIPLIER = SCORE_MULTIPLIER
-
-                MULT_PUNCH_DIR = 1
-                create basic tween MULT_PUNCH_TWEEN_ID, 1, 0, 500, 0
-                spawnBubbles(MULT_POS.x + 24, MULT_POS.y + 30, 8, 14, 0, rgb(255, 255, 255))
-            endif
+            fillMultiplierBar()
         else
             ` a swap that put together a group that only coral kept from popping is let off. the bar does
-            ` not fill, and nothing is taken away. see CORAL in fish_headers.
-            if CORAL_HELD_GROUPS = 0
+            ` not fill, and nothing is taken away. see CORAL in fish_headers. a swap that made a line of
+            ` fish, corner to corner, is let off the same way. see DIAGONALS in fish_headers.
+            swapLetOff = CORAL_HELD_GROUPS + DIAGONAL_LINES
+            if swapLetOff = 0
                 ` the player can swap while fish are still popping, so more than one swap can be waiting.
                 ` every one of them that popped nothing costs one thing: the bar, if there is anything in
                 ` it, and one off of the multiplier only when the bar is already empty.
@@ -136,7 +125,42 @@ function judgeMultiplierSwaps(comboCount)
         CORAL_SWAP_B = -1
 
         refreshMultiplier(150)
+
+        ` the lines of fish that the swap made have been heard about too. judgeDiagonals has already
+        ` added what they were worth to the multiplier.
+        DIAGONAL_LINES = 0
     endif
+endfunction
+
+
+` the bar goes up by one. a swap that pops fish does this, and so does a bubble of the beat that was
+` left hanging when its tune ended. see THE DANCE in fish_headers. this does not draw the bar again.
+` refreshMultiplier does.
+function fillMultiplierBar()
+    MULT_PROGRESS = MULT_PROGRESS + 1
+    fillRequired = getMultiplierRequired()
+    if MULT_PROGRESS >= fillRequired
+        ` the bar is full, so the multiplier goes up, and the bar starts again. there is no top to it.
+        SCORE_MULTIPLIER = SCORE_MULTIPLIER + 1
+        MULT_PROGRESS = 0
+
+        ` the highest that it gets goes on the table of high scores
+        if SCORE_MULTIPLIER > BEST_MULTIPLIER then BEST_MULTIPLIER = SCORE_MULTIPLIER
+
+        MULT_PUNCH_DIR = 1
+        create basic tween MULT_PUNCH_TWEEN_ID, 1, 0, 500, 0
+        spawnBubbles(MULT_POS.x + 24, MULT_POS.y + 30, 8, 14, 0, rgb(255, 255, 255))
+    endif
+endfunction
+
+
+` the bar wiggles from side to side for a moment, and fizzes. it does this for every bubble of the beat
+` that pops when a tune is over. see THE DANCE in fish_headers. stepMultiplier does the wiggling.
+function wiggleMultiplierBar()
+    MULT_WIGGLE_AT = game ms()
+    for wiggleN = 1 to MULT_WIGGLE_FIZZ
+        spawnBubblesOnLayer(MULT_POS.x + rnd(MULT_BAR_WIDTH), MULT_POS.y + 48, 2, 1, 0, rgb(255, 255, 255), ORDER_FLOAT_BUBBLES, 40, 255, 1)
+    next
 endfunction
 
 
@@ -183,6 +207,21 @@ endfunction
 function stepMultiplier()
     fillWidth# = (MULT_BAR_WIDTH - 2.0) * tweenVal(MULT_FILL_TWEEN_ID)
     size sprite MULT_BAR_FILL_SPRITE, fillWidth#, 2
+
+    ` the wiggle of the bar dies away, and then the bar is back where setup_multiplier put it
+    if MULT_WIGGLE_AT >= 0
+        wiggleAge = game ms() - MULT_WIGGLE_AT
+        wiggleShift# = 0
+        if wiggleAge < MULT_WIGGLE_TIME
+            wiggleAge# = wiggleAge
+            wiggleTime# = MULT_WIGGLE_TIME
+            wiggleShift# = sin(wiggleAge# * .05) * MULT_WIGGLE_SIZE * (1 - wiggleAge# / wiggleTime#)
+        else
+            MULT_WIGGLE_AT = -1
+        endif
+        position sprite MULT_BAR_BACK_SPRITE, MULT_POS.x + wiggleShift#, MULT_POS.y + 46
+        position sprite MULT_BAR_FILL_SPRITE, MULT_POS.x + 1 + wiggleShift#, MULT_POS.y + 47
+    endif
 
     ` the punch is 1 when the multiplier has just changed, and it dies away to 0
     punch# = tweenVal(MULT_PUNCH_TWEEN_ID)

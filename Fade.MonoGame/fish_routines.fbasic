@@ -244,6 +244,8 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_SHOW_TIME).artTexId), "Fish/Textures/Cards/show_time"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_WASTE_BUCKET).artTexId), "Fish/Textures/Cards/waste_bucket"
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_BUNCH_UP).artTexId), "Fish/Textures/Cards/bunch_up"
+    texture reserve texture id(CARDS(ABILITY_INDEX_SNEAKING_DEATH).artTexId), "Fish/Textures/Cards/sneaking_death"
+    texture reserve texture id(CARDS(ABILITY_INDEX_LOWER_BAR).artTexId), "Fish/Textures/Cards/lower_the_bar"
 
 return
 
@@ -505,6 +507,8 @@ update_frame:
     stepMultiplier()
     stepCoral()
     stepSkeletonGhosts()
+    stepTuna()
+    stepBeatLook()
     gosub frame_hints
     updateBubbles()
     updateMusic()
@@ -551,6 +555,11 @@ frame_fish_fx:
 
     ` the same rings push the picture of the whole screen as they pass
     gosub frame_ripples
+
+    ` which fish have one of their own kind at a corner. see DIAGONALS in fish_headers.
+    stepDiagonalHints()
+    diagonalPeriod = CURRENT_PERIOD#
+    diagonalNudgeTime# = DIAGONAL_HINT_SHUFFLE_MS
 
     for i = 0 to CELL_COUNT - 1
         c = CELLS(i)
@@ -621,8 +630,54 @@ frame_fish_fx:
         ` the fish leans one way as the wave gets to it, and the other way as it leaves. the 3.7 makes the most of that 1.
         currentLean# = sin(currentPhase#) * currentNear# * 3.7 * CURRENT_TILT#
 
-        yaw# = yaw# + currentLean# * CURRENT_DIR_X#
-        pitch# = pitch# - currentLean# * CURRENT_DIR_Y#
+        ` a fish that has one of its own kind at a corner leans toward it as the wave gets there, in place of
+        ` leaning into the wave. see DIAGONALS in fish_headers.
+        diagonalLeanX# = DIAGONAL_HINT_X(i)
+        diagonalLeanY# = DIAGONAL_HINT_Y(i)
+        if diagonalLeanX# <> 0 or diagonalLeanY# <> 0
+            diagonalLean# = currentNear# * DIAGONAL_HINT_LEAN#
+            yaw# = yaw# + diagonalLean# * diagonalLeanX#
+            pitch# = pitch# - diagonalLean# * diagonalLeanY#
+        else
+            yaw# = yaw# + currentLean# * CURRENT_DIR_X#
+            pitch# = pitch# - currentLean# * CURRENT_DIR_Y#
+        endif
+
+        ` and the fish of a line that is one short nudge along it, one after another, starting when the
+        ` wave gets to the left end of the line
+        if DIAGONAL_HINT_SLOPE(i) <> 0
+            diagonalAge = shockNow + diagonalPeriod * 4
+            diagonalAge = diagonalAge - DIAGONAL_HINT_DELAY(i)
+            diagonalAge = diagonalAge mod diagonalPeriod
+
+            ` the debug key plays it right away, without waiting for a wave. see frame_dbg.
+            diagonalAsked = shockNow - DIAGONAL_HINT_NOW_MS
+            if diagonalAsked < 5000
+                diagonalAge = diagonalAsked - DIAGONAL_HINT_PLACE(i) * DIAGONAL_HINT_STEP_MS
+                if diagonalAge < 0 then diagonalAge = DIAGONAL_HINT_SHUFFLE_MS
+            endif
+            if diagonalAge < DIAGONAL_HINT_SHUFFLE_MS
+                diagonalAge# = diagonalAge
+                ` it eases out and eases back, so that the fish never starts or stops with a jerk
+                diagonalNudge# = sin((diagonalAge# * 3.14159) / diagonalNudgeTime#)
+                ` the fish drifts toward the next corner of its line, and back. a push is in whole pixels, so
+                ` it goes far enough, and slowly enough, to be a drift and not a hop.
+                diagonalNudge# = diagonalNudge# * diagonalNudge# * DIAGONAL_HINT_SHUFFLE#
+                diagonalSlope# = DIAGONAL_HINT_SLOPE(i)
+                pushX# = pushX# + diagonalNudge#
+                pushY# = pushY# + diagonalNudge# * diagonalSlope#
+            endif
+        endif
+
+        ` nothing leans, shuffles or bobs while the fish are making the QR code. see TUNA in fish_headers.
+        tunaCalm# = 1 - TUNA_EASED#
+        if TUNA_EASED# > 0
+            yaw# = yaw# * tunaCalm#
+            pitch# = pitch# * tunaCalm#
+            pushX# = pushX# * tunaCalm#
+            pushY# = pushY# * tunaCalm#
+            lift# = lift# * tunaCalm#
+        endif
 
         ` a fish that is belly up is turned all the way over, top over bottom. the turn that is drawn chases
         ` the real one, so that the fish can be seen rolling over. once it is over, it rocks from side to
@@ -636,7 +691,7 @@ frame_fish_fx:
         ` a skeleton turns the rest of the way over, back to the right way up, and stops rocking as it gets there
         bellyRock# = bellyShown#
         if bellyRock# > 3.14159 then bellyRock# = 6.28318 - bellyRock#
-        yaw# = yaw# + (sin(shockNow * .003 + i) * BELLY_UP_ROCK# * bellyRock#) / 3.14159
+        yaw# = yaw# + (sin(shockNow * .003 + i) * BELLY_UP_ROCK# * bellyRock# * tunaCalm#) / 3.14159
 
         ` and it is drawn as its bones from the moment that it is edge on, so the fish goes over and the
         ` skeleton comes around. see SKELETONS in fish_headers. whatever else sets the picture of a fish
@@ -670,7 +725,12 @@ frame_fish_fx:
         fishSize# = sprite width(c.spriteId) * sprite scale x(c.spriteId)
 
         set sprite all texcoord1 c.spriteId, pitch#, yaw#, stackShown#, fishSize#
-        set sprite all texcoord2 c.spriteId, pushX# * fishSize#, pushY# * fishSize#, lift#, 0
+
+        ` the fish goes to its place in the QR code, and gets smaller. see TUNA in fish_headers.
+        tunaPushX# = TUNA_CELL_DX(i) * TUNA_EASED#
+        tunaPushY# = TUNA_CELL_DY(i) * TUNA_EASED#
+
+        set sprite all texcoord2 c.spriteId, pushX# * fishSize# + tunaPushX#, pushY# * fishSize# + tunaPushY#, lift# + TUNA_SHRINK#, 0
     next
 
 return
@@ -682,15 +742,22 @@ frame_dbg:
     ` the debug panel also has a window that gives the player any card. see fish_routines_debug.
     ` U turns the fish above the cursor belly up, and a second press turns it into a skeleton.
     ` G grows coral on the cell that the cursor is on, and H grows horror coral there.
+    ` N plays the hint of the diagonals, right away: the shuffle that runs along every line that is one short.
     ` J plays a hint, right away, the way that it looks without the "listen" card. K plays one the way
     ` that it looks with the card, after a group of five or more: brighter, with more bubbles, and a trail.
     ` R covers the whole board with coral, which saves the reef, and T covers it with horror coral, which
     ` summons the ancient one. the ending plays, and then the game ends, the way that it would have.
     ` Y wins the game the usual way, as if the last round had been got through, so the fish go home.
+    ` M sounds the ding and starts a tune to move the cursor in time to. see THE DANCE in fish_headers.
     if is env set("FISH_DEBUG")
         if MENU_MODE = 0
             gosub frame_debug_cards
+            gosub frame_debug_beat
             if INFO_MODE = 0
+                ` the dance. see THE DANCE in fish_headers.
+                if new key down(scancode("M"))
+                    startBeatDance(1)
+                endif
                 if new key down(scancode("U"))
                     if SELECTION_POS.y > 0
                         dbgBellyIndex = SELECTION_POS.x + (SELECTION_POS.y - 1) * CELL_COLUMN_COUNT
@@ -706,6 +773,10 @@ frame_dbg:
                 endif
                 if new key down(scancode("H"))
                     coralDebugGrow(SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT, 1)
+                endif
+                ` N plays the hint of the diagonals right away: the shuffle that runs along every line that is one short
+                if new key down(scancode("N"))
+                    DIAGONAL_HINT_NOW_MS = game ms()
                 endif
                 if new key down(scancode("J"))
                     coralClearHint()
@@ -1029,6 +1100,11 @@ handle_combos:
     ` how long the pops are held back for the ghosts of the skeletons so far, in milliseconds. every
     ` group that has a skeleton in it adds to this. see THE GHOST OF A SKELETON in fish_headers.
     ghostWait = 0
+
+    ` a swap that left a line of fish of one kind, corner to corner, gets paid for it, before any group
+    ` is scored, and the pops wait until the line has been seen. see DIAGONALS in fish_headers.
+    judgeDiagonals()
+    ghostWait = ghostWait + DIAGONAL_WAIT
 
     totalComboCount = 0
     CORAL_HELD_GROUPS = 0

@@ -59,6 +59,21 @@ frame_debug_cards:
     next
 
     end debug window
+
+    ` the hint of the diagonals, to tune by eye. see THE HINTS OF THE DIAGONALS in fish_headers. the numbers
+    ` that are settled on have to be written into fish_headers by hand, because these are gone with the game.
+    begin debug window("Diagonal hint")
+    debug text "the drift along a line that is one short"
+    debugHintMoved = debug float slider("how far (fish sizes)", DIAGONAL_HINT_SHUFFLE#, 0, .4)
+    debugHintMoved = debug int slider("how long (ms)", DIAGONAL_HINT_SHUFFLE_MS, 100, 5000)
+    debugHintMoved = debug int slider("gap to next fish (ms)", DIAGONAL_HINT_STEP_MS, 0, 2000)
+    if debug button("play it now") = 1
+        DIAGONAL_HINT_NOW_MS = game ms()
+    endif
+    debug separator
+    debug text "the lean of a pair, as the current passes"
+    debugHintMoved = debug float slider("lean (radians)", DIAGONAL_HINT_LEAN#, 0, .6)
+    end debug window
 return
 
 

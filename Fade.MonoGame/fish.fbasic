@@ -88,8 +88,11 @@ gosub setup_intro
 gosub setup_seabed `before the menu, because the menu draws frames as soon as it is set up, and every frame moves the sea floor
 gosub setup_menu
 gosub setup_upgrade_wipe `this uses the menu's effect, and the cards and rows of the upgrade screen
+gosub setup_passive_drop `the page of the upgrade screen that drops a passive, which is drawn the same way
 gosub setup_float_bubbles `these use the bubble effect, which the menu loads
 gosub setup_zaps
+gosub setup_tuna
+gosub setup_beat `these use the bubble effect too
 
 
 
@@ -112,6 +115,7 @@ do
     ` TODO: stupid FX system loses parameters between reloads, so best to s8et them in a loop. 
     set effect param float 1, "TimeSpeed", 1
     applyScreenWater()
+    applyTunaScreen()
 
     ` show keys or controller buttons, depending on which one the player touched last
     gosub frame_input_icons
@@ -137,6 +141,7 @@ do
 
             ` the pause key brings up the pause menu
             if new action down(ACT_PAUSE)
+                tunaHide() `the code is drawn on top of everything, so it goes before the menu comes. see TUNA in fish_headers.
                 gosub menu_open_pause
             endif
 

@@ -216,6 +216,11 @@ function swapCellStacks(aIndex, bIndex)
     tempSung = CORAL_SUNG(aIndex)
     CORAL_SUNG(aIndex) = CORAL_SUNG(bIndex)
     CORAL_SUNG(bIndex) = tempSung
+
+    ` and a fish that has paid out in a line has still paid out. see DIAGONALS in fish_headers.
+    tempPaid = DIAGONAL_PAID(aIndex)
+    DIAGONAL_PAID(aIndex) = DIAGONAL_PAID(bIndex)
+    DIAGONAL_PAID(bIndex) = tempPaid
 endfunction
 
 ` one fish takes the place of another
@@ -224,6 +229,7 @@ function copyCellStack(fromIndex, toIndex)
     CELLS(toIndex).stackShown# = CELLS(fromIndex).stackShown#
     CELLS(toIndex).bellyUp = CELLS(fromIndex).bellyUp
     CELLS(toIndex).bellyShown# = CELLS(fromIndex).bellyShown#
+    DIAGONAL_PAID(toIndex) = DIAGONAL_PAID(fromIndex)
 endfunction
 
 ` a fish goes away, or a brand new one shows up
@@ -232,6 +238,7 @@ function clearCellStack(index)
     CELLS(index).stackShown# = 0
     CELLS(index).bellyUp = 0
     CELLS(index).bellyShown# = 0
+    DIAGONAL_PAID(index) = 0
 endfunction
 
 ` a fish just landed in this cell, from a row above it. with the "bottom feeder" card, a fish that lands
@@ -907,6 +914,11 @@ function collectInput()
     if new action down(ACT_LEFT) then swapDir.x = -1
     if new action down(ACT_UP) then swapDir.y = -1
     if new action down(ACT_DOWN) then swapDir.y = 1
+
+    ` a move that is in time with the tune is part of a dance. see THE DANCE in fish_headers.
+    if swapDir.x <> 0 or swapDir.y <> 0
+        beatJudgeMove()
+    endif
 
     ` the queue is full. moves can pile up now that they can be made while a combo is going.
     if QUEUED_MOVE_NUM >= QUEUED_MOVE_MAX - 1 then exitfunction

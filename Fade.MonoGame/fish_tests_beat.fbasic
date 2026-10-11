@@ -1,0 +1,182 @@
+remstart
+    THE TESTS OF THE DANCE
+    moving the cursor in time to a tune. see THE DANCE in fish_headers, and fish_tests for how the tests work.
+remend
+
+test beat_quick_tunes_are_counted_at_half_speed from fishBoard
+    MELODY_BEAT(MELODY_MADE) = 520
+    assert beatPulseSteps(MELODY_MADE) = 1, "a tune at a walking pace is danced to as it is"
+    MELODY_BEAT(MELODY_MADE) = 260
+    assert beatPulseSteps(MELODY_MADE) = 2, "a quick one is counted on every second beat"
+    MELODY_BEAT(MELODY_MADE) = 1000
+    assert beatPulseSteps(MELODY_MADE) = 0, "and a very slow one is not a dance"
+    MELODY_BEAT(MELODY_MADE) = 500
+    end
+endtest
+
+test beat_moves_in_time_are_counted from fishBoard
+    ` a dance with a beat every half a second, and the last beat at ten seconds
+    BEAT_ON = 1
+    BEAT_DING_MS = -1
+    BEAT_PULSE = 500
+    BEAT_LAST_MS = 10000
+    BEAT_HIT_MS = -1
+    BEAT_STREAK = 0
+
+    BEAT_FLASHING = 0
+
+    assert beatJudge(10040) = 1, "a move a little after the beat is in time"
+    assert BEAT_FLASHING = 1, "and the cursor flashes"
+    assert beatJudge(10060) = -1, "a second move on the same beat does not count either way"
+    assert BEAT_STREAK = 1, "so it is still one in a row"
+    assert beatJudge(10440) = 1, "a move a little before the next beat is in time too"
+    assert beatJudge(11500) = 1, "and a beat that went by with no move does no harm"
+    assert BEAT_STREAK = 3, "that is three in a row"
+
+    assert beatJudge(11750) = 0, "a move between two beats is not in time"
+    assert BEAT_STREAK = 0, "and the count starts over"
+    end
+endtest
+
+test beat_ding_comes_before_the_tune from fishBoard
+    startBeatDance(1)
+    assert BEAT_ON = 1, "asking for the ding starts a dance"
+    assert MELODY_PLAYING >= 0, "with a tune"
+    assert beatPulseSteps(MELODY_PLAYING) > 0, "that can be danced to"
+    assert BEAT_DING_MS >= 0, "the ding is on its way"
+    assert MELODY_NEXT_MS > BEAT_DING_MS, "and the first note comes after it"
+    assert beatJudge(BEAT_DING_MS) = -1, "a move before the ding does not count either way"
+
+    stepBeat(BEAT_DING_MS)
+    assert BEAT_DING_MS = -1, "the ding sounds when it is due"
+    assert beatJudge(BEAT_LAST_MS) = 1, "and from then on a move on the beat is in time"
+
+    ` the music of the coral takes the place of the tune
+    playMelody(MELODY_CORAL_FIRST)
+    assert BEAT_ON = 0, "another tune starting ends the dance"
+    assert beatJudge(BEAT_LAST_MS) = -1, "and moves do not count any more"
+    end
+endtest
+
+test beat_bubbles_hang_for_a_move_in_time from fishBoard
+    BEAT_ON = 1
+    BEAT_DING_MS = -1
+    BEAT_PULSE = 500
+    BEAT_LAST_MS = 10000
+    BEAT_HIT_MS = -1
+    BEAT_STREAK = 2
+
+    ` one bubble is on its way up for the beat at ten and a half seconds, and one for the beat after
+    beatBubbleUp(10000, 10500, 0)
+    tFirst = (BEAT_BUBBLE_NEXT + BEAT_BUBBLE_MAX - 1) mod BEAT_BUBBLE_MAX
+    beatBubbleUp(10500, 11000, 1)
+    tSecond = (BEAT_BUBBLE_NEXT + BEAT_BUBBLE_MAX - 1) mod BEAT_BUBBLE_MAX
+    assert BEAT_BUBBLE_STATE(tFirst) = BEAT_BUBBLE_RISING, "a bubble comes up"
+
+    tHit = beatJudge(10480)
+    assert BEAT_BUBBLE_STATE(tFirst) = BEAT_BUBBLE_HANGING, "a move in time with its beat freezes it"
+    assert BEAT_BUBBLE_STATE(tSecond) = BEAT_BUBBLE_RISING, "the one for the next beat is still on its way"
+
+    tHit = beatJudge(10750)
+    assert BEAT_BUBBLE_STATE(tSecond) = BEAT_BUBBLE_POPPING, "a move out of time pops the one that was drifting up"
+    assert BEAT_BUBBLE_STATE(tFirst) = BEAT_BUBBLE_HANGING, "but the one that was frozen stays"
+
+    ` a bubble pops right on its beat, and a move that is a little late is still in time
+    beatBubbleUp(11500, 12000, 2)
+    tThird = (BEAT_BUBBLE_NEXT + BEAT_BUBBLE_MAX - 1) mod BEAT_BUBBLE_MAX
+    BEAT_BUBBLE_STATE(tThird) = BEAT_BUBBLE_POPPING
+    tHit = beatJudge(12040)
+    assert BEAT_BUBBLE_STATE(tThird) = BEAT_BUBBLE_HANGING, "so one that had started to pop comes back, and freezes"
+    end
+endtest
+
+test beat_bubbles_left_over_fill_the_multiplier_bar from fishBoard
+    resetMultiplier()
+    tNeeded = getMultiplierRequired()
+    assert tNeeded = 2, "the first multiplier takes two"
+
+    ` the tune is over, and two bubbles were left hanging. the second one is further to the left.
+    BEAT_ON = 0
+    beatBubbleUp(0, 1, 0)
+    tFirst = (BEAT_BUBBLE_NEXT + BEAT_BUBBLE_MAX - 1) mod BEAT_BUBBLE_MAX
+    beatBubbleUp(0, 1, 0)
+    tSecond = (BEAT_BUBBLE_NEXT + BEAT_BUBBLE_MAX - 1) mod BEAT_BUBBLE_MAX
+    BEAT_BUBBLE_STATE(tFirst) = BEAT_BUBBLE_HANGING
+    BEAT_BUBBLE_STATE(tSecond) = BEAT_BUBBLE_HANGING
+    BEAT_BUBBLE_X(tFirst) = 200
+    BEAT_BUBBLE_X(tSecond) = 50
+
+    BEAT_CASH_MS = 0
+    MULT_WIGGLE_AT = -1
+    stepBeatLook()
+    assert BEAT_BUBBLE_STATE(tSecond) = BEAT_BUBBLE_POPPING, "the one on the left pops first"
+    assert BEAT_BUBBLE_STATE(tFirst) = BEAT_BUBBLE_HANGING, "and the other one waits its turn"
+    assert MULT_PROGRESS = 1, "the bar of the multiplier goes up by one"
+    assert MULT_WIGGLE_AT >= 0, "and it wiggles"
+
+    stepBeatLook()
+    assert BEAT_BUBBLE_STATE(tFirst) = BEAT_BUBBLE_HANGING, "the next one does not pop right away"
+
+    BEAT_CASH_MS = 0
+    stepBeatLook()
+    assert BEAT_BUBBLE_STATE(tFirst) = BEAT_BUBBLE_POPPING, "then it pops too"
+    assert SCORE_MULTIPLIER = 2, "and that fills the bar, so the multiplier goes up"
+    assert MULT_PROGRESS = 0, "and the bar starts again"
+    end
+endtest
+
+test beat_look_of_a_dance_can_be_drawn from fishBoard
+    ` a dance, with the ding heard, and enough moves in time for the bubbles to start
+    startBeatDance(1)
+    stepBeat(BEAT_DING_MS)
+    tBefore = BEAT_BUBBLE_NEXT
+    stepBeatLook()
+    assert BEAT_BUBBLE_NEXT = tBefore, "no bubble comes up before there has been a move in time"
+    assert BEAT_BUBBLE_SLOT = 1, "but its place is used up"
+
+    BEAT_BUBBLE_BEAT_MS = -100000
+    BEAT_HIT_MS = BEAT_LAST_MS
+    stepBeatLook()
+    assert BEAT_BUBBLE_NEXT <> tBefore, "after one, a bubble comes up on the beat"
+    assert BEAT_BUBBLE_X(tBefore) = beatSlotX(1), "in the place of its beat"
+
+    ` a move, and its flash
+    BEAT_HIT_MS = -1
+    tHit = beatJudge(BEAT_LAST_MS)
+    assert BEAT_FLASHING = 1, "a move makes the cursor flash"
+    stepBeatLook()
+    end
+endtest
+
+test beat_bubbles_have_evenly_spaced_places from fishBoard
+    ` a dance of five beats
+    BEAT_BUBBLE_SLOTS = 5
+    tLeft = BEAT_BUBBLE_MARGIN
+    tRight = WORLD_WIDTH - BEAT_BUBBLE_MARGIN
+    tMiddle = WORLD_WIDTH / 2
+    assert beatSlotX(0) = tLeft, "the first beat is on the far left"
+    assert beatSlotX(4) = tRight, "and the last one is on the far right"
+    assert beatSlotX(2) = tMiddle, "the one in the middle is in the middle"
+    ` in thousandths of a pixel, because the distance is not always a whole number of pixels
+    tGapA = beatSlotMilli(1) - beatSlotMilli(0)
+    tGapB = beatSlotMilli(4) - beatSlotMilli(3)
+    tGapOff = abs(tGapA - tGapB)
+    tEven = 0
+    if tGapOff <= 1 then tEven = 1
+    assert tEven = 1, "and they are all the same distance apart"
+
+    ` a longer tune has more places, closer together
+    BEAT_BUBBLE_SLOTS = 9
+    tGapC = beatSlotMilli(1) - beatSlotMilli(0)
+    tCloser = 0
+    if tGapC < tGapA then tCloser = 1
+    assert tCloser = 1, "a longer tune has them closer together"
+    assert beatSlotX(8) = tRight, "and its last one is still on the far right"
+
+    ` the places are counted from the tune
+    startBeatDance(1)
+    tTuneBeats = (MELODY_LENGTH(MELODY_PLAYING) + BEAT_PULSE_STEPS - 1) / BEAT_PULSE_STEPS
+    tPlaces = (BEAT_LEAD_PULSES + tTuneBeats) - 1
+    assert BEAT_BUBBLE_SLOTS = tPlaces, "one for every beat after the ding, to the last beat of the tune"
+    end
+endtest

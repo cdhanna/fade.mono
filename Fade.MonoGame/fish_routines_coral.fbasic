@@ -240,8 +240,12 @@ finale_goodbye:
         if finStep# > .05 then finStep# = .05
 
         ` a fish that has set off gets up to speed gently, and wanders up and down a little as it goes
+        ` a fish that is on coral never sets off: it is at home already. see fishStaysHome.
         for finI = 0 to CELL_COUNT - 1
             finGone# = finAge# - CORAL_DANCE_SLOT(finI)
+            if fishStaysHome(finI)
+                finGone# = 0
+            endif
             if finGone# > 0
                 finPace# = finGone# / 1500
                 if finPace# > 1 then finPace# = 1
@@ -274,12 +278,15 @@ finale_goodbye:
     until finDone
 
     ` the words go, and are the size that the other endings want them again. the fish that have not
-    ` got off of the screen yet are gone too: the board is empty under the menu that comes up next.
+    ` got off of the screen yet are gone too: the board is empty under the menu that comes up next,
+    ` but for the fish that are at home on their coral.
     set text alpha CORAL_END_TEXT_ID, 0
     set text alpha CORAL_END_SUB_TEXT_ID, 0
     size text y CORAL_END_TEXT_ID, 32
     for finI = 0 to CELL_COUNT - 1
-        position sprite CELLS(finI).spriteId, WORLD_WIDTH + 200, CORAL_DANCE_Y#(finI)
+        if fishStaysHome(finI) = 0
+            position sprite CELLS(finI).spriteId, WORLD_WIDTH + 200, CORAL_DANCE_Y#(finI)
+        endif
     next
     FISH_AWAY = 1
 
@@ -1581,6 +1588,9 @@ function coralRollHint()
     if CORAL_HINT_START_MS >= 0 then coralRollOk = 0
     if TUTORIAL_STAGE > 0 then coralRollOk = 0
 
+    ` and not while the fish are making the QR code. see TUNA in fish_headers.
+    if TUNA_SHOWN# > 0 then coralRollOk = 0
+
     ` every wave of the current gets one roll, as it sets out
     coralRollYes = 0
     coralRollLucky = 0
@@ -2359,6 +2369,16 @@ function applyHudFade()
         set sprite alpha CORAL_BAR_WISPS(hudN), 255 * hudKeep#
     next
 endfunction
+
+
+` THE FISH GO HOME. see fish_headers. 1 when the fish of a cell does not leave with the others when the
+` game is won, because it is sitting on coral that is well, and so it has a home. horror coral is no home.
+function fishStaysHome(stayIndex)
+    stayHome = 0
+    if CORAL_CELLS(stayIndex) > CORAL_SICK(stayIndex)
+        if CELLS(stayIndex).value > 0 then stayHome = 1
+    endif
+endfunction stayHome
 
 
 ` THE FISH GO HOME. see fish_headers. the fish left when the game was won, and the game is being

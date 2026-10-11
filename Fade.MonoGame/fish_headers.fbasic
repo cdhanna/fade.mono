@@ -9,7 +9,7 @@ global SCORE_POS as vec = {
 
 
 global dim CARDS(32) as ability
-global CARD_LENGTH = 29
+global CARD_LENGTH = 31
 
 global CURRENT_MOVE_COUNT = 0
 global MOVE_COUNT_TEXT_ID
@@ -54,6 +54,9 @@ global ABILITY_INDEX_QUICK_SONG = 26
 global ABILITY_INDEX_MOVE_SONG = 27
 ` an instant, so it is a constant, like the other instants. see SHOW TIME, with THE HINTS, further down.
 #constant ABILITY_INDEX_SHOW_TIME 28
+` the two cards of the diagonals. neither one says what it is about. see DIAGONALS, at the very end.
+global ABILITY_INDEX_SNEAKING_DEATH = 29
+global ABILITY_INDEX_LOWER_BAR = 30
 
 ` THE NEW KINDS OF FISH. three cards each put a new kind of thing on the board. each one is a kind of
 ` fish like any other: it has a picture, it can be swapped, and three of it in a row pop. load_textures,
@@ -451,6 +454,10 @@ global MULT_NUM_TEXT_ID
 global MULT_FILL_TWEEN_ID
 global MULT_PUNCH_TWEEN_ID `1 when the multiplier has just changed, dying away to 0
 global MULT_PUNCH_DIR = 0 `1 if it went up, and -1 if it went down
+global MULT_WIGGLE_AT = -1 `when the bar last started to wiggle, or -1. see wiggleMultiplierBar.
+global MULT_WIGGLE_TIME = 320 `how long a wiggle lasts, in milliseconds
+global MULT_WIGGLE_SIZE = 2 `how far the bar goes to each side, in pixels
+global MULT_WIGGLE_FIZZ = 5 `how many bubbles come off the bar when a wiggle starts
 
 ` THE UPGRADE WIPE. the upgrade screen is not drawn onto the screen. it is drawn to a render target of its
 ` own, and the wave of bubbles wipes that in over the game, and away again, the same way that it wipes the
@@ -485,10 +492,47 @@ global UPGRADE_REROLL_STEP = 5
 global UPGRADE_REROLL_MAX = 4
 global UPGRADE_REROLLS = 0 `how many times the cards of this upgrade screen have been dealt again
 global UPGRADE_REROLLING = 0 `1 while the cards are being dealt again
-global UPGRADE_ROW_PICK = 0 `which of the two lines is highlighted, while one of them is: 0 takes nothing, and 1 deals again
+global UPGRADE_ROW_PICK = 0 `which of the lines is highlighted, while one of them is: 0 takes nothing, 1 deals again, and 2 drops a passive
 global UPGRADE_REROLL_TEXT_ID
 global UPGRADE_REROLL_X = 0 `where the middle of the line is. setup_upgrade_wipe works it out.
 global dim CARD_CHOICE_OLD(10) `the cards that are being thrown away
+
+` DROPPING A PASSIVE. the third line under the cards, to the right of the one that takes nothing, gives a
+` passive up, and that is what the player gets from the upgrade screen that time: no card is taken.
+` it opens a page that lists the passives that are owned, with what the highlighted one does written
+` above them, and a row at the end that goes back to the cards. picking a passive asks if the player
+` is sure, and "yes" is the far answer, the same as when a move is left behind.
+` a passive that is dropped is gone, every copy of it, as if it had never been taken. an upgrade can
+` offer it again. the passives under it in the list at the side of the board move up a row.
+` dropping "bottom feeder" drops its second copy too, which is nothing without it. and in a zen game
+` "seamless" is not on the list, because the game is given it, and is not the same game without it.
+` when no passive is owned, the line is dim, and picking it does nothing.
+` the page is in fish_routines_drop, and so is dropPassive, which does the dropping.
+global UPGRADE_DROP_TEXT_ID
+global UPGRADE_DROP_X = 0 `where the middle of the line is. setup_upgrade_wipe works it out.
+global DROP_ROW_MAX = 17 `a row for every passive that there can be, and the row that goes back
+global DROP_ROWS_PER_COLUMN = 6
+global DROP_ROW_WIDTH = 170
+global DROP_ROW_HEIGHT = 20
+global DROP_ROW_GAP = 2
+global DROP_COLUMN_GAP = 8
+global DROP_ROWS_TOP = 132
+global DROP_OPTION_WIDTH = 60 `how wide the outline around an answer is
+global DROP_ROW_COUNT = 0 `how many rows the page has, counting the one that goes back, which is the last
+global DROP_SELECTED = 0 `the row that is highlighted
+global DROP_CONFIRMING = 0 `1 while the player is being asked if they are sure
+global DROP_CONFIRM_YES = 0 `1 while "yes" is the answer that is highlighted
+global DROP_DONE = 0 `1 if the page was left by dropping a passive, and 0 if the player went back to the cards
+global DROP_FADE_TWEEN_ID `0 when the page is put away, and 1 when it is showing
+global dim DROP_ROW_CARD(17) `the passive that every row stands for, or -1 for the row that goes back
+global dim DROP_ROW_PANEL(17) `the dark panel of every row
+global dim DROP_ROW_NAME(17) `and the name on it
+global dim DROP_ROW_BORDER(17) as infoBorder
+global DROP_DESC_TEXT_ID `what the highlighted passive does
+global DROP_PROMPT_TEXT_ID `the question, which takes the place of that
+global DROP_NO_TEXT_ID
+global DROP_YES_TEXT_ID
+global dim PASSIVE_INFO(16) `the spot that info mode has for every row of the list of passives, or 0 if the row has not had one in this game
 
 ` FLOATING BUBBLES. the routines are in fish_routines_bubbles.
 global FLOAT_BUBBLE_COUNT = 300
@@ -770,6 +814,8 @@ global REQUEST_GAME_END = 0 `1 when the last round has been won, and the end of 
 ` leaving. the cursor fades away, and the fish swim off of the board, slowly, to the right, the ones
 ` nearest to that side first, fanning out a little as they go. the words come up over that: "The fish
 ` need to go home, now. Bye bye!", and then, a moment later and smaller, "If they had a home...".
+` a fish that is sitting on coral that is well has one, and does not go anywhere: it stays in its cell,
+` and is still there under the end of the game. a fish on horror coral leaves with the rest.
 ` and while they go, everything around the board that was about playing fades away: the bar of the round,
 ` which was full and fizzing, and the rounds that were left, the bar of the multiplier, the passives and
 ` the special moves, the songs and their bars, and the key hints. what is left is the count of moves, and
@@ -1101,7 +1147,15 @@ global CODEC_COUNT = 16 `how many entries there are: one for every card, and the
 ` fish_routines_codec, does that. new entries go on the end, so that the ones before them keep their preferences.
 ` the last of what can happen to a fish is heart home: a fish that is sitting on coral that is well, where
 ` it is happy, and sends up hearts. see A FISH ON CORAL, further down.
-global CODEC_EXTRA_COUNT = 11
+` and after that, the QR code that the fish make when TUNA is typed. see TUNA, at the end. it is unlocked
+` the first time that the fish make one.
+` and after that, the lines of fish, corner to corner. see DIAGONALS, at the end. the entry is unlocked the
+` first time that a line pays out. diagonalPayThrough, in fish_routines_diagonal, does that.
+global CODEC_EXTRA_COUNT = 13
+global CODEC_ENTRY_CROOKED = -1
+global TEX_CROOKED `the picture that it has in the codec
+global CODEC_ENTRY_TUNA = -1
+global CODEC_TUNA_TEX = 0 `the picture that it has in the codec. setup_tuna sets it.
 global CODEC_ENTRY_HOME = -1
 global dim CODEC_HEART_SPRITES(2) `the heart over the fish, in the picture of "heart home": one for its tile, and one for the big picture
 global CODEC_ENTRY_CORAL = -1 `which entry each of them is, once setup_codec has run
@@ -1342,6 +1396,84 @@ global MELODY_LAST = -1 `the one that played last, so that it is not picked twic
 global MELODY_STEP = 0 `the beat of it that is next
 global MELODY_NEXT_MS = 0 `when that beat is due
 global MELODY_AUTO_COUNT = 0 `how many of the melodies can start on their own. the ones after that only play when the game asks.
+
+` THE DANCE. this is a prototype. a ding says that a tune is coming, and then the tune plays. a move of the
+` cursor that lands on a beat of it, in any direction, is in time. a move
+` that lands between two beats starts the count over. a beat that goes by with no move does not, and a
+` beat that is a rest counts the same as one that is a note, so moving on every beat and moving only
+` with the notes both work. the reward is in the bubbles of the beat, further down: every move in time
+` keeps one, and each one that is kept is worth a step of the bar of the multiplier when the tune is over.
+` nothing is written on the screen about any of this, and a move makes no sound. this is what shows:
+` THE FLASH. the outline of the cursor flashes white when it is moved during a dance. the closer the move
+` was to a beat, the whiter, so a move halfway between two beats does not flash at all.
+` A PERFECT MOVE is one within BEAT_PERFECT milliseconds of the beat. its flash is all the way white.
+` THE BUBBLES OF THE BEAT. on every beat, a bubble comes up from the bottom of the screen, and drifts up.
+` it is for the beat after. if the cursor is moved in time with that beat, the bubble freezes where it
+` is. if it has not been by the time that the beat comes, the bubble pops, right on the beat, so that
+` the pop shows when the move should have been made. a move that is a little late is still in time,
+` and then the bubble that has just started to pop comes back, and freezes. a move that is out of time
+` pops the bubble that is drifting up. the ones that are frozen stay, whatever happens after.
+` every beat of the dance has a place of its own along the bottom of the screen, from the first one on
+` the far left to the last note of the tune on the far right, and the places are evenly spaced, so how
+` far apart they are depends on how long the tune is. a bubble comes up in the place of its beat.
+` and a bubble only comes up if one of the last BEAT_BUBBLE_RECENT beats had a move in time with it. so
+` there are none until the first move that is in time, and they stop if the player stops.
+` when the tune is over, the ones that are frozen pop one at a time, from left to right, with the sound
+` that a bubble makes when it pops. each one moves the bar of the multiplier up by one, the way that a
+` swap that pops fish does. the bar wiggles and fizzes for each one. see wiggleMultiplierBar.
+` the ding is two beats ahead of the first note, so the beats can be felt before the tune starts, and
+` moves count from the ding on. a quick tune is counted at half speed, and one that is too slow, even
+` so, is not a dance at all: it plays with no ding. see beatPulseSteps.
+` the tunes that start on their own are dances while a game is being played. with FISH_DEBUG, the M key
+` starts one right away, and so does the button in the "Dance" window of the debug panel, which also
+` says how far off the beat the last move was. all of it is in fish_routines_beat.
+global BEAT_ON = 0 `1 from when a dance is set up until its tune is over
+global BEAT_PULSE = 0 `how many milliseconds there are from one beat of the dance to the next
+global BEAT_PULSE_STEPS = 1 `and how many beats of the melody that is. 2 for a quick tune.
+global BEAT_LAST_MS = 0 `when the last beat was. the first one is the ding.
+global BEAT_DING_MS = -1 `when the ding is due, or -1 once it has been heard
+global BEAT_HIT_MS = -1 `the beat that the last move in time landed on, so that no beat counts twice
+global BEAT_STREAK = 0 `how many moves in a row have been in time. for the debug panel.
+global BEAT_LAST_OFF = 0 `how far from the beat the last move was, in milliseconds. less than 0 is early. for the debug panel.
+global BEAT_JUDGED_FRAME as long = -1 `the frame that a move was last looked at on, because collectInput can run many times on one
+global BEAT_PULSE_MIN = 450 `a beat that is quicker than this is too quick to move to,
+global BEAT_PULSE_MAX = 800 `and one that is slower than this is too slow to feel
+global BEAT_WINDOW = 95 `a move this many milliseconds from a beat, either side, is in time
+global BEAT_LEAD_PULSES = 2 `how many beats ahead of the first note the ding is
+global BEAT_PERFECT = 35 `a move this many milliseconds from a beat, either side, is a perfect one
+global BEAT_FLASH# = 0 `how white the last move made the outline of the cursor, from 0 to 1
+global BEAT_FLASH_AT = 0 `when that move was
+global BEAT_FLASHING = 0 `1 while the outline is not back to its own color yet
+global BEAT_FLASH_TIME = 320 `how long the flash takes to die away, in milliseconds
+
+` the bubbles of the beat. they are not the bubbles of fish_routines_bubbles, because those cannot stay put.
+#constant BEAT_BUBBLE_OFF 0
+#constant BEAT_BUBBLE_RISING 1
+#constant BEAT_BUBBLE_HANGING 2
+#constant BEAT_BUBBLE_POPPING 3
+global BEAT_BUBBLE_RECENT = 3 `a bubble only comes up if one of this many beats before the one that it is for had a move in time
+global BEAT_BUBBLE_MARGIN = 16 `how far the first and the last place are from the sides of the screen, in pixels
+global BEAT_BUBBLE_SLOT = 0 `the place that the next bubble comes up in, counting from 0 on the left
+global BEAT_BUBBLE_SLOTS = 1 `how many places there are, which is how many beats the dance has after the ding
+global BEAT_BUBBLE_MAX = 64 `when there are this many, a new one takes the place of the oldest
+global BEAT_BUBBLE_NEXT = 0 `the one that the next bubble will be
+global BEAT_BUBBLE_BEAT_MS = 0 `the last beat that a bubble came up on
+global BEAT_BUBBLE_POP_MS = 140 `how long a pop takes
+global BEAT_CASH_GAP = 160 `when the tune is over, the ones that are hanging pop this many milliseconds apart
+global BEAT_CASH_MS = 0 `when the next one of them pops
+global BEAT_POP_VOLUME# = .3 `how loud the pop of each of them is. the pop of any other bubble is about .2.
+global BEAT_BUBBLE_RISE_MIN = 45 `a bubble drifts up at somewhere between this many pixels a second
+global BEAT_BUBBLE_RISE_MAX = 110 `and this many
+global dim BEAT_BUBBLE_SPRITE(64)
+global dim BEAT_BUBBLE_STATE(64) `one of the BEAT_BUBBLE_ numbers above
+global dim BEAT_BUBBLE_FROM_MS(64) `when it came up, or when it started to pop or to leave
+global dim BEAT_BUBBLE_DUE_MS(64) `the beat that it is for, which is when it gets to where it hangs
+global dim BEAT_BUBBLE_X(64) `the place that it came up in, in whole pixels from the left of the screen
+global dim BEAT_BUBBLE_EXACT_X#(64) `the same, to a part of a pixel, so that the places are exactly as far apart as each other
+global dim BEAT_BUBBLE_Y#(64) `where it is now
+global dim BEAT_BUBBLE_SHOW_X#(64) `where it was drawn last, with its wobble. it freezes there.
+global dim BEAT_BUBBLE_RISE(64) `how fast it drifts up, in pixels a second
+global dim BEAT_BUBBLE_SIZE(64)
 
 ` THE MUSIC OF THE CORAL. when a song is cast and coral grows, a choir sings one of a few tunes of praise,
 ` over the brighter of the two chords. when the coral that grows is horror coral, there is a scream from
@@ -1877,3 +2009,120 @@ global CORAL_DEBUG_TEXT_ID
 ` once there is any coral, info mode has a spot for it. it takes the right side of the board. see coralPlaceInfo.
 global INFO_INDEX_CORAL = -1
 global SAVE_PREF_CORAL = 700 `where the patterns of the saved game are kept, with the rest of the saved game
+
+` DIAGONALS. the other hidden thing. nothing in the game says that it is there.
+` fish that only touch at the corners are not a group, and they never pop. but when a swap leaves one of
+` the two fish that it moved in a line of DIAGONAL_LENGTH or more fish of its own kind, corner to corner,
+` the line pays out: every fish of it picks up one more fish for its stack, and scores DIAGONAL_POINTS
+` times the multiplier, one after another along the line. then the multiplier goes up, and a swap that
+` popped nothing is not held against the player.
+` a line of DIAGONAL_LENGTH adds DIAGONAL_MULT_GAIN to the multiplier, and every fish more than that adds
+` it again: a line of four adds one, a line of five adds two, and a line of six adds three.
+` a line whose fish have all paid out already does not pay again. DIAGONAL_PAID is how that is known,
+` and it goes with the fish wherever the fish goes, the same as its stack does. so a fish that is
+` swapped out of a line and back in gets nothing the second time: the bubbles come up along the line,
+` and the swap is not held against the player, and that is all. the same goes for a line that fell
+` apart and was put back together out of the same fish. but one fish that has not paid out is enough
+` to make the whole line good again: every fish of it is paid, and the multiplier gets all that a
+` line of that length is worth.
+` the line comes before the groups. when the same swap makes a line and a group that pops, the line
+` pays out first: the fish have their new stacks when they pop, the group is scored with the
+` multiplier that the line raised, and the pops wait until the line has been seen.
+` it takes swaps that pop nothing to put a line together, and those cost the multiplier, so the line
+` gives back about what it took. the stacks are what is left over.
+` the swap has to make the line. a line that was there already pays nothing, and neither does trading
+` two fish of the same kind. a "free move" and the robot do not make lines, the same as they do not
+` touch the multiplier. the first dive has no lines, until it has a multiplier.
+` the routines are in fish_routines_diagonal.
+` two cards change it, and neither one says what it is about. they call a line "the crooked bar", and a
+` player who has not found the lines is left to wonder what that is.
+`   "sneaking death", a passive: the fish of a line that pays out do not pick up a fish for their stacks.
+`       they go belly up, and one that is belly up already turns into a skeleton. they still score, and
+`       the multiplier still goes up. a skeleton is not part of any line, so that fish is done with lines.
+`   "lower the bar", a passive: a line takes one fish less. getDiagonalLength, in fish_routines_diagonal,
+`       says how many it takes, and the multiplier counts from there: three adds one, four adds two.
+global DIAGONAL_LENGTH = 4 `how many fish it takes, without the "lower the bar" card
+global DIAGONAL_POINTS = 1 `how much every fish of the line scores, before the multiplier
+global DIAGONAL_MULT_GAIN = 1 `how much a line adds to the multiplier, and how much more for every fish past DIAGONAL_LENGTH
+global DIAGONAL_STEP_MS = 90 `how long after one fish of the line pays out the next one does, in milliseconds
+global DIAGONAL_LINES = 0 `how many lines the swap that is being judged made, paid or not. judgeDiagonals counts them, and judgeMultiplierSwaps uses them up.
+global DIAGONAL_GAIN = 0 `and how much those lines add to the multiplier. judgeDiagonals adds it, and this is 0 again.
+global DIAGONAL_WAIT = 0 `how long the pops of the same swap are held back for a line that paid out, in milliseconds
+global DIAGONAL_AFTER_MS = 250 `how long it is from the last fish of a line paying out to the first pop
+global dim DIAGONAL_PAID(400) `the kind of fish that has paid out in every cell, and is still the fish that is there, or 0
+global dim DIAGONAL_LINE(32) `the cells of the line that was looked at last, from its left end to its right
+global DIAGONAL_LINE_COUNT = 0
+
+` THE HINTS OF THE DIAGONALS. they ride on the current. when a wave gets to a fish that has one of its own
+` kind at a corner, the fish does not lean into the wave like the rest. it leans toward the other one, and
+` the other one leans back. there is nearly always a pair like that somewhere, so it is easy to take for
+` nothing. and the fish of a line that is one short of paying out shuffle: when the wave gets to the
+` left end of the line, the fish there drifts toward the next one and back, and then the next one
+` does, and so on down the line. the last one drifts toward the corner that has no fish in it yet.
+` it is slow, and it goes a good way. a push is in whole pixels, so a short one is a hop, which was
+` jarring, and a swell in place of it was too faint to see.
+global DIAGONAL_HINT_EVERY = 200 `how often the hints are worked out again, in milliseconds
+global DIAGONAL_HINT_MS = 0 `when they are next due
+global DIAGONAL_HINT_LEAN# = .25 `how far a fish leans toward one corner, in radians
+global DIAGONAL_HINT_SHUFFLE# = .12 `how far a fish of a line that is one short drifts, where 1 is the size of a fish
+global DIAGONAL_HINT_SHUFFLE_MS = 1800 `how long the drift of one fish takes, there and back, in milliseconds
+global DIAGONAL_HINT_STEP_MS = 600 `and how long after one fish starts the next one does
+global dim DIAGONAL_HINT_X(400) `which way the fish in every cell leans: toward the right, or the left if it is less than 0,
+global dim DIAGONAL_HINT_Y(400) `and down, or up
+global dim DIAGONAL_HINT_SLOPE(400) `for a fish that shuffles, which way its line goes: 1 is down to the right, and -1 is up to the right. 0 for the rest.
+global dim DIAGONAL_HINT_DELAY(400) `and how long after a wave of the current sets out its nudge starts, in milliseconds
+global dim DIAGONAL_HINT_PLACE(400) `and which fish of its line it is, counting from 0 at the left end
+global DIAGONAL_HINT_NOW_MS = -100000 `when the debug key last asked to see the shuffle, right away, on every line that has one. see frame_dbg.
+
+` TUNA. a silly secret. typing the word TUNA while the fish are on the screen makes them into a QR code,
+` that a phone can read. a pool of light falls on the water, and there is a dark fish in it for every
+` dark module of the code. where a module is light there is no fish, only the water. the fish of the
+` board each go to a dark module of their own, anywhere in the code, and get smaller. then the rest of
+` the dark modules are taken by more fish, that come out of the fish of the board: each one swims out
+` of the nearest of them, and is the same kind of fish.
+` see TunaFishEffect.fx and ScreenEffect.fx.
+` it stays for TUNA_HOLD_MS, or until the cursor moves. then the fish that came out go back into the
+` fish that they came out of, and the fish of the board go back to their places.
+` the first time that it happens, it gets an entry in the codec. see CODEC_ENTRY_TUNA.
+` nothing else moves while the code is up: the fish do not lean or shuffle, and no hint comes.
+` the debug keys use T and U, so with FISH_DEBUG set the word does nothing, and Q does it instead.
+` there can be more than one code, and then one is picked at random every time. the codes are in
+` fish_tuna_code, which build/make-tuna-qr.py writes. where they lead to is set there.
+` the routines are in fish_routines_tuna.
+global TUNA_HOLD_MS = 30000 `how long the code stays up, in milliseconds
+global TUNA_CODE_SIZE = 25 `how many modules wide the code is
+global TUNA_QUIET = 2 `how many modules of open, lit water go around it. a phone needs some, to find the edge of the code.
+global TUNA_PITCH = 8 `how far apart the fish are, in pixels of the game
+global TUNA_ART = 8 `how big a fish is drawn. the pictures are 16 pixels, so this is half the size, and every other pixel of one.
+global TUNA_SHADOW = 8 `how big the shadow under a fish is, in pixels of the game. the same as TUNA_PITCH fills the whole module, and anything smaller made the code hard for a phone to read.
+global TUNA_MARGIN = 10 `how much further than that the pool of light goes, in pixels of the game, before it starts to fade out
+global TUNA_IN_FRAMES = 170 `how long it all takes, in frames. the fish of the board take the first half, and the fish that come out of them the second.
+global TUNA_OUT_FRAMES = 100 `and to go away again
+global TUNA_FX_ID `the effect of the fish that come out of the fish of the board
+global TARGET_TUNA `the picture of where the dark modules are, for the screen effect: white, with a black square for every one
+global TUNA_ON = 0 `1 while the code is up, or on its way there
+global TUNA_SHOWN# = 0 `how far along it is, from 0 to 1, at a steady pace. the fish that come out go by this.
+global TUNA_EASED# = 0 `the same for the fish of the board, and the light. they are done in the first half.
+global TUNA_START_MS = 0 `when it started
+global TUNA_FROM_X = 0 `where the cursor was then
+global TUNA_FROM_Y = 0
+global TUNA_TYPED = 0 `how many letters of the word have been typed so far
+global dim TUNA_WORD(4) `the letters of the word, where 0 is A
+global dim TUNA_KEYS(26) `the key of every letter, from A to Z
+global TUNA_CODE_COUNT = 0 `how many codes there are to pick from. each one leads somewhere else.
+global TUNA_PICK = 0 `which of them the fish are making. a new one is picked at random every time.
+global dim TUNA_CODE(200) `the codes, as fish_tuna_code has them: a number for every row, one code after another. there is room for 8.
+global dim TUNA_DARK(5000) `and with a 1 for every dark module, row after row
+global dim TUNA_SPRITES(625) `a fish for every module of the code. the ones of the dark modules that no fish of the board took are shown.
+global dim TUNA_SHADOWS(625) `a black square for every module of the code. the ones of the dark modules are shown.
+global dim TUNA_TAKEN(625) `1 for every module of the code that a fish of the board has taken
+global TUNA_DARK_COUNT = 0 `how many dark modules the code that was picked has
+global TUNA_EXTRAS_OUT = 0 `1 while the fish that come out are on the screen
+global TUNA_EXTRA_COUNT = 0 `how many of them there are
+global TUNA_CURSOR_FADED = 0 `1 while the cursor is faded out, to be out of the way of the code
+global dim TUNA_CELL_DX(400) `for every cell of the board: how far its fish goes to get to its place in the code, in pixels of the game
+global dim TUNA_CELL_DY(400)
+global dim TUNA_CELL_AT(400) `and which module of the code that place is
+global TUNA_MID_X = 0 `the middle of the code on the screen, in pixels of the game
+global TUNA_MID_Y = 0
+global TUNA_SHRINK# = 0 `how much smaller the fish of the board are drawn on this frame. 0 is their own size, and -.5 is half of it.

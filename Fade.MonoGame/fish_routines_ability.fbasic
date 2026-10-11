@@ -149,6 +149,21 @@ setup_abilities:
         abilityType = ABILITY_TYPE_PASSIVE
         stackable = 0
     }
+    ` see DIAGONALS in fish_headers. neither of these says what it is about.
+    CARDS(ABILITY_INDEX_SNEAKING_DEATH) = {
+        name$ = "sneaking death"
+        desc$ = "The crooked bar makes fish go belly up"
+        obtained = 0
+        abilityType = ABILITY_TYPE_PASSIVE
+        stackable = 0
+    }
+    CARDS(ABILITY_INDEX_LOWER_BAR) = {
+        name$ = "lower the bar"
+        desc$ = "Lower the crooked bar from " + str$(DIAGONAL_LENGTH) + " to " + str$(DIAGONAL_LENGTH - 1)
+        obtained = 0
+        abilityType = ABILITY_TYPE_PASSIVE
+        stackable = 0
+    }
     CARDS(ABILITY_INDEX_BOTTLES) = {
         name$ = "bottles"
         desc$ = "a group of " + str$(BOTTLE_GROUP_SIZE) + " or more leaves a bottle. on the bottom row, it adds " + str$(BOTTLE_MULT_GAIN) + " to the multiplier."
@@ -770,6 +785,7 @@ handle_ability_selection:
     UPGRADE_ROW_PICK = 0
     show text UPGRADE_SKIP_TEXT_ID
     show text UPGRADE_REROLL_TEXT_ID
+    show text UPGRADE_DROP_TEXT_ID
 
     TRANSITION_FOR_UPGRADE = 1
     TRANSITION_TO_MENU = 1
@@ -784,15 +800,22 @@ handle_ability_selection:
         if new action down(ACT_RIGHT) then dir = 1
         if new action down(ACT_LEFT) then dir = -1
 
-        ` down goes to the two lines under the cards, and it starts on the one that takes nothing.
-        ` left and right go between the two of them, and up comes back to the card that was
-        ` highlighted before. see THE REROLL in fish_headers.
+        ` down goes to the lines under the cards, and it starts on the one that takes nothing, which
+        ` is in the middle. the one that deals new cards is to the left of it, and the one that drops
+        ` a passive is to the right. left and right go between them, and up comes back to the card
+        ` that was highlighted before. see THE REROLL and DROPPING A PASSIVE in fish_headers.
         skipWas = UPGRADE_SKIP_SELECTED
         rowWas = UPGRADE_ROW_PICK
         skipLeft = 0
         if UPGRADE_SKIP_SELECTED
-            if dir < 0 then UPGRADE_ROW_PICK = 1
-            if dir > 0 then UPGRADE_ROW_PICK = 0
+            if dir < 0
+                if rowWas = 0 then UPGRADE_ROW_PICK = 1
+                if rowWas = 2 then UPGRADE_ROW_PICK = 0
+            endif
+            if dir > 0
+                if rowWas = 1 then UPGRADE_ROW_PICK = 0
+                if rowWas = 0 then UPGRADE_ROW_PICK = 2
+            endif
             dir = 0
             if new action down(ACT_UP)
                 UPGRADE_SKIP_SELECTED = 0
@@ -808,6 +831,7 @@ handle_ability_selection:
         ` where the line that was highlighted is, for the bubbles that the outline leaves behind
         rowWasX = UPGRADE_SKIP_X
         if rowWas = 1 then rowWasX = UPGRADE_REROLL_X
+        if rowWas = 2 then rowWasX = UPGRADE_DROP_X
         if UPGRADE_SKIP_SELECTED = skipWas
             if UPGRADE_ROW_PICK <> rowWas
                 spawnWakeBubbles(rowWasX - 60, UPGRADE_SKIP_Y, 120, 20, 8, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
@@ -869,6 +893,17 @@ handle_ability_selection:
                     upgradePicked = 0
                     gosub reroll_ability_choices
                 endif
+
+                ` the line that drops a passive opens the list of them. when one is dropped, that is
+                ` what the player took from this screen, and it closes the same way as when nothing
+                ` is taken. when the player comes back without dropping one, the screen stays up.
+                if UPGRADE_ROW_PICK = 2
+                    upgradePicked = 0
+                    if getDroppableCount() > 0
+                        gosub handle_passive_drop
+                        upgradePicked = DROP_DONE
+                    endif
+                endif
             endif
         endif
 
@@ -902,6 +937,7 @@ handle_ability_selection:
                 case ABILITY_TYPE_MOVE
                     hide text UPGRADE_SKIP_TEXT_ID `the page that comes next has rows where these lines are
                     hide text UPGRADE_REROLL_TEXT_ID
+                    hide text UPGRADE_DROP_TEXT_ID
                     gosub handle_move_equip
                 endcase
             endselect
@@ -917,6 +953,7 @@ handle_ability_selection:
             hide sprite UPGRADE_COMPOSITE_SPRITE
             hide text UPGRADE_SKIP_TEXT_ID
             hide text UPGRADE_REROLL_TEXT_ID
+            hide text UPGRADE_DROP_TEXT_ID
             UPGRADE_SKIP_SELECTED = 0
 
             ` none of it is being drawn any more, so it can all be put away
@@ -971,11 +1008,19 @@ frame_ability_selection:
     if UPGRADE_REROLLS >= UPGRADE_REROLL_MAX
         color text UPGRADE_REROLL_TEXT_ID, rgb(150, 190, 255, 90)
     endif
+    ` the line that drops a passive is dim when there is none to drop
+    dropLineTone = 200
+    if getDroppableCount() = 0 then dropLineTone = 90
+    color text UPGRADE_DROP_TEXT_ID, rgb(150, 190, 255, dropLineTone)
     if UPGRADE_SKIP_SELECTED
+        if UPGRADE_ROW_PICK = 0
+            color text UPGRADE_SKIP_TEXT_ID, rgb(255, 255, 255)
+        endif
         if UPGRADE_ROW_PICK = 1
             color text UPGRADE_REROLL_TEXT_ID, rgb(255, 255, 255)
-        else
-            color text UPGRADE_SKIP_TEXT_ID, rgb(255, 255, 255)
+        endif
+        if UPGRADE_ROW_PICK = 2
+            color text UPGRADE_DROP_TEXT_ID, rgb(255, 255, 255)
         endif
     endif
 
@@ -1021,6 +1066,9 @@ frame_ability_selection:
             layoutInfoBorder(ABILITY_CURSOR, UPGRADE_REROLL_X - rerollBoxW / 2, UPGRADE_SKIP_Y - 3, rerollBoxW, 26)
         else
             layoutInfoBorder(ABILITY_CURSOR, UPGRADE_SKIP_X - 64, UPGRADE_SKIP_Y - 3, 128, 26)
+        endif
+        if UPGRADE_ROW_PICK = 2
+            layoutInfoBorder(ABILITY_CURSOR, UPGRADE_DROP_X - 72, UPGRADE_SKIP_Y - 3, 144, 26)
         endif
     endif
 

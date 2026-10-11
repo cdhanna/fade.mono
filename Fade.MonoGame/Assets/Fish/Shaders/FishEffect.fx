@@ -21,7 +21,7 @@
 //
 //   texcoord2.xy how far to push the fish out of its place, in pixels. it gets rounded to whole pixels.
 //   texcoord2.z  how much bigger to draw the fish, as if it lifts up toward the eye. 0 is its own
-//                size, and 1 is twice as big.
+//                size, and 1 is twice as big. less than 0 draws it smaller: -.5 is half the size.
 //   texcoord2.w  how much brighter to draw it. 0 is its own color, and 1 is twice as bright.
 
 Texture2D SpriteTexture;
@@ -85,7 +85,7 @@ VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
 	// push the corners out, to make room. the picture on the quad stays the same, so pushing them
 	// out further than that is what makes the fish bigger.
 	float grow = (QUAD_GROW - 1.0) * step(.5, custom.w);
-	float lift = 1.0 + max(custom2.z, 0.0) * step(.5, custom.w);
+	float lift = 1.0 + max(custom2.z, -0.9) * step(.5, custom.w);
 	position.xy += corner * custom.w * ((1.0 + grow) * lift - 1.0);
 
 	// the push lands on whole pixels. a fish that sits part of the way between two pixels gets some

@@ -272,7 +272,8 @@ setup_music:
     ` how loud it is, how far its pitch can wander (in hundredths of an octave), the shortest and
     ` the longest wait before it plays on its own again, in milliseconds, and the scene that it
     ` plays on its own in. a shot with no longest wait never plays on its own.
-    addMusicShot(MUSIC_SHOT_PING, "Fish/Audio/Music/shot-ping", .25, 0, 30000, 70000, MUSIC_SCENE_BOTH)
+    ` the ping does not play on its own any more. it is the ding of a dance. see THE DANCE in fish_headers.
+    addMusicShot(MUSIC_SHOT_PING, "Fish/Audio/Music/shot-ping", .25, 0, 0, 0, MUSIC_SCENE_BOTH)
     addMusicShot(MUSIC_SHOT_WHALE_LOW, "Fish/Audio/Music/shot-whale-low", .3, 6, 45000, 100000, MUSIC_SCENE_BOTH)
     addMusicShot(MUSIC_SHOT_WHALE_HIGH, "Fish/Audio/Music/shot-whale-high", .22, 6, 60000, 130000, MUSIC_SCENE_BOTH)
     addMusicShot(MUSIC_SHOT_BUBBLES_SPARSE, "Fish/Audio/Music/shot-bubbles-sparse", .2, 10, 20000, 50000, MUSIC_SCENE_SURFACE)
@@ -447,12 +448,21 @@ function updateMusic()
         endif
     next
 
+    ` the ding of a dance, and the end of one. see THE DANCE in fish_headers.
+    stepBeat(now)
+
     if MELODY_PLAYING >= 0
         if now >= MELODY_NEXT_MS
             m = MELODY_PLAYING
 
             ` every note is a little louder or quieter than the last, the way that a person would play it
             playMusicNote(MELODY_INSTRUMENT(m), MELODY_NOTES(MELODY_FIRST(m) + MELODY_STEP), MELODY_VOLUME# * MELODY_GAIN# * (.8 + rnd(21) * .01))
+
+            ` a dance counts its beats from when this one was due. a quick tune is counted at half speed.
+            if BEAT_ON
+                beatOnStep = MELODY_STEP mod BEAT_PULSE_STEPS
+                if beatOnStep = 0 then BEAT_LAST_MS = MELODY_NEXT_MS
+            endif
 
             ` the next beat is timed from when this one was due, so that the beats do not drift.
             ` but if the game stalled, the beats that were missed are not all played at once.
@@ -466,8 +476,9 @@ function updateMusic()
             endif
         endif
     else
+        ` while a game is being played, a tune that starts on its own is one to dance to, if it can be
         if MELODY_GAP_MAX > 0 and now >= MELODY_AUTO_MS
-            playRandomMelody()
+            startBeatDance(0)
         endif
     endif
 
@@ -562,6 +573,11 @@ function playMelody(index)
     MELODY_STEP = 0
     MELODY_NEXT_MS = now
     MELODY_GAIN# = 1
+
+    ` a dance does not outlast its tune. startBeatDance sets up a new one after this. see THE DANCE in fish_headers.
+    BEAT_ON = 0
+    BEAT_DING_MS = -1
+    BEAT_STREAK = 0
 
     chord = MELODY_CHORD(index)
     if chord <> MUSIC_CHORD_ANY

@@ -1,0 +1,139 @@
+remstart
+    THE TESTS OF TUNA
+    the QR code that the fish make. see TUNA in fish_headers, and fish_tests for how the tests work.
+remend
+
+test tuna_word_has_to_be_typed_in_order from fishBoard
+    ` the letters count from A, which is 0
+    TUNA_TYPED = 0
+    assert tunaType(19) = 0, "T is not the whole word"
+    assert tunaType(20) = 0, "and neither is TU"
+    assert tunaType(13) = 0, "or TUN"
+    assert tunaType(0) = 1, "TUNA is"
+
+    assert tunaType(19) = 0, "the word starts over after it has been typed"
+    tTyped = tunaType(20)
+    tTyped = tunaType(23)
+    tTyped = tunaType(13)
+    assert tunaType(0) = 0, "a wrong letter in the middle starts it over"
+
+    tTyped = tunaType(19)
+    tTyped = tunaType(19)
+    tTyped = tunaType(20)
+    tTyped = tunaType(13)
+    assert tunaType(0) = 1, "a wrong letter that is a T is the start of the word"
+    end
+endtest
+
+test tuna_listens_for_the_keys_of_its_letters from fishBoard
+    assert TUNA_KEYS(TUNA_WORD(0)) = scancode("T"), "the first letter is T"
+    assert TUNA_KEYS(TUNA_WORD(1)) = scancode("U"), "then U"
+    assert TUNA_KEYS(TUNA_WORD(2)) = scancode("N"), "then N"
+    assert TUNA_KEYS(TUNA_WORD(3)) = scancode("A"), "then A"
+    assert TUNA_KEYS(25) = scancode("Z"), "and every other letter is listened for, to the end of the alphabet"
+    end
+endtest
+
+test tuna_stays_until_the_cursor_moves from fishBoard
+    testCursor(4, 4)
+    tunaStart()
+    stepTuna()
+    assert TUNA_ON = 1, "the code stays up while the cursor is still"
+
+    testCursor(5, 4)
+    stepTuna()
+    assert TUNA_ON = 0, "and it is over when the cursor moves"
+    end
+endtest
+
+test tuna_goes_away_when_the_time_is_up from fishBoard
+    testCursor(4, 4)
+    tunaStart()
+    TUNA_START_MS = TUNA_START_MS - TUNA_HOLD_MS
+    TUNA_START_MS = TUNA_START_MS + 1000
+    stepTuna()
+    assert TUNA_ON = 1, "a second before the time is up, the code is still there"
+
+    TUNA_START_MS = TUNA_START_MS - 2000
+    stepTuna()
+    assert TUNA_ON = 0, "and a second after it, it is over"
+    end
+endtest
+
+test tuna_has_a_fish_for_every_dark_module from fishBoard
+    tunaStart()
+    assert TUNA_DARK_COUNT > CELL_COUNT, "the code has more dark modules than the board has fish"
+    assert TUNA_EXTRA_COUNT + CELL_COUNT = TUNA_DARK_COUNT, "the fish that swim in take every dark module that the fish of the board do not"
+    assert tunaDark(0, 0) = 1, "the corner of the code is the corner of a finder, which is dark"
+    assert tunaDark(1, 1) = 0, "and the ring inside of that is light"
+    assert tunaDark(3, 3) = 1, "and the middle of it is dark"
+    assert tunaDark(-1, 0) = 0, "there is nothing past the edge of the code"
+    end
+endtest
+
+test tuna_fish_swim_away_when_it_is_over from fishBoard
+    testCursor(4, 4)
+    tunaStart()
+    stepTuna()
+    assert TUNA_EXTRAS_OUT = 1, "the fish that swim in are out while the code is up"
+
+    testCursor(5, 4)
+    tLongest = TUNA_OUT_FRAMES + TUNA_IN_FRAMES
+    for tFrame = 1 to tLongest
+        stepTuna()
+    next
+    assert TUNA_ON = 0, "the cursor moved, so the code is over"
+    assert TUNA_EXTRAS_OUT = 0, "and once they have swum away, they are put away"
+    end
+endtest
+
+test tuna_picks_one_of_its_codes from fishBoard
+    assert TUNA_CODE_COUNT > 0, "there is a code to make"
+    tunaStart()
+    tInRange = 0
+    if TUNA_PICK >= 0
+        if TUNA_PICK < TUNA_CODE_COUNT
+            tInRange = 1
+        endif
+    endif
+    assert tInRange = 1, "the code that is picked is one of them"
+
+    ` every one of them has a finder in its corner
+    tLastCode = TUNA_CODE_COUNT - 1
+    for tCode = 0 to tLastCode
+        TUNA_PICK = tCode
+        assert tunaDark(0, 0) = 1, "the corner of every code is dark"
+        assert tunaDark(1, 1) = 0, "with a light ring inside of it"
+        assert tunaDark(3, 3) = 1, "and a dark middle"
+    next
+    end
+endtest
+
+test tuna_unlocks_its_codec_entry from fishBoard
+    assert CODEC_ENTRY_TUNA = CARD_LENGTH + 11, "the QR code comes after everything else in the codec"
+    assert getCodecPref(CODEC_ENTRY_TUNA) = CODEC_PREF_MORE + 1, "and it is remembered right after heart home"
+
+    CODEC_SEEN(CODEC_ENTRY_TUNA) = 0
+    tunaStart()
+    assert CODEC_SEEN(CODEC_ENTRY_TUNA) = 1, "the first time that the fish make a code, the codec has an entry for it"
+    end
+endtest
+
+test tuna_fish_come_out_of_the_fish_of_the_board from fishBoard
+    tunaStart()
+
+    ` every fish of the board has a dark module of its own
+    tLastCell = CELL_COUNT - 1
+    tAllDark = 1
+    for tCell = 0 to tLastCell
+        tModule = TUNA_CELL_AT(tCell)
+        if tunaDark(tModule mod TUNA_CODE_SIZE, tModule / TUNA_CODE_SIZE) = 0
+            tAllDark = 0
+        endif
+        if TUNA_TAKEN(tModule) = 0
+            tAllDark = 0
+        endif
+    next
+    assert tAllDark = 1, "every fish of the board goes to a dark module, and takes it"
+    end
+endtest

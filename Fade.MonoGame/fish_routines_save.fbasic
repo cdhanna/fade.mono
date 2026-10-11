@@ -328,9 +328,19 @@ function grantPassive(abilityIndex)
         create basic tween binding.fadeTweenId, 0, 1, 400, 0
         CARDS(abilityIndex).obtained = 1
 
-        ` the passive explains itself in info mode, instead of the empty space
+        ` the passive explains itself in info mode, instead of the empty space. a row that had a
+        ` passive in it before, which was dropped, still has its spot. see DROPPING A PASSIVE in fish_headers.
         setInfoBlobEnabled(INFO_INDEX_PASSIVES, 0)
-        infoIndex = allocateInfoBlob(WORLD_WIDTH - 124, ABILITY_ROWS_Y + 2 - (PASSIVE_COUNT - 1) * 18, 112, 18, CARDS(abilityIndex).name$, CARDS(abilityIndex).desc$)
+        passiveRow = PASSIVE_COUNT - 1
+        passiveSpot = PASSIVE_INFO(passiveRow)
+        if passiveSpot > 0
+            INFOS(passiveSpot).title$ = CARDS(abilityIndex).name$
+            INFOS(passiveSpot).desc$ = CARDS(abilityIndex).desc$
+            setInfoBlobEnabled(passiveSpot, 1)
+        else
+            infoIndex = allocateInfoBlob(WORLD_WIDTH - 124, ABILITY_ROWS_Y + 2 - passiveRow * 18, 112, 18, CARDS(abilityIndex).name$, CARDS(abilityIndex).desc$)
+            PASSIVE_INFO(passiveRow) = infoIndex
+        endif
     endif
 endfunction
 

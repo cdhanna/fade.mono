@@ -1,0 +1,425 @@
+goto routines_tuna_exit
+
+remstart
+    TUNA
+    the fish make a QR code: a dark fish for every dark module of it. see TUNA in fish_headers.
+
+    there are three parts to it.
+
+    the fish of the board each go to a dark module of the code, and get smaller. the fish effect does
+    that: frame_fish_fx, in fish_routines, hands it the numbers that are worked out here.
+
+    the rest of the dark modules are made of fish that are only for this. there is one for every module
+    of the code, made once, in setup_tuna, and hidden. tunaLayout shows the ones that are needed, and
+    tells each one which fish of the board it comes out of. their effect, TunaFishEffect.fx, does the
+    swimming, so nothing has to move them from frame to frame.
+
+    and the screen effect puts a pool of light on the water, and makes the fish in it dark. it is also
+    told where the dark modules are, by a picture: white, with a black square for every one of them.
+    the squares are sprites, made once, that are drawn to a render target of their own. the light is a
+    little dimmer there, like the shadow of the fish. see applyTunaScreen.
+remend
+
+setup_tuna:
+
+    reserve effect id(TUNA_FX_ID)
+    effect TUNA_FX_ID, "Fish/Shaders/TunaFishEffect"
+
+    ` the picture that this has in the codec: the bass looks the most like a tuna
+    CODEC_TUNA_TEX = TEX_BASS
+
+    ` the word
+    TUNA_WORD(0) = 19
+    TUNA_WORD(1) = 20
+    TUNA_WORD(2) = 13
+    TUNA_WORD(3) = 0
+
+    ` every letter is listened for, and not only the four of the word, so that a wrong letter starts it over
+    for tunaI = 0 to 25
+        TUNA_KEYS(tunaI) = scancode(chr$(65 + tunaI))
+    next
+
+    ` the codes come as a number for every row, one code after another. take the bits apart, into
+    ` a 1 for every dark module.
+    tunaLoadCode()
+    tunaLastRow = TUNA_CODE_COUNT * TUNA_CODE_SIZE - 1
+    for tunaRow = 0 to tunaLastRow
+        tunaBits = TUNA_CODE(tunaRow)
+        for tunaColumn = 0 to TUNA_CODE_SIZE - 1
+            TUNA_DARK(tunaRow * TUNA_CODE_SIZE + tunaColumn) = tunaBits mod 2
+            tunaBits = tunaBits / 2
+        next
+    next
+
+    ` the code sits in the middle of the board
+    TUNA_MID_X = GRID_CENTER.x
+    TUNA_MID_Y = GRID_CENTER.y
+    tunaMiddle = (TUNA_CODE_SIZE - 1) / 2
+
+    ` the picture of where the dark modules are, for the screen effect. it is white.
+    reserve render target id(TARGET_TUNA)
+    render target TARGET_TUNA
+    set render target background color TARGET_TUNA, rgb(255, 255, 255)
+
+    ` every module of the code has a fish, of any of the first seven kinds, and a black square in the
+    ` picture, right where the fish is on the screen. tunaLayout shows the ones of the dark modules.
+    for tunaRow = 0 to TUNA_CODE_SIZE - 1
+        for tunaColumn = 0 to TUNA_CODE_SIZE - 1
+            tunaI = tunaRow * TUNA_CODE_SIZE + tunaColumn
+            tunaPlaceX = TUNA_MID_X + (tunaColumn - tunaMiddle) * TUNA_PITCH
+            tunaPlaceY = TUNA_MID_Y + (tunaRow - tunaMiddle) * TUNA_PITCH
+
+            reserve sprite id(TUNA_SPRITES(tunaI))
+            tunaKind = 1 + ((tunaI * 3 + rnd(7)) mod 7)
+            sprite TUNA_SPRITES(tunaI), tunaPlaceX, tunaPlaceY, tunaKind
+            size sprite TUNA_SPRITES(tunaI), TUNA_ART, TUNA_ART
+            order sprite TUNA_SPRITES(tunaI), ORDER_FISH
+            set sprite effect TUNA_SPRITES(tunaI), TUNA_FX_ID
+            hide sprite TUNA_SPRITES(tunaI)
+
+            reserve sprite id(tunaShadowId)
+            sprite tunaShadowId, tunaPlaceX, tunaPlaceY, TEX_PIXEL
+            size sprite tunaShadowId, TUNA_SHADOW, TUNA_SHADOW
+            color sprite tunaShadowId, rgb(0, 0, 0)
+            set sprite render target tunaShadowId, TARGET_TUNA
+            hide sprite tunaShadowId
+            TUNA_SHADOWS(tunaI) = tunaShadowId
+        next
+    next
+
+return
+
+
+routines_tuna_exit:
+
+
+` one letter of the alphabet was typed, where 0 is A. this is 1 when it finishes the word.
+function tunaType(tunaLetter)
+    tunaDone = 0
+    if tunaLetter = TUNA_WORD(TUNA_TYPED)
+        TUNA_TYPED = TUNA_TYPED + 1
+    else
+        ` a wrong letter starts the word over. it may be the first letter of it.
+        TUNA_TYPED = 0
+        if tunaLetter = TUNA_WORD(0)
+            TUNA_TYPED = 1
+        endif
+    endif
+    if TUNA_TYPED >= 4
+        TUNA_TYPED = 0
+        tunaDone = 1
+    endif
+endfunction tunaDone
+
+
+` was it asked for on this frame? the word is typed on the keyboard. the debug keys use two of its
+` letters, so while they are on, the word does nothing and Q asks for it.
+function tunaAsked()
+    tunaWanted = 0
+    if is env set("FISH_DEBUG")
+        if new key down(scancode("Q"))
+            tunaWanted = 1
+        endif
+    else
+        for tunaKey = 0 to 25
+            if new key down(TUNA_KEYS(tunaKey))
+                tunaFinished = tunaType(tunaKey)
+                if tunaFinished
+                    tunaWanted = 1
+                endif
+            endif
+        next
+    endif
+endfunction tunaWanted
+
+
+` is this module dark, in the code that was picked? there is nothing past the edges of the code.
+function tunaDark(tnCodeX, tnCodeY)
+    tnDark = 0
+    tnInCode = 1
+    if tnCodeX < 0 then tnInCode = 0
+    if tnCodeY < 0 then tnInCode = 0
+    if tnCodeX >= TUNA_CODE_SIZE then tnInCode = 0
+    if tnCodeY >= TUNA_CODE_SIZE then tnInCode = 0
+    if tnInCode
+        tnRowOfAll = TUNA_PICK * TUNA_CODE_SIZE + tnCodeY
+        tnDark = TUNA_DARK(tnRowOfAll * TUNA_CODE_SIZE + tnCodeX)
+    endif
+endfunction tnDark
+
+
+` work out where every fish goes. every fish of the board takes a dark module of the code that was
+` picked, at random, and every dark module that is left gets a fish that comes out of the nearest fish
+` of the board. the light modules get nothing: they are open water.
+function tunaLayout()
+    tnModules = TUNA_CODE_SIZE * TUNA_CODE_SIZE
+    tnLastModule = tnModules - 1
+    tnMiddle = (TUNA_CODE_SIZE - 1) / 2
+    tnFirstOfCode = TUNA_PICK * tnModules
+
+    TUNA_DARK_COUNT = 0
+    for tnClear = 0 to tnLastModule
+        TUNA_TAKEN(tnClear) = 0
+        TUNA_DARK_COUNT = TUNA_DARK_COUNT + TUNA_DARK(tnFirstOfCode + tnClear)
+    next
+
+    ` the fish of the board. a module that is light, or that is taken already, passes the fish along
+    ` to the next one. a code always has more dark modules than the biggest board has fish.
+    tnLastCell = CELL_COUNT - 1
+    for tnCell = 0 to tnLastCell
+        tnAt = rnd(tnModules * 4) mod tnModules
+        tnBusy = 1
+        while tnBusy
+            tnBusy = TUNA_TAKEN(tnAt)
+            if TUNA_DARK(tnFirstOfCode + tnAt) = 0
+                tnBusy = 1
+            endif
+            if tnBusy
+                tnAt = (tnAt + 1) mod tnModules
+            endif
+        endwhile
+        TUNA_TAKEN(tnAt) = 1
+        TUNA_CELL_AT(tnCell) = tnAt
+
+        tnToX = TUNA_MID_X + ((tnAt mod TUNA_CODE_SIZE) - tnMiddle) * TUNA_PITCH
+        tnToY = TUNA_MID_Y + ((tnAt / TUNA_CODE_SIZE) - tnMiddle) * TUNA_PITCH
+        TUNA_CELL_DX(tnCell) = tnToX - getCellX(CELLS(tnCell).coord.x)
+        TUNA_CELL_DY(tnCell) = tnToY - getCellY(CELLS(tnCell).coord.y)
+    next
+
+    ` the fish that come out, and the picture of the dark modules
+    TUNA_EXTRA_COUNT = 0
+    for tnModule = 0 to tnLastModule
+        tnSprite = TUNA_SPRITES(tnModule)
+        tnShadow = TUNA_SHADOWS(tnModule)
+        tnX = tnModule mod TUNA_CODE_SIZE
+        tnY = tnModule / TUNA_CODE_SIZE
+
+        if TUNA_DARK(tnFirstOfCode + tnModule)
+            show sprite tnShadow
+        else
+            hide sprite tnShadow
+        endif
+
+        tnWanted = TUNA_DARK(tnFirstOfCode + tnModule)
+        if TUNA_TAKEN(tnModule)
+            tnWanted = 0
+        endif
+
+        if tnWanted
+            ` which fish of the board is the nearest, and how many modules away it is, the long way
+            ` of across and down
+            tnNearest = 0
+            tnNearestFar = 1000
+            for tnCell = 0 to tnLastCell
+                tnAcross = abs((TUNA_CELL_AT(tnCell) mod TUNA_CODE_SIZE) - tnX)
+                tnDown = abs((TUNA_CELL_AT(tnCell) / TUNA_CODE_SIZE) - tnY)
+                tnFar = tnAcross
+                if tnDown > tnFar
+                    tnFar = tnDown
+                endif
+                if tnFar < tnNearestFar
+                    tnNearestFar = tnFar
+                    tnNearest = tnCell
+                endif
+            next
+
+            ` the sprite sits where the fish ends up. its effect draws it on the fish that it comes out
+            ` of, until it sets off. it is the same kind of fish.
+            tnFromX = ((TUNA_CELL_AT(tnNearest) mod TUNA_CODE_SIZE) - tnX) * TUNA_PITCH
+            tnFromY = ((TUNA_CELL_AT(tnNearest) / TUNA_CODE_SIZE) - tnY) * TUNA_PITCH
+            tnKind = CELLS(tnNearest).value
+            if tnKind > 0
+                set sprite texture tnSprite, tnKind
+                size sprite tnSprite, TUNA_ART, TUNA_ART
+            endif
+
+            ` the ones with further to go set off later, so the code grows outward from the fish of the board
+            tnDelay# = tnNearestFar * .14 + rnd(100) * .002
+            if tnDelay# > 1
+                tnDelay# = 1
+            endif
+            tnPhase# = rnd(628) * .01
+
+            set sprite all texcoord1 tnSprite, tnFromX, tnFromY, tnDelay#, 0
+            set sprite all texcoord2 tnSprite, tnPhase#, 0, 0, 0
+            show sprite tnSprite
+            TUNA_EXTRA_COUNT = TUNA_EXTRA_COUNT + 1
+        else
+            hide sprite tnSprite
+        endif
+    next
+    TUNA_EXTRAS_OUT = 1
+endfunction
+
+
+` put away the fish that came out
+function tunaHideExtras()
+    if TUNA_EXTRAS_OUT
+        tnLastSprite = TUNA_CODE_SIZE * TUNA_CODE_SIZE - 1
+        for tnHideI = 0 to tnLastSprite
+            hide sprite TUNA_SPRITES(tnHideI)
+        next
+        TUNA_EXTRAS_OUT = 0
+    endif
+endfunction
+
+
+` make the code. asking again while it is up starts the wait over.
+function tunaStart()
+    TUNA_ON = 1
+    TUNA_START_MS = game ms()
+    TUNA_FROM_X = SELECTION_POS.x
+    TUNA_FROM_Y = SELECTION_POS.y
+
+    ` the fish that came out may still be on their way back from the last time. then they turn
+    ` around, and make the same code again. otherwise it is a new code, picked at random.
+    if TUNA_EXTRAS_OUT = 0
+        TUNA_PICK = rnd(1000) mod TUNA_CODE_COUNT
+        tunaLayout()
+
+        ` and a hint that is playing stops. none comes while the code is up. see coralRollHint.
+        coralClearHint()
+
+        ` the codec has an entry for this, from the first time on
+        codecSeeCard(CODEC_ENTRY_TUNA)
+    endif
+endfunction
+
+
+` everything back to how it is when there is no code, at once
+function tunaReset()
+    TUNA_ON = 0
+    TUNA_SHOWN# = 0
+    TUNA_EASED# = 0
+    TUNA_SHRINK# = 0
+    tunaHideExtras()
+endfunction
+
+
+` take the code away at once, with nothing swimming anywhere. this is for when something is about to
+` cover the board: the light of the code is drawn on top of everything, and so it has to go first.
+function tunaHide()
+    tunaReset()
+    applyTunaScreen()
+endfunction
+
+
+` this runs on every frame of the game, from update_frame
+function stepTuna()
+
+    if INFO_MODE
+        if TUNA_SHOWN# > 0
+            tunaHide()
+        endif
+        tunaCursor()
+        exitfunction
+    endif
+
+    tunaWanted = tunaAsked()
+    if tunaWanted
+        tunaStart()
+    endif
+
+    ` it is over when the time is up, or when the cursor goes anywhere
+    if TUNA_ON
+        tunaAge = game ms() - TUNA_START_MS
+        if tunaAge > TUNA_HOLD_MS
+            TUNA_ON = 0
+        endif
+        if SELECTION_POS.x <> TUNA_FROM_X
+            TUNA_ON = 0
+        endif
+        if SELECTION_POS.y <> TUNA_FROM_Y
+            TUNA_ON = 0
+        endif
+        if LIVE_MOVE_ACTIVE
+            TUNA_ON = 0
+        endif
+    endif
+
+    ` how far along it is goes up and down at a steady pace
+    tunaInFrames# = TUNA_IN_FRAMES
+    tunaOutFrames# = TUNA_OUT_FRAMES
+    if TUNA_ON
+        tunaStep# = 1.0 / tunaInFrames#
+        TUNA_SHOWN# = TUNA_SHOWN# + tunaStep#
+        if TUNA_SHOWN# > 1
+            TUNA_SHOWN# = 1
+        endif
+    else
+        if TUNA_SHOWN# > 0
+            tunaStep# = 1.0 / tunaOutFrames#
+            TUNA_SHOWN# = TUNA_SHOWN# - tunaStep#
+            if TUNA_SHOWN# <= 0
+                TUNA_SHOWN# = 0
+                tunaHideExtras()
+            endif
+        endif
+    endif
+
+    ` the fish of the board go first. they are in their places at half way, which is when the others
+    ` start to come out of them, and on the way back they wait until the others are all in again.
+    ` they start and stop gently.
+    tunaHalf# = TUNA_SHOWN# * 2
+    if tunaHalf# > 1
+        tunaHalf# = 1
+    endif
+    TUNA_EASED# = tunaHalf# * tunaHalf# * (3 - 2 * tunaHalf#)
+
+    ` how much smaller the fish of the board get, to be the size of the fish that come out of them
+    tunaArt# = TUNA_ART
+    tunaCellArt# = CELL_ART_SIZE
+    TUNA_SHRINK# = (tunaArt# / tunaCellArt# - 1) * TUNA_EASED#
+
+    tunaCursor()
+    applyTunaScreen()
+endfunction
+
+
+` the cursor fades out as the code comes, so that its outline is not in the middle of it, and it comes
+` back as the code goes. it is faded the same way that the ending of the hidden game fades it.
+function tunaCursor()
+    if TUNA_EASED# > 0
+        TUNA_CURSOR_FADED = 1
+    endif
+    if TUNA_CURSOR_FADED
+        tunaCursorKeep# = 1 - TUNA_EASED#
+        set sprite alpha SELECTION_SPRITE, 90 * tunaCursorKeep#
+        set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, tunaCursorKeep#
+        if TUNA_EASED# <= 0
+            TUNA_CURSOR_FADED = 0
+        endif
+    endif
+endfunction
+
+
+` tell the two effects how far along the code is. the screen effect makes the light and the shadows,
+` and the effect of the fish that come out of the others moves them. effects lose their parameters when they are
+` reloaded, so this is called on every frame, the same as applyScreenWater.
+` a menu covers the board, and the game does not run underneath it, so the code goes away at once.
+function applyTunaScreen()
+    if MENU_MODE
+        tunaReset()
+    endif
+
+    ` the pool of light goes past the code on every side. a phone needs light around a code, to find its edge.
+    tunaHalfSize = (TUNA_CODE_SIZE * TUNA_PITCH) / 2 + TUNA_QUIET * TUNA_PITCH + TUNA_MARGIN
+    set effect param float4 1, "Qr", TUNA_MID_X, TUNA_MID_Y, tunaHalfSize, TUNA_EASED#
+    set effect param texture 1, "QrTexture", render target texture(TARGET_TUNA)
+
+    ` the light comes first, and the shadows of the fish come on in it toward the end, as the last of
+    ` the fish get to their places
+    tunaDeep# = (TUNA_SHOWN# - .65) * 3.2
+    if tunaDeep# < 0
+        tunaDeep# = 0
+    endif
+    if tunaDeep# > 1
+        tunaDeep# = 1
+    endif
+    set effect param float 1, "QrDeep", tunaDeep# * tunaDeep# * (3 - 2 * tunaDeep#)
+
+    set effect param float TUNA_FX_ID, "Progress", TUNA_SHOWN#
+    set effect param float TUNA_FX_ID, "Time", game ms() * .001
+    set effect param float TUNA_FX_ID, "Leaving", 1 - TUNA_ON
+endfunction

@@ -107,16 +107,7 @@ function updateBubbles()
             ` otherwise a big burst would be a wall of noise.
             if floaty.loud and floaty.y# > 0 and (bubNow - FLOAT_BUBBLE_SFX_LAST_MS) >= FLOAT_BUBBLE_SFX_GAP
                 FLOAT_BUBBLE_SFX_LAST_MS = bubNow
-                bubSfx = FLOAT_BUBBLE_SFX(FLOAT_BUBBLE_SFX_NEXT)
-                FLOAT_BUBBLE_SFX_NEXT = (FLOAT_BUBBLE_SFX_NEXT + 1) mod FLOAT_BUBBLE_SFX_COUNT
-
-                ` these are the same sounds that the fish make when they pop, but higher and quieter,
-                ` and off to the side that the bubble is on. a big bubble sounds a little lower.
-                sfx bubSfx, FLOAT_BUBBLE_CLIPS(rnd(FLOAT_BUBBLE_CLIP_COUNT))
-                set sfx volume bubSfx, .18 + rnd(10) * .01
-                set sfx pitch bubSfx, .75 + rnd(20) * .01 - floaty.size * .03
-                set sfx pan bubSfx, (floaty.x# * 2 - WORLD_WIDTH) * .6 / bubWidth#
-                play sfx bubSfx
+                playBubblePop(floaty.x#, floaty.size, .18 + rnd(10) * .01)
             endif
         else
             ` it grows in quickly at the start, and swells and fades right before it pops
@@ -159,6 +150,23 @@ function updateBubbles()
 
     FLOAT_BUBBLE_LIVE = bubLive
 
+endfunction
+
+
+` the sound of a bubble popping, `popX#` pixels from the left of the screen. `popSize` is how big the
+` bubble was, and `popVolume#` is how loud it is. updateBubbles is at about .2.
+` these are the same sounds that the fish make when they pop, but higher and quieter, and off to the
+` side that the bubble is on. a big bubble sounds a little lower.
+function playBubblePop(popX#, popSize, popVolume#)
+    popSfx = FLOAT_BUBBLE_SFX(FLOAT_BUBBLE_SFX_NEXT)
+    FLOAT_BUBBLE_SFX_NEXT = (FLOAT_BUBBLE_SFX_NEXT + 1) mod FLOAT_BUBBLE_SFX_COUNT
+
+    popWidth# = WORLD_WIDTH
+    sfx popSfx, FLOAT_BUBBLE_CLIPS(rnd(FLOAT_BUBBLE_CLIP_COUNT))
+    set sfx volume popSfx, popVolume#
+    set sfx pitch popSfx, .75 + rnd(20) * .01 - popSize * .03
+    set sfx pan popSfx, (popX# * 2 - WORLD_WIDTH) * .6 / popWidth#
+    play sfx popSfx
 endfunction
 
 

@@ -14,7 +14,9 @@ remstart
     entries that are not cards: coral, and horror coral. those are not on the upgrade screen. they are
     seen when some of it grows on the board. see CODEC_ENTRY_CORAL in fish_headers. then the two
     endings, and then the special fish (jellyfish, stingray, bottle) and what can happen to a fish
-    (belly up, skeletal, stacked, heart home), which are seen when one is on the board.
+    (belly up, skeletal, stacked, heart home), which are seen when one is on the board. and last, the
+    QR code that the fish make when TUNA is typed, which is seen when they make one. see TUNA in fish_headers.
+    and after that, the crooked bar, which is seen when a line of fish pays out. see DIAGONALS in fish_headers.
 
     there are more upgrades than fit in the grid, so the grid has pages. a page is CODEC_PAGE_SIZE
     tiles, and there are only that many tile sprites: they are given the pictures of whichever page is
@@ -41,6 +43,8 @@ setup_codec:
     CODEC_ENTRY_SKELETON = CARD_LENGTH + 8
     CODEC_ENTRY_STACK = CARD_LENGTH + 9
     CODEC_ENTRY_HOME = CARD_LENGTH + 10
+    CODEC_ENTRY_TUNA = CARD_LENGTH + 11
+    CODEC_ENTRY_CROOKED = CARD_LENGTH + 12
     CODEC_COUNT = CARD_LENGTH + CODEC_EXTRA_COUNT
 
     ` what has been seen, in every game that has ever been played
@@ -54,6 +58,7 @@ setup_codec:
 
     texture reserve texture id(TEX_ENDING_REEF), "Fish/Textures/ending_reef"
     texture reserve texture id(TEX_ENDING_ANCIENT), "Fish/Textures/ending_ancient"
+    texture reserve texture id(TEX_CROOKED), "Fish/Textures/Cards/crooked_bar"
 
     ` what a locked entry has for a picture is a question mark, and not a lock, whatever the names say
     texture reserve texture id(TEX_LOCK), "Fish/Textures/Cards/question"
@@ -320,6 +325,8 @@ function getCodecEntryTex(entryIndex)
     if entryIndex = CODEC_ENTRY_SKELETON then entryTex = SKELETON_TEX(CODEC_FISH_TEX)
     if entryIndex = CODEC_ENTRY_STACK then entryTex = CODEC_FISH_TEX
     if entryIndex = CODEC_ENTRY_HOME then entryTex = CODEC_FISH_TEX
+    if entryIndex = CODEC_ENTRY_TUNA then entryTex = CODEC_TUNA_TEX
+    if entryIndex = CODEC_ENTRY_CROOKED then entryTex = TEX_CROOKED
     if entryIndex < CARD_LENGTH then entryTex = CARDS(entryIndex).artTexId
 endfunction entryTex
 
@@ -505,6 +512,11 @@ function refreshCodec()
         if CODEC_SELECTED >= CODEC_ENTRY_JELLY
             set text CODEC_DESC_TEXT_ID, "Not found yet. It turns up on the board."
         endif
+
+        ` and the QR code is not on the board, or anywhere, until it is asked for
+        if CODEC_SELECTED = CODEC_ENTRY_TUNA
+            set text CODEC_DESC_TEXT_ID, "Not found yet. It has to be spelled out. The Underwater Notes Await."
+        endif
     else
         ` the size is set again, because it is worked out from the size of the texture
         set sprite texture CODEC_BIG_SPRITE, getCodecEntryTex(CODEC_SELECTED)
@@ -578,6 +590,21 @@ function refreshCodec()
             set text CODEC_NAME_TEXT_ID, "Coral Home"
             set text CODEC_DESC_TEXT_ID, "Happy fish come from happy coral homes. They don't leave, they just score " + str$(CORAL_SCORE_BONUS) + " times as much."
             set text CODEC_KIND_TEXT_ID, "status"
+            exitfunction
+        endif
+
+        if CODEC_SELECTED = CODEC_ENTRY_TUNA
+            set text CODEC_NAME_TEXT_ID, "Donate"
+            set text CODEC_DESC_TEXT_ID, "Type TUNA, and the fish line up into a QR code. Use a smart phone to read the code, and help a coral reef near you."
+            set text CODEC_KIND_TEXT_ID, "secret"
+            exitfunction
+        endif
+
+        ` see DIAGONALS in fish_headers
+        if CODEC_SELECTED = CODEC_ENTRY_CROOKED
+            set text CODEC_NAME_TEXT_ID, "The Crooked Bar"
+            set text CODEC_DESC_TEXT_ID, "Swap a fish into a line of " + str$(DIAGONAL_LENGTH) + " of its kind, corner to corner. Each one stacks up, and the multiplier grows: by one, and one more for every fish past " + str$(DIAGONAL_LENGTH) + "."
+            set text CODEC_KIND_TEXT_ID, "secret"
             exitfunction
         endif
 
