@@ -104,8 +104,75 @@ public class Game1 : Microsoft.Xna.Framework.Game
     // Applied to each VM in ResetFade. sweepInterval 0 → keep the VM default;
     // paranoid poisons freed memory + disables reuse so a use-after-free
     // surfaces immediately (diagnostic for GC-liveness bugs).
-    private int _gcSweepInterval;
+    private int _gcSweepInterval = ReadEnvInt("FADE_BASIC_GC_SWEEP");
+
+    // Whether the Fade program runs under the debug session: breakpoints, stepping, and the
+    // debug server that an editor attaches to. It checks for a breakpoint on every instruction,
+    // which more than doubles what a frame of the program costs, so a game that is shipping
+    // sets this to false before Run(). The FADE_NO_DEBUG environment variable turns it off
+    // without a rebuild, for measuring.
+    public bool DebugProgram { get; set; } = true;
     private bool _gcParanoid;
+
+    // Frame timing log, for hunting stalls on a machine that has no profiler on it. Set the
+    // FADE_PERF_LOG environment variable and the game writes one line a second to the console
+    // (and so to log.txt in a shipped build): how long the Fade program and the drawing took per
+    // frame, on average and at worst, and how many .NET collections ran. A frame that takes
+    // more than FADE_PERF_LOG milliseconds of work (default 14, which leaves little of a 60 Hz
+    // frame) gets a line of its own.
+    private static readonly bool _perfLog = Environment.GetEnvironmentVariable("FADE_PERF_LOG") != null;
+    private static readonly double _perfSpikeMs = Math.Max(ReadEnvInt("FADE_PERF_LOG"), 0) > 1 ? ReadEnvInt("FADE_PERF_LOG") : 14;
+    private long _perfVmStart, _perfDrawStart, _perfWindowStart, _perfLastFrame;
+    private double _perfVmSum, _perfVmMax, _perfDrawSum, _perfDrawMax, _perfFrameMax, _perfFrameVm;
+    private int _perfFrames, _perfGc0, _perfGc1, _perfGc2;
+
+    private static int ReadEnvInt(string name)
+    {
+        return int.TryParse(Environment.GetEnvironmentVariable(name), out var value) ? value : 0;
+    }
+
+    private static double PerfMs(long from, long to)
+    {
+        return (to - from) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+    }
+
+    private void PerfEndFrame()
+    {
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        var drawMs = PerfMs(_perfDrawStart, now);
+        var frameMs = _perfLastFrame == 0 ? 0 : PerfMs(_perfLastFrame, now);
+        _perfLastFrame = now;
+
+        _perfFrames++;
+        _perfVmSum += _perfFrameVm;
+        _perfDrawSum += drawMs;
+        if (_perfFrameVm > _perfVmMax) _perfVmMax = _perfFrameVm;
+        if (drawMs > _perfDrawMax) _perfDrawMax = drawMs;
+        if (frameMs > _perfFrameMax) _perfFrameMax = frameMs;
+
+        // The time between frames includes waiting for the screen, so it is the work that is judged.
+        if (_perfFrameVm + drawMs > _perfSpikeMs)
+        {
+            Console.WriteLine($"[perf] slow frame at {PerfMs(0, now) / 1000:F2} s: program {_perfFrameVm:F1} ms, draw {drawMs:F1} ms, {frameMs:F1} ms since the last frame");
+        }
+
+        if (_perfWindowStart == 0) _perfWindowStart = now;
+        if (PerfMs(_perfWindowStart, now) >= 1000 && _perfFrames > 0)
+        {
+            var gc0 = GC.CollectionCount(0);
+            var gc1 = GC.CollectionCount(1);
+            var gc2 = GC.CollectionCount(2);
+            Console.WriteLine(
+                $"[perf] {_perfFrames} frames, worst {_perfFrameMax:F1} ms | program avg {_perfVmSum / _perfFrames:F2} max {_perfVmMax:F1}" +
+                $" | draw avg {_perfDrawSum / _perfFrames:F2} max {_perfDrawMax:F1} | gc {gc0 - _perfGc0}/{gc1 - _perfGc1}/{gc2 - _perfGc2}");
+            _perfGc0 = gc0;
+            _perfGc1 = gc1;
+            _perfGc2 = gc2;
+            _perfWindowStart = now;
+            _perfFrames = 0;
+            _perfVmSum = _perfVmMax = _perfDrawSum = _perfDrawMax = _perfFrameMax = 0;
+        }
+    }
 
     private bool _autoAcceptNewBuilds;
     private bool _reloadRequestedFromUi;
@@ -528,7 +595,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         // Enable debug for normal runs and for test-debug runs.
         // Plain test runs (withDebug=false) stay non-debug so the Execute2
         // path runs without breakpoint overhead.
-        if (!_testMode || _testModeWithDebug)
+        if ((!_testMode || _testModeWithDebug) && DebugProgram && Environment.GetEnvironmentVariable("FADE_NO_DEBUG") == null)
         {
             _options.debug = true;
             _options.debugWaitForConnection = false;
@@ -949,6 +1016,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
             // it publishes is visible to commands the program calls this same frame.
             HostSystemRegistry.BeforeVmTick(gameTime);
 
+            if (_perfLog) _perfVmStart = System.Diagnostics.Stopwatch.GetTimestamp();
             try
             {
                 // Both desktop and browser route through DebugSession now.
@@ -1006,6 +1074,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
                         }
                     }
                 }
+
+                if (_perfLog) _perfFrameVm = PerfMs(_perfVmStart, System.Diagnostics.Stopwatch.GetTimestamp());
 
                 // Frame safepoint — runs after EITHER the debug or non-debug tick.
                 // (The fish game runs with _options.debug = true, so the module
@@ -1117,6 +1187,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
     protected override void Draw(GameTime gameTime)
     {
         if (_vm.instructionIndex <= 4) return; // the VM hasn't started yet; so don't draw anything...
+        if (_perfLog) _perfDrawStart = System.Diagnostics.Stopwatch.GetTimestamp();
 
         // the final image will be stored in the mainBuffer...
         // RenderSystem.RenderAllStages(_spriteBatch);
@@ -1179,6 +1250,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
         _spriteBatch.End();
         base.Draw(gameTime);
+        if (_perfLog) PerfEndFrame();
     }
 
     public void Quit()

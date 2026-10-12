@@ -91,6 +91,7 @@ public class Program
                 var fade = GameReloader.LatestBuild;
                 var game = new Game1(fade);
                 game.Services.AddService(typeof(IFadeHostSystem), NewSteamSystem());
+                game.SetGcSettings(4096, paranoid: false); // the same as the game that ships. see below.
 #if FADE_CONTENT_HOTRELOAD
                 game.Services.AddService(typeof(Fade.MonoGame.Content.IContentBuilder),
                     new Fade.MonoGame.Content.FadeContentBuilder());
@@ -110,6 +111,15 @@ public class Program
         StartLog();
 #endif
         using var shipped = new Game1(new GeneratedFade());
+
+        // A player has no debugger to attach, and running under the debug session more than
+        // doubles what every frame of the program costs. FISH_DEBUG keeps it, for the inspector.
+        shipped.DebugProgram = Environment.GetEnvironmentVariable("FISH_DEBUG") != null;
+
+        // The program's own heap is swept after this many allocations. The default of 64 means a
+        // sweep or two on every frame; this is a sweep every few frames, for about a tenth less
+        // time in the program, and a little more memory in between.
+        shipped.SetGcSettings(4096, paranoid: false);
         shipped.Services.AddService(typeof(IFadeHostSystem), NewSteamSystem());
         shipped.Run();
         return 0;

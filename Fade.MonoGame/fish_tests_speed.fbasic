@@ -81,3 +81,38 @@ test speed_looking_at_the_board_is_quick from fishBoard
     assert tQuick = 1, "40 looks at the board took " + str$(tTook) + " ms, and 1000 is allowed"
     end
 endtest
+
+test speed_hints_of_the_diagonals_are_quick from fishBoard
+    ` the hints are worked out again five times a second, so one pass has to be a small part of a frame.
+    ` a board with lines on it, so that there is something to find
+    testPut(1, 1, 6)
+    testPut(2, 2, 6)
+    testPut(3, 3, 6)
+    testPut(5, 5, 7)
+    testPut(6, 4, 7)
+    testPut(7, 3, 7)
+
+    tPasses = 300
+    tTotal# = 0.0
+    tPass = 0
+    tStart# = wall ms()
+    while tPass < tPasses
+        DIAGONAL_HINT_MS = 0
+        stepDiagonalHints()
+        tPass = tPass + 1
+    endwhile
+    tEnd# = wall ms()
+    tTotal# = tEnd# - tStart#
+
+    assert DIAGONAL_HINT_SLOPE(testIndex(2, 2)) = 1, "the line that goes down was found"
+    assert DIAGONAL_HINT_SLOPE(testIndex(6, 4)) = -1, "and the one that goes up"
+
+    ` 500 milliseconds for all of them. they take about 250, and they took about 800 when both lines
+    ` through every fish were followed a cell at a time.
+    tAllowed# = 500.0
+    tQuick = 0
+    if tTotal# < tAllowed# then tQuick = 1
+    tTook = tTotal#
+    assert tQuick = 1, "300 passes over the board took " + str$(tTook) + " ms, and 500 is allowed"
+    end
+endtest
