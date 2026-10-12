@@ -82,7 +82,16 @@ global TEX_BOTTLE
 global JELLY_SPAWN_CHANCE = 10 `how many new fish in a hundred are jellyfish, with the first card
 global JELLY_SPAWN_STEP = 5 `how much every card after the first adds to that
 global JELLY_MAX = 3 `how many times the card can be taken
-global dim STING_DELAY(400) `for every jellyfish that is popping, how long it is until it pops, in milliseconds. the bolts wait for that.
+` handle_combos looks closely at every group that could pop, and that takes a walk over the whole board
+` for each one. most groups are a fish or two, which can not pop, so the fish of every group are counted
+` first, in one walk, and the small ones are passed over. see comboCountGroups in fish_funcs.
+global COMBO_GROUP_ROOM = 400 `how many groups there is room to count. with more than this, none are passed over.
+global dim COMBO_GROUP_SIZE(400) `how many fish every group has
+global dim COMBO_GROUP_FORCED(400) `1 for a group that has a forced pop in it, which goes whatever its size
+global COMBO_GROUP_WALKS = 0 `how many groups the last look at the board walked the board for. the tests hold this down. see fish_tests_speed.
+global COMBO_GROUPS_STALE = 0`1 when a group has been handled since the count, which may have moved fish from one group to another
+
+global dim STING_DELAY(400)`for every jellyfish that is popping, how long it is until it pops, in milliseconds. the bolts wait for that.
 global JELLY_STING_CHANCE = 50 `how many fish in a hundred get stung, of the ones next to a jellyfish that pops
 
 ` RAYS. with the "rays" card, some of the new fish are stingrays. whenever a stingray pops, for whatever
@@ -405,10 +414,26 @@ global SCORE_SHOWN = 0
 ` time, and it fizzes with bubbles to show that an upgrade is on its way.
 ` the bar stays full while the upgrade screen is up, too. only once an upgrade has been picked does the bar
 ` empty out and start on the next round. advanceScoreBar, in fish_funcs, does that.
-` a big combo can score far past the end of the bar. the score is kept, but the next round never starts
-` more than SCORE_CARRY_MAX# of the way along, so one combo cannot win two rounds in a row.
+` a big combo can score far past the end of the bar. the score is kept, but none of it counts toward the
+` next round, which starts from empty. it goes toward more multiplier instead. see OVERFLOW, below.
 global SCORE_BAR_HOLD = 0 `0 is not full. 1 is full, and waiting for the board to settle. 2 is full, with the upgrade screen asked for.
-global SCORE_CARRY_MAX# = .5 `how much of the next round's bar the points scored past the end can fill, at the most
+
+` OVERFLOW. the points that are scored past the end of the bar, while it is full and fizzing, fill a second
+` bar that is drawn over the full one, in a color of its own. when that one fills up, the multiplier goes up
+` by one, and it starts again from empty in another color, and takes more to fill. the first one takes
+` OVERFLOW_STEP_PERCENT of what the next round takes, the second takes twice that, and so on: a quarter of the
+` next round, then a half, then three quarters, then all of it. they stack, so the second one has been won when
+` a quarter and a half of the next round have been scored past the end. after OVERFLOW_TIER_MAX of them there
+` are no more, and the last one stays full.
+` it goes by the score that shows, like the bar does, so every one is seen to fill up before it pays out.
+` stepOverflow, in fish_funcs, does the work, and frame_score draws it.
+global OVERFLOW_TIER_MAX = 4 `how many times the multiplier can go up on one full bar
+global OVERFLOW_STEP_PERCENT = 25 `how much of the next round the first one takes, and how much more every one after it takes
+global OVERFLOW_TIER = 0 `how many have been won on this full bar
+global OVERFLOW_FILL# = 0 `how full the one that is being filled is drawn, from 0 to 1
+global OVERFLOW_POINTS = 0 `how many points are in the one that is being filled
+global OVERFLOW_NEED = 0 `and how many it takes
+global OVERFLOW_SPRITE
 
 ` HOW LONG A ROUND IS. round n needs SCORE_ROUND_BASE * n ^ SCORE_ROUND_POWER# points: 400, 1020, 1760, 2600, 3510,
 ` then about 8950 for round 10, 22830 for round 20, and 39460 for round 30. getRoundSpan, in fish_funcs, works it out.
@@ -1551,7 +1576,9 @@ global dim CORAL_CELLS(400) `1 for every cell of the board that has coral on it
 
 ` HORROR CORAL. a song that is sung with the dead brings coral that is diseased: when the cursor passes
 ` over a belly up fish anywhere on the way along a pattern, or any of the fish that the swap at the end
-` of the pattern pops is belly up, the coral that the pattern grows is horror coral.
+` of the pattern pops is belly up, the coral that the pattern grows is horror coral. it is, too, when a
+` dead fish is on any cell of the pattern as the swap is judged: one that died after the cursor had
+` passed it, or the one that the swap brought onto the last cell. a skeleton is as dead as a belly up fish.
 ` every song says which kind the coral on its cells is from then on, so a song with no dead fish in it
 ` heals the horror coral that it crosses, and a song with one spoils the coral that it crosses.
 ` it is dark and sickly, with tentacles, eyes and skulls coming out of it in place of the things that grow

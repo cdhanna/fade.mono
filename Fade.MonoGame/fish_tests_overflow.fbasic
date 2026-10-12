@@ -1,0 +1,90 @@
+remstart
+    THE TESTS OF THE OVERFLOW
+    the points that are scored past the end of a full bar go toward more multiplier.
+    see OVERFLOW in fish_headers, and fish_tests for how the tests work.
+remend
+
+test overflow_points_win_more_multiplier from fishBoard
+    ` a round of 400 points that has just been won. the next round, the second, takes 1020.
+    SCORE_BAR.startVal = 0
+    SCORE_BAR.endVal = 400
+    PROGRESS_BARS(0) = SCORE_BAR
+    SCORE_BAR_HOLD = 1
+    CURRENT_ROUND = 1
+    SCORE_MULTIPLIER = 1
+    resetOverflow()
+    assert getRoundSpan(1) = 1020, "the next round takes 1020 points"
+
+    SCORE_SHOWN = 654
+    stepOverflow()
+    assert OVERFLOW_TIER = 0, "a quarter of the next round has not been scored past the end yet"
+    assert SCORE_MULTIPLIER = 1, "so the multiplier is as it was"
+    assert OVERFLOW_NEED = 255, "the first one takes a quarter of the next round"
+    assert OVERFLOW_POINTS = 254, "and this much of it is there"
+
+    SCORE_SHOWN = 655
+    stepOverflow()
+    assert OVERFLOW_TIER = 1, "a quarter of the next round past the end wins the first one"
+    assert SCORE_MULTIPLIER = 2, "and the multiplier goes up"
+    assert OVERFLOW_NEED = 510, "the second one takes half of the next round"
+    assert OVERFLOW_POINTS = 0, "and it starts from empty"
+
+    SCORE_SHOWN = 1164
+    stepOverflow()
+    assert OVERFLOW_TIER = 1, "the second one takes a quarter and a half, added up"
+    assert SCORE_MULTIPLIER = 2, "so this is not enough"
+
+    SCORE_SHOWN = 1165
+    stepOverflow()
+    assert SCORE_MULTIPLIER = 3, "and this is"
+    assert OVERFLOW_NEED = 765, "the third one takes three quarters of the next round"
+
+    ` 255 + 510 + 765 + 1020 past the end
+    SCORE_SHOWN = 2950
+    stepOverflow()
+    assert OVERFLOW_TIER = 4, "a big score can win more than one at once"
+    assert SCORE_MULTIPLIER = 5, "and every one of them adds to the multiplier"
+
+    SCORE_SHOWN = 90000
+    stepOverflow()
+    stepOverflow()
+    assert SCORE_MULTIPLIER = 5, "after the fourth there are no more"
+    end
+endtest
+
+test overflow_points_are_not_carried_into_the_next_round from fishBoard
+    SCORE_BAR.startVal = 0
+    SCORE_BAR.endVal = 400
+    PROGRESS_BARS(0) = SCORE_BAR
+    SCORE_BAR_HOLD = 1
+    CURRENT_ROUND = 1
+    CURRENT_SCORE = 1200
+    SCORE_SHOWN = 1200
+    stepOverflow()
+    assert OVERFLOW_TIER = 2, "the points past the end went toward the multiplier"
+
+    advanceScoreBar()
+    tWantEnd = 1200 + getRoundSpan(1)
+    assert CURRENT_SCORE = 1200, "the score is all still there"
+    assert SCORE_BAR.startVal = 1200, "but the next round starts from empty"
+    assert SCORE_BAR.endVal = tWantEnd, "and takes all of its points"
+    assert OVERFLOW_TIER = 0, "and the overflow starts over"
+    end
+endtest
+
+test overflow_of_a_loaded_game_is_not_paid_twice from fishBoard
+    SCORE_BAR.startVal = 0
+    SCORE_BAR.endVal = 400
+    PROGRESS_BARS(0) = SCORE_BAR
+    SCORE_BAR_HOLD = 1
+    CURRENT_ROUND = 1
+    SCORE_MULTIPLIER = 3
+    CURRENT_SCORE = 1200
+    SCORE_SHOWN = 1200
+
+    syncOverflow()
+    stepOverflow()
+    assert OVERFLOW_TIER = 2, "the game knows how many had been won"
+    assert SCORE_MULTIPLIER = 3, "and they are already in the multiplier that was saved"
+    end
+endtest

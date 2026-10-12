@@ -1,0 +1,99 @@
+remstart
+    THE TESTS OF HORROR CORAL
+    the dead fish that a song does not walk over, and does not pop, but that are on its pattern all the
+    same. see HORROR CORAL in fish_headers, and fish_tests for how the tests work.
+remend
+
+test coral_cast_with_a_dead_fish_swapped_in_is_horror_coral from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` the walk and swap that the tests of coral in fish_tests use, but the fish that the swap brings down onto
+    ` the last cell of the pattern is belly up. the cursor never comes to it, and it does not pop.
+    testPut(1, 3, 6)
+    testPut(2, 3, 6)
+    testPut(3, 4, 6)
+    CELLS(testIndex(3, 3)).bellyUp = 1
+    testCursor(4, 6)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the swap popped something"
+    assert CELLS(testIndex(3, 4)).bellyUp = 1, "the belly up fish is on the last cell of the pattern now"
+    assert CELLS(testIndex(3, 4)).comboBlownUp = 0, "and it is not one of the fish that pop"
+    assert CORAL_COUNT = 4, "coral grew on the four cells that the cursor walked over"
+    assert CORAL_SICK_COUNT = 4, "and all of it is horror coral"
+    end
+endtest
+
+test coral_cast_with_a_skeleton_swapped_in_is_horror_coral from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` a skeleton is as dead as a belly up fish
+    coralSwapMade(0, 0)
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+    coralCursorStepped(3, 5, 0, -1)
+
+    ` the swap is made, and the skeleton is what it leaves on the last cell
+    CELLS(testIndex(3, 4)).bellyUp = 2
+    coralSwapMade(3, 4)
+    judgeCoralCast(1)
+
+    assert CORAL_COUNT = 4, "coral grew on the four cells that the cursor walked over"
+    assert CORAL_SICK_COUNT = 4, "and all of it is horror coral"
+    assert MELODY_PLAYING >= MELODY_HORROR_FIRST, "and the music answers with a lament"
+    end
+endtest
+
+test coral_walked_past_a_fish_that_dies_later_is_horror_coral from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` up, left, up, from 4, 6. every fish is well as the cursor passes it
+    coralSwapMade(0, 0)
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+
+    ` and then the one where the walk started goes belly up, behind the cursor
+    CELLS(testIndex(4, 6)).bellyUp = 1
+    coralCursorStepped(3, 5, 0, -1)
+    coralSwapMade(3, 4)
+    judgeCoralCast(1)
+
+    assert CORAL_COUNT = 4, "coral grew on the four cells that the cursor walked over"
+    assert CORAL_SICK_COUNT = 4, "and all of it is horror coral, though the cursor never passed a dead fish"
+    assert MELODY_PLAYING >= MELODY_HORROR_FIRST, "and the music answers with a lament"
+    end
+endtest
+
+test coral_cast_with_a_dead_fish_off_the_pattern_is_coral from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    ` a dead fish that is next to the walk, and not on it, spoils nothing
+    CELLS(testIndex(5, 5)).bellyUp = 1
+    CELLS(testIndex(2, 5)).bellyUp = 2
+    coralSwapMade(0, 0)
+    coralCursorStepped(4, 6, 0, -1)
+    coralCursorStepped(4, 5, -1, 0)
+    coralCursorStepped(3, 5, 0, -1)
+    coralSwapMade(3, 4)
+    judgeCoralCast(1)
+
+    assert CORAL_COUNT = 4, "coral grew on the four cells that the cursor walked over"
+    assert CORAL_SICK_COUNT = 0, "and none of it is horror coral"
+    end
+endtest

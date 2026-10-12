@@ -1,0 +1,83 @@
+remstart
+    THE TESTS OF SPEED
+    a swap must not make the game stall. see fish_tests for how the tests work.
+
+    after every swap, handle_combos looks at the board. it used to walk the whole board once for every
+    group on it, and a board is mostly groups of one fish, so every swap cost a few frames. now the
+    small groups are passed over. see COMBO_GROUP_SIZE in fish_headers.
+
+    there are two kinds of test in here:
+    - the ones that count. COMBO_GROUP_WALKS is how many groups the board was walked for, which is the
+      same on every machine, so these never fail by chance.
+    - the one that times. it is there for a stall that comes from somewhere else. the time that it
+      allows is many times what the look takes, because a machine can be slow, or busy.
+
+    `wall ms` is the only clock that moves in the middle of a frame. a float can only hold it to the
+    nearest 64 milliseconds or so, which is why the test times many looks and adds them up.
+remend
+
+test speed_quiet_board_walks_no_groups from fishBoard
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 0, "nothing pops on the board of the tests"
+    assert COMBO_GROUP_WALKS = 0, "and no group is worth a walk over the board"
+    end
+endtest
+
+test speed_only_the_group_that_pops_is_walked from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the three in a row pop"
+    assert COMBO_GROUP_WALKS = 1, "and theirs is the only group that the board is walked for"
+    end
+endtest
+
+test speed_swap_that_pops_nothing_walks_no_groups from fishBoard
+    testCursor(4, 4)
+    testQueueMove(1, 0, 1, -1)
+
+    ` the swap plays out over a few frames, and the board is looked at when it lands
+    tFrames = 0
+    tWaiting = 1
+    while tWaiting
+        runto _loop
+        tFrames = tFrames + 1
+        if CURRENT_MOVE_COUNT > 0 then tWaiting = 0
+        if tFrames >= 120 then tWaiting = 0
+    endwhile
+    assert CURRENT_MOVE_COUNT = 1, "the swap was made"
+    assert REQUEST_COMBO_CHECK = 0, "and the board has been looked at"
+    assert COMBO_GROUP_WALKS = 0, "without a walk over the board for any group"
+    end
+endtest
+
+test speed_looking_at_the_board_is_quick from fishBoard
+    ` from the top of a frame to the end of the look, which leaves out drawing the frame
+    tLooks = 40
+    tTotal# = 0.0
+    tLook = 0
+    while tLook < tLooks
+        runto _loop
+        REQUEST_COMBO_CHECK = 1
+        tStart# = wall ms()
+        runto _combos_judged
+        tEnd# = wall ms()
+        tSpan# = tEnd# - tStart#
+        tTotal# = tTotal# + tSpan#
+        tLook = tLook + 1
+    endwhile
+
+    ` 25 milliseconds a look. it takes about 5, and it took about 65 when every group was walked.
+    tAllowed# = tLooks * 25.0
+    tQuick = 0
+    if tTotal# < tAllowed# then tQuick = 1
+    tTook = tTotal#
+    assert tQuick = 1, "40 looks at the board took " + str$(tTook) + " ms, and 1000 is allowed"
+    end
+endtest

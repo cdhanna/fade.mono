@@ -374,6 +374,13 @@ setup_score:
     global PROGRESS_BAR_COUNT = 1
     PROGRESS_BARS(0) = SCORE_BAR
 
+    ` the bar that fills toward more multiplier, on top of the full one. see OVERFLOW in fish_headers.
+    reserve sprite id(OVERFLOW_SPRITE)
+    sprite OVERFLOW_SPRITE, SCORE_POS.x + 1, SCORE_POS.y + 1, TEX_PIXEL
+    size sprite OVERFLOW_SPRITE, 0, SCORE_SIZE.y - 2
+    set sprite offset OVERFLOW_SPRITE, 0, 0
+    color sprite OVERFLOW_SPRITE, rgb(255, 220, 64, 255)
+
     ` global SCORE_SLIDE_BACKDROP_SPRITE
     ` global SCORE_SLIDE_FRONT_SPRITE
     ` global SCORE_SLIDE_TWEEN_ID
@@ -832,10 +839,14 @@ frame_score:
         create basic tween SCORE_BAR.progressTweenId, tweenVal(SCORE_BAR.progressTweenId), 1, 90, 0
     endif
 
+    ` the points past the end of a full bar go toward more multiplier. see OVERFLOW in fish_headers.
+    stepOverflow()
+
     if SCORE_BAR_HOLD > 0
 
-        ` show ability upgrade! but not while fish are still popping. it waits for the board to settle.
-        if SCORE_BAR_HOLD = 1 and REQUEST_COMBO_CHECK = 0 and LIVE_MOVE_ACTIVE = 0
+        ` show ability upgrade! but not while fish are still popping. it waits for the board to settle,
+        ` and for the points of the last fish to get onto the bar, so that none of the overflow is missed.
+        if SCORE_BAR_HOLD = 1 and REQUEST_COMBO_CHECK = 0 and LIVE_MOVE_ACTIVE = 0 and SCORE_TICK_COUNT = 0
             roundWasLast = 0
             if getRoundsLeft() <= 0
                 ` a game that was won already, and is being carried on with, has no last round. see KEEP PLAYING in fish_headers.
@@ -861,6 +872,9 @@ frame_score:
             SCORE_BAR_FIZZ_MS = game ms() + SCORE_BAR_FIZZ_GAP
             for fizzN = 1 to 2
                 fizzColor = rgb(64, 128, 255)
+                ` once there are points past the end, it fizzes in the color of the overflow
+                fizzOver = OVERFLOW_TIER + OVERFLOW_POINTS
+                if fizzOver > 0 then fizzColor = getOverflowColor(OVERFLOW_TIER)
                 if rnd(3) = 0 then fizzColor = rgb(255, 255, 255)
                 spawnBubblesOnLayer(SCORE_BAR.pos.x + rnd(SCORE_BAR.size.x), SCORE_BAR.pos.y + 2, 2, 1, 0, fizzColor, ORDER_FLOAT_BUBBLES, 40, 255, 1)
             next
@@ -908,8 +922,23 @@ frame_score:
         if SCORE_BAR_HOLD and shownInRound > span then shownInRound = span
         y$ = str$(shownInRound)
 
+        ` and once there are points past the end, it counts them toward the next bonus multiplier
+        if OVERFLOW_NEED > 0 and OVERFLOW_POINTS > 0
+            y$ = "+" + str$(OVERFLOW_POINTS)
+            x$ = str$(OVERFLOW_NEED)
+        endif
+
         concat$ = y$ + z$ + x$
         set text bar.textNumId, y$ + z$ + x$
+
+        ` the overflow is drawn over the full bar, and shakes along with it
+        overWidth# = (bar.size.x - 2.0) * OVERFLOW_FILL#
+        size sprite OVERFLOW_SPRITE, overWidth#, 2
+        position sprite OVERFLOW_SPRITE, bar.pos.x + 1 + barShakeX, bar.pos.y + 1 + barShakeY
+        overDrawTier = OVERFLOW_TIER
+        if overDrawTier >= OVERFLOW_TIER_MAX then overDrawTier = OVERFLOW_TIER_MAX - 1
+        color sprite OVERFLOW_SPRITE, getOverflowColor(overDrawTier)
+        set sprite alpha OVERFLOW_SPRITE, 255 * HUD_KEEP#
     next
 
 
@@ -1111,7 +1140,28 @@ handle_combos:
     explodePitch# = (rnd(4)*.02)
     explodeIndex = 0
     requiredComboCount = getRequiredComboCount()
+
+    ` the fish of every group get counted, so that a group that is too small to do anything is passed
+    ` over without a walk over the board. see COMBO_GROUP_SIZE in fish_headers.
+    groupsCounted = 0
+    if groupId < COMBO_GROUP_ROOM then groupsCounted = 1
+    COMBO_GROUPS_STALE = 1
+    COMBO_GROUP_WALKS = 0
     for g = 0 to groupId
+
+        groupIdle = 0
+        if groupsCounted
+            ` a group that was handled may have taken fish from another group, or made a forced one
+            if COMBO_GROUPS_STALE
+                comboCountGroups(groupId)
+            endif
+            if COMBO_GROUP_SIZE(g) < requiredComboCount
+                if COMBO_GROUP_FORCED(g) = 0 then groupIdle = 1
+            endif
+        endif
+        if groupIdle then skip
+        COMBO_GROUPS_STALE = 1
+        COMBO_GROUP_WALKS = COMBO_GROUP_WALKS + 1
 
         ` need to check if this group is big enough
         comboCount = 0
@@ -1430,10 +1480,11 @@ handle_combos:
 
     next
 
+
     ` reset comboForce
     for i = 0 to CELL_COUNT - 1
         CELLS(i).comboForce = 0
-    next 
+    next
 
     ` a swap that led to this look at the board either popped something, or it did not. the fish that are
     ` popping now were scored with the multiplier as it was, and a new one counts from the next pop.

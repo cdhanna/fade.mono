@@ -1316,6 +1316,22 @@ function judgeCoralCast(coralComboCount)
                     if CELLS(coralCastN).bellyUp then coralCastSick = 1
                 endif
             next
+
+            ` and so does a dead fish that is on the pattern now, whether it pops or not: one that died
+            ` after the cursor had passed it, or the one that the swap brought onto the last cell.
+            for coralCastN = 0 to CORAL_PENDING_COUNT - 1
+                coralCastX = CORAL_PENDING_X(coralCastN)
+                coralCastY = CORAL_PENDING_Y(coralCastN)
+                coralOnBoard = 1
+                if coralCastX < 0 then coralOnBoard = 0
+                if coralCastX >= CELL_COLUMN_COUNT then coralOnBoard = 0
+                if coralCastY < 0 then coralOnBoard = 0
+                if coralCastY >= CELL_ROW_COUNT then coralOnBoard = 0
+
+                if coralOnBoard
+                    if CELLS(coralCastX + coralCastY * CELL_COLUMN_COUNT).bellyUp then coralCastSick = 1
+                endif
+            next
             coralCastTint = rgb(255, 150, 140)
             if coralCastSick then coralCastTint = rgb(150, 190, 90)
 
@@ -2318,6 +2334,7 @@ function applyHudFade()
     hudBarAlpha = 200
     if SCORE_BAR_HOLD > 0 then hudBarAlpha = 255
     set sprite alpha SCORE_BAR.foregroundSpriteId, hudBarAlpha * hudKeep#
+    set sprite alpha OVERFLOW_SPRITE, 255 * hudKeep#
     set text alpha SCORE_BAR.textNumId, 200 * hudKeep#
     set text alpha SCORE_BAR.textTitleId, 200 * hudKeep#
     set text alpha ROUNDS_LABEL_TEXT_ID, 200 * hudKeep#

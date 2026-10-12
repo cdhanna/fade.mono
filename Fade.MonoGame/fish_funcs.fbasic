@@ -710,6 +710,108 @@ function syncScoreShown()
     SCORE_SHOWN = CURRENT_SCORE
     SCORE_TICK_COUNT = 0
     SCORE_BAR_HOLD = 0
+    resetOverflow()
+endfunction
+
+` how many points past the end of the bar it takes to have won `tierCount` of the bonus multipliers.
+` see OVERFLOW in fish_headers. each one takes more than the last, and this is all of them added up.
+function getOverflowTotal(tierCount)
+    ` they go by what the next round takes, which is more than the one that was just won took. the round
+    ` was counted when its bar filled up, so CURRENT_ROUND is already the next one.
+    overSpan = getRoundSpan(CURRENT_ROUND)
+    overTotal = 0
+    overN = 1
+    while overN <= tierCount
+        overPart = (overSpan * OVERFLOW_STEP_PERCENT * overN) / 100
+        if overPart < 1 then overPart = 1
+        overTotal = overTotal + overPart
+        overN = overN + 1
+    endwhile
+endfunction overTotal
+
+` the color of the bar that fills toward a bonus multiplier, when `tierCount` of them have been won
+function getOverflowColor(tierCount)
+    overColor = rgb(255, 220, 64)
+    if tierCount = 1 then overColor = rgb(255, 144, 48)
+    if tierCount = 2 then overColor = rgb(255, 80, 136)
+    if tierCount >= 3 then overColor = rgb(200, 104, 255)
+endfunction overColor
+
+` nothing has been scored past the end of the bar
+function resetOverflow()
+    OVERFLOW_TIER = 0
+    OVERFLOW_FILL# = 0
+    OVERFLOW_POINTS = 0
+    OVERFLOW_NEED = 0
+endfunction
+
+` a game that was loaded with its bar held full has already been given the multipliers that its score won
+function syncOverflow()
+    resetOverflow()
+    syncPast = CURRENT_SCORE - SCORE_BAR.endVal
+    syncGoing = 1
+    while syncGoing
+        syncGoing = 0
+        if OVERFLOW_TIER < OVERFLOW_TIER_MAX
+            syncNext = getOverflowTotal(OVERFLOW_TIER + 1)
+            if syncPast >= syncNext
+                OVERFLOW_TIER = OVERFLOW_TIER + 1
+                syncGoing = 1
+            endif
+        endif
+    endwhile
+endfunction
+
+` the points that show past the end of a full bar go toward more multiplier. see OVERFLOW in fish_headers.
+` frame_score calls this on every frame, and draws what it works out.
+function stepOverflow()
+    if SCORE_BAR_HOLD = 0
+        OVERFLOW_FILL# = 0
+        OVERFLOW_POINTS = 0
+        OVERFLOW_NEED = 0
+        exitfunction
+    endif
+
+    overPast = SCORE_SHOWN - SCORE_BAR.endVal
+
+    ` one big fish can fill more than one of them at once
+    overGoing = 1
+    while overGoing
+        overGoing = 0
+        if OVERFLOW_TIER < OVERFLOW_TIER_MAX
+            overNext = getOverflowTotal(OVERFLOW_TIER + 1)
+            if overPast >= overNext
+                ` the bar bursts in the color that it was, and starts again from empty in the next one
+                overBurst = getOverflowColor(OVERFLOW_TIER)
+                OVERFLOW_TIER = OVERFLOW_TIER + 1
+                OVERFLOW_FILL# = 0
+                addMultiplier(1)
+                for overN = 1 to 24
+                    spawnBubblesOnLayer(SCORE_BAR.pos.x + rnd(SCORE_BAR.size.x), SCORE_BAR.pos.y + 2, 3, 1, 0, overBurst, ORDER_FLOAT_BUBBLES, 40, 255, 1)
+                next
+                overGoing = 1
+            endif
+        endif
+    endwhile
+
+    if OVERFLOW_TIER >= OVERFLOW_TIER_MAX
+        ` there are no more to win, and the last one stays full
+        OVERFLOW_POINTS = 0
+        OVERFLOW_NEED = 0
+        OVERFLOW_FILL# = 1
+    else
+        overStart = getOverflowTotal(OVERFLOW_TIER)
+        overEnd = getOverflowTotal(OVERFLOW_TIER + 1)
+        OVERFLOW_NEED = overEnd - overStart
+        OVERFLOW_POINTS = overPast - overStart
+        if OVERFLOW_POINTS < 0 then OVERFLOW_POINTS = 0
+
+        ` it slides to where it should be, quickly, the same as the bar under it does
+        overPoints# = OVERFLOW_POINTS
+        overNeed# = OVERFLOW_NEED
+        overTarget# = overPoints# / overNeed#
+        OVERFLOW_FILL# = OVERFLOW_FILL# + (overTarget# - OVERFLOW_FILL#) * .3
+    endif
 endfunction
 
 ` how many points the round takes. `roundIndex` is 0 for the first round. see HOW LONG A ROUND IS in fish_headers.
@@ -731,13 +833,13 @@ function advanceScoreBar()
 
         ` the round was counted when its bar filled up, so CURRENT_ROUND is already the round that is starting
         newSpan = getRoundSpan(CURRENT_ROUND)
-        newStart = SCORE_BAR.endVal
 
-        ` whatever was scored past the end of the last round is already part of this one, but only so much
-        ` of it. past that, the round starts later instead, so that the score is still all there.
-        carryMax = newSpan * SCORE_CARRY_MAX#
-        carried = CURRENT_SCORE - newStart
-        if carried > carryMax then newStart = CURRENT_SCORE - carryMax
+        ` whatever was scored past the end of the last round went toward more multiplier, and none of it
+        ` is part of this one. see OVERFLOW in fish_headers. the round starts from the score as it is,
+        ` so that the score is still all there.
+        newStart = CURRENT_SCORE
+        if newStart < SCORE_BAR.endVal then newStart = SCORE_BAR.endVal
+        resetOverflow()
 
         SCORE_BAR.startVal = newStart
         SCORE_BAR.endVal = newStart + newSpan
@@ -747,6 +849,7 @@ function advanceScoreBar()
         barAhead# = SCORE_SHOWN - SCORE_BAR.startVal
         barRatio# = barAhead# / barSpan#
         if barRatio# > 1 then barRatio# = 1
+        if barRatio# < 0 then barRatio# = 0
 
         ` the bar is empty right away, and stays that way for a moment so that it is seen to be empty.
         ` then it grows from the left to where the new round starts.
@@ -813,6 +916,29 @@ function createProgressBar(pos as vec, size as vec)
 
 endfunction bar
 
+
+` count the fish of every group, from group 0 to group `countLast`, and note which groups have a forced
+` pop in them. handle_combos uses this to pass over the groups that are too small to pop. see
+` COMBO_GROUP_SIZE in fish_headers.
+function comboCountGroups(countLast)
+    for countGroup = 0 to countLast
+        COMBO_GROUP_SIZE(countGroup) = 0
+        COMBO_GROUP_FORCED(countGroup) = 0
+    next
+
+    countLastCell = CELL_COUNT - 1
+    for countCell = 0 to countLastCell
+        countGroup = CELLS(countCell).comboFillId
+        if countGroup >= 0
+            if countGroup <= countLast
+                COMBO_GROUP_SIZE(countGroup) = COMBO_GROUP_SIZE(countGroup) + 1
+                if CELLS(countCell).comboForce > 0 then COMBO_GROUP_FORCED(countGroup) = 1
+            endif
+        endif
+    next
+
+    COMBO_GROUPS_STALE = 0
+endfunction
 
 function findCombos(cIndex, groupId)
     ` find the cell to the left, 
