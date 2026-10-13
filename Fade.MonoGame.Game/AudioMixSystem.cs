@@ -135,9 +135,11 @@ public static class AudioMixSystem
         // reserve time, say). They are kept above and applied when the instance appears.
         if (instance == null) return;
 
+        var perfStart = System.Diagnostics.Stopwatch.GetTimestamp();
         instance.Volume = volume;
         instance.Pitch = pitch;
         instance.Pan = pan;
+        AudioInstanceSystem.perfTicks += System.Diagnostics.Stopwatch.GetTimestamp() - perfStart;
 #endif
     }
 }

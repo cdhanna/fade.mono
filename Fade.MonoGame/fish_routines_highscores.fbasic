@@ -63,14 +63,14 @@ remend
 ` they can be in any order, and there can be fewer than 8 of them. the rest of the table is left empty.
 ` a table that the player has got onto is kept in prefs.json, and does not look at these any more.
 seed_highscores:
-    seedHighscore("CDH", 9, 60, 420, 1500)
-    seedHighscore("LEE", 8, 75, 500, 1800)
-    seedHighscore("FFP", 7, 90, 580, 2100)
-    seedHighscore("CDH", 6, 105, 660, 2400)
-    seedHighscore("LEE", 5, 120, 740, 2700)
-    seedHighscore("FFP", 4, 140, 820, 3000)
-    seedHighscore("CDH", 3, 160, 900, 3300)
-    seedHighscore("LEE", 2, 180, 1000, 3600)
+    seedHighscore("CDH", 9, 60, 420, 900)
+    seedHighscore("LEE", 8, 75, 500, 1080)
+    seedHighscore("FFP", 7, 90, 580, 1260)
+    seedHighscore("CDH", 6, 105, 660, 1440)
+    seedHighscore("LEE", 5, 120, 740, 1620)
+    seedHighscore("FFP", 4, 140, 820, 1800)
+    seedHighscore("CDH", 3, 160, 900, 1980)
+    seedHighscore("LEE", 2, 180, 1000, 2160)
 return
 
 
@@ -109,6 +109,35 @@ setup_highscores:
     createHighscoreTab(7, hsPanelX + 202, 98, "Global")
 
     HISCORE_NOTE_TEXT_ID = createHighscoreText(WORLD_WIDTH / 2, 0, 16, "note")
+
+    ` the tiles of the endings go on top of the tabs, at the right. see THE ENDINGS THAT ARE SHOWN in fish_headers.
+    showAllEndings()
+    loadKnownEndings()
+    HISCORE_TILE_MARK = createHighscoreText(0, 0, 16, "?")
+    for hsI = 0 to 2
+        hsTileX = getEndingTileX(hsI)
+        hsTileY = getEndingTileY()
+
+        hsTileId = 0
+        reserve sprite id(hsTileId)
+        sprite hsTileId, hsTileX, hsTileY, TEX_PIXEL
+        set sprite offset hsTileId, 0, 0
+        size sprite hsTileId, HISCORE_ENDING_SIZE, HISCORE_ENDING_SIZE
+        order sprite hsTileId, ORDER_MENU_PANEL
+        set sprite render target hsTileId, TARGET_MENU
+        hide sprite hsTileId
+        HISCORE_ENDING_TILES(hsI) = hsTileId
+
+        hsTileIcon = 0
+        reserve sprite id(hsTileIcon)
+        sprite hsTileIcon, hsTileX + 1, hsTileY + 1, TEX_PIXEL
+        set sprite offset hsTileIcon, 0, 0
+        size sprite hsTileIcon, 16, 16
+        order sprite hsTileIcon, ORDER_MENU_TEXT
+        set sprite render target hsTileIcon, TARGET_MENU
+        hide sprite hsTileIcon
+        HISCORE_ENDING_ICONS(hsI) = hsTileIcon
+    next
     HISCORE_STATUS_TEXT_ID = createHighscoreText(WORLD_WIDTH / 2, HISCORE_TOP + 24 + 3 * HISCORE_ROW_HEIGHT, 16, "status")
     color text HISCORE_STATUS_TEXT_ID, rgb(150, 190, 255)
 
@@ -127,6 +156,9 @@ setup_highscores:
     texture reserve texture id(TEX_BADGE_CORAL), "Fish/Textures/badge_coral"
     texture reserve texture id(TEX_BADGE_TENTACLE), "Fish/Textures/badge_tentacle"
 
+    ` and the one for a game that ended with the album of the diver full, which is a diving mask. see THE ENDING in fish_headers_diver.
+    texture reserve texture id(TEX_BADGE_MASK), "Fish/Textures/badge_mask"
+
     for hsI = 0 to HISCORE_ROWS - 1
         hsRowY = HISCORE_TOP + 24 + hsI * HISCORE_ROW_HEIGHT
 
@@ -140,6 +172,10 @@ setup_highscores:
         set sprite render target hsBadgeId, TARGET_MENU
         hide sprite hsBadgeId
         HISCORE_BADGE_SPRITES(hsI) = hsBadgeId
+
+        ` and the question mark that goes there when the ending is one that the player has not got to
+        HISCORE_MYSTERY_TEXTS(hsI) = createHighscoreText(hsPanelX + 62, hsRowY, 20, "?")
+        color text HISCORE_MYSTERY_TEXTS(hsI), rgb(200, 210, 235)
 
         HISCORE_CELL_TEXTS(hsI * 6) = createHighscoreText(hsPanelX + 34, hsRowY, 20, "1")
         HISCORE_CELL_TEXTS(hsI * 6 + 1) = createHighscoreText(hsPanelX + 90, hsRowY, 20, "A")
@@ -157,9 +193,10 @@ setup_highscores:
     ` the page that shows the upgrades of one game. it is wider than the table is.
     hsDetailX = (WORLD_WIDTH - HISCORE_DETAIL_WIDTH) / 2
     HISCORE_DETAIL_HEAD_TEXTS(0) = createHighscoreText(hsDetailX + 100, HISCORE_DETAIL_TOP + 5, 16, "Upgrade")
-    HISCORE_DETAIL_HEAD_TEXTS(1) = createHighscoreText(hsDetailX + 256, HISCORE_DETAIL_TOP + 5, 16, "Kind")
-    HISCORE_DETAIL_HEAD_TEXTS(2) = createHighscoreText(hsDetailX + 324, HISCORE_DETAIL_TOP + 5, 16, "Move")
-    for hsI = 0 to 2
+    HISCORE_DETAIL_HEAD_TEXTS(1) = createHighscoreText(hsDetailX + 258, HISCORE_DETAIL_TOP + 5, 16, "Kind")
+    HISCORE_DETAIL_HEAD_TEXTS(2) = createHighscoreText(hsDetailX + 444, HISCORE_DETAIL_TOP + 5, 16, "Move")
+    HISCORE_DETAIL_HEAD_TEXTS(3) = createHighscoreText(hsDetailX + 362, HISCORE_DETAIL_TOP + 5, 16, "Quest")
+    for hsI = 0 to 3
         color text HISCORE_DETAIL_HEAD_TEXTS(hsI), rgb(64, 128, 255)
     next
 
@@ -184,11 +221,15 @@ setup_highscores:
         HISCORE_DETAIL_NAME_TEXTS(hsI) = createHighscoreText(hsDetailX + 66, hsRowY + 3, 20, "name")
         set text offset HISCORE_DETAIL_NAME_TEXTS(hsI), 0, 0
 
-        HISCORE_DETAIL_KIND_TEXTS(hsI) = createHighscoreText(hsDetailX + 256, hsRowY + 5, 16, "kind")
+        HISCORE_DETAIL_KIND_TEXTS(hsI) = createHighscoreText(hsDetailX + 258, hsRowY + 5, 16, "kind")
         enable rich text HISCORE_DETAIL_KIND_TEXTS(hsI)
         color text HISCORE_DETAIL_KIND_TEXTS(hsI), rgb(150, 190, 255)
 
-        HISCORE_DETAIL_MOVE_TEXTS(hsI) = createHighscoreText(hsDetailX + 324, hsRowY + 3, 20, "0")
+        ` the quest that was finished in the round, if one was
+        HISCORE_DETAIL_QUEST_TEXTS(hsI) = createHighscoreText(hsDetailX + 362, hsRowY + 5, 16, " ")
+        color text HISCORE_DETAIL_QUEST_TEXTS(hsI), rgb(255, 220, 64)
+
+        HISCORE_DETAIL_MOVE_TEXTS(hsI) = createHighscoreText(hsDetailX + 444, hsRowY + 3, 20, "0")
     next
 
     HISCORE_CURSOR = createMenuBorder(ORDER_MENU_CURSOR)
@@ -234,6 +275,7 @@ return
 ` put the table in hsLoopTable on the screen, with everything that goes around it. this is what shows
 ` it in the first place, and it is what puts it back after the page of one game's upgrades.
 highscore_table_open:
+    loadKnownEndings() `the player may have got to an ending since the last time
     openHighscoreTable(hsLoopTable, hsLoopMarked, hsFocus)
 
     ` the line under the table says how the game that just ended did. the main menu has no game to talk about.
@@ -244,17 +286,36 @@ highscore_table_open:
         hide text HISCORE_NOTE_TEXT_ID
     endif
 
-    if hsLoopTabs
-        set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} details    {pause} back"
+    gosub highscore_table_hint
+return
+
+
+` the line at the bottom of the screen says what the buttons do, which depends on what the outline is on
+highscore_table_hint:
+    hsHintEnd$ = "    {pause} done"
+    if hsLoopTabs then hsHintEnd$ = "    {pause} back"
+
+    if hsFocus = -2
+        hsHintTile = HISCORE_TILE_ENDING(HISCORE_ENDING_AT)
+        hsHintEnding$ = "mystery"
+        if hsHintTile = CORAL_ENDING_REEF then hsHintEnding$ = "coral"
+        if hsHintTile = CORAL_ENDING_ANCIENT then hsHintEnding$ = "horror"
+        if hsHintTile = CORAL_ENDING_DIVER then hsHintEnding$ = "diver"
+        if HISCORE_ENDING_SHOWN(hsHintTile)
+            set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} hide " + hsHintEnding$ + " endings" + hsHintEnd$
+        else
+            set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} show " + hsHintEnding$ + " endings" + hsHintEnd$
+        endif
     else
-        set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} details    {pause} done"
+        set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} details" + hsHintEnd$
     endif
     size text y MENU_HINT_TEXT_ID, 16
 return
 
 
 ` the table is showing. let the player look around it until they back out with the pause button.
-` hsFocus is what the outline is on: -1 is the row of tabs that says whose scores they are, 0 is the
+` hsFocus is what the outline is on: -2 is the tiles of the endings, where left and right pick a tile
+` and the confirm button switches it. -1 is the row of tabs that says whose scores they are, 0 is the
 ` row of tabs for the modes, 1 is the row of tabs for the lengths, and from 2 on it is a row of the
 ` table. up and down move it.
 ` on a row of tabs, left and right change the tab, and so the table. hsLoopTabs is 0 when the table
@@ -283,8 +344,8 @@ highscore_table_loop:
                     if hsLoopStep > 0 then hsFocus = 2
                 endif
             endif
-            if hsFocus > HISCORE_ROWS + 1 then hsFocus = -1
-            if hsFocus < -1 then hsFocus = HISCORE_ROWS + 1
+            if hsFocus > HISCORE_ROWS + 1 then hsFocus = -2
+            if hsFocus < -2 then hsFocus = HISCORE_ROWS + 1
             hsLoopChanged = 1
         endif
 
@@ -292,6 +353,17 @@ highscore_table_loop:
         hsLoopStep = 0
         if new action down(ACT_RIGHT) then hsLoopStep = 1
         if new action down(ACT_LEFT) then hsLoopStep = -1
+
+        ` on the tiles of the endings they only move the outline, and the table stays the one that it is
+        if hsFocus = -2
+            if hsLoopStep <> 0
+                HISCORE_ENDING_AT = HISCORE_ENDING_AT + hsLoopStep
+                if HISCORE_ENDING_AT >= HISCORE_TILE_COUNT then HISCORE_ENDING_AT = 0
+                if HISCORE_ENDING_AT < 0 then HISCORE_ENDING_AT = HISCORE_TILE_COUNT - 1
+                hsLoopChanged = 1
+                hsLoopStep = 0
+            endif
+        endif
         if hsLoopStep <> 0
             if hsFocus < 2
                 hsLoopZen = hsLoopTable mod 2
@@ -325,9 +397,19 @@ highscore_table_loop:
 
         ` the upgrades of the game on the row. a row that nobody has taken has no game to show.
         if new action down(ACT_CONFIRM)
+            ` on a tile of the endings, it leaves the games with that ending out, or puts them back.
+            ` the scores from Steam are gone through again, so that the table is filled with what is left.
+            if hsFocus = -2
+                hsEndingFlip = HISCORE_TILE_ENDING(HISCORE_ENDING_AT)
+                HISCORE_ENDING_SHOWN(hsEndingFlip) = 1 - HISCORE_ENDING_SHOWN(hsEndingFlip)
+                if HISCORE_ONLINE_BOARD > 0
+                    fillOnlineTable(HISCORE_ONLINE_BOARD)
+                endif
+                hsLoopChanged = 1
+            endif
             if hsFocus >= 2
-                hsDetailIndex = getShownHighscoreTable(hsLoopTable) * HISCORE_ROWS + (hsFocus - 2)
-                if HISCORE_MOVES(hsDetailIndex) < HISCORE_EMPTY_MOVES
+                hsDetailIndex = HISCORE_SHOWN(hsFocus - 2)
+                if hsDetailIndex >= 0
                     gosub highscore_details
                     gosub highscore_table_open
                     hsLoopChanged = 0
@@ -337,6 +419,7 @@ highscore_table_loop:
 
         if hsLoopChanged
             refreshHighscoreTable(hsLoopTable, hsLoopMarked, hsFocus)
+            gosub highscore_table_hint
 
             ` the same swell of sound that the highlight of the menu makes when it moves
             create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
@@ -349,7 +432,7 @@ return
 ` show the upgrades of the game at hsDetailIndex, in place of the table, until the player backs out.
 ` up and down scroll the list, when it is longer than the page.
 highscore_details:
-    hsDetailCount = HISCORE_LOGS(hsDetailIndex * HISCORE_LOG_STRIDE)
+    hsDetailCount = logRowsOf(HISCORE_LOGS(hsDetailIndex * HISCORE_LOG_STRIDE))
     hsDetailLast = hsDetailCount - HISCORE_DETAIL_ROWS `how far the list can scroll
     if hsDetailLast < 0 then hsDetailLast = 0
     hsDetailScroll = 0
@@ -544,6 +627,7 @@ highscore_game_end:
     ` the table comes up with the outline on the new row. it cannot be changed for another table here.
     hsLoopTable = hsEndTable
     hsLoopMarked = hsEndPlace
+    showAllEndings() `so that the row of the game that just ended is there, whatever its ending was
     hsLoopTabs = 0
     hsLoopNote = 1
     hsFocus = 2
@@ -566,6 +650,10 @@ highscore_game_end:
     if CORAL_ENDING = CORAL_ENDING_ANCIENT
         hsNote$ = "You summoned the ancient one, in " + str$(CURRENT_MOVE_COUNT) + " moves."
         hsNoteColor = rgb(200, 150, 255)
+    endif
+    if CORAL_ENDING = CORAL_ENDING_DIVER
+        hsNote$ = "You filled the album, in " + str$(CURRENT_MOVE_COUNT) + " moves."
+        hsNoteColor = rgb(255, 228, 170)
     endif
 
     gosub highscore_table_open
@@ -634,7 +722,7 @@ endfunction
 function getScoreBadge(packedName)
     scoreBadge = 0
     if packedName > 0 then scoreBadge = packedName / HISCORE_BADGE_STEP
-    if scoreBadge > CORAL_ENDING_ANCIENT then scoreBadge = 0
+    if scoreBadge > CORAL_ENDING_DIVER then scoreBadge = 0
 endfunction scoreBadge
 
 ` and the initials that are in that number, without the badge, packed the way that packInitials packs them
@@ -692,6 +780,92 @@ function getShownHighscoreTable(tableIndex)
 endfunction shownTable
 
 
+` THE ENDINGS THAT ARE SHOWN. see fish_headers.
+function showAllEndings()
+    for i = 0 to 3
+        HISCORE_ENDING_SHOWN(i) = 1
+    next
+endfunction
+
+
+` whether a game with this badge is shown on the tables. one with no badge always is. an ending
+` that the player has not got to goes by the tile of the mystery ones.
+function isEndingShown(badge)
+    endingShown = 1
+    if badge > 0 and badge <= CORAL_ENDING_DIVER
+        if HISCORE_ENDING_KNOWN(badge)
+            endingShown = HISCORE_ENDING_SHOWN(badge)
+        else
+            endingShown = HISCORE_ENDING_SHOWN(0)
+        endif
+    endif
+endfunction endingShown
+
+
+` THE MYSTERY ENDINGS. see fish_headers. read which endings the player has got to, and lay the tiles out for them.
+function loadKnownEndings()
+    HISCORE_ENDING_KNOWN(0) = 0
+    HISCORE_ENDING_KNOWN(CORAL_ENDING_REEF) = get pref(PREF_ENDING_REEF, 0)
+    HISCORE_ENDING_KNOWN(CORAL_ENDING_ANCIENT) = get pref(PREF_ENDING_ANCIENT, 0)
+    HISCORE_ENDING_KNOWN(CORAL_ENDING_DIVER) = get pref(PREF_ENDING_DIVER, 0)
+    layoutEndingTiles()
+endfunction
+
+
+` work out which tiles there are: one for every ending that is known, and then one for all the rest, if there are any
+function layoutEndingTiles()
+    HISCORE_TILE_COUNT = 0
+    tileMystery = 0
+    for i = CORAL_ENDING_REEF to CORAL_ENDING_DIVER
+        if HISCORE_ENDING_KNOWN(i)
+            HISCORE_TILE_ENDING(HISCORE_TILE_COUNT) = i
+            HISCORE_TILE_COUNT = HISCORE_TILE_COUNT + 1
+        else
+            tileMystery = 1
+        endif
+    next
+    if tileMystery
+        HISCORE_TILE_ENDING(HISCORE_TILE_COUNT) = 0
+        HISCORE_TILE_COUNT = HISCORE_TILE_COUNT + 1
+    endif
+    if HISCORE_ENDING_AT >= HISCORE_TILE_COUNT then HISCORE_ENDING_AT = HISCORE_TILE_COUNT - 1
+endfunction
+
+
+` where a tile is: they end where the tabs do, on the right, a row above them
+function getEndingTileX(tile)
+    tileX = (WORLD_WIDTH - HISCORE_WIDTH) / 2 + HISCORE_WIDTH
+    tileX = tileX - (HISCORE_TILE_COUNT - tile) * (HISCORE_ENDING_SIZE + 2)
+    tileX = tileX + 2
+endfunction tileX
+
+function getEndingTileY()
+    tileY = getHighscoreTabY(5) - 2
+    tileY = tileY - HISCORE_ENDING_SIZE
+endfunction tileY
+
+
+` work out which entry every row on the screen shows: the entries of the table, best first, without
+` the ones whose ending is switched off.
+function buildShownHighscores(tableIndex)
+    shownFirst = getShownHighscoreTable(tableIndex) * HISCORE_ROWS
+    HISCORE_SHOWN_COUNT = 0
+    for i = 0 to HISCORE_ROWS - 1
+        HISCORE_SHOWN(i) = -1
+    next
+    for i = 0 to HISCORE_ROWS - 1
+        shownEntry = shownFirst + i
+        if HISCORE_MOVES(shownEntry) < HISCORE_EMPTY_MOVES
+            shownBadge = getScoreBadge(HISCORE_NAMES(shownEntry))
+            if isEndingShown(shownBadge)
+                HISCORE_SHOWN(HISCORE_SHOWN_COUNT) = shownEntry
+                HISCORE_SHOWN_COUNT = HISCORE_SHOWN_COUNT + 1
+            endif
+        endif
+    next
+endfunction
+
+
 ` empty the table that the scores from Steam are written into
 function clearOnlineTable()
     stmFirst = HISCORE_ONLINE_TABLE * HISCORE_ROWS
@@ -728,6 +902,7 @@ endfunction
 
 ` write the scores that Steam sent back for a leaderboard into their table, best first, until it is
 ` full. a score that fails its check, or that this version of the game cannot read, is left out.
+` so is one with an ending that is switched off. see THE ENDINGS THAT ARE SHOWN in fish_headers.
 function fillOnlineTable(boardId)
     clearOnlineTable()
     stmFirst = HISCORE_ONLINE_TABLE * HISCORE_ROWS
@@ -744,6 +919,11 @@ function fillOnlineTable(boardId)
                 if stmVersion <> STEAM_PACK_VERSION then stmGood = 0
                 stmMoves = steam score(boardId, stmRow) / 1000
                 if stmMoves < 1 or stmMoves >= HISCORE_EMPTY_MOVES then stmGood = 0
+
+                ` and so is one with an ending that is switched off, so that the table fills up with the rest
+                stmEnding = steam score bits(boardId, stmRow, STEAM_DETAIL_FLAGS * 32, 2)
+                if stmEnding < 0 then stmEnding = 0
+                if isEndingShown(stmEnding) = 0 then stmGood = 0
 
                 if stmGood
                     unpackSteamScore(boardId, stmRow, stmFirst + HISCORE_ONLINE_COUNT)
@@ -768,7 +948,7 @@ function unpackSteamScore(boardId, steamRow, scoreIndex)
 
     ` which ending the game had is the first two of the flags
     stmBadge = steam score bits(boardId, steamRow, STEAM_DETAIL_FLAGS * 32, 2)
-    if stmBadge > CORAL_ENDING_ANCIENT then stmBadge = 0
+    if stmBadge > CORAL_ENDING_DIVER then stmBadge = 0
     if stmBadge < 0 then stmBadge = 0
 
     HISCORE_NAMES(scoreIndex) = stmInitials + stmBadge * HISCORE_BADGE_STEP
@@ -796,6 +976,30 @@ function unpackSteamScore(boardId, steamRow, scoreIndex)
             HISCORE_LOGS(stmLogStart + k) = stmMove * 100 + stmCard
             stmBit = stmBit + STEAM_CARD_BITS + stmGapBits
         next
+    endif
+
+    ` the quests that were finished, which follow the log. see THE QUESTS ON STEAM in fish_headers.
+    ` a score from before there were quests has nothing in detail 5, and so no quests.
+    stmSpare = steam score detail(boardId, steamRow, STEAM_DETAIL_SPARE)
+    if stmSpare mod 256 = STEAM_QUEST_TAG
+        stmBit = STEAM_BIT_LOG + stmLogCount * (STEAM_CARD_BITS + stmGapBits)
+        stmCovered = (stmSpare / 256) mod 256
+        if stmCovered > stmLogCount then stmCovered = stmLogCount
+        stmDone = 0
+        while stmDone < stmCovered
+            stmDone = stmDone + 1
+            stmFlag = steam score bits(boardId, steamRow, stmBit, 1)
+            stmBit = stmBit + 1
+            if stmFlag
+                stmQuest = steam score bits(boardId, steamRow, stmBit, STEAM_QUEST_BITS) + 1
+                stmBit = stmBit + STEAM_QUEST_BITS
+                HISCORE_LOGS(stmLogStart + stmDone) = HISCORE_LOGS(stmLogStart + stmDone) + stmQuest * LOG_QUEST_STEP
+            endif
+        endwhile
+        if (stmSpare / 65536) mod 2 = 1
+            stmLastQuest = steam score bits(boardId, steamRow, stmBit, STEAM_QUEST_BITS + 1)
+            HISCORE_LOGS(stmLogStart) = stmLogCount + stmLastQuest * LOG_LAST_STEP
+        endif
     endif
 endfunction
 
@@ -827,7 +1031,7 @@ function sendGameToSteam(tableIndex, packedName)
     sendLast = 0
     if GAME_LOG_COUNT > 0
         for i = 0 to GAME_LOG_COUNT - 1
-            sendGap = GAME_LOG(i) / 100 - sendLast
+            sendGap = logMoveOf(GAME_LOG(i)) - sendLast
             if sendGap < 0 then sendGap = 0
             if sendGap > 8191 then sendGap = 8191
             if sendGap > sendWidest then sendWidest = sendGap
@@ -852,13 +1056,12 @@ function sendGameToSteam(tableIndex, packedName)
     ` a debug environment variable set, now or before it was saved and carried on with
     if isDebugEnvSet() then GAME_DEBUG_USED = 1
     set steam score detail STEAM_DETAIL_FLAGS, CORAL_ENDING + GAME_DEBUG_USED * STEAM_FLAG_DEBUG
-    set steam score detail STEAM_DETAIL_SPARE, 0
 
     sendBit = STEAM_BIT_LOG
     sendLast = 0
     if GAME_LOG_COUNT > 0
         for i = 0 to GAME_LOG_COUNT - 1
-            sendGap = GAME_LOG(i) / 100 - sendLast
+            sendGap = logMoveOf(GAME_LOG(i)) - sendLast
             if sendGap < 0 then sendGap = 0
             if sendGap > 8191 then sendGap = 8191
             sendLast = sendLast + sendGap
@@ -868,6 +1071,39 @@ function sendGameToSteam(tableIndex, packedName)
             sendBit = sendBit + STEAM_CARD_BITS + sendGapBits
         next
     endif
+
+    ` the quests that were finished follow the log, in bits that nothing else uses. see THE QUESTS ON
+    ` STEAM in fish_headers. they are only written for as long as there is room for another.
+    sendCovered = 0
+    sendRoom = 1
+    while sendCovered < GAME_LOG_COUNT and sendRoom = 1
+        sendEnd = sendBit + 1 + STEAM_QUEST_BITS
+        if sendEnd > STEAM_BITS_TOTAL
+            sendRoom = 0
+        else
+            sendQuest = logQuestOf(GAME_LOG(sendCovered))
+            if sendQuest > 0
+                set steam score bits sendBit, 1, 1
+                set steam score bits sendBit + 1, STEAM_QUEST_BITS, sendQuest - 1
+                sendBit = sendBit + 1 + STEAM_QUEST_BITS
+            else
+                set steam score bits sendBit, 1, 0
+                sendBit = sendBit + 1
+            endif
+            sendCovered = sendCovered + 1
+        endif
+    endwhile
+
+    ` and then the quest of the last round, which has no upgrade to go with
+    sendLastThere = 0
+    if sendRoom
+        sendEnd = sendBit + 1 + STEAM_QUEST_BITS
+        if sendEnd <= STEAM_BITS_TOTAL
+            set steam score bits sendBit, STEAM_QUEST_BITS + 1, QUEST_LOG_PENDING
+            sendLastThere = 1
+        endif
+    endif
+    set steam score detail STEAM_DETAIL_SPARE, STEAM_QUEST_TAG + sendCovered * 256 + sendLastThere * 65536
 
     ` fewer moves is a lower score, and of two games with the same moves, the higher multiplier is lower
     sendMult = BEST_MULTIPLIER
@@ -881,16 +1117,50 @@ endfunction
 ` write down that an upgrade was picked, on the move that the game is up to. see THE LOG OF UPGRADES in fish_headers.
 function logUpgrade(cardIndex)
     if GAME_LOG_COUNT < HISCORE_LOG_MAX
-        GAME_LOG(GAME_LOG_COUNT) = CURRENT_MOVE_COUNT * 100 + cardIndex
+        ` the quest that was finished in the round goes with it. see THE QUESTS IN THE LOG in fish_headers.
+        logMoves = CURRENT_MOVE_COUNT
+        if logMoves > 499999 then logMoves = 499999
+        if logMoves < 0 then logMoves = 0
+        GAME_LOG(GAME_LOG_COUNT) = QUEST_LOG_PENDING * LOG_QUEST_STEP + logMoves * 100 + cardIndex
         GAME_LOG_COUNT = GAME_LOG_COUNT + 1
     endif
+    QUEST_LOG_PENDING = 0
 endfunction
+
+
+` the parts of one number of a log: the move that the upgrade was picked on, and the quest that was
+` finished in its round, or 0. the card is the number mod 100, as it always was.
+function logMoveOf(logEntry)
+endfunction (logEntry mod LOG_QUEST_STEP) / 100
+
+function logQuestOf(logEntry)
+endfunction logEntry / LOG_QUEST_STEP
+
+` and the parts of the first number of a log: how many upgrades there are, and the quest that was
+` finished in the last round of the game, or 0
+function logCountOf(logHead)
+endfunction logHead mod LOG_LAST_STEP
+
+function logLastQuestOf(logHead)
+endfunction logHead / LOG_LAST_STEP
+
+` how many rows the page that shows a game has: one for every upgrade, and one more for the last
+` round, when a quest was finished in it, because that round has no upgrade to share a row with
+function logRowsOf(logHead)
+    logRows = logHead mod LOG_LAST_STEP
+    logRowsLast = logHead / LOG_LAST_STEP
+    if logRowsLast > 0
+        logRows = logRows + 1
+    endif
+endfunction logRows
 
 
 ` give an entry of a table the log of the game that is being played
 function takeGameLog(scoreIndex)
     logStart = scoreIndex * HISCORE_LOG_STRIDE
-    HISCORE_LOGS(logStart) = GAME_LOG_COUNT
+
+    ` the quest that was finished in the last round, after the last upgrade, goes with the count
+    HISCORE_LOGS(logStart) = GAME_LOG_COUNT + QUEST_LOG_PENDING * LOG_LAST_STEP
     if GAME_LOG_COUNT > 0
         for i = 0 to GAME_LOG_COUNT - 1
             HISCORE_LOGS(logStart + 1 + i) = GAME_LOG(i)
@@ -982,12 +1252,16 @@ function loadHighscoreTable(tableIndex)
                 if savedPlace >= 0
                     logPref = getHighscoreLogPref(tableIndex, i)
                     logStart = (firstEntry + savedPlace) * HISCORE_LOG_STRIDE
-                    logCount = get pref(logPref, 0)
-                    if logCount > HISCORE_LOG_MAX then logCount = HISCORE_LOG_MAX
-                    if logCount < 0 then logCount = 0
-                    HISCORE_LOGS(logStart) = logCount
-                    if logCount > 0
-                        for k = 1 to logCount
+                    logHead = get pref(logPref, 0)
+                    if logHead < 0 then logHead = 0
+                    logLength = logCountOf(logHead)
+                    if logLength > HISCORE_LOG_MAX
+                        logLength = HISCORE_LOG_MAX
+                        logHead = logLength + logLastQuestOf(logHead) * LOG_LAST_STEP
+                    endif
+                    HISCORE_LOGS(logStart) = logHead
+                    if logLength > 0
+                        for k = 1 to logLength
                             HISCORE_LOGS(logStart + k) = get pref(logPref + k, 0)
                         next
                     endif
@@ -1021,10 +1295,10 @@ function saveHighscoreTable(tableIndex)
         ` the upgrades of the game on the row
         logPref = getHighscoreLogPref(tableIndex, i)
         logStart = (firstEntry + i) * HISCORE_LOG_STRIDE
-        logCount = HISCORE_LOGS(logStart)
-        set pref logPref, logCount
-        if logCount > 0
-            for k = 1 to logCount
+        logLength = logCountOf(HISCORE_LOGS(logStart))
+        set pref logPref, HISCORE_LOGS(logStart)
+        if logLength > 0
+            for k = 1 to logLength
                 set pref logPref + k, HISCORE_LOGS(logStart + k)
             next
         endif
@@ -1098,6 +1372,14 @@ function hideHighscoreTexts()
         hide text HISCORE_TAB_TEXTS(i)
         hide sprite HISCORE_TAB_SPRITES(i)
     next
+    for i = 0 to 2
+        hide sprite HISCORE_ENDING_TILES(i)
+        hide sprite HISCORE_ENDING_ICONS(i)
+    next
+    hide text HISCORE_TILE_MARK
+    for i = 0 to HISCORE_ROWS - 1
+        hide text HISCORE_MYSTERY_TEXTS(i)
+    next
     hide text HISCORE_NOTE_TEXT_ID
     hide text HISCORE_STATUS_TEXT_ID
     for i = 0 to 3
@@ -1119,7 +1401,9 @@ function hideHighscoreTexts()
         hide text HISCORE_DETAIL_NAME_TEXTS(i)
         hide text HISCORE_DETAIL_KIND_TEXTS(i)
         hide text HISCORE_DETAIL_MOVE_TEXTS(i)
+        hide text HISCORE_DETAIL_QUEST_TEXTS(i)
     next
+    hide text HISCORE_DETAIL_HEAD_TEXTS(3)
     showInfoBorder(HISCORE_CURSOR, 0)
     HISCORE_CURSOR_ON = 0
 endfunction
@@ -1154,7 +1438,8 @@ endfunction
 
 ` write a table onto the rows, and light up its tabs. the row at markedRow is the game that was just
 ` added, so it is gold. -1 is none of them.
-` cursorAt is what the outline goes around: -1 is the lit tab of whose scores they are, 0 is the lit tab
+` a game whose ending is switched off is left out, and the rows under it move up. see buildShownHighscores.
+` cursorAt is what the outline goes around: -2 is one of the tiles of the endings, -1 is the lit tab of whose scores they are, 0 is the lit tab
 ` of the modes, 1 is the lit tab of the lengths, and from 2 on it is a row of the table, which is white.
 function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
 
@@ -1163,6 +1448,7 @@ function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
     if HISCORE_SCOPE <> HISCORE_SCOPE_LOCAL then isOnline = 1
     if isOnline then markedRow = HISCORE_ONLINE_ME
     firstEntry = getShownHighscoreTable(tableIndex) * HISCORE_ROWS
+    buildShownHighscores(tableIndex)
 
     ` with nothing from Steam to show, the rows are left blank, and a line says why
     statusWords$ = ""
@@ -1195,15 +1481,19 @@ function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
     endif
 
     for i = 0 to HISCORE_ROWS - 1
-        scoreIndex = firstEntry + i
+        ` which entry the row shows, and which row of its table that is. -1 is a row with nothing on it.
+        scoreIndex = HISCORE_SHOWN(i)
+        tableRow = -1
+        if scoreIndex >= 0 then tableRow = scoreIndex - firstEntry
         cellText = i * 6
 
         ` only a game that ended with one of the two endings of the hidden game has a badge
         hide sprite HISCORE_BADGE_SPRITES(i)
+        hide text HISCORE_MYSTERY_TEXTS(i)
 
         ` the place, the three letters of the initials, the moves, and the multiplier
         set text HISCORE_CELL_TEXTS(cellText), str$(i + 1)
-        if HISCORE_MOVES(scoreIndex) >= HISCORE_EMPTY_MOVES
+        if scoreIndex < 0
             for col = 1 to 5
                 set text HISCORE_CELL_TEXTS(cellText + col), "-"
             next
@@ -1220,9 +1510,22 @@ function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
         else
             packed = getScoreInitials(HISCORE_NAMES(scoreIndex))
             rowBadge = getScoreBadge(HISCORE_NAMES(scoreIndex))
+
+            ` an ending that the player has not got to is not given away. see THE MYSTERY ENDINGS in fish_headers.
+            if rowBadge > 0
+                if HISCORE_ENDING_KNOWN(rowBadge) = 0
+                    rowBadge = 0
+                    show text HISCORE_MYSTERY_TEXTS(i)
+                endif
+            endif
             if rowBadge = CORAL_ENDING_REEF
                 set sprite texture HISCORE_BADGE_SPRITES(i), TEX_BADGE_CORAL
                 color sprite HISCORE_BADGE_SPRITES(i), rgb(255, 140, 155)
+                show sprite HISCORE_BADGE_SPRITES(i)
+            endif
+            if rowBadge = CORAL_ENDING_DIVER
+                set sprite texture HISCORE_BADGE_SPRITES(i), TEX_BADGE_MASK
+                color sprite HISCORE_BADGE_SPRITES(i), rgb(150, 220, 255)
                 show sprite HISCORE_BADGE_SPRITES(i)
             endif
             if rowBadge = CORAL_ENDING_ANCIENT
@@ -1241,7 +1544,7 @@ function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
             ` only the plain letters of it, because that is all that the font has.
             if isOnline
                 set text HISCORE_CELL_TEXTS(cellText + 1), ""
-                set text HISCORE_CELL_TEXTS(cellText + 2), steam score plain name$(HISCORE_ONLINE_BOARD, HISCORE_ONLINE_ROWS(i), 10)
+                set text HISCORE_CELL_TEXTS(cellText + 2), steam score plain name$(HISCORE_ONLINE_BOARD, HISCORE_ONLINE_ROWS(tableRow), 10)
                 set text HISCORE_CELL_TEXTS(cellText + 3), ""
             endif
             set text HISCORE_CELL_TEXTS(cellText + 4), str$(HISCORE_MOVES(scoreIndex))
@@ -1249,7 +1552,9 @@ function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
         endif
 
         rowColor = rgb(150, 190, 255)
-        if i = markedRow then rowColor = rgb(255, 220, 96)
+        if tableRow >= 0
+            if tableRow = markedRow then rowColor = rgb(255, 220, 96)
+        endif
         if i + 2 = cursorAt then rowColor = rgb(255, 255, 255)
         for col = 0 to 5
             color text HISCORE_CELL_TEXTS(cellText + col), rowColor
@@ -1281,7 +1586,58 @@ function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
         endif
     next
 
+    ` the tile of an ending has its badge in its own color when its games are shown, and is dark when they are not
+    ` the tile of the mystery endings has a question mark on it and no badge
+    hide text HISCORE_TILE_MARK
+    for i = 0 to 2
+        if i < HISCORE_TILE_COUNT
+            tileEnding = HISCORE_TILE_ENDING(i)
+            tileAtX = getEndingTileX(i)
+            tileAtY = getEndingTileY()
+            tileColor = rgb(255, 255, 255)
+            if HISCORE_ENDING_SHOWN(tileEnding) = 0 then tileColor = rgb(72, 86, 134)
+
+            show sprite HISCORE_ENDING_TILES(i)
+            position sprite HISCORE_ENDING_TILES(i), tileAtX, tileAtY
+            if HISCORE_ENDING_SHOWN(tileEnding)
+                color sprite HISCORE_ENDING_TILES(i), rgb(26, 52, 124, 235)
+            else
+                color sprite HISCORE_ENDING_TILES(i), rgb(10, 14, 30, 235)
+            endif
+
+            if tileEnding = 0
+                hide sprite HISCORE_ENDING_ICONS(i)
+                show text HISCORE_TILE_MARK
+                set text position HISCORE_TILE_MARK, tileAtX + HISCORE_ENDING_SIZE / 2, tileAtY + 2
+                color text HISCORE_TILE_MARK, tileColor
+            else
+                if HISCORE_ENDING_SHOWN(tileEnding)
+                    tileColor = rgb(255, 140, 155)
+                    if tileEnding = CORAL_ENDING_ANCIENT then tileColor = rgb(190, 130, 255)
+                    if tileEnding = CORAL_ENDING_DIVER then tileColor = rgb(150, 220, 255)
+                endif
+                tileTex = TEX_BADGE_CORAL
+                if tileEnding = CORAL_ENDING_ANCIENT then tileTex = TEX_BADGE_TENTACLE
+                if tileEnding = CORAL_ENDING_DIVER then tileTex = TEX_BADGE_MASK
+
+                ` the size is set again, because it is worked out from the size of the texture
+                set sprite texture HISCORE_ENDING_ICONS(i), tileTex
+                size sprite HISCORE_ENDING_ICONS(i), 16, 16
+                position sprite HISCORE_ENDING_ICONS(i), tileAtX + 1, tileAtY + 1
+                color sprite HISCORE_ENDING_ICONS(i), tileColor
+                show sprite HISCORE_ENDING_ICONS(i)
+            endif
+        else
+            hide sprite HISCORE_ENDING_TILES(i)
+            hide sprite HISCORE_ENDING_ICONS(i)
+        endif
+    next
+
     HISCORE_CURSOR_ON = 0
+    if cursorAt = -2
+        HISCORE_CURSOR_ON = 1
+        movePageOutline(HISCORE_CURSOR, getEndingTileX(HISCORE_ENDING_AT), getEndingTileY(), HISCORE_ENDING_SIZE, HISCORE_ENDING_SIZE)
+    endif
     if cursorAt >= 2
         HISCORE_CURSOR_ON = 1
         rowY = HISCORE_TOP + 23 + (cursorAt - 2) * HISCORE_ROW_HEIGHT
@@ -1396,7 +1752,7 @@ function openHighscoreDetails(scoreIndex, place)
     set text MENU_HINT_TEXT_ID, "{dir} scroll    {confirm} back"
     size text y MENU_HINT_TEXT_ID, 16
 
-    for i = 0 to 2
+    for i = 0 to 3
         show text HISCORE_DETAIL_HEAD_TEXTS(i)
     next
 endfunction
@@ -1405,55 +1761,79 @@ endfunction
 ` write the upgrades of a game onto the rows of the page, starting from the one at `firstShown`.
 function refreshHighscoreDetails(scoreIndex, firstShown)
     logStart = scoreIndex * HISCORE_LOG_STRIDE
-    logCount = HISCORE_LOGS(logStart)
+    logUpgrades = logCountOf(HISCORE_LOGS(logStart))
+    logLength = logRowsOf(HISCORE_LOGS(logStart))
 
     for i = 0 to HISCORE_DETAIL_ROWS - 1
         logIndex = firstShown + i
-        if logIndex < logCount
-            logged = HISCORE_LOGS(logStart + 1 + logIndex)
-            cardIndex = logged mod 100
-            if cardIndex >= CARD_LENGTH then cardIndex = 0
-
+        if logIndex < logLength
             set text HISCORE_DETAIL_NUM_TEXTS(i), str$(logIndex + 1)
-            set text HISCORE_DETAIL_NAME_TEXTS(i), CARDS(cardIndex).name$
-            set text HISCORE_DETAIL_MOVE_TEXTS(i), str$(logged / 100)
-
-            ` the size is set again, because it is worked out from the size of the texture
-            set sprite texture HISCORE_DETAIL_ART_SPRITES(i), CARDS(cardIndex).artTexId
-            size sprite HISCORE_DETAIL_ART_SPRITES(i), 24, 24
-
-            select CARDS(cardIndex).abilityType
-                case ABILITY_TYPE_PASSIVE
-                    set text HISCORE_DETAIL_KIND_TEXTS(i), "{passive} passive"
-                endcase
-                case ABILITY_TYPE_MOVE
-                    set text HISCORE_DETAIL_KIND_TEXTS(i), "{move} move"
-                endcase
-                case ABILITY_TYPE_INSTANT
-                    set text HISCORE_DETAIL_KIND_TEXTS(i), "{instant} instant"
-                endcase
-            endselect
-
             show text HISCORE_DETAIL_NUM_TEXTS(i)
-            show sprite HISCORE_DETAIL_ART_SPRITES(i)
             show text HISCORE_DETAIL_NAME_TEXTS(i)
-            show text HISCORE_DETAIL_KIND_TEXTS(i)
-            show text HISCORE_DETAIL_MOVE_TEXTS(i)
+            show text HISCORE_DETAIL_QUEST_TEXTS(i)
+
+            if logIndex < logUpgrades
+                logged = HISCORE_LOGS(logStart + 1 + logIndex)
+                cardIndex = logged mod 100
+                if cardIndex >= CARD_LENGTH then cardIndex = 0
+
+                set text HISCORE_DETAIL_NAME_TEXTS(i), CARDS(cardIndex).name$
+                color text HISCORE_DETAIL_NAME_TEXTS(i), rgb(255, 255, 255)
+                set text HISCORE_DETAIL_MOVE_TEXTS(i), str$(logMoveOf(logged))
+
+                ` the size is set again, because it is worked out from the size of the texture
+                set sprite texture HISCORE_DETAIL_ART_SPRITES(i), CARDS(cardIndex).artTexId
+                size sprite HISCORE_DETAIL_ART_SPRITES(i), 24, 24
+
+                select CARDS(cardIndex).abilityType
+                    case ABILITY_TYPE_PASSIVE
+                        set text HISCORE_DETAIL_KIND_TEXTS(i), "{passive} passive"
+                    endcase
+                    case ABILITY_TYPE_MOVE
+                        set text HISCORE_DETAIL_KIND_TEXTS(i), "{move} move"
+                    endcase
+                    case ABILITY_TYPE_INSTANT
+                        set text HISCORE_DETAIL_KIND_TEXTS(i), "{instant} instant"
+                    endcase
+                endselect
+
+                ` the quest that was finished in the round, in its own column
+                loggedQuest = logQuestOf(logged)
+                show sprite HISCORE_DETAIL_ART_SPRITES(i)
+                show text HISCORE_DETAIL_KIND_TEXTS(i)
+                show text HISCORE_DETAIL_MOVE_TEXTS(i)
+            else
+                ` the last round of the game, which has no upgrade, and is only here for its quest
+                set text HISCORE_DETAIL_NAME_TEXTS(i), "last round"
+                color text HISCORE_DETAIL_NAME_TEXTS(i), rgb(120, 140, 185)
+                loggedQuest = logLastQuestOf(HISCORE_LOGS(logStart))
+                hide sprite HISCORE_DETAIL_ART_SPRITES(i)
+                hide text HISCORE_DETAIL_KIND_TEXTS(i)
+                hide text HISCORE_DETAIL_MOVE_TEXTS(i)
+            endif
+
+            if loggedQuest > QUEST_COUNT then loggedQuest = 0
+            if loggedQuest > 0
+                set text HISCORE_DETAIL_QUEST_TEXTS(i), QUEST_DEFS(loggedQuest).name$
+            else
+                set text HISCORE_DETAIL_QUEST_TEXTS(i), " "
+            endif
         else
             hide text HISCORE_DETAIL_NUM_TEXTS(i)
             hide sprite HISCORE_DETAIL_ART_SPRITES(i)
             hide text HISCORE_DETAIL_NAME_TEXTS(i)
             hide text HISCORE_DETAIL_KIND_TEXTS(i)
             hide text HISCORE_DETAIL_MOVE_TEXTS(i)
+            hide text HISCORE_DETAIL_QUEST_TEXTS(i)
         endif
     next
 
-    if logCount = 0
+    if logLength = 0
         set text MENU_DESC_TEXT_ID, "No upgrades were written down for this game."
     else
         lastShown = firstShown + HISCORE_DETAIL_ROWS
-        if lastShown > logCount then lastShown = logCount
-        set text MENU_DESC_TEXT_ID, str$(firstShown + 1) + " to " + str$(lastShown) + " of " + str$(logCount)
+        if lastShown > logLength then lastShown = logLength
+        set text MENU_DESC_TEXT_ID, str$(firstShown + 1) + " to " + str$(lastShown) + " of " + str$(logLength)
     endif
 endfunction
 

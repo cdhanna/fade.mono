@@ -1,0 +1,206 @@
+remstart
+    THE DIVER
+    the diver from the boat can come down to the board, with a camera. the routines are in
+    fish_routines_diver, and the tests are in fish_tests_diver.
+
+    HOW THE DIVER COMES DOWN. a bottle wants to sink: on the bottom row it pays out. a bottle that a
+    swap carries up to the top row, from the row under it, does the other thing. it is gone, and the
+    diver is in its cell. a bottle that was left on the top row by a group that popped there does not
+    count, and neither does one that is swapped along the top row. stepLiveMove, in fish_funcs, asks
+    diverBottleRose after every swap.
+
+    WHAT THE DIVER IS. it is a kind of fish of its own, the one after the kinds of the quests, so it
+    is a fish like any other to the board: it can be swapped, it falls, and it is saved with the board.
+    it never matches, because no kind from QUEST_SOLID_FROM up does. and nothing happens to it: it is
+    never stung, never belly up, never stacked, never copied, and a stingray swims past it. there is
+    only ever one. diverMend, which handle_combos calls before every look at the board, sees to all
+    of that, whatever a special move may have done.
+
+    THE PICTURES. whenever a fish pops in one of the four cells that touch the diver, for whatever
+    reason, the diver takes its picture. a fish that is belly up, or a skeleton, is not worth one.
+    there is no flash, because nobody uses one down here. the diver turns to the fish and holds its
+    camera out, and the corners of a viewfinder close in on the fish. the fish do not pop until that
+    is done: every pop of that look at the board is held back for DIVER_SNAP_AHEAD. then they pop, and
+    a little photo paper flies from the fish to its box of the album. a fish that the album has
+    already gets none of that: the diver does not look up, and nothing waits. diverSnapAhead is what holds the pops back. it has to
+    say so before handle_combos has gone through the groups, so it goes by which groups are big
+    enough. a fish that only pops because a stingray shot past it is not held back for.
+    there is a picture to take of each of the seven fish, of the jellyfish and of the stingray: nine.
+    the pictures that have been taken are kept for the whole game, from one dive to the next, and they
+    are saved with it. diverJudge takes them, when handle_combos has decided what pops.
+
+    THE AIR. the diver has DIVER_AIR_MAX moves of air. every move that is counted takes one, whether
+    it moved the diver or not. when the air is gone and the board has settled, the diver swims up to
+    the top row, trading places with the fish over it, one row after another, and then up and away,
+    and a fish takes its place. the game waits while it does. diver_rise does that. another bottle
+    brings the diver back, with a full tank.
+
+    THE ALBUM. nine pale blue boxes in a row, under the bars of the coral, one for every picture. a box
+    has its fish in it once the picture has been taken. they show from the first dive of a game on.
+    the air sits on top of them while the diver is down: a row of little blocks, one for every move of
+    air that a full tank has. the ones that are left are bright, and the ones that are used up are dim.
+
+    HOW THE DIVER IS DRAWN. the picture of its kind, Diver.png, is empty, so its cell on the board
+    looks empty. the diver is one sprite of its own, on top of that cell, which goes wherever the
+    sprite of the cell goes. its frames are in DiverSheet.png: swimming, swimming with the camera held
+    out, and upright, which is how it goes up. the art is the pixel art diver of dkproductions, and
+    the frames with the camera were added to it. make_diver.py, which is not part of the game, built the sheet.
+
+    WHEN THE LAST PICTURE IS TAKEN the diver is done, and goes up as soon as the board has settled.
+    DIVER_DONE is 1 from then on, and no bottle brings the diver back. that is the end of the game.
+    see THE ENDING, further down.
+remend
+
+global TEX_DIVER `the kind of fish that the diver is. load_textures, in fish_routines, loads its picture right after the kinds of the quests.
+
+global DIVER_AIR_MAX = 8 `how many moves of air a dive has
+global DIVER_AIR_LOW = 3 `the bar of air blinks from here down
+
+global DIVER_ON = 0 `1 while the diver is on the board
+global DIVER_AT = -1 `the cell that it was in, the last time that the board was looked at
+global DIVER_AIR = 0 `how many moves of air are left
+global DIVER_SEEN = 0 `1 once the diver has come down in this game. the album shows from then on.
+global DIVER_DONE = 0 `1 once every picture has been taken
+
+global DIVER_ALBUM_COUNT = 9
+global dim DIVER_ALBUM_KIND(9) `the kind of fish that every box of the album is for
+global dim DIVER_PHOTOS(9) `1 for every picture that has been taken
+global dim DIVER_PHOTO_MS(9) `when each one shows up in its box. the fish has to pop first.
+
+` how the album is drawn. the boxes are in one row. a fish in a box is half of its size, so that the
+` row is not much wider than the bars of the coral are.
+global DIVER_BOX_SIZE = 8
+global DIVER_BOX_STEP = 9
+global DIVER_FISH_SIZE = 8 `how big the fish in a box is
+global DIVER_LEAVE_TIME = 900 `how long the diver takes to swim up and away, in milliseconds
+
+global dim DIVER_BOX_SPRITES(9)
+global dim DIVER_FISH_SPRITES(9)
+global DIVER_AIR_PIP_ROOM = 16 `the most blocks of air that there is room to draw. DIVER_AIR_MAX can be no more than this.
+global dim DIVER_AIR_PIPS(16)
+
+` the diver itself. see HOW THE DIVER IS DRAWN.
+global TEX_DIVER_SHEET
+global TEX_DIVER_FOCUS `the corners of a viewfinder
+global TEX_DIVER_PHOTO `a little photo paper
+global DIVER_FRAMES = 12 `how many frames every row of the sheet has
+global DIVER_FRAME_MS = 90 `how long a frame lasts
+global DIVER_BODY_SPRITE = 0
+global DIVER_LEAVE_SPRITE = 0
+global DIVER_LEAVE_MS = -100000 `when the diver started up
+global DIVER_LEAVE_X = 0
+global DIVER_LEAVE_Y = 0
+
+` THE SHOTS. a shot is one fish that the diver is taking a picture of. there is room for four at once,
+` which is every cell that touches the diver.
+global DIVER_SHOT_COUNT = 4
+global DIVER_FOCUS_TIME = 380 `how long before the fish pops the viewfinder starts to close in on it, in milliseconds
+global DIVER_FOCUS_HOLD = 140 `and how long after the pop it stays
+global DIVER_PAPER_TIME = 520 `how long the photo paper takes to fly to its box
+global DIVER_SHOT_NEXT = 0 `the one that the next shot takes
+global dim DIVER_SHOT_ON(4)
+global dim DIVER_SHOT_MS(4) `when the fish pops
+global dim DIVER_SHOT_SLOT(4) `the box that the paper flies to
+global dim DIVER_SHOT_X(4) `where the fish is
+global dim DIVER_SHOT_Y(4)
+global dim DIVER_FOCUS_SPRITES(4)
+global dim DIVER_PAPER_SPRITES(4)
+global dim DIVER_PAPER_FISH(4) `the fish on the paper
+global DIVER_SNAP_AHEAD = 430 `how long the pops are held back for the diver to take its pictures, in milliseconds
+global DIVER_SNAP_HOLD = 0 `how long the pops of this look at the board are being held back for it. diverSnapAhead works it out.
+global DIVER_FACE_LEFT = 0 `1 while the diver faces left. it turns to the way that it was moved, and to the fish that it takes a picture of.
+global DIVER_LAST_COLUMN = -1 `the column that it was drawn in on the frame before, or -1
+global DIVER_RISE_DUE = 0 `1 when the diver is to swim up and away, and has not started
+global DIVER_RISE_HAPPY = 0 `1 when it goes with every picture taken
+global DIVER_RISING = 0 `1 while it is swimming up
+global DIVER_RISE_FRAMES = 27 `how many frames it takes to get up one row. it is slow, so that it can be seen for what it is.
+global DIVER_RISE_WAIT_FRAMES = 24 `and how many frames it waits, upright, before it sets off
+global DIVER_SNAPS = 0 `how many pictures the last look at the board took. the tests read this.
+
+` THE SOUNDS. there is a splash when the diver comes down. and while it is down, there is the sound of
+` being under the water with it, which is a recording that loops, turned well down so that it sits
+` under everything else. it fades in after the splash, and out again when the diver goes up.
+global SFX_CLIP_DIVER_SPLASH
+global SFX_CLIP_DIVER_WATER
+global SFX_DIVER_SPLASH = 0
+global SFX_DIVER_WATER = 0
+global DIVER_SPLASH_VOLUME# = .6 `how loud the splash is, from 0 to 1
+global DIVER_WATER_VOLUME# = .22 `how loud the recording gets
+global DIVER_WATER_NOW# = 0 `how loud it is on this frame. it chases what it should be.
+global DIVER_WATER_STARTED = 0 `1 once it has been played. it is turned down after that, and never stopped.
+
+remstart
+    THE ENDING. when the last picture has been taken, and the board has settled, the game is over, the
+    same way that it is over when the reef is saved or the ancient one is summoned: this is a third
+    ending of the hidden game. handle_coral_ending, in fish_routines_coral, starts it.
+      - on the board, the words say that the album is full, and hearts come up from the fish. diver_finale.
+      - the initials and the table of high scores come up, as they do for every game that ends.
+      - the wave that brings the main menu back is photo papers of the fish, in place of bubbles.
+        diverWaveStart, diverWaveStep and diverWaveEnd, which menu_transition and frame_transition call.
+      - at the surface, before the menu is there, the photos are strung on a line along the side of
+        the boat, under its railing. the diver on the back of the boat is hunched over, looking
+        through the rest of them, which are not seen. a heart comes up from it now and then. and the
+        words are there. diver_boat_scene, which handle_game_end comes to.
+    and the main menu remembers: the photos are on the boat from then on, and the diver is hunched
+    over them, with a heart once in a while. diverSurfaceStep, which frame_surface calls, draws it.
+    the player can turn that off again on the options page, with "Menu photos", which is only on the
+    page once there are photos to turn off. the FISH_MENU_DIVER environment variable puts them
+    there, for working on the game.
+    a game that ended this way has a diving mask for its badge in the table of high scores.
+    the pictures of the boat with the diver hunched over, and the badge, are built by
+    make_diver_menu_art.py, which is not part of the game.
+
+    THE CODEC has an entry for the diver, which says what info mode says about it, and is unlocked
+    the first time that the diver comes down. and it has one for this ending, which is locked, and
+    says nothing about what it is, until a game has ended this way. see setup_codec, in fish_routines_codec.
+remend
+#constant CORAL_ENDING_DIVER 3
+#constant PREF_ENDING_DIVER 12
+global DIVER_ENDING_DUE = 0 `1 when the album is full, and the ending has not started yet
+global DIVER_ENDING_HOLD = 0 `1 keeps the ending from starting. the tests set it, because the ending draws frames of its own.
+global DIVER_SURFACE = 0 `1 once some game has ended with the album full
+global DIVER_SURFACE_READY = 0 `1 once the things that are drawn into the main menu have been put there
+global DIVER_SCENE = 0 `1 while the scene at the boat is playing
+global DIVER_SCENE_MS = 0 `when it started
+global DIVER_SCENE_KEEP# = 1 `how much of the words is there, from 0 to 1. they fade out at the end.
+global DIVER_SCENE_HOLD_MS = 3200 `how long it is before the player can move on
+global DIVER_SCENE_MAX_MS = 18000 `and how long before it moves on by itself
+global DIVER_HEART_MS = 0 `when the next heart comes up from the diver on the boat
+
+` the wave of photo papers
+global DIVER_WAVE_COUNT = 22 `there is room for 30
+global DIVER_WAVE_ON = 0
+global dim DIVER_WAVE_SPRITES(30)
+global dim DIVER_WAVE_FISH(30)
+global dim DIVER_WAVE_X(30)
+global dim DIVER_WAVE_OFF(30) `how far ahead of the waterline each one is, or behind it
+global dim DIVER_WAVE_PHASE(30)
+
+` the line of photos on the boat. everything is measured from the middle of the picture of the boat.
+global DIVER_LINE_LEFT = -60 `where the two ends of the line are, across
+global DIVER_LINE_RIGHT = 50
+global DIVER_LINE_DOWN = 16 `how far down they are, which is just under the railing, at the top of the hull
+global DIVER_LINE_SAG = 2 `how far the middle of the line hangs under its ends
+global DIVER_LINE_DOT_COUNT = 40
+global dim DIVER_LINE_DOTS(40)
+global dim DIVER_LINE_PAPERS(9)
+global dim DIVER_LINE_FISH(9)
+global DIVER_HEART_X = 61 `where the hearts come up from, which is the head of the diver on the boat
+global DIVER_HEART_Y = -4
+global TEX_DIVER_BOAT `the picture of the boat with the diver hunched over
+global DIVER_BOAT_SWAPPED = 0 `1 while the boat of the main menu is that picture
+#constant PREF_MENU_PHOTOS 13
+global OPTION_MENU_PHOTOS = 1 `1 while the photos are wanted on the main menu
+global TEX_BADGE_MASK `the badge of a game that ended with the album full, in the table of high scores
+
+` the two entries of the codec. setup_codec, in fish_routines_codec, says which they are.
+global CODEC_ENTRY_DIVER = -1
+global CODEC_ENTRY_ALBUM = -1 `the ending
+global TEX_CODEC_DIVER `the pictures that they have there
+global TEX_ENDING_ALBUM
+
+` info mode has a spot for the album, once the diver has come down in a game
+global INFO_INDEX_DIVER = -1
+global DIVER_INFO_TOP = -1 `where that spot was put last. it follows the album.
+global DIVER_CARD_TEXT_ID = 0
+global DIVER_CARD_SUB_TEXT_ID = 0

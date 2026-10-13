@@ -204,6 +204,42 @@ public static class RenderSystem
     private static Dictionary<int, int> _effectMap = new Dictionary<int, int>();
 
     public static int screenEffectIndex = -1;
+
+    // The screen effect normally runs once for every pixel of the window, which on a big or
+    // high-density screen is many times the pixels of the picture it is given. With a scale of N
+    // it runs on a buffer N times the size of the render size instead, and that buffer is then
+    // stretched to the window with no effect at all. 0 means the window, as it always was.
+    // FADE_SCREEN_EFFECT_SCALE sets it from outside, for trying sizes without a rebuild.
+    public static int screenEffectScale = ReadScreenEffectScaleFromEnv();
+    public static RenderTarget2D screenBuffer;
+
+    private static int ReadScreenEffectScaleFromEnv()
+    {
+        return int.TryParse(Environment.GetEnvironmentVariable("FADE_SCREEN_EFFECT_SCALE"), out var scale) && scale > 0
+            ? scale
+            : 0;
+    }
+
+    /// <summary>
+    /// The buffer that the screen effect draws into when it has a scale of its own, or null when
+    /// the effect should go straight to the window: there is no scale, or the window is no
+    /// bigger than the buffer would be, so the extra step would save nothing.
+    /// </summary>
+    public static RenderTarget2D GetScreenBuffer()
+    {
+        if (screenEffectScale <= 0 || mainBuffer == null) return null;
+        if (screenEffectScale >= mainBufferScale) return null;
+
+        var width = mainBuffer.Width * screenEffectScale;
+        var height = mainBuffer.Height * screenEffectScale;
+        if (screenBuffer == null || screenBuffer.IsDisposed || screenBuffer.Width != width || screenBuffer.Height != height)
+        {
+            screenBuffer?.Dispose();
+            screenBuffer = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice, width, height);
+        }
+
+        return screenBuffer;
+    }
     public static int highestEffectId;
     public static int highestOutputId = 1;
 
@@ -350,6 +386,9 @@ public static class RenderSystem
         outputs.Clear();
         _outputMap.Clear();
         screenEffectIndex = -1;
+        screenEffectScale = ReadScreenEffectScaleFromEnv();
+        screenBuffer?.Dispose();
+        screenBuffer = null;
         highestEffectId = 0;
         highestOutputId = 1;
     }

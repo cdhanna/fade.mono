@@ -80,6 +80,13 @@ public static class AudioSystem
 
 public static class AudioInstanceSystem
 {
+    // How long the calls into the sound library took, in Stopwatch ticks, since the frame timing
+    // log last asked. Starting a sound is the one part of a frame that goes out to the operating
+    // system's audio, and how long that takes is very different from one machine to the next.
+    // See FADE_PERF_LOG in Game1.
+    public static long perfTicks;
+    public static int perfPlays;
+
     public static List<AudioInstance> audioEffects = new List<AudioInstance>();
     private static Dictionary<int, int> _effectMap = new Dictionary<int, int>();
     public static int highestEffectId;
@@ -141,7 +148,10 @@ public static class AudioInstanceSystem
             {
                 if (currentTime > sfx.playingDelayedUntil)
                 {
+                    var perfStart = System.Diagnostics.Stopwatch.GetTimestamp();
                     sfx.instance.Play();
+                    perfTicks += System.Diagnostics.Stopwatch.GetTimestamp() - perfStart;
+                    perfPlays++;
                     sfx.playingDelayedUntil = 0;
                     audioEffects[i] = sfx;
                 }

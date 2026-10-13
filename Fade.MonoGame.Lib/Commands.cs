@@ -181,6 +181,36 @@ public partial class FadeMonoGameCommands
              * (1000.0 / System.Diagnostics.Stopwatch.Frequency);
     }
 
+    /// <summary>
+    /// <para>Marks the end of one part of the frame, for the frame timing log. The time since the
+    /// lap before it is given to the section with this number.</para>
+    /// </summary>
+    /// <remarks>
+    /// Put one between the parts of your main loop. Run the game with the FADE_PERF_LOG environment
+    /// variable set, and every few seconds the log lists what each section cost per frame, on
+    /// average and in its worst frame. Without the variable a lap does nothing, so they can stay in.
+    /// </remarks>
+    /// <param name="section">Which section the time goes to, from 0 to 63.</param>
+    /// <seealso cref="PerfName">perf name</seealso>
+    /// <seealso cref="WallMs">wall ms</seealso>
+    [FadeBasicCommand("perf lap")]
+    public static void PerfLap(int section)
+    {
+        Fade.MonoGame.Core.PerfSections.Lap(section);
+    }
+
+    /// <summary>
+    /// <para>Gives a section of the frame timing log a name to be listed under.</para>
+    /// </summary>
+    /// <param name="section">The number of the section, from 0 to 63.</param>
+    /// <param name="name">What the log calls it.</param>
+    /// <seealso cref="PerfLap">perf lap</seealso>
+    [FadeBasicCommand("perf name")]
+    public static void PerfName(int section, string name)
+    {
+        Fade.MonoGame.Core.PerfSections.Name(section, name);
+    }
+
     [FadeBasicCommand("go kaboom")]
     public static void Throw()
     {

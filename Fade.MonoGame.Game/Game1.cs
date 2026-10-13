@@ -125,6 +125,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private long _perfVmStart, _perfDrawStart, _perfWindowStart, _perfLastFrame;
     private double _perfVmSum, _perfVmMax, _perfDrawSum, _perfDrawMax, _perfFrameMax, _perfFrameVm;
     private int _perfFrames, _perfGc0, _perfGc1, _perfGc2;
+    private double _perfGcPauseMs, _perfAudioSum, _perfAudioMax;
+    private int _perfWindows;
 
     private static int ReadEnvInt(string name)
     {
@@ -143,6 +145,13 @@ public class Game1 : Microsoft.Xna.Framework.Game
         var frameMs = _perfLastFrame == 0 ? 0 : PerfMs(_perfLastFrame, now);
         _perfLastFrame = now;
 
+        PerfSections.EndFrame();
+        if (++_perfWindows % 600 == 0)
+        {
+            var sections = PerfSections.Report();
+            if (sections != null) Console.Write(sections);
+        }
+
         _perfFrames++;
         _perfVmSum += _perfFrameVm;
         _perfDrawSum += drawMs;
@@ -150,10 +159,22 @@ public class Game1 : Microsoft.Xna.Framework.Game
         if (drawMs > _perfDrawMax) _perfDrawMax = drawMs;
         if (frameMs > _perfFrameMax) _perfFrameMax = frameMs;
 
-        // The time between frames includes waiting for the screen, so it is the work that is judged.
-        if (_perfFrameVm + drawMs > _perfSpikeMs)
+        // A frame is slow when its work is, or when it came late for any other reason: the time
+        // between frames also covers handing the picture to the screen, which is where a graphics
+        // card that cannot keep up shows, and anything else the engine does outside of the two.
+        // A collection by .NET stops everything, wherever it lands, so its pause is given too.
+        var audioMs = AudioInstanceSystem.perfTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        var audioPlays = AudioInstanceSystem.perfPlays;
+        AudioInstanceSystem.perfTicks = 0;
+        AudioInstanceSystem.perfPlays = 0;
+        _perfAudioSum += audioMs;
+        if (audioMs > _perfAudioMax) _perfAudioMax = audioMs;
+        var gcPauseMs = GC.GetTotalPauseDuration().TotalMilliseconds;
+        var gcMs = gcPauseMs - _perfGcPauseMs;
+        _perfGcPauseMs = gcPauseMs;
+        if (_perfFrameVm + drawMs > _perfSpikeMs || frameMs > _perfSpikeMs * 2)
         {
-            Console.WriteLine($"[perf] slow frame at {PerfMs(0, now) / 1000:F2} s: program {_perfFrameVm:F1} ms, draw {drawMs:F1} ms, {frameMs:F1} ms since the last frame");
+            Console.WriteLine($"[perf] slow frame at {PerfMs(0, now) / 1000:F2} s: program {_perfFrameVm:F1} ms (of which {audioMs:F1} starting {audioPlays} sounds), draw {drawMs:F1} ms, .NET gc pause {gcMs:F1} ms, {frameMs:F1} ms since the last frame");
         }
 
         if (_perfWindowStart == 0) _perfWindowStart = now;
@@ -164,13 +185,14 @@ public class Game1 : Microsoft.Xna.Framework.Game
             var gc2 = GC.CollectionCount(2);
             Console.WriteLine(
                 $"[perf] {_perfFrames} frames, worst {_perfFrameMax:F1} ms | program avg {_perfVmSum / _perfFrames:F2} max {_perfVmMax:F1}" +
-                $" | draw avg {_perfDrawSum / _perfFrames:F2} max {_perfDrawMax:F1} | gc {gc0 - _perfGc0}/{gc1 - _perfGc1}/{gc2 - _perfGc2}");
+                $" | draw avg {_perfDrawSum / _perfFrames:F2} max {_perfDrawMax:F1} | audio avg {_perfAudioSum / _perfFrames:F2} max {_perfAudioMax:F1} | gc {gc0 - _perfGc0}/{gc1 - _perfGc1}/{gc2 - _perfGc2}");
             _perfGc0 = gc0;
             _perfGc1 = gc1;
             _perfGc2 = gc2;
             _perfWindowStart = now;
             _perfFrames = 0;
             _perfVmSum = _perfVmMax = _perfDrawSum = _perfDrawMax = _perfFrameMax = 0;
+            _perfAudioSum = _perfAudioMax = 0;
         }
     }
 
@@ -1016,7 +1038,12 @@ public class Game1 : Microsoft.Xna.Framework.Game
             // it publishes is visible to commands the program calls this same frame.
             HostSystemRegistry.BeforeVmTick(gameTime);
 
-            if (_perfLog) _perfVmStart = System.Diagnostics.Stopwatch.GetTimestamp();
+            if (_perfLog)
+            {
+                _perfVmStart = System.Diagnostics.Stopwatch.GetTimestamp();
+                PerfSections.enabled = true;
+                PerfSections.BeginFrame();
+            }
             try
             {
                 // Both desktop and browser route through DebugSession now.
@@ -1193,6 +1220,39 @@ public class Game1 : Microsoft.Xna.Framework.Game
         // RenderSystem.RenderAllStages(_spriteBatch);
         RenderSystem.RenderAll2(_spriteBatch);
 
+        var screenEffect = RenderSystem.screenEffectIndex > -1
+            ? RenderSystem.effects[RenderSystem.screenEffectIndex].effect
+            : null;
+
+        // The picture that goes to the window, and how much it is stretched to get there. With
+        // `set screen effect scale`, the effect is run here, on a buffer of its own that is a
+        // few times the size of the picture, and what goes to the window below is that buffer
+        // with no effect. Otherwise the effect runs on the way to the window, once per pixel of it.
+        Texture2D screenSource = RenderSystem.mainBuffer;
+        var screenSourceScale = RenderSystem.mainBufferScale;
+        var screenSampler = SamplerState.PointClamp;
+        var screenBuffer = screenEffect != null ? RenderSystem.GetScreenBuffer() : null;
+        if (screenBuffer != null)
+        {
+            GraphicsDevice.SetRenderTarget(screenBuffer);
+            _spriteBatch.Begin(
+                sortMode: SpriteSortMode.Immediate,
+                blendState: BlendState.Opaque,
+                samplerState: SamplerState.PointClamp,
+                effect: screenEffect
+                );
+            _spriteBatch.Draw(RenderSystem.mainBuffer, Vector2.Zero, null, Color.White, 0f, Vector2.Zero, (float)RenderSystem.screenEffectScale, SpriteEffects.None, 0);
+            _spriteBatch.End();
+
+            screenSource = screenBuffer;
+            screenSourceScale = RenderSystem.mainBufferScale / RenderSystem.screenEffectScale;
+            screenEffect = null;
+
+            // A stretch by a whole number keeps its hard pixels. Any other would make some
+            // pixels wider than their neighbours, so it is smoothed.
+            if (Math.Abs(screenSourceScale - MathF.Round(screenSourceScale)) > 0.001f) screenSampler = SamplerState.LinearClamp;
+        }
+
         GraphicsDevice.SetRenderTarget(null);
         GraphicsDevice.Clear(Color.Black);
 
@@ -1202,18 +1262,15 @@ public class Game1 : Microsoft.Xna.Framework.Game
         // screenShakeOffset += screenDelta * screenShakeElastic;
         // var mat2 = Matrix.Identity * Matrix.CreateTranslation(new Vector3(screenShakeOffset.X, screenShakeOffset.Y, 0));
         //
-        var screenEffect = RenderSystem.screenEffectIndex > -1
-            ? RenderSystem.effects[RenderSystem.screenEffectIndex].effect
-            : null;
         _spriteBatch.Begin(
             sortMode: SpriteSortMode.Immediate,
             blendState: BlendState.Opaque,
-            samplerState: SamplerState.PointClamp,
+            samplerState: screenSampler,
             transformMatrix: RenderSystem.shakeMat,
             effect: screenEffect
             );
-        
-        _spriteBatch.Draw(RenderSystem.mainBuffer, RenderSystem.mainBufferPosition, null, Color.White, 0f, Vector2.Zero, RenderSystem.mainBufferScale, SpriteEffects.None, 0);
+
+        _spriteBatch.Draw(screenSource, RenderSystem.mainBufferPosition, null, Color.White, 0f, Vector2.Zero, screenSourceScale, SpriteEffects.None, 0);
         _spriteBatch.End();
 
         // Gizmos draw in world-space (mainBuffer pixels) but to the

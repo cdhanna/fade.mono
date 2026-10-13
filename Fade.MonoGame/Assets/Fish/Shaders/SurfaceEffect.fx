@@ -330,7 +330,13 @@ float3 sea(float2 px)
 	// the sun lays a path of light across the water, which gets wider toward the camera
 	float path = saturate(1.0 - abs(px.x - SunX) / (10.0 + dy * 0.55));
 	float glint = step(0.82 - path * 0.75, ripple);
-	float3 glintColor = lerp(color + 0.07, SeaGlint, saturate(path * 1.6) * (1.0 - depth * 0.45));
+
+	// once the thing is there, the sun is gone into the hole, so there is no sunlight to lay on the water.
+	// what is on the water is the hole: the dim colors of that other sky, with the lit edge of it here and there.
+	float3 riftGlint = lerp(RiftWarm, RiftCold, 0.5 + 0.5 * sin(row * 0.9 + Time * 0.3));
+	riftGlint = lerp(riftGlint, RiftRing, step(0.86, hash(float2(floor(wx * 0.08), floor(row)))));
+	float3 pathColor = lerp(SeaGlint, riftGlint, Endings.y);
+	float3 glintColor = lerp(color + 0.07, pathColor, saturate(path * 1.6) * (1.0 - depth * 0.45));
 	color = lerp(color, glintColor, glint);
 
 	// and the troughs between the ripples are a little darker

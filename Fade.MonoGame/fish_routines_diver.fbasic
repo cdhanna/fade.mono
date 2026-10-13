@@ -1,0 +1,1219 @@
+goto routines_diver_exit
+
+remstart
+    THE DIVER
+    see fish_headers_diver for what the diver is, and what it does.
+
+    handle_combos, in fish_routines, calls diverMend before it looks at the board, diverJudge when it
+    has decided what pops, diverAfterPops when the pops are over, and diverSettled when nothing pops.
+    stepLiveMove and registerMove, in fish_funcs, call diverBottleRose and diverMoveMade.
+    stepCoral draws the album, with diverStep, right after the bars of the coral.
+remend
+
+setup_diver:
+
+    ` the seven fish, and then the two kinds that only show up with their cards
+    for dvSetupI = 0 to 6
+        DIVER_ALBUM_KIND(dvSetupI) = dvSetupI + 1
+    next
+    DIVER_ALBUM_KIND(7) = TEX_JELLY
+    DIVER_ALBUM_KIND(8) = TEX_RAY
+
+    for dvSetupI = 0 to DIVER_ALBUM_COUNT - 1
+        dvSetupId = 0
+        reserve sprite id(dvSetupId)
+        sprite dvSetupId, 0, 0, TEX_PIXEL
+        set sprite offset dvSetupId, 0, 0
+        size sprite dvSetupId, DIVER_BOX_SIZE, DIVER_BOX_SIZE
+        color sprite dvSetupId, rgb(120, 180, 255, 70)
+        hide sprite dvSetupId
+        DIVER_BOX_SPRITES(dvSetupI) = dvSetupId
+
+        dvSetupId = 0
+        reserve sprite id(dvSetupId)
+        sprite dvSetupId, 0, 0, DIVER_ALBUM_KIND(dvSetupI)
+        size sprite dvSetupId, DIVER_FISH_SIZE, DIVER_FISH_SIZE
+        hide sprite dvSetupId
+        DIVER_FISH_SPRITES(dvSetupI) = dvSetupId
+    next
+
+    ` the air: a block for every move of it
+    for dvSetupI = 0 to DIVER_AIR_PIP_ROOM - 1
+        dvSetupId = 0
+        reserve sprite id(dvSetupId)
+        sprite dvSetupId, 0, 0, TEX_PIXEL
+        set sprite offset dvSetupId, 0, 0
+        hide sprite dvSetupId
+        DIVER_AIR_PIPS(dvSetupI) = dvSetupId
+    next
+
+    ` the diver itself, and the diver on the way up. see HOW THE DIVER IS DRAWN in fish_headers_diver.
+    texture reserve texture id(TEX_DIVER_SHEET), "Fish/Textures/DiverSheet"
+    set texture frame grid TEX_DIVER_SHEET, 3 12 `rows, columns
+    texture reserve texture id(TEX_DIVER_FOCUS), "Fish/Textures/DiverFocus"
+    texture reserve texture id(TEX_DIVER_PHOTO), "Fish/Textures/DiverPhoto"
+
+    reserve sprite id(DIVER_BODY_SPRITE)
+    sprite DIVER_BODY_SPRITE, 0, 0, TEX_DIVER_SHEET
+    order sprite DIVER_BODY_SPRITE, ORDER_FISH + 1
+    hide sprite DIVER_BODY_SPRITE
+
+    reserve sprite id(DIVER_LEAVE_SPRITE)
+    sprite DIVER_LEAVE_SPRITE, 0, 0, TEX_DIVER_SHEET
+    order sprite DIVER_LEAVE_SPRITE, ORDER_FISH + 2
+    hide sprite DIVER_LEAVE_SPRITE
+
+    ` the shots: a viewfinder, a photo paper, and the fish on the paper, for each. see THE SHOTS in fish_headers_diver.
+    for dvSetupI = 0 to DIVER_SHOT_COUNT - 1
+        dvSetupId = 0
+        reserve sprite id(dvSetupId)
+        sprite dvSetupId, 0, 0, TEX_DIVER_FOCUS
+        order sprite dvSetupId, ORDER_FISH + 2
+        hide sprite dvSetupId
+        DIVER_FOCUS_SPRITES(dvSetupI) = dvSetupId
+
+        dvSetupId = 0
+        reserve sprite id(dvSetupId)
+        sprite dvSetupId, 0, 0, TEX_DIVER_PHOTO
+        order sprite dvSetupId, ORDER_FISH + 3
+        hide sprite dvSetupId
+        DIVER_PAPER_SPRITES(dvSetupI) = dvSetupId
+
+        dvSetupId = 0
+        reserve sprite id(dvSetupId)
+        sprite dvSetupId, 0, 0, TEX_GOLDFISH
+        order sprite dvSetupId, ORDER_FISH + 4
+        hide sprite dvSetupId
+        DIVER_PAPER_FISH(dvSetupI) = dvSetupId
+    next
+
+    ` the sounds. see THE SOUNDS in fish_headers_diver.
+    load sfx clip reserve sfx clip id(SFX_CLIP_DIVER_SPLASH), "Fish/Audio/diver-splash"
+    sfx reserve sfx id(SFX_DIVER_SPLASH), SFX_CLIP_DIVER_SPLASH
+    set sfx volume SFX_DIVER_SPLASH, DIVER_SPLASH_VOLUME#
+    load sfx clip reserve sfx clip id(SFX_CLIP_DIVER_WATER), "Fish/Audio/diver-underwater"
+    sfx reserve sfx id(SFX_DIVER_WATER), SFX_CLIP_DIVER_WATER
+    set sfx loop SFX_DIVER_WATER, 1
+    set sfx volume SFX_DIVER_WATER, 0
+
+    ` the wave of photo papers. they are on the screen, where the bubbles of the wave are.
+    for dvSetupI = 0 to 29
+        dvSetupId = 0
+        reserve sprite id(dvSetupId)
+        sprite dvSetupId, 0, 0, TEX_DIVER_PHOTO
+        size sprite dvSetupId, 48, 56
+        order sprite dvSetupId, ORDER_MENU_BUBBLES
+        hide sprite dvSetupId
+        DIVER_WAVE_SPRITES(dvSetupI) = dvSetupId
+
+        dvSetupId = 0
+        reserve sprite id(dvSetupId)
+        sprite dvSetupId, 0, 0, DIVER_ALBUM_KIND(dvSetupI mod DIVER_ALBUM_COUNT)
+        size sprite dvSetupId, 32, 32
+        order sprite dvSetupId, ORDER_MENU_BUBBLES + 1
+        hide sprite dvSetupId
+        DIVER_WAVE_FISH(dvSetupI) = dvSetupId
+    next
+
+    ` the line of photos on the boat, which is drawn into the main menu, on top of the boat
+    for dvSetupI = 0 to DIVER_LINE_DOT_COUNT - 1
+        dvSetupId = 0
+        reserve sprite id(dvSetupId)
+        sprite dvSetupId, 0, 0, TEX_PIXEL
+        size sprite dvSetupId, 2, 1
+        color sprite dvSetupId, rgb(226, 220, 200)
+        order sprite dvSetupId, ORDER_MENU_SURFACE + 4
+        hide sprite dvSetupId
+        DIVER_LINE_DOTS(dvSetupI) = dvSetupId
+    next
+    for dvSetupI = 0 to DIVER_ALBUM_COUNT - 1
+        dvSetupId = 0
+        reserve sprite id(dvSetupId)
+        sprite dvSetupId, 0, 0, TEX_DIVER_PHOTO
+        size sprite dvSetupId, 12, 14
+        order sprite dvSetupId, ORDER_MENU_SURFACE + 5
+        hide sprite dvSetupId
+        DIVER_LINE_PAPERS(dvSetupI) = dvSetupId
+
+        dvSetupId = 0
+        reserve sprite id(dvSetupId)
+        sprite dvSetupId, 0, 0, DIVER_ALBUM_KIND(dvSetupI)
+        size sprite dvSetupId, 8, 8
+        order sprite dvSetupId, ORDER_MENU_SURFACE + 6
+        hide sprite dvSetupId
+        DIVER_LINE_FISH(dvSetupI) = dvSetupId
+    next
+
+    ` and the words of that scene, which are made the same way as the words of the splash screen
+    reserve text id(DIVER_CARD_TEXT_ID)
+    text DIVER_CARD_TEXT_ID, WORLD_WIDTH / 2, 34, SCORE_FONT, "Remember, the ocean is always waiting to welcome you back."
+    size text y DIVER_CARD_TEXT_ID, 22
+    dvSetupRoom = WORLD_WIDTH - 30
+    if get text size x(DIVER_CARD_TEXT_ID) > dvSetupRoom
+        size text y DIVER_CARD_TEXT_ID, 18
+    endif
+    if get text size x(DIVER_CARD_TEXT_ID) > dvSetupRoom
+        size text y DIVER_CARD_TEXT_ID, 15
+    endif
+    set text offset DIVER_CARD_TEXT_ID, .5, 0
+    color text DIVER_CARD_TEXT_ID, rgb(255, 244, 214)
+    enable text drop shadow DIVER_CARD_TEXT_ID, 2, -2, rgb(0,0,0)
+    order text DIVER_CARD_TEXT_ID, ORDER_MENU_TEXT
+    set text alpha DIVER_CARD_TEXT_ID, 0
+    hide text DIVER_CARD_TEXT_ID
+
+    reserve text id(DIVER_CARD_SUB_TEXT_ID)
+    text DIVER_CARD_SUB_TEXT_ID, WORLD_WIDTH / 2, 62, SCORE_FONT, "Have a good day, friend."
+    size text y DIVER_CARD_SUB_TEXT_ID, 20
+    set text offset DIVER_CARD_SUB_TEXT_ID, .5, 0
+    color text DIVER_CARD_SUB_TEXT_ID, rgb(255, 196, 150)
+    enable text drop shadow DIVER_CARD_SUB_TEXT_ID, 2, -2, rgb(0,0,0)
+    order text DIVER_CARD_SUB_TEXT_ID, ORDER_MENU_TEXT
+    set text alpha DIVER_CARD_SUB_TEXT_ID, 0
+    hide text DIVER_CARD_SUB_TEXT_ID
+
+    ` the spot that info mode has for the album. it is not there until the diver has come down.
+    INFO_INDEX_DIVER = allocateInfoBlob(CORAL_BAR_X - 4, 0, DIVER_BOX_STEP * DIVER_ALBUM_COUNT + 7, 22, "The diver", "Looking for all the types of sea life")
+    setInfoBlobEnabled(INFO_INDEX_DIVER, 0)
+
+    ` what the main menu remembers. see THE ENDING in fish_headers_diver.
+    DIVER_SURFACE = get pref(PREF_ENDING_DIVER, 0)
+    if is env set("FISH_MENU_DIVER")
+        DIVER_SURFACE = 1
+    endif
+
+return
+
+
+` THE DIVER SWIMS UP. see THE AIR in fish_headers_diver. handle_combos, in fish_routines, comes here
+` when the board has settled and diverSettled has said that the diver is to go. the diver trades places
+` with the fish over it, one row after another, until it is on the top row, and then it is gone. this
+` draws frames of its own, the way that the pops and the falls do, and it counts them, because the
+` clock does not move in the tests. everything in it has a name of its own, which starts with "dvRise".
+diver_rise:
+    if DIVER_RISE_DUE = 0 then return
+    DIVER_RISE_DUE = 0
+    if DIVER_ON = 0 then return
+    if DIVER_AT < 0 then return
+
+    DIVER_RISING = 1
+    dvRiseAt = DIVER_AT
+    dvRiseFull# = DIVER_RISE_FRAMES
+
+    ` it turns upright, and that gets a moment to be seen before it sets off
+    dvRiseN = 0
+    while dvRiseN < DIVER_RISE_WAIT_FRAMES
+        dvRiseN = dvRiseN + 1
+        gosub update_frame
+        sync
+    endwhile
+    while dvRiseAt >= CELL_COLUMN_COUNT
+        dvRiseTo = dvRiseAt - CELL_COLUMN_COUNT
+
+        ` the two trade places, and then their pictures slide to where they belong
+        dvRiseKind = CELLS(dvRiseTo).value
+        CELLS(dvRiseTo).value = CELLS(dvRiseAt).value
+        CELLS(dvRiseAt).value = dvRiseKind
+        swapCellStacks(dvRiseAt, dvRiseTo)
+        updateCell(CELLS(dvRiseAt))
+        updateCell(CELLS(dvRiseTo))
+        CORAL_SUNG(dvRiseAt) = 0
+        DIVER_AT = dvRiseTo
+
+        dvRiseX = getCellX(dvRiseAt mod CELL_COLUMN_COUNT)
+        dvRiseLowY = getCellY(dvRiseAt / CELL_COLUMN_COUNT)
+        dvRiseHighY = getCellY(dvRiseTo / CELL_COLUMN_COUNT)
+        spawnBubbles(dvRiseX, dvRiseLowY, CELL_SIZE / 3, 5, 0, rgb(255, 255, 255))
+
+        dvRiseN = 0
+        while dvRiseN < DIVER_RISE_FRAMES
+            dvRiseN = dvRiseN + 1
+            dvRiseGo# = dvRiseN
+            dvRiseGo# = dvRiseGo# / dvRiseFull#
+
+            ` slow to leave a row, and slow to get to the next, so that every trade is a stroke
+            dvRiseGo# = dvRiseGo# * dvRiseGo# * (3 - 2 * dvRiseGo#)
+            dvRiseSpan# = (dvRiseLowY - dvRiseHighY) * dvRiseGo#
+            position sprite CELLS(dvRiseTo).spriteId, dvRiseX, dvRiseLowY - dvRiseSpan#
+            position sprite CELLS(dvRiseAt).spriteId, dvRiseX, dvRiseHighY + dvRiseSpan#
+            gosub update_frame
+            sync
+        endwhile
+
+        dvRiseAt = dvRiseTo
+    endwhile
+
+    ` it is on the top row, so it goes up and away, and a fish takes its place
+    DIVER_RISING = 0
+    diverLeave(DIVER_RISE_HAPPY)
+
+    ` the fish that it passed have each come down a row, and that may have made a group
+    REQUEST_COMBO_CHECK = 1
+return
+
+
+` THE ENDING, on the board. see fish_headers_diver. handle_coral_ending, in fish_routines_coral, comes
+` here. like the other endings, it draws frames of its own, with update_frame, so everything in it has
+` a name of its own, which starts with "dvFin".
+diver_finale:
+    set text CORAL_END_TEXT_ID, "The album is full"
+    color text CORAL_END_TEXT_ID, rgb(255, 244, 214)
+    set text CORAL_END_SUB_TEXT_ID, "in " + str$(CURRENT_MOVE_COUNT) + " moves"
+    color text CORAL_END_SUB_TEXT_ID, rgb(255, 196, 150)
+
+    ` the key hints go, and the full bar stops fizzing
+    hintShow(0)
+    SCORE_BAR_FIZZ_MS = game ms() + 10000000
+
+    dvFinStart = game ms()
+    dvFinHeartMs = dvFinStart
+    dvFinHopMs = dvFinStart
+    dvFinWords# = CORAL_END_WORDS_MS
+    dvFinHud# = GOODBYE_HUD_MS
+    dvFinDone = 0
+    repeat
+        ` the things around the board fade away, the same way that they do when the fish go home.
+        ` update_frame draws them, and then fades them by this much. see HUD_KEEP# in fish_headers.
+        dvFinAge# = game ms() - dvFinStart
+        HUD_KEEP# = 1 - dvFinAge# / dvFinHud#
+        if HUD_KEEP# < 0 then HUD_KEEP# = 0
+
+        gosub update_frame
+
+        dvFinNow = game ms()
+        dvFinAge# = dvFinNow - dvFinStart
+        dvFinBob# = sin(dvFinAge# * .003) * 3
+
+        ` the cursor fades away, the same way that it does for the other endings
+        dvFinCursor# = 1 - dvFinAge# / CORAL_END_CURSOR_MS
+        if dvFinCursor# < 0 then dvFinCursor# = 0
+        set sprite alpha SELECTION_SPRITE, 90 * dvFinCursor#
+        set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, dvFinCursor#
+
+        ` a heart from one fish or another, and a hop from one
+        if dvFinNow >= dvFinHeartMs
+            dvFinHeartMs = dvFinNow + 200
+            dvFinPick = rnd(CELL_COUNT)
+            spawnHeart(sprite x(CELLS(dvFinPick).spriteId), sprite y(CELLS(dvFinPick).spriteId) - CELL_ART_SIZE / 2, 0)
+        endif
+        if dvFinNow >= dvFinHopMs
+            dvFinHopMs = dvFinNow + 360
+            dvFinPick = rnd(CELL_COUNT)
+            create basic tween CELLS(dvFinPick).scaleWaveTweenId, 1.5, 1, 260, 0
+        endif
+
+        ` the words fade in, and bob a little
+        dvFinShown# = (dvFinAge# - 700) / dvFinWords#
+        if dvFinShown# < 0 then dvFinShown# = 0
+        if dvFinShown# > 1 then dvFinShown# = 1
+        set text alpha CORAL_END_TEXT_ID, 255 * dvFinShown#
+        set text alpha CORAL_END_SUB_TEXT_ID, 255 * dvFinShown#
+        set text position CORAL_END_TEXT_ID, WORLD_WIDTH / 2, 150 + dvFinBob#
+        set text position CORAL_END_SUB_TEXT_ID, WORLD_WIDTH / 2, 176 + dvFinBob#
+
+        sync
+
+        ` the player can move on once they have had a look, and it moves on by itself after a while
+        if dvFinAge# > 700 + CORAL_END_WORDS_MS + CORAL_END_HOLD_MS
+            if new action down(ACT_CONFIRM) then dvFinDone = 1
+        endif
+        if dvFinAge# > CORAL_END_MAX_MS then dvFinDone = 1
+    until dvFinDone
+
+    set text alpha CORAL_END_TEXT_ID, 0
+    set text alpha CORAL_END_SUB_TEXT_ID, 0
+
+    ` and the things around the board are gone for good, however early the player moved on
+    HUD_KEEP# = 0
+    applyHudFade()
+return
+
+
+` THE ENDING, at the boat. see fish_headers_diver. handle_game_end, in fish_routines_menu, comes here
+` once the main menu is back, which menu_quit_to_title has left see-through. the photos are on their
+` line, the diver looks through a few more, and the words are there. then the menu fades in.
+diver_boat_scene:
+    diverSurfaceReady()
+    DIVER_SCENE = 1
+    DIVER_SCENE_MS = game ms()
+    DIVER_SCENE_KEEP# = 1
+    DIVER_HEART_MS = DIVER_SCENE_MS + 1200
+    set text alpha DIVER_CARD_TEXT_ID, 0
+    set text alpha DIVER_CARD_SUB_TEXT_ID, 0
+    show text DIVER_CARD_TEXT_ID
+    show text DIVER_CARD_SUB_TEXT_ID
+
+    dvSceneDone = 0
+    repeat
+        gosub frame_menu_render
+        sync
+
+        dvSceneAge = game ms() - DIVER_SCENE_MS
+        if dvSceneAge > DIVER_SCENE_HOLD_MS
+            if new action down(ACT_CONFIRM) then dvSceneDone = 1
+        endif
+        if dvSceneAge > DIVER_SCENE_MAX_MS then dvSceneDone = 1
+    until dvSceneDone
+
+    ` the words go, and the menu comes
+    dvSceneOut = game ms()
+    dvSceneOutFull# = 700
+    repeat
+        dvSceneGone# = game ms() - dvSceneOut
+        dvSceneGone# = dvSceneGone# / dvSceneOutFull#
+        if dvSceneGone# > 1 then dvSceneGone# = 1
+        DIVER_SCENE_KEEP# = 1 - dvSceneGone#
+        setMenuChromeAlpha(dvSceneGone#)
+        gosub frame_menu_render
+        sync
+    until dvSceneGone# >= 1
+
+    DIVER_SCENE = 0
+    hide text DIVER_CARD_TEXT_ID
+    hide text DIVER_CARD_SUB_TEXT_ID
+
+    ` the main menu is all the way there. selecting the line again puts the colors of the lines back.
+    setMenuChromeAlpha(1)
+    selectMenuItem(MENU_SELECTED, 0)
+return
+
+
+routines_diver_exit:
+
+
+` a new game. the diver is back on the boat, and the album is empty.
+function diverReset()
+    DIVER_ON = 0
+    DIVER_AT = -1
+    DIVER_AIR = 0
+    DIVER_SEEN = 0
+    DIVER_DONE = 0
+    DIVER_SNAPS = 0
+    DIVER_ENDING_DUE = 0
+    DIVER_INFO_TOP = -1
+    DIVER_RISE_DUE = 0
+    DIVER_RISING = 0
+    DIVER_FACE_LEFT = 0
+    DIVER_LAST_COLUMN = -1
+    if INFO_INDEX_DIVER >= 0
+        setInfoBlobEnabled(INFO_INDEX_DIVER, 0)
+    endif
+
+    ` the sound of being under the water goes with the diver
+    DIVER_WATER_NOW# = 0
+    set sfx volume SFX_DIVER_WATER, 0
+    DIVER_LEAVE_MS = -100000
+    for dvResetI = 0 to DIVER_SHOT_COUNT - 1
+        DIVER_SHOT_ON(dvResetI) = 0
+        hide sprite DIVER_FOCUS_SPRITES(dvResetI)
+        hide sprite DIVER_PAPER_SPRITES(dvResetI)
+        hide sprite DIVER_PAPER_FISH(dvResetI)
+    next
+    for dvResetI = 0 to DIVER_ALBUM_COUNT - 1
+        DIVER_PHOTOS(dvResetI) = 0
+        DIVER_PHOTO_MS(dvResetI) = 0
+        hide sprite DIVER_BOX_SPRITES(dvResetI)
+        hide sprite DIVER_FISH_SPRITES(dvResetI)
+    next
+    for dvResetI = 0 to DIVER_AIR_PIP_ROOM - 1
+        hide sprite DIVER_AIR_PIPS(dvResetI)
+    next
+    hide sprite DIVER_BODY_SPRITE
+    hide sprite DIVER_LEAVE_SPRITE
+endfunction
+
+
+` the cell that the diver is in, or -1 when it is not on the board
+function diverFind()
+    dvFound = -1
+    dvFindLast = CELL_COUNT - 1
+    for dvFindI = 0 to dvFindLast
+        if CELLS(dvFindI).value = TEX_DIVER
+            dvFound = dvFindI
+            exit
+        endif
+    next
+endfunction dvFound
+
+
+` the box of the album that a kind of fish goes in, or -1 for a kind that there is no picture of
+function diverAlbumSlot(dvSlotKind)
+    dvSlotFound = -1
+    for dvSlotI = 0 to DIVER_ALBUM_COUNT - 1
+        if DIVER_ALBUM_KIND(dvSlotI) = dvSlotKind then dvSlotFound = dvSlotI
+    next
+endfunction dvSlotFound
+
+
+` how many pictures have been taken
+function diverPhotoCount()
+    dvTaken = 0
+    for dvTakenI = 0 to DIVER_ALBUM_COUNT - 1
+        if DIVER_PHOTOS(dvTakenI) then dvTaken = dvTaken + 1
+    next
+endfunction dvTaken
+
+
+` a swap has just traded the fish of these two cells. a bottle that it carried up to the top row,
+` from the row under it, brings the diver down. see HOW THE DIVER COMES DOWN in fish_headers_diver.
+function diverBottleRose(dvRoseA, dvRoseB)
+    if DIVER_ON then exitfunction
+    if DIVER_DONE then exitfunction
+
+    dvRoseAt = -1
+    if dvRoseA < CELL_COLUMN_COUNT
+        if dvRoseB >= CELL_COLUMN_COUNT
+            if CELLS(dvRoseA).value = TEX_BOTTLE then dvRoseAt = dvRoseA
+        endif
+    endif
+    if dvRoseB < CELL_COLUMN_COUNT
+        if dvRoseA >= CELL_COLUMN_COUNT
+            if CELLS(dvRoseB).value = TEX_BOTTLE then dvRoseAt = dvRoseB
+        endif
+    endif
+
+    if dvRoseAt >= 0
+        diverArrive(dvRoseAt)
+    endif
+endfunction
+
+
+` the diver comes down into this cell, in place of whatever was in it, with a full tank of air
+function diverArrive(dvArriveCell)
+    CELLS(dvArriveCell).value = TEX_DIVER
+    clearCellStack(dvArriveCell)
+    updateCell(CELLS(dvArriveCell))
+    create basic tween CELLS(dvArriveCell).scaleWaveTweenId, 1.8, 1, 300, 0
+    spawnBubbles(getCellX(CELLS(dvArriveCell).coord.x), getCellY(CELLS(dvArriveCell).coord.y), CELL_SIZE / 3, 14, 0, rgb(255, 255, 255))
+
+    DIVER_ON = 1
+    DIVER_AT = dvArriveCell
+    DIVER_AIR = DIVER_AIR_MAX
+    DIVER_SEEN = 1
+    DIVER_RISE_DUE = 0
+    DIVER_RISING = 0
+    DIVER_FACE_LEFT = 0
+    DIVER_LAST_COLUMN = -1
+
+    ` the diver is in the codec from now on
+    codecSeeCard(CODEC_ENTRY_DIVER)
+
+    ` the splash, and the sound of being under the water starts, which diverStep fades in. see THE SOUNDS in fish_headers_diver.
+    set sfx volume SFX_DIVER_SPLASH, DIVER_SPLASH_VOLUME#
+    play sfx SFX_DIVER_SPLASH
+    if DIVER_WATER_STARTED = 0
+        DIVER_WATER_STARTED = 1
+        set sfx volume SFX_DIVER_WATER, 0
+        play sfx SFX_DIVER_WATER
+    endif
+endfunction
+
+
+` a move was counted. it takes that much of the air.
+function diverMoveMade(dvMoves)
+    if DIVER_ON = 0 then exitfunction
+    if dvMoves <= 0 then exitfunction
+    DIVER_AIR = DIVER_AIR - dvMoves
+    if DIVER_AIR < 0 then DIVER_AIR = 0
+endfunction
+
+
+` the board is about to be looked at. there is one diver, where the last swap or the last fall left
+` it, and nothing has happened to it. a special move may have copied it, or written over it: a copy
+` turns into a fish, and a diver that was written over is back where it was.
+function diverMend()
+    DIVER_SNAPS = 0
+    if DIVER_SEEN = 0 then exitfunction
+
+    dvKeep = -1
+    if DIVER_ON
+        if DIVER_AT >= 0
+            if DIVER_AT < CELL_COUNT
+                if CELLS(DIVER_AT).value = TEX_DIVER then dvKeep = DIVER_AT
+            endif
+        endif
+    endif
+
+    dvMendLast = CELL_COUNT - 1
+    for dvMendI = 0 to dvMendLast
+        if CELLS(dvMendI).value = TEX_DIVER
+            dvStray = 1
+            if DIVER_ON
+                if dvKeep < 0 then dvKeep = dvMendI
+                if dvKeep = dvMendI then dvStray = 0
+            endif
+            if dvStray
+                CELLS(dvMendI).value = getImpossibleRandomValueForCell(dvMendI)
+                clearCellStack(dvMendI)
+                updateCell(CELLS(dvMendI))
+            endif
+        endif
+    next
+
+    if DIVER_ON = 0 then exitfunction
+
+    if dvKeep < 0
+        dvKeep = DIVER_AT
+        if dvKeep >= CELL_COUNT then dvKeep = -1
+        if dvKeep < 0
+            DIVER_ON = 0
+            exitfunction
+        endif
+        CELLS(dvKeep).value = TEX_DIVER
+        updateCell(CELLS(dvKeep))
+    endif
+
+    DIVER_AT = dvKeep
+    dvSpoiled = CELLS(dvKeep).stack + CELLS(dvKeep).bellyUp
+    if dvSpoiled > 0
+        clearCellStack(dvKeep)
+        updateCell(CELLS(dvKeep))
+    endif
+    CELLS(dvKeep).comboForce = 0
+endfunction
+
+
+` for working on the game: the album is full, as if the last picture had just been taken, and the
+` board is asked to settle, which is when the diver swims up and the ending starts. a diver that is not
+` down comes down first, into `dvWinCell`. the O debug key, in frame_dbg, does this.
+function diverDebugWin(dvWinCell)
+    if CORAL_ENDING > 0 then exitfunction
+    DIVER_DONE = 0
+    if DIVER_ON = 0
+        diverArrive(dvWinCell)
+    endif
+    for dvWinI = 0 to DIVER_ALBUM_COUNT - 1
+        DIVER_PHOTOS(dvWinI) = 1
+    next
+    REQUEST_COMBO_CHECK = 1
+endfunction
+
+
+` handle_combos has found the groups, and has not gone through them yet. this works out how long every
+` pop of this look at the board is to be held back for the diver, in milliseconds, and leaves it in
+` DIVER_SNAP_HOLD: DIVER_SNAP_AHEAD when a fish that is worth a picture is about to pop in a cell that
+` touches the diver, and 0 when none is. see THE PICTURES in fish_headers_diver. `dvAheadLast` is the
+` highest number that a group has.
+` it leaves its answer in a global, and it asks nothing of any function in the middle of a sum,
+` because a number that came back from here to the middle of handle_combos came back wrong.
+function diverSnapAhead(dvAheadLast)
+    DIVER_SNAP_HOLD = 0
+    if DIVER_ON = 0 then exitfunction
+    if DIVER_AT < 0 then exitfunction
+    if dvAheadLast >= COMBO_GROUP_ROOM then exitfunction
+
+    comboCountGroups(dvAheadLast)
+    dvAheadNeed = getRequiredComboCount()
+    dvAheadX = DIVER_AT mod CELL_COLUMN_COUNT
+    dvAheadY = DIVER_AT / CELL_COLUMN_COUNT
+
+    ` the four cells that touch the diver: left, right, up and down
+    dvAheadSide = 0
+    while dvAheadSide < 4
+        dvAheadCell = -1
+        if dvAheadSide = 0
+            if dvAheadX > 0 then dvAheadCell = DIVER_AT - 1
+        endif
+        if dvAheadSide = 1
+            if dvAheadX < CELL_COLUMN_COUNT - 1 then dvAheadCell = DIVER_AT + 1
+        endif
+        if dvAheadSide = 2
+            if dvAheadY > 0 then dvAheadCell = DIVER_AT - CELL_COLUMN_COUNT
+        endif
+        if dvAheadSide = 3
+            if dvAheadY < CELL_ROW_COUNT - 1 then dvAheadCell = DIVER_AT + CELL_COLUMN_COUNT
+        endif
+        dvAheadSide = dvAheadSide + 1
+
+        if dvAheadCell >= 0
+            ` is the fish in it worth a picture, and is it about to pop?
+            dvAheadSlot = diverAlbumSlot(CELLS(dvAheadCell).value)
+            dvAheadWorth = 1
+            if dvAheadSlot < 0 then dvAheadWorth = 0
+            if dvAheadSlot >= 0
+                ` nothing waits for a picture that the album has already
+                if DIVER_PHOTOS(dvAheadSlot) then dvAheadWorth = 0
+            endif
+            if CELLS(dvAheadCell).bellyUp > 0 then dvAheadWorth = 0
+            if CELLS(dvAheadCell).comboForce = FORCE_BUNCH then dvAheadWorth = 0
+
+            dvAheadPops = 0
+            if CELLS(dvAheadCell).comboForce > 0 then dvAheadPops = 1
+            dvAheadGroup = CELLS(dvAheadCell).comboFillId
+            if dvAheadGroup >= 0
+                if dvAheadGroup <= dvAheadLast
+                    if COMBO_GROUP_SIZE(dvAheadGroup) >= dvAheadNeed then dvAheadPops = 1
+                endif
+            endif
+
+            if dvAheadWorth
+                if dvAheadPops then DIVER_SNAP_HOLD = DIVER_SNAP_AHEAD
+            endif
+        endif
+    endwhile
+endfunction
+
+
+` handle_combos has decided what pops. the diver takes a picture of every fish that is popping in a
+` cell that touches it. see THE PICTURES in fish_headers_diver.
+function diverJudge()
+    if DIVER_ON = 0 then exitfunction
+    if DIVER_AT < 0 then exitfunction
+
+    dvJudgeX = DIVER_AT mod CELL_COLUMN_COUNT
+    dvJudgeY = DIVER_AT / CELL_COLUMN_COUNT
+    if dvJudgeX > 0
+        diverSnap(DIVER_AT - 1)
+    endif
+    if dvJudgeX < CELL_COLUMN_COUNT - 1
+        diverSnap(DIVER_AT + 1)
+    endif
+    if dvJudgeY > 0
+        diverSnap(DIVER_AT - CELL_COLUMN_COUNT)
+    endif
+    if dvJudgeY < CELL_ROW_COUNT - 1
+        diverSnap(DIVER_AT + CELL_COLUMN_COUNT)
+    endif
+endfunction
+
+
+` the fish in this cell touches the diver. if it is popping, and it is alive, the diver takes its
+` picture, unless the album has that picture already. that is a shot. see THE SHOTS in fish_headers_diver.
+function diverSnap(dvSnapCell)
+    if CELLS(dvSnapCell).comboBlownUp = 0 then exitfunction
+
+    ` fish that are going into a stack do not pop. see BUNCH UP in fish_headers.
+    if CELLS(dvSnapCell).comboForce = FORCE_BUNCH then exitfunction
+
+    ` a belly up fish, or a skeleton, is not worth a picture
+    if CELLS(dvSnapCell).bellyUp > 0 then exitfunction
+
+    dvSnapSlot = diverAlbumSlot(CELLS(dvSnapCell).value)
+    if dvSnapSlot < 0 then exitfunction
+
+    ` the album has this one already, so the diver does not bother with it
+    if DIVER_PHOTOS(dvSnapSlot) then exitfunction
+
+    ` the diver turns to a fish that is beside it
+    dvSnapSide = (dvSnapCell mod CELL_COLUMN_COUNT) - (DIVER_AT mod CELL_COLUMN_COUNT)
+    if dvSnapSide < 0 then DIVER_FACE_LEFT = 1
+    if dvSnapSide > 0 then DIVER_FACE_LEFT = 0
+
+    ` STING_DELAY is how long it is until the fish in a cell pops, for every fish that is popping
+    dvSnapWait = STING_DELAY(dvSnapCell)
+    dvSnapShot = DIVER_SHOT_NEXT
+    DIVER_SHOT_NEXT = (DIVER_SHOT_NEXT + 1) mod DIVER_SHOT_COUNT
+    DIVER_SHOT_ON(dvSnapShot) = 1
+    DIVER_SHOT_MS(dvSnapShot) = game ms() + dvSnapWait
+    DIVER_SHOT_SLOT(dvSnapShot) = dvSnapSlot
+    DIVER_SHOT_X(dvSnapShot) = getCellX(dvSnapCell mod CELL_COLUMN_COUNT)
+    DIVER_SHOT_Y(dvSnapShot) = getCellY(dvSnapCell / CELL_COLUMN_COUNT)
+
+    ` the picture is in its box when the photo paper gets there
+    DIVER_PHOTOS(dvSnapSlot) = 1
+    DIVER_PHOTO_MS(dvSnapSlot) = game ms() + dvSnapWait + DIVER_PAPER_TIME
+    DIVER_SNAPS = DIVER_SNAPS + 1
+endfunction
+
+
+` the pops are over. nothing pops the diver, but if something has, it is still there.
+function diverAfterPops()
+    if DIVER_ON = 0 then exitfunction
+    if DIVER_AT < 0 then exitfunction
+    if CELLS(DIVER_AT).value <> TEX_DIVER then exitfunction
+    if CELLS(DIVER_AT).comboBlownUp
+        CELLS(DIVER_AT).comboBlownUp = 0
+        updateCell(CELLS(DIVER_AT))
+        set sprite alpha CELLS(DIVER_AT).spriteId, 255
+    endif
+endfunction
+
+
+` the board has settled. a diver that has every picture goes up, and so does one that is out of air.
+` it swims up, which takes a while, so this only says that it is due. handle_combos comes to
+` diver_rise right after this, and that is what does it.
+function diverSettled()
+    if DIVER_ON = 0 then exitfunction
+    if DIVER_RISE_DUE then exitfunction
+
+    if diverPhotoCount() >= DIVER_ALBUM_COUNT
+        ` and that is the end of the game. see THE ENDING in fish_headers_diver.
+        DIVER_DONE = 1
+        DIVER_RISE_DUE = 1
+        DIVER_RISE_HAPPY = 1
+        if DIVER_ENDING_HOLD = 0 then DIVER_ENDING_DUE = 1
+        exitfunction
+    endif
+
+    if DIVER_AIR <= 0
+        DIVER_RISE_DUE = 1
+        DIVER_RISE_HAPPY = 0
+    endif
+endfunction
+
+
+` the diver swims up and away, and a fish that does not pop takes its place. `dvHappy` is 1 for a
+` diver that has every picture, and hearts come up from that one.
+function diverLeave(dvHappy)
+    dvLeaveCell = DIVER_AT
+    DIVER_ON = 0
+    DIVER_AT = -1
+    DIVER_AIR = 0
+    if dvLeaveCell < 0 then exitfunction
+
+    dvLeaveX = getCellX(CELLS(dvLeaveCell).coord.x)
+    dvLeaveY = getCellY(CELLS(dvLeaveCell).coord.y)
+
+    CELLS(dvLeaveCell).value = getImpossibleRandomValueForCell(dvLeaveCell)
+    clearCellStack(dvLeaveCell)
+    updateCell(CELLS(dvLeaveCell))
+    create basic tween CELLS(dvLeaveCell).scaleWaveTweenId, 1.6, 1, 250, 0
+    spawnBubbles(dvLeaveX, dvLeaveY, CELL_SIZE / 3, 14, 0, rgb(255, 255, 255))
+    if dvHappy
+        spawnHeart(dvLeaveX, dvLeaveY, 0)
+        spawnHeart(dvLeaveX - 6, dvLeaveY, 200)
+        spawnHeart(dvLeaveX + 6, dvLeaveY, 400)
+    endif
+
+    DIVER_LEAVE_MS = game ms()
+    DIVER_LEAVE_X = dvLeaveX
+    DIVER_LEAVE_Y = dvLeaveY
+endfunction
+
+
+` draw the album, the bar of air, the diver, the shots, and the diver on the way up. this runs on every frame.
+function diverStep()
+    if DIVER_SEEN = 0 then exitfunction
+    dvNow = game ms()
+
+    ` the spot that info mode has for the album goes wherever the album is
+    if INFO_INDEX_DIVER >= 0
+        dvInfoTop = CORAL_RUNE_Y + CORAL_BAR_GAP + CORAL_BAR_STEP * 2
+        dvInfoRows = (CORAL_USED_COUNT + CORAL_RUNE_COLUMNS - 1) / CORAL_RUNE_COLUMNS
+        if dvInfoRows < 1 then dvInfoRows = 1
+        dvInfoTop = dvInfoTop + dvInfoRows * CORAL_RUNE_HEIGHT
+        if dvInfoTop <> DIVER_INFO_TOP
+            DIVER_INFO_TOP = dvInfoTop
+            dvInfoBlob = INFOS(INFO_INDEX_DIVER)
+            dvInfoBlob.topLeft.y = dvInfoTop - 4
+            dvInfoBlob.enabled = 1
+            INFOS(INFO_INDEX_DIVER) = dvInfoBlob
+        endif
+    endif
+
+    ` the sound of being under the water, which fades in when the diver comes down, and out when it goes up
+    dvWaterWant# = DIVER_WATER_VOLUME# * DIVER_ON
+    DIVER_WATER_NOW# = DIVER_WATER_NOW# + (dvWaterWant# - DIVER_WATER_NOW#) * .03
+    set sfx volume SFX_DIVER_WATER, DIVER_WATER_NOW#
+
+    ` they sit right under the bars of the coral. see coralStepBars, in fish_routines_coralbars.
+    dvRows = (CORAL_USED_COUNT + CORAL_RUNE_COLUMNS - 1) / CORAL_RUNE_COLUMNS
+    if dvRows < 1 then dvRows = 1
+    dvTop = CORAL_RUNE_Y + dvRows * CORAL_RUNE_HEIGHT + CORAL_BAR_GAP + CORAL_BAR_STEP * 2
+
+    ` the air, while the diver is down: one block for every move that a full tank has, as wide as the
+    ` bars of the coral between them. the ones that are left are bright, and they blink when there
+    ` are only a few. the ones that are used up are dim.
+    dvPipCount = DIVER_AIR_MAX
+    if dvPipCount > DIVER_AIR_PIP_ROOM then dvPipCount = DIVER_AIR_PIP_ROOM
+    dvPipStep = (CORAL_BAR_WIDTH + 1) / dvPipCount
+    if dvPipStep < 2 then dvPipStep = 2
+    dvPipLeft = rgb(170, 220, 255, 235)
+    if DIVER_AIR <= DIVER_AIR_LOW
+        if (dvNow / 150) mod 2 = 0 then dvPipLeft = rgb(255, 255, 255, 255)
+    endif
+    for dvPipI = 0 to DIVER_AIR_PIP_ROOM - 1
+        dvPipOn = DIVER_ON
+        if dvPipI >= dvPipCount then dvPipOn = 0
+        if dvPipOn
+            position sprite DIVER_AIR_PIPS(dvPipI), CORAL_BAR_X + dvPipI * dvPipStep, dvTop
+            size sprite DIVER_AIR_PIPS(dvPipI), dvPipStep - 1, 3
+            if dvPipI < DIVER_AIR
+                color sprite DIVER_AIR_PIPS(dvPipI), dvPipLeft
+            else
+                color sprite DIVER_AIR_PIPS(dvPipI), rgb(32, 64, 128, 128)
+            endif
+            show sprite DIVER_AIR_PIPS(dvPipI)
+        else
+            hide sprite DIVER_AIR_PIPS(dvPipI)
+        endif
+    next
+
+    ` the boxes, in a row, and the fish in the ones that have a picture. a new picture swells up as it shows.
+    dvBoxTop = dvTop + 6
+    dvBoxHalf = DIVER_BOX_SIZE / 2
+    for dvBoxI = 0 to DIVER_ALBUM_COUNT - 1
+        dvBoxX = CORAL_BAR_X + dvBoxI * DIVER_BOX_STEP
+        position sprite DIVER_BOX_SPRITES(dvBoxI), dvBoxX, dvBoxTop
+        set sprite alpha DIVER_BOX_SPRITES(dvBoxI), 70 * HUD_KEEP#
+        show sprite DIVER_BOX_SPRITES(dvBoxI)
+
+        dvBoxFull = 0
+        if DIVER_PHOTOS(dvBoxI)
+            if dvNow >= DIVER_PHOTO_MS(dvBoxI) then dvBoxFull = 1
+        endif
+        if dvBoxFull
+            dvBoxSince = dvNow - DIVER_PHOTO_MS(dvBoxI)
+            dvBoxBig# = DIVER_FISH_SIZE
+            if dvBoxSince < 250
+                dvBoxPunch# = 250 - dvBoxSince
+                dvBoxBig# = dvBoxBig# * (1 + dvBoxPunch# * .004)
+            endif
+            sprite DIVER_FISH_SPRITES(dvBoxI), dvBoxX + dvBoxHalf, dvBoxTop + dvBoxHalf, DIVER_ALBUM_KIND(dvBoxI)
+            size sprite DIVER_FISH_SPRITES(dvBoxI), dvBoxBig#, dvBoxBig#
+            set sprite alpha DIVER_FISH_SPRITES(dvBoxI), 255 * HUD_KEEP#
+            show sprite DIVER_FISH_SPRITES(dvBoxI)
+        else
+            hide sprite DIVER_FISH_SPRITES(dvBoxI)
+        endif
+    next
+
+    ` the shots. the corners of a viewfinder close in on the fish until it pops, and stay for a moment.
+    ` then, for a new picture, a photo paper flies from the fish to its box, and shrinks on the way.
+    dvCamera = 0
+    dvFocusFrom = 0 - DIVER_FOCUS_TIME
+    dvFocusFull# = DIVER_FOCUS_TIME
+    dvPaperFull# = DIVER_PAPER_TIME
+    for dvShotI = 0 to DIVER_SHOT_COUNT - 1
+        dvShotFocus = 0
+        dvShotPaper = 0
+        if DIVER_SHOT_ON(dvShotI)
+            dvShotAge = dvNow - DIVER_SHOT_MS(dvShotI)
+            if dvShotAge >= dvFocusFrom
+                dvCamera = 1
+                if dvShotAge < DIVER_FOCUS_HOLD then dvShotFocus = 1
+            endif
+            if dvShotAge >= 0
+                if DIVER_SHOT_SLOT(dvShotI) >= 0
+                    if dvShotAge < DIVER_PAPER_TIME then dvShotPaper = 1
+                endif
+            endif
+
+            ` it is over when the viewfinder has gone, and the paper has landed
+            dvShotDone = 1
+            if dvShotAge < DIVER_FOCUS_HOLD then dvShotDone = 0
+            if dvShotPaper then dvShotDone = 0
+            if dvShotDone then DIVER_SHOT_ON(dvShotI) = 0
+        endif
+
+        if dvShotFocus
+            ` from most of two cells across, down to one cell, by the time that the fish pops
+            dvFocusIn# = dvShotAge - dvFocusFrom
+            dvFocusIn# = dvFocusIn# / dvFocusFull#
+            if dvFocusIn# > 1 then dvFocusIn# = 1
+            dvFocusSize# = CELL_SIZE * (1.8 - dvFocusIn# * .8)
+            position sprite DIVER_FOCUS_SPRITES(dvShotI), DIVER_SHOT_X(dvShotI), DIVER_SHOT_Y(dvShotI)
+            size sprite DIVER_FOCUS_SPRITES(dvShotI), dvFocusSize#, dvFocusSize#
+            set sprite alpha DIVER_FOCUS_SPRITES(dvShotI), 120 + 135 * dvFocusIn#
+            show sprite DIVER_FOCUS_SPRITES(dvShotI)
+        else
+            hide sprite DIVER_FOCUS_SPRITES(dvShotI)
+        endif
+
+        if dvShotPaper
+            ` it is slow to leave, and slow to land
+            dvPaperGo# = dvShotAge
+            dvPaperGo# = dvPaperGo# / dvPaperFull#
+            dvPaperGo# = dvPaperGo# * dvPaperGo# * (3 - 2 * dvPaperGo#)
+            dvPaperToX = CORAL_BAR_X + DIVER_SHOT_SLOT(dvShotI) * DIVER_BOX_STEP + dvBoxHalf
+            dvPaperToY = dvBoxTop + dvBoxHalf
+            dvPaperX# = DIVER_SHOT_X(dvShotI) + (dvPaperToX - DIVER_SHOT_X(dvShotI)) * dvPaperGo#
+            dvPaperY# = DIVER_SHOT_Y(dvShotI) + (dvPaperToY - DIVER_SHOT_Y(dvShotI)) * dvPaperGo#
+            dvPaperBig# = 1.5 - dvPaperGo# * .8
+            position sprite DIVER_PAPER_SPRITES(dvShotI), dvPaperX#, dvPaperY# + 1.5 * dvPaperBig#
+            size sprite DIVER_PAPER_SPRITES(dvShotI), 12 * dvPaperBig#, 14 * dvPaperBig#
+            show sprite DIVER_PAPER_SPRITES(dvShotI)
+            sprite DIVER_PAPER_FISH(dvShotI), dvPaperX#, dvPaperY#, DIVER_ALBUM_KIND(DIVER_SHOT_SLOT(dvShotI))
+            size sprite DIVER_PAPER_FISH(dvShotI), 8 * dvPaperBig#, 8 * dvPaperBig#
+            show sprite DIVER_PAPER_FISH(dvShotI)
+        else
+            hide sprite DIVER_PAPER_SPRITES(dvShotI)
+            hide sprite DIVER_PAPER_FISH(dvShotI)
+        endif
+    next
+
+    ` the diver, on top of its cell. the sprite of the cell is what a swap and a fall move, so the diver
+    ` goes wherever that is. it kicks, and bobs a little, and holds the camera out while there is a shot.
+    ` DIVER_AT is only as new as the last look at the board, so the diver is looked for when it is not there.
+    dvBodyAt = -1
+    if DIVER_ON
+        dvBodyAt = DIVER_AT
+        dvBodyLost = 0
+        if dvBodyAt < 0 then dvBodyLost = 1
+        if dvBodyAt >= CELL_COUNT then dvBodyLost = 1
+        if dvBodyLost = 0
+            if CELLS(dvBodyAt).value <> TEX_DIVER then dvBodyLost = 1
+        endif
+        if dvBodyLost
+            dvBodyAt = diverFind()
+        endif
+    endif
+    dvFrame = (dvNow / DIVER_FRAME_MS) mod DIVER_FRAMES
+    if dvBodyAt >= 0
+        dvBodyCell = CELLS(dvBodyAt).spriteId
+        dvBodyBob# = sin(dvNow * .004) * 1.5
+        dvBodySize = CELL_ART_SIZE * 2
+        position sprite DIVER_BODY_SPRITE, sprite x(dvBodyCell), sprite y(dvBodyCell) + dvBodyBob#
+        size sprite DIVER_BODY_SPRITE, dvBodySize, dvBodySize
+
+        ` it turns to face the way that it was moved, when that was to one side
+        dvBodyColumn = dvBodyAt mod CELL_COLUMN_COUNT
+        if DIVER_LAST_COLUMN >= 0
+            if dvBodyColumn < DIVER_LAST_COLUMN then DIVER_FACE_LEFT = 1
+            if dvBodyColumn > DIVER_LAST_COLUMN then DIVER_FACE_LEFT = 0
+        endif
+        DIVER_LAST_COLUMN = dvBodyColumn
+        set sprite flip DIVER_BODY_SPRITE, DIVER_FACE_LEFT, 0
+
+        ` and it is upright while it swims up to the top. see diver_rise.
+        dvBodyFrame = dvFrame + dvCamera * DIVER_FRAMES
+        if DIVER_RISING then dvBodyFrame = dvFrame + DIVER_FRAMES * 2
+        set sprite frame DIVER_BODY_SPRITE, dvBodyFrame
+        show sprite DIVER_BODY_SPRITE
+    else
+        hide sprite DIVER_BODY_SPRITE
+    endif
+
+    ` the diver on the way up, upright, which fades
+    dvLeaveAge = dvNow - DIVER_LEAVE_MS
+    dvLeaveOn = 0
+    if dvLeaveAge >= 0
+        if dvLeaveAge < DIVER_LEAVE_TIME then dvLeaveOn = 1
+    endif
+    if dvLeaveOn
+        dvLeaveGone# = dvLeaveAge
+        dvLeaveFull# = DIVER_LEAVE_TIME
+        dvLeaveGone# = dvLeaveGone# / dvLeaveFull#
+        dvLeaveRise# = dvLeaveGone# * CELL_SIZE * 4
+        dvLeaveSize = CELL_ART_SIZE * 2
+        position sprite DIVER_LEAVE_SPRITE, DIVER_LEAVE_X, DIVER_LEAVE_Y - dvLeaveRise#
+        size sprite DIVER_LEAVE_SPRITE, dvLeaveSize, dvLeaveSize
+        set sprite frame DIVER_LEAVE_SPRITE, dvFrame + DIVER_FRAMES * 2
+        set sprite alpha DIVER_LEAVE_SPRITE, 255 * (1 - dvLeaveGone#)
+        show sprite DIVER_LEAVE_SPRITE
+    else
+        hide sprite DIVER_LEAVE_SPRITE
+    endif
+endfunction
+
+
+` the diver of the saved game: whether it is down, its air, and the album. the diver itself is a
+` fish on the board, and it is saved with the board.
+function diverSave()
+    dvSaveBits = 0
+    dvSaveBit = 1
+    for dvSaveI = 0 to DIVER_ALBUM_COUNT - 1
+        if DIVER_PHOTOS(dvSaveI) then dvSaveBits = dvSaveBits + dvSaveBit
+        dvSaveBit = dvSaveBit * 2
+    next
+    set pref SAVE_PREF + 40, DIVER_ON
+    set pref SAVE_PREF + 41, DIVER_AIR
+    set pref SAVE_PREF + 42, dvSaveBits
+    set pref SAVE_PREF + 43, DIVER_SEEN + DIVER_DONE * 2
+endfunction
+
+function diverLoad()
+    diverReset()
+    DIVER_ON = get pref(SAVE_PREF + 40, 0)
+    DIVER_AIR = get pref(SAVE_PREF + 41, 0)
+    dvLoadBits = get pref(SAVE_PREF + 42, 0)
+    for dvLoadI = 0 to DIVER_ALBUM_COUNT - 1
+        DIVER_PHOTOS(dvLoadI) = dvLoadBits mod 2
+        dvLoadBits = dvLoadBits / 2
+    next
+    dvLoadFlags = get pref(SAVE_PREF + 43, 0)
+    DIVER_SEEN = dvLoadFlags mod 2
+    DIVER_DONE = dvLoadFlags / 2
+
+    ` the board has been loaded already, so the diver is wherever it was saved
+    DIVER_AT = diverFind()
+    if DIVER_AT < 0 then DIVER_ON = 0
+endfunction
+
+
+` THE WAVE OF PHOTO PAPERS. see THE ENDING in fish_headers_diver. menu_transition, in fish_routines_menu,
+` calls this when it has set up its wave. `dvWaveDown` is 1 for the wave that comes down the screen
+` with the waterline, which is the one that brings the main menu back.
+function diverWaveStart(dvWaveDown)
+    DIVER_WAVE_ON = 0
+    if dvWaveDown = 0 then exitfunction
+    if CORAL_ENDING <> CORAL_ENDING_DIVER then exitfunction
+
+    DIVER_WAVE_ON = 1
+    for dvWaveI = 0 to DIVER_WAVE_COUNT - 1
+        DIVER_WAVE_X(dvWaveI) = 24 + rnd(WORLD_WIDTH - 48)
+        DIVER_WAVE_OFF(dvWaveI) = rnd(300) - 170
+        DIVER_WAVE_PHASE(dvWaveI) = rnd(628)
+        show sprite DIVER_WAVE_SPRITES(dvWaveI)
+        show sprite DIVER_WAVE_FISH(dvWaveI)
+    next
+endfunction
+
+
+` move the photo papers to where the wave is. frame_transition calls this on every frame of a wave.
+` `dvWaveLine` is how far down the screen the wave is, and `dvWaveGo#` is how far along it is.
+function diverWaveStep(dvWaveLine, dvWaveGo#)
+    if DIVER_WAVE_ON = 0 then exitfunction
+    for dvWaveI = 0 to DIVER_WAVE_COUNT - 1
+        dvWaveX# = DIVER_WAVE_X(dvWaveI) + sin(dvWaveGo# * 12 + DIVER_WAVE_PHASE(dvWaveI) * .01) * 8
+        dvWaveY# = dvWaveLine + DIVER_WAVE_OFF(dvWaveI) + cos(dvWaveGo# * 9 + DIVER_WAVE_PHASE(dvWaveI) * .01) * 5
+        position sprite DIVER_WAVE_SPRITES(dvWaveI), dvWaveX#, dvWaveY# + 6
+        position sprite DIVER_WAVE_FISH(dvWaveI), dvWaveX#, dvWaveY#
+    next
+endfunction
+
+
+` the wave is over
+function diverWaveEnd()
+    if DIVER_WAVE_ON = 0 then exitfunction
+    DIVER_WAVE_ON = 0
+    for dvWaveI = 0 to DIVER_WAVE_COUNT - 1
+        hide sprite DIVER_WAVE_SPRITES(dvWaveI)
+        hide sprite DIVER_WAVE_FISH(dvWaveI)
+    next
+endfunction
+
+
+` a game has ended with the album full. the main menu remembers. coralEndingRemember, in fish_routines_coral, calls this.
+function diverEndingRemember()
+    DIVER_SURFACE = 1
+    set pref PREF_ENDING_DIVER, 1
+    codecSeeCard(CODEC_ENTRY_ALBUM)
+endfunction
+
+
+` the things that are drawn into the main menu are put there the first time that they are needed.
+` setup_diver cannot do it, because it runs before the menu has made the place that it is drawn into.
+` the picture of the boat with the diver hunched over is loaded here too, because which boat it is, the
+` one of the day or the one of the evening, is not known until the surface has been set up.
+function diverSurfaceReady()
+    if DIVER_SURFACE_READY then exitfunction
+    DIVER_SURFACE_READY = 1
+    for dvReadyI = 0 to DIVER_LINE_DOT_COUNT - 1
+        set sprite render target DIVER_LINE_DOTS(dvReadyI), TARGET_MENU
+    next
+    for dvReadyI = 0 to DIVER_ALBUM_COUNT - 1
+        set sprite render target DIVER_LINE_PAPERS(dvReadyI), TARGET_MENU
+        set sprite render target DIVER_LINE_FISH(dvReadyI), TARGET_MENU
+    next
+    set text render target DIVER_CARD_TEXT_ID, TARGET_MENU
+    set text render target DIVER_CARD_SUB_TEXT_ID, TARGET_MENU
+
+    if SURFACE_DAY
+        texture reserve texture id(TEX_DIVER_BOAT), "Fish/Textures/Menu/dive_boat_day_hunched"
+    else
+        texture reserve texture id(TEX_DIVER_BOAT), "Fish/Textures/Menu/dive_boat_hunched"
+    endif
+endfunction
+
+
+` put away the line of photos on the boat, and the diver is sat up again. showSurface, in
+` fish_routines_surface, calls this when the surface goes, and diverSurfaceStep does when the photos
+` are not wanted. diverSurfaceStep brings them back.
+function diverSurfaceHide()
+    for dvHideI = 0 to DIVER_LINE_DOT_COUNT - 1
+        hide sprite DIVER_LINE_DOTS(dvHideI)
+    next
+    for dvHideI = 0 to DIVER_ALBUM_COUNT - 1
+        hide sprite DIVER_LINE_PAPERS(dvHideI)
+        hide sprite DIVER_LINE_FISH(dvHideI)
+    next
+    if DIVER_BOAT_SWAPPED
+        DIVER_BOAT_SWAPPED = 0
+        set sprite texture SURFACE_BOAT_SPRITE, TEX_DIVE_BOAT
+    endif
+endfunction
+
+
+` one heart floats up over the main menu. it is one of the hearts of the board, drawn on top of the menu.
+function diverMenuHeart(dvHeartX, dvHeartY)
+    dvHeartAt = FLOAT_BUBBLE_NEXT
+    spawnHeart(dvHeartX, dvHeartY, 0)
+    order sprite FLOAT_BUBBLES(dvHeartAt).spriteId, ORDER_MENU_FLOAT_BUBBLES
+endfunction
+
+
+` draw the line of photos on the boat, and the scene at the boat while that is playing. frame_surface,
+` in fish_routines_surface, calls this on every frame that the main menu is drawn, with where the
+` middle of the picture of the boat is. see THE ENDING in fish_headers_diver.
+function diverSurfaceStep(dvBoatX, dvBoatY#)
+    ` the photos are there once a game has ended with the album full, unless the options page has
+    ` turned them off, and they are always there for the scene
+    dvLineOn = DIVER_SURFACE * OPTION_MENU_PHOTOS
+    if DIVER_SCENE then dvLineOn = 1
+    if dvLineOn = 0
+        if DIVER_BOAT_SWAPPED
+            diverSurfaceHide()
+        endif
+        exitfunction
+    endif
+    diverSurfaceReady()
+    dvSurfNow = game ms()
+
+    ` the diver on the back of the boat is hunched over, looking through the photos
+    if DIVER_BOAT_SWAPPED = 0
+        DIVER_BOAT_SWAPPED = 1
+        set sprite texture SURFACE_BOAT_SPRITE, TEX_DIVER_BOAT
+    endif
+
+    ` the line runs along the side of the boat, under the railing, and hangs a little in the middle
+    dvLineX0# = dvBoatX + DIVER_LINE_LEFT
+    dvLineX1# = dvBoatX + DIVER_LINE_RIGHT
+    dvLineY# = dvBoatY# + DIVER_LINE_DOWN
+    dvLineWide# = dvLineX1# - dvLineX0#
+    dvDotLast# = DIVER_LINE_DOT_COUNT - 1
+    for dvDotI = 0 to DIVER_LINE_DOT_COUNT - 1
+        dvDotT# = dvDotI
+        dvDotT# = dvDotT# / dvDotLast#
+        dvDotHang# = DIVER_LINE_SAG * 4 * dvDotT# * (1 - dvDotT#)
+        position sprite DIVER_LINE_DOTS(dvDotI), dvLineX0# + dvLineWide# * dvDotT#, dvLineY# + dvDotHang#
+        show sprite DIVER_LINE_DOTS(dvDotI)
+    next
+
+    ` the photos hang from it, against the hull, and each one swings on its own
+    dvPaperCount# = DIVER_ALBUM_COUNT
+    for dvPaperI = 0 to DIVER_ALBUM_COUNT - 1
+        dvPaperT# = dvPaperI + .5
+        dvPaperT# = dvPaperT# / dvPaperCount#
+        dvPaperHang# = DIVER_LINE_SAG * 4 * dvPaperT# * (1 - dvPaperT#)
+        dvPaperSwing# = sin(dvSurfNow * .002 + dvPaperI * 1.3) * .8
+        dvPaperX# = dvLineX0# + dvLineWide# * dvPaperT# + dvPaperSwing#
+        dvPaperY# = dvLineY# + dvPaperHang# + 7
+        position sprite DIVER_LINE_PAPERS(dvPaperI), dvPaperX#, dvPaperY# + 1.5
+        show sprite DIVER_LINE_PAPERS(dvPaperI)
+        position sprite DIVER_LINE_FISH(dvPaperI), dvPaperX#, dvPaperY#
+        show sprite DIVER_LINE_FISH(dvPaperI)
+    next
+
+    ` a heart comes up from the diver every now and then: often during the scene, and once in a while
+    ` after that. not while the camera is going under, because a heart does not go with it.
+    dvHeartOk = 1
+    if SURFACE_SINK# > 0 then dvHeartOk = 0
+    if dvSurfNow < DIVER_HEART_MS then dvHeartOk = 0
+    if dvHeartOk
+        if DIVER_SCENE
+            DIVER_HEART_MS = dvSurfNow + 650 + rnd(500)
+        else
+            DIVER_HEART_MS = dvSurfNow + 3200 + rnd(3800)
+        endif
+        diverMenuHeart(dvBoatX + DIVER_HEART_X + rnd(7) - 3, dvBoatY# + DIVER_HEART_Y)
+    endif
+
+    if DIVER_SCENE = 0 then exitfunction
+
+    ` THE SCENE. the words fade in, one line and then the other, and bob a little.
+    dvSceneAge = dvSurfNow - DIVER_SCENE_MS
+    dvCardBob# = sin(dvSurfNow * .002) * 2
+    dvCardShown# = dvSceneAge - 900
+    dvCardShown# = dvCardShown# / 1100
+    if dvCardShown# < 0 then dvCardShown# = 0
+    if dvCardShown# > 1 then dvCardShown# = 1
+    dvSubShown# = dvSceneAge - 2400
+    dvSubShown# = dvSubShown# / 1100
+    if dvSubShown# < 0 then dvSubShown# = 0
+    if dvSubShown# > 1 then dvSubShown# = 1
+    set text alpha DIVER_CARD_TEXT_ID, 255 * dvCardShown# * DIVER_SCENE_KEEP#
+    set text alpha DIVER_CARD_SUB_TEXT_ID, 255 * dvSubShown# * DIVER_SCENE_KEEP#
+    set text position DIVER_CARD_TEXT_ID, WORLD_WIDTH / 2, 34 + dvCardBob#
+    set text position DIVER_CARD_SUB_TEXT_ID, WORLD_WIDTH / 2, 62 + dvCardBob#
+endfunction

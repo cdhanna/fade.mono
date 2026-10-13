@@ -59,6 +59,11 @@ global SCORE_FONT
 effect 1, "Fish/Shaders/ScreenEffect"
 set screen effect 1
 
+` the water runs on a picture three times the size of the game's, and that is stretched to the window.
+` without this it runs once for every pixel of the window, which on a big screen is a great many more.
+` at 2 it starts to look soft on a big screen, and 1 is a blur.
+set screen effect scale 3
+
 
 effect FISH_FX_ID, "Fish/Shaders/FishEffect"
 
@@ -80,6 +85,7 @@ gosub setup_passives
 gosub setup_moves
 gosub setup_ability_selection
 gosub setup_move_equip
+gosub setup_quests `the spot that info mode has for the quest of the round has to be made before INFO_BASE_LENGTH is taken
 
 ` everything that can be explained in info mode from here on belongs to an upgrade, and goes away with a new game
 INFO_BASE_LENGTH = INFO_LENGTH
@@ -106,6 +112,35 @@ sync
 if is env set("FISH_DEBUG")
     enable debug inspector
 endif
+` the parts of a frame, for the frame timing log. see `perf lap`, and FADE_PERF_LOG in Game1.
+perf name 1, "icons and water"
+perf name 2, "input"
+perf name 3, "board check and pops"
+perf name 4, "endings"
+perf name 5, "info"
+perf name 6, "autosave"
+perf name 7, "rest of the loop"
+perf name 8, "between updates (pop loops)"
+perf name 10, "texts"
+perf name 11, "scale wave"
+perf name 12, "fish fx: every fish"
+perf name 13, "score"
+perf name 14, "passive rows"
+perf name 15, "move rows"
+perf name 16, "free moves"
+perf name 17, "cursor and multiplier"
+perf name 18, "coral"
+perf name 19, "skeleton ghosts"
+perf name 20, "tuna"
+perf name 21, "beat look"
+perf name 22, "hints"
+perf name 23, "bubbles"
+perf name 24, "music"
+perf name 25, "debug"
+perf name 26, "hud fade"
+perf name 30, "fish fx: shockwaves"
+perf name 31, "fish fx: ripples"
+perf name 32, "fish fx: diagonal hints"
 do
 
 
@@ -119,6 +154,7 @@ do
 
     ` show keys or controller buttons, depending on which one the player touched last
     gosub frame_input_icons
+    perf lap 1
 
     if MENU_MODE
         ` a menu is up, so the game waits underneath it.
@@ -137,7 +173,9 @@ do
             gosub handle_ability_selection
             gosub handle_board_expansion
             gosub process_input
+            perf lap 2
             gosub handle_combos
+            perf lap 3
 
             ` the pause key brings up the pause menu
             if new action down(ACT_PAUSE)
@@ -150,15 +188,19 @@ do
             gosub handle_coral_ending
 
             gosub handle_game_end
+            perf lap 4
 
         endif
 
         gosub frame_info_render
+        perf lap 5
         gosub update_frame
 
         ` keep the saved game up to date, so that the game can be closed at any time and carried on with later
         gosub frame_autosave
+        perf lap 6
     endif
+    perf lap 7
 
     sync
 

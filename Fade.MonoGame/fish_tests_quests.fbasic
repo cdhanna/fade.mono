@@ -1,0 +1,1337 @@
+remstart
+    THE TESTS OF THE QUESTS
+    see QUESTS in fish_headers_quests, and fish_tests for how the tests work.
+
+    a quest is set up by stepQuest, once the board is still, so a test asks for the quest with
+    questForce, says that the board is still, and calls stepQuest itself. most of what a quest does
+    comes from being told what happened, so the tests tell it: questSwapDone for a swap,
+    questJudge for a look at the board, and questSettled for a board that has gone still.
+remend
+
+test quest_none_before_the_third_round from fishBoard
+    CURRENT_ROUND = 1
+    SCORE_BAR_HOLD = 1
+    advanceScoreBar()
+    assert QUEST_ID = 0, "the second round has no quest"
+
+    CURRENT_ROUND = 2
+    SCORE_BAR_HOLD = 1
+    advanceScoreBar()
+    assert QUEST_ID = QUEST_LOST_PAIR, "the third round has the first quest of a game, which is the lost pair"
+    assert QUEST_INIT_DUE = 1, "and it is set up once the board is still"
+    assert QUEST_ARRIVING = 1, "though not right away"
+
+    REQUEST_COMBO_CHECK = 0
+    SCORE_BAR_HOLD = 0
+    stepQuest()
+    assert QUEST_STATE = QSTATE_NONE, "it has not shown up when the round has only just started"
+
+    ` a move pops one group, and that is not enough to bring it
+    assert QUEST_DOT_COUNT = 2, "the first round with a quest has two dots, so it takes two groups in one turn"
+    questJudge(1)
+    assert QUEST_ARRIVE_READY = 0, "one group does not bring the quest"
+    assert QUEST_SLOT_ON = 1, "the strip where its name will go is there from this round on"
+    assert QUEST_DOTS_MODE = 2, "and the dots say that one was not enough"
+    assert QUEST_DOTS_BOUNCE = 1, "one of them bounces, and the other one shakes"
+
+    ` the board goes still, and the next turn starts from nothing
+    questJudge(0)
+    questSettled()
+    questJudge(1)
+    assert QUEST_ARRIVE_READY = 0, "one group in the next turn is not added to the one before"
+    assert QUEST_DOTS_BOUNCE = 1, "one dot bounces for it"
+
+    ` a second group in that turn does it. all of the dots bounce, and the pickup shows up as the
+    ` last of them lands.
+    QUEST_DOT_GAP = 0 `the tests do not wait for the dots
+    QUEST_DOT_TIME = 0
+    REQUEST_COMBO_CHECK = 1
+    questJudge(1)
+    assert QUEST_ARRIVE_READY = 1, "two groups in one turn bring the quest"
+    assert QUEST_DOTS_MODE = 1, "both dots bounce for it"
+    assert QUEST_DOTS_BOUNCE = 2, "every one of them"
+    assert QUEST_STATE = QSTATE_NONE, "and the pickup is not there until the last dot has landed"
+    questStepArrive()
+    assert QUEST_STATE = QSTATE_OFFERED, "and then it is, without waiting for the board to be still"
+    assert QUEST_ID = QUEST_LOST_PAIR, "it is the first quest of the game"
+
+    ` more groups in the same turn do not swap it for another
+    questJudge(3)
+    questStepArrive()
+    assert QUEST_ID = QUEST_LOST_PAIR, "the turn that brought it does not also swap it"
+
+    ` but another turn that pops enough does
+    questJudge(0)
+    questSettled()
+    questJudge(3)
+    assert QUEST_ID = QUEST_LOST_PAIR, "the pickup that is waiting stays until the dots have bounced again"
+
+    ` the old one pops, for a few points, and its cell is empty for a moment
+    QUEST_SWAP_GAP = 0 `the tests do not wait for the gap
+    tScoreBefore = CURRENT_SCORE
+    tPickRow = QUEST_PICK_CELL / CELL_COLUMN_COUNT
+    questStepArrive()
+    assert CURRENT_SCORE = tScoreBefore + QUEST_SWAP_POINTS, "the pickup that was waiting pops for a few points"
+    assert QUEST_PICK_CELL = -1, "and its cell is empty"
+    assert QUEST_ID = QUEST_LOST_PAIR, "the next one has not come yet"
+    assert INFOS(INFO_INDEX_QUEST_PICK).enabled = 0, "so info mode has nothing there to explain"
+
+    ` and then the next one shows up, in the same cell
+    questStepArrive()
+    assert QUEST_STATE = QSTATE_OFFERED, "a pickup is waiting again after another turn like that"
+    assert QUEST_PICK_CELL / CELL_COLUMN_COUNT = tPickRow, "in the cell that the old one popped in"
+    tSwapped = 1
+    if QUEST_ID = QUEST_LOST_PAIR then tSwapped = 0
+    assert tSwapped = 1, "and it is the pickup of a different quest"
+    QUEST_ID = QUEST_LOST_PAIR
+    questArriveNow()
+    questJudge(0)
+    questSettled()
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_STATE = QSTATE_OFFERED, "and it has once its wait is over, as a pickup beside the board"
+    assert INFOS(INFO_INDEX_QUEST).enabled = 0, "with nothing for info mode to explain yet"
+    questPickUp()
+    assert QUEST_STATE = QSTATE_ACTIVE, "it starts when it is picked up"
+    assert INFOS(INFO_INDEX_QUEST).enabled = 1, "and then info mode explains it"
+    tOne = questFindMark(1)
+    tTwo = questFindMark(2)
+    assert tTwo = tOne + 4, "the lost pair are four cells apart in a row"
+    assert QUEST_USED(QUEST_LOST_PAIR) = 1, "and now it has been tried"
+
+    ` once it has been picked up, a turn that pops enough does not swap it for anything
+    questJudge(3)
+    questStepArrive()
+    assert QUEST_ID = QUEST_LOST_PAIR, "a quest that is being played stays"
+
+    ` every fifth round has one more dot, up to eight
+    CURRENT_ROUND = QUEST_FIRST_ROUND + 4
+    assert questDotCount() = 2, "four rounds on, there are still two dots"
+    CURRENT_ROUND = QUEST_FIRST_ROUND + 5
+    assert questDotCount() = 3, "five rounds on, there are three"
+    CURRENT_ROUND = QUEST_FIRST_ROUND + 11
+    assert questDotCount() = 4, "and four from ten rounds on"
+    CURRENT_ROUND = QUEST_FIRST_ROUND + 90
+    assert questDotCount() = 8, "and never more than eight"
+    end
+endtest
+
+test quest_that_never_showed_up_does_not_hold_the_upgrade_screen from fishBoard
+    ` the round starts with a quest on its way, and no turn ever pops enough to bring it
+    CURRENT_ROUND = QUEST_FIRST_ROUND
+    SCORE_BAR_HOLD = 1
+    advanceScoreBar()
+    assert QUEST_ARRIVING = 1, "the quest of the round is on its way"
+    tOnItsWay = QUEST_ID
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_STATE = QSTATE_NONE, "and has not shown up"
+
+    ` the round ends, the board settles, and the upgrade screen is free to come up
+    CURRENT_ROUND = QUEST_FIRST_ROUND + 1
+    questRoundEnded()
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert questHoldsRound() = 0, "nothing keeps the upgrade screen waiting"
+
+    ` and it is still on its way in the next round
+    SCORE_BAR_HOLD = 1
+    advanceScoreBar()
+    assert QUEST_ID = tOnItsWay, "the same quest is on its way in the next round"
+    assert QUEST_ARRIVING = 1, "still waiting for a turn that pops enough"
+    end
+endtest
+
+test quest_that_was_waiting_does_not_hold_the_upgrade_screen from fishBoard
+    questForce(QUEST_WAKE)
+    QUEST_REARM = 0 `as it shows up in a round, waiting to be started
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_STATE = QSTATE_OFFERED, "a pickup is waiting beside the board"
+
+    questRoundEnded()
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_STATE = QSTATE_OFFERED, "and it is still waiting when the round is over"
+    assert questHoldsRound() = 0, "with nothing to keep the upgrade screen waiting"
+    end
+endtest
+
+test quest_does_not_come_around_twice_in_a_game from fishBoard
+    ` every round takes a quest that has not had its turn, until they all have
+    for tQuest = 0 to QUEST_COUNT
+        QUEST_TEMP(tQuest) = 0
+    next
+    for tTurn = 1 to QUEST_COUNT
+        tPicked = questNextQuest(0)
+        if tTurn = 1
+            assert tPicked = QUEST_LOST_PAIR, "the first quest of a game is the lost pair"
+        endif
+        QUEST_TEMP(tPicked) = QUEST_TEMP(tPicked) + 1
+        QUEST_USED(tPicked) = 1 `it is picked up, which is what counts as its turn
+    next
+    tOnce = 1
+    for tQuest = 1 to QUEST_COUNT
+        if QUEST_TEMP(tQuest) <> 1 then tOnce = 0
+    next
+    assert tOnce = 1, "the first 32 rounds have each of the 32 quests once"
+
+    tPicked = questNextQuest(0)
+    tAgain = 0
+    if tPicked >= 1
+        if tPicked <= QUEST_COUNT then tAgain = 1
+    endif
+    assert tAgain = 1, "and then they start to come around again"
+    assert QUEST_USED(tPicked) = 0, "with every one of them still to try"
+
+    ` a pickup that is swapped for another is never swapped for itself
+    for tTurn = 1 to 40
+        tOther = questNextQuest(QUEST_WAKE)
+        if tOther = QUEST_WAKE then tAgain = 0
+    next
+    assert tAgain = 1, "the quest that is waiting is not picked again in its own place"
+
+    ` a quest that the debug window started has had its turn too
+    resetQuests()
+    questForce(QUEST_WAKE)
+    assert QUEST_USED(QUEST_WAKE) = 1, "a quest that was asked for by name has had its turn"
+
+    ` and what has had its turn is saved with the game, as a bit for every quest
+    resetQuests()
+    assert QUEST_USED(QUEST_WAKE) = 0, "a new game starts with every quest still to come"
+    end
+endtest
+
+test quest_every_one_runs from fishBoard
+    ` every quest is set up, picked up if it has to be, told about a swap that pops three fish and
+    ` a swap that pops nothing, and drawn. none of them may bring the game down.
+    for tQuest = 1 to QUEST_COUNT
+        testBoard()
+        testCursor(4, 4)
+        questForce(tQuest)
+        REQUEST_COMBO_CHECK = 0
+        stepQuest()
+        assert QUEST_ID = tQuest, "the quest that was asked for is the quest of the round"
+
+        if QUEST_STATE = QSTATE_OFFERED
+            questPickUp()
+        endif
+        assert QUEST_STATE = QSTATE_ACTIVE, "it is being played, once it has been set up and picked up"
+
+        ` a swap that pops the first three fish of the top row
+        questSwapDone(40, 41)
+        questCursorStepped(40, 41)
+        for tPop = 0 to 2
+            CELLS(tPop).comboBlownUp = 1
+            CELLS(tPop).comboFillId = 300
+        next
+        tWorth = questGroupScore(300)
+        tHeld = questHoldsGroup(300)
+        questJudge(1)
+        for tPop = 0 to 2
+            CELLS(tPop).comboBlownUp = 0
+        next
+        questAfterPops()
+        tKind = questNewFish(0, 3)
+        questJudge(0)
+        questSettled()
+        REQUEST_COMBO_CHECK = 0
+        stepQuest()
+
+        ` a swap that pops nothing, twice, with a frame after each
+        for tMiss = 1 to 2
+            questSwapDone(41, 42)
+            questCursorStepped(41, 42)
+            tLetOff = questMissLetOff()
+            questJudge(0)
+            questSettled()
+            REQUEST_COMBO_CHECK = 0
+            stepQuest()
+            questCursorStepped(42, 41)
+            stepQuest()
+        next
+
+        assert QUEST_ID = tQuest, "and it is still the quest of the round after all of that"
+    next
+
+    ` the last one is taken away, and what it put on the board goes with it
+    questForce(0)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tSpecial = 0
+    tLast = CELL_COUNT - 1
+    for tIndex = 0 to tLast
+        if CELLS(tIndex).value >= TEX_KRILL then tSpecial = tSpecial + 1
+    next
+    assert tSpecial = 0, "no fish of a quest's own kind is left on the board"
+    end
+endtest
+
+test quest_every_one_finishes from fishBoard
+    ` finishing a quest counts it, and pays it, whichever quest it is
+    for tQuest = 1 to QUEST_COUNT
+        testBoard()
+        questForce(tQuest)
+        REQUEST_COMBO_CHECK = 0
+        stepQuest()
+        questComplete()
+        assert QUEST_STATE = QSTATE_DONE, "the quest is done"
+        assert QUESTS_DONE = tQuest, "and it has been counted"
+        REQUEST_COMBO_CHECK = 0
+        stepQuest()
+    next
+    end
+endtest
+
+test quest_pays_all_that_the_round_still_needs from fishBoard
+    SCORE_BAR.startVal = 0
+    SCORE_BAR.endVal = 1000
+    PROGRESS_BARS(0) = SCORE_BAR
+    CURRENT_SCORE = 200
+    questForce(QUEST_CONTINUOUS)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert questPayout() = 800, "all of the 800 points that are left"
+
+    questComplete()
+    assert CURRENT_SCORE = 1000, "the payout is scored, and that is the round won"
+    assert CURRENT_SCORE = SCORE_BAR.endVal, "right to the end of the bar"
+    assert QUESTS_DONE = 1, "and the quest is counted"
+
+    ` the points float up off of the little bar in shares, as it drains, and they add up
+    assert QUEST_PAY_TEXT_COUNT = 8, "a payout of 800 floats up in eight shares"
+    QUEST_PAY_MS = game ms() - QUEST_PAY_TIME
+    for tShare = 1 to 8
+        questStepPay()
+    next
+    assert QUEST_PAY_TEXT_N = 8, "every share has floated up by the time that the bar has drained"
+    assert QUEST_PAY_GIVEN = 800, "and together they are the whole payout"
+
+    questComplete()
+    assert QUESTS_DONE = 1, "a quest is only finished once"
+    assert CURRENT_SCORE = 1000, "and only paid once"
+
+    CURRENT_SCORE = 980
+    assert questPayout() = 50, "a quest never pays less than a twentieth of the round"
+    CURRENT_SCORE = 405
+    assert questPayout() = 600, "and it rounds up to the next ten, so that it is never short of the end"
+    end
+endtest
+
+test quest_sand_dollar_only_breaks_when_a_miss_moved_it from fishBoard
+    questForce(QUEST_LEFT_RIGHT)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert CELLS(1).value = TEX_SAND_DOLLAR, "the sand dollar starts one cell in from the top left"
+
+    ` a swap somewhere else that pops nothing
+    questSwapDone(testIndex(4, 4), testIndex(5, 4))
+    questJudge(0)
+    questSettled()
+    assert QUEST_STATE = QSTATE_ACTIVE, "a miss that did not move it leaves it alone"
+    assert QUEST_INIT_DUE = 0, "and the quest does not start over"
+
+    ` a swap that moves it and pops fish
+    CELLS(1).value = CELLS(2).value
+    CELLS(2).value = TEX_SAND_DOLLAR
+    questSwapDone(1, 2)
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    assert QUEST_STATE = QSTATE_ACTIVE, "a swap that moved it and popped fish is how it travels"
+    assert QUEST_PROG_NOW = 2, "and the badge says how far it has got"
+
+    ` a swap that moves it and pops nothing
+    CELLS(2).value = CELLS(3).value
+    CELLS(3).value = TEX_SAND_DOLLAR
+    questSwapDone(2, 3)
+    questJudge(0)
+    questSettled()
+    assert QUEST_INIT_DUE = 1, "a miss that moved it breaks it, and the quest starts over"
+    end
+endtest
+
+test quest_free_move_can_move_a_quest_thing from fishBoard
+    questForce(QUEST_LEFT_RIGHT)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+
+    ` the swap of the "free move" card moves the sand dollar, and pops nothing
+    CELLS(1).value = CELLS(2).value
+    CELLS(2).value = TEX_SAND_DOLLAR
+    LIVE_MOVE_FREE = 1
+    questSwapDone(1, 2)
+    LIVE_MOVE_FREE = 0
+    questJudge(0)
+    questSettled()
+    assert QUEST_STATE = QSTATE_ACTIVE, "a free move that moved the sand dollar does not break it"
+    assert QUEST_INIT_DUE = 0, "and the quest does not start over"
+    assert QUEST_PROG_NOW = 2, "the sand dollar is where the free move put it"
+    end
+endtest
+
+test quest_has_a_codec_entry_that_is_marked_when_it_is_finished from fishBoard
+    assert CODEC_ENTRY_QUEST = CARD_LENGTH + 15, "the quests come after everything else in the codec"
+    tEntry = CODEC_ENTRY_QUEST + QUEST_WAKE - 1
+    assert getCodecQuest(tEntry) = QUEST_WAKE, "an entry knows which quest it is"
+    assert getCodecQuest(CODEC_ENTRY_CROOKED) = 0, "and the entry before the quests is not one"
+    assert getCodecPref(tEntry) = QUEST_PREF_SEEN + QUEST_WAKE, "a quest is remembered by its number"
+    assert CODEC_SEEN(tEntry) = 0, "a quest is locked to begin with"
+    assert QUEST_EVER_DONE(QUEST_WAKE) = 0, "and has never been finished"
+
+    questForce(QUEST_WAKE)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert CODEC_SEEN(tEntry) = 1, "the quest of a round is in the codec"
+    assert QUEST_EVER_DONE(QUEST_WAKE) = 0, "but it is not marked until it is finished"
+
+    questComplete()
+    assert QUEST_EVER_DONE(QUEST_WAKE) = 1, "and then it is"
+
+    ` a new game does not take the mark away
+    resetQuests()
+    assert QUEST_EVER_DONE(QUEST_WAKE) = 1, "the mark is for good"
+    assert getCodecEntryTex(tEntry) = QUEST_DEFS(QUEST_WAKE).iconTex, "its picture is the one on its badge"
+    end
+endtest
+
+test quest_pickup_is_off_of_the_board from fishBoard
+    questForce(QUEST_REMORA)
+    QUEST_REARM = 0 `as it shows up in a round, waiting to be started
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_STATE = QSTATE_OFFERED, "the remora waits to be started"
+    assert QUEST_PICK_CELL mod CELL_COLUMN_COUNT = CELL_COLUMN_COUNT - 1, "its pickup is beside the last cell of a row"
+    tRow = QUEST_PICK_CELL / CELL_COLUMN_COUNT
+    tLastColumn = CELL_COLUMN_COUNT - 1
+
+    ` walking onto the cell beside it does nothing, and neither does a push some other way from there
+    testCursor(tLastColumn, tRow)
+    questCursorStepped(QUEST_PICK_CELL - 1, QUEST_PICK_CELL)
+    assert QUEST_STATE = QSTATE_OFFERED, "the cursor coming to the cell beside it does not start it"
+    assert questCursorBumped(0, -1, 0) = 0, "a push up from there is not a step out onto it"
+    assert questCursorBumped(-1, 0, 0) = 0, "and neither is a push to the left"
+
+    ` nor does a push off of the edge from another row
+    testCursor(tLastColumn, tRow + 2)
+    assert questCursorBumped(1, 0, 0) = 0, "a push off of the edge from another row is not a step out onto it"
+
+    ` stepping out onto it does not start it. it shows the check mark.
+    testCursor(tLastColumn, tRow)
+    assert questCursorBumped(1, 0, 0) = 1, "a step off of the edge from the cell beside it goes out onto it"
+    assert QUEST_CURSOR_OUT = 1, "and the cursor is out on it"
+    assert QUEST_STATE = QSTATE_OFFERED, "which does not start the quest"
+    assert SELECTION_POS.x = tLastColumn, "as far as the board knows, the cursor has not moved"
+
+    ` out there, a plain step down does nothing, and a swap down starts the quest
+    assert questCursorBumped(0, 1, 0) = 1, "a step down from out there is taken, and does nothing"
+    assert QUEST_STATE = QSTATE_OFFERED, "the quest still waits"
+    QUEST_ACCEPT_TIME = 0 `the tests do not wait for the swap to play out
+    assert questCursorBumped(0, 1, 1) = 1, "a swap down puts the pickup onto the check mark"
+    assert QUEST_STATE = QSTATE_OFFERED, "the quest does not start until the swap has played out"
+    assert questCursorBumped(-1, 0, 0) = 1, "and nothing else can be done while it plays"
+    assert QUEST_CURSOR_OUT = 1, "so the cursor is still out"
+    questStepCursorOut()
+    assert QUEST_STATE = QSTATE_ACTIVE, "which starts the quest"
+    assert QUEST_PICK_CELL / CELL_COLUMN_COUNT = tRow + 1, "the pickup stays where the check mark was, one row down"
+    assert QUEST_CURSOR_OUT = 1, "and the cursor stays out on it"
+    assert SELECTION_POS.y = tRow + 1, "beside the row that it is in now"
+
+    ` out there, a swap down does nothing, because the X is above it
+    assert questCursorBumped(0, 1, 1) = 1, "a swap down from there is taken"
+    questStepCursorOut()
+    assert QUEST_STATE = QSTATE_ACTIVE, "and does nothing"
+
+    ` stepping back onto the board leaves the quest running
+    assert questCursorBumped(-1, 0, 0) = 1, "a step back toward the board is taken"
+    assert QUEST_CURSOR_OUT = 0, "and brings the cursor in"
+    assert QUEST_STATE = QSTATE_ACTIVE, "with the quest still running"
+
+    ` the pickup is not beside its old row any more
+    testCursor(tLastColumn, tRow)
+    assert questCursorBumped(1, 0, 0) = 0, "a push off of the edge from the row that it left goes nowhere"
+
+    ` going back out to it, and swapping it up onto the X, drops it
+    testCursor(tLastColumn, tRow + 1)
+    assert questCursorBumped(1, 0, 0) = 1, "the cursor can go out to the pickup of a quest that is running"
+    assert QUEST_STATE = QSTATE_ACTIVE, "which does not drop it"
+    assert questCursorBumped(0, -1, 1) = 1, "a swap up puts the pickup onto the X"
+    questStepCursorOut()
+    assert QUEST_INIT_DUE = 1, "which drops the quest, so that it starts over, waiting"
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_STATE = QSTATE_OFFERED, "it waits to be started again"
+    assert QUEST_PICK_CELL / CELL_COLUMN_COUNT = tRow, "with its pickup back in the row that it started in"
+    assert QUEST_CURSOR_OUT = 1, "and the cursor still out on it"
+    assert SELECTION_POS.y = tRow, "beside that row"
+    end
+endtest
+
+test quest_seaweed_grows_in_every_column_that_pops_on_the_bottom from fishBoard
+    questForce(QUEST_SEAWEED)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tBottom = CELL_ROW_COUNT - 1
+
+    ` there is a stalk in one column already, two tall
+    testPut(1, tBottom, TEX_SEAWEED)
+    testPut(1, tBottom - 1, TEX_SEAWEED)
+
+    ` three fish pop along the bottom row, in three other columns, and one right on top of the stalk
+    CELLS(testIndex(4, tBottom)).comboBlownUp = 1
+    CELLS(testIndex(5, tBottom)).comboBlownUp = 1
+    CELLS(testIndex(6, tBottom)).comboBlownUp = 1
+    CELLS(testIndex(1, tBottom - 2)).comboBlownUp = 1
+    ` and one that is not on the bottom row, and has no seaweed under it
+    CELLS(testIndex(8, 3)).comboBlownUp = 1
+    questJudge(1)
+    assert QUEST_REBORN(testIndex(4, tBottom)) = TEX_SEAWEED, "a pop on the bottom row plants seaweed"
+    assert QUEST_REBORN(testIndex(5, tBottom)) = TEX_SEAWEED, "in every column that it happens in"
+    assert QUEST_REBORN(testIndex(6, tBottom)) = TEX_SEAWEED, "however many there are"
+    assert QUEST_REBORN(testIndex(1, tBottom - 2)) = TEX_SEAWEED, "and a pop on top of a stalk grows that stalk"
+    assert QUEST_REBORN(testIndex(8, 3)) = 0, "a pop with no seaweed under it, off of the bottom row, plants nothing"
+
+    questAfterPops()
+    questJudge(0)
+    questSettled()
+    assert CELLS(testIndex(5, tBottom)).value = TEX_SEAWEED, "the seaweed is there once the pops are over"
+    assert QUEST_PROG_NOW = 3, "and the badge counts the tallest stalk"
+    end
+endtest
+
+test quest_seaweed_grows_through_coral from fishBoard
+    questForce(QUEST_SEAWEED)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+
+    tBottom = CELL_ROW_COUNT - 1
+    testPut(3, tBottom, TEX_SEAWEED)
+    CORAL_CELLS(testIndex(3, tBottom - 1)) = 1
+    CORAL_CELLS(testIndex(3, tBottom - 2)) = 1
+    questSettled()
+    assert CELLS(testIndex(3, tBottom - 1)).value = TEX_SEAWEED, "seaweed under coral grows into it right away"
+    assert CELLS(testIndex(3, tBottom - 2)).value = TEX_SEAWEED, "and on through the coral above that"
+    tAbove = 0
+    if CELLS(testIndex(3, tBottom - 3)).value = TEX_SEAWEED then tAbove = 1
+    assert tAbove = 0, "and it stops where the coral does"
+    assert QUEST_PROG_NOW = 3, "the badge says how tall it is"
+    end
+endtest
+
+test quest_shark_eats_a_group_two_cells_away from fishBoard
+    questForce(QUEST_SHARK)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    QUEST_V(0) = testIndex(4, 4)
+
+    ` a group whose nearest fish is two cells from the shark
+    testPut(6, 3, 6)
+    testPut(7, 3, 6)
+    testPut(8, 3, 6)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert totalComboCount = 1, "the three fish pop"
+    assert CURRENT_SCORE = 0, "and the shark eats them, from two cells away"
+    assert QUEST_V(2) = 1, "which it remembers"
+    end
+endtest
+
+test quest_shark_leaves_a_group_three_cells_away from fishBoard
+    questForce(QUEST_SHARK)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    QUEST_V(0) = testIndex(4, 4)
+
+    testPut(7, 0, 6)
+    testPut(7, 1, 6)
+    testPut(8, 1, 6)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert totalComboCount = 1, "the three fish pop"
+    assert CURRENT_SCORE = 60, "and score, because the shark is three cells away"
+    end
+endtest
+
+test quest_keeps_its_fish_from_the_stock_market from fishBoard
+    assert questKeepsFish(testIndex(2, 2)) = 0, "a plain fish is anyone's"
+    QUEST_MARK(testIndex(2, 2)) = 2
+    assert questKeepsFish(testIndex(2, 2)) = 1, "a fish that a quest has marked is not"
+    testPut(5, 5, TEX_TURTLE)
+    assert questKeepsFish(testIndex(5, 5)) = 1, "and neither is a fish of a quest's own kind"
+    end
+endtest
+
+test quest_turtle_cannot_be_swapped from fishBoard
+    testPut(3, 3, TEX_TURTLE)
+    assert questLocksCell(testIndex(3, 3)) = 1, "the turtle cannot be swapped"
+    assert questLocksCell(testIndex(4, 3)) = 0, "the fish next to it can"
+
+    ` a swap from the turtle, and a swap into it, are both turned down
+    testCursor(3, 3)
+    assert startLiveMove(1, 0, 1) = 0, "a swap that would carry the turtle away does not start"
+    testCursor(2, 3)
+    assert startLiveMove(1, 0, 1) = 0, "and neither does a swap that would push a fish into its place"
+    assert CELLS(testIndex(3, 3)).value = TEX_TURTLE, "the turtle is where it was"
+
+    ` the cursor can still walk over it
+    assert startLiveMove(1, 0, 0) = 1, "the cursor can step onto the turtle without a swap"
+    end
+endtest
+
+test quest_echo_always_makes_its_swap from fishBoard
+    questForce(QUEST_ECHO)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+
+    ` a swap is remembered, and four more swaps go by somewhere else
+    tLeft = CELLS(testIndex(2, 2)).value
+    tRight = CELLS(testIndex(3, 2)).value
+    questSwapDone(testIndex(2, 2), testIndex(3, 2))
+    questJudge(0)
+    questSettled()
+    for tSwap = 1 to 4
+        QUEST_LIST_N = 3 `only the first swap is waiting, so that the swaps that pass the time are not echoed too
+        questSwapDone(testIndex(7, 7), testIndex(8, 7))
+        questJudge(0)
+        questSettled()
+    next
+    assert CELLS(testIndex(2, 2)).value = tRight, "the ghost made the swap again, though it pops nothing"
+    assert CELLS(testIndex(3, 2)).value = tLeft, "so the two fish have traded places"
+    assert QUEST_V(0) = 0, "and a swap of the ghost's that pops nothing is not counted"
+    end
+endtest
+
+test quest_remora_drags_a_long_tail from fishBoard
+    questForce(QUEST_REMORA)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_V(1) = 8, "it takes eight swaps that pop fish"
+
+    ` the cursor walks twelve cells, along the top two rows and back, without crossing itself
+    for tWalk = 0 to 7
+        questCursorStepped(tWalk, tWalk + 1)
+    next
+    questCursorStepped(8, 17)
+    for tWalk = 0 to 2
+        questCursorStepped(17 - tWalk, 16 - tWalk)
+    next
+    assert QUEST_LIST_N = 10, "the tail is ten cells long, and no longer"
+    assert QUEST_LIST(0) = 2, "the cells that it has dropped off of are free again"
+    assert QUEST_STATE = QSTATE_ACTIVE, "and a walk that does not cross it is fine"
+
+    ` stepping back onto a cell of the tail tangles it
+    questCursorStepped(14, 5)
+    assert QUEST_INIT_DUE = 1, "crossing the tail starts the quest over"
+    end
+endtest
+
+test quest_name_shows_while_the_cursor_looks_at_it from fishBoard
+    questForce(QUEST_WAKE)
+    QUEST_REARM = 0 `as it shows up in a round, waiting to be started
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_PREVIEW = 0, "a quest that is waiting does not show its name"
+    assert INFO_SELECTED = INFO_INDEX_QUEST_PICK, "info mode would open on its pickup"
+    assert INFOS(INFO_INDEX_QUEST_PICK).enabled = 1, "info mode explains its pickup, beside the board"
+    tPickLeft = INFOS(INFO_INDEX_QUEST_PICK).topLeft.x
+    tBoardRight = getCellX(CELL_COLUMN_COUNT - 1) + CELL_SIZE / 2
+    tOffBoard = 0
+    if tPickLeft >= tBoardRight - 2 then tOffBoard = 1
+    assert tOffBoard = 1, "which is off of the right edge of the board"
+
+    testCursor(CELL_COLUMN_COUNT - 1, QUEST_PICK_CELL / CELL_COLUMN_COUNT)
+    assert questCursorBumped(1, 0, 0) = 1, "the cursor steps out onto the pickup"
+    stepQuest()
+    assert QUEST_PREVIEW = 1, "and the name shows, for a look"
+    assert INFO_SELECTED = INFO_INDEX_QUEST, "and info mode would open on it"
+    assert INFOS(INFO_INDEX_QUEST).enabled = 1, "which info mode can explain"
+    assert QUEST_SHOWN_KEY = 1, "on the badge"
+    assert QUEST_STATE = QSTATE_OFFERED, "without the quest having started"
+
+    assert questCursorBumped(-1, 0, 0) = 1, "the cursor steps back onto the board"
+    stepQuest()
+    assert QUEST_PREVIEW = 0, "and the name is gone again"
+    assert INFOS(INFO_INDEX_QUEST).enabled = 0, "and so is what info mode had to say about it"
+    assert INFOS(INFO_INDEX_QUEST_PICK).enabled = 1, "though info mode still explains the pickup beside the board"
+    assert QUEST_SHOWN_KEY = 0, "with the badge"
+
+    ` starting it keeps the name there
+    assert questCursorBumped(1, 0, 0) = 1, "out again"
+    stepQuest()
+    QUEST_ACCEPT_TIME = 0 `the tests do not wait for the swap to play out
+    assert questCursorBumped(0, 1, 1) = 1, "and a swap down starts the quest"
+    stepQuest()
+    assert QUEST_STATE = QSTATE_ACTIVE, "the quest is on"
+    assert QUEST_SHOWN_KEY = 1, "and its name stays on the badge"
+    assert INFO_SELECTED = INFO_INDEX_QUEST, "and info mode would open on the quest"
+
+    ` the quest is straight under the bar of the round, so that info mode can get to it from there
+    ` the bar of the round is explained as an upside down L, and the quest is in the corner of the L
+    assert INFO_L_INDEX = INFO_INDEX_SCORE_BAR, "the bar of the round is the one with a leg"
+    tBarBottom = INFOS(INFO_INDEX_SCORE_BAR).topLeft.y + INFOS(INFO_INDEX_SCORE_BAR).size.y
+    tQuestTop = INFOS(INFO_INDEX_QUEST).topLeft.y
+    tClear = 0
+    if tQuestTop >= tBarBottom then tClear = 1
+    assert tClear = 1, "the quest starts where the bar of the round ends"
+    tQuestRight = INFOS(INFO_INDEX_QUEST).topLeft.x + INFOS(INFO_INDEX_QUEST).size.x
+    tLegLeft = INFOS(INFO_INDEX_SCORE_BAR).topLeft.x + INFOS(INFO_INDEX_SCORE_BAR).size.x - INFO_L_W
+    assert tQuestRight = tLegLeft, "and it stops where the leg of the L comes down"
+    INFO_SELECTED = INFO_INDEX_SCORE_BAR
+    assert findInfoInDirection(0, 1) = INFO_INDEX_QUEST, "down from the bar of the round is the quest"
+    INFO_SELECTED = INFO_INDEX_GRID
+    assert findInfoInDirection(0, -1) = INFO_INDEX_QUEST, "and up from the board is the quest"
+    INFO_SELECTED = INFO_INDEX_QUEST
+    assert findInfoInDirection(0, -1) = INFO_INDEX_SCORE_BAR, "and up from the quest is the bar"
+    end
+endtest
+
+test quest_wake_finishes_with_a_line_along_its_path from fishBoard
+    questForce(QUEST_WAKE)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+
+    ` every cell of one row glows but the last one, and a few cells that lead nowhere
+    tRow = 4
+    tLastColumn = CELL_COLUMN_COUNT - 1
+    for tColumn = 0 to tLastColumn - 1
+        QUEST_SPOT(testIndex(tColumn, tRow)) = 5
+    next
+    QUEST_SPOT(testIndex(2, 3)) = 5
+    QUEST_SPOT(testIndex(2, 2)) = 5
+
+    ` the fish in the last cell pops, which joins the two edges
+    CELLS(testIndex(tLastColumn, tRow)).comboBlownUp = 1
+    questJudge(1)
+    CELLS(testIndex(tLastColumn, tRow)).comboBlownUp = 0
+    assert QUEST_STATE = QSTATE_DONE, "a glowing path from edge to edge is the quest done"
+    assert QUEST_FINISH_N = CELL_COLUMN_COUNT, "the line that runs to finish it has a spot for every cell of the path, and no more"
+    tFirstX = QUEST_FINISH#(0)
+    tLastX = QUEST_FINISH#(tLastColumn * 2)
+    assert tFirstX = getCellX(0), "it starts at the left edge"
+    assert tLastX = getCellX(tLastColumn), "and ends at the right edge"
+    tRunning = 0
+    if QUEST_FINISH_MS >= 0 then tRunning = 1
+    assert tRunning = 1, "and it has set off"
+    end
+endtest
+
+test quest_other_than_the_wake_finishes_with_no_line from fishBoard
+    questForce(QUEST_TURTLE)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    stepQuest()
+    questComplete()
+    assert QUEST_FINISH_N = 0, "a quest that gives the line no spots has no line"
+    assert QUEST_FINISH_MS = -1, "so none sets off"
+    end
+endtest
+
+test quest_avoid_puffers_takes_a_dozen_swaps from fishBoard
+    CURRENT_ROUND = 2
+    questForce(QUEST_PUFFERS)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_PROG_NEED = 12, "it takes twelve swaps in a row in the first round that has quests"
+    end
+endtest
+
+test quest_pilot_fish_takes_a_ring_with_a_swap_from_it from fishBoard
+    testCursor(4, 4)
+    questForce(QUEST_PILOT_FISH)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tRing = QUEST_V(1)
+
+    ` the cursor walks onto the ring, and the little fish is one step behind
+    questCursorStepped(tRing + 1, tRing)
+    assert QUEST_V(0) = tRing + 1, "the little fish is on the cell that the cursor just left"
+
+    ` a swap somewhere else that pops fish does not take the ring
+    questSwapDone(tRing + 1, tRing)
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    assert QUEST_PROG_NOW = 0, "a pop while the little fish is not in a ring takes nothing"
+
+    ` a swap that starts on the ring leaves the little fish in it, and if it pops, that takes the ring
+    questSwapDone(tRing, tRing + 1)
+    questCursorStepped(tRing, tRing + 1)
+    assert QUEST_V(0) = tRing, "a swap away from the ring leaves the little fish in it"
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    assert QUEST_PROG_NOW = 1, "and a pop then takes the ring"
+
+    ` a ring is only taken once
+    questSwapDone(tRing, tRing + 1)
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    assert QUEST_PROG_NOW = 1, "the same ring does not count twice"
+    end
+endtest
+
+test quest_descriptions_fit_in_the_codec from fishBoard
+    ` how tall the tallest description of a card is, in the codec, where they are known to fit
+    tCardTall = 0
+    tLastCard = CARD_LENGTH - 1
+    for tCard = 0 to tLastCard
+        set text CODEC_DESC_TEXT_ID, CARDS(tCard).desc$
+        tHigh = get text size y(CODEC_DESC_TEXT_ID)
+        if tHigh > tCardTall then tCardTall = tHigh
+    next
+
+    ` no description of a quest is taller than that, or than the room that there is under the name
+    tQuestTall = 0
+    for tQuest = 1 to QUEST_COUNT
+        set text CODEC_DESC_TEXT_ID, QUEST_DEFS(tQuest).desc$
+        tHigh = get text size y(CODEC_DESC_TEXT_ID)
+        if tHigh > tQuestTall then tQuestTall = tHigh
+    next
+    tRoom = CODEC_TOP + CODEC_HEIGHT
+    tRoom = tRoom - CODEC_DETAIL_TOP
+    tRoom = tRoom - 43
+    tFits = 0
+    if tQuestTall <= tCardTall then tFits = 1
+    if tQuestTall <= tRoom then tFits = 1
+    assert tFits = 1, "the longest description of a quest is no taller than the longest of a card, or fits under the name"
+    assert tQuestTall <= tRoom, "and it fits in the room that the codec has under the name"
+    end
+endtest
+
+test quest_is_written_into_the_log_of_its_round from fishBoard
+    ` an upgrade in a round with no quest
+    GAME_LOG_COUNT = 0
+    CURRENT_MOVE_COUNT = 40
+    logUpgrade(7)
+    assert logQuestOf(GAME_LOG(0)) = 0, "a round with no quest finished in it has none in the log"
+    assert logMoveOf(GAME_LOG(0)) = 40, "the move of the upgrade is what it always was"
+    assert GAME_LOG(0) mod 100 = 7, "and so is the card"
+    assert GAME_LOG(0) = 4007, "a round with no quest is written exactly as it was before there were quests"
+
+    ` a quest is finished, and the next upgrade carries it
+    questForce(QUEST_WAKE)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questComplete()
+    assert QUEST_LOG_PENDING = QUEST_WAKE, "a quest that is finished waits for the upgrade of its round"
+    CURRENT_MOVE_COUNT = 95
+    logUpgrade(12)
+    assert logQuestOf(GAME_LOG(1)) = QUEST_WAKE, "the upgrade of the round says which quest was finished"
+    assert logMoveOf(GAME_LOG(1)) = 95, "and its move"
+    assert GAME_LOG(1) mod 100 = 12, "and its card"
+    assert QUEST_LOG_PENDING = 0, "the next round starts with none"
+
+    ` the round after that has none again
+    CURRENT_MOVE_COUNT = 130
+    logUpgrade(3)
+    assert logQuestOf(GAME_LOG(2)) = 0, "one quest does not carry over to the next round"
+
+    ` the biggest numbers still come apart, and stay inside of what a number can hold
+    QUEST_LOG_PENDING = QUEST_COUNT
+    CURRENT_MOVE_COUNT = 499999
+    logUpgrade(30)
+    assert logQuestOf(GAME_LOG(3)) = QUEST_COUNT, "the last quest fits"
+    assert logMoveOf(GAME_LOG(3)) = 499999, "with the most moves that are written down"
+    assert GAME_LOG(3) mod 100 = 30, "and the last card"
+    tPositive = 0
+    if GAME_LOG(3) > 0 then tPositive = 1
+    assert tPositive = 1, "without running past the biggest number that there is"
+
+    ` a quest that is finished in the last round, after the last upgrade, goes with the count
+    QUEST_LOG_PENDING = QUEST_TURTLE
+    takeGameLog(0)
+    assert logCountOf(HISCORE_LOGS(0)) = 4, "the count of a log is still how many upgrades it has"
+    assert logLastQuestOf(HISCORE_LOGS(0)) = QUEST_TURTLE, "and it carries the quest of the last round"
+    assert logRowsOf(HISCORE_LOGS(0)) = 5, "the page that shows the game has a row for each upgrade, and one for the last round"
+    assert logRowsOf(4) = 4, "a game with no quest in its last round has a row for each upgrade, and no more"
+
+    ` the page that shows the game has the quest in a column of its own
+    refreshHighscoreDetails(0, 0)
+    tNamedWide# = get text size x(HISCORE_DETAIL_QUEST_TEXTS(1))
+    tBlankWide# = get text size x(HISCORE_DETAIL_QUEST_TEXTS(0))
+    tNamed = 0
+    if tNamedWide# > 10 then tNamed = 1
+    tBlank = 0
+    if tBlankWide# < 10 then tBlank = 1
+    assert tNamed = 1, "the row of the round with a quest names it, in the quest column"
+    assert tBlank = 1, "and the row of a round with none is blank there"
+    assert logQuestOf(HISCORE_LOGS(2)) = QUEST_WAKE, "the log that a table keeps has the quests in it"
+
+    ` a log from before there were quests reads as it did
+    assert logCountOf(37) = 37, "an old count is a count"
+    assert logLastQuestOf(37) = 0, "with no quest"
+    assert logQuestOf(123456) = 0, "and an old upgrade has no quest"
+    assert logMoveOf(123456) = 1234, "and the move that it always had"
+    end
+endtest
+
+test quest_long_game_is_sixty_rounds from fishBoard
+    assert getGameLengthRounds(GAME_LENGTH_LONG) = 60, "a long game has 60 rounds"
+    assert getGameLengthRounds(GAME_LENGTH_REGULAR) = 30, "a regular one still has 30"
+    assert getGameLengthRounds(GAME_LENGTH_SHORT) = 5, "and a short one 5"
+
+    ` the most bits that a long game can take on steam: every upgrade with the widest gap, and a quest in every round
+    tLogBits = 60 * (STEAM_CARD_BITS + STEAM_GAP_BITS_MAX)
+    tQuestBits = 60 * (1 + STEAM_QUEST_BITS) + STEAM_QUEST_BITS + 1
+    tUsed = STEAM_BIT_LOG + tLogBits + tQuestBits
+    tFits = 0
+    if tUsed <= STEAM_BITS_TOTAL then tFits = 1
+    assert tFits = 1, "the log and the quests of the longest game always fit in a score on steam"
+    end
+endtest
+
+test quest_is_pointed_out_from_its_pickup from fishBoard
+    questForce(QUEST_TURTLE)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_HILITE = 0, "nothing is pointed out while the cursor is on the board"
+
+    ` the cursor goes out to the pickup of the quest, which is running
+    testCursor(CELL_COLUMN_COUNT - 1, QUEST_PICK_CELL / CELL_COLUMN_COUNT)
+    assert questCursorBumped(1, 0, 0) = 1, "the cursor steps out onto the pickup"
+    stepQuest()
+    assert QUEST_HILITE = 1, "and the quest is pointed out"
+    assert QUEST_FOCUS = 1, "with whatever explains it showing too"
+
+    assert questCursorBumped(-1, 0, 0) = 1, "the cursor steps back onto the board"
+    stepQuest()
+    assert QUEST_HILITE = 0, "and it is not pointed out any more"
+    end
+endtest
+
+test quest_turtle_slides_to_its_next_cell from fishBoard
+    questForce(QUEST_TURTLE)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tTurtle = questFindKind(TEX_TURTLE)
+    tAhead = tTurtle + 1
+    testPut(tAhead mod CELL_COLUMN_COUNT, tAhead / CELL_COLUMN_COUNT, QUEST_V(0))
+
+    ` a swap somewhere else, and then the board goes still, and the turtle takes its step
+    questSwapDone(testIndex(6, 7), testIndex(7, 7))
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    assert CELLS(tAhead).value = TEX_TURTLE, "the turtle has stepped onto the fish that it asked for"
+    tSliding = 0
+    if QUEST_SLIDE_MS >= 0 then tSliding = 1
+    assert tSliding = 1, "and its picture is sliding there"
+    assert QUEST_SLIDE_A = tAhead, "to the cell that it stepped onto"
+
+    ` when its time is up, the pictures are where they belong
+    QUEST_SLIDE_TIME = 0
+    questStepSlide()
+    assert QUEST_SLIDE_MS = -1, "the slide is over when its time is up"
+    tDrawnX = sprite x(CELLS(tAhead).spriteId)
+    tWantX = getCellX(tAhead mod CELL_COLUMN_COUNT)
+    assert tDrawnX = tWantX, "and the turtle is drawn on its new cell"
+    end
+endtest
+
+test quest_mark_goes_with_its_fish from fishBoard
+    testCursor(2, 2)
+    QUEST_MARK(testIndex(2, 2)) = 3
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+    assert QUEST_MARK(testIndex(3, 2)) = 3, "the mark is on the cell that the fish was swapped to"
+    assert QUEST_MARK(testIndex(2, 2)) = 0, "and not on the cell that it left"
+    end
+endtest
+
+test quest_kinds_that_never_match from fishBoard
+    testPut(0, 0, TEX_SAND_DOLLAR)
+    testPut(1, 0, TEX_SAND_DOLLAR)
+    testPut(2, 0, TEX_SAND_DOLLAR)
+    testPut(5, 2, TEX_SEAWEED)
+    testPut(5, 3, TEX_SEAWEED)
+    testPut(5, 4, TEX_SEAWEED)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert totalComboCount = 0, "three of a quest's own kind in a row are not a group"
+    assert testPopCount() = 0, "nothing pops"
+    end
+endtest
+
+test quest_krill_pops_for_nothing from fishBoard
+    questForce(QUEST_KRILL)
+    QUEST_REARM = 0 `as it shows up in a round, waiting to be picked up
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_STATE = QSTATE_OFFERED, "the krill do nothing until the shell has been stepped on"
+    questPickUp()
+    assert QUEST_STATE = QSTATE_ACTIVE, "and then the quest is on"
+    assert questMissLetOff() = 1, "a swap that pops nothing costs nothing with the multiplier"
+
+    testPut(2, 4, TEX_KRILL)
+    testPut(3, 4, TEX_KRILL)
+    testPut(4, 4, TEX_KRILL)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert totalComboCount = 1, "three krill in a row are a group"
+    assert testPopCount() = 3, "and they pop"
+    assert CURRENT_SCORE = 0, "for nothing"
+    end
+endtest
+
+test quest_krill_come_from_a_swap_that_pops_nothing from fishBoard
+    questForce(QUEST_KRILL)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+
+    questSwapDone(testIndex(4, 4), testIndex(5, 4))
+    questJudge(0)
+    questSettled()
+    assert CELLS(testIndex(4, 4)).value = TEX_KRILL, "the fish that was swapped is krill"
+    assert CELLS(testIndex(5, 4)).value = TEX_KRILL, "and so is the fish that it was swapped with"
+    assert QUEST_PROG_NOW = 2, "which the badge counts"
+
+    ` stepping onto the shell again calls it off, and the krill go
+    questPickToggle()
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_STATE = QSTATE_OFFERED, "the quest is back to waiting to be picked up"
+    assert questCountKind(TEX_KRILL) = 0, "and there are no krill on the board"
+    end
+endtest
+
+test quest_sunbeam_counts_a_pop_in_the_lit_column from fishBoard
+    questForce(QUEST_SUNBEAM)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    QUEST_V(0) = 4
+
+    testPut(4, 0, 6)
+    testPut(4, 1, 6)
+    testPut(4, 2, 6)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert QUEST_V(2) = 1, "fish that pop in the lit column are counted"
+    assert QUEST_V(4) = 8, "eight of the nine columns have to be done"
+
+    QUEST_V(0) = 0
+    QUEST_V(3) = 0
+    questJudge(1)
+    assert QUEST_V(2) = 1, "and fish that pop in another column are not"
+
+    QUEST_V(0) = 4
+    QUEST_V(3) = 0
+    questJudge(1)
+    assert QUEST_V(2) = 1, "and a column only counts once"
+    end
+endtest
+
+test quest_continuous_swap_counts_swaps_that_pop from fishBoard
+    questForce(QUEST_CONTINUOUS)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tNeed = QUEST_V(1)
+
+    questSwapDone(0, 1)
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    assert QUEST_PROG_NOW = 1, "a swap that pops fish is counted"
+
+    questSwapDone(0, 1)
+    questJudge(0)
+    questSettled()
+    assert QUEST_PROG_NOW = 0, "and a swap that pops nothing starts the count over"
+
+    for tSwap = 1 to tNeed
+        questSwapDone(0, 1)
+        questJudge(1)
+        questJudge(0)
+        questSettled()
+    next
+    assert QUEST_STATE = QSTATE_DONE, "enough of them in a row is the quest done"
+    assert QUESTS_DONE = 1, "and counted"
+    end
+endtest
+
+test quest_lost_pair_is_done_side_by_side from fishBoard
+    questForce(QUEST_LOST_PAIR)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tOne = questFindMark(1)
+    tTwo = questFindMark(2)
+    tBoth = 0
+    if tOne >= 0
+        if tTwo >= 0 then tBoth = 1
+    endif
+    assert tBoth = 1, "both fish of the pair are marked"
+
+    ` put the two marks next to each other
+    QUEST_MARK(tOne) = 0
+    QUEST_MARK(tTwo) = 0
+    QUEST_MARK(testIndex(3, 3)) = 1
+    QUEST_MARK(testIndex(4, 3)) = 2
+    questSettled()
+    assert QUEST_STATE = QSTATE_DONE, "side by side is the quest done"
+    end
+endtest
+
+test quest_lost_pair_starts_over_when_a_miss_moves_one from fishBoard
+    questForce(QUEST_LOST_PAIR)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tOne = questFindMark(1)
+
+    ` a swap somewhere else that pops nothing is none of its business
+    questSwapDone(testIndex(0, 8), testIndex(1, 8))
+    questJudge(0)
+    questSettled()
+    assert QUEST_STATE = QSTATE_ACTIVE, "a miss that moved neither of the pair leaves them be"
+
+    ` a swap that moves one of the pair, and pops nothing
+    questSwapMarks(tOne, tOne + 1)
+    questSwapDone(tOne, tOne + 1)
+    questJudge(0)
+    questSettled()
+    assert QUEST_INIT_DUE = 1, "a miss that moved one of the pair starts the quest over"
+    end
+endtest
+
+test quest_lost_pair_comes_back_when_one_pops from fishBoard
+    questForce(QUEST_LOST_PAIR)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tOne = questFindMark(1)
+    tKind = CELLS(tOne).value
+    CELLS(tOne).comboBlownUp = 1
+    questJudge(1)
+    assert QUEST_STATE = QSTATE_ACTIVE, "one of the pair popping does not start the quest over"
+    assert QUEST_MARK(tOne) = 1, "its mark stays on its cell"
+    assert QUEST_REBORN(tOne) = tKind, "and it is on its way back, as the kind that it was"
+    questAfterPops()
+    assert CELLS(tOne).comboBlownUp = 0, "once the pops are over, its cell is not empty"
+    assert CELLS(tOne).value = tKind, "the fish is back in it"
+    questJudge(0)
+    questSettled()
+    assert QUEST_STATE = QSTATE_ACTIVE, "and the quest carries on"
+    end
+endtest
+
+test quest_is_saved_just_as_it_is from fishBoard
+    ` a quest that is being played, with marks, a spot, a list, and a fish of its own on the board
+    questForce(QUEST_LOST_PAIR)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tOne = questFindMark(1)
+    tTwo = questFindMark(2)
+    tPick = QUEST_PICK_CELL
+    QUEST_V(7) = 123
+    QUEST_V(63) = -4
+    QUEST_SPOT(50) = 6
+    QUEST_LIST(0) = 17
+    QUEST_LIST(1) = 18
+    QUEST_LIST_N = 2
+    questProgress(3, 9)
+
+    ` it is packed, and then everything about it is forgotten
+    questPack()
+    questForget()
+    QUEST_STATE = QSTATE_NONE
+    assert questFindMark(1) = -1, "nothing of it is left once it has been forgotten"
+
+    ` and it comes back out just as it was
+    assert questUnpack() = 1, "there is a quest in what was packed"
+    assert QUEST_STATE = QSTATE_ACTIVE, "it is being played, as it was"
+    assert questFindMark(1) = tOne, "the first fish of the pair is marked again"
+    assert questFindMark(2) = tTwo, "and the second"
+    assert QUEST_PICK_CELL = tPick, "its pickup is beside the same cell"
+    assert QUEST_V(7) = 123, "what it kept is kept"
+    assert QUEST_V(63) = -4, "to the last number, and below nothing too"
+    assert QUEST_SPOT(50) = 6, "a cell that it lit is lit"
+    assert QUEST_LIST_N = 2, "its list is as long as it was"
+    assert QUEST_LIST(1) = 18, "with what was in it"
+    assert QUEST_PROG_NOW = 3, "and it is as far along as it was"
+    assert QUEST_PROG_NEED = 9, "out of as many"
+
+    ` a saved game from before any of this was saved has nothing there
+    for tPackN = 0 to 399
+        QUEST_PACK(tPackN) = 0
+    next
+    assert questUnpack() = 0, "an old saved game has no quest packed in it"
+    end
+endtest
+
+test quest_sleepers_hold_a_group_back from fishBoard
+    questForce(QUEST_SLEEPERS)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    QUEST_V(0) = 6
+
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert totalComboCount = 0, "a group of the kind that is asleep does not pop"
+    assert testPopCount() = 0, "none of its fish do"
+    assert QUEST_V(2) = 1, "and it is counted as waiting"
+    end
+endtest
+
+test quest_seaweed_grows_from_a_pop_on_the_bottom_row from fishBoard
+    questForce(QUEST_SEAWEED)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+
+    tBottom = CELL_ROW_COUNT - 1
+    testPut(3, tBottom, 6)
+    testPut(3, tBottom - 1, 6)
+    testPut(3, tBottom - 2, 6)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert totalComboCount = 1, "the three fish pop"
+    assert QUEST_REBORN(testIndex(3, tBottom)) = TEX_SEAWEED, "and the one on the bottom row leaves seaweed behind"
+
+    ` play it out, until the board is still
+    tGuard = 0
+    while REQUEST_COMBO_CHECK = 1 and tGuard < 40
+        tGuard = tGuard + 1
+        runto _loop
+    endwhile
+    assert CELLS(testIndex(3, tBottom)).value = TEX_SEAWEED, "there is seaweed on the bottom row"
+    assert CELLS(testIndex(3, tBottom - 1)).value = TEX_SEAWEED, "and on top of that, where the next fish popped"
+    assert CELLS(testIndex(3, tBottom - 2)).value = TEX_SEAWEED, "and on top of that"
+    assert QUEST_PROG_NOW = 3, "the badge says how tall it is"
+    end
+endtest
+
+test quest_carries_on_into_the_next_round from fishBoard
+    questForce(QUEST_TURTLE)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tTurtle = questFindKind(TEX_TURTLE)
+    tThere = 0
+    if tTurtle >= 0 then tThere = 1
+    assert tThere = 1, "the turtle is on the board"
+
+    ` the round ends, and the quest is not lost
+    CURRENT_ROUND = QUEST_FIRST_ROUND + 1
+    questRoundEnded()
+    assert QUEST_ID = QUEST_TURTLE, "the quest is still the quest when the round is over"
+    assert QUEST_STATE = QSTATE_ACTIVE, "and it is still being played"
+    assert questHoldsRound() = 0, "so the upgrade screen has nothing to wait for"
+
+    ` the next round starts, and it carries on
+    SCORE_BAR_HOLD = 1
+    advanceScoreBar()
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_ID = QUEST_TURTLE, "it is still the quest in the next round"
+    assert QUEST_STATE = QSTATE_ACTIVE, "and still being played"
+    assert questFindKind(TEX_TURTLE) = tTurtle, "with the turtle right where it was"
+
+    ` once it is finished, the end of the round is the end of it, and the next round brings another
+    questComplete()
+    questRoundEnded()
+    assert QUEST_ID = 0, "a quest that was finished is done with when its round is over"
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tTurtle = questFindKind(TEX_TURTLE)
+    assert tTurtle = -1, "and so is the turtle"
+    SCORE_BAR_HOLD = 1
+    advanceScoreBar()
+    tNew = 0
+    if QUEST_ID > 0 then tNew = 1
+    assert tNew = 1, "the round after that has a new quest"
+    assert QUEST_ARRIVING = 1, "which is on its way"
+    tOther = 1
+    if QUEST_ID = QUEST_TURTLE then tOther = 0
+    assert tOther = 1, "and it is not the one that was just finished"
+    end
+endtest
+
+
+` THE ENDINGS THAT ARE SHOWN on the tables of the high scores. see fish_headers.
+test highscore_endings_can_be_left_out from fishBoard
+    HISCORE_SCOPE = HISCORE_SCOPE_LOCAL
+    showAllEndings()
+    for tEndKnown = CORAL_ENDING_REEF to CORAL_ENDING_DIVER
+        HISCORE_ENDING_KNOWN(tEndKnown) = 1
+    next
+    layoutEndingTiles()
+    assert HISCORE_TILE_COUNT = 3, "with every ending known, each has a tile of its own"
+    assert HISCORE_TILE_ENDING(2) = CORAL_ENDING_DIVER, "and none is for mystery endings"
+    tEndReef = insertHighscore(0, 5 + CORAL_ENDING_REEF * HISCORE_BADGE_STEP, 3, 9)
+    tEndDiver = insertHighscore(0, 6 + CORAL_ENDING_DIVER * HISCORE_BADGE_STEP, 2, 9)
+    assert tEndDiver = 0, "the game with the diver's ending is at the top"
+    assert getScoreBadge(HISCORE_NAMES(1)) = CORAL_ENDING_REEF, "and the one with the coral's is under it"
+
+    buildShownHighscores(0)
+    assert HISCORE_SHOWN_COUNT = HISCORE_ROWS, "with every ending on, every row of the table is shown"
+    assert HISCORE_SHOWN(0) = 0, "in the order of the table"
+    assert HISCORE_SHOWN(1) = 1, "one after the other"
+
+    HISCORE_ENDING_SHOWN(CORAL_ENDING_REEF) = 0
+    buildShownHighscores(0)
+    assert HISCORE_SHOWN_COUNT = HISCORE_ROWS - 1, "with the coral off, the game with that ending is left out"
+    assert HISCORE_SHOWN(0) = 0, "the diver's is still at the top"
+    assert HISCORE_SHOWN(1) = 2, "and the rows under the one that is gone move up"
+    assert HISCORE_SHOWN(HISCORE_ROWS - 1) = -1, "which leaves the last row with nothing on it"
+
+    HISCORE_ENDING_SHOWN(CORAL_ENDING_DIVER) = 0
+    buildShownHighscores(0)
+    assert HISCORE_SHOWN_COUNT = HISCORE_ROWS - 2, "with the diver off too, both are gone"
+    assert HISCORE_SHOWN(0) = 2, "and the first row is the best game that had no ending"
+    assert isEndingShown(0) = 1, "a game with no ending is always shown"
+    assert isEndingShown(CORAL_ENDING_ANCIENT) = 1, "and the horror is still on"
+
+    ` the page can be drawn with rows left out, and with the outline on a tile
+    refreshHighscoreTable(0, 0, -2)
+    assert HISCORE_SHOWN_COUNT = HISCORE_ROWS - 2, "drawing the table leaves the same games out"
+
+    showAllEndings()
+    buildShownHighscores(0)
+    assert HISCORE_SHOWN_COUNT = HISCORE_ROWS, "and they all come back when every ending is on again"
+    end
+endtest
+
+test highscore_endings_that_are_not_known_are_a_mystery from fishBoard
+    HISCORE_SCOPE = HISCORE_SCOPE_LOCAL
+    showAllEndings()
+    tMystReef = insertHighscore(0, 5 + CORAL_ENDING_REEF * HISCORE_BADGE_STEP, 3, 9)
+    tMystDiver = insertHighscore(0, 6 + CORAL_ENDING_DIVER * HISCORE_BADGE_STEP, 2, 9)
+    tMystOld = insertHighscore(0, 7 + CORAL_ENDING_ANCIENT * HISCORE_BADGE_STEP, 1, 9)
+
+    ` the player has only got to the coral's ending
+    HISCORE_ENDING_KNOWN(CORAL_ENDING_REEF) = 1
+    HISCORE_ENDING_KNOWN(CORAL_ENDING_ANCIENT) = 0
+    HISCORE_ENDING_KNOWN(CORAL_ENDING_DIVER) = 0
+    HISCORE_ENDING_AT = 2
+    layoutEndingTiles()
+    assert HISCORE_TILE_COUNT = 2, "the two endings that are not known share one tile"
+    assert HISCORE_TILE_ENDING(0) = CORAL_ENDING_REEF, "the one that is known has its own"
+    assert HISCORE_TILE_ENDING(1) = 0, "and the tile of the mystery ones comes after it"
+    assert HISCORE_ENDING_AT = 1, "the outline does not stay on a tile that is gone"
+
+    ` switching the mystery ones off leaves out both of them, and nothing else
+    HISCORE_ENDING_SHOWN(0) = 0
+    buildShownHighscores(0)
+    assert HISCORE_SHOWN_COUNT = HISCORE_ROWS - 2, "both of the games with a mystery ending are left out"
+    assert HISCORE_SHOWN(0) = 2, "and the one whose ending is known is first"
+    assert isEndingShown(CORAL_ENDING_REEF) = 1, "the ending that is known is still shown"
+    assert isEndingShown(0) = 1, "and so is a game with no ending"
+
+    ` the switch of an ending does nothing while that ending is a mystery
+    HISCORE_ENDING_SHOWN(0) = 1
+    HISCORE_ENDING_SHOWN(CORAL_ENDING_DIVER) = 0
+    assert isEndingShown(CORAL_ENDING_DIVER) = 1, "a mystery ending goes by the tile of the mystery ones"
+    refreshHighscoreTable(0, -1, -2)
+
+    ` with none of them known there is only the one tile
+    HISCORE_ENDING_KNOWN(CORAL_ENDING_REEF) = 0
+    layoutEndingTiles()
+    assert HISCORE_TILE_COUNT = 1, "with no ending known, there is one tile"
+    assert HISCORE_TILE_ENDING(0) = 0, "for all of them"
+    showAllEndings()
+    end
+endtest

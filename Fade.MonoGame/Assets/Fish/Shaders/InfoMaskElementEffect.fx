@@ -42,9 +42,11 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 	float2 q = abs(p) - (Size * .5 - Radius);
 	float d = length(max(q, 0)) + min(max(q.x, q.y), 0) - Radius;
 
-	// 1 inside the box, fading to 0 at the edge.
+	// 1 inside the box, fading to 0 at the edge. the fade is in the alpha, and not in the color, so
+	// that two holes that overlap run together. with the fade in the color, the dark edge of the one
+	// on top would be drawn over the bright middle of the one under it.
 	float hole = saturate(-d / Feather);
-	return float4(hole, hole, hole, 1);
+	return float4(1, 1, 1, hole);
 }
 
 technique SpriteDrawing

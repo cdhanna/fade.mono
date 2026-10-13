@@ -1,0 +1,2615 @@
+goto quests_list_exit
+
+remstart
+    THE QUESTS
+    every quest is one function, which is told what happened, and does what that quest does about
+    it. see WHAT A QUEST HEARS ABOUT in fish_headers_quests. questEvent, at the bottom of this file,
+    passes each thing that happens on to the quest of the round.
+
+    a quest keeps what it needs in QUEST_V, and each one says what it keeps where, at its top. a
+    "swap that pops" is a swap that handle_combos found a group for, and a "miss" is one that it
+    did not. `qA` and `qB` are different things for different events:
+        QEV_SWAP    the two cells of the swap
+        QEV_STEP    the cell that the cursor left, or -1, and the cell that it came to
+        QEV_JUDGE   how many groups are popping, and 1 if a swap was waiting to hear
+        QEV_SETTLE  how many swaps have been made since the board was last still
+remend
+
+setup_quest_defs:
+    questDefine(QUEST_LEFT_RIGHT, "Left to Right", "Swap the sand dollar to the right edge. It breaks if a swap moves it and pops nothing, or on the bottom row.", TEX_SAND_DOLLAR, 0)
+    questDefine(QUEST_KRILL, "Whale Krill", "Swaps that pop nothing cost nothing, and make krill. Fill half the board with krill for the whale.", TEX_KRILL, TEX_Q_SHELL)
+    questDefine(QUEST_LOST_PAIR, "Lost Pair", "Bring the two ringed fish side by side. A swap that moves one and pops nothing picks a new pair.", TEX_Q_RING, 0)
+    questDefine(QUEST_SEQUENCE, "Sequence", "Pop the three kinds shown, in order. Popping one out of turn starts over.", TEX_Q_RING, 0)
+    questDefine(QUEST_SHARK, "Shark", "It hunts the cursor and eats pops within two cells. Make 8 popping swaps without feeding it.", TEX_Q_SHARK, TEX_Q_BAIT)
+    questDefine(QUEST_PUFFERS, "Avoid Puffers", "Make popping swaps in a row. A popped pufferfish, or a swap that pops nothing, resets the count.", QUEST_PUFFER_KIND, 0)
+    questDefine(QUEST_PROTECTED, "Protected", "Score a quarter of the round without swapping or popping a ringed fish.", TEX_Q_RING, 0)
+    questDefine(QUEST_SUNBEAM, "Sunbeam", "The beam moves one column each swap. Pop fish in the lit column, for eight columns in ten.", TEX_Q_DOT, 0)
+    questDefine(QUEST_CONTINUOUS, "Continuous Swap", "Make popping swaps in a row. A swap that pops nothing resets the count.", TEX_Q_RING, 0)
+    questDefine(QUEST_SEAWEED, "Seaweed", "Bottom row pops plant seaweed, and pops on top grow it. Reach the top row. Swapping a piece breaks the rest.", TEX_SEAWEED, 0)
+    questDefine(QUEST_WAKE, "Wake", "Popped cells glow for a few moves. Join the left and right edges with one glowing path.", TEX_Q_DOT, 0)
+    questDefine(QUEST_TURTLE, "Turtle", "After each swap it steps right, onto the kind of fish shown. It cannot be swapped. Reach the right edge.", TEX_TURTLE, 0)
+    questDefine(QUEST_CUTTLEFISH, "Cuttlefish", "The ringed fish changes kind each swap, in the order shown, and survives pops. Pop it as each kind.", TEX_Q_RING, 0)
+    questDefine(QUEST_CONSTELLATION, "Constellation", "Arrange the four ringed fish in the shape shown. A pop, or a swap that moves one and pops nothing, resets it.", TEX_Q_RING, 0)
+    questDefine(QUEST_REMORA, "Remora", "The cursor drags a long tail. Make 8 popping swaps without crossing it.", TEX_Q_EEL, TEX_Q_EEL)
+    questDefine(QUEST_SLEEPERS, "Sleepers", "One kind sleeps for three moves, and its groups wait. Have two groups waiting when it wakes.", TEX_Q_SHELL, TEX_Q_SHELL)
+    questDefine(QUEST_ECHO, "Echo", "A ghost repeats each swap four moves later, in the same place. Get three of its swaps to pop fish.", TEX_Q_RING, 0)
+    questDefine(QUEST_PULSE, "Pulse", "Every fourth move, the lit cell turns its four corner fish into its own kind. Get three pops from that.", TEX_Q_DOT, 0)
+    questDefine(QUEST_TOTEM, "Totem", "Stack the four kinds shown, top to bottom, in the marked column.", TEX_Q_RING, 0)
+    questDefine(QUEST_ROLL_CALL, "Roll Call", "Pop the three ringed fish in the order of the colors shown. One out of turn resets it.", TEX_Q_RING, 0)
+    questDefine(QUEST_GLASS_FISH, "Glass Fish", "Pop fish under it to lower it to the bottom row. It cannot be swapped, and shatters if it falls two cells.", TEX_GLASS_FISH, 0)
+    questDefine(QUEST_REFLECTION, "Reflection", "Make the marked row read the same from both ends.", TEX_Q_RING, 0)
+    questDefine(QUEST_TETHER, "Tether", "The cursor can stray three cells from the buoy. Popping swaps bring the buoy along. Take it to the far corner.", TEX_Q_BUOY, TEX_Q_BUOY)
+    questDefine(QUEST_LANTERN, "Lantern", "Each step burns light, and a popping swap refills it. Light all three pearls before it goes out.", TEX_Q_ANGLER, TEX_Q_ANGLER)
+    questDefine(QUEST_HATCH, "Hatch", "Each ringed fish counts down every swap. Pop it on the move it hits zero. Do that three times.", TEX_Q_PEARL, 0)
+    questDefine(QUEST_FORECAST, "Forecast", "The next fish for each column shows above it. Make four groups finished by a fish as it lands.", TEX_Q_DOT, 0)
+    questDefine(QUEST_MOORINGS, "Moorings", "Each colored cell wants the fish shown in its color. Fill all three at once.", TEX_Q_RING, 0)
+    questDefine(QUEST_TRADE_PLACES, "Trade Places", "Get the two ringed fish into each other's cells. A pop, or a swap that moves one and pops nothing, resets it.", TEX_Q_RING, 0)
+    questDefine(QUEST_PILOT_FISH, "Pilot Fish", "A little fish trails one step behind the cursor. Make a popping swap while it sits on each lit cell.", TEX_Q_PILOT, 0)
+    questDefine(QUEST_FERRY, "Ferry", "Carry each starfish from the left edge to the right, popping fish on the way. A miss, or a slow trip, drops it.", TEX_Q_STARFISH, 0)
+    questDefine(QUEST_LASSO, "Lasso", "Walk the cursor in a loop around the ringed fish, with a popping swap on the way.", TEX_Q_RING, 0)
+    questDefine(QUEST_TREASURE, "Treasure", "Each popping swap says warmer or colder. Pop the fish on the buried cell.", TEX_Q_PEARL, 0)
+return
+
+quests_list_exit:
+
+
+function questDefine(qDefId, qDefName$, qDefDesc$, qDefIcon, qDefPick)
+    QUEST_DEFS(qDefId).name$ = qDefName$
+    QUEST_DEFS(qDefId).desc$ = qDefDesc$
+    QUEST_DEFS(qDefId).iconTex = qDefIcon
+
+    ` every quest has a pickup. one that has no picture of its own for that has the picture on its
+    ` badge, or a shell when that picture is only a plain ring or a dot.
+    qDefPickTex = qDefPick
+    if qDefPickTex = 0
+        qDefPickTex = qDefIcon
+        if qDefIcon = TEX_Q_RING then qDefPickTex = TEX_Q_SHELL
+        if qDefIcon = TEX_Q_DOT then qDefPickTex = TEX_Q_SHELL
+    endif
+    QUEST_DEFS(qDefId).pickTex = qDefPickTex
+endfunction
+
+
+` a row of little pictures of fish next to the count on the badge. `qRowAt` is which place in the
+` row this one is, and a faint one has not been done yet.
+function questBadgeKind(qRowAt, qRowKind, qRowBright)
+    qRowAlpha = 90
+    if qRowBright then qRowAlpha = 255
+    questIconAt(qRowKind, QUEST_EXTRA_X + 6 + qRowAt * 14, QUEST_EXTRA_Y, 12, rgb(255, 255, 255, qRowAlpha))
+endfunction
+
+
+` the cell on one side of a cell, or -1 at the edge of the board. 0 is left, 1 is right, 2 is up, 3 is down.
+function questSide(qSideOf, qSideWhich)
+    qSideCell = -1
+    qSideX = qSideOf mod CELL_COLUMN_COUNT
+    qSideY = qSideOf / CELL_COLUMN_COUNT
+    if qSideWhich = 0
+        if qSideX > 0 then qSideCell = qSideOf - 1
+    endif
+    if qSideWhich = 1
+        if qSideX < CELL_COLUMN_COUNT - 1 then qSideCell = qSideOf + 1
+    endif
+    if qSideWhich = 2
+        if qSideY > 0 then qSideCell = qSideOf - CELL_COLUMN_COUNT
+    endif
+    if qSideWhich = 3
+        if qSideY < CELL_ROW_COUNT - 1 then qSideCell = qSideOf + CELL_COLUMN_COUNT
+    endif
+endfunction qSideCell
+
+
+` ---------------------------------------------------------------------------------------------
+` 1. LEFT TO RIGHT. a sand dollar, which never matches anything, starts one cell in from the top
+` left. it has to get to the right edge. a miss that moved it breaks it, and so does coming to the
+` bottom row. V(0) is 1 when a swap has moved it, and the board has not gone still since.
+` ---------------------------------------------------------------------------------------------
+function questLeftRight(qEv, qA, qB)
+    if qEv = QEV_INIT
+        questPlaceKind(1, TEX_SAND_DOLLAR)
+        questProgress(1, CELL_COLUMN_COUNT - 1)
+    endif
+
+    if qEv = QEV_SWAP
+        if CELLS(qA).value = TEX_SAND_DOLLAR then QUEST_V(0) = 1
+        if CELLS(qB).value = TEX_SAND_DOLLAR then QUEST_V(0) = 1
+    endif
+
+    if qEv = QEV_SETTLE
+        qDollarMoved = QUEST_V(0)
+        QUEST_V(0) = 0
+        qDollar = questFindKind(TEX_SAND_DOLLAR)
+        if qDollar < 0
+            questFail()
+            exitfunction
+        endif
+
+        ` only a swap that moved it, and popped nothing, breaks it. any other miss is none of its business.
+        if QUEST_MISSED
+            if qDollarMoved
+                questSayAt(qDollar, "broken!", rgb(240, 225, 170))
+                questRestart()
+                exitfunction
+            endif
+        endif
+        qDollarX = qDollar mod CELL_COLUMN_COUNT
+        qDollarY = qDollar / CELL_COLUMN_COUNT
+        questProgress(qDollarX, CELL_COLUMN_COUNT - 1)
+        if qDollarX = CELL_COLUMN_COUNT - 1
+            questComplete()
+            exitfunction
+        endif
+        if qDollarY = CELL_ROW_COUNT - 1
+            questFail()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        ` where it is headed, and where it must not go, while the cursor is on it
+        if QUEST_FOCUS
+            questGlowSpan(CELL_COLUMN_COUNT - 1, 0, 1, CELL_ROW_COUNT - 1, rgb(120, 255, 170, 70))
+            questGlowSpan(0, CELL_ROW_COUNT - 1, CELL_COLUMN_COUNT, 1, rgb(255, 90, 90, 64))
+        endif
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 2. WHALE KRILL. picked up. a miss costs nothing with the multiplier, and turns both of its fish
+` into krill. krill pops like any fish, for nothing. when half of the board is krill, the whale comes.
+` ---------------------------------------------------------------------------------------------
+function questMakeKrill(qKrillCell)
+    if qKrillCell < 0 then exitfunction
+    if questPlain(CELLS(qKrillCell).value)
+        CELLS(qKrillCell).value = TEX_KRILL
+        updateCell(CELLS(qKrillCell))
+        create basic tween CELLS(qKrillCell).scaleWaveTweenId, 1.5, 1, 220, 0
+        spawnBubbles(getCellX(qKrillCell mod CELL_COLUMN_COUNT), getCellY(qKrillCell / CELL_COLUMN_COUNT), CELL_SIZE / 4, 5, 0, rgb(255, 150, 130))
+    endif
+endfunction
+
+function questKrill(qEv, qA, qB)
+    if qEv = QEV_START
+        questProgress(0, CELL_COUNT / 2)
+    endif
+
+    if qEv = QEV_SETTLE
+        if QUEST_MISSED
+            questMakeKrill(QUEST_SWAP_A)
+            questMakeKrill(QUEST_SWAP_B)
+            REQUEST_COMBO_CHECK = 1 `the krill may have landed next to more of it
+        endif
+        qKrillNow = questCountKind(TEX_KRILL)
+        qKrillNeed = CELL_COUNT / 2
+        questProgress(qKrillNow, qKrillNeed)
+        if qKrillNow >= qKrillNeed
+            QUEST_WHALE_MS = game ms()
+            questComplete()
+        endif
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 3. LOST PAIR. two marked fish, four cells apart in a row, have to end up next to each other. one
+` of them that pops comes back where it was. a miss that moved one of them starts it over.
+` V(0) is 1 when one of them has popped.
+` ---------------------------------------------------------------------------------------------
+function questLostPair(qEv, qA, qB)
+    if qEv = QEV_INIT
+        ` four cells apart, in one row
+        qPairOne = -1
+        qPairTwo = -1
+        qPairTries = 0
+        while qPairTries < 60
+            qPairTries = qPairTries + 1
+            qPairAt = questPickCell(0, CELL_COLUMN_COUNT - 5, 0, CELL_ROW_COUNT - 1)
+            if qPairAt >= 0
+                qPairOk = questPlain(CELLS(qPairAt + 4).value)
+                if qPairAt + 4 = questCursorCell() then qPairOk = 0
+                if qPairOk
+                    qPairOne = qPairAt
+                    qPairTwo = qPairAt + 4
+                    qPairTries = 60
+                endif
+            endif
+        endwhile
+        if qPairOne < 0
+            questRestart()
+            exitfunction
+        endif
+        QUEST_MARK(qPairOne) = 1
+        QUEST_MARK(qPairTwo) = 2
+        questProgress(0, 0)
+    endif
+
+    if qEv = QEV_JUDGE
+        ` one of the pair that pops is not lost. it comes back, in the cell that it popped in, as the
+        ` kind of fish that it was, and it is still one of the pair.
+        qPairLast = CELL_COUNT - 1
+        for qPairI = 0 to qPairLast
+            if QUEST_MARK(qPairI) > 0
+                if CELLS(qPairI).comboBlownUp then QUEST_REBORN(qPairI) = CELLS(qPairI).value
+            endif
+        next
+    endif
+
+    if qEv = QEV_SETTLE
+        ` a swap that moved one of the two, and popped nothing, starts it over
+        qPairBroken = QUEST_V(0)
+        if QUEST_MISSED
+            if QUEST_SWAP_MARKED then qPairBroken = 1
+        endif
+        qPairOne = questFindMark(1)
+        qPairTwo = questFindMark(2)
+        if qPairOne < 0 then qPairBroken = 1
+        if qPairTwo < 0 then qPairBroken = 1
+        if qPairBroken
+            questFail()
+            exitfunction
+        endif
+        qPairApart = questManhattan(qPairOne, qPairTwo)
+        if qPairApart = 1
+            questComplete()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        ` a dotted line from one to the other
+        qPairOne = questFindMark(1)
+        qPairTwo = questFindMark(2)
+        qPairShow = QUEST_FOCUS `only while the cursor is on one of the two
+        if qPairOne < 0 then qPairShow = 0
+        if qPairTwo < 0 then qPairShow = 0
+        if qPairShow
+            qPairX1# = sprite x(CELLS(qPairOne).spriteId)
+            qPairY1# = sprite y(CELLS(qPairOne).spriteId)
+            qPairX2# = sprite x(CELLS(qPairTwo).spriteId)
+            qPairY2# = sprite y(CELLS(qPairTwo).spriteId)
+            for qPairDot = 1 to 5
+                qPairAlong# = qPairDot / 6.0
+                questIconAt(TEX_Q_DOT, qPairX1# + (qPairX2# - qPairX1#) * qPairAlong#, qPairY1# + (qPairY2# - qPairY1#) * qPairAlong#, 6, rgb(255, 230, 150, 130))
+            next
+        endif
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 4. SEQUENCE. three kinds of fish have to pop in order. V(0) to V(2) are the kinds, and V(3) is how
+` many have been done. a group of one of the three that pops out of turn starts it over.
+` ---------------------------------------------------------------------------------------------
+function questSequence(qEv, qA, qB)
+    if qEv = QEV_INIT
+        QUEST_V(0) = rnd(7) + 1
+        QUEST_V(1) = questOtherKind(QUEST_V(0))
+        QUEST_V(2) = rnd(7) + 1
+        while QUEST_V(2) = QUEST_V(0) or QUEST_V(2) = QUEST_V(1)
+            QUEST_V(2) = (QUEST_V(2) mod 7) + 1
+        endwhile
+        questProgress(0, 3)
+    endif
+
+    if qEv = QEV_JUDGE
+        ` the groups that are next in the order are taken first, however many of them pop together
+        qSeqGoing = 1
+        while qSeqGoing
+            qSeqGoing = 0
+            if QUEST_V(3) < 3
+                qSeqWant = QUEST_V(QUEST_V(3))
+                qSeqN = 0
+                while qSeqN < QUEST_GROUP_N
+                    if QUEST_GROUP_KIND(qSeqN) = qSeqWant
+                        QUEST_GROUP_KIND(qSeqN) = 0
+                        QUEST_V(3) = QUEST_V(3) + 1
+                        qSeqGoing = 1
+                        qSeqN = QUEST_GROUP_N
+                    endif
+                    qSeqN = qSeqN + 1
+                endwhile
+            endif
+        endwhile
+
+        ` any that are left popped out of turn
+        if QUEST_V(3) < 3
+            qSeqN = 0
+            while qSeqN < QUEST_GROUP_N
+                qSeqKind = QUEST_GROUP_KIND(qSeqN)
+                if qSeqKind > 0
+                    if qSeqKind = QUEST_V(0) or qSeqKind = QUEST_V(1) or qSeqKind = QUEST_V(2)
+                        QUEST_V(3) = 0
+                    endif
+                endif
+                qSeqN = qSeqN + 1
+            endwhile
+        endif
+        questProgress(QUEST_V(3), 3)
+    endif
+
+    if qEv = QEV_SETTLE
+        if QUEST_V(3) >= 3
+            questComplete()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        for qSeqShow = 0 to 2
+            qSeqLit = 0
+            if qSeqShow <= QUEST_V(3) then qSeqLit = 1
+            questBadgeKind(qSeqShow, QUEST_V(qSeqShow), qSeqLit)
+        next
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 5. SHARK. picked up. it eats any group that has a fish within QUEST_SHARK_REACH cells of it. V(0) is the cell that it is on, V(1) is how many swaps have popped fish
+` without feeding it, V(2) is 1 when it has just eaten, and V(3) is how many swaps it takes.
+` questGroupScore, in fish_routines_quests, is where a group next to it scores nothing.
+` ---------------------------------------------------------------------------------------------
+function questShark(qEv, qA, qB)
+    if qEv = QEV_START
+        QUEST_V(0) = questOppositeCorner(QUEST_PICK_CELL)
+        QUEST_V(3) = 8
+        questProgress(0, QUEST_V(3))
+
+        ` it shows up in a burst of bubbles, right where it is. see SLIDING AND GLIDING in fish_headers_quests.
+        QUEST_GLIDE_X# = getCellX(QUEST_V(0) mod CELL_COLUMN_COUNT)
+        QUEST_GLIDE_Y# = getCellY(QUEST_V(0) / CELL_COLUMN_COUNT)
+        spawnBubbles(getCellX(QUEST_V(0) mod CELL_COLUMN_COUNT), getCellY(QUEST_V(0) / CELL_COLUMN_COUNT), CELL_SIZE, 26, 0, rgb(200, 225, 255))
+        spawnBubbles(getCellX(QUEST_V(0) mod CELL_COLUMN_COUNT), getCellY(QUEST_V(0) / CELL_COLUMN_COUNT), CELL_SIZE / 2, 12, 120, rgb(255, 255, 255))
+    endif
+
+    if qEv = QEV_JUDGE
+        if QUEST_V(2) = 0
+            if qB then QUEST_V(1) = QUEST_V(1) + 1
+        else
+            ` it has eaten, and that is that, right away
+            questSayAt(QUEST_V(0), "chomp!", rgb(255, 110, 110))
+            questRestart()
+            exitfunction
+        endif
+    endif
+
+    if qEv = QEV_SETTLE
+        if QUEST_V(2)
+            questSayAt(QUEST_V(0), "chomp!", rgb(255, 110, 110))
+            questRestart()
+            exitfunction
+        endif
+        questProgress(QUEST_V(1), QUEST_V(3))
+        if QUEST_V(1) >= QUEST_V(3)
+            questComplete()
+            exitfunction
+        endif
+
+        ` it swims a cell closer to the cursor for every swap
+        qSharkSteps = qA
+        while qSharkSteps > 0
+            qSharkSteps = qSharkSteps - 1
+            qSharkX = QUEST_V(0) mod CELL_COLUMN_COUNT
+            qSharkY = QUEST_V(0) / CELL_COLUMN_COUNT
+            qSharkDX = SELECTION_POS.x - qSharkX
+            qSharkDY = SELECTION_POS.y - qSharkY
+            qSharkFarX = abs(qSharkDX)
+            qSharkFarY = abs(qSharkDY)
+            if qSharkFarX >= qSharkFarY
+                qSharkX = qSharkX + questSign(qSharkDX)
+            else
+                qSharkY = qSharkY + questSign(qSharkDY)
+            endif
+            QUEST_V(0) = qSharkX + qSharkY * CELL_COLUMN_COUNT
+        endwhile
+    endif
+
+    if qEv = QEV_DRAW
+        ` the water around it is red, as far as it can bite, while the cursor is close to it
+        qSharkNear = questChebyshev(questCursorCell(), QUEST_V(0))
+        qSharkShow = QUEST_HILITE
+        if qSharkNear <= QUEST_SHARK_REACH + 1 then qSharkShow = 1
+        if qSharkShow
+            qSharkX = QUEST_V(0) mod CELL_COLUMN_COUNT
+            qSharkY = QUEST_V(0) / CELL_COLUMN_COUNT
+            qSharkLeft = qSharkX - QUEST_SHARK_REACH
+            qSharkTop = qSharkY - QUEST_SHARK_REACH
+            qSharkRight = qSharkX + QUEST_SHARK_REACH
+            qSharkBottom = qSharkY + QUEST_SHARK_REACH
+            if qSharkLeft < 0 then qSharkLeft = 0
+            if qSharkTop < 0 then qSharkTop = 0
+            if qSharkRight > CELL_COLUMN_COUNT - 1 then qSharkRight = CELL_COLUMN_COUNT - 1
+            if qSharkBottom > CELL_ROW_COUNT - 1 then qSharkBottom = CELL_ROW_COUNT - 1
+            questGlowSpan(qSharkLeft, qSharkTop, qSharkRight + 1 - qSharkLeft, qSharkBottom + 1 - qSharkTop, rgb(255, 70, 70, 60))
+        endif
+        ` it glides to the cell that it is on, and bobs, and leaves a bubble or two behind while it swims
+        qSharkToX# = getCellX(QUEST_V(0) mod CELL_COLUMN_COUNT)
+        qSharkToY# = getCellY(QUEST_V(0) / CELL_COLUMN_COUNT)
+        qSharkGapX# = qSharkToX# - QUEST_GLIDE_X#
+        qSharkGapY# = qSharkToY# - QUEST_GLIDE_Y#
+        QUEST_GLIDE_X# = QUEST_GLIDE_X# + qSharkGapX# * .12
+        QUEST_GLIDE_Y# = QUEST_GLIDE_Y# + qSharkGapY# * .12
+        if abs(qSharkGapX#) + abs(qSharkGapY#) > 3
+            if rnd(4) = 0
+                qSharkWakeX = QUEST_GLIDE_X#
+                qSharkWakeY = QUEST_GLIDE_Y#
+                spawnBubbles(qSharkWakeX, qSharkWakeY, 5, 1, 0, rgb(200, 225, 255))
+            endif
+        endif
+        questIconAt(TEX_Q_SHARK, QUEST_GLIDE_X#, QUEST_GLIDE_Y# + sin(game ms() * .004) * 2, CELL_ART_SIZE + 8, rgb(255, 255, 255, 235))
+        if QUEST_HILITE
+            qSharkLitX = QUEST_GLIDE_X# - CELL_SIZE / 2
+            qSharkLitY = QUEST_GLIDE_Y# - CELL_SIZE / 2
+            questGlowRect(qSharkLitX, qSharkLitY, CELL_SIZE, CELL_SIZE, rgb(255, 220, 64, 190 + 60 * sin(game ms() * .008)))
+        endif
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 6. AVOID PUFFERS. swaps that pop fish, in a row, with no pufferfish popping. V(0) is how many so
+` far, V(1) is how many it takes, and V(2) is 1 when a pufferfish has popped since the board was still.
+` ---------------------------------------------------------------------------------------------
+function questPuffers(qEv, qA, qB)
+    if qEv = QEV_INIT
+        QUEST_V(1) = 12 + CURRENT_ROUND / 5
+        questProgress(0, QUEST_V(1))
+    endif
+
+    if qEv = QEV_JUDGE
+        qPuffPopped = 0
+        qPuffN = 0
+        while qPuffN < QUEST_GROUP_N
+            if QUEST_GROUP_KIND(qPuffN) = QUEST_PUFFER_KIND then qPuffPopped = 1
+            qPuffN = qPuffN + 1
+        endwhile
+
+        ` the count goes back to nothing the moment that one pops, and stays there until the board has settled
+        if qPuffPopped
+            if QUEST_V(2) = 0
+                questSay("puff!", rgb(250, 190, 54))
+            endif
+            QUEST_V(2) = 1
+        endif
+        if QUEST_V(2)
+            QUEST_V(0) = 0
+        else
+            if qB then QUEST_V(0) = QUEST_V(0) + 1
+        endif
+        questProgress(QUEST_V(0), QUEST_V(1))
+    endif
+
+    if qEv = QEV_SETTLE
+        if QUEST_V(2)
+            QUEST_V(2) = 0
+            QUEST_V(0) = 0
+        endif
+        if QUEST_MISSED then QUEST_V(0) = 0
+        questProgress(QUEST_V(0), QUEST_V(1))
+        if QUEST_V(0) >= QUEST_V(1)
+            questComplete()
+        endif
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 7. PROTECTED. five marked fish must not be swapped, or popped, while a quarter of the round is
+` scored. V(0) is the score that it started from, V(1) is how many points it takes, and V(2) is 1
+` when one of the fish has been disturbed.
+` ---------------------------------------------------------------------------------------------
+function questProtected(qEv, qA, qB)
+    if qEv = QEV_INIT
+        for qGuardN = 1 to 5
+            qGuardCell = questPickAnyCell()
+            if qGuardCell >= 0 then QUEST_MARK(qGuardCell) = 1
+        next
+        QUEST_V(0) = CURRENT_SCORE
+        QUEST_V(1) = (SCORE_BAR.endVal - SCORE_BAR.startVal) / 4
+        if QUEST_V(1) < 10 then QUEST_V(1) = 10
+        questProgress(0, QUEST_V(1))
+    endif
+
+    if qEv = QEV_SWAP
+        ` it is over the moment that one of them is swapped
+        qGuardSwapped = 0
+        if QUEST_MARK(qA) > 0 then qGuardSwapped = 1
+        if QUEST_MARK(qB) > 0 then qGuardSwapped = 1
+        if qGuardSwapped
+            questFail()
+            exitfunction
+        endif
+    endif
+
+    if qEv = QEV_JUDGE
+        ` it is over the moment that one of them pops, and not when the board has settled
+        if questMarkPopping()
+            questFail()
+            exitfunction
+        endif
+    endif
+
+    if qEv = QEV_SETTLE
+        if QUEST_V(2)
+            questFail()
+            exitfunction
+        endif
+        qGuardGot = CURRENT_SCORE - QUEST_V(0)
+        if qGuardGot > QUEST_V(1) then qGuardGot = QUEST_V(1)
+        questProgress(qGuardGot, QUEST_V(1))
+        if qGuardGot >= QUEST_V(1)
+            questComplete()
+        endif
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 8. SUNBEAM. V(0) is the column that is lit, V(1) is the way that it is moving, V(2) is how many
+` columns fish have popped in while they were lit, V(4) is how many columns it takes, and V(3) is
+` 1 when the swap that is playing out has been counted. V(10) on are 1 for the columns that are done.
+` the beam moves once the board is still, so a swap is judged against the column that it was made by.
+` ---------------------------------------------------------------------------------------------
+function questSunbeam(qEv, qA, qB)
+    if qEv = QEV_INIT
+        QUEST_V(0) = rnd(CELL_COLUMN_COUNT)
+        QUEST_V(1) = 1
+
+        ` eight columns in every ten, rounded up
+        QUEST_V(4) = (CELL_COLUMN_COUNT * 8 + 9) / 10
+        questProgress(0, QUEST_V(4))
+    endif
+
+    if qEv = QEV_JUDGE
+        if QUEST_V(3) = 0
+            qBeamHit = 0
+            qBeamRow = 0
+            while qBeamRow < CELL_ROW_COUNT
+                if CELLS(qBeamRow * CELL_COLUMN_COUNT + QUEST_V(0)).comboBlownUp then qBeamHit = 1
+                qBeamRow = qBeamRow + 1
+            endwhile
+            if qBeamHit
+                QUEST_V(3) = 1
+
+                ` a column only counts the first time
+                if QUEST_V(10 + QUEST_V(0)) = 0
+                    QUEST_V(10 + QUEST_V(0)) = 1
+                    QUEST_V(2) = QUEST_V(2) + 1
+                    questProgress(QUEST_V(2), QUEST_V(4))
+                    spawnBubbles(getCellX(QUEST_V(0)), getCellY(CELL_ROW_COUNT / 2), CELL_SIZE * 2, 14, 0, rgb(255, 240, 150))
+                endif
+            endif
+        endif
+    endif
+
+    if qEv = QEV_SETTLE
+        QUEST_V(3) = 0
+        if QUEST_V(2) >= QUEST_V(4)
+            questComplete()
+            exitfunction
+        endif
+        qBeamSteps = qA
+        while qBeamSteps > 0
+            qBeamSteps = qBeamSteps - 1
+            qBeamEnd = CELL_COLUMN_COUNT - 1
+            if QUEST_V(0) >= qBeamEnd then QUEST_V(1) = -1
+            if QUEST_V(0) <= 0 then QUEST_V(1) = 1
+            QUEST_V(0) = QUEST_V(0) + QUEST_V(1)
+        endwhile
+    endif
+
+    if qEv = QEV_DRAW
+        ` it is fainter over a column that has been done already
+        qBeamWave# = sin(game ms() * .004)
+        qBeamBright = 54
+        if QUEST_V(10 + QUEST_V(0)) then qBeamBright = 22
+        questGlowSpan(QUEST_V(0), 0, 1, CELL_ROW_COUNT, rgb(255, 240, 150, qBeamBright + 16 * qBeamWave#))
+
+        ` a faint one where it goes next, while the cursor is in the beam
+        if SELECTION_POS.x = QUEST_V(0)
+            qBeamNext = QUEST_V(0) + QUEST_V(1)
+            if qBeamNext < 0 then qBeamNext = 1
+            if qBeamNext > CELL_COLUMN_COUNT - 1 then qBeamNext = CELL_COLUMN_COUNT - 2
+            questGlowSpan(qBeamNext, 0, 1, CELL_ROW_COUNT, rgb(255, 240, 150, 24))
+        endif
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 9. CONTINUOUS SWAP. swaps that pop fish, in a row. V(0) is how many so far, and V(1) is how many it takes.
+` ---------------------------------------------------------------------------------------------
+function questContinuous(qEv, qA, qB)
+    if qEv = QEV_INIT
+        QUEST_V(1) = 4 + CURRENT_ROUND / 6
+        questProgress(0, QUEST_V(1))
+    endif
+
+    if qEv = QEV_JUDGE
+        if qB then QUEST_V(0) = QUEST_V(0) + 1
+    endif
+
+    if qEv = QEV_SETTLE
+        if QUEST_MISSED then QUEST_V(0) = 0
+        questProgress(QUEST_V(0), QUEST_V(1))
+        if QUEST_V(0) >= QUEST_V(1)
+            questComplete()
+        endif
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 10. SEAWEED. seaweed is a kind of fish that never matches. a fish that pops on the bottom row
+` leaves a piece of it there, in any column, and a fish that pops right on top of seaweed leaves
+` another piece, so every column can have a stalk of its own. a piece that has nothing but seaweed
+` under it, down to the bottom row, stands. any other piece breaks, which is what happens to the
+` ones above a piece that is swapped away. it grows straight through coral, where a fish would
+` sing and not pop. it is done when any stalk gets to the top row, and the badge counts the tallest.
+` ---------------------------------------------------------------------------------------------
+function questSeaweed(qEv, qA, qB)
+    if qEv = QEV_INIT
+        questProgress(0, CELL_ROW_COUNT)
+    endif
+
+    if qEv = QEV_JUDGE
+        ` in every column, from the bottom up: seaweed that stands, and every fish on top of it, or
+        ` on the bottom row, that is popping. the first thing that is neither is as far as it goes.
+        qWeedX = 0
+        while qWeedX < CELL_COLUMN_COUNT
+            qWeedY = CELL_ROW_COUNT - 1
+            while qWeedY >= 0
+                qWeedAt = qWeedY * CELL_COLUMN_COUNT + qWeedX
+                qWeedOn = 0
+                if CELLS(qWeedAt).comboBlownUp
+                    QUEST_REBORN(qWeedAt) = TEX_SEAWEED
+                    qWeedOn = 1
+                else
+                    if CELLS(qWeedAt).value = TEX_SEAWEED then qWeedOn = 1
+                endif
+                if qWeedOn = 0 then qWeedY = 0
+                qWeedY = qWeedY - 1
+            endwhile
+            qWeedX = qWeedX + 1
+        endwhile
+    endif
+
+    if qEv = QEV_SETTLE
+        qWeedBest = 0 `how tall the tallest stalk is
+        qWeedTop = 0
+        qWeedX = 0
+        while qWeedX < CELL_COLUMN_COUNT
+            ` a piece with anything but seaweed under it breaks
+            qWeedStands = 1
+            qWeedTall = 0
+            qWeedY = CELL_ROW_COUNT - 1
+            while qWeedY >= 0
+                qWeedAt = qWeedY * CELL_COLUMN_COUNT + qWeedX
+                if CELLS(qWeedAt).value = TEX_SEAWEED
+                    if qWeedStands
+                        qWeedTall = qWeedTall + 1
+                    else
+                        questConvert(qWeedAt)
+                    endif
+                else
+                    qWeedStands = 0
+                endif
+                qWeedY = qWeedY - 1
+            endwhile
+
+            ` a fish on coral does not pop, so the seaweed could never grow past it. when the fish on
+            ` top of a stalk is on coral, the stalk grows right into that cell, and into the next,
+            ` for as far up as the coral goes.
+            if qWeedTall > 0
+                qWeedGrowing = 1
+                while qWeedGrowing
+                    qWeedGrowing = 0
+                    if qWeedTall < CELL_ROW_COUNT
+                        qWeedUp = (CELL_ROW_COUNT - 1 - qWeedTall) * CELL_COLUMN_COUNT + qWeedX
+                        if CORAL_CELLS(qWeedUp)
+                            questPlaceKind(qWeedUp, TEX_SEAWEED)
+                            qWeedTall = qWeedTall + 1
+                            qWeedGrowing = 1
+                        endif
+                    endif
+                endwhile
+            endif
+
+            if qWeedTall > qWeedBest then qWeedBest = qWeedTall
+            if qWeedTall >= CELL_ROW_COUNT then qWeedTop = 1
+            qWeedX = qWeedX + 1
+        endwhile
+
+        questProgress(qWeedBest, CELL_ROW_COUNT)
+        if qWeedTop
+            questComplete()
+        endif
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 11. WAKE. the spot of a cell is how many more moves it glows for. a cell glows when a fish pops in
+` it. it is done when the glowing cells join the left edge to the right edge.
+` ---------------------------------------------------------------------------------------------
+
+` how many columns the glow reaches across, starting from the left edge. the whole board is all of them.
+function questWakeReach()
+    qReachLast = CELL_COUNT - 1
+    for qReachI = 0 to qReachLast
+        QUEST_TEMP(qReachI) = 0
+    next
+
+    ` start from every glowing cell of the left edge
+    qReachN = 0
+    qReachBest = 0
+    qReachRow = 0
+    while qReachRow < CELL_ROW_COUNT
+        qReachAt = qReachRow * CELL_COLUMN_COUNT
+        if QUEST_SPOT(qReachAt) > 0
+            QUEST_TEMP(qReachAt) = 1
+            QUEST_STACK(qReachN) = qReachAt
+            qReachN = qReachN + 1
+        endif
+        qReachRow = qReachRow + 1
+    endwhile
+
+    while qReachN > 0
+        qReachN = qReachN - 1
+        qReachAt = QUEST_STACK(qReachN)
+        qReachX = (qReachAt mod CELL_COLUMN_COUNT) + 1
+        if qReachX > qReachBest then qReachBest = qReachX
+        for qReachSide = 0 to 3
+            qReachNext = questSide(qReachAt, qReachSide)
+            if qReachNext >= 0
+                if QUEST_TEMP(qReachNext) = 0
+                    if QUEST_SPOT(qReachNext) > 0
+                        QUEST_TEMP(qReachNext) = 1
+                        QUEST_STACK(qReachN) = qReachNext
+                        qReachN = qReachN + 1
+                    endif
+                endif
+            endif
+        next
+    endwhile
+endfunction qReachBest
+
+
+` the cells of a glowing path from the left edge of the board to the right edge, as the spots that
+` the line of THE FINISH runs through. the search spreads out from the left edge a step at a time,
+` so the path that it finds is as short as any. QUEST_FRESH remembers the cell that each cell was
+` come to from, plus one, and QUEST_LIST holds the path while it is turned around.
+function questWakeFinish()
+    qPathLast = CELL_COUNT - 1
+    for qPathI = 0 to qPathLast
+        QUEST_TEMP(qPathI) = 0
+        QUEST_FRESH(qPathI) = 0
+    next
+
+    qPathHead = 0
+    qPathTail = 0
+    qPathRow = 0
+    while qPathRow < CELL_ROW_COUNT
+        qPathAt = qPathRow * CELL_COLUMN_COUNT
+        if QUEST_SPOT(qPathAt) > 0
+            QUEST_TEMP(qPathAt) = 1
+            QUEST_STACK(qPathTail) = qPathAt
+            qPathTail = qPathTail + 1
+        endif
+        qPathRow = qPathRow + 1
+    endwhile
+
+    qPathEnd = -1
+    while qPathHead < qPathTail
+        qPathAt = QUEST_STACK(qPathHead)
+        qPathHead = qPathHead + 1
+        if qPathAt mod CELL_COLUMN_COUNT = CELL_COLUMN_COUNT - 1
+            qPathEnd = qPathAt
+            qPathHead = qPathTail
+        else
+            for qPathSide = 0 to 3
+                qPathNext = questSide(qPathAt, qPathSide)
+                if qPathNext >= 0
+                    if QUEST_TEMP(qPathNext) = 0
+                        if QUEST_SPOT(qPathNext) > 0
+                            QUEST_TEMP(qPathNext) = 1
+                            QUEST_FRESH(qPathNext) = qPathAt + 1
+                            QUEST_STACK(qPathTail) = qPathNext
+                            qPathTail = qPathTail + 1
+                        endif
+                    endif
+                endif
+            next
+        endif
+    endwhile
+    if qPathEnd < 0 then exitfunction
+
+    ` back from the right edge to the left, and then the other way around
+    QUEST_LIST_N = 0
+    qPathAt = qPathEnd
+    while qPathAt >= 0
+        QUEST_LIST(QUEST_LIST_N) = qPathAt
+        QUEST_LIST_N = QUEST_LIST_N + 1
+        qPathAt = QUEST_FRESH(qPathAt) - 1
+    endwhile
+    QUEST_FINISH_N = 0
+    qPathN = QUEST_LIST_N - 1
+    while qPathN >= 0
+        questFinishPoint(getCellX(QUEST_LIST(qPathN) mod CELL_COLUMN_COUNT), getCellY(QUEST_LIST(qPathN) / CELL_COLUMN_COUNT))
+        qPathN = qPathN - 1
+    endwhile
+    QUEST_LIST_N = 0
+endfunction
+
+function questWake(qEv, qA, qB)
+    if qEv = QEV_INIT
+        questProgress(0, CELL_COLUMN_COUNT)
+    endif
+
+    if qEv = QEV_JUDGE
+        ` one more than it lasts, because the swap that popped these is still to be counted off
+        qWakeLast = CELL_COUNT - 1
+        for qWakeI = 0 to qWakeLast
+            if CELLS(qWakeI).comboBlownUp then QUEST_SPOT(qWakeI) = 9
+        next
+        qWakeReach = questWakeReach()
+        questProgress(qWakeReach, CELL_COLUMN_COUNT)
+        if qWakeReach >= CELL_COLUMN_COUNT
+            ` the line of light runs along the path that did it. see THE FINISH in fish_headers_quests.
+            questWakeFinish()
+            questComplete()
+        endif
+    endif
+
+    if qEv = QEV_SETTLE
+        if qA > 0
+            qWakeLast = CELL_COUNT - 1
+            for qWakeI = 0 to qWakeLast
+                if QUEST_SPOT(qWakeI) > 0
+                    QUEST_SPOT(qWakeI) = QUEST_SPOT(qWakeI) - qA
+                    if QUEST_SPOT(qWakeI) < 0 then QUEST_SPOT(qWakeI) = 0
+                endif
+            next
+            qWakeReach = questWakeReach()
+            questProgress(qWakeReach, CELL_COLUMN_COUNT)
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        qWakeLast = CELL_COUNT - 1
+        for qWakeI = 0 to qWakeLast
+            if QUEST_SPOT(qWakeI) > 0
+                questGlowCell(qWakeI, rgb(120, 220, 255, 24 + QUEST_SPOT(qWakeI) * 13))
+            endif
+        next
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 12. TURTLE. the turtle is a kind of fish that never matches, and that cannot be swapped. it
+` starts at the left edge, and it falls like a fish. after every swap it trades places with the
+` fish to its right, if that fish is the kind that the badge shows. V(0) is that kind.
+` ---------------------------------------------------------------------------------------------
+function questTurtle(qEv, qA, qB)
+    if qEv = QEV_INIT
+        qTurtleRow = 1 + rnd(CELL_ROW_COUNT - 2)
+        qTurtleAt = qTurtleRow * CELL_COLUMN_COUNT
+        questPlaceKind(qTurtleAt, TEX_TURTLE)
+        spawnBubbles(getCellX(0), getCellY(qTurtleRow), CELL_SIZE, 22, 0, rgb(150, 220, 130))
+        spawnBubbles(getCellX(0), getCellY(qTurtleRow), CELL_SIZE / 2, 10, 120, rgb(255, 255, 255))
+        QUEST_V(0) = questOtherKind(CELLS(qTurtleAt + 1).value)
+        questProgress(0, CELL_COLUMN_COUNT - 1)
+    endif
+
+    if qEv = QEV_SETTLE
+        qTurtleAt = questFindKind(TEX_TURTLE)
+        if qTurtleAt < 0
+            questFail()
+            exitfunction
+        endif
+
+        qTurtleSteps = qA
+        while qTurtleSteps > 0
+            qTurtleSteps = qTurtleSteps - 1
+            qTurtleX = qTurtleAt mod CELL_COLUMN_COUNT
+            if qTurtleX < CELL_COLUMN_COUNT - 1
+                qTurtleNext = qTurtleAt + 1
+                if CELLS(qTurtleNext).value = QUEST_V(0)
+                    CELLS(qTurtleAt).value = QUEST_V(0)
+                    CELLS(qTurtleNext).value = TEX_TURTLE
+                    swapCellStacks(qTurtleAt, qTurtleNext)
+                    updateCell(CELLS(qTurtleAt))
+                    updateCell(CELLS(qTurtleNext))
+
+                    ` the turtle and the fish slide past each other. see SLIDING AND GLIDING in fish_headers_quests.
+                    questSlideStart(qTurtleAt, qTurtleNext)
+                    spawnBubbles(getCellX(qTurtleX), getCellY(qTurtleAt / CELL_COLUMN_COUNT), CELL_SIZE / 4, 6, 0, rgb(150, 220, 130))
+                    qTurtleAt = qTurtleNext
+
+                    ` it asks for something other than what is in front of it now
+                    qTurtleX = qTurtleAt mod CELL_COLUMN_COUNT
+                    if qTurtleX < CELL_COLUMN_COUNT - 1
+                        QUEST_V(0) = questOtherKind(CELLS(qTurtleAt + 1).value)
+                    endif
+                    REQUEST_COMBO_CHECK = 1 `the fish that it stepped past may have made a group
+                endif
+            endif
+        endwhile
+
+        qTurtleX = qTurtleAt mod CELL_COLUMN_COUNT
+        questProgress(qTurtleX, CELL_COLUMN_COUNT - 1)
+        if qTurtleX = CELL_COLUMN_COUNT - 1
+            questComplete()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        qTurtleAt = questFindKind(TEX_TURTLE)
+        ` the kind of fish that it wants next is on the badge, after the count
+        questBadgeKind(0, QUEST_V(0), 1)
+        if qTurtleAt >= 0
+            if QUEST_FOCUS
+                questGlowSpan(CELL_COLUMN_COUNT - 1, 0, 1, CELL_ROW_COUNT, rgb(120, 255, 170, 70))
+            endif
+        endif
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 13. CUTTLEFISH. a marked fish that changes kind after every swap, around four kinds, and comes
+` back when it pops. V(0) to V(3) are the kinds, V(4) is which one it is now, V(5) to V(8) are 1
+` for the ones that it has popped as, and V(9) is how many of those there are.
+` ---------------------------------------------------------------------------------------------
+function questCuttlefish(qEv, qA, qB)
+    if qEv = QEV_INIT
+        qCuttleAt = questPickAnyCell()
+        if qCuttleAt < 0
+            questRestart()
+            exitfunction
+        endif
+        QUEST_MARK(qCuttleAt) = 1
+
+        ` four kinds in a row, starting anywhere, so that they are all different
+        qCuttleFirst = rnd(7)
+        for qCuttleN = 0 to 3
+            QUEST_V(qCuttleN) = ((qCuttleFirst + qCuttleN * 2) mod 7) + 1
+        next
+        CELLS(qCuttleAt).value = QUEST_V(0)
+        updateCell(CELLS(qCuttleAt))
+        REQUEST_COMBO_CHECK = 1
+        questProgress(0, 4)
+    endif
+
+    if qEv = QEV_JUDGE
+        qCuttleAt = questFindMarkPopping(1)
+        if qCuttleAt >= 0
+            qCuttleKind = CELLS(qCuttleAt).value
+            for qCuttleN = 0 to 3
+                if QUEST_V(qCuttleN) = qCuttleKind
+                    if QUEST_V(5 + qCuttleN) = 0
+                        QUEST_V(5 + qCuttleN) = 1
+                        QUEST_V(9) = QUEST_V(9) + 1
+                    endif
+                endif
+            next
+            questProgress(QUEST_V(9), 4)
+
+            ` it comes back as the next kind
+            QUEST_V(4) = (QUEST_V(4) + 1) mod 4
+            QUEST_REBORN(qCuttleAt) = QUEST_V(QUEST_V(4))
+        endif
+    endif
+
+    if qEv = QEV_SETTLE
+        qCuttleAt = questFindMark(1)
+        if qCuttleAt < 0
+            questFail()
+            exitfunction
+        endif
+        if QUEST_V(9) >= 4
+            questComplete()
+            exitfunction
+        endif
+        if qA > 0
+            QUEST_V(4) = (QUEST_V(4) + qA) mod 4
+            CELLS(qCuttleAt).value = QUEST_V(QUEST_V(4))
+            updateCell(CELLS(qCuttleAt))
+            create basic tween CELLS(qCuttleAt).scaleWaveTweenId, 1.3, 1, 180, 0
+            REQUEST_COMBO_CHECK = 1 `what it turned into may be next to two of its new kind
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        ` the four kinds, on the badge. the bright ones are still to do, and a dot sits under the one that comes next.
+        for qCuttleN = 0 to 3
+            qCuttleLit = 1
+            if QUEST_V(5 + qCuttleN) then qCuttleLit = 0
+            questBadgeKind(qCuttleN, QUEST_V(qCuttleN), qCuttleLit)
+        next
+        qCuttleNext = (QUEST_V(4) + 1) mod 4
+        questIconAt(TEX_Q_DOT, QUEST_EXTRA_X + 6 + qCuttleNext * 14, QUEST_EXTRA_Y + 8, 4, rgb(255, 220, 64, 255))
+
+        ` and what it turns into next rides on the fish
+        qCuttleAt = questFindMark(1)
+        if qCuttleAt >= 0
+            questIconOnFish(qCuttleAt, QUEST_V(qCuttleNext), 9, -10, 9, rgb(255, 255, 255, 230))
+        endif
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 14. CONSTELLATION. four marked fish, of four kinds, have to make a shape. V(0) is the shape:
+` 0 is four in a line, 1 is a square, and 2 is an L. V(1) is 1 when one of them has popped.
+` ---------------------------------------------------------------------------------------------
+
+` are the four marked fish in the shape, any way around?
+function questShapeMade(qShape)
+    qShapeMinX = 999
+    qShapeMaxX = -1
+    qShapeMinY = 999
+    qShapeMaxY = -1
+    for qShapeN = 1 to 4
+        qShapeAt = questFindMark(qShapeN)
+        if qShapeAt < 0
+            exitfunction 0
+        endif
+        QUEST_STACK(qShapeN) = qShapeAt
+        qShapeX = qShapeAt mod CELL_COLUMN_COUNT
+        qShapeY = qShapeAt / CELL_COLUMN_COUNT
+        if qShapeX < qShapeMinX then qShapeMinX = qShapeX
+        if qShapeX > qShapeMaxX then qShapeMaxX = qShapeX
+        if qShapeY < qShapeMinY then qShapeMinY = qShapeY
+        if qShapeY > qShapeMaxY then qShapeMaxY = qShapeY
+    next
+    qShapeWide = qShapeMaxX + 1 - qShapeMinX
+    qShapeTall = qShapeMaxY + 1 - qShapeMinY
+
+    qShapeOk = 0
+    if qShape = 0
+        if qShapeWide = 4 and qShapeTall = 1 then qShapeOk = 1
+        if qShapeWide = 1 and qShapeTall = 4 then qShapeOk = 1
+    endif
+    if qShape = 1
+        if qShapeWide = 2 and qShapeTall = 2 then qShapeOk = 1
+    endif
+    if qShape = 2
+        ` three along one long side of the box, and the fourth at one end of the other
+        qShapeLow = 0 `how many are on the first long side
+        qShapeEnd = 0 `1 when the odd one out is at an end
+        if qShapeWide = 3 and qShapeTall = 2
+            for qShapeN = 1 to 4
+                qShapeX = QUEST_STACK(qShapeN) mod CELL_COLUMN_COUNT
+                qShapeY = QUEST_STACK(qShapeN) / CELL_COLUMN_COUNT
+                if qShapeY = qShapeMinY then qShapeLow = qShapeLow + 1
+            next
+            for qShapeN = 1 to 4
+                qShapeX = QUEST_STACK(qShapeN) mod CELL_COLUMN_COUNT
+                qShapeY = QUEST_STACK(qShapeN) / CELL_COLUMN_COUNT
+                qShapeOdd = 0
+                if qShapeLow = 1 and qShapeY = qShapeMinY then qShapeOdd = 1
+                if qShapeLow = 3 and qShapeY = qShapeMaxY then qShapeOdd = 1
+                if qShapeOdd
+                    if qShapeX = qShapeMinX then qShapeEnd = 1
+                    if qShapeX = qShapeMaxX then qShapeEnd = 1
+                endif
+            next
+        endif
+        if qShapeWide = 2 and qShapeTall = 3
+            for qShapeN = 1 to 4
+                qShapeX = QUEST_STACK(qShapeN) mod CELL_COLUMN_COUNT
+                if qShapeX = qShapeMinX then qShapeLow = qShapeLow + 1
+            next
+            for qShapeN = 1 to 4
+                qShapeX = QUEST_STACK(qShapeN) mod CELL_COLUMN_COUNT
+                qShapeY = QUEST_STACK(qShapeN) / CELL_COLUMN_COUNT
+                qShapeOdd = 0
+                if qShapeLow = 1 and qShapeX = qShapeMinX then qShapeOdd = 1
+                if qShapeLow = 3 and qShapeX = qShapeMaxX then qShapeOdd = 1
+                if qShapeOdd
+                    if qShapeY = qShapeMinY then qShapeEnd = 1
+                    if qShapeY = qShapeMaxY then qShapeEnd = 1
+                endif
+            next
+        endif
+        if qShapeEnd then qShapeOk = 1
+    endif
+endfunction qShapeOk
+
+function questConstellation(qEv, qA, qB)
+    if qEv = QEV_INIT
+        ` four fish of four different kinds, so that they never pop each other
+        qStarN = 1
+        qStarTries = 0
+        while qStarN <= 4 and qStarTries < 200
+            qStarTries = qStarTries + 1
+            qStarAt = questPickAnyCell()
+            if qStarAt >= 0
+                qStarOk = 1
+                qStarKind = CELLS(qStarAt).value
+                for qStarOld = 1 to 4
+                    if qStarOld < qStarN
+                        if QUEST_V(10 + qStarOld) = qStarKind then qStarOk = 0
+                    endif
+                next
+                if qStarOk
+                    QUEST_MARK(qStarAt) = qStarN
+                    QUEST_V(10 + qStarN) = qStarKind
+                    qStarN = qStarN + 1
+                endif
+            endif
+        endwhile
+        if qStarN <= 4
+            questRestart()
+            exitfunction
+        endif
+        QUEST_V(0) = rnd(3)
+        questProgress(0, 0)
+        if QUEST_V(0) = 0
+            questNote("a line")
+        endif
+        if QUEST_V(0) = 1
+            questNote("a square")
+        endif
+        if QUEST_V(0) = 2
+            questNote("an L")
+        endif
+    endif
+
+    if qEv = QEV_JUDGE
+        ` it is over the moment that one of them pops, and not when the board has settled
+        if questMarkPopping()
+            questFail()
+            exitfunction
+        endif
+    endif
+
+    if qEv = QEV_SETTLE
+        qStarBroken = QUEST_V(1)
+        if QUEST_MISSED
+            if QUEST_SWAP_MARKED then qStarBroken = 1
+        endif
+        if qStarBroken
+            questFail()
+            exitfunction
+        endif
+        if questShapeMade(QUEST_V(0))
+            questComplete()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        ` the shape, drawn small by the badge
+        qStarLeft = QUEST_EXTRA_X
+        qStarTop = QUEST_EXTRA_Y - 7
+        for qStarN = 0 to 3
+            qStarX = qStarN
+            qStarY = 0
+            if QUEST_V(0) = 1
+                qStarX = qStarN mod 2
+                qStarY = qStarN / 2
+            endif
+            if QUEST_V(0) = 2
+                qStarX = 0
+                qStarY = qStarN
+                if qStarN = 3
+                    qStarX = 1
+                    qStarY = 2
+                endif
+            endif
+            questSolidRect(qStarLeft + qStarX * 5, qStarTop + qStarY * 5, 4, 4, questMarkColor(qStarN + 1, 255))
+        next
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 15. REMORA. picked up. the list holds the last few cells that the cursor has been on, oldest
+` first, and the cursor must not come back onto any of them. V(0) is how many swaps have popped
+` fish, V(1) is how many it takes, and V(2) is how many cells long the tail is.
+` ---------------------------------------------------------------------------------------------
+function questRemora(qEv, qA, qB)
+    if qEv = QEV_START
+        QUEST_LIST_N = 0
+        QUEST_V(1) = 8
+        QUEST_V(2) = 10 `how many cells long the tail is. the ribbon that draws it has room for eleven.
+        questProgress(0, QUEST_V(1))
+    endif
+
+    if qEv = QEV_STEP
+        qTailN = 0
+        while qTailN < QUEST_LIST_N
+            if QUEST_LIST(qTailN) = qB
+                questSay("tangled!", rgb(255, 150, 110))
+                questRestart()
+                exitfunction
+            endif
+            qTailN = qTailN + 1
+        endwhile
+
+        ` the cell that the cursor left is the new end of the tail, and the oldest end drops off
+        if qA >= 0
+            if QUEST_LIST_N >= QUEST_V(2)
+                qTailLast = QUEST_V(2) - 2
+                for qTailN = 0 to qTailLast
+                    QUEST_LIST(qTailN) = QUEST_LIST(qTailN + 1)
+                next
+                QUEST_LIST_N = QUEST_V(2) - 1
+            endif
+            QUEST_LIST(QUEST_LIST_N) = qA
+            QUEST_LIST_N = QUEST_LIST_N + 1
+        endif
+    endif
+
+    if qEv = QEV_JUDGE
+        if qB then QUEST_V(0) = QUEST_V(0) + 1
+    endif
+
+    if qEv = QEV_SETTLE
+        questProgress(QUEST_V(0), QUEST_V(1))
+        if QUEST_V(0) >= QUEST_V(1)
+            questComplete()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        ` a ribbon of light from the cursor back through the cells of the tail, newest first, like
+        ` the trail that a hint leaves. see THE TAIL in fish_headers_quests.
+        questTrailBegin()
+        questTrailPoint(sprite x(SELECTION_SPRITE), sprite y(SELECTION_SPRITE))
+        qTailN = QUEST_LIST_N - 1
+        while qTailN >= 0
+            qTailCell = QUEST_LIST(qTailN)
+            questTrailPoint(getCellX(qTailCell mod CELL_COLUMN_COUNT), getCellY(qTailCell / CELL_COLUMN_COUNT))
+            qTailN = qTailN - 1
+        endwhile
+        questTrailDraw(rgb(150, 205, 255, 215))
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 16. SLEEPERS. picked up. V(0) is the kind of fish that is asleep, V(1) is how many more moves
+` it sleeps for, V(2) is how many of its groups were held back the last time the board was looked
+` at, and V(3) is how many were waiting when the board was last still. questHoldsGroup, in
+` fish_routines_quests, is where a group is held back, and it counts them into V(2).
+` ---------------------------------------------------------------------------------------------
+function questSleepers(qEv, qA, qB)
+    if qEv = QEV_START
+        QUEST_V(0) = rnd(7) + 1
+        QUEST_V(1) = 3
+        questProgress(0, 2)
+        REQUEST_COMBO_CHECK = 1
+    endif
+
+    if qEv = QEV_JUDGE
+        ` the next look at the board counts them again
+        QUEST_V(2) = 0
+    endif
+
+    if qEv = QEV_SETTLE
+        QUEST_V(3) = QUEST_V(2)
+        QUEST_V(2) = 0
+        questProgress(QUEST_V(3), 2)
+
+        QUEST_V(1) = QUEST_V(1) - qA
+        if QUEST_V(1) <= 0
+            ` it wakes. with enough groups waiting, that is the quest done, and they all go off.
+            if QUEST_V(3) >= 2
+                questComplete()
+                exitfunction
+            endif
+            QUEST_V(0) = (QUEST_V(0) mod 7) + 1
+            QUEST_V(1) = 3
+            REQUEST_COMBO_CHECK = 1 `whatever was waiting pops now
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        ` which kind is asleep, how long for, and which kind is next
+        questIconAt(QUEST_V(0), QUEST_EXTRA_X + 7, QUEST_EXTRA_Y, 13, rgb(170, 170, 220, 255))
+        questWordAt(QUEST_EXTRA_X + 25, QUEST_EXTRA_Y, "z" + str$(QUEST_V(1)), rgb(190, 200, 255))
+        questIconAt((QUEST_V(0) mod 7) + 1, QUEST_EXTRA_X + 44, QUEST_EXTRA_Y + 1, 10, rgb(255, 255, 255, 110))
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 17. ECHO. the list holds the swaps that are waiting to be made again, three numbers each: the
+` two cells, and how many more moves it waits. the ghost always makes the swap. V(0) is how many
+` of its swaps have popped fish.
+` ---------------------------------------------------------------------------------------------
+function questEcho(qEv, qA, qB)
+    if qEv = QEV_INIT
+        QUEST_LIST_N = 0
+        questProgress(0, 3)
+    endif
+
+    if qEv = QEV_SWAP
+        ` one more than it waits, because this swap is still to be counted off
+        if QUEST_LIST_N < 24
+            QUEST_LIST(QUEST_LIST_N) = qA
+            QUEST_LIST(QUEST_LIST_N + 1) = qB
+            QUEST_LIST(QUEST_LIST_N + 2) = 5
+            QUEST_LIST_N = QUEST_LIST_N + 3
+        endif
+    endif
+
+    if qEv = QEV_SETTLE
+        if qA > 0
+            qEchoRequired = getRequiredComboCount()
+            qEchoN = 0
+            while qEchoN < QUEST_LIST_N
+                QUEST_LIST(qEchoN + 2) = QUEST_LIST(qEchoN + 2) - qA
+                if QUEST_LIST(qEchoN + 2) <= 0
+                    qEchoOne = QUEST_LIST(qEchoN)
+                    qEchoTwo = QUEST_LIST(qEchoN + 1)
+
+                    ` the ghost makes the swap, whatever it does. it is only counted when one of the two
+                    ` fish ends up in a group that pops. the things of a quest are left where they are.
+                    qEchoTry = questPlain(CELLS(qEchoOne).value)
+                    if questPlain(CELLS(qEchoTwo).value) = 0 then qEchoTry = 0
+                    if qEchoTry
+                        qEchoKeep = CELLS(qEchoOne).value
+                        CELLS(qEchoOne).value = CELLS(qEchoTwo).value
+                        CELLS(qEchoTwo).value = qEchoKeep
+                        qEchoPops = 0
+                        qEchoSize = countFishGroup(qEchoOne, CELLS(qEchoOne).value, qEchoRequired)
+                        if qEchoSize >= qEchoRequired then qEchoPops = 1
+                        qEchoSize = countFishGroup(qEchoTwo, CELLS(qEchoTwo).value, qEchoRequired)
+                        if qEchoSize >= qEchoRequired then qEchoPops = 1
+                        swapCellStacks(qEchoOne, qEchoTwo)
+                        updateCell(CELLS(qEchoOne))
+                        updateCell(CELLS(qEchoTwo))
+                        create basic tween CELLS(qEchoOne).scaleWaveTweenId, 1.5, 1, 220, 0
+                        create basic tween CELLS(qEchoTwo).scaleWaveTweenId, 1.5, 1, 220, 0
+                        if qEchoPops
+                            questSayAt(qEchoOne, "echo!", rgb(200, 150, 255))
+                            QUEST_V(0) = QUEST_V(0) + 1
+                            REQUEST_COMBO_CHECK = 1
+                        endif
+                    endif
+
+                    ` it comes off of the list, and the last one takes its place
+                    QUEST_LIST_N = QUEST_LIST_N - 3
+                    QUEST_LIST(qEchoN) = QUEST_LIST(QUEST_LIST_N)
+                    QUEST_LIST(qEchoN + 1) = QUEST_LIST(QUEST_LIST_N + 1)
+                    QUEST_LIST(qEchoN + 2) = QUEST_LIST(QUEST_LIST_N + 2) + qA `this one has not been counted off yet
+                else
+                    qEchoN = qEchoN + 3
+                endif
+            endwhile
+        endif
+
+        questProgress(QUEST_V(0), 3)
+        if QUEST_V(0) >= 3
+            questComplete()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        ` the swaps that are waiting get brighter as their turn comes
+        qEchoN = 0
+        while qEchoN < QUEST_LIST_N
+            qEchoGlow = 110 - QUEST_LIST(qEchoN + 2) * 20
+            if qEchoGlow < 16 then qEchoGlow = 16
+            questGlowCell(QUEST_LIST(qEchoN), rgb(200, 150, 255, qEchoGlow))
+            questGlowCell(QUEST_LIST(qEchoN + 1), rgb(200, 150, 255, qEchoGlow))
+            qEchoN = qEchoN + 3
+        endwhile
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 18. PULSE. V(0) is the cell, which is never on the edge of the board. V(1) is how many more
+` moves it is until it goes off, V(2) is how many times fish have popped from it, and V(3) is 1
+` when it has just gone off, and the board has not been looked at since.
+` ---------------------------------------------------------------------------------------------
+
+` one of the four cells at the corners of the cell that pulses. a - b + c comes out as a - (b + c),
+` so the row is taken off last.
+function questPulseCorner(qCornerN)
+    qCornerRowUp = QUEST_V(0) - CELL_COLUMN_COUNT
+    qCornerRowDown = QUEST_V(0) + CELL_COLUMN_COUNT
+    qCornerAt = qCornerRowUp - 1
+    if qCornerN = 1 then qCornerAt = qCornerRowUp + 1
+    if qCornerN = 2 then qCornerAt = qCornerRowDown - 1
+    if qCornerN = 3 then qCornerAt = qCornerRowDown + 1
+endfunction qCornerAt
+
+function questPulse(qEv, qA, qB)
+    if qEv = QEV_INIT
+        QUEST_V(0) = questPickCell(1, CELL_COLUMN_COUNT - 2, 1, CELL_ROW_COUNT - 2)
+        if QUEST_V(0) < 0
+            questRestart()
+            exitfunction
+        endif
+        QUEST_V(1) = 4
+        questProgress(0, 3)
+    endif
+
+    if qEv = QEV_JUDGE
+        if QUEST_V(3)
+            QUEST_V(3) = 0
+            QUEST_V(2) = QUEST_V(2) + 1
+            questProgress(QUEST_V(2), 3)
+        endif
+    endif
+
+    if qEv = QEV_SETTLE
+        QUEST_V(3) = 0
+        if QUEST_V(2) >= 3
+            questComplete()
+            exitfunction
+        endif
+
+        QUEST_V(1) = QUEST_V(1) - qA
+        if QUEST_V(1) <= 0
+            QUEST_V(1) = 4
+            qPulseKind = CELLS(QUEST_V(0)).value
+            if questPlain(qPulseKind)
+                for qPulseN = 0 to 3
+                    qPulseAt = questPulseCorner(qPulseN)
+                    if questPlain(CELLS(qPulseAt).value)
+                        CELLS(qPulseAt).value = qPulseKind
+                        updateCell(CELLS(qPulseAt))
+                        create basic tween CELLS(qPulseAt).scaleWaveTweenId, 1.5, 1, 220, 0
+                    endif
+                next
+                spawnShockwave(QUEST_V(0) mod CELL_COLUMN_COUNT, QUEST_V(0) / CELL_COLUMN_COUNT, .6, 0)
+                QUEST_V(3) = 1
+                REQUEST_COMBO_CHECK = 1
+            endif
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        ` it gets brighter as it gets closer to going off
+        qPulseWave# = sin(game ms() * .008)
+        qPulseBright = 130 - QUEST_V(1) * 22
+        questGlowCell(QUEST_V(0), rgb(255, 150, 220, qPulseBright + 14 * qPulseWave#))
+        ` the four corners that it changes, while the cursor is on it
+        qPulseShow = QUEST_HILITE
+        if questCursorCell() = QUEST_V(0) then qPulseShow = 1
+        if qPulseShow
+            for qPulseN = 0 to 3
+                questGlowCell(questPulseCorner(qPulseN), rgb(255, 150, 220, 60))
+            next
+        endif
+        questNumberOnFish(QUEST_V(0), QUEST_V(1), rgb(255, 200, 235))
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 19 and 27. TOTEM and MOORINGS. some cells each ask for a kind of fish, and they all have to have
+` it at once. the list holds them, two numbers each: the cell, and the kind. the totem is four
+` cells of one column, with a row under them to pop fish out of, and it lists its kinds on the
+` badge. the moorings are three cells apart, each in a color, and the badge says which color wants what.
+` ---------------------------------------------------------------------------------------------
+function questWants(qEv, qA, qB)
+    if qEv = QEV_SETTLE
+        qWantMade = 0
+        qWantN = 0
+        while qWantN < QUEST_LIST_N
+            if CELLS(QUEST_LIST(qWantN)).value = QUEST_LIST(qWantN + 1) then qWantMade = qWantMade + 1
+            qWantN = qWantN + 2
+        endwhile
+
+        ` the totem counts them. the moorings have their colors on the badge, where the count would go.
+        if QUEST_ID = QUEST_TOTEM
+            questProgress(qWantMade, QUEST_LIST_N / 2)
+        else
+            questProgress(0, 0)
+        endif
+        if qWantMade * 2 = QUEST_LIST_N
+            questComplete()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        qWantN = 0
+        while qWantN < QUEST_LIST_N
+            qWantCell = QUEST_LIST(qWantN)
+            qWantPlace = qWantN / 2
+            qWantHas = 0
+            if CELLS(qWantCell).value = QUEST_LIST(qWantN + 1) then qWantHas = 1
+
+            if QUEST_ID = QUEST_TOTEM
+                ` the totem lists its kinds on the badge, from the top one down, and the ones that
+                ` are still wanted are bright
+                if qWantHas
+                    questGlowCell(qWantCell, rgb(120, 255, 150, 90))
+                else
+                    questGlowCell(qWantCell, rgb(255, 220, 90, 60))
+                endif
+                questBadgeKind(qWantPlace, QUEST_LIST(qWantN + 1), 1 - qWantHas)
+            else
+                ` every mooring has a color of its own, and nothing else in its cell. the badge has a
+                ` square of each color under the name, with the kind of fish that it wants in it. one
+                ` that has its fish is brighter on the board, and faint on the badge.
+                qWantCellAlpha = 70
+                qWantBadgeAlpha = 170
+                qWantFishAlpha = 255
+                if qWantHas
+                    qWantCellAlpha = 130
+                    qWantBadgeAlpha = 50
+                    qWantFishAlpha = 90
+                endif
+                questGlowCell(qWantCell, questMarkColor(qWantPlace + 1, qWantCellAlpha))
+                questSolidRect(QUEST_EXTRA_X + qWantPlace * 17, QUEST_EXTRA_Y - 7, 14, 14, questMarkColor(qWantPlace + 1, qWantBadgeAlpha))
+                questIconAt(QUEST_LIST(qWantN + 1), QUEST_EXTRA_X + 7 + qWantPlace * 17, QUEST_EXTRA_Y, 10, rgb(255, 255, 255, qWantFishAlpha))
+            endif
+            qWantN = qWantN + 2
+        endwhile
+    endif
+endfunction
+
+function questTotem(qEv, qA, qB)
+    if qEv = QEV_INIT
+        qTotemColumn = rnd(CELL_COLUMN_COUNT)
+        qTotemTop = CELL_ROW_COUNT - 5
+        qTotemLast = 0
+        QUEST_LIST_N = 0
+        for qTotemN = 0 to 3
+            qTotemCell = (qTotemTop + qTotemN) * CELL_COLUMN_COUNT + qTotemColumn
+
+            ` not what is there already, and not the same as the one above it
+            qTotemKind = questOtherKind(CELLS(qTotemCell).value)
+            if qTotemKind = qTotemLast then qTotemKind = (qTotemKind mod 7) + 1
+            if qTotemKind = CELLS(qTotemCell).value then qTotemKind = (qTotemKind mod 7) + 1
+            qTotemLast = qTotemKind
+            QUEST_LIST(QUEST_LIST_N) = qTotemCell
+            QUEST_LIST(QUEST_LIST_N + 1) = qTotemKind
+            QUEST_LIST_N = QUEST_LIST_N + 2
+        next
+        questProgress(0, 4)
+    endif
+    questWants(qEv, qA, qB)
+endfunction
+
+function questMoorings(qEv, qA, qB)
+    if qEv = QEV_INIT
+        qMoorThird = CELL_COLUMN_COUNT / 3
+        QUEST_LIST_N = 0
+        for qMoorN = 0 to 2
+            qMoorCell = questPickCell(qMoorN * qMoorThird, qMoorN * qMoorThird + qMoorThird - 1, 1, CELL_ROW_COUNT - 2)
+            if qMoorCell < 0
+                questRestart()
+                exitfunction
+            endif
+            QUEST_SPOT(qMoorCell) = 1 `so that the next one is not put on top of it
+            QUEST_LIST(QUEST_LIST_N) = qMoorCell
+            QUEST_LIST(QUEST_LIST_N + 1) = questOtherKind(CELLS(qMoorCell).value)
+            QUEST_LIST_N = QUEST_LIST_N + 2
+        next
+        questProgress(0, 0)
+    endif
+    questWants(qEv, qA, qB)
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 20. ROLL CALL. three marked fish have to pop in the order of their marks, which is the order of
+` the colors of their outlines: gold, then blue, then pink. the badge lists the colors. V(0) is the
+` number that is next, and V(1) is 1 when one has popped out of turn.
+` ---------------------------------------------------------------------------------------------
+function questRollCall(qEv, qA, qB)
+    if qEv = QEV_INIT
+        for qRollN = 1 to 3
+            qRollAt = questPickAnyCell()
+            if qRollAt >= 0 then QUEST_MARK(qRollAt) = qRollN
+        next
+        QUEST_V(0) = 1
+        questProgress(0, 0)
+    endif
+
+    if qEv = QEV_JUDGE
+        for qRollN = 1 to 3
+            qRollAt = questFindMarkPopping(qRollN)
+            if qRollAt >= 0
+                if qRollN = QUEST_V(0)
+                    QUEST_V(0) = QUEST_V(0) + 1
+                else
+                    QUEST_V(1) = 1
+                endif
+            endif
+        next
+
+        ` one that pops out of turn ends it there and then
+        if QUEST_V(1)
+            questFail()
+            exitfunction
+        endif
+    endif
+
+    if qEv = QEV_SETTLE
+        if QUEST_V(1)
+            questFail()
+            exitfunction
+        endif
+        if QUEST_V(0) > 3
+            questComplete()
+            exitfunction
+        endif
+
+        ` a numbered fish that is gone some other way, like under a special move, starts it over
+        qRollAt = questFindMark(QUEST_V(0))
+        if qRollAt < 0
+            questFail()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        ` the three colors, in order, under the name. the ones that have popped are faint.
+        for qRollN = 1 to 3
+            qRollAlpha = 255
+            if qRollN < QUEST_V(0) then qRollAlpha = 60
+            qRollPlace = qRollN - 1
+            questSolidRect(QUEST_EXTRA_X + qRollPlace * 12, QUEST_EXTRA_Y - 4, 8, 8, questMarkColor(qRollN, qRollAlpha))
+        next
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 21. GLASS FISH. a kind of fish that never matches, which starts on the top row. V(0) is the row
+` that it was last seen on, and V(1) is 1 when it has been swapped.
+` ---------------------------------------------------------------------------------------------
+function questGlassFish(qEv, qA, qB)
+    if qEv = QEV_INIT
+        qGlassAt = rnd(CELL_COLUMN_COUNT)
+        questPlaceKind(qGlassAt, TEX_GLASS_FISH)
+        QUEST_V(0) = 0
+        questProgress(0, CELL_ROW_COUNT - 1)
+    endif
+
+    if qEv = QEV_SWAP
+        if CELLS(qA).value = TEX_GLASS_FISH then QUEST_V(1) = 1
+        if CELLS(qB).value = TEX_GLASS_FISH then QUEST_V(1) = 1
+    endif
+
+    ` both times that the board is looked at, it has had its chance to fall since the last time
+    qGlassLook = 0
+    if qEv = QEV_JUDGE then qGlassLook = 1
+    if qEv = QEV_SETTLE then qGlassLook = 1
+    if qGlassLook
+        qGlassAt = questFindKind(TEX_GLASS_FISH)
+        qGlassBroke = QUEST_V(1)
+        if qGlassAt < 0 then qGlassBroke = 1
+        if qGlassBroke = 0
+            qGlassRow = qGlassAt / CELL_COLUMN_COUNT
+            qGlassFell = qGlassRow - QUEST_V(0)
+            if qGlassFell > 1 then qGlassBroke = 1
+            QUEST_V(0) = qGlassRow
+            questProgress(qGlassRow, CELL_ROW_COUNT - 1)
+        endif
+        if qGlassBroke
+            if qGlassAt >= 0
+                questSayAt(qGlassAt, "shattered!", rgb(200, 230, 255))
+            endif
+            questRestart()
+            exitfunction
+        endif
+        if qEv = QEV_SETTLE
+            if QUEST_V(0) = CELL_ROW_COUNT - 1
+                questComplete()
+            endif
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        if QUEST_FOCUS
+            questGlowSpan(0, CELL_ROW_COUNT - 1, CELL_COLUMN_COUNT, 1, rgb(120, 255, 170, 70))
+        endif
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 22. REFLECTION. seven cells in the middle of a row have to read the same from both ends, which
+` is three pairs of fish. V(0) is the row, and V(1) is the column that the seven start at.
+` ---------------------------------------------------------------------------------------------
+
+` how many of the three pairs match
+function questReflectPairs()
+    qMirrorMade = 0
+    for qMirrorN = 0 to 2
+        qMirrorOne = QUEST_V(0) * CELL_COLUMN_COUNT + QUEST_V(1) + qMirrorN
+        qMirrorTwo = QUEST_V(0) * CELL_COLUMN_COUNT + QUEST_V(1) + 6 - qMirrorN
+        if CELLS(qMirrorOne).value = CELLS(qMirrorTwo).value
+            if questPlain(CELLS(qMirrorOne).value) then qMirrorMade = qMirrorMade + 1
+        endif
+    next
+endfunction qMirrorMade
+
+function questReflection(qEv, qA, qB)
+    if qEv = QEV_INIT
+        QUEST_V(1) = (CELL_COLUMN_COUNT - 7) / 2
+
+        ` a row that is not most of the way there already
+        qMirrorTries = 0
+        while qMirrorTries < 12
+            qMirrorTries = qMirrorTries + 1
+            QUEST_V(0) = 1 + rnd(CELL_ROW_COUNT - 2)
+            qMirrorNow = questReflectPairs()
+            if qMirrorNow < 2 then qMirrorTries = 12
+        endwhile
+        questProgress(qMirrorNow, 3)
+    endif
+
+    if qEv = QEV_SETTLE
+        qMirrorNow = questReflectPairs()
+        questProgress(qMirrorNow, 3)
+        if qMirrorNow >= 3
+            questComplete()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        ` a pair that matches is green. the cell in the middle is its own pair.
+        for qMirrorN = 0 to 2
+            qMirrorOne = QUEST_V(0) * CELL_COLUMN_COUNT + QUEST_V(1) + qMirrorN
+            qMirrorTwo = QUEST_V(0) * CELL_COLUMN_COUNT + QUEST_V(1) + 6 - qMirrorN
+            qMirrorColor = rgb(255, 220, 90, 50)
+            if CELLS(qMirrorOne).value = CELLS(qMirrorTwo).value then qMirrorColor = rgb(120, 255, 150, 86)
+            questGlowCell(qMirrorOne, qMirrorColor)
+            questGlowCell(qMirrorTwo, qMirrorColor)
+        next
+        questGlowCell(QUEST_V(0) * CELL_COLUMN_COUNT + QUEST_V(1) + 3, rgb(255, 255, 255, 30))
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 23. TETHER. picked up. V(0) is the cell that the buoy is on, and V(1) is the corner that it has
+` to get to. the cursor must stay within three cells of the buoy, counting a corner step as one.
+` ---------------------------------------------------------------------------------------------
+function questTether(qEv, qA, qB)
+    if qEv = QEV_START
+        QUEST_V(0) = QUEST_PICK_CELL
+        QUEST_V(1) = questOppositeCorner(QUEST_PICK_CELL)
+        QUEST_V(2) = questChebyshev(QUEST_V(0), QUEST_V(1))
+        questProgress(0, QUEST_V(2))
+    endif
+
+    if qEv = QEV_STEP
+        qRopeLong = questChebyshev(qB, QUEST_V(0))
+        if qRopeLong > 3
+            questSay("snap!", rgb(255, 150, 110))
+            questRestart()
+            exitfunction
+        endif
+    endif
+
+    if qEv = QEV_JUDGE
+        ` a swap that pops fish brings the buoy to the cursor
+        if qB
+            QUEST_V(0) = questCursorCell()
+            spawnBubbles(getCellX(SELECTION_POS.x), getCellY(SELECTION_POS.y), CELL_SIZE / 2, 8, 0, rgb(255, 220, 90))
+        endif
+    endif
+
+    if qEv = QEV_SETTLE
+        qRopeLeft = questChebyshev(QUEST_V(0), QUEST_V(1))
+        questProgress(QUEST_V(2) - qRopeLeft, QUEST_V(2))
+        if qRopeLeft <= 1
+            questComplete()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        questGlowCell(QUEST_V(1), rgb(120, 255, 170, 70 + 30 * sin(game ms() * .005)))
+        questIconOnCell(QUEST_V(0), TEX_Q_BUOY, 0, 0, CELL_ART_SIZE, rgb(255, 255, 255, 255))
+
+        ` the rope, which goes red when it is as long as it gets
+        qRopeX1# = getCellX(QUEST_V(0) mod CELL_COLUMN_COUNT)
+        qRopeY1# = getCellY(QUEST_V(0) / CELL_COLUMN_COUNT)
+        qRopeX2# = sprite x(SELECTION_SPRITE)
+        qRopeY2# = sprite y(SELECTION_SPRITE)
+        qRopeColor = rgb(255, 240, 200, 170)
+        qRopeLong = questChebyshev(questCursorCell(), QUEST_V(0))
+        if qRopeLong >= 3 then qRopeColor = rgb(255, 90, 90, 230)
+        for qRopeDot = 1 to 5
+            qRopeAlong# = qRopeDot / 6.0
+            questIconAt(TEX_Q_DOT, qRopeX1# + (qRopeX2# - qRopeX1#) * qRopeAlong#, qRopeY1# + (qRopeY2# - qRopeY1#) * qRopeAlong#, 5, qRopeColor)
+        next
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 24. LANTERN. picked up. V(0) is how many steps of light are left, V(4) is how many a full light
+` is, and V(1) to V(3) are 1 for the pearls that are lit. the list holds the cells of the three pearls.
+` ---------------------------------------------------------------------------------------------
+function questLantern(qEv, qA, qB)
+    if qEv = QEV_START
+        QUEST_V(4) = (CELL_COLUMN_COUNT * 2) / 3 `not enough to get from one pearl to the next without a swap that pops fish
+        QUEST_V(0) = QUEST_V(4)
+
+        ` a pearl one cell in from each of the other three corners
+        qLampFar = questOppositeCorner(QUEST_PICK_CELL)
+        qLampFarX = qLampFar mod CELL_COLUMN_COUNT
+        qLampFarY = qLampFar / CELL_COLUMN_COUNT
+        qLampNearX = (QUEST_PICK_CELL mod CELL_COLUMN_COUNT)
+        qLampNearY = (QUEST_PICK_CELL / CELL_COLUMN_COUNT)
+        qLampInFarX = 1
+        if qLampFarX > 0 then qLampInFarX = qLampFarX - 1
+        qLampInFarY = 1
+        if qLampFarY > 0 then qLampInFarY = qLampFarY - 1
+        qLampInNearX = 1
+        if qLampNearX > 0 then qLampInNearX = qLampNearX - 1
+        qLampInNearY = 1
+        if qLampNearY > 0 then qLampInNearY = qLampNearY - 1
+        QUEST_LIST(0) = qLampInFarX + qLampInFarY * CELL_COLUMN_COUNT
+        QUEST_LIST(1) = qLampInFarX + qLampInNearY * CELL_COLUMN_COUNT
+        QUEST_LIST(2) = qLampInNearX + qLampInFarY * CELL_COLUMN_COUNT
+        QUEST_LIST_N = 3
+        questProgress(0, 3)
+    endif
+
+    if qEv = QEV_STEP
+        QUEST_V(0) = QUEST_V(0) - 1
+        for qLampN = 0 to 2
+            if QUEST_LIST(qLampN) = qB
+                if QUEST_V(1 + qLampN) = 0
+                    QUEST_V(1 + qLampN) = 1
+                    spawnBubbles(getCellX(qB mod CELL_COLUMN_COUNT), getCellY(qB / CELL_COLUMN_COUNT), CELL_SIZE / 2, 12, 0, rgb(255, 240, 150))
+                endif
+            endif
+        next
+        qLampLit = QUEST_V(1) + QUEST_V(2) + QUEST_V(3)
+        questProgress(qLampLit, 3)
+        if qLampLit >= 3
+            questComplete()
+            exitfunction
+        endif
+        if QUEST_V(0) <= 0
+            questSay("dark!", rgb(150, 160, 200))
+            questRestart()
+            exitfunction
+        endif
+    endif
+
+    if qEv = QEV_JUDGE
+        if qB then QUEST_V(0) = QUEST_V(4)
+    endif
+
+    if qEv = QEV_DRAW
+        for qLampN = 0 to 2
+            if QUEST_V(1 + qLampN)
+                questGlowCell(QUEST_LIST(qLampN), rgb(255, 240, 150, 110))
+                questIconOnCell(QUEST_LIST(qLampN), TEX_Q_PEARL, 0, 0, CELL_ART_SIZE - 2, rgb(255, 255, 255, 255))
+            else
+                questGlowCell(QUEST_LIST(qLampN), rgb(255, 240, 150, 30))
+                questIconOnCell(QUEST_LIST(qLampN), TEX_Q_PEARL, 0, 0, CELL_ART_SIZE - 4, rgb(255, 255, 255, 120))
+            endif
+        next
+
+        ` how many steps of light are left rides along with the cursor
+        qLampX# = sprite x(SELECTION_SPRITE)
+        qLampY# = sprite y(SELECTION_SPRITE)
+        qLampColor = rgb(255, 240, 150)
+        if QUEST_V(0) <= 3 then qLampColor = rgb(255, 110, 90)
+        questWordAt(qLampX# + CELL_SIZE / 2 + 2, qLampY# - CELL_SIZE / 2, str$(QUEST_V(0)), qLampColor)
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 25. HATCH. three marked fish, each with a count that goes down by one on every swap. a fish
+` that pops on the move that its count gets to zero has hatched. one that pops early, or is still
+` there when the board goes still at zero, is laid again somewhere else. V(1) to V(3) are the
+` counts, V(4) is how many have hatched, V(21) to V(23) are 1 for the ones that have, and V(31) to
+` V(33) are 1 for the ones that popped early.
+` ---------------------------------------------------------------------------------------------
+function questHatchLay(qLayMark, qLayCount)
+    qLayAt = questPickAnyCell()
+    if qLayAt >= 0
+        QUEST_MARK(qLayAt) = qLayMark
+        QUEST_V(qLayMark) = qLayCount
+        QUEST_V(30 + qLayMark) = 0
+        create basic tween CELLS(qLayAt).scaleWaveTweenId, 1.4, 1, 220, 0
+    endif
+endfunction
+
+function questHatch(qEv, qA, qB)
+    if qEv = QEV_INIT
+        for qEggN = 1 to 3
+            questHatchLay(qEggN, 1 + qEggN * 2)
+        next
+        questProgress(0, 3)
+    endif
+
+    if qEv = QEV_SWAP
+        for qEggN = 1 to 3
+            if QUEST_V(20 + qEggN) = 0 then QUEST_V(qEggN) = QUEST_V(qEggN) - 1
+        next
+    endif
+
+    if qEv = QEV_JUDGE
+        for qEggN = 1 to 3
+            if QUEST_V(20 + qEggN) = 0
+                qEggAt = questFindMarkPopping(qEggN)
+                if qEggAt >= 0
+                    if QUEST_V(qEggN) = 0
+                        QUEST_V(20 + qEggN) = 1
+                        QUEST_V(4) = QUEST_V(4) + 1
+                        questSayAt(qEggAt, "hatched!", rgb(255, 240, 150))
+                    else
+                        QUEST_V(30 + qEggN) = 1
+                    endif
+                endif
+            endif
+        next
+        questProgress(QUEST_V(4), 3)
+    endif
+
+    if qEv = QEV_SETTLE
+        if QUEST_V(4) >= 3
+            questComplete()
+            exitfunction
+        endif
+        for qEggN = 1 to 3
+            if QUEST_V(20 + qEggN) = 0
+                qEggAgain = QUEST_V(30 + qEggN)
+                if QUEST_V(qEggN) <= 0 then qEggAgain = 1
+                qEggAt = questFindMark(qEggN)
+                if qEggAt < 0 then qEggAgain = 1
+                if qEggAgain
+                    if qEggAt >= 0 then QUEST_MARK(qEggAt) = 0
+                    questHatchLay(qEggN, 3 + rnd(4))
+                endif
+            endif
+        next
+    endif
+
+    if qEv = QEV_DRAW
+        qEggLast = CELL_COUNT - 1
+        for qEggI = 0 to qEggLast
+            if QUEST_MARK(qEggI) > 0
+                qEggColor = rgb(255, 255, 255)
+                if QUEST_V(QUEST_MARK(qEggI)) <= 1 then qEggColor = rgb(255, 220, 64)
+                questNumberOnFish(qEggI, QUEST_V(QUEST_MARK(qEggI)), qEggColor)
+            endif
+        next
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 26. FORECAST. QUEST_FORE holds the fish that are waiting above every column, 16 deep, with the
+` next one first. a new fish comes off of the front of its column's line, and may well pop as it
+` lands, which the game never lets a new fish do otherwise. V(0) is how many groups a new fish has
+` finished. QUEST_STACK is how many each column has had taken, since the lines were last moved up.
+` ---------------------------------------------------------------------------------------------
+
+` the kind of the new fish that is dropping into this cell. the fish that are dropping into the
+` cells under it, in the same column, come off of the line first.
+function questForecastTake(qTakeCell)
+    qTakeColumn = qTakeCell mod CELL_COLUMN_COUNT
+    qTakeUnder = 0
+    qTakeAt = qTakeCell + CELL_COLUMN_COUNT
+    while qTakeAt < CELL_COUNT
+        if CELLS(qTakeAt).comboBlownUp > 0 then qTakeUnder = qTakeUnder + 1
+        qTakeAt = qTakeAt + CELL_COLUMN_COUNT
+    endwhile
+    if qTakeUnder > 15 then qTakeUnder = 15
+    if qTakeUnder + 1 > QUEST_STACK(qTakeColumn) then QUEST_STACK(qTakeColumn) = qTakeUnder + 1
+    QUEST_FRESH(qTakeCell) = 1
+    QUEST_V(1) = 1
+endfunction QUEST_FORE(qTakeColumn * 16 + qTakeUnder)
+
+` the fish that dropped in are off of the lines, so the lines move up, and new fish join the back
+function questForecastShift()
+    if QUEST_V(1) = 0 then exitfunction
+    QUEST_V(1) = 0
+    qShiftColumn = 0
+    while qShiftColumn < CELL_COLUMN_COUNT
+        qShiftBy = QUEST_STACK(qShiftColumn)
+        if qShiftBy > 0
+            QUEST_STACK(qShiftColumn) = 0
+            for qShiftN = 0 to 15
+                if qShiftN + qShiftBy < 16
+                    QUEST_FORE(qShiftColumn * 16 + qShiftN) = QUEST_FORE(qShiftColumn * 16 + qShiftN + qShiftBy)
+                else
+                    QUEST_FORE(qShiftColumn * 16 + qShiftN) = rnd(7) + 1
+                endif
+            next
+        endif
+        qShiftColumn = qShiftColumn + 1
+    endwhile
+    qShiftLast = CELL_COUNT - 1
+    for qShiftI = 0 to qShiftLast
+        QUEST_FRESH(qShiftI) = 0
+    next
+endfunction
+
+function questForecast(qEv, qA, qB)
+    if qEv = QEV_INIT
+        for qForeI = 0 to 399
+            QUEST_FORE(qForeI) = rnd(7) + 1
+            QUEST_STACK(qForeI) = 0
+        next
+        questProgress(0, 4)
+    endif
+
+    if qEv = QEV_JUDGE
+        ` every group that has a fish in it that only just landed
+        qForeN = 0
+        while qForeN < QUEST_GROUP_N
+            qForeLanded = 0
+            qForeLast = CELL_COUNT - 1
+            for qForeI = 0 to qForeLast
+                if QUEST_FRESH(qForeI)
+                    if CELLS(qForeI).comboBlownUp
+                        if CELLS(qForeI).comboFillId = QUEST_GROUP_ID(qForeN) then qForeLanded = 1
+                    endif
+                endif
+            next
+            if qForeLanded
+                QUEST_V(0) = QUEST_V(0) + 1
+                spawnBubbles(QUEST_BADGE_X + 40, QUEST_BADGE_Y + 8, 16, 8, 0, rgb(255, 220, 64))
+            endif
+            qForeN = qForeN + 1
+        endwhile
+        questForecastShift()
+        questProgress(QUEST_V(0), 4)
+    endif
+
+    if qEv = QEV_SETTLE
+        questForecastShift()
+        questProgress(QUEST_V(0), 4)
+        if QUEST_V(0) >= 4
+            questComplete()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        ` the next fish of every column, waiting above it
+        qForeX = 0
+        while qForeX < CELL_COLUMN_COUNT
+            questIconAt(QUEST_FORE(qForeX * 16), getCellX(qForeX), getCellY(0) - (CELL_SIZE / 2 - 2), 8, rgb(255, 255, 255, 190))
+            qForeX = qForeX + 1
+        endwhile
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 28. TRADE PLACES. two marked fish, two cells apart in a row, have to end up in each other's
+` cells. V(0) and V(1) are the cells that the first and the second started in, and V(2) is 1
+` when one of them has popped.
+` ---------------------------------------------------------------------------------------------
+function questTradePlaces(qEv, qA, qB)
+    if qEv = QEV_INIT
+        qTradeTries = 0
+        qTradeOne = -1
+        while qTradeTries < 60
+            qTradeTries = qTradeTries + 1
+            qTradeAt = questPickCell(0, CELL_COLUMN_COUNT - 3, 0, CELL_ROW_COUNT - 1)
+            if qTradeAt >= 0
+                qTradeOk = questPlain(CELLS(qTradeAt + 2).value)
+                if CELLS(qTradeAt + 2).value = CELLS(qTradeAt).value then qTradeOk = 0
+                if qTradeAt + 2 = questCursorCell() then qTradeOk = 0
+                if qTradeOk
+                    qTradeOne = qTradeAt
+                    qTradeTries = 60
+                endif
+            endif
+        endwhile
+        if qTradeOne < 0
+            questRestart()
+            exitfunction
+        endif
+        QUEST_MARK(qTradeOne) = 1
+        QUEST_MARK(qTradeOne + 2) = 2
+        QUEST_V(0) = qTradeOne
+        QUEST_V(1) = qTradeOne + 2
+        questProgress(0, 0)
+    endif
+
+    if qEv = QEV_JUDGE
+        ` it is over the moment that one of them pops, and not when the board has settled
+        if questMarkPopping()
+            questFail()
+            exitfunction
+        endif
+    endif
+
+    if qEv = QEV_SETTLE
+        qTradeBroken = QUEST_V(2)
+        if QUEST_MISSED
+            if QUEST_SWAP_MARKED then qTradeBroken = 1
+        endif
+        qTradeOne = questFindMark(1)
+        qTradeTwo = questFindMark(2)
+        if qTradeOne < 0 then qTradeBroken = 1
+        if qTradeTwo < 0 then qTradeBroken = 1
+        if qTradeBroken
+            questFail()
+            exitfunction
+        endif
+        if qTradeOne = QUEST_V(1) and qTradeTwo = QUEST_V(0)
+            questComplete()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        ` each cell glows in the color of the fish that has to come to it, while the cursor is on either fish
+        if QUEST_FOCUS
+            questGlowCell(QUEST_V(1), questMarkColor(1, 90))
+            questGlowCell(QUEST_V(0), questMarkColor(2, 90))
+        endif
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 29. PILOT FISH. a little fish is always one step behind the cursor: it sits on the cell that the
+` cursor last left. three cells of the board have a ring on them. a swap that pops fish while the
+` little fish is sitting in a ring takes that ring, and the three can be taken in any order.
+` since the little fish is on the cell that the cursor just left, and a swap moves the cursor, that
+` comes to: make a swap that pops fish, starting from the cell of a ring.
+` V(0) is the cell that the little fish is on. V(1) to V(3) are the cells of the rings, V(11) to
+` V(13) are 1 for the ones that have been taken, and V(4) is how many of those there are.
+` ---------------------------------------------------------------------------------------------
+function questPilotFish(qEv, qA, qB)
+    if qEv = QEV_INIT
+        QUEST_V(0) = questCursorCell()
+        QUEST_GLIDE_X# = getCellX(SELECTION_POS.x)
+        QUEST_GLIDE_Y# = getCellY(SELECTION_POS.y)
+        qPilotThird = CELL_COLUMN_COUNT / 3
+        for qPilotN = 0 to 2
+            qPilotCell = questPickCell(qPilotN * qPilotThird, qPilotN * qPilotThird + qPilotThird - 1, 0, CELL_ROW_COUNT - 1)
+            if qPilotCell < 0
+                questRestart()
+                exitfunction
+            endif
+            QUEST_SPOT(qPilotCell) = 1 `so that the next one is not put on top of it
+            QUEST_V(1 + qPilotN) = qPilotCell
+        next
+        questProgress(0, 3)
+    endif
+
+    if qEv = QEV_STEP
+        ` it swims onto the cell that the cursor just left
+        if qA >= 0 then QUEST_V(0) = qA
+    endif
+
+    if qEv = QEV_JUDGE
+        ` a swap that popped fish, with the little fish sitting in a ring
+        if qB
+            for qPilotN = 0 to 2
+                if QUEST_V(11 + qPilotN) = 0
+                    if QUEST_V(1 + qPilotN) = QUEST_V(0)
+                        QUEST_V(11 + qPilotN) = 1
+                        QUEST_V(4) = QUEST_V(4) + 1
+                        qPilotCell = QUEST_V(0)
+                        spawnBubbles(getCellX(qPilotCell mod CELL_COLUMN_COUNT), getCellY(qPilotCell / CELL_COLUMN_COUNT), CELL_SIZE / 2, 16, 0, rgb(255, 220, 64))
+                        questSayAt(qPilotCell, "got it!", rgb(255, 220, 64))
+                    endif
+                endif
+            next
+            questProgress(QUEST_V(4), 3)
+        endif
+    endif
+
+    if qEv = QEV_SETTLE
+        if QUEST_V(4) >= 3
+            questComplete()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        ` the rings that are still to be taken. the one that the little fish is sitting in is bright.
+        for qPilotN = 0 to 2
+            if QUEST_V(11 + qPilotN) = 0
+                qPilotAlpha = 150
+                if QUEST_V(1 + qPilotN) = QUEST_V(0) then qPilotAlpha = 210 + 45 * sin(game ms() * .01)
+                questGlowCell(QUEST_V(1 + qPilotN), rgb(255, 220, 64, qPilotAlpha / 2))
+            endif
+        next
+
+        ` and the little fish, which glides to its cell, and sits in the corner of it, so that it
+        ` does not hide the fish that is there. see SLIDING AND GLIDING in fish_headers_quests.
+        qPilotToX# = getCellX(QUEST_V(0) mod CELL_COLUMN_COUNT)
+        qPilotToY# = getCellY(QUEST_V(0) / CELL_COLUMN_COUNT)
+        QUEST_GLIDE_X# = QUEST_GLIDE_X# + (qPilotToX# - QUEST_GLIDE_X#) * .25
+        QUEST_GLIDE_Y# = QUEST_GLIDE_Y# + (qPilotToY# - QUEST_GLIDE_Y#) * .25
+        questIconAt(TEX_Q_PILOT, QUEST_GLIDE_X# + 6 - CELL_SIZE / 2, QUEST_GLIDE_Y# + CELL_SIZE / 2 - 6, 12, rgb(255, 255, 255, 255))
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 30. FERRY. three starfish wait at the left edge. V(1) to V(3) are their cells, and V(11) to
+` V(13) are what each is doing: 0 is waiting, 1 is being carried, and 2 is across. V(0) is the one
+` that is being carried, or 0. V(4) is how many more steps the trip can take, V(5) is 1 when a swap
+` has popped fish on this trip, and V(6) is how many are across.
+` ---------------------------------------------------------------------------------------------
+function questFerryDrop()
+    if QUEST_V(0) > 0
+        QUEST_V(10 + QUEST_V(0)) = 0
+        QUEST_V(0) = 0
+        questSay("slipped away", rgb(255, 170, 190))
+    endif
+endfunction
+
+function questFerry(qEv, qA, qB)
+    if qEv = QEV_INIT
+        for qFerryN = 1 to 3
+            QUEST_V(qFerryN) = ((CELL_ROW_COUNT * qFerryN) / 4) * CELL_COLUMN_COUNT
+        next
+        questProgress(0, 3)
+    endif
+
+    if qEv = QEV_STEP
+        if QUEST_V(0) = 0
+            for qFerryN = 1 to 3
+                if QUEST_V(qFerryN) = qB
+                    if QUEST_V(10 + qFerryN) = 0
+                        if QUEST_V(0) = 0
+                            QUEST_V(0) = qFerryN
+                            QUEST_V(10 + qFerryN) = 1
+                            QUEST_V(4) = CELL_COLUMN_COUNT + 3
+                            QUEST_V(5) = 0
+                        endif
+                    endif
+                endif
+            next
+        else
+            QUEST_V(4) = QUEST_V(4) - 1
+            qFerryX = qB mod CELL_COLUMN_COUNT
+            if qFerryX = CELL_COLUMN_COUNT - 1
+                if QUEST_V(5)
+                    QUEST_V(10 + QUEST_V(0)) = 2
+                    QUEST_V(0) = 0
+                    QUEST_V(6) = QUEST_V(6) + 1
+                    questProgress(QUEST_V(6), 3)
+                    spawnBubbles(getCellX(SELECTION_POS.x), getCellY(SELECTION_POS.y), CELL_SIZE / 2, 12, 0, rgb(255, 170, 190))
+                else
+                    questSay("pop fish first", rgb(255, 170, 190))
+                endif
+            endif
+            if QUEST_V(0) > 0
+                if QUEST_V(4) <= 0
+                    questFerryDrop()
+                endif
+            endif
+        endif
+    endif
+
+    if qEv = QEV_JUDGE
+        if qB
+            if QUEST_V(0) > 0 then QUEST_V(5) = 1
+        endif
+    endif
+
+    if qEv = QEV_SETTLE
+        if QUEST_MISSED
+            questFerryDrop()
+        endif
+        if QUEST_V(6) >= 3
+            questComplete()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        for qFerryN = 1 to 3
+            if QUEST_V(10 + qFerryN) = 0
+                questIconOnCell(QUEST_V(qFerryN), TEX_Q_STARFISH, 0, sin(game ms() * .004 + qFerryN) * 2, CELL_ART_SIZE - 2, rgb(255, 255, 255, 255))
+            endif
+        next
+        if QUEST_V(0) > 0
+            ` it rides on the cursor, with how many steps it has left, and the far edge lights up
+            qFerryX# = sprite x(SELECTION_SPRITE)
+            qFerryY# = sprite y(SELECTION_SPRITE)
+            questIconAt(TEX_Q_STARFISH, qFerryX# + 4 - CELL_SIZE / 2, qFerryY# + 2 - CELL_SIZE / 2, 11, rgb(255, 255, 255, 255))
+            qFerryColor = rgb(255, 255, 255)
+            if QUEST_V(4) <= 3 then qFerryColor = rgb(255, 110, 90)
+            questWordAt(qFerryX# + CELL_SIZE / 2 + 2, qFerryY# - CELL_SIZE / 2, str$(QUEST_V(4)), qFerryColor)
+            if QUEST_V(5)
+                questGlowSpan(CELL_COLUMN_COUNT - 1, 0, 1, CELL_ROW_COUNT, rgb(120, 255, 170, 56))
+            else
+                questGlowSpan(CELL_COLUMN_COUNT - 1, 0, 1, CELL_ROW_COUNT, rgb(200, 200, 200, 30))
+            endif
+        endif
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 31. LASSO. one marked fish. the list holds the last cells that the cursor has been on, oldest
+` first. when the cursor comes back onto one of them, the cells from there on are a loop, and if
+` the marked fish is shut inside it, and a swap popped fish on the way around, it is done. V(0) is
+` how many steps it has been since a swap popped fish, and V(1) is 1 when the marked fish has popped.
+` ---------------------------------------------------------------------------------------------
+
+` is the marked fish shut in by the cells of the list, from `qLoopFrom` on? a search spreads out
+` from the fish, through every cell that is not part of the loop. if it gets to the edge of the
+` board, the fish is not shut in.
+function questLassoHolds(qLoopFrom)
+    qLoopFish = questFindMark(1)
+    if qLoopFish < 0
+        exitfunction 0
+    endif
+
+    qLoopLast = CELL_COUNT - 1
+    for qLoopI = 0 to qLoopLast
+        QUEST_TEMP(qLoopI) = 0
+    next
+    qLoopN = qLoopFrom
+    while qLoopN < QUEST_LIST_N
+        QUEST_TEMP(QUEST_LIST(qLoopN)) = 1
+        qLoopN = qLoopN + 1
+    endwhile
+    if QUEST_TEMP(qLoopFish)
+        exitfunction 0
+    endif
+
+    qLoopShut = 1
+    QUEST_TEMP(qLoopFish) = 2
+    QUEST_STACK(0) = qLoopFish
+    qLoopSize = 1
+    while qLoopSize > 0
+        qLoopSize = qLoopSize - 1
+        qLoopAt = QUEST_STACK(qLoopSize)
+        for qLoopSide = 0 to 3
+            qLoopNext = questSide(qLoopAt, qLoopSide)
+            if qLoopNext < 0
+                ` this cell is on the edge of the board, so the way out is open
+                qLoopShut = 0
+            else
+                if QUEST_TEMP(qLoopNext) = 0
+                    QUEST_TEMP(qLoopNext) = 2
+                    QUEST_STACK(qLoopSize) = qLoopNext
+                    qLoopSize = qLoopSize + 1
+                endif
+            endif
+        next
+        if qLoopShut = 0 then qLoopSize = 0
+    endwhile
+endfunction qLoopShut
+
+function questLasso(qEv, qA, qB)
+    if qEv = QEV_INIT
+        qLassoAt = questPickCell(2, CELL_COLUMN_COUNT - 3, 2, CELL_ROW_COUNT - 3)
+        if qLassoAt < 0
+            questRestart()
+            exitfunction
+        endif
+        QUEST_MARK(qLassoAt) = 1
+        QUEST_LIST_N = 0
+        QUEST_V(0) = 999
+        questProgress(0, 0)
+    endif
+
+    if qEv = QEV_STEP
+        QUEST_V(0) = QUEST_V(0) + 1
+
+        ` the cell that the cursor left joins the trail, and the oldest end of it fades away
+        if qA >= 0
+            if QUEST_LIST_N >= 16
+                for qLassoN = 0 to 14
+                    QUEST_LIST(qLassoN) = QUEST_LIST(qLassoN + 1)
+                next
+                QUEST_LIST_N = 15
+            endif
+            QUEST_LIST(QUEST_LIST_N) = qA
+            QUEST_LIST_N = QUEST_LIST_N + 1
+        endif
+
+        ` has the cursor come back onto its trail? the last cell of the trail is the one that it just left.
+        qLassoBack = -1
+        qLassoN = 0
+        while qLassoN < QUEST_LIST_N - 1
+            if QUEST_LIST(qLassoN) = qB then qLassoBack = qLassoN
+            qLassoN = qLassoN + 1
+        endwhile
+        if qLassoBack >= 0
+            qLassoLong = QUEST_LIST_N - qLassoBack
+            if qLassoLong >= 8
+                if questLassoHolds(qLassoBack)
+                    if QUEST_V(0) <= qLassoLong
+                        questComplete()
+                        exitfunction
+                    endif
+                    questSay("pop fish on the way", rgb(255, 220, 64))
+                endif
+            endif
+            QUEST_LIST_N = 0
+        endif
+    endif
+
+    if qEv = QEV_JUDGE
+        if qB then QUEST_V(0) = 0
+        ` it is over the moment that one of them pops, and not when the board has settled
+        if questMarkPopping()
+            questFail()
+            exitfunction
+        endif
+    endif
+
+    if qEv = QEV_SETTLE
+        qLassoAt = questFindMark(1)
+        if qLassoAt < 0 then QUEST_V(1) = 1
+        if QUEST_V(1)
+            questFail()
+        endif
+    endif
+
+    if qEv = QEV_DRAW
+        qLassoN = 0
+        while qLassoN < QUEST_LIST_N
+            questGlowCell(QUEST_LIST(qLassoN), rgb(255, 220, 90, 24 + qLassoN * 7))
+            qLassoN = qLassoN + 1
+        endwhile
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` 32. TREASURE. V(0) is the cell that it is under, which nothing on the board shows. V(1) is how
+` far from it the last pop was, or -1, and V(2) is 1 when it has been dug up. only the first pops
+` of a swap say warmer or colder, but any pop on the cell digs it up.
+` ---------------------------------------------------------------------------------------------
+function questTreasure(qEv, qA, qB)
+    if qEv = QEV_INIT
+        QUEST_V(0) = rnd(CELL_COUNT)
+        QUEST_V(1) = -1
+        questProgress(0, 0)
+        questNote("pop to listen")
+    endif
+
+    if qEv = QEV_JUDGE
+        qDigBest = 999
+        qDigAt = -1
+        qDigLast = CELL_COUNT - 1
+        for qDigI = 0 to qDigLast
+            if CELLS(qDigI).comboBlownUp
+                qDigFar = questManhattan(qDigI, QUEST_V(0))
+                if qDigFar < qDigBest
+                    qDigBest = qDigFar
+                    qDigAt = qDigI
+                endif
+            endif
+        next
+        if qDigAt >= 0
+            if qDigBest = 0
+                QUEST_V(2) = 1
+                questSayAt(qDigAt, "treasure!", rgb(255, 220, 64))
+            else
+                if QUEST_CHAIN = 1
+                    if QUEST_V(1) < 0
+                        questNote("listening")
+                    else
+                        if qDigBest < QUEST_V(1)
+                            questSayAt(qDigAt, "warmer", rgb(255, 130, 90))
+                            questNote("warmer")
+                        endif
+                        if qDigBest > QUEST_V(1)
+                            questSayAt(qDigAt, "colder", rgb(120, 190, 255))
+                            questNote("colder")
+                        endif
+                        if qDigBest = QUEST_V(1)
+                            questSayAt(qDigAt, "the same", rgb(220, 220, 220))
+                            questNote("the same")
+                        endif
+                    endif
+                    QUEST_V(1) = qDigBest
+                endif
+            endif
+        endif
+    endif
+
+    if qEv = QEV_SETTLE
+        if QUEST_V(2)
+            questComplete()
+        endif
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` pass something that happened on to the quest of the round
+` ---------------------------------------------------------------------------------------------
+function questEvent(qEv, qA, qB)
+    if QUEST_ID = QUEST_LEFT_RIGHT
+        questLeftRight(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_KRILL
+        questKrill(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_LOST_PAIR
+        questLostPair(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_SEQUENCE
+        questSequence(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_SHARK
+        questShark(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_PUFFERS
+        questPuffers(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_PROTECTED
+        questProtected(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_SUNBEAM
+        questSunbeam(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_CONTINUOUS
+        questContinuous(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_SEAWEED
+        questSeaweed(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_WAKE
+        questWake(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_TURTLE
+        questTurtle(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_CUTTLEFISH
+        questCuttlefish(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_CONSTELLATION
+        questConstellation(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_REMORA
+        questRemora(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_SLEEPERS
+        questSleepers(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_ECHO
+        questEcho(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_PULSE
+        questPulse(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_TOTEM
+        questTotem(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_ROLL_CALL
+        questRollCall(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_GLASS_FISH
+        questGlassFish(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_REFLECTION
+        questReflection(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_TETHER
+        questTether(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_LANTERN
+        questLantern(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_HATCH
+        questHatch(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_FORECAST
+        questForecast(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_MOORINGS
+        questMoorings(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_TRADE_PLACES
+        questTradePlaces(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_PILOT_FISH
+        questPilotFish(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_FERRY
+        questFerry(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_LASSO
+        questLasso(qEv, qA, qB)
+    endif
+    if QUEST_ID = QUEST_TREASURE
+        questTreasure(qEv, qA, qB)
+    endif
+endfunction

@@ -17,6 +17,8 @@ remstart
     (belly up, skeletal, stacked, heart home), which are seen when one is on the board. and last, the
     QR code that the fish make when TUNA is typed, which is seen when they make one. see TUNA in fish_headers.
     and after that, the crooked bar, which is seen when a line of fish pays out. see DIAGONALS in fish_headers.
+    and after that, every quest, which is seen when it is the quest of a round, and has a check mark
+    once it has been finished in any game. see THE QUESTS IN THE CODEC in fish_headers_quests.
 
     there are more upgrades than fit in the grid, so the grid has pages. a page is CODEC_PAGE_SIZE
     tiles, and there are only that many tile sprites: they are given the pictures of whichever page is
@@ -45,7 +47,15 @@ setup_codec:
     CODEC_ENTRY_HOME = CARD_LENGTH + 10
     CODEC_ENTRY_TUNA = CARD_LENGTH + 11
     CODEC_ENTRY_CROOKED = CARD_LENGTH + 12
-    CODEC_COUNT = CARD_LENGTH + CODEC_EXTRA_COUNT
+    CODEC_ENTRY_DIVER = CARD_LENGTH + 13
+    CODEC_ENTRY_ALBUM = CARD_LENGTH + 14
+
+    ` and then every quest. see THE QUESTS IN THE CODEC in fish_headers_quests.
+    CODEC_ENTRY_QUEST = CARD_LENGTH + CODEC_EXTRA_COUNT
+    CODEC_COUNT = CARD_LENGTH + CODEC_EXTRA_COUNT + QUEST_COUNT
+    for codecI = 1 to QUEST_COUNT
+        QUEST_EVER_DONE(codecI) = get pref(QUEST_PREF_DONE + codecI, 0)
+    next
 
     ` what has been seen, in every game that has ever been played
     for codecI = 0 to CODEC_COUNT - 1
@@ -55,9 +65,12 @@ setup_codec:
     ` an ending that was reached before the codec had an entry for it counts, too
     if get pref(PREF_ENDING_REEF, 0) then codecSeeCard(CODEC_ENTRY_REEF)
     if get pref(PREF_ENDING_ANCIENT, 0) then codecSeeCard(CODEC_ENTRY_ANCIENT)
+    if get pref(PREF_ENDING_DIVER, 0) then codecSeeCard(CODEC_ENTRY_ALBUM)
 
     texture reserve texture id(TEX_ENDING_REEF), "Fish/Textures/ending_reef"
     texture reserve texture id(TEX_ENDING_ANCIENT), "Fish/Textures/ending_ancient"
+    texture reserve texture id(TEX_ENDING_ALBUM), "Fish/Textures/ending_album"
+    texture reserve texture id(TEX_CODEC_DIVER), "Fish/Textures/codec_diver"
     texture reserve texture id(TEX_CROOKED), "Fish/Textures/Cards/crooked_bar"
 
     ` what a locked entry has for a picture is a question mark, and not a lock, whatever the names say
@@ -91,6 +104,23 @@ setup_codec:
         hide sprite codecSprite
         CODEC_LOCK_SPRITES(codecI) = codecSprite
     next
+
+    ` the check mark of a quest that has been finished, on the corner of its tile, and one more by the
+    ` big picture. refreshCodec shows the ones that are wanted.
+    for codecI = 0 to CODEC_PAGE_SIZE
+        codecSprite = 0
+        reserve sprite id(codecSprite)
+        sprite codecSprite, getCodecTileX(codecI) + 11, getCodecTileY(codecI) + 11, TEX_Q_CHECK
+        set sprite offset codecSprite, .5, .5
+        size sprite codecSprite, 14, 14
+        color sprite codecSprite, rgb(140, 235, 150)
+        order sprite codecSprite, ORDER_MENU_TEXT + 2
+        set sprite render target codecSprite, TARGET_MENU
+        hide sprite codecSprite
+        CODEC_CHECK_SPRITES(codecI) = codecSprite
+    next
+    position sprite CODEC_CHECK_SPRITES(CODEC_PAGE_SIZE), CODEC_X + 66, CODEC_DETAIL_TOP + 60
+    size sprite CODEC_CHECK_SPRITES(CODEC_PAGE_SIZE), 21, 21
 
     ` the fish behind the fish in the picture of "stacked". refreshCodec puts them where they go.
     for codecI = 0 to 1
@@ -274,8 +304,22 @@ function getCodecPref(prefEntry)
         if prefExtra >= CODEC_PREF_EXTRA_ROOM
             prefSlot = CODEC_PREF_MORE + (prefExtra - CODEC_PREF_EXTRA_ROOM)
         endif
+
+        ` the quests have a run of their own, by the number of the quest
+        if prefExtra >= CODEC_EXTRA_COUNT
+            prefSlot = QUEST_PREF_SEEN + 1 + (prefExtra - CODEC_EXTRA_COUNT)
+        endif
     endif
 endfunction prefSlot
+
+
+` which quest an entry of the codec is, or 0 for an entry that is not a quest
+function getCodecQuest(questEntry)
+    codecQuest = 0
+    if CODEC_ENTRY_QUEST >= 0
+        if questEntry >= CODEC_ENTRY_QUEST then codecQuest = questEntry + 1 - CODEC_ENTRY_QUEST
+    endif
+endfunction codecQuest
 
 
 ` the board has settled. whatever is on it that the codec has an entry for is unlocked: the special
@@ -327,6 +371,12 @@ function getCodecEntryTex(entryIndex)
     if entryIndex = CODEC_ENTRY_HOME then entryTex = CODEC_FISH_TEX
     if entryIndex = CODEC_ENTRY_TUNA then entryTex = CODEC_TUNA_TEX
     if entryIndex = CODEC_ENTRY_CROOKED then entryTex = TEX_CROOKED
+    if entryIndex = CODEC_ENTRY_DIVER then entryTex = TEX_CODEC_DIVER
+    if entryIndex = CODEC_ENTRY_ALBUM then entryTex = TEX_ENDING_ALBUM
+
+    ` a quest has the picture that is on its badge
+    entryQuest = getCodecQuest(entryIndex)
+    if entryQuest > 0 then entryTex = QUEST_DEFS(entryQuest).iconTex
     if entryIndex < CARD_LENGTH then entryTex = CARDS(entryIndex).artTexId
 endfunction entryTex
 
@@ -387,6 +437,9 @@ function closeCodec()
     hide sprite CODEC_STACK_SPRITES(1)
     hide sprite CODEC_HEART_SPRITES(0)
     hide sprite CODEC_HEART_SPRITES(1)
+    for i = 0 to CODEC_PAGE_SIZE
+        hide sprite CODEC_CHECK_SPRITES(i)
+    next
     hide text CODEC_COUNT_TEXT_ID
     hide text CODEC_PAGE_TEXT_ID
     hide text CODEC_ARROW_TEXTS(0)
@@ -431,6 +484,11 @@ function refreshCodec()
     hide sprite CODEC_HEART_SPRITES(0)
     hide sprite CODEC_HEART_SPRITES(1)
 
+    ` and for the check marks of the quests that have been finished
+    for i = 0 to CODEC_PAGE_SIZE
+        hide sprite CODEC_CHECK_SPRITES(i)
+    next
+
     for i = 0 to CODEC_PAGE_SIZE - 1
         shownEntry = pageNow * CODEC_PAGE_SIZE + i
         rotate sprite CODEC_ICON_SPRITES(i), 0
@@ -469,6 +527,14 @@ function refreshCodec()
                     position sprite CODEC_STACK_SPRITES(0), getCodecTileX(i) - 5, getCodecTileY(i) - 5
                     color sprite CODEC_STACK_SPRITES(0), rgb(90, 115, 165)
                     show sprite CODEC_STACK_SPRITES(0)
+                endif
+
+                ` a quest that has been finished, in any game, has a check mark on the corner of its tile
+                shownQuest = getCodecQuest(shownEntry)
+                if shownQuest > 0
+                    if QUEST_EVER_DONE(shownQuest)
+                        show sprite CODEC_CHECK_SPRITES(i)
+                    endif
                 endif
 
                 ` and one that is at home has a heart coming up from it
@@ -513,6 +579,19 @@ function refreshCodec()
             set text CODEC_DESC_TEXT_ID, "Not found yet. It turns up on the board."
         endif
 
+        ` the diver, and its ending, are secrets, like the two endings of the coral, and nothing says where they are
+        if CODEC_SELECTED = CODEC_ENTRY_DIVER
+            set text CODEC_DESC_TEXT_ID, "Not found yet. No upgrade will bring it."
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_ALBUM
+            set text CODEC_DESC_TEXT_ID, "Not found yet. No upgrade will bring it."
+        endif
+
+        ` a quest turns up with a round
+        if getCodecQuest(CODEC_SELECTED) > 0
+            set text CODEC_DESC_TEXT_ID, "Not found yet. It turns up as the quest of a round."
+        endif
+
         ` and the QR code is not on the board, or anywhere, until it is asked for
         if CODEC_SELECTED = CODEC_ENTRY_TUNA
             set text CODEC_DESC_TEXT_ID, "Not found yet. It has to be spelled out. The Underwater Notes Await."
@@ -534,6 +613,19 @@ function refreshCodec()
         if CODEC_SELECTED = CODEC_ENTRY_ANCIENT
             set text CODEC_NAME_TEXT_ID, "The Ancient One"
             set text CODEC_DESC_TEXT_ID, "You listened to something dark."
+            set text CODEC_KIND_TEXT_ID, "ending"
+            exitfunction
+        endif
+        ` the diver says what info mode says about it in a game, and its ending has words of its own. see fish_headers_diver.
+        if CODEC_SELECTED = CODEC_ENTRY_DIVER
+            set text CODEC_NAME_TEXT_ID, INFOS(INFO_INDEX_DIVER).title$
+            set text CODEC_DESC_TEXT_ID, INFOS(INFO_INDEX_DIVER).desc$
+            set text CODEC_KIND_TEXT_ID, "secret"
+            exitfunction
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_ALBUM
+            set text CODEC_NAME_TEXT_ID, "The Album, Filled"
+            set text CODEC_DESC_TEXT_ID, "The ocean is wonderful, and it is always nice to visit"
             set text CODEC_KIND_TEXT_ID, "ending"
             exitfunction
         endif
@@ -605,6 +697,20 @@ function refreshCodec()
             set text CODEC_NAME_TEXT_ID, "The Crooked Bar"
             set text CODEC_DESC_TEXT_ID, "Swap a fish into a line of " + str$(DIAGONAL_LENGTH) + " of its kind, corner to corner. Each one stacks up, and the multiplier grows: by one, and one more for every fish past " + str$(DIAGONAL_LENGTH) + "."
             set text CODEC_KIND_TEXT_ID, "secret"
+            exitfunction
+        endif
+
+        ` a quest says what info mode says about it in a game, and whether it has ever been finished
+        selectedQuest = getCodecQuest(CODEC_SELECTED)
+        if selectedQuest > 0
+            set text CODEC_NAME_TEXT_ID, QUEST_DEFS(selectedQuest).name$
+            set text CODEC_DESC_TEXT_ID, QUEST_DEFS(selectedQuest).desc$
+            if QUEST_EVER_DONE(selectedQuest)
+                set text CODEC_KIND_TEXT_ID, "quest, completed"
+                show sprite CODEC_CHECK_SPRITES(CODEC_PAGE_SIZE)
+            else
+                set text CODEC_KIND_TEXT_ID, "quest, not completed yet"
+            endif
             exitfunction
         endif
 

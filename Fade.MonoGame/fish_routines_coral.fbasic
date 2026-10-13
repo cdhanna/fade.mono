@@ -139,6 +139,7 @@ setup_coral:
     next
 
     gosub setup_coral_bars
+    gosub setup_diver
 
     resetCoral()
 
@@ -149,6 +150,11 @@ return
 ` everything in here starts with "fin", because it draws frames of its own, with update_frame, and
 ` it must not touch anything that the rest of the game is using.
 handle_coral_ending:
+    ` the diver has an ending too, which is due when the album is full. see THE ENDING in fish_headers_diver.
+    ` the coral works out its own two again and again, so that one is asked for here, every time.
+    if CORAL_ENDING_DUE = 0
+        if DIVER_ENDING_DUE then CORAL_ENDING_DUE = CORAL_ENDING_DIVER
+    endif
     if CORAL_ENDING_DUE = 0 then return
 
     ` the board has to settle first, and a round that was just won gets its upgrade first
@@ -159,14 +165,19 @@ handle_coral_ending:
 
     CORAL_ENDING = CORAL_ENDING_DUE
     CORAL_ENDING_DUE = 0
+    DIVER_ENDING_DUE = 0
     gosub clear_queued_moves
 
     coralEndingRemember(CORAL_ENDING)
 
     if CORAL_ENDING = CORAL_ENDING_REEF
         gosub coral_finale_reef
-    else
+    endif
+    if CORAL_ENDING = CORAL_ENDING_ANCIENT
         gosub coral_finale_ancient
+    endif
+    if CORAL_ENDING = CORAL_ENDING_DIVER
+        gosub diver_finale
     endif
 
     ` and then the game ends the way that every game does, with the initials and the table of high scores
@@ -1927,6 +1938,9 @@ function stepCoral()
     coralStepRunes()
     coralStepBars()
 
+    ` the album of the diver sits under the bars. see fish_headers_diver.
+    diverStep()
+
     ` the effect turns the squares into rock. it loses its parameters when it is reloaded, so they are
     ` all set on every frame. it wants the top left corner of the board, and the sprites are centered on their cells.
     coralFxTime# = game ms() * .001
@@ -2429,6 +2443,7 @@ function rollHorrorCoral()
     for horrorIndex = 0 to CELL_COUNT - 1
         horrorHere = CORAL_CELLS(horrorIndex) * CORAL_SICK(horrorIndex)
         if CELLS(horrorIndex).value <= 0 then horrorHere = 0
+        if CELLS(horrorIndex).value = TEX_DIVER then horrorHere = 0 `it does nothing to the diver. see fish_headers_diver.
 
         if horrorHere
             ` a bottle never goes belly up, so it does not wait to. it is as good as belly up already.
@@ -2670,6 +2685,12 @@ endfunction
 ` an ending has been reached. the main menu is different from now on, and the codec has the ending in it.
 ` see THE MAIN MENU REMEMBERS in fish_headers, and CODEC_ENTRY_REEF.
 function coralEndingRemember(ending)
+    ` the ending of the diver has its own. see THE ENDING in fish_headers_diver.
+    if ending = CORAL_ENDING_DIVER
+        diverEndingRemember()
+        exitfunction
+    endif
+
     if ending = CORAL_ENDING_REEF
         SURFACE_REEF = 1
         set pref PREF_ENDING_REEF, 1

@@ -601,6 +601,11 @@ global BOARD_EXPAND_TWEEN_ID
 global INFO_INDEX_GRID = 0 `the info blob that explains the board. it has to follow the board when the board changes size.
 
 global PASSIVE_BINDINGS_LENGTH = 16
+
+` the names in the two lists at the sides of the board, the special moves and the passives, are
+` fitted to this many pixels, and are never bigger than this many times the size of the font.
+global HUD_LIST_WIDTH = 86
+global HUD_LIST_SCALE# = .25
 global PASSIVE_COUNT = 0
 global passive as passiveDisplay
 global dim PASSIVE_BINDINGS(PASSIVE_BINDINGS_LENGTH) as passiveDisplay
@@ -686,6 +691,22 @@ global INFO_DESC_TEXT_ID
 global INFO_HINT_TEXT_ID
 global INFO_CURSOR as infoBorder
 global INFO_PANEL_BORDER as infoBorder
+
+` THE ONE THAT IS NOT A RECTANGLE. one of the things that info mode explains can have a leg: a
+` second, smaller rectangle that hangs down from the right end of its bottom edge, so that the two
+` together are an upside down L. the bar of the round is that one. its name and its bar go all the
+` way across, and its numbers are under the right end of the bar, and the quest of the round is
+` under the left end, which is not part of it. see THE BADGE in fish_headers_quests.
+` INFO_L_INDEX is which one has the leg, or -1 for none. the outline, the bright outline of the one
+` that is highlighted, and the hole in the dark overlay, are each drawn in the shape of the L for it.
+` layoutInfoL, in fish_routines_info, lays an outline out that way.
+global INFO_L_INDEX = -1
+global INFO_L_W = 0 `how wide the leg is
+global INFO_L_H = 0 `and how far down it goes
+global INFO_L_FAINT as infoBorder `the two sides of the leg that the outline of the rectangle does not have
+global INFO_L_CURSOR as infoBorder `and the same for the bright outline
+global INFO_HOLE2_SPRITE `the hole in the overlay for the leg
+
 global INFO_BASE_LENGTH = 0 `how many infos there are before any upgrades have been picked. a new game goes back to this.
 
 ` the hint at the bottom of the screen while the game is being played
@@ -743,7 +764,9 @@ global MENU_PAGE = 0
 #constant MENU_ITEM_SET_MONSTER 21
 ` and one more for the page that comes up when the last round has been won, above "Done". see KEEP PLAYING.
 #constant MENU_ITEM_OVER_CONTINUE 22
-global MENU_ITEM_COUNT = 23
+` and one that turns off the photos of the diver on the boat of the main menu, the same way. see OPTION_MENU_PHOTOS in fish_headers_diver.
+#constant MENU_ITEM_SET_PHOTOS 23
+global MENU_ITEM_COUNT = 24
 global dim MENU_ITEMS(MENU_ITEM_COUNT) as menuItem
 
 global MENU_PAGE_FIRST = 0 `the first item on the page
@@ -981,6 +1004,31 @@ global HISCORE_ROWS = 8 `how many entries a table has
 ` getScoreBadge and getScoreInitials, in fish_routines_highscores, take the number apart.
 global HISCORE_BADGE_STEP = 20000
 global dim HISCORE_BADGE_SPRITES(8) `one for every row of the table
+
+` THE ENDINGS THAT ARE SHOWN. the page of the tables has a little tile for every ending that a game
+` can have a badge for: the coral, the horror, and the diver, in that order. a tile that is switched
+` off leaves the games with that ending out of the table, and the ones that are left move up. they
+` all start out on, and they go back on when a game ends, so that its own row is never left out.
+` a game with no badge is always shown. they are not kept in the preferences.
+` THE MYSTERY ENDINGS. an ending that the player has never got to is not given away: a game that
+` had it shows a question mark where its badge would be, and the ending has no tile of its own. all
+` of the endings like that share one tile, with a question mark on it, which comes after the others.
+` so there are three tiles when every ending is known, and one when none of them are.
+global dim HISCORE_ENDING_SHOWN(4) `by ending: one of the CORAL_ENDING constants, and 0 is the mystery ones. 1 is shown.
+global dim HISCORE_ENDING_KNOWN(4) `by ending: 1 if the player has got to it. loadKnownEndings reads it from the preferences.
+global dim HISCORE_ENDING_TILES(3) `the block of color of every tile
+global dim HISCORE_ENDING_ICONS(3) `and the badge that is on it
+global dim HISCORE_TILE_ENDING(3) `which ending every tile is for, or 0 for the tile of the mystery ones
+global HISCORE_TILE_COUNT = 3 `how many tiles there are
+global HISCORE_TILE_MARK `the question mark on the tile of the mystery ones
+global dim HISCORE_MYSTERY_TEXTS(8) `the question mark of every row of the table, for a game with a mystery ending
+global HISCORE_ENDING_AT = 0 `which tile the outline is on, when it is on that row
+global HISCORE_ENDING_SIZE = 18
+
+` which entry every row on the screen shows, once the games that are left out are gone: an index
+` into HISCORE_NAMES and the lists that go with it, or -1 for a row with nothing on it.
+global dim HISCORE_SHOWN(8)
+global HISCORE_SHOWN_COUNT = 0
 global TEX_BADGE_CORAL
 global TEX_BADGE_TENTACLE
 global HISCORE_TABLE_COUNT = 6 `three lengths, times two modes
@@ -1086,6 +1134,19 @@ global dim HISCORE_LETTER_TEXTS(3) `the big letters on the page where the initia
 ` the log of the game that is being played is saved with the game. when a game gets onto a table, its log
 ` goes with it, and picking its row on the table shows it.
 global HISCORE_LOG_MAX = 100 `the most upgrades that get written down for one game
+
+` THE QUESTS IN THE LOG. the log also says which quest was finished in every round, if one was. an
+` upgrade is picked at the end of every round but the last, so the upgrade that is logged for a
+` round carries the quest that was finished in that round: its number in the log is the quest,
+` times LOG_QUEST_STEP, on top of the move and the card. LOG_QUEST_STEP is a round number that is
+` bigger than any move times 100, so the move and the card read the same as ever once it is taken
+` off, and a log from before there were quests has no quest in it. the last round of a game has no
+` upgrade to carry its quest, so that one is kept with the count of the log: the first number of a
+` log is how many upgrades there are, plus LOG_LAST_STEP times the quest of the last round.
+` logMoveOf, logQuestOf, logCountOf and logLastQuestOf, in fish_routines_highscores, take them apart.
+` QUEST_LOG_PENDING, in fish_headers_quests, is the quest that has been finished since the last upgrade.
+global LOG_QUEST_STEP = 50000000
+global LOG_LAST_STEP = 1000
 global GAME_LOG_COUNT = 0
 global dim GAME_LOG(100)
 
@@ -1100,10 +1161,11 @@ global SAVE_PREF_LOG = 500 `and where the log of the saved game is kept, with th
 
 ` the page that shows the log of one entry. it lists this many upgrades at a time, and it scrolls.
 global HISCORE_DETAIL_ROWS = 7
-global HISCORE_DETAIL_WIDTH = 360
+global HISCORE_DETAIL_WIDTH = 480
 global HISCORE_DETAIL_TOP = 70
 global HISCORE_DETAIL_ROW_HEIGHT = 26
-global dim HISCORE_DETAIL_HEAD_TEXTS(3)
+global dim HISCORE_DETAIL_HEAD_TEXTS(4)
+global dim HISCORE_DETAIL_QUEST_TEXTS(7) `the quest that was finished in the round, in a column of its own. see THE QUESTS IN THE LOG.
 global dim HISCORE_DETAIL_NUM_TEXTS(7) `which upgrade of the game it was: the first, the second, and so on
 global dim HISCORE_DETAIL_ART_SPRITES(7) `the picture from the card
 global dim HISCORE_DETAIL_NAME_TEXTS(7)
@@ -1145,10 +1207,27 @@ global STEAM_DETAIL_FLAGS = 3 `32 flags. the lowest two bits are the ending of t
 global STEAM_FLAG_DEBUG = 4 `the game was played with one of the debug environment variables set. see isDebugEnvSet.
 global GAME_DEBUG_USED = 0 `1 when the game that is being played has had one of them set at any time. it is saved with the game.
 global STEAM_DETAIL_CHECK = 4 `the check, which Steam's commands fill in. see "set steam leaderboard check".
+` detail 5 says whether the quests of the game follow the log of upgrades, and how many of them. see
+` THE QUESTS ON STEAM, below. it is 0 for a score from before there were quests.
 global STEAM_DETAIL_SPARE = 5
 global STEAM_BIT_LOG = 192 `the log of upgrades starts at detail 6. every upgrade is 5 bits of card, and then its gap.
 global STEAM_CARD_BITS = 5
 global STEAM_GAP_BITS_MAX = 13 `a gap of more than 8191 moves is written down as 8191
+
+` THE QUESTS ON STEAM. the quests that were finished go in the bits right after the log of upgrades,
+` which nothing else uses, and which a game from before there were quests never looks at: it reads
+` as many upgrades as the count says, and stops. so the way that a score is packed has not changed,
+` STEAM_PACK_VERSION is still 1, and an old game shows a new score the same as any other.
+` for every upgrade of the log, in order, there is one bit: 1 if a quest was finished in that round.
+` when it is 1, the next STEAM_QUEST_BITS bits are the quest, less one. after the last upgrade come
+` STEAM_QUEST_BITS + 1 bits for the quest of the last round, which has no upgrade: the quest, or 0.
+` detail 5 is STEAM_QUEST_TAG, plus 256 times how many upgrades have their bit, plus 65536 if the
+` quest of the last round is there. a long game has 60 rounds, so its log is 1080 bits at the very
+` most, and its quests 366, out of the 1856 that there are. they always fit. a game that was saved
+` when a long game had 100 rounds could run out, and then only as many as fit are written.
+global STEAM_QUEST_TAG = 1
+global STEAM_QUEST_BITS = 5
+global STEAM_BITS_TOTAL = 2048 `a score has 64 details of 32 bits
 global STEAM_GLOBAL_FETCH = 40 `how many of everybody's scores are asked for, to find 8 that pass their check
 
 ` where the outline is on whichever of these pages is up: the high scores, or the codec. when it moves, it
@@ -1176,7 +1255,9 @@ global CODEC_COUNT = 16 `how many entries there are: one for every card, and the
 ` the first time that the fish make one.
 ` and after that, the lines of fish, corner to corner. see DIAGONALS, at the end. the entry is unlocked the
 ` first time that a line pays out. diagonalPayThrough, in fish_routines_diagonal, does that.
-global CODEC_EXTRA_COUNT = 13
+` and after that, the diver, and the ending of the diver. see fish_headers_diver. the diver is unlocked
+` the first time that it comes down, and its ending the first time that a game ends with the album full.
+global CODEC_EXTRA_COUNT = 15
 global CODEC_ENTRY_CROOKED = -1
 global TEX_CROOKED `the picture that it has in the codec
 global CODEC_ENTRY_TUNA = -1
@@ -1197,7 +1278,7 @@ global CODEC_FISH_TEX = 0 `the picture of the fish that stands in for any fish, 
 global dim CODEC_STACK_SPRITES(2) `the fish behind the fish, in the picture of "stacked": one for its tile, and one for the big picture
 global TEX_ENDING_REEF `the pictures of the two endings: a heart, and an eye
 global TEX_ENDING_ANCIENT
-global dim CODEC_SEEN(64) `1 for every entry that has been seen in a game, and so is unlocked
+global dim CODEC_SEEN(128) `1 for every entry that has been seen in a game, and so is unlocked
 
 ` where in the preferences what has been seen is kept, one number for every entry. it must not move.
 global CODEC_PREF = 57
@@ -1240,7 +1321,7 @@ global TARGET_CREDITS `the credits are drawn to a render target of their own, so
 global CREDIT_MAX = 24
 global CREDIT_COUNT = 0
 global dim CREDIT_LINES(CREDIT_MAX) as creditLine
-global CREDIT_LENGTH = 830 `how tall the whole roll is, from the top of the first line to the bottom of the last
+global CREDIT_LENGTH = 960 `how tall the whole roll is, from the top of the first line to the bottom of the last
 global CREDIT_SPEED = 32 `how many pixels the credits roll in a second
 
 ` the logos that are shown when the game starts
@@ -1804,7 +1885,7 @@ global dim SKELETON_GHOST_CELL(48) `the cell that each one is over
 global dim SKELETON_GHOST_FROM(48) `when each one pops out of its bones
 global dim SKELETON_GHOST_UNTIL(48) `and when it goes, which is when its skeleton pops. 0 for one that is not in use.
 global dim SKELETON_AS(400) `the kind of fish that the skeleton in every cell stood for, the last time that the board was searched for groups, or 0
-global dim SKELETON_TEX(16) `the picture of the skeleton of every kind of fish
+global dim SKELETON_TEX(17) `the picture of the skeleton of every kind of fish
 global dim SKELETON_SHOWN(400) `1 for every cell whose fish is being drawn as a skeleton. frame_fish_fx keeps it.
 global dim SKELETON_KIND(400) `while handle_combos searches for groups, the kind of fish that a skeleton that a group has taken really is, or 0
 global SKELETON_WILD_A = -1 `the two cells of the swap that was just made, or -1. the groups of the fish in them can go through skeletons.

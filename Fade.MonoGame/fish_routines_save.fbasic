@@ -100,6 +100,12 @@ save_game:
     ` the hidden patterns. see CORAL in fish_headers.
     coralSave()
 
+    ` the quest of the round, and how many have been finished. see QUESTS in fish_headers_quests.
+    questSave()
+
+    ` the diver, and the album. see fish_headers_diver.
+    diverSave()
+
     end pref batch
 
     SAVE_SIGNATURE = saveSignature()
@@ -223,6 +229,12 @@ load_game:
     registerMove(0) `this writes the number of moves onto the screen
     showRoundsLeft()
 
+    ` the quest of the round starts over, on the board as it was saved
+    questLoad()
+
+    ` and so does the diver, with the album as it was saved
+    diverLoad()
+
     ` what was just loaded is what is saved, so there is nothing new to save yet
     SAVE_SIGNATURE = saveSignature()
 return
@@ -288,6 +300,8 @@ function saveSignature()
     signature = signature + PENDING_FREE_MOVES * 23 + PENDING_BOARD_EXPANSIONS * 29 + REQUEST_ABILITY_SELECTION * 31
     signature = signature + SCORE_MULTIPLIER * 41 + MULT_PROGRESS * 43 + GAME_LOG_COUNT * 61
     signature = signature + CORAL_COUNT * 67 + CORAL_CASTS * 71 + GAME_ENDLESS * 73
+    signature = signature + QUESTS_DONE * 79 + QUEST_ID * 83 + QUEST_STATE * 89 + QUEST_ARRIVING * 97
+    signature = signature + QUEST_PROG_NOW * 103 + QUEST_PICK_CELL * 107 + QUEST_LIST_N * 109
     for i = 0 to CARD_LENGTH - 1
         signature = signature + CARDS(i).uses * (37 + i)
     next
@@ -315,7 +329,7 @@ function grantPassive(abilityIndex)
         for passiveI = 0 to PASSIVE_COUNT - 1
             if PASSIVE_BINDINGS(passiveI).abilityIndex = abilityIndex
                 set text PASSIVE_BINDINGS(passiveI).titleTextId, CARDS(abilityIndex).name$ + " x" + str$(CARDS(abilityIndex).uses)
-                size text x PASSIVE_BINDINGS(passiveI).titleTextId, 100, .1, .3
+                size text x PASSIVE_BINDINGS(passiveI).titleTextId, HUD_LIST_WIDTH, .1, HUD_LIST_SCALE#
                 create basic tween PASSIVE_BINDINGS(passiveI).fadeTweenId, 0, 1, 400, 0
             endif
         next
@@ -325,7 +339,7 @@ function grantPassive(abilityIndex)
         binding.abilityIndex = abilityIndex
 
         set text binding.titleTextId, CARDS(abilityIndex).name$
-        size text x binding.titleTextId, 100, .1, .3 `fit the name to the column, so that a long one does not run off of the screen
+        size text x binding.titleTextId, HUD_LIST_WIDTH, .1, HUD_LIST_SCALE# `fit the name to the column, so that a long one does not run off of the screen
         PASSIVE_BINDINGS(PASSIVE_COUNT) = binding
         PASSIVE_COUNT = PASSIVE_COUNT + 1
         create basic tween binding.fadeTweenId, 0, 1, 400, 0
@@ -365,7 +379,7 @@ function grantMoveToSlot(abilityIndex, slot)
     moveBinding.icon$ = "move" + str$(slot + 1)
 
     set text moveBinding.titleTextId, CARDS(abilityIndex).name$
-    size text x moveBinding.titleTextId, 100, .1, .3 `fit the name to the column, so that a long one does not run into the key
+    size text x moveBinding.titleTextId, HUD_LIST_WIDTH, .1, HUD_LIST_SCALE# `fit the name to the column, so that a long one does not run into the key
     set text moveBinding.keyTextId, "{" + moveBinding.icon$ + "}"
 
     ` the move explains itself in info mode. a slot only ever gets one info blob, and whichever move

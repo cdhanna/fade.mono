@@ -1,0 +1,2485 @@
+goto routines_quests_exit
+
+remstart
+    QUESTS
+    see QUESTS in fish_headers_quests for what a quest is, and what it has to work with. this file is
+    the part that every quest shares: setting one up, telling it what happened, drawing it, paying it
+    out, and the debug window. the quests themselves are in fish_quests.
+
+    WHERE THE REST OF THE GAME COMES HERE
+    - update_frame calls stepQuest on every frame
+    - stepLiveMove, in fish_funcs, calls questSwapDone and questCursorStepped
+    - swapCellStacks, in fish_funcs, calls questSwapMarks, so that a mark goes where its fish goes
+    - handle_combos, in fish_routines, calls questHoldsGroup and questGroupScore for every group,
+      questJudge once the groups have been scored, questSettled when nothing pops, questAfterPops
+      when the fish that popped are gone, and questNewFish for every new fish that drops in
+    - judgeMultiplierSwaps, in fish_routines_multiplier, calls questMissLetOff
+    - advanceScoreBar, in fish_funcs, calls questRoundStarted, and frame_score calls questRoundEnded
+    - reset_game, save_game and load_game call resetQuests, questSave and questLoad
+    - handle_board_expansion calls questBoardGrowing and questBoardGrew
+remend
+
+setup_quests:
+
+    ` the pictures that are not fish. the five kinds of fish that a quest has are loaded with the
+    ` rest of the fish, in load_textures. see THE QUEST KINDS in fish_headers_quests.
+    texture reserve texture id(TEX_Q_RING), "Fish/Textures/Quests/Ring"
+    texture reserve texture id(TEX_Q_DOT), "Fish/Textures/Quests/Dot"
+    texture reserve texture id(TEX_Q_SHARK), "Fish/Textures/Quests/Shark"
+    texture reserve texture id(TEX_Q_STARFISH), "Fish/Textures/Quests/Starfish"
+    texture reserve texture id(TEX_Q_PEARL), "Fish/Textures/Quests/Pearl"
+    texture reserve texture id(TEX_Q_BUOY), "Fish/Textures/Quests/Buoy"
+    texture reserve texture id(TEX_Q_ANGLER), "Fish/Textures/Quests/Angler"
+    texture reserve texture id(TEX_Q_EEL), "Fish/Textures/Quests/Eel"
+    texture reserve texture id(TEX_Q_PILOT), "Fish/Textures/Quests/Pilot"
+    texture reserve texture id(TEX_Q_SHELL), "Fish/Textures/Quests/Shell"
+    texture reserve texture id(TEX_Q_BAIT), "Fish/Textures/Quests/Bait"
+    texture reserve texture id(TEX_Q_WHALE), "Fish/Textures/Quests/Whale"
+    texture reserve texture id(TEX_Q_CHECK), "Fish/Textures/Quests/Check"
+    texture reserve texture id(TEX_Q_CROSS), "Fish/Textures/Quests/Cross"
+
+    ` the three piles of things that a quest draws with. see HOW A QUEST IS DRAWN in fish_headers_quests.
+    ` the squares of light have an effect that gives them a wavy outline. see THE ZONES.
+    reserve effect id(QUEST_ZONE_FX_ID)
+    effect QUEST_ZONE_FX_ID, "Fish/Shaders/QuestZoneEffect"
+
+    ` the ribbon of light behind the cursor. see THE TAIL in fish_headers_quests.
+    reserve effect id(QUEST_TRAIL_FX_ID)
+    effect QUEST_TRAIL_FX_ID, "Fish/Shaders/QuestTrailEffect"
+    reserve sprite id(QUEST_TRAIL_SPRITE)
+    sprite QUEST_TRAIL_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset QUEST_TRAIL_SPRITE, 0, 0
+    size sprite QUEST_TRAIL_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    set sprite effect QUEST_TRAIL_SPRITE, QUEST_TRAIL_FX_ID
+    order sprite QUEST_TRAIL_SPRITE, ORDER_QUEST_GLOW
+    hide sprite QUEST_TRAIL_SPRITE
+    for questSetupI = 0 to QUEST_GLOW_MAX - 1
+        reserve sprite id(QUEST_GLOW_SPRITES(questSetupI))
+        sprite QUEST_GLOW_SPRITES(questSetupI), 0, 0, TEX_PIXEL
+        set sprite offset QUEST_GLOW_SPRITES(questSetupI), 0, 0
+        set sprite effect QUEST_GLOW_SPRITES(questSetupI), QUEST_ZONE_FX_ID
+        order sprite QUEST_GLOW_SPRITES(questSetupI), ORDER_QUEST_GLOW
+        hide sprite QUEST_GLOW_SPRITES(questSetupI)
+    next
+    for questSetupI = 0 to QUEST_ICON_MAX - 1
+        reserve sprite id(QUEST_ICON_SPRITES(questSetupI))
+        sprite QUEST_ICON_SPRITES(questSetupI), 0, 0, TEX_Q_RING
+        order sprite QUEST_ICON_SPRITES(questSetupI), ORDER_QUEST_ICON
+        hide sprite QUEST_ICON_SPRITES(questSetupI)
+    next
+    for questSetupI = 0 to QUEST_NUM_MAX - 1
+        reserve text id(QUEST_NUM_TEXTS(questSetupI))
+        text QUEST_NUM_TEXTS(questSetupI), 0, 0, SCORE_FONT, "0"
+        size text y QUEST_NUM_TEXTS(questSetupI), 16
+        set text offset QUEST_NUM_TEXTS(questSetupI), .5, .5
+        enable text drop shadow QUEST_NUM_TEXTS(questSetupI), 1, -1, rgb(0, 0, 0)
+        order text QUEST_NUM_TEXTS(questSetupI), ORDER_QUEST_NUM
+        hide text QUEST_NUM_TEXTS(questSetupI)
+    next
+
+    ` the badge
+    reserve sprite id(QUEST_BADGE_SPRITE)
+    sprite QUEST_BADGE_SPRITE, QUEST_BADGE_X + 7, QUEST_BADGE_Y + 8, TEX_Q_RING
+    size sprite QUEST_BADGE_SPRITE, 14, 14
+    hide sprite QUEST_BADGE_SPRITE
+
+    ` the check mark that goes in the box of a quest that is done
+    reserve sprite id(QUEST_BADGE_CHECK_SPRITE)
+    sprite QUEST_BADGE_CHECK_SPRITE, QUEST_BADGE_X + 7, QUEST_BADGE_Y + 8, TEX_Q_CHECK
+    size sprite QUEST_BADGE_CHECK_SPRITE, 8, 8
+    color sprite QUEST_BADGE_CHECK_SPRITE, rgb(140, 235, 150)
+    order sprite QUEST_BADGE_CHECK_SPRITE, 1
+    hide sprite QUEST_BADGE_CHECK_SPRITE
+
+    ` the little bar that drains as a quest pays out. see THE PAYOUT in fish_headers_quests.
+    reserve sprite id(QUEST_PAY_BACK_SPRITE)
+    sprite QUEST_PAY_BACK_SPRITE, QUEST_BADGE_X, QUEST_BADGE_Y + 16, TEX_PIXEL
+    set sprite offset QUEST_PAY_BACK_SPRITE, 0, 0
+    size sprite QUEST_PAY_BACK_SPRITE, QUEST_PAY_WIDTH, 4
+    color sprite QUEST_PAY_BACK_SPRITE, rgb(32, 64, 128, 128)
+    hide sprite QUEST_PAY_BACK_SPRITE
+    reserve sprite id(QUEST_PAY_FILL_SPRITE)
+    sprite QUEST_PAY_FILL_SPRITE, QUEST_BADGE_X + 1, QUEST_BADGE_Y + 17, TEX_PIXEL
+    set sprite offset QUEST_PAY_FILL_SPRITE, 0, 0
+    size sprite QUEST_PAY_FILL_SPRITE, QUEST_PAY_WIDTH - 2, 2
+    color sprite QUEST_PAY_FILL_SPRITE, rgb(255, 220, 64, 240)
+    hide sprite QUEST_PAY_FILL_SPRITE
+
+    reserve text id(QUEST_TITLE_TEXT_ID)
+    text QUEST_TITLE_TEXT_ID, QUEST_BADGE_X + 17, QUEST_BADGE_Y, SCORE_FONT, "Quest"
+    size text y QUEST_TITLE_TEXT_ID, 15
+    set text offset QUEST_TITLE_TEXT_ID, 0, 0
+    color text QUEST_TITLE_TEXT_ID, rgb(150, 190, 255, 230)
+    enable text drop shadow QUEST_TITLE_TEXT_ID, 2, -2, rgb(0, 0, 0)
+    hide text QUEST_TITLE_TEXT_ID
+
+    reserve text id(QUEST_PROG_TEXT_ID)
+    text QUEST_PROG_TEXT_ID, QUEST_BADGE_X + 80, QUEST_BADGE_Y + 1, SCORE_FONT, " "
+    size text y QUEST_PROG_TEXT_ID, 14
+    set text offset QUEST_PROG_TEXT_ID, 0, 0
+    color text QUEST_PROG_TEXT_ID, rgb(64, 128, 255, 200)
+    enable text drop shadow QUEST_PROG_TEXT_ID, 2, -2, rgb(0, 0, 0)
+    hide text QUEST_PROG_TEXT_ID
+
+
+    reserve tween id(QUEST_PUNCH_TWEEN_ID)
+    create basic tween QUEST_PUNCH_TWEEN_ID, 0, 0, 1, 0
+    reserve tween id(QUEST_PICK_PUNCH_TWEEN_ID)
+    create basic tween QUEST_PICK_PUNCH_TWEEN_ID, 0, 0, 1, 0
+
+    ` info mode explains the quest of the round. the spot is always there, and it is only switched
+    ` on while there is a quest. questShowInfo writes what it says.
+    ` it is under the left end of the bar of the round, as far along as the numbers of the bar,
+    ` which are under the right end. the bar of the round is explained as an upside down L, around
+    ` its numbers, so the two do not overlap. see THE ONE THAT IS NOT A RECTANGLE in fish_headers.
+    INFO_INDEX_QUEST = allocateInfoBlob(SCORE_POS.x - 4, QUEST_BADGE_Y - 1, SCORE_SIZE.x + 8 - INFO_L_W, 20, "Quest", " ")
+    INFO_INDEX_QUEST_PICK = allocateInfoBlob(0, 0, 32, 60, "A Quest", " ")
+    setInfoBlobEnabled(INFO_INDEX_QUEST_PICK, 0)
+
+    ` the faint empty strip where the badge goes. see THE SLOT in fish_headers_quests.
+    reserve sprite id(QUEST_SLOT_SPRITE)
+    sprite QUEST_SLOT_SPRITE, QUEST_BADGE_X, QUEST_BADGE_Y, TEX_PIXEL
+    set sprite offset QUEST_SLOT_SPRITE, 0, 0
+    size sprite QUEST_SLOT_SPRITE, QUEST_SLOT_WIDTH, 16
+    color sprite QUEST_SLOT_SPRITE, rgb(32, 64, 128, 0)
+    order sprite QUEST_SLOT_SPRITE, -1
+    hide sprite QUEST_SLOT_SPRITE
+    reserve tween id(QUEST_SLOT_TWEEN_ID)
+    create basic tween QUEST_SLOT_TWEEN_ID, 0, 0, 1, 0
+
+    ` and the dots that sit in it. see THE DOTS in fish_headers_quests.
+    for questSetupI = 0 to 7
+        reserve sprite id(QUEST_DOT_SPRITES(questSetupI))
+        sprite QUEST_DOT_SPRITES(questSetupI), QUEST_BADGE_X + 9 + questSetupI * 9, QUEST_BADGE_Y + 9, TEX_Q_DOT
+        size sprite QUEST_DOT_SPRITES(questSetupI), 5, 5
+        color sprite QUEST_DOT_SPRITES(questSetupI), rgb(150, 190, 255, 0)
+        hide sprite QUEST_DOT_SPRITES(questSetupI)
+    next
+    setInfoBlobEnabled(INFO_INDEX_QUEST, 0)
+
+    ` the whale
+    reserve sprite id(QUEST_WHALE_SPRITE)
+    sprite QUEST_WHALE_SPRITE, 0, 0, TEX_Q_WHALE
+    size sprite QUEST_WHALE_SPRITE, 128, 64
+    order sprite QUEST_WHALE_SPRITE, ORDER_QUEST_NUM + 1
+    hide sprite QUEST_WHALE_SPRITE
+
+    gosub setup_quest_defs
+    resetQuests()
+return
+
+
+remstart
+    THE DEBUG QUESTS
+    a window in the debug panel that starts any quest, right away, in any round. it is only there
+    when the FISH_DEBUG environment variable is set. frame_dbg, in fish_routines, comes here.
+remend
+frame_debug_quests:
+    begin debug window("Quests")
+
+    debugQuestLine$ = "none"
+    if QUEST_ID > 0 then debugQuestLine$ = QUEST_DEFS(QUEST_ID).name$
+    debugQuestLine$ = "now: " + debugQuestLine$
+    debug text debugQuestLine$
+    debugQuestLine$ = "state " + str$(QUEST_STATE) + "   count " + str$(QUEST_PROG_NOW) + "/" + str$(QUEST_PROG_NEED)
+    debug text debugQuestLine$
+    debugQuestLine$ = "finished in this game: " + str$(QUESTS_DONE)
+    debug text debugQuestLine$
+    debugQuestPay = questPayout()
+    debugQuestLine$ = "would pay: " + str$(debugQuestPay)
+    debug text debugQuestLine$
+
+    if debug button("finish it") = 1
+        if QUEST_ID > 0
+            if QUEST_STATE <> QSTATE_DONE
+                questComplete()
+            endif
+        endif
+    endif
+    if debug button("fail it (start over)") = 1
+        if QUEST_ID > 0
+            questFail()
+        endif
+    endif
+    if debug button("take it away") = 1
+        questForce(0)
+    endif
+
+    debug separator
+    debug text "start a quest"
+    for debugQuestI = 1 to QUEST_COUNT
+        debugQuestLine$ = str$(debugQuestI) + "  " + QUEST_DEFS(debugQuestI).name$
+        if debug button(debugQuestLine$) = 1
+            questForce(debugQuestI)
+        endif
+    next
+
+    end debug window
+return
+
+
+routines_quests_exit:
+
+
+` ---------------------------------------------------------------------------------------------
+` THE LIFE OF A QUEST
+` ---------------------------------------------------------------------------------------------
+
+` a new game has no quest, none finished, and none that have had their turn
+function resetQuests()
+    QUEST_ID = 0
+    QUEST_STATE = QSTATE_NONE
+    QUESTS_DONE = 0
+    QUEST_LOG_PENDING = 0
+    QUEST_INIT_DUE = 0
+    QUEST_HOLD = 0
+    QUEST_SWEEP_DUE = 0
+    QUEST_LEAVE_UNTIL = 0
+    QUEST_WHALE_MS = -1
+    hide sprite QUEST_WHALE_SPRITE
+    QUEST_PAY_MS = -1
+    QUEST_FINISH_MS = -1
+    QUEST_FINISH_N = 0
+    hide sprite QUEST_PAY_BACK_SPRITE
+    hide sprite QUEST_PAY_FILL_SPRITE
+    questForget()
+    for qResetI = 0 to 39
+        QUEST_USED(qResetI) = 0
+    next
+    QUEST_ARRIVING = 0
+    QUEST_FIZZ_DUE = 0
+    QUEST_REARM = 0
+    QUEST_KEEP_ROW = -1
+    QUEST_KEEP_OUT = 0
+    QUEST_PREVIEW = 0
+    QUEST_SLOT_ON = 0
+    QUEST_DOTS_MODE = 0
+    QUEST_ARRIVE_DUE_MS = -1
+    QUEST_DOT_COUNT = QUEST_DOT_BASE
+    QUEST_TURN_GROUPS = 0
+    QUEST_TURN_USED = 0
+    create basic tween QUEST_SLOT_TWEEN_ID, 0, 0, 1, 0
+    questShowInfo()
+endfunction
+
+
+` WHICH QUEST COMES NEXT. a quest that has been tried, which is to say picked up, does not come
+` around again in the same game until every one of them has been. the first quest of a game is
+` always the lost pair, which explains itself the best. after that they are picked at random, out
+` of the ones that are left. `qNextNot` is a quest that must not be picked, or 0: when the pickup
+` that is waiting is swapped for another, it is not swapped for itself.
+function questNextQuest(qNextNot)
+    qNextLeft = 0
+    qNextUsed = 0
+    for qNextI = 1 to QUEST_COUNT
+        if QUEST_USED(qNextI)
+            qNextUsed = qNextUsed + 1
+        else
+            if qNextI <> qNextNot then qNextLeft = qNextLeft + 1
+        endif
+    next
+
+    ` they have all been tried, so they all get another turn
+    if qNextLeft = 0
+        for qNextI = 1 to QUEST_COUNT
+            QUEST_USED(qNextI) = 0
+        next
+        qNextUsed = 1 `so that the lost pair is not forced, further down
+        qNextLeft = QUEST_COUNT
+        if qNextNot > 0 then qNextLeft = QUEST_COUNT - 1
+    endif
+
+    ` the very first one of a game is the lost pair. after that it is any one that is left.
+    qNextPick = QUEST_LOST_PAIR
+    qNextAny = qNextUsed
+    if qNextNot > 0 then qNextAny = 1
+    if qNextAny > 0
+        qNextSkip = rnd(qNextLeft)
+        for qNextI = 1 to QUEST_COUNT
+            qNextOpen = 1
+            if QUEST_USED(qNextI) then qNextOpen = 0
+            if qNextI = qNextNot then qNextOpen = 0
+            if qNextOpen
+                if qNextSkip = 0 then qNextPick = qNextI
+                qNextSkip = qNextSkip - 1
+            endif
+        next
+    endif
+endfunction qNextPick
+
+
+` the pickup that is on its way shows up when its time comes, which is when the fourth dot lands.
+` a quest that was started in the meantime is left alone.
+function questStepArrive()
+    if QUEST_ARRIVE_DUE_MS < 0 then exitfunction
+    if game ms() < QUEST_ARRIVE_DUE_MS then exitfunction
+    QUEST_ARRIVE_DUE_MS = -1
+
+    qArriveOk = QUEST_ARRIVING
+    if QUEST_STATE = QSTATE_OFFERED then qArriveOk = 1
+    if QUEST_ID = 0 then qArriveOk = 0
+    if qArriveOk = 0 then exitfunction
+
+    ` the pickup that was waiting pops, and the one that takes its place comes a moment later, in
+    ` the same cell. see THE PICKUP POPS in fish_headers_quests.
+    if QUEST_ARRIVE_SWAP = 1
+        if QUEST_PICK_CELL >= 0
+            questPopPickup()
+            QUEST_ARRIVE_SWAP = 2
+            QUEST_ARRIVE_DUE_MS = game ms() + QUEST_SWAP_GAP
+            exitfunction
+        endif
+    endif
+
+    if QUEST_ARRIVE_SWAP > 0
+        QUEST_ID = questNextQuest(QUEST_ID)
+    endif
+    QUEST_ARRIVE_SWAP = 0
+    questArriveNow()
+endfunction
+
+
+` the pickup that is waiting beside the board pops, the way that a fish does: a burst of bubbles,
+` the sound of it, and a few points. its cell is left empty, and the cursor, if it was out on it,
+` stays out there for the pickup that comes next.
+function questPopPickup()
+    qPopRow = QUEST_PICK_CELL / CELL_COLUMN_COUNT
+    qPopX = getCellX(CELL_COLUMN_COUNT)
+    qPopY = getCellY(qPopRow)
+
+    qPopPoints = QUEST_SWAP_POINTS * SCORE_MULTIPLIER
+    queueScore(qPopPoints, 0)
+    questPopPos as vec = {
+        x = qPopX,
+        y = qPopY
+    }
+    qPopText = spawnBoardScoreText(questPopPos, "+" + str$(qPopPoints), 0, 800)
+    color text qPopText, rgb(255, 220, 64)
+    spawnBubbles(qPopX, qPopY, CELL_SIZE / 3, 14, 0, rgb(255, 220, 64))
+    spawnBubbles(qPopX, qPopY, CELL_SIZE / 2, 8, 60, rgb(255, 255, 255))
+    playBubblePop(qPopX, 10, .8)
+
+    ` the next one shows up in the same cell
+    QUEST_KEEP_ROW = qPopRow
+    QUEST_KEEP_OUT = QUEST_CURSOR_OUT
+    QUEST_PICK_CELL = -1
+    QUEST_ACCEPT_MS = -1
+    questShowInfo()
+endfunction
+
+
+` the pickup of the quest of the round shows up, right now. it is beside the board, and nothing
+` of the quest is on the board until it has been picked up, so the board does not have to be
+` still for this. see A QUEST ARRIVES in fish_headers_quests.
+function questArriveNow()
+    QUEST_INIT_DUE = 0
+    QUEST_ARRIVING = 0
+    QUEST_REARM = 0
+    QUEST_FIZZ_DUE = 1
+    questForget()
+    questOffer()
+    questShowInfo()
+    questInfoJump(INFO_INDEX_QUEST_PICK)
+endfunction
+
+
+` the next time that info mode is opened, it opens on this, because it is what has just turned up,
+` and so the likeliest thing to want explained. it does nothing while info mode is open.
+function questInfoJump(qJumpInfo)
+    if INFO_MODE then exitfunction
+    if qJumpInfo < 0 then exitfunction
+    if INFOS(qJumpInfo).enabled then INFO_SELECTED = qJumpInfo
+endfunction
+
+
+` forget everything that the quest was keeping. this does not touch the fish on the board. questSweep does.
+function questForget()
+    for qForgetI = 0 to 399
+        QUEST_MARK(qForgetI) = 0
+        QUEST_SPOT(qForgetI) = 0
+        QUEST_FRESH(qForgetI) = 0
+        QUEST_REBORN(qForgetI) = 0
+    next
+    for qForgetI = 0 to 63
+        QUEST_V(qForgetI) = 0
+    next
+    QUEST_LIST_N = 0
+    QUEST_PICK_CELL = -1
+    QUEST_CURSOR_OUT = 0 `the pickup that the cursor was out on is gone, so the cursor comes back
+    QUEST_ACCEPT_MS = -1
+    QUEST_SLIDE_MS = -1
+    if QUEST_FINISH_MS < 0 then QUEST_FINISH_N = 0
+    QUEST_PENDING_SWAPS = 0
+    QUEST_SWAP_A = -1
+    QUEST_SWAP_B = -1
+    QUEST_SWAP_MARKED = 0
+    QUEST_MISSED = 0
+    QUEST_TICKS = 0
+    QUEST_CHAIN = 0
+    QUEST_PROG_NOW = 0
+    QUEST_PROG_NEED = 0
+    QUEST_NOTE_ON = 0
+    QUEST_SHOWN_KEY = -1
+endfunction
+
+
+` take the fish that only a quest puts on the board off of it again. each one turns into a fish of
+` a kind that does not pop where it is. this is only called when the board has settled.
+function questSweep()
+    QUEST_SWEEP_DUE = 0
+    qSweepAny = 0
+    qSweepLast = CELL_COUNT - 1
+    for qSweepI = 0 to qSweepLast
+        ` the diver is not a quest's, though its kind comes after theirs. see fish_headers_diver.
+        qSweepIt = 0
+        if CELLS(qSweepI).value >= TEX_KRILL then qSweepIt = 1
+        if CELLS(qSweepI).value = TEX_DIVER then qSweepIt = 0
+        if qSweepIt
+            questConvert(qSweepI)
+            qSweepAny = 1
+        endif
+    next
+
+    ` they go off in bubbles, and that gets a moment to be seen. see A QUEST THAT THE ROUND ENDS ON.
+    if qSweepAny then QUEST_LEAVE_UNTIL = game ms() + QUEST_LEAVE_TIME
+endfunction
+
+
+` is the upgrade screen being kept waiting, for a quest that the round ended on to finish leaving?
+function questHoldsRound()
+    qLeaving = 0
+    if QUEST_SWEEP_DUE then qLeaving = 1
+    if game ms() < QUEST_LEAVE_UNTIL then qLeaving = 1
+endfunction qLeaving
+
+
+` everything that the quest has drawn fizzes with bubbles, right where it is. a quest that the
+` round ends on goes off this way, and a new one shows up this way. the
+` piles that a quest draws with know what is on the screen. see HOW A QUEST IS DRAWN.
+function questBubbleAway()
+    qAwayN = 0
+    while qAwayN < QUEST_GLOW_SHOWN
+        qAwaySprite = QUEST_GLOW_SPRITES(qAwayN)
+        qAwayWide = sprite width(qAwaySprite) * sprite scale x(qAwaySprite)
+        qAwayTall = sprite height(qAwaySprite) * sprite scale y(qAwaySprite)
+        qAwayX = sprite x(qAwaySprite) + qAwayWide / 2
+        qAwayY = sprite y(qAwaySprite) + qAwayTall / 2
+        qAwayReach = qAwayWide
+        if qAwayTall > qAwayReach then qAwayReach = qAwayTall
+        qAwayCount = 8 + qAwayReach / 10
+        spawnBubbles(qAwayX, qAwayY, qAwayReach / 2, qAwayCount, rnd(160), rgb(255, 235, 150))
+        qAwayN = qAwayN + 1
+    endwhile
+    qAwayN = 0
+    while qAwayN < QUEST_ICON_SHOWN
+        qAwaySprite = QUEST_ICON_SPRITES(qAwayN)
+        qAwayX = sprite x(qAwaySprite)
+        qAwayY = sprite y(qAwaySprite)
+        spawnBubbles(qAwayX, qAwayY, 8, 8, rnd(160), rgb(255, 255, 255))
+        qAwayN = qAwayN + 1
+    endwhile
+
+    ` and so does the badge, all the way along its name
+    for qAwayN = 0 to 5
+        spawnBubbles(QUEST_BADGE_X + 8 + qAwayN * 18, QUEST_BADGE_Y + 12, 10, 6, qAwayN * 30, rgb(150, 190, 255))
+    next
+endfunction
+
+
+` the round is over
+function questRoundEnded()
+    ` a quest is not lost with the round. one that is being played, or that is waiting to be picked
+    ` up, or that has not even shown up yet, carries on into the next round just as it is. only one
+    ` that was finished is done with, so that the next round can bring a new one.
+    if QUEST_ID > 0
+        if QUEST_STATE = QSTATE_DONE
+            QUEST_ID = 0
+            QUEST_STATE = QSTATE_NONE
+            QUEST_INIT_DUE = 0
+            QUEST_REARM = 0
+            QUEST_ARRIVING = 0
+            QUEST_ARRIVE_READY = 0
+            QUEST_ARRIVE_DUE_MS = -1
+            QUEST_SWEEP_DUE = 1
+            questForget()
+            questShowInfo()
+        endif
+    endif
+endfunction
+
+
+` a round is starting. from the third one on, there is a quest to be had, unless one came over
+` from the round before. a zen game has none.
+function questRoundStarted()
+    if GAME_ZEN then exitfunction
+    if CURRENT_ROUND < QUEST_FIRST_ROUND then exitfunction
+
+    ` how many groups it takes to bring a quest goes by the round
+    QUEST_DOT_COUNT = questDotCount()
+
+    ` the empty strip where the badge goes fades in, the first time. see THE SLOT in fish_headers_quests.
+    if QUEST_SLOT_ON = 0
+        QUEST_SLOT_ON = 1
+        create basic tween QUEST_SLOT_TWEEN_ID, 0, 1, 1200, 0
+
+        ` and once it is there, its dots bounce in a wave
+        questDotsWave(1, 900)
+    endif
+
+    ` a quest that came over from the round before carries on. see questRoundEnded.
+    if QUEST_ID > 0 then exitfunction
+
+    QUEST_ID = questNextQuest(0)
+    QUEST_STATE = QSTATE_NONE
+    QUEST_INIT_DUE = 1
+    QUEST_REARM = 0
+    questForget()
+
+    ` it does not show up right away. see A QUEST ARRIVES in fish_headers_quests.
+    QUEST_ARRIVING = 1
+    QUEST_ARRIVE_READY = 0
+endfunction
+
+
+` start a quest right now, whatever the round. 0 takes the quest away. the debug window uses this.
+function questForce(qForceId)
+    QUEST_ID = qForceId
+    QUEST_STATE = QSTATE_NONE
+    QUEST_INIT_DUE = 0
+    QUEST_SWEEP_DUE = 1
+    questForget()
+    QUEST_ARRIVING = 0
+    QUEST_REARM = 0
+    if qForceId > 0
+        QUEST_INIT_DUE = 1
+        QUEST_USED(qForceId) = 1
+        QUEST_REARM = 1 `it starts right away, without waiting to be picked up
+    endif
+    questShowInfo()
+    REQUEST_COMBO_CHECK = 1
+endfunction
+
+
+` set the quest up. the board has settled, so the quest is free to put things on it.
+function questInitNow()
+    QUEST_INIT_DUE = 0
+    QUEST_ARRIVING = 0
+    QUEST_FIZZ_DUE = 1 `it fizzes as it shows up, once it has been drawn
+    qInitRearm = QUEST_REARM
+    QUEST_REARM = 0
+    questForget()
+    questSweep()
+
+    ` every quest waits to be picked up. one that is starting over after it failed was picked up
+    ` already, so it carries straight on. see EVERY QUEST IS PICKED UP in fish_headers_quests.
+    questOffer()
+    if qInitRearm
+        questPickUp()
+    endif
+    questShowInfo()
+    if QUEST_STATE = QSTATE_OFFERED
+        questInfoJump(INFO_INDEX_QUEST_PICK)
+    endif
+endfunction
+
+
+` the quest starts over. what it had on the screen is gone at once, and it is set up again the
+` next time that the board is settled.
+function questRestart()
+    ` whatever it had drawn goes off in bubbles, right now, and not when the board has settled
+    if QUEST_STATE = QSTATE_ACTIVE
+        questBubbleAway()
+    endif
+    QUEST_STATE = QSTATE_NONE
+    QUEST_INIT_DUE = 1
+    QUEST_SWEEP_DUE = 1
+    QUEST_REARM = 1 `it was being played, so it does not have to be picked up again
+    create basic tween QUEST_PUNCH_TWEEN_ID, 1, 0, 400, 0
+
+    ` whatever it was holding back is let go
+    REQUEST_COMBO_CHECK = 1
+endfunction
+
+
+` the player has put the quest down. it starts over, and waits to be picked up again.
+function questDrop()
+    questRestart()
+    QUEST_REARM = 0
+endfunction
+
+
+` the quest failed, so it starts over
+function questFail()
+    if QUEST_STATE = QSTATE_DONE then exitfunction
+    questSay("quest reset", rgb(170, 180, 200))
+    questRestart()
+endfunction
+
+
+` what the quest would pay out, if it were finished right now: every point that the round still
+` needs, so that finishing a quest wins the round. it is never less than a small part of the whole
+` round, for a quest that is finished when the round is as good as won already.
+function questPayout()
+    qPayLeft = SCORE_BAR.endVal - CURRENT_SCORE
+    if qPayLeft < 0 then qPayLeft = 0
+
+    ` to the next 10 up, like everything else that scores, so that it is never short of the end of the bar
+    qPay = ((qPayLeft + 9) / 10) * 10
+
+    ` a round that is as good as won already still pays something
+    qPaySpan = SCORE_BAR.endVal - SCORE_BAR.startVal
+    qPayFloor = ((qPaySpan * QUEST_FLOOR_PERCENT) / 1000) * 10
+    if qPay < qPayFloor then qPay = qPayFloor
+    if qPay < 10 then qPay = 10
+endfunction qPay
+
+
+` the quest is finished. it pays out, and it is counted.
+function questComplete()
+    if QUEST_STATE = QSTATE_DONE then exitfunction
+
+    ` a line of light runs through what the quest was about. see THE FINISH in fish_headers_quests.
+    questFinishStart()
+
+    QUEST_REWARD = questPayout()
+    QUESTS_DONE = QUESTS_DONE + 1
+
+    ` the log of the game says which quest was finished in which round. the next upgrade that is
+    ` picked carries it. see THE QUESTS IN THE LOG in fish_headers.
+    QUEST_LOG_PENDING = QUEST_ID
+
+    ` and the codec marks it as finished, for good
+    if QUEST_EVER_DONE(QUEST_ID) = 0
+        QUEST_EVER_DONE(QUEST_ID) = 1
+        set pref QUEST_PREF_DONE + QUEST_ID, 1
+    endif
+    QUEST_STATE = QSTATE_DONE
+    QUEST_SWEEP_DUE = 1
+    QUEST_PICK_CELL = -1
+    QUEST_CURSOR_OUT = 0
+    for qDoneI = 0 to 399
+        QUEST_MARK(qDoneI) = 0
+        QUEST_SPOT(qDoneI) = 0
+        QUEST_REBORN(qDoneI) = 0
+    next
+
+    ` the points are scored now, and they show up on the bar of the round a few at a time, while
+    ` the little bar over the name drains. see THE PAYOUT in fish_headers_quests.
+    qPayUnits = QUEST_REWARD / 10
+    qPayEach = qPayUnits / QUEST_PAY_PARTS
+    qPayOver = qPayUnits mod QUEST_PAY_PARTS
+    qPayN = 0
+    while qPayN < QUEST_PAY_PARTS
+        qPayPart = qPayEach
+        if qPayN < qPayOver then qPayPart = qPayPart + 1
+        if qPayPart > 0
+            queueScore(qPayPart * 10, 150 + (qPayN * QUEST_PAY_TIME) / QUEST_PAY_PARTS)
+        endif
+        qPayN = qPayN + 1
+    endwhile
+    QUEST_PAY_MS = game ms()
+    questShowInfo() `the pickup is gone, so info mode has nothing to say about it
+
+    ` and they float up off of the little bar in shares, as it drains. see questStepPay.
+    QUEST_PAY_TEXT_COUNT = QUEST_PAY_TEXTS
+    if qPayUnits < QUEST_PAY_TEXT_COUNT then QUEST_PAY_TEXT_COUNT = qPayUnits
+    if QUEST_PAY_TEXT_COUNT < 1 then QUEST_PAY_TEXT_COUNT = 1
+    QUEST_PAY_TEXT_N = 0
+    QUEST_PAY_GIVEN = 0
+
+    ` the badge fizzes
+    spawnBubbles(QUEST_BADGE_X + 50, QUEST_BADGE_Y + 8, 30, 20, 0, rgb(255, 220, 64))
+    create basic tween QUEST_PUNCH_TWEEN_ID, 1, 0, 700, 0
+
+    ` whatever it was holding back is let go
+    REQUEST_COMBO_CHECK = 1
+endfunction
+
+
+` a quest does nothing until it is started. its pickup is not on the board, where the cursor could
+` come to it by accident. it sits just off of the right edge, beside the last cell of a row, which
+` is the cell that QUEST_PICK_CELL holds. the cursor steps off of the board from that cell, onto
+` it, and then a swap downward starts the quest. see questCursorBumped.
+function questOffer()
+    QUEST_STATE = QSTATE_OFFERED
+
+    ` beside the last cell of a row a little way down the board. the row under that one is where
+    ` the check mark shows up, so it is never the bottom row. the pickup of a quest that was
+    ` dropped is back in the row that it was swapped up into.
+    qOfferRow = CELL_ROW_COUNT / 3 + rnd(2)
+    if QUEST_KEEP_ROW >= 0 then qOfferRow = QUEST_KEEP_ROW
+    QUEST_KEEP_ROW = -1
+    if qOfferRow > CELL_ROW_COUNT - 2 then qOfferRow = CELL_ROW_COUNT - 2
+    if qOfferRow < 0 then qOfferRow = 0
+    QUEST_PICK_CELL = qOfferRow * CELL_COLUMN_COUNT + CELL_COLUMN_COUNT - 1
+
+    ` the cursor stays out on the pickup of a quest that it has just dropped
+    if QUEST_KEEP_OUT
+        QUEST_KEEP_OUT = 0
+        QUEST_CURSOR_OUT = 1
+    endif
+
+    ` the badge says nothing under the name until the quest has been picked up
+    questNote(" ")
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` WHAT THE GAME TELLS A QUEST
+` ---------------------------------------------------------------------------------------------
+
+` two fish have traded places, or one has fallen into the place of another. the marks go with them.
+function questSwapMarks(qMarkA, qMarkB)
+    qMarkKeep = QUEST_MARK(qMarkA)
+    QUEST_MARK(qMarkA) = QUEST_MARK(qMarkB)
+    QUEST_MARK(qMarkB) = qMarkKeep
+endfunction
+
+
+` a swap has finished, and the two fish are in their new cells. it is not known yet if it popped anything.
+function questSwapDone(qSwapA, qSwapB)
+    if QUEST_STATE <> QSTATE_ACTIVE then exitfunction
+
+    ` the swap of the "free move" card is free for a quest too. it can move the things of a quest
+    ` about, and whether it pops anything or not is nobody's business. the marks went with the fish.
+    if LIVE_MOVE_FREE then exitfunction
+    QUEST_PENDING_SWAPS = QUEST_PENDING_SWAPS + 1
+    QUEST_TICKS = QUEST_TICKS + 1
+    QUEST_SWAP_A = qSwapA
+    QUEST_SWAP_B = qSwapB
+    if QUEST_MARK(qSwapA) > 0 then QUEST_SWAP_MARKED = 1
+    if QUEST_MARK(qSwapB) > 0 then QUEST_SWAP_MARKED = 1
+    questEvent(QEV_SWAP, qSwapA, qSwapB)
+endfunction
+
+
+` the cursor has come to a new cell. `qStepFrom` is -1 when a special move took it there.
+function questCursorStepped(qStepFrom, qStepTo)
+    if QUEST_STATE = QSTATE_ACTIVE
+        questEvent(QEV_STEP, qStepFrom, qStepTo)
+    endif
+endfunction
+
+
+` the cursor has been pushed one cell across or down, from the cell that it is on, as a swap or
+` not. if that is off of the board, onto the pickup of the quest, the cursor goes out onto it. this
+` says 1 when the push has been dealt with, so that it does nothing else. process_input, in
+` fish_routines_input, and startLiveMove, in fish_funcs, ask.
+function questCursorBumped(qBumpX, qBumpY, qBumpSwap)
+    qBumpTook = 0
+
+    if QUEST_CURSOR_OUT
+        ` while the pickup has popped, and the next one has not come, there is nothing to swap
+        if QUEST_PICK_CELL < 0
+            if qBumpSwap = 0
+                if qBumpX = -1 and qBumpY = 0 then QUEST_CURSOR_OUT = 0
+            endif
+            exitfunction 1
+        endif
+
+        ` the cursor is out on the pickup. a swap puts the pickup onto the mark that is showing next
+        ` to it: down onto the check mark, which starts the quest, or up onto the X, which drops it.
+        ` a step back toward the board brings the cursor in. nothing else does anything out there.
+        qBumpTook = 1
+
+        ` nothing can be done while the swap onto the mark is playing. questStepCursorOut finishes it.
+        if QUEST_ACCEPT_MS < 0
+            qBumpWay = 1
+            if QUEST_STATE = QSTATE_ACTIVE then qBumpWay = -1
+            if qBumpSwap
+                if qBumpX = 0 and qBumpY = qBumpWay
+                    QUEST_ACCEPT_MS = game ms()
+                    QUEST_ACCEPT_DIR = qBumpWay
+
+                    ` the same swell of sound that a swap of two fish makes
+                    create basic tween SWAP_TWEEN_SFX, 0, 1, QUEST_ACCEPT_TIME + 1, 0
+                    set tween type SWAP_TWEEN_SFX, 1
+                endif
+            else
+                if qBumpX = -1 and qBumpY = 0 then QUEST_CURSOR_OUT = 0
+            endif
+        endif
+    else
+        if QUEST_PICK_CELL >= 0
+            if qBumpX = 1 and qBumpY = 0
+                qBumpCell = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+                if qBumpCell = QUEST_PICK_CELL
+                    qBumpOn = 0
+                    if QUEST_STATE = QSTATE_OFFERED then qBumpOn = 1
+                    if QUEST_STATE = QSTATE_ACTIVE then qBumpOn = 1
+                    if qBumpOn
+                        QUEST_CURSOR_OUT = 1
+                        qBumpTook = 1
+                    endif
+                endif
+            endif
+        endif
+    endif
+endfunction qBumpTook
+
+
+` draw the cursor out on the pickup, while it is there, and on its way out and back. the cursor is
+` still on the cell beside the pickup, as far as the rest of the game knows. see THE CURSOR STEPS
+` OFF OF THE BOARD in fish_headers_quests.
+function questStepCursorOut()
+    ` the swap onto the mark is over when its time is up, and that is when the quest starts, or drops
+    if QUEST_ACCEPT_MS >= 0
+        if questAcceptAlong() >= 1000
+            QUEST_ACCEPT_MS = -1
+
+            ` a quest that is dropped has its pickup back in the row above, where the X was
+            if QUEST_STATE = QSTATE_ACTIVE
+                QUEST_KEEP_ROW = QUEST_PICK_CELL / CELL_COLUMN_COUNT - 1
+                QUEST_KEEP_OUT = 1
+            endif
+            questPickToggle()
+
+            ` the cursor went along with the pickup, and it stays out on it, in its new cell. so the
+            ` cell of the board that the cursor is beside is one row along, the way that the swap went.
+            SELECTION_POS.y = SELECTION_POS.y + QUEST_ACCEPT_DIR
+            if SELECTION_POS.y < 0 then SELECTION_POS.y = 0
+            if SELECTION_POS.y > CELL_ROW_COUNT - 1 then SELECTION_POS.y = CELL_ROW_COUNT - 1
+            QUEST_CURSOR_DOWN# = 0
+            create basic tween QUEST_PICK_PUNCH_TWEEN_ID, 1, 0, 380, 0
+        endif
+    endif
+
+    qOutWant# = QUEST_CURSOR_OUT
+    qOutDown# = questAcceptAlong() * .001
+    qOutIdle = 1
+    if QUEST_CURSOR_OUT then qOutIdle = 0
+    if QUEST_CURSOR_EASED# <> 0 then qOutIdle = 0
+    if QUEST_CURSOR_DOWN# <> 0 then qOutIdle = 0
+    if qOutDown# <> 0 then qOutIdle = 0
+    if qOutIdle then exitfunction
+
+    QUEST_CURSOR_EASED# = QUEST_CURSOR_EASED# + (qOutWant# - QUEST_CURSOR_EASED#) * .35
+    if abs(qOutWant# - QUEST_CURSOR_EASED#) < .02 then QUEST_CURSOR_EASED# = qOutWant#
+
+    ` the cursor rides down with the pickup while the swap plays, and comes back up after
+    if qOutDown# > QUEST_CURSOR_DOWN#
+        QUEST_CURSOR_DOWN# = qOutDown#
+    else
+        QUEST_CURSOR_DOWN# = QUEST_CURSOR_DOWN# + (qOutDown# - QUEST_CURSOR_DOWN#) * .35
+        if abs(qOutDown# - QUEST_CURSOR_DOWN#) < .02 then QUEST_CURSOR_DOWN# = qOutDown#
+    endif
+
+    ` a move that is playing out, or a shake, puts the cursor where it wants it
+    if LIVE_MOVE_ACTIVE then exitfunction
+    qOutX# = getCellX(SELECTION_POS.x) + CELL_SIZE * QUEST_CURSOR_EASED#
+    qOutY# = getCellY(SELECTION_POS.y) + CELL_SIZE * QUEST_CURSOR_DOWN# * QUEST_ACCEPT_DIR
+    position sprite SELECTION_SPRITE, qOutX#, qOutY#
+endfunction
+
+
+` how far along the swap onto the mark is, in thousandths, eased so that it starts and stops
+` softly. 0 when there is none.
+function questAcceptAlong()
+    qAcceptAlong = 0
+    if QUEST_ACCEPT_MS >= 0
+        qAcceptAlong = 1000
+        if QUEST_ACCEPT_TIME > 0
+            qAcceptAge# = game ms() - QUEST_ACCEPT_MS
+            qAcceptTime# = QUEST_ACCEPT_TIME
+            qAcceptPart# = qAcceptAge# / qAcceptTime#
+            if qAcceptPart# < 0 then qAcceptPart# = 0
+            if qAcceptPart# < 1
+                qAcceptAlong = qAcceptPart# * qAcceptPart# * (3 - 2 * qAcceptPart#) * 1000
+            endif
+        endif
+    endif
+endfunction qAcceptAlong
+
+
+` pick the quest up, if it is waiting to be, or drop it, if it is being played
+function questPickToggle()
+    if QUEST_PICK_CELL < 0 then exitfunction
+    if QUEST_STATE = QSTATE_OFFERED
+        questPickUp()
+        exitfunction
+    endif
+    if QUEST_STATE = QSTATE_ACTIVE
+        questSay("dropped", rgb(170, 180, 200))
+        questDrop()
+    endif
+endfunction
+
+
+` the quest has been picked up, so this is where it really starts: it puts its things on the
+` board, its name goes up on the badge, and the codec has an entry for it from now on.
+function questPickUp()
+    if QUEST_STATE <> QSTATE_OFFERED then exitfunction
+    QUEST_STATE = QSTATE_ACTIVE
+    QUEST_NOTE_ON = 0
+    questProgress(0, 0)
+    questEvent(QEV_INIT, 0, 0)
+    if QUEST_STATE = QSTATE_ACTIVE
+        questEvent(QEV_START, -1, QUEST_PICK_CELL)
+    endif
+
+    ` its pickup stays where the check mark was, which is one row down. see THE SWAP ONTO THE MARK in fish_headers_quests.
+    if QUEST_PICK_CELL >= 0
+        QUEST_PICK_CELL = QUEST_PICK_CELL + CELL_COLUMN_COUNT
+    endif
+    questShowInfo()
+    QUEST_USED(QUEST_ID) = 1 `it has been tried, so it does not come around again
+    QUEST_FIZZ_DUE = 1
+
+    ` info mode opens on the quest, the next time
+    questInfoJump(INFO_INDEX_QUEST)
+
+    ` the name gets a punch, and a lot of bubbles
+    create basic tween QUEST_PUNCH_TWEEN_ID, 1, 0, 600, 0
+    questBadgeFizz(14)
+    if QUEST_PICK_CELL >= 0
+        spawnBubbles(getCellX(CELL_COLUMN_COUNT), getCellY(QUEST_PICK_CELL / CELL_COLUMN_COUNT), CELL_SIZE / 2, 12, 0, rgb(255, 220, 64))
+    endif
+
+    ` see THE QUESTS IN THE CODEC in fish_headers_quests
+    if CODEC_ENTRY_QUEST >= 0
+        codecSeeCard(CODEC_ENTRY_QUEST + QUEST_ID - 1)
+    endif
+endfunction
+
+
+` handle_combos has looked at the board, and `qJudgeCount` groups are popping. the fish that pop
+` have comboBlownUp set, and the group that each is in is its comboFillId.
+function questJudge(qJudgeCount)
+    ` the quest of the round is waiting for a big group to pop before it shows up. see A QUEST ARRIVES in fish_headers_quests.
+    ` and its pickup shows up as that group is scored. while the pickup is waiting, another big group,
+    ` the next time that the board is looked at, swaps it for the pickup of a quest that has not
+    ` been tried.
+    ` how many groups have popped in this turn so far
+    if qJudgeCount > 0
+        QUEST_TURN_GROUPS = QUEST_TURN_GROUPS + qJudgeCount
+    endif
+
+    qJudgeBig = 0
+    qJudgeWaiting = QUEST_ARRIVING
+    if QUEST_STATE = QSTATE_OFFERED then qJudgeWaiting = 1
+    if QUEST_ID = 0 then qJudgeWaiting = 0
+    if QUEST_TURN_USED then qJudgeWaiting = 0
+    if qJudgeWaiting
+        if qJudgeCount > 0
+            if QUEST_TURN_GROUPS >= QUEST_DOT_COUNT
+                qJudgeBig = 1
+                QUEST_TURN_USED = 1
+            endif
+        endif
+    endif
+
+    ` fish popped, and the turn has not brought a quest. while the strip has only its dots in it,
+    ` they say how far it got. see THE DOTS in fish_headers_quests.
+    if qJudgeBig = 0
+        if qJudgeCount > 0
+            if QUEST_SLOT_ON
+                if QUEST_SHOWN_KEY <> 1
+                    if QUEST_TURN_USED = 0
+                        ` a dot bounces for every group that has popped in the turn, and the rest shake
+                        questDotsWave(2, 0)
+                        QUEST_DOTS_BOUNCE = QUEST_TURN_GROUPS
+                        if QUEST_DOTS_BOUNCE > QUEST_DOT_COUNT - 1 then QUEST_DOTS_BOUNCE = QUEST_DOT_COUNT - 1
+                    endif
+                endif
+            endif
+        endif
+    endif
+
+    ` all of the dots bounce, and the pickup shows up as the last one lands. see THE DOTS in fish_headers_quests.
+    if qJudgeBig
+        if QUEST_ARRIVE_DUE_MS < 0
+            QUEST_ARRIVE_SWAP = 1
+            if QUEST_ARRIVING
+                QUEST_ARRIVE_READY = 1
+                QUEST_ARRIVE_SWAP = 0
+            endif
+            QUEST_ARRIVE_DUE_MS = game ms() + QUEST_DOT_GAP * (QUEST_DOT_COUNT - 1) + QUEST_DOT_TIME
+            questDotsWave(1, 0)
+        endif
+    endif
+
+    if QUEST_STATE <> QSTATE_ACTIVE
+        QUEST_PENDING_SWAPS = 0
+        exitfunction
+    endif
+
+    qJudgeSwap = 0
+    if QUEST_PENDING_SWAPS > 0 then qJudgeSwap = 1
+    QUEST_PENDING_SWAPS = 0
+    QUEST_MISSED = 0
+
+    ` nothing pops. questSettled is called next, and it hears whether a swap just missed.
+    if qJudgeCount = 0
+        if qJudgeSwap then QUEST_MISSED = 1
+        exitfunction
+    endif
+
+    QUEST_CHAIN = QUEST_CHAIN + 1
+    questCollectGroups()
+    questEvent(QEV_JUDGE, qJudgeCount, qJudgeSwap)
+
+    ` a mark is gone with its fish, unless the quest is bringing the fish back
+    qJudgeLast = CELL_COUNT - 1
+    for qJudgeI = 0 to qJudgeLast
+        if CELLS(qJudgeI).comboBlownUp
+            if QUEST_REBORN(qJudgeI) = 0 then QUEST_MARK(qJudgeI) = 0
+        endif
+    next
+endfunction
+
+
+` handle_combos has looked at the board, and nothing pops. the board is still.
+function questSettled()
+    if QUEST_STATE = QSTATE_ACTIVE
+        questEvent(QEV_SETTLE, QUEST_TICKS, 0)
+    endif
+    QUEST_TICKS = 0
+    QUEST_CHAIN = 0
+    QUEST_MISSED = 0
+    QUEST_SWAP_MARKED = 0
+
+    ` the turn is over, and the next one starts counting its groups from nothing
+    QUEST_TURN_GROUPS = 0
+    QUEST_TURN_USED = 0
+endfunction
+
+
+` list the groups that are popping: which group, what kind of fish, and how many
+function questCollectGroups()
+    QUEST_GROUP_N = 0
+    qGroupLast = CELL_COUNT - 1
+    for qGroupI = 0 to qGroupLast
+        if CELLS(qGroupI).comboBlownUp
+            qGroupId = CELLS(qGroupI).comboFillId
+            qGroupAt = -1
+            qGroupN = 0
+            while qGroupN < QUEST_GROUP_N
+                if QUEST_GROUP_ID(qGroupN) = qGroupId
+                    qGroupAt = qGroupN
+                    qGroupN = QUEST_GROUP_N
+                endif
+                qGroupN = qGroupN + 1
+            endwhile
+            if qGroupAt < 0
+                if QUEST_GROUP_N < 64
+                    qGroupAt = QUEST_GROUP_N
+                    QUEST_GROUP_N = QUEST_GROUP_N + 1
+                    QUEST_GROUP_ID(qGroupAt) = qGroupId
+                    QUEST_GROUP_KIND(qGroupAt) = CELLS(qGroupI).value
+                    QUEST_GROUP_SIZE(qGroupAt) = 0
+                endif
+            endif
+            if qGroupAt >= 0
+                QUEST_GROUP_SIZE(qGroupAt) = QUEST_GROUP_SIZE(qGroupAt) + 1
+            endif
+        endif
+    next
+endfunction
+
+
+` what a group that is popping scores: 1 for the usual, and 0 for nothing at all.
+` krill is worth nothing, and so is anything that pops next to the shark.
+function questGroupScore(qScoreGroup)
+    qScoreWorth = 1
+    qScoreQuest = 0
+    if QUEST_STATE = QSTATE_ACTIVE then qScoreQuest = QUEST_ID
+
+    if qScoreQuest = QUEST_KRILL
+        qScoreLast = CELL_COUNT - 1
+        for qScoreI = 0 to qScoreLast
+            if CELLS(qScoreI).comboFillId = qScoreGroup
+                if CELLS(qScoreI).value = TEX_KRILL then qScoreWorth = 0
+            endif
+        next
+    endif
+
+    if qScoreQuest = QUEST_SHARK
+        qScoreLast = CELL_COUNT - 1
+        for qScoreI = 0 to qScoreLast
+            if CELLS(qScoreI).comboFillId = qScoreGroup
+                qScoreNear = questChebyshev(qScoreI, QUEST_V(0))
+                if qScoreNear <= QUEST_SHARK_REACH
+                    qScoreWorth = 0
+                    QUEST_V(2) = 1
+                endif
+            endif
+        next
+    endif
+endfunction qScoreWorth
+
+
+` is the fish in this cell one that the cards must leave alone? a fish that a quest has marked is,
+` and so is a fish of one of a quest's own kinds. the "stock market" card asks, before it adds a
+` fish to a group that is popping.
+function questKeepsFish(qKeepCell)
+    qKept = 0
+    if QUEST_MARK(qKeepCell) > 0 then qKept = 1
+    if CELLS(qKeepCell).value >= TEX_KRILL then qKept = 1
+endfunction qKept
+
+
+` is the thing in this cell one that cannot be swapped? the turtle walks on its own, and the glass
+` fish is only lowered by popping what is under it. a swap that would move either one is turned
+` down, and the cursor shakes, the same as for any move that cannot be made. startLiveMove asks.
+function questLocksCell(qLockCell)
+    qLocked = 0
+    if CELLS(qLockCell).value = TEX_TURTLE then qLocked = 1
+    if CELLS(qLockCell).value = TEX_GLASS_FISH then qLocked = 1
+endfunction qLocked
+
+
+` is this group, which is big enough to pop, being held back? see SLEEPERS in fish_quests.
+function questHoldsGroup(qHoldGroup)
+    qHeld = 0
+    qHoldOn = 0
+    if QUEST_STATE = QSTATE_ACTIVE
+        if QUEST_ID = QUEST_SLEEPERS then qHoldOn = 1
+    endif
+
+    if qHoldOn
+        qHoldLast = CELL_COUNT - 1
+        for qHoldI = 0 to qHoldLast
+            if CELLS(qHoldI).comboFillId = qHoldGroup
+                if CELLS(qHoldI).value = QUEST_V(0) then qHeld = 1
+                exit
+            endif
+        next
+        if qHeld then QUEST_V(2) = QUEST_V(2) + 1
+    endif
+endfunction qHeld
+
+
+` is a swap that popped nothing let off by the multiplier? with the krill, every one is. with the
+` sleepers, one that made a group that is being held back is.
+function questMissLetOff()
+    qLetOff = 0
+    if QUEST_STATE = QSTATE_ACTIVE
+        if QUEST_ID = QUEST_KRILL then qLetOff = 1
+        if QUEST_ID = QUEST_SLEEPERS
+            if QUEST_V(2) > 0 then qLetOff = 1
+        endif
+    endif
+endfunction qLetOff
+
+
+` the fish that popped are gone. a cell that a quest is bringing a fish back to gets it now, so that
+` it is not empty, and nothing falls into it. the "bottles" card does the same thing.
+function questAfterPops()
+    if QUEST_ID = 0 then exitfunction
+    qBornLast = CELL_COUNT - 1
+    for qBornI = 0 to qBornLast
+        if QUEST_REBORN(qBornI) > 0
+            CELLS(qBornI).comboBlownUp = 0
+            CELLS(qBornI).value = QUEST_REBORN(qBornI)
+            QUEST_REBORN(qBornI) = 0
+            updateCell(CELLS(qBornI))
+            set sprite alpha CELLS(qBornI).spriteId, 255
+            create basic tween CELLS(qBornI).scaleWaveTweenId, 1.6, 1, 250, 0
+            spawnBubbles(getCellX(CELLS(qBornI).coord.x), getCellY(CELLS(qBornI).coord.y), CELL_SIZE / 3, 6, 0, rgb(255, 255, 255))
+        endif
+    next
+endfunction
+
+
+` a new fish is dropping into this cell, and `qNewKind` is the kind that was picked for it. this
+` says what kind it really is. a quest's own kinds never drop in. see FORECAST in fish_quests.
+function questNewFish(qNewCell, qNewKind)
+    qNewPicked = qNewKind
+    if qNewPicked >= TEX_KRILL then qNewPicked = rnd(7) + 1
+
+    if QUEST_STATE = QSTATE_ACTIVE
+        if QUEST_ID = QUEST_FORECAST
+            if NEW_FISH_ROUND_WON = 0
+                qNewPicked = questForecastTake(qNewCell)
+            endif
+        endif
+    endif
+endfunction qNewPicked
+
+
+` the board is about to change shape, so nothing that a quest knows about it will be true. the
+` quest starts over on the new board.
+function questBoardGrowing()
+    QUEST_HOLD = 1
+    if QUEST_ID > 0
+        if QUEST_STATE <> QSTATE_DONE
+            ` one that was being played carries on, on the new board
+            if QUEST_STATE = QSTATE_ACTIVE then QUEST_REARM = 1
+            QUEST_STATE = QSTATE_NONE
+            QUEST_INIT_DUE = 1
+        endif
+        questSweep()
+        questForget()
+    endif
+endfunction
+
+function questBoardGrew()
+    QUEST_HOLD = 0
+endfunction
+
+
+` the quests of the saved game: which quest it is, whether it was finished, which ones have been
+` tried, and the quest itself, just as it is. see THE QUEST IN THE SAVED GAME in fish_headers_quests.
+function questSave()
+    set pref SAVE_PREF + 25, QUESTS_DONE
+    set pref SAVE_PREF + 26, QUEST_ID
+    qSaveDone = 0
+    if QUEST_STATE = QSTATE_DONE then qSaveDone = 1
+    if QUEST_ARRIVING
+        if QUEST_ARRIVE_READY = 0 then qSaveDone = 2 `it has not shown up yet
+    endif
+    set pref SAVE_PREF + 27, qSaveDone
+    set pref SAVE_PREF + 30, QUEST_LOG_PENDING
+
+    ` which quests have had their turn, sixteen to a number, as a bit each
+    for qSaveHalf = 0 to 1
+        qSaveBits = 0
+        qSaveBit = 1
+        for qSaveN = 1 to 16
+            if QUEST_USED(qSaveHalf * 16 + qSaveN) then qSaveBits = qSaveBits + qSaveBit
+            qSaveBit = qSaveBit * 2
+        next
+        set pref SAVE_PREF + 28 + qSaveHalf, qSaveBits
+    next
+
+    ` and the quest itself, as it is. see THE QUEST IN THE SAVED GAME in fish_headers_quests.
+    questPack()
+    for qSaveN = 0 to 399
+        set pref QUEST_PACK_PREF + qSaveN, QUEST_PACK(qSaveN)
+    next
+endfunction
+
+
+` put the quest that is being played into QUEST_PACK, as plain numbers. see THE QUEST IN THE SAVED GAME.
+function questPack()
+    for qPackN = 0 to 399
+        QUEST_PACK(qPackN) = 0
+    next
+    QUEST_PACK(0) = QUEST_STATE + 10
+    QUEST_PACK(1) = QUEST_PICK_CELL + 1
+    QUEST_PACK(2) = QUEST_PROG_NOW
+    QUEST_PACK(3) = QUEST_PROG_NEED
+    QUEST_PACK(4) = QUEST_LIST_N
+    QUEST_PACK(5) = QUEST_NOTE_ON
+    QUEST_PACK(6) = QUEST_REARM
+    QUEST_PACK(7) = QUEST_INIT_DUE
+    for qPackN = 0 to 63
+        QUEST_PACK(10 + qPackN) = QUEST_V(qPackN)
+    next
+    for qPackN = 0 to 99
+        QUEST_PACK(100 + qPackN) = QUEST_LIST(qPackN)
+    next
+    for qPackN = 0 to 199
+        QUEST_PACK(200 + qPackN) = QUEST_MARK(qPackN) + QUEST_SPOT(qPackN) * 100
+    next
+endfunction
+
+
+` take the quest back out of QUEST_PACK. this says 1 if there was one in it to take out, and 0 for
+` a saved game from before the quest was saved, which has nothing there.
+function questUnpack()
+    if QUEST_PACK(0) < 10 then exitfunction 0
+
+    QUEST_STATE = QUEST_PACK(0) - 10
+    QUEST_PICK_CELL = QUEST_PACK(1) - 1
+    QUEST_PROG_NOW = QUEST_PACK(2)
+    QUEST_PROG_NEED = QUEST_PACK(3)
+    QUEST_LIST_N = QUEST_PACK(4)
+    if QUEST_LIST_N > 100 then QUEST_LIST_N = 100
+    QUEST_NOTE_ON = QUEST_PACK(5)
+    QUEST_REARM = QUEST_PACK(6)
+    QUEST_INIT_DUE = QUEST_PACK(7)
+    for qPackN = 0 to 63
+        QUEST_V(qPackN) = QUEST_PACK(10 + qPackN)
+    next
+    for qPackN = 0 to 99
+        QUEST_LIST(qPackN) = QUEST_PACK(100 + qPackN)
+    next
+    for qPackN = 0 to 199
+        QUEST_MARK(qPackN) = QUEST_PACK(200 + qPackN) mod 100
+        QUEST_SPOT(qPackN) = QUEST_PACK(200 + qPackN) / 100
+    next
+    QUEST_SHOWN_KEY = -1 `the badge has to be written again
+endfunction 1
+
+
+` the few things about a quest that are not numbers, and so were not saved, put back from the
+` numbers that were: the words on the badge, where the things that glide are drawn, and the fish
+` that are waiting above the columns.
+function questAfterLoad()
+    if QUEST_STATE <> QSTATE_ACTIVE then exitfunction
+
+    if QUEST_ID = QUEST_CONSTELLATION
+        if QUEST_V(0) = 0
+            questNote("a line")
+        endif
+        if QUEST_V(0) = 1
+            questNote("a square")
+        endif
+        if QUEST_V(0) = 2
+            questNote("an L")
+        endif
+    endif
+    if QUEST_ID = QUEST_TREASURE
+        questNote("pop to listen")
+    endif
+    if QUEST_NOTE_ON
+        if QUEST_ID <> QUEST_CONSTELLATION
+            if QUEST_ID <> QUEST_TREASURE then QUEST_NOTE_ON = 0
+        endif
+    endif
+
+    ` the shark, and the little fish, are drawn right where they are, with no glide to get there
+    qAfterGlide = QUEST_V(0)
+    if qAfterGlide >= 0
+        if qAfterGlide < CELL_COUNT
+            QUEST_GLIDE_X# = getCellX(qAfterGlide mod CELL_COLUMN_COUNT)
+            QUEST_GLIDE_Y# = getCellY(qAfterGlide / CELL_COLUMN_COUNT)
+        endif
+    endif
+
+    if QUEST_ID = QUEST_FORECAST
+        for qAfterN = 0 to 399
+            QUEST_FORE(qAfterN) = rnd(7) + 1
+            QUEST_STACK(qAfterN) = 0
+        next
+    endif
+endfunction
+
+function questLoad()
+    QUESTS_DONE = get pref(SAVE_PREF + 25, 0)
+    QUEST_LOG_PENDING = get pref(SAVE_PREF + 30, 0)
+    if QUEST_LOG_PENDING < 0 then QUEST_LOG_PENDING = 0
+    if QUEST_LOG_PENDING > QUEST_COUNT then QUEST_LOG_PENDING = 0
+    QUEST_ID = get pref(SAVE_PREF + 26, 0)
+    if QUEST_ID < 0 then QUEST_ID = 0
+    if QUEST_ID > QUEST_COUNT then QUEST_ID = 0
+    QUEST_STATE = QSTATE_NONE
+    QUEST_INIT_DUE = 0
+    QUEST_SWEEP_DUE = 1
+    QUEST_ARRIVING = 0
+    QUEST_REARM = 0
+
+    QUEST_DOT_COUNT = questDotCount()
+
+    ` a game that was saved in a round that can have a quest has the empty strip already
+    if GAME_ZEN = 0
+        if CURRENT_ROUND >= QUEST_FIRST_ROUND
+            QUEST_SLOT_ON = 1
+            create basic tween QUEST_SLOT_TWEEN_ID, 1, 1, 1, 0
+        endif
+    endif
+    for qLoadHalf = 0 to 1
+        qLoadBits = get pref(SAVE_PREF + 28 + qLoadHalf, 0)
+        for qLoadN = 1 to 16
+            QUEST_USED(qLoadHalf * 16 + qLoadN) = qLoadBits mod 2
+            qLoadBits = qLoadBits / 2
+        next
+    next
+    if QUEST_ID > 0
+        qLoadDone = get pref(SAVE_PREF + 27, 0)
+        if qLoadDone = 1
+            QUEST_STATE = QSTATE_DONE
+        else
+            QUEST_INIT_DUE = 1
+
+            ` one that had not shown up yet still has to wait for its big group
+            if qLoadDone = 2
+                QUEST_ARRIVING = 1
+                QUEST_ARRIVE_READY = 0
+            else
+                ` one that was waiting, or being played, is put back just as it was, with what it had
+                ` on the board, which was saved with the board. see THE QUEST IN THE SAVED GAME in
+                ` fish_headers_quests. a saved game from before that was saved sets the quest up again.
+                for qLoadN = 0 to 399
+                    QUEST_PACK(qLoadN) = get pref(QUEST_PACK_PREF + qLoadN, 0)
+                next
+                if questUnpack()
+                    QUEST_SWEEP_DUE = 0
+                    questAfterLoad()
+                endif
+            endif
+        endif
+    endif
+    questShowInfo()
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` EVERY FRAME
+` ---------------------------------------------------------------------------------------------
+
+` update_frame calls this on every frame. it sets the quest up when the board is still, and draws it.
+function stepQuest()
+    questStepWhale()
+    questStepArrive()
+    questStepCursorOut()
+    questStepPay()
+    questStepSlot()
+    questStepSlide()
+
+    ` the waves of the zones move with the clock. the effect forgets what it is told, so it is told on every frame.
+    qZoneClock# = game ms() mod 600000
+    set effect param float QUEST_ZONE_FX_ID, "Time", qZoneClock# * .001
+
+    ` is the board still? nothing is popping or falling, and no swap is playing out.
+    qStill = 1
+    if REQUEST_COMBO_CHECK then qStill = 0
+    if LIVE_MOVE_ACTIVE then qStill = 0
+    if COMBO_PHASE > 0 then qStill = 0
+    if QUEST_HOLD then qStill = 0
+    if PENDING_BOARD_EXPANSIONS > 0 then qStill = 0
+    if qStill
+        qInitNow = QUEST_INIT_DUE
+        if SCORE_BAR_HOLD > 0 then qInitNow = 0 `the round is over, and the next one has not started
+        if QUEST_ID = 0 then qInitNow = 0
+
+        ` a quest that has not shown up yet is not set up here. questArriveNow brings it, when a turn
+        ` pops enough groups. this only holds back the setting up, and never the sweep further down,
+        ` because the upgrade screen waits for the sweep. see questHoldsRound.
+        if QUEST_ARRIVING then qInitNow = 0
+        if qInitNow
+            questInitNow()
+        else
+            if QUEST_SWEEP_DUE
+                questSweep()
+            endif
+        endif
+    endif
+
+    ` draw it. whatever this frame does not take from the piles is hidden.
+    QUEST_TRAIL_ON = 0
+    QUEST_GLOW_N = 0
+    QUEST_ICON_N = 0
+    QUEST_NUM_N = 0
+    ` a quest that has not shown up yet is not on the screen at all
+    qDrawAny = 0
+    if QUEST_ID > 0 then qDrawAny = 1
+    if QUEST_ARRIVING then qDrawAny = 0
+    if qDrawAny
+        qDrawBoard = 0
+        if QUEST_STATE = QSTATE_ACTIVE then qDrawBoard = 1
+        if QUEST_STATE = QSTATE_OFFERED then qDrawBoard = 1
+        if TUNA_EASED# > 0 then qDrawBoard = 0 `the fish are busy making a QR code
+        QUEST_FOCUS = 0
+        QUEST_HILITE = 0
+        if qDrawBoard
+            ` is the cursor on the thing that the quest is about? see STAYING OUT OF THE WAY in fish_headers_quests.
+            qFocusCell = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+            if QUEST_MARK(qFocusCell) > 0 then QUEST_FOCUS = 1
+            if CELLS(qFocusCell).value >= TEX_KRILL then QUEST_FOCUS = 1
+
+            ` while the cursor is out on the pickup of a quest that is running, the whole quest is
+            ` pointed out. see POINTING THE QUEST OUT in fish_headers_quests.
+            if QUEST_CURSOR_OUT
+                if QUEST_STATE = QSTATE_ACTIVE
+                    QUEST_HILITE = 1
+                    QUEST_FOCUS = 1
+                endif
+            endif
+
+            ` a quest that is waiting to be picked up has nothing on the board but its pickup
+            if QUEST_STATE = QSTATE_ACTIVE
+                questEvent(QEV_DRAW, 0, 0)
+            endif
+            questDrawMarks()
+            questDrawKinds()
+            questDrawPickup()
+        endif
+
+        ` the badge is only there once the quest has been started, or while the cursor is out on
+        ` the pickup, having a look at it. see A LOOK AT THE QUEST in fish_headers_quests.
+        qDrawBadge = 0
+        if QUEST_STATE = QSTATE_ACTIVE then qDrawBadge = 1
+        if QUEST_STATE = QSTATE_DONE then qDrawBadge = 1
+        qDrawLook = 0
+        if QUEST_STATE = QSTATE_OFFERED
+            if QUEST_CURSOR_OUT then qDrawLook = 1
+        endif
+        if qDrawLook then qDrawBadge = 1
+
+        ` the name puffs in when the look starts, and fizzles out when the cursor comes away
+        if qDrawLook <> QUEST_PREVIEW
+            if QUEST_STATE = QSTATE_OFFERED
+                questBadgeFizz(5)
+            endif
+            QUEST_PREVIEW = qDrawLook
+            questShowInfo() `info mode explains the quest while it is being looked at, and not after
+            if qDrawLook
+                questInfoJump(INFO_INDEX_QUEST)
+            else
+                ` the look is over. if that is because the quest was started, info mode stays on the quest.
+                if QUEST_STATE = QSTATE_OFFERED
+                    questInfoJump(INFO_INDEX_QUEST_PICK)
+                endif
+            endif
+        endif
+        if qDrawBadge
+            questDrawBadge()
+        else
+            questHideBadge()
+        endif
+    else
+        questHideBadge()
+    endif
+
+    while QUEST_GLOW_SHOWN > QUEST_GLOW_N
+        QUEST_GLOW_SHOWN = QUEST_GLOW_SHOWN - 1
+        hide sprite QUEST_GLOW_SPRITES(QUEST_GLOW_SHOWN)
+    endwhile
+    QUEST_GLOW_SHOWN = QUEST_GLOW_N
+    while QUEST_ICON_SHOWN > QUEST_ICON_N
+        QUEST_ICON_SHOWN = QUEST_ICON_SHOWN - 1
+        hide sprite QUEST_ICON_SPRITES(QUEST_ICON_SHOWN)
+    endwhile
+    QUEST_ICON_SHOWN = QUEST_ICON_N
+    while QUEST_NUM_SHOWN > QUEST_NUM_N
+        QUEST_NUM_SHOWN = QUEST_NUM_SHOWN - 1
+        hide text QUEST_NUM_TEXTS(QUEST_NUM_SHOWN)
+    endwhile
+    QUEST_NUM_SHOWN = QUEST_NUM_N
+    questStepFinish()
+    if QUEST_TRAIL_ON = 0
+        hide sprite QUEST_TRAIL_SPRITE
+    endif
+
+    ` a quest that has just been set up fizzes, now that it has been drawn
+    if QUEST_FIZZ_DUE
+        QUEST_FIZZ_DUE = 0
+        if qDrawAny
+            questBubbleAway()
+        endif
+    endif
+endfunction
+
+
+` an outline around every fish that has a mark on it, in a color that goes by the mark. it is a
+` zone like any other, so the water pushes it about, and it rides along with the fish.
+function questDrawMarks()
+    qMarkLast = CELL_COUNT - 1
+    qMarkSize = CELL_ART_SIZE + 8
+
+    ` they are strong, and pulse, while the quest is being pointed out. see POINTING THE QUEST OUT.
+    qMarkAlpha = 105
+    if QUEST_HILITE then qMarkAlpha = 190 + 60 * sin(game ms() * .008)
+    for qMarkI = 0 to qMarkLast
+        if QUEST_MARK(qMarkI) > 0
+            qMarkLeft = sprite x(CELLS(qMarkI).spriteId) - qMarkSize / 2
+            qMarkTop = sprite y(CELLS(qMarkI).spriteId) - qMarkSize / 2
+            questGlowRect(qMarkLeft, qMarkTop, qMarkSize, qMarkSize, questMarkColor(QUEST_MARK(qMarkI), qMarkAlpha))
+        endif
+    next
+endfunction
+
+
+` light up every fish on the board that is one of the quest's own kinds, like the turtle, while
+` the quest is being pointed out
+function questDrawKinds()
+    if QUEST_HILITE = 0 then exitfunction
+    qKindLast = CELL_COUNT - 1
+    qKindSize = CELL_ART_SIZE + 10
+    qKindAlpha = 190 + 60 * sin(game ms() * .008)
+    for qKindI = 0 to qKindLast
+        if CELLS(qKindI).value >= TEX_KRILL
+            qKindLeft = sprite x(CELLS(qKindI).spriteId) - qKindSize / 2
+            qKindTop = sprite y(CELLS(qKindI).spriteId) - qKindSize / 2
+            questGlowRect(qKindLeft, qKindTop, qKindSize, qKindSize, rgb(255, 220, 64, qKindAlpha))
+        endif
+    next
+endfunction
+
+
+` SLIDING. see SLIDING AND GLIDING in fish_headers_quests. the fish that was in `qSlideFrom` is
+` in `qSlideTo` now, and the other way around: the two have already traded places. their pictures
+` slide to where they belong.
+function questSlideStart(qSlideFrom, qSlideTo)
+    QUEST_SLIDE_A = qSlideTo
+    QUEST_SLIDE_B = qSlideFrom
+    QUEST_SLIDE_MS = game ms()
+    questStepSlide()
+endfunction
+
+function questStepSlide()
+    if QUEST_SLIDE_MS < 0 then exitfunction
+
+    qSlideAX = getCellX(QUEST_SLIDE_A mod CELL_COLUMN_COUNT)
+    qSlideAY = getCellY(QUEST_SLIDE_A / CELL_COLUMN_COUNT)
+    qSlideBX = getCellX(QUEST_SLIDE_B mod CELL_COLUMN_COUNT)
+    qSlideBY = getCellY(QUEST_SLIDE_B / CELL_COLUMN_COUNT)
+
+    ` it is over when its time is up. it is cut short when the fish start to pop and fall, or when
+    ` the player swaps one of the two, because then something else is moving the pictures.
+    qSlideAge = game ms() - QUEST_SLIDE_MS
+    qSlideOver = 0
+    if qSlideAge >= QUEST_SLIDE_TIME then qSlideOver = 1
+    if COMBO_PHASE > 0 then qSlideOver = 1
+    if LIVE_MOVE_ACTIVE
+        if LIVE_MOVE_IS_SWAP
+            if LIVE_MOVE_A = QUEST_SLIDE_A then qSlideOver = 2
+            if LIVE_MOVE_B = QUEST_SLIDE_A then qSlideOver = 2
+            if LIVE_MOVE_A = QUEST_SLIDE_B then qSlideOver = 2
+            if LIVE_MOVE_B = QUEST_SLIDE_B then qSlideOver = 2
+        endif
+    endif
+    if qSlideOver
+        QUEST_SLIDE_MS = -1
+
+        ` a swap puts the pictures of its own two fish where it wants them
+        if qSlideOver = 1
+            position sprite CELLS(QUEST_SLIDE_A).spriteId, qSlideAX, qSlideAY
+            position sprite CELLS(QUEST_SLIDE_B).spriteId, qSlideBX, qSlideBY
+        endif
+        exitfunction
+    endif
+
+    ` it eases out of where it was, and into where it is going
+    qSlideAge# = qSlideAge
+    qSlideTime# = QUEST_SLIDE_TIME
+    qSlideAlong# = qSlideAge# / qSlideTime#
+    qSlideEase# = qSlideAlong# * qSlideAlong# * (3 - 2 * qSlideAlong#)
+    position sprite CELLS(QUEST_SLIDE_A).spriteId, qSlideBX + (qSlideAX - qSlideBX) * qSlideEase#, qSlideBY + (qSlideAY - qSlideBY) * qSlideEase#
+    position sprite CELLS(QUEST_SLIDE_B).spriteId, qSlideAX + (qSlideBX - qSlideAX) * qSlideEase#, qSlideAY + (qSlideBY - qSlideAY) * qSlideEase#
+endfunction
+
+
+` the color of a mark: gold, then blue, then pink, then green
+function questMarkColor(qColorMark, qColorAlpha)
+    qColorCode = rgb(255, 220, 90, qColorAlpha)
+    if qColorMark = 2 then qColorCode = rgb(110, 230, 255, qColorAlpha)
+    if qColorMark = 3 then qColorCode = rgb(255, 150, 210, qColorAlpha)
+    if qColorMark = 4 then qColorCode = rgb(150, 255, 150, qColorAlpha)
+endfunction qColorCode
+
+
+` the pickup, which bobs just off of the right edge of the board, beside the cell in QUEST_PICK_CELL.
+` once the quest has been started, it is faint.
+function questDrawPickup()
+    if QUEST_PICK_CELL < 0 then exitfunction
+    qPickRow = QUEST_PICK_CELL / CELL_COLUMN_COUNT
+    qPickX = getCellX(CELL_COLUMN_COUNT)
+    qPickY = getCellY(qPickRow)
+    qPickHalf = CELL_SIZE / 2
+    qPickWave# = sin(game ms() * .005)
+
+    ` the mark is in the cell under a pickup that is waiting, and in the cell above one whose quest is running
+    qPickWay = 1
+    if QUEST_STATE = QSTATE_ACTIVE then qPickWay = -1
+    qPickMarkY = getCellY(qPickRow + qPickWay)
+
+    ` while it is being swapped onto the mark, the pickup slides over and the mark slides back. and
+    ` when the swap is over, the pickup swells up for a moment. see THE SWAP ONTO THE MARK in fish_headers_quests.
+    qPickSlide# = questAcceptAlong() * .001 * CELL_SIZE * qPickWay
+    qPickPunch# = 1 + .7 * tweenVal(QUEST_PICK_PUNCH_TWEEN_ID)
+
+    if QUEST_STATE = QSTATE_OFFERED
+        questGlowRect(qPickX - qPickHalf, qPickY - qPickHalf, CELL_SIZE, CELL_SIZE, rgb(255, 220, 64, 44 + 20 * qPickWave#))
+        questIconAt(QUEST_DEFS(QUEST_ID).pickTex, qPickX, qPickY + qPickSlide# - (1 + 2 * qPickWave#), CELL_ART_SIZE * qPickPunch#, rgb(255, 255, 255, 255))
+    else
+        questGlowRect(qPickX - qPickHalf, qPickY - qPickHalf, CELL_SIZE, CELL_SIZE, rgb(255, 220, 64, 14))
+        qPickFaint = 90 + 165 * tweenVal(QUEST_PICK_PUNCH_TWEEN_ID)
+        questIconAt(QUEST_DEFS(QUEST_ID).pickTex, qPickX, qPickY + qPickSlide#, (CELL_ART_SIZE - 4) * qPickPunch#, rgb(255, 255, 255, qPickFaint))
+    endif
+
+    ` while the cursor is out on it, the cell next to it shows what a swap into it would do: a
+    ` faint check mark, to start the quest, or a faint red X, to drop it
+    if QUEST_CURSOR_OUT
+        if QUEST_STATE = QSTATE_OFFERED
+            questGlowRect(qPickX - qPickHalf, qPickMarkY - qPickHalf, CELL_SIZE, CELL_SIZE, rgb(140, 235, 150, 50))
+            questIconAt(TEX_Q_CHECK, qPickX, qPickMarkY - qPickSlide#, 14, rgb(140, 235, 150, 130))
+        else
+            questGlowRect(qPickX - qPickHalf, qPickMarkY - qPickHalf, CELL_SIZE, CELL_SIZE, rgb(255, 90, 90, 50))
+            questIconAt(TEX_Q_CROSS, qPickX, qPickMarkY - qPickSlide#, 14, rgb(255, 90, 90, 140))
+        endif
+    endif
+endfunction
+
+
+` write the badge. the words are only written again when they change.
+function questDrawBadge()
+    qBadgeKeep# = HUD_KEEP#
+    qBadgePunch# = tweenVal(QUEST_PUNCH_TWEEN_ID)
+
+    qBadgeNew = 0
+    if QUEST_SHOWN_KEY <> 1 then qBadgeNew = 1
+    if QUEST_SHOWN_ID <> QUEST_ID then qBadgeNew = 1
+    if QUEST_SHOWN_STATE <> QUEST_STATE then qBadgeNew = 1
+    if QUEST_SHOWN_NOW <> QUEST_PROG_NOW then qBadgeNew = 1
+    if QUEST_SHOWN_NEED <> QUEST_PROG_NEED then qBadgeNew = 1
+    if QUEST_SHOWN_NOTE <> QUEST_NOTE_ON * 100 + QUEST_NOTE_KEY then qBadgeNew = 1
+    if qBadgeNew
+        QUEST_SHOWN_KEY = 1
+        QUEST_SHOWN_ID = QUEST_ID
+        QUEST_SHOWN_STATE = QUEST_STATE
+        QUEST_SHOWN_NOW = QUEST_PROG_NOW
+        QUEST_SHOWN_NEED = QUEST_PROG_NEED
+        QUEST_SHOWN_NOTE = QUEST_NOTE_ON * 100 + QUEST_NOTE_KEY
+        ` a quest that is only being looked at has a question mark after its name
+        if QUEST_STATE = QSTATE_OFFERED
+            set text QUEST_TITLE_TEXT_ID, QUEST_DEFS(QUEST_ID).name$ + " ?"
+        else
+            set text QUEST_TITLE_TEXT_ID, QUEST_DEFS(QUEST_ID).name$
+        endif
+
+        ` a quest that is done has a box with a check mark in it, in place of its picture
+        ` until then it has its own picture, if it has one. a quest whose picture is only the plain
+        ` ring, or the dot, has none, because an empty box next to the name looks like a box that
+        ` is waiting to be checked. its name starts where the picture would have been.
+        qBadgePicture = 1
+        if QUEST_STATE = QSTATE_DONE
+            set sprite texture QUEST_BADGE_SPRITE, TEX_Q_RING
+            show sprite QUEST_BADGE_CHECK_SPRITE
+        else
+            set sprite texture QUEST_BADGE_SPRITE, QUEST_DEFS(QUEST_ID).iconTex
+            hide sprite QUEST_BADGE_CHECK_SPRITE
+            if QUEST_DEFS(QUEST_ID).iconTex = TEX_Q_RING then qBadgePicture = 0
+            if QUEST_DEFS(QUEST_ID).iconTex = TEX_Q_DOT then qBadgePicture = 0
+        endif
+        size sprite QUEST_BADGE_SPRITE, 14, 14
+        qBadgeNameX = QUEST_BADGE_X + 17
+        if qBadgePicture
+            show sprite QUEST_BADGE_SPRITE
+        else
+            hide sprite QUEST_BADGE_SPRITE
+            qBadgeNameX = QUEST_BADGE_X + 3
+        endif
+        set text position QUEST_TITLE_TEXT_ID, qBadgeNameX, QUEST_BADGE_Y
+        show text QUEST_TITLE_TEXT_ID
+        show text QUEST_PROG_TEXT_ID
+
+        qBadgeWords$ = " "
+        if QUEST_PROG_NEED > 0 then qBadgeWords$ = str$(QUEST_PROG_NOW) + "/" + str$(QUEST_PROG_NEED)
+        if QUEST_NOTE_ON then qBadgeWords$ = QUEST_NOTE$
+        if QUEST_STATE = QSTATE_DONE then qBadgeWords$ = " "
+        set text QUEST_PROG_TEXT_ID, qBadgeWords$
+
+        ` it is all on one line: the count comes right after the name, and the little pictures that
+        ` a quest draws come right after the count. the name is measured at its plain size.
+        qBadgePlain = 15
+        if QUEST_ID = QUEST_CONTINUOUS then qBadgePlain = 13
+        if QUEST_ID = QUEST_CONSTELLATION then qBadgePlain = 13
+        size text y QUEST_TITLE_TEXT_ID, qBadgePlain
+        qBadgeAfter = qBadgeNameX + get text size x(QUEST_TITLE_TEXT_ID) + 7
+        set text position QUEST_PROG_TEXT_ID, qBadgeAfter, QUEST_BADGE_Y + 1
+        QUEST_EXTRA_X = qBadgeAfter
+        qBadgeCounted = 0
+        if QUEST_PROG_NEED > 0 then qBadgeCounted = 1
+        if QUEST_NOTE_ON then qBadgeCounted = 1
+        if QUEST_STATE = QSTATE_DONE then qBadgeCounted = 0
+        if qBadgeCounted
+            QUEST_EXTRA_X = qBadgeAfter + get text size x(QUEST_PROG_TEXT_ID) + 9
+        endif
+        QUEST_EXTRA_Y = QUEST_BADGE_Y + 8
+    endif
+
+    ` the name jumps when the quest changes, and everything fades with the rest of the hud.
+    ` a long name is written smaller, so that it stays clear of the board.
+    qBadgeTall = 15
+    if QUEST_ID = QUEST_CONTINUOUS then qBadgeTall = 13
+    if QUEST_ID = QUEST_CONSTELLATION then qBadgeTall = 13
+    size text y QUEST_TITLE_TEXT_ID, qBadgeTall + 4 * qBadgePunch#
+    qBadgeAlpha = 230
+    if QUEST_STATE = QSTATE_DONE then qBadgeAlpha = 110 `the name of a quest that is done is faint
+    if QUEST_STATE = QSTATE_OFFERED then qBadgeAlpha = 170 `and so is one that is only being looked at, a little
+    set text alpha QUEST_TITLE_TEXT_ID, qBadgeAlpha * qBadgeKeep#
+    set text alpha QUEST_PROG_TEXT_ID, 200 * qBadgeKeep#
+    set sprite alpha QUEST_BADGE_SPRITE, (qBadgeAlpha + 25) * qBadgeKeep#
+    set sprite alpha QUEST_BADGE_CHECK_SPRITE, 255 * qBadgeKeep#
+endfunction
+
+
+` the faint empty strip where the badge goes. it fades in, and then it is always there, and it
+` fades with the rest of the hud when the fish go home. see THE SLOT in fish_headers_quests.
+function questStepSlot()
+    if QUEST_SLOT_ON = 0
+        hide sprite QUEST_SLOT_SPRITE
+        for qDotN = 0 to 7
+            hide sprite QUEST_DOT_SPRITES(qDotN)
+        next
+        exitfunction
+    endif
+
+    qSlotFade# = tweenVal(QUEST_SLOT_TWEEN_ID) * HUD_KEEP#
+    show sprite QUEST_SLOT_SPRITE
+    set sprite alpha QUEST_SLOT_SPRITE, 50 * qSlotFade#
+
+    ` the dots are only there while no quest is named in the strip. see THE DOTS in fish_headers_quests.
+    if QUEST_SHOWN_KEY = 1
+        for qDotN = 0 to 7
+            hide sprite QUEST_DOT_SPRITES(qDotN)
+        next
+        exitfunction
+    endif
+
+    qDotAge = game ms() - QUEST_DOTS_MS
+    qDotTime# = QUEST_DOT_TIME
+    for qDotN = 0 to QUEST_DOT_COUNT - 1
+        qDotX# = QUEST_BADGE_X + 9 + qDotN * 9
+        qDotY# = QUEST_BADGE_Y + 9
+        if QUEST_DOTS_MODE > 0
+            qDotSince# = qDotAge - qDotN * QUEST_DOT_GAP
+            qDotLive = 0
+            if qDotSince# > 0
+                if qDotSince# < qDotTime# then qDotLive = 1
+            endif
+            if qDotLive
+                qDotPart# = qDotSince# / qDotTime#
+                qDotShakes = 0
+                if QUEST_DOTS_MODE = 2
+                    if qDotN >= QUEST_DOTS_BOUNCE then qDotShakes = 1
+                endif
+                if qDotShakes
+                    ` the ones that were not earned shake from side to side, and the shake dies away
+                    qDotX# = qDotX# + sin(qDotPart# * 18.8) * 2.5 * (1 - qDotPart#)
+                else
+                    ` up, and back down
+                    qDotY# = qDotY# - sin(qDotPart# * 3.14159) * QUEST_DOT_HIGH
+                endif
+            endif
+        endif
+        position sprite QUEST_DOT_SPRITES(qDotN), qDotX#, qDotY#
+        set sprite alpha QUEST_DOT_SPRITES(qDotN), 200 * qSlotFade#
+        show sprite QUEST_DOT_SPRITES(qDotN)
+    next
+
+    ` the round may have fewer dots than the last game got up to
+    qDotN = QUEST_DOT_COUNT
+    while qDotN < 8
+        hide sprite QUEST_DOT_SPRITES(qDotN)
+        qDotN = qDotN + 1
+    endwhile
+
+    ` the wave is over when the last dot has landed
+    qDotLong = QUEST_DOT_GAP * (QUEST_DOT_COUNT - 1) + QUEST_DOT_TIME
+    if qDotAge > qDotLong then QUEST_DOTS_MODE = 0
+endfunction
+
+
+` how many dots the round that is being played has, which is how many groups of fish have to pop
+` in one turn to bring a quest. see THE DOTS in fish_headers_quests.
+function questDotCount()
+    qDotsRounds = CURRENT_ROUND - QUEST_FIRST_ROUND
+    if qDotsRounds < 0 then qDotsRounds = 0
+    qDots = QUEST_DOT_BASE + qDotsRounds / QUEST_DOT_EVERY
+    if qDots > 8 then qDots = 8
+    if qDots < 1 then qDots = 1
+endfunction qDots
+
+
+` start a wave of the dots. `qWaveMode` is 1 for the one where they all bounce, and 2 for the one
+` where the last ones shake, and it starts `qWaveDelay` milliseconds from now.
+function questDotsWave(qWaveMode, qWaveDelay)
+    QUEST_DOTS_MODE = qWaveMode
+    QUEST_DOTS_BOUNCE = QUEST_DOT_COUNT
+    QUEST_DOTS_MS = game ms() + qWaveDelay
+endfunction
+
+
+` bubbles all the way along the name on the badge, `qFizzEach` of them at every spot
+function questBadgeFizz(qFizzEach)
+    for qFizzN = 0 to 5
+        spawnBubbles(QUEST_BADGE_X + 8 + qFizzN * 18, QUEST_BADGE_Y + 10, 10, qFizzEach, qFizzN * 25, rgb(150, 190, 255))
+    next
+    spawnBubbles(QUEST_BADGE_X + 50, QUEST_BADGE_Y + 10, 40, qFizzEach, 0, rgb(255, 255, 255))
+endfunction
+
+
+function questHideBadge()
+    if QUEST_SHOWN_KEY <> 0
+        QUEST_SHOWN_KEY = 0
+        hide sprite QUEST_BADGE_SPRITE
+        hide sprite QUEST_BADGE_CHECK_SPRITE
+        hide text QUEST_TITLE_TEXT_ID
+        hide text QUEST_PROG_TEXT_ID
+    endif
+endfunction
+
+
+` what info mode says about the quest of the round. with no quest, there is nothing there to look at.
+function questShowInfo()
+    if INFO_INDEX_QUEST < 0 then exitfunction
+
+    ` the badge. a quest that has not been started has no badge, so there is nothing there to
+    ` explain, except while the cursor is out on its pickup, having a look at it.
+    qInfoOn = 0
+    qInfoLook = 0
+    if QUEST_ID > 0
+        if QUEST_STATE = QSTATE_ACTIVE then qInfoOn = 1
+        if QUEST_STATE = QSTATE_DONE then qInfoOn = 1
+        if QUEST_STATE = QSTATE_OFFERED
+            if QUEST_CURSOR_OUT then qInfoLook = 1
+        endif
+    endif
+    if qInfoLook then qInfoOn = 1
+    if qInfoOn
+        INFOS(INFO_INDEX_QUEST).title$ = "Quest: " + QUEST_DEFS(QUEST_ID).name$
+        INFOS(INFO_INDEX_QUEST).desc$ = QUEST_DEFS(QUEST_ID).desc$
+        setInfoBlobEnabled(INFO_INDEX_QUEST, 1)
+    else
+        setInfoBlobEnabled(INFO_INDEX_QUEST, 0)
+    endif
+
+    ` the pickup beside the board, and the cell under it, where the check mark or the X shows up
+    qInfoPick = 0
+    if QUEST_ID > 0
+        if QUEST_PICK_CELL >= 0
+            if QUEST_STATE = QSTATE_OFFERED then qInfoPick = 1
+            if QUEST_STATE = QSTATE_ACTIVE then qInfoPick = 2
+        endif
+    endif
+    if qInfoPick > 0
+        questPickBlob = INFOS(INFO_INDEX_QUEST_PICK)
+        questPickBlob.topLeft.x = getCellX(CELL_COLUMN_COUNT) - (CELL_SIZE / 2 + 2)
+        qInfoTopRow = QUEST_PICK_CELL / CELL_COLUMN_COUNT
+        if qInfoPick = 2 then qInfoTopRow = qInfoTopRow - 1 `the X is above the pickup of a quest that is running
+        questPickBlob.topLeft.y = getCellY(qInfoTopRow) - (CELL_SIZE / 2 + 2)
+        questPickBlob.size.x = CELL_SIZE + 4
+        questPickBlob.size.y = CELL_SIZE * 2 + 4
+        if qInfoPick = 1
+            questPickBlob.title$ = "A Quest"
+            questPickBlob.desc$ = "A quest may be accepted here, to earn points. Step the cursor out onto it to see what it is, and swap it down onto the check mark to accept it."
+        else
+            questPickBlob.title$ = "Your Quest"
+            questPickBlob.desc$ = "The quest that you accepted. Step the cursor out onto it to have everything that it is about pointed out, and swap it up onto the X to drop it."
+        endif
+        questPickBlob.enabled = 1
+        INFOS(INFO_INDEX_QUEST_PICK) = questPickBlob
+    else
+        setInfoBlobEnabled(INFO_INDEX_QUEST_PICK, 0)
+    endif
+endfunction
+
+
+` the little bar over the name of the quest drains, as the points of the quest go onto the bar of
+` the round, and both of them fizz. see THE PAYOUT in fish_headers_quests.
+function questStepPay()
+    if QUEST_PAY_MS < 0 then exitfunction
+    qPayAge = game ms() - QUEST_PAY_MS
+    qPayLong = QUEST_PAY_TIME + 150
+    if qPayAge > qPayLong
+        QUEST_PAY_MS = -1
+        hide sprite QUEST_PAY_BACK_SPRITE
+        hide sprite QUEST_PAY_FILL_SPRITE
+        exitfunction
+    endif
+
+    qPayAge# = qPayAge
+    qPayLong# = qPayLong
+    qPayLeft# = 1 - qPayAge# / qPayLong#
+    qPayWide# = (QUEST_PAY_WIDTH - 2) * qPayLeft#
+    size sprite QUEST_PAY_FILL_SPRITE, qPayWide#, 2
+    show sprite QUEST_PAY_BACK_SPRITE
+    show sprite QUEST_PAY_FILL_SPRITE
+
+    ` it shakes by a pixel while it drains, the way that the bar of the round does while it fills
+    qPayShake = rnd(2)
+    position sprite QUEST_PAY_BACK_SPRITE, QUEST_BADGE_X, QUEST_BADGE_Y + 16 + qPayShake
+    position sprite QUEST_PAY_FILL_SPRITE, QUEST_BADGE_X + 1, QUEST_BADGE_Y + 17 + qPayShake
+    set sprite alpha QUEST_PAY_BACK_SPRITE, 128 * HUD_KEEP#
+    set sprite alpha QUEST_PAY_FILL_SPRITE, 240 * HUD_KEEP#
+
+    ` the end that is draining, which is where the points float up from
+    qPayEndX = QUEST_BADGE_X + 1 + qPayWide#
+
+    ` and the next share of the points floats up off of that end, when its turn comes. the last
+    ` share is whatever has not floated up yet, so that they add up to the payout.
+    if QUEST_PAY_TEXT_N < QUEST_PAY_TEXT_COUNT
+        qPayDue = (QUEST_PAY_TEXT_N * QUEST_PAY_TIME) / QUEST_PAY_TEXT_COUNT
+        if qPayAge >= qPayDue
+            qPayShare = ((QUEST_REWARD / QUEST_PAY_TEXT_COUNT) / 10) * 10
+            QUEST_PAY_TEXT_N = QUEST_PAY_TEXT_N + 1
+            if QUEST_PAY_TEXT_N = QUEST_PAY_TEXT_COUNT then qPayShare = QUEST_REWARD - QUEST_PAY_GIVEN
+            QUEST_PAY_GIVEN = QUEST_PAY_GIVEN + qPayShare
+            questPayPos as vec = {
+                x = qPayEndX,
+                y = QUEST_BADGE_Y + 12
+            }
+            qPayText = spawnScoreTextScaled(questPayPos, "+" + str$(qPayShare), 0, 700, .8)
+            color text qPayText, rgb(255, 220, 64)
+        endif
+    endif
+    ` only the bar of the round fizzes. the little bar is right under it, and the two together were too much.
+    qPayBarFill# = tweenVal(SCORE_BAR.progressTweenId)
+    qPayBarX = SCORE_BAR.pos.x + (SCORE_BAR.size.x - 2) * qPayBarFill#
+    for qPayN = 1 to 2
+        qPayTint = rgb(255, 220, 64)
+        if rnd(3) = 0 then qPayTint = rgb(255, 255, 255)
+        spawnBubblesOnLayer(qPayBarX - rnd(10), SCORE_BAR.pos.y + 2, 3, 1, 0, qPayTint, ORDER_FLOAT_BUBBLES, 40, 255, 1)
+    next
+endfunction
+
+
+` the whale swims across the board once, from left to right, and bobs as it goes
+function questStepWhale()
+    if QUEST_WHALE_MS < 0 then exitfunction
+    qWhaleAge = game ms() - QUEST_WHALE_MS
+    if qWhaleAge > QUEST_WHALE_TIME
+        QUEST_WHALE_MS = -1
+        hide sprite QUEST_WHALE_SPRITE
+        exitfunction
+    endif
+    qWhaleAge# = qWhaleAge
+    qWhaleTime# = QUEST_WHALE_TIME
+    qWhaleAlong# = qWhaleAge# / qWhaleTime#
+    qWhaleFrom# = GRID_CENTER.x - (GRID_SPAN / 2 + 80)
+    qWhaleTo# = GRID_CENTER.x + GRID_SPAN / 2 + 80
+    qWhaleX# = qWhaleFrom# + (qWhaleTo# - qWhaleFrom#) * qWhaleAlong#
+    qWhaleY# = GRID_CENTER.y + sin(qWhaleAlong# * 9) * 8
+    position sprite QUEST_WHALE_SPRITE, qWhaleX#, qWhaleY#
+    show sprite QUEST_WHALE_SPRITE
+
+    ` it trails bubbles
+    if rnd(3) = 0
+        qWhaleTailX = qWhaleX# - 50
+        qWhaleTailY = qWhaleY#
+        spawnBubbles(qWhaleTailX, qWhaleTailY, 20, 2, 0, rgb(200, 230, 255))
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` WHAT A QUEST DRAWS WITH
+` ---------------------------------------------------------------------------------------------
+
+` a zone under the fish: a faint wash of color, with an outline that the water pushes about. the
+` place is in pixels. the outline of the zone that the cursor is on is drawn stronger. see THE
+` ZONES in fish_headers_quests.
+function questGlowRect(qGlowX, qGlowY, qGlowW, qGlowH, qGlowColor)
+    questZone(qGlowX, qGlowY, qGlowW, qGlowH, qGlowColor, 0)
+endfunction
+
+` a plain block of color, with no waves and no outline, for the little drawings by the badge
+function questSolidRect(qBlockX, qBlockY, qBlockW, qBlockH, qBlockColor)
+    questZone(qBlockX, qBlockY, qBlockW, qBlockH, qBlockColor, 1)
+endfunction
+
+` the one that does the work
+function questZone(qZoneX, qZoneY, qZoneW, qZoneH, qZoneColor, qZoneSolid)
+    if QUEST_GLOW_N < QUEST_GLOW_MAX
+        qZoneSprite = QUEST_GLOW_SPRITES(QUEST_GLOW_N)
+        position sprite qZoneSprite, qZoneX, qZoneY
+        size sprite qZoneSprite, qZoneW, qZoneH
+        color sprite qZoneSprite, qZoneColor
+        show sprite qZoneSprite
+
+        if qZoneSolid
+            set sprite all texcoord1 qZoneSprite, 1, 1, 0, 0
+        else
+            ` is the cursor on it?
+            qZoneFill# = QUEST_ZONE_FILL#
+            qZoneEdge# = QUEST_ZONE_EDGE#
+            qZoneCursorX = getCellX(SELECTION_POS.x)
+            qZoneCursorY = getCellY(SELECTION_POS.y)
+            qZoneRight = qZoneX + qZoneW
+            qZoneBottom = qZoneY + qZoneH
+            qZoneOn = 1
+            if qZoneCursorX < qZoneX then qZoneOn = 0
+            if qZoneCursorX > qZoneRight then qZoneOn = 0
+            if qZoneCursorY < qZoneY then qZoneOn = 0
+            if qZoneCursorY > qZoneBottom then qZoneOn = 0
+            if qZoneOn then qZoneEdge# = QUEST_ZONE_EDGE_ON#
+
+            ` every zone gets waves of its own, so that two side by side do not move as one
+            qZonePhase# = QUEST_GLOW_N * 1.3
+            set sprite all texcoord1 qZoneSprite, qZoneFill#, qZoneEdge#, qZonePhase#, QUEST_ZONE_WAVE#
+        endif
+        QUEST_GLOW_N = QUEST_GLOW_N + 1
+    endif
+endfunction
+
+` light under one cell
+function questGlowCell(qGlowCell, qGlowTint)
+    qGlowHalf = CELL_SIZE / 2
+    qGlowLeft = getCellX(qGlowCell mod CELL_COLUMN_COUNT) - qGlowHalf
+    qGlowTop = getCellY(qGlowCell / CELL_COLUMN_COUNT) - qGlowHalf
+    questGlowRect(qGlowLeft, qGlowTop, CELL_SIZE, CELL_SIZE, qGlowTint)
+endfunction
+
+` light under a block of cells, as one piece
+function questGlowSpan(qSpanColumn, qSpanRow, qSpanColumns, qSpanRows, qSpanTint)
+    qSpanHalf = CELL_SIZE / 2
+    qSpanLeft = getCellX(qSpanColumn) - qSpanHalf
+    qSpanTop = getCellY(qSpanRow) - qSpanHalf
+    questGlowRect(qSpanLeft, qSpanTop, qSpanColumns * CELL_SIZE, qSpanRows * CELL_SIZE, qSpanTint)
+endfunction
+
+` THE FINISH. see the notes in fish_headers_quests.
+
+` add a spot for the line to run through, in pixels
+function questFinishPoint(qEndX#, qEndY#)
+    if QUEST_FINISH_N < 100
+        QUEST_FINISH#(QUEST_FINISH_N * 2) = qEndX#
+        QUEST_FINISH#(QUEST_FINISH_N * 2 + 1) = qEndY#
+        QUEST_FINISH_N = QUEST_FINISH_N + 1
+    endif
+endfunction
+
+` the quest is finished. if it gave the line some spots to run through, the line sets off. most
+` quests give none, and have no line.
+function questFinishStart()
+    if QUEST_FINISH_N < 2
+        QUEST_FINISH_N = 0
+        QUEST_FINISH_MS = -1
+        exitfunction
+    endif
+
+    ` it takes longer the further it has to go, within reason
+    QUEST_FINISH_TIME = QUEST_FINISH_N * 120
+    if QUEST_FINISH_TIME < 1000 then QUEST_FINISH_TIME = 1000
+    if QUEST_FINISH_TIME > 2400 then QUEST_FINISH_TIME = 2400
+    QUEST_FINISH_MS = game ms()
+    QUEST_FINISH_AT = 0
+endfunction
+
+` run the line along its spots: the ribbon of THE TAIL, with its head somewhere between two of
+` them, and the spots that it has passed behind it. bubbles come up from each spot as it gets there.
+function questStepFinish()
+    if QUEST_FINISH_MS < 0 then exitfunction
+    qRunAge# = game ms() - QUEST_FINISH_MS
+    qRunTime# = QUEST_FINISH_TIME
+    qRunLast = QUEST_FINISH_N - 1
+
+    ` it runs on a little past the last spot, so that the ribbon has time to draw in behind it and fade
+    qRunEnd# = qRunLast + 4
+    qRunAlong# = (qRunAge# / qRunTime#) * qRunEnd#
+    if qRunAlong# > qRunEnd#
+        QUEST_FINISH_MS = -1
+        QUEST_FINISH_N = 0
+        exitfunction
+    endif
+
+    ` which spot the head has passed, and how far it is on the way to the next one. the spot is
+    ` counted up to, because a number that came out of a division cannot pick a spot of an array.
+    qRunSpot = 0
+    qRunSeek = 1
+    while qRunSeek
+        qRunSeek = 0
+        if qRunSpot < qRunLast
+            qRunOver# = qRunSpot + 1
+            if qRunAlong# >= qRunOver#
+                qRunSpot = qRunSpot + 1
+                qRunSeek = 1
+            endif
+        endif
+    endwhile
+    qRunPart# = qRunAlong# - qRunSpot
+    if qRunPart# > 1 then qRunPart# = 1
+    qRunNext = qRunSpot + 1
+    if qRunNext > qRunLast then qRunNext = qRunLast
+    qRunHeadX# = QUEST_FINISH#(qRunSpot * 2) + (QUEST_FINISH#(qRunNext * 2) - QUEST_FINISH#(qRunSpot * 2)) * qRunPart#
+    qRunHeadY# = QUEST_FINISH#(qRunSpot * 2 + 1) + (QUEST_FINISH#(qRunNext * 2 + 1) - QUEST_FINISH#(qRunSpot * 2 + 1)) * qRunPart#
+
+    ` bubbles from every spot that it has got to since the last frame
+    while QUEST_FINISH_AT <= qRunSpot
+        qRunBubbleX = QUEST_FINISH#(QUEST_FINISH_AT * 2)
+        qRunBubbleY = QUEST_FINISH#(QUEST_FINISH_AT * 2 + 1)
+        spawnBubbles(qRunBubbleX, qRunBubbleY, CELL_SIZE / 3, 7, 0, rgb(255, 220, 64))
+        if rnd(2) = 0
+            spawnBubbles(qRunBubbleX, qRunBubbleY, CELL_SIZE / 2, 3, 40, rgb(255, 255, 255))
+        endif
+        QUEST_FINISH_AT = QUEST_FINISH_AT + 1
+    endwhile
+
+    ` the ribbon: the head, and then the spots behind it, as many as there is room for
+    questTrailBegin()
+    questTrailPoint(qRunHeadX#, qRunHeadY#)
+    qRunBack = qRunSpot
+    while qRunBack >= 0
+        questTrailPoint(QUEST_FINISH#(qRunBack * 2), QUEST_FINISH#(qRunBack * 2 + 1))
+        qRunBack = qRunBack - 1
+    endwhile
+
+    ` once it is past the last spot, it fades
+    qRunAlpha# = 240
+    qRunPast# = qRunAlong# - qRunLast
+    if qRunPast# > 0 then qRunAlpha# = 240 * (1 - qRunPast# / 4)
+    questTrailDraw(rgb(255, 225, 110, qRunAlpha#))
+endfunction
+
+
+` THE TAIL. see the notes in fish_headers_quests. a quest starts one, gives it its spots, from
+` the cursor back, and draws it, all on the same frame.
+function questTrailBegin()
+    QUEST_TRAIL_N = 0
+endfunction
+
+function questTrailPoint(qSpotX#, qSpotY#)
+    if QUEST_TRAIL_N < 12
+        QUEST_TRAIL#(QUEST_TRAIL_N * 2) = qSpotX#
+        QUEST_TRAIL#(QUEST_TRAIL_N * 2 + 1) = qSpotY#
+        QUEST_TRAIL_N = QUEST_TRAIL_N + 1
+    endif
+endfunction
+
+function questTrailDraw(qTrailColor)
+    if QUEST_TRAIL_N < 2 then exitfunction
+
+    ` the spots that were not given are the last one that was, over again, so the ribbon ends there
+    qTrailN = QUEST_TRAIL_N
+    while qTrailN < 12
+        QUEST_TRAIL#(qTrailN * 2) = QUEST_TRAIL#(QUEST_TRAIL_N * 2 - 2)
+        QUEST_TRAIL#(qTrailN * 2 + 1) = QUEST_TRAIL#(QUEST_TRAIL_N * 2 - 1)
+        qTrailN = qTrailN + 1
+    endwhile
+
+    ` the effect forgets what it is told, so it is told on every frame
+    qTrailWide# = CELL_SIZE * .42
+    set effect param float2 QUEST_TRAIL_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT
+    set effect param float QUEST_TRAIL_FX_ID, "Wide", qTrailWide#
+    set effect param float4 QUEST_TRAIL_FX_ID, "Trail0", QUEST_TRAIL#(0), QUEST_TRAIL#(1), QUEST_TRAIL#(2), QUEST_TRAIL#(3)
+    set effect param float4 QUEST_TRAIL_FX_ID, "Trail1", QUEST_TRAIL#(4), QUEST_TRAIL#(5), QUEST_TRAIL#(6), QUEST_TRAIL#(7)
+    set effect param float4 QUEST_TRAIL_FX_ID, "Trail2", QUEST_TRAIL#(8), QUEST_TRAIL#(9), QUEST_TRAIL#(10), QUEST_TRAIL#(11)
+    set effect param float4 QUEST_TRAIL_FX_ID, "Trail3", QUEST_TRAIL#(12), QUEST_TRAIL#(13), QUEST_TRAIL#(14), QUEST_TRAIL#(15)
+    set effect param float4 QUEST_TRAIL_FX_ID, "Trail4", QUEST_TRAIL#(16), QUEST_TRAIL#(17), QUEST_TRAIL#(18), QUEST_TRAIL#(19)
+    set effect param float4 QUEST_TRAIL_FX_ID, "Trail5", QUEST_TRAIL#(20), QUEST_TRAIL#(21), QUEST_TRAIL#(22), QUEST_TRAIL#(23)
+    color sprite QUEST_TRAIL_SPRITE, qTrailColor
+    show sprite QUEST_TRAIL_SPRITE
+    QUEST_TRAIL_ON = 1
+endfunction
+
+` a picture on top of the fish. the place is the middle of it, in pixels.
+function questIconAt(qIconTex, qIconX#, qIconY#, qIconSize, qIconColor)
+    if QUEST_ICON_N < QUEST_ICON_MAX
+        qIconSprite = QUEST_ICON_SPRITES(QUEST_ICON_N)
+        QUEST_ICON_N = QUEST_ICON_N + 1
+        set sprite texture qIconSprite, qIconTex
+        position sprite qIconSprite, qIconX#, qIconY#
+        size sprite qIconSprite, qIconSize, qIconSize
+        color sprite qIconSprite, qIconColor
+        show sprite qIconSprite
+    endif
+endfunction
+
+` a picture that rides on the fish of a cell, wherever a swap or a fall has that fish right now
+function questIconOnFish(qRideCell, qRideTex, qRideDX#, qRideDY#, qRideSize, qRideColor)
+    qRideX# = sprite x(CELLS(qRideCell).spriteId) + qRideDX#
+    qRideY# = sprite y(CELLS(qRideCell).spriteId) + qRideDY#
+    questIconAt(qRideTex, qRideX#, qRideY#, qRideSize, qRideColor)
+endfunction
+
+` a picture in the middle of a cell
+function questIconOnCell(qSitCell, qSitTex, qSitDX#, qSitDY#, qSitSize, qSitColor)
+    qSitX# = getCellX(qSitCell mod CELL_COLUMN_COUNT) + qSitDX#
+    qSitY# = getCellY(qSitCell / CELL_COLUMN_COUNT) + qSitDY#
+    questIconAt(qSitTex, qSitX#, qSitY#, qSitSize, qSitColor)
+endfunction
+
+` a word on top of everything that a quest draws. the place is the middle of it, in pixels.
+function questWordAt(qWordX#, qWordY#, qWord$, qWordColor)
+    if QUEST_NUM_N < QUEST_NUM_MAX
+        qWordText = QUEST_NUM_TEXTS(QUEST_NUM_N)
+        QUEST_NUM_N = QUEST_NUM_N + 1
+        set text qWordText, qWord$
+        set text position qWordText, qWordX#, qWordY#
+        color text qWordText, qWordColor
+        show text qWordText
+    endif
+endfunction
+
+` a number that rides on the fish of a cell, at its top right corner
+function questNumberOnFish(qCountCell, qCountNumber, qCountColor)
+    qCountX# = sprite x(CELLS(qCountCell).spriteId) + CELL_ART_SIZE / 2 + 1
+    qCountY# = sprite y(CELLS(qCountCell).spriteId) - CELL_ART_SIZE / 2
+    questWordAt(qCountX#, qCountY#, str$(qCountNumber), qCountColor)
+endfunction
+
+` a few words that float up off of the cursor and are gone, like a score does
+function questSay(qSayWords$, qSayColor)
+    questSayPos as vec = {
+        x = getCellX(SELECTION_POS.x),
+        y = getCellY(SELECTION_POS.y) - 6
+    }
+    qSayText = spawnBoardScoreText(questSayPos, qSayWords$, 0, 900)
+    color text qSayText, qSayColor
+endfunction
+
+` the same, off of a cell
+function questSayAt(qSayCell, qSayAtWords$, qSayAtColor)
+    questSayAtPos as vec = {
+        x = getCellX(qSayCell mod CELL_COLUMN_COUNT),
+        y = getCellY(qSayCell / CELL_COLUMN_COUNT) - 6
+    }
+    qSayAtText = spawnBoardScoreText(questSayAtPos, qSayAtWords$, 0, 900)
+    color text qSayAtText, qSayAtColor
+endfunction
+
+` what the badge counts: how far along the quest is, and how far there is to go. 0 to go shows no count.
+function questProgress(qProgNow, qProgNeed)
+    QUEST_PROG_NOW = qProgNow
+    QUEST_PROG_NEED = qProgNeed
+    if QUEST_PROG_NOW < 0 then QUEST_PROG_NOW = 0
+    QUEST_NOTE_ON = 0
+endfunction
+
+` a few words for the badge to say in place of the count
+function questNote(qNoteWords$)
+    QUEST_NOTE$ = qNoteWords$
+    QUEST_NOTE_ON = 1
+    QUEST_NOTE_KEY = (QUEST_NOTE_KEY + 1) mod 40
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` WHAT A QUEST WORKS WITH
+` ---------------------------------------------------------------------------------------------
+
+` is this a kind of fish that the game drops in on its own, and not one of a quest's?
+function questPlain(qPlainKind)
+    qIsPlain = 1
+    if qPlainKind < 1 then qIsPlain = 0
+    if qPlainKind >= TEX_KRILL then qIsPlain = 0
+endfunction qIsPlain
+
+` turn the fish in a cell into a fish of a kind that does not pop where it is
+function questConvert(qTurnCell)
+    CELLS(qTurnCell).value = 0
+    CELLS(qTurnCell).value = getImpossibleRandomValueForCell(qTurnCell)
+    updateCell(CELLS(qTurnCell))
+    set sprite alpha CELLS(qTurnCell).spriteId, 255
+    create basic tween CELLS(qTurnCell).scaleWaveTweenId, 1.5, 1, 220, 0
+    spawnBubbles(getCellX(qTurnCell mod CELL_COLUMN_COUNT), getCellY(qTurnCell / CELL_COLUMN_COUNT), CELL_SIZE / 4, 5, 0, rgb(255, 255, 255))
+endfunction
+
+` put a fish of a kind in a cell, in place of whatever was there
+function questPlaceKind(qPutCell, qPutKind)
+    CELLS(qPutCell).value = qPutKind
+    clearCellStack(qPutCell)
+    updateCell(CELLS(qPutCell))
+    set sprite alpha CELLS(qPutCell).spriteId, 255
+    create basic tween CELLS(qPutCell).scaleWaveTweenId, 1.6, 1, 250, 0
+    spawnBubbles(getCellX(qPutCell mod CELL_COLUMN_COUNT), getCellY(qPutCell / CELL_COLUMN_COUNT), CELL_SIZE / 3, 8, 0, rgb(255, 255, 255))
+endfunction
+
+` the first cell that holds a fish of a kind, or -1
+function questFindKind(qFindKind)
+    qFound = -1
+    qFindLast = CELL_COUNT - 1
+    for qFindI = 0 to qFindLast
+        if CELLS(qFindI).value = qFindKind
+            qFound = qFindI
+            exit
+        endif
+    next
+endfunction qFound
+
+` how many cells hold a fish of a kind
+function questCountKind(qTallyKind)
+    qTally = 0
+    qTallyLast = CELL_COUNT - 1
+    for qTallyI = 0 to qTallyLast
+        if CELLS(qTallyI).value = qTallyKind then qTally = qTally + 1
+    next
+endfunction qTally
+
+` the cell of the fish that has a mark, or -1
+function questFindMark(qSeekMark)
+    qSought = -1
+    qSeekLast = CELL_COUNT - 1
+    for qSeekI = 0 to qSeekLast
+        if QUEST_MARK(qSeekI) = qSeekMark
+            qSought = qSeekI
+            exit
+        endif
+    next
+endfunction qSought
+
+` the cell of the fish that has a mark, if that fish is popping, or -1
+function questFindMarkPopping(qPopMark)
+    qPopAt = -1
+    qPopLast = CELL_COUNT - 1
+    for qPopI = 0 to qPopLast
+        if QUEST_MARK(qPopI) = qPopMark
+            if CELLS(qPopI).comboBlownUp then qPopAt = qPopI
+        endif
+    next
+endfunction qPopAt
+
+` is any fish with a mark on it popping?
+function questMarkPopping()
+    qAnyPop = 0
+    qAnyLast = CELL_COUNT - 1
+    for qAnyI = 0 to qAnyLast
+        if QUEST_MARK(qAnyI) > 0
+            if CELLS(qAnyI).comboBlownUp then qAnyPop = 1
+        endif
+    next
+endfunction qAnyPop
+
+` pick a cell at random, in a block of the board, that holds a plain fish with no mark and no spot, and
+` that the cursor is not on. the block is cut down to fit the board. -1 when there is none.
+function questPickCell(qPickMinX, qPickMaxX, qPickMinY, qPickMaxY)
+    qPickLowX = qPickMinX
+    qPickHighX = qPickMaxX
+    qPickLowY = qPickMinY
+    qPickHighY = qPickMaxY
+    if qPickLowX < 0 then qPickLowX = 0
+    if qPickLowY < 0 then qPickLowY = 0
+    if qPickHighX > CELL_COLUMN_COUNT - 1 then qPickHighX = CELL_COLUMN_COUNT - 1
+    if qPickHighY > CELL_ROW_COUNT - 1 then qPickHighY = CELL_ROW_COUNT - 1
+    if qPickHighX < qPickLowX then qPickHighX = qPickLowX
+    if qPickHighY < qPickLowY then qPickHighY = qPickLowY
+
+    qPickWide = qPickHighX + 1 - qPickLowX
+    qPickTall = qPickHighY + 1 - qPickLowY
+    qPickCursor = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+    qPicked = -1
+    qPickTries = 0
+    while qPickTries < 80
+        qPickTries = qPickTries + 1
+        qPickAt = (qPickLowX + rnd(qPickWide)) + (qPickLowY + rnd(qPickTall)) * CELL_COLUMN_COUNT
+        qPickOk = questPlain(CELLS(qPickAt).value)
+        if QUEST_MARK(qPickAt) > 0 then qPickOk = 0
+        if QUEST_SPOT(qPickAt) <> 0 then qPickOk = 0
+        if qPickAt = qPickCursor then qPickOk = 0
+        if qPickOk
+            qPicked = qPickAt
+            qPickTries = 80
+        endif
+    endwhile
+endfunction qPicked
+
+` anywhere on the board
+function questPickAnyCell()
+    qAnyCell = questPickCell(0, CELL_COLUMN_COUNT - 1, 0, CELL_ROW_COUNT - 1)
+endfunction qAnyCell
+
+` one of the first seven kinds of fish, and not the one given
+function questOtherKind(qNotKind)
+    qOther = rnd(7) + 1
+    if qOther = qNotKind then qOther = (qOther mod 7) + 1
+endfunction qOther
+
+` how far apart two cells are, counting a step across and a step down as one each
+function questManhattan(qFarA, qFarB)
+    qFarX = abs((qFarA mod CELL_COLUMN_COUNT) - (qFarB mod CELL_COLUMN_COUNT))
+    qFarY = abs((qFarA / CELL_COLUMN_COUNT) - (qFarB / CELL_COLUMN_COUNT))
+endfunction qFarX + qFarY
+
+` and counting a step to a corner as one
+function questChebyshev(qNearA, qNearB)
+    qNearX = abs((qNearA mod CELL_COLUMN_COUNT) - (qNearB mod CELL_COLUMN_COUNT))
+    qNearY = abs((qNearA / CELL_COLUMN_COUNT) - (qNearB / CELL_COLUMN_COUNT))
+    if qNearY > qNearX then qNearX = qNearY
+endfunction qNearX
+
+` the corner of the board that is the furthest from a cell
+function questOppositeCorner(qCornerOf)
+    qCornerX = 0
+    qCornerY = 0
+    qCornerAtX = qCornerOf mod CELL_COLUMN_COUNT
+    qCornerAtY = qCornerOf / CELL_COLUMN_COUNT
+    qCornerMidX = CELL_COLUMN_COUNT / 2
+    qCornerMidY = CELL_ROW_COUNT / 2
+    if qCornerAtX < qCornerMidX then qCornerX = CELL_COLUMN_COUNT - 1
+    if qCornerAtY < qCornerMidY then qCornerY = CELL_ROW_COUNT - 1
+endfunction qCornerX + qCornerY * CELL_COLUMN_COUNT
+
+` the cell that the cursor is on
+function questCursorCell()
+endfunction SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+
+` -1, 0 or 1
+function questSign(qSignOf)
+    qSigned = 0
+    if qSignOf > 0 then qSigned = 1
+    if qSignOf < 0 then qSigned = -1
+endfunction qSigned

@@ -608,8 +608,11 @@ public partial class FadeMonoGameCommands
         }
         try
         {
+            var perfStart = System.Diagnostics.Stopwatch.GetTimestamp();
             instance.Stop();
             instance.Play();
+            AudioInstanceSystem.perfTicks += System.Diagnostics.Stopwatch.GetTimestamp() - perfStart;
+            AudioInstanceSystem.perfPlays++;
         }
         catch (System.Exception ex)
         {

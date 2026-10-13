@@ -33,6 +33,14 @@ setup_infos:
     set sprite render target INFO_HOLE_SPRITE, TARGET_INFO
     hide sprite INFO_HOLE_SPRITE
 
+    ` and a second hole, for the leg of the one that has a leg. see THE ONE THAT IS NOT A RECTANGLE in fish_headers.
+    reserve sprite id(INFO_HOLE2_SPRITE)
+    sprite INFO_HOLE2_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset INFO_HOLE2_SPRITE, 0, 0
+    set sprite effect INFO_HOLE2_SPRITE, INFO_MASK_FX_ID
+    set sprite render target INFO_HOLE2_SPRITE, TARGET_INFO
+    hide sprite INFO_HOLE2_SPRITE
+
     ` setup the mask sprite. this is the dark overlay that covers the game.
     reserve sprite id(INFO_MASK_SPRITE)
 
@@ -46,6 +54,8 @@ setup_infos:
 
     ` the cursor is the bright outline around the selected blob.
     INFO_CURSOR = createInfoBorder(ORDER_INFO_CURSOR)
+    INFO_L_CURSOR = createInfoBorder(ORDER_INFO_CURSOR)
+    INFO_L_FAINT = createInfoBorder(ORDER_INFO_BORDER)
     reserve tween id(INFO_CURSOR_TWEEN_X)
     reserve tween id(INFO_CURSOR_TWEEN_Y)
     reserve tween id(INFO_CURSOR_TWEEN_W)
@@ -124,8 +134,16 @@ info_open:
     for i = 0 to INFO_LENGTH - 1
         infoItem = INFOS(i)
         if infoItem.enabled
-            layoutInfoBorder(infoItem.border, infoItem.topLeft.x, infoItem.topLeft.y, infoItem.size.x, infoItem.size.y)
-            showInfoBorder(infoItem.border, 1)
+            if i = INFO_L_INDEX
+                ` the one with a leg has an outline in the shape of an L
+                layoutInfoL(infoItem.border, INFO_L_FAINT, infoItem.topLeft.x, infoItem.topLeft.y, infoItem.size.x, infoItem.size.y, INFO_L_W, INFO_L_H)
+                showInfoBorder(infoItem.border, 1)
+                show sprite INFO_L_FAINT.leftId
+                show sprite INFO_L_FAINT.bottomId
+            else
+                layoutInfoBorder(infoItem.border, infoItem.topLeft.x, infoItem.topLeft.y, infoItem.size.x, infoItem.size.y)
+                showInfoBorder(infoItem.border, 1)
+            endif
         endif
     next
 
@@ -179,9 +197,12 @@ info_close:
     next
 
     hide sprite INFO_HOLE_SPRITE
+    hide sprite INFO_HOLE2_SPRITE
     hide sprite INFO_MASK_SPRITE
     hide sprite INFO_PANEL_SPRITE
     showInfoBorder(INFO_CURSOR, 0)
+    showInfoBorder(INFO_L_CURSOR, 0)
+    showInfoBorder(INFO_L_FAINT, 0)
     showInfoBorder(INFO_PANEL_BORDER, 0)
     hide text INFO_TITLE_TEXT_ID
     hide text INFO_DESC_TEXT_ID
@@ -239,7 +260,21 @@ frame_info_render:
     infoY = tweenVal(INFO_CURSOR_TWEEN_Y)
     infoW = tweenVal(INFO_CURSOR_TWEEN_W)
     infoH = tweenVal(INFO_CURSOR_TWEEN_H)
-    layoutInfoBorder(INFO_CURSOR, infoX, infoY, infoW, infoH)
+    ` the one with a leg has a bright outline in the shape of an L, and a second hole for the leg.
+    ` the second hole reaches up into the first, so that the two run together.
+    if INFO_SELECTED = INFO_L_INDEX
+        layoutInfoL(INFO_CURSOR, INFO_L_CURSOR, infoX, infoY, infoW, infoH, INFO_L_W, INFO_L_H)
+        show sprite INFO_L_CURSOR.leftId
+        show sprite INFO_L_CURSOR.bottomId
+        infoLegX = infoX + infoW - (INFO_L_W + INFO_HOLE_PADDING)
+        position sprite INFO_HOLE2_SPRITE, infoLegX, infoY + infoH - INFO_HOLE_PADDING * 3
+        size sprite INFO_HOLE2_SPRITE, INFO_L_W + INFO_HOLE_PADDING * 2, INFO_L_H + INFO_HOLE_PADDING * 4
+        show sprite INFO_HOLE2_SPRITE
+    else
+        layoutInfoBorder(INFO_CURSOR, infoX, infoY, infoW, infoH)
+        showInfoBorder(INFO_L_CURSOR, 0)
+        hide sprite INFO_HOLE2_SPRITE
+    endif
 
     ` the hole is a little bigger than the blob, so its soft edge lands outside the outline
     position sprite INFO_HOLE_SPRITE, infoX - INFO_HOLE_PADDING, infoY - INFO_HOLE_PADDING
@@ -249,6 +284,8 @@ frame_info_render:
     ` the selected outline is bright and pulses a little. all the others are faint.
     infoPulse# = .8 + .2 * sin(game ms() * .006)
     colorInfoBorder(INFO_CURSOR, rgb(255, 255, 255, 255 * infoFade# * infoPulse#))
+    colorInfoBorder(INFO_L_CURSOR, rgb(255, 255, 255, 255 * infoFade# * infoPulse#))
+    colorInfoBorder(INFO_L_FAINT, rgb(64, 128, 255, 160 * infoFade#))
     for i = 0 to INFO_LENGTH - 1
         if INFOS(i).enabled
             colorInfoBorder(INFOS(i).border, rgb(64, 128, 255, 160 * infoFade#))
@@ -344,6 +381,22 @@ function findInfoInDirection(dx, dy)
         ` and how far off to the side it is. a blob that is more sideways than forwards does not count,
         ` otherwise pressing left could pick something that is straight above.
         across = abs(vx * dy) + abs(vy * dx)
+
+        ` going up or down, a blob whose width takes in the middle of this one is straight above or
+        ` below it, however far apart their own middles are, and so is one whose middle is inside the
+        ` width of this one. a wide thing over a narrow one, like the bar of the round over the
+        ` quest, would be passed over without this.
+        if dy <> 0
+            straightOn = 0
+            if curX >= other.topLeft.x
+                if curX <= other.topLeft.x + other.size.x then straightOn = 1
+            endif
+            otherX = other.topLeft.x + other.size.x / 2
+            if otherX >= cur.topLeft.x
+                if otherX <= cur.topLeft.x + cur.size.x then straightOn = 1
+            endif
+            if straightOn then across = 0
+        endif
         if across > along * 2 then skip
 
         ` closer is better, and lined up is better than off to the side
@@ -414,6 +467,7 @@ function layoutInfoPanel(index)
 
     ` below the blob if there is room, otherwise above it, otherwise inside the bottom of it.
     panelY = blob.topLeft.y + blob.size.y + 6
+    if index = INFO_L_INDEX then panelY = panelY + INFO_L_H `and below its leg, for the one that has one
     if panelY + panelH > WORLD_HEIGHT - 16 then panelY = blob.topLeft.y - panelH - 6
     if panelY < 4 then panelY = blob.topLeft.y + blob.size.y - panelH - 6
 
@@ -459,6 +513,34 @@ function layoutInfoBorder(b as infoBorder, x, y, w, h)
 
     position sprite b.rightId, x + w - 1, y
     size sprite b.rightId, 1, h
+endfunction
+
+` lay an outline out in the shape of an upside down L: the rectangle, and a leg that hangs down
+` from the right end of its bottom edge. see THE ONE THAT IS NOT A RECTANGLE in fish_headers. the
+` outline of the rectangle gives up the part of its bottom edge that the leg joins on at, and its
+` right side runs on down the leg. `legSides` has the other two sides of the leg: its left, and
+` its bottom. its top and its right are not used.
+function layoutInfoL(b as infoBorder, legSides as infoBorder, x, y, w, h, legW, legH)
+    position sprite b.topId, x, y
+    size sprite b.topId, w, 1
+
+    position sprite b.leftId, x, y
+    size sprite b.leftId, 1, h
+
+    position sprite b.rightId, x + w - 1, y
+    size sprite b.rightId, 1, h + legH
+
+    position sprite b.bottomId, x, y + h - 1
+    size sprite b.bottomId, w - legW + 1, 1
+
+    position sprite legSides.leftId, x + w - legW, y + h - 1
+    size sprite legSides.leftId, 1, legH + 1
+
+    position sprite legSides.bottomId, x + w - legW, y + h + legH - 1
+    size sprite legSides.bottomId, legW, 1
+
+    hide sprite legSides.topId
+    hide sprite legSides.rightId
 endfunction
 
 function colorInfoBorder(b as infoBorder, colorCode)

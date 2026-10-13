@@ -221,6 +221,9 @@ function swapCellStacks(aIndex, bIndex)
     tempPaid = DIAGONAL_PAID(aIndex)
     DIAGONAL_PAID(aIndex) = DIAGONAL_PAID(bIndex)
     DIAGONAL_PAID(bIndex) = tempPaid
+
+    ` and a fish that a quest has marked keeps its mark. see QUESTS in fish_headers_quests.
+    questSwapMarks(aIndex, bIndex)
 endfunction
 
 ` one fish takes the place of another
@@ -262,6 +265,7 @@ endfunction
 ` a puff of bubbles shows it off, `delay` milliseconds from now.
 function tryStackFish(index, chance, delay, abilityIndex)
     lucky = CELLS(index)
+    if lucky.value = TEX_DIVER then exitfunction `there is only one diver. see fish_headers_diver.
     if lucky.stack < FISH_STACK_MAX
         if rnd(100) < chance
             CELLS(index).stack = lucky.stack + 1
@@ -289,7 +293,11 @@ function rollBellyUpFish()
     startIndex = rnd(CELL_COUNT)
     for n = 0 to CELL_COUNT - 1
         index = (n + startIndex) mod CELL_COUNT
-        if index <> cursorIndex and CELLS(index).bellyUp = 0
+        bellyOk = 1
+        if index = cursorIndex then bellyOk = 0
+        if CELLS(index).bellyUp <> 0 then bellyOk = 0
+        if CELLS(index).value = TEX_DIVER then bellyOk = 0 `the diver never goes belly up. see fish_headers_diver.
+        if bellyOk
             unlucky = CELLS(index)
             CELLS(index).bellyUp = 1
             showPassiveUsed(ABILITY_INDEX_BOTTOMS_UP)
@@ -355,6 +363,7 @@ function shootRay(index, groupBase)
         if CELLS(rayIndex).comboBlownUp then rayOk = 0
         if CELLS(rayIndex).comboForce > 0 then rayOk = 0
         if CELLS(rayIndex).comboFillId = CELLS(index).comboFillId then rayOk = 0
+        if CELLS(rayIndex).value = TEX_DIVER then rayOk = 0 `the stingray swims past the diver. see fish_headers_diver.
         if rayOk
             CELLS(rayIndex).comboForce = rayForce
             CELLS(rayIndex).comboFillId = groupBase + rayForce
@@ -411,6 +420,7 @@ function stingFish(index)
     if CELLS(index).comboBlownUp then exitfunction 0
     if CELLS(index).bellyUp >= 2 then exitfunction 0
     if CELLS(index).value = TEX_BOTTLE then exitfunction 0
+    if CELLS(index).value = TEX_DIVER then exitfunction 0
     if rnd(100) >= JELLY_STING_CHANCE then exitfunction 0
 
     CELLS(index).bellyUp = CELLS(index).bellyUp + 1
@@ -854,6 +864,9 @@ function advanceScoreBar()
         ` the bar is empty right away, and stays that way for a moment so that it is seen to be empty.
         ` then it grows from the left to where the new round starts.
         create basic tween SCORE_BAR.progressTweenId, 0, barRatio#, 450, 350
+
+        ` the new round may have a quest. see QUESTS in fish_headers_quests.
+        questRoundStarted()
     endif
 endfunction
 
@@ -875,7 +888,7 @@ endfunction
 function getGameLengthRounds(length)
     rounds = 30
     if length = GAME_LENGTH_SHORT then rounds = 5
-    if length = GAME_LENGTH_LONG then rounds = 100
+    if length = GAME_LENGTH_LONG then rounds = 60
 endfunction rounds
 
 function createProgressBar(pos as vec, size as vec)
@@ -948,6 +961,9 @@ function findCombos(cIndex, groupId)
     lowIndex = cIndex + CELL_COLUMN_COUNT
 
     cell = CELLS(cIndex)
+
+    ` some of the things that a quest puts on the board never match. see THE QUEST KINDS in fish_headers_quests.
+    if cell.value >= QUEST_SOLID_FROM then exitfunction
 
     hasLeft = cell.coord.x > 0
     hasRight = cell.coord.x < CELL_COLUMN_COUNT - 1
@@ -1684,6 +1700,13 @@ function startLiveMove(dirX, dirY, wantSwap)
     }
     liveTarget as vec = addCoordinates(SELECTION_POS, liveDir)
 
+    ` the pickup of a quest is beside the board, and the cursor can step out onto it, and back. this
+    ` is for a move that is made while fish are popping. see questCursorBumped in fish_routines_quests.
+    questTook = questCursorBumped(dirX, dirY, wantSwap)
+    if questTook
+        exitfunction 0
+    endif
+
     allowed = 1
     if liveTarget.x < 0 then allowed = 0
     if liveTarget.x >= CELL_COLUMN_COUNT then allowed = 0
@@ -1696,6 +1719,10 @@ function startLiveMove(dirX, dirY, wantSwap)
         if wantSwap
             if isCellLocked(aIndex) then allowed = 0
             if isCellLocked(bIndex) then allowed = 0
+
+            ` and some of the things that a quest puts on the board cannot be swapped. see questLocksCell in fish_routines_quests.
+            if questLocksCell(aIndex) then allowed = 0
+            if questLocksCell(bIndex) then allowed = 0
         endif
     endif
 
@@ -1847,6 +1874,9 @@ function stepLiveMove()
                 updateCell(CELLS(LIVE_MOVE_A))
                 updateCell(CELLS(LIVE_MOVE_B))
 
+                ` the quest of the round hears about every swap
+                questSwapDone(LIVE_MOVE_A, LIVE_MOVE_B)
+
                 ` the groups of the two fish that a swap has moved can go through skeletons, when the board is looked at next. see SKELETONS in fish_headers.
                 SKELETON_WILD_A = LIVE_MOVE_A
                 SKELETON_WILD_B = LIVE_MOVE_B
@@ -1870,6 +1900,10 @@ function stepLiveMove()
                     coralTrailClear()
                 endif
 
+                ` a bottle that the swap carried up to the top row brings the diver down. this comes
+                ` after the move was counted, so the swap that did it takes none of the air. see fish_headers_diver.
+                diverBottleRose(LIVE_MOVE_A, LIVE_MOVE_B)
+
                 ` a swap may turn a fish belly up, once the board has settled
                 BELLY_UP_ROLL_DUE = 1
 
@@ -1886,6 +1920,9 @@ function stepLiveMove()
 
             ` the cursor swelled up on the way, and it ends up exactly the size of a cell again
             scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+
+            ` and the quest of the round hears where the cursor has got to
+            questCursorStepped(LIVE_MOVE_A, LIVE_MOVE_B)
 
             ` with the "bottoms up" card, a fish that is belly up pops when the cursor comes to it.
             ` not one that a combo is already busy with, though.
@@ -2210,6 +2247,7 @@ function doKnownFill(start as vec, dir as vec)
     ` so this only matters to something that calls this directly.
     KNOWN_FILL_VALUE = movedValue
     if movedValue = TEX_BOTTLE then KNOWN_FILL_VALUE = 0
+    if movedValue = TEX_DIVER then KNOWN_FILL_VALUE = 0 `and neither is the diver
 
     registerMove(1)
 endfunction
@@ -2237,4 +2275,8 @@ function registerMove(delta)
     ` register the move against the score
     CURRENT_MOVE_COUNT = CURRENT_MOVE_COUNT + delta
     set text MOVE_COUNT_TEXT_ID, str$(CURRENT_MOVE_COUNT)
+
+    ` every move takes some of the air of a diver that is down. see THE AIR in fish_headers_diver.
+    diverMoveMade(delta)
 endfunction
+

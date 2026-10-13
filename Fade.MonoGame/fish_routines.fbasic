@@ -130,13 +130,25 @@ load_textures:
     texture free texture id(TEX_RAY), "Fish/Textures/Stingray"
     texture free texture id(TEX_BOTTLE), "Fish/Textures/Bottle"
 
+    ` the kinds that only a quest puts on the board. they come right after the bottle, so that they are
+    ` fish 11 to 15. see THE QUEST KINDS in fish_headers_quests.
+    texture free texture id(TEX_KRILL), "Fish/Textures/Quests/Krill"
+    texture free texture id(TEX_SEAWEED), "Fish/Textures/Quests/Seaweed"
+    texture free texture id(TEX_SAND_DOLLAR), "Fish/Textures/Quests/SandDollar"
+    texture free texture id(TEX_TURTLE), "Fish/Textures/Quests/Turtle"
+    texture free texture id(TEX_GLASS_FISH), "Fish/Textures/Quests/GlassFish"
+    QUEST_SOLID_FROM = TEX_SEAWEED
+
+    ` the diver comes right after those, so it is fish 16, and it never matches either. see fish_headers_diver.
+    texture free texture id(TEX_DIVER), "Fish/Textures/Diver"
+
     texture reserve texture id(TEX_NOISE), "Fish/Textures/Turbulence_13-256x256"
 
     ` every skeleton is the same pile of bones, whatever kind of fish it was. and the ghost that one
     ` turns into when it is matched. see EVERY SKELETON IS THE SAME PILE OF BONES in fish_headers.
     texture reserve texture id(TEX_BONES), "Fish/Textures/Bones"
     texture reserve texture id(TEX_GHOST), "Fish/Textures/Ghost"
-    for skeletonTexN = 0 to 15
+    for skeletonTexN = 0 to 16
         SKELETON_TEX(skeletonTexN) = TEX_BONES
     next
     CODEC_FISH_TEX = TEX_GOLDFISH `the codec shows what can happen to a fish on a goldfish
@@ -145,6 +157,12 @@ load_textures:
     FISH_COLORS(getFishColorIndex(TEX_JELLY)) = rgb(200, 130, 255)
     FISH_COLORS(getFishColorIndex(TEX_RAY)) = rgb(120, 150, 200)
     FISH_COLORS(getFishColorIndex(TEX_BOTTLE)) = rgb(150, 220, 180)
+    FISH_COLORS(getFishColorIndex(TEX_KRILL)) = rgb(255, 150, 130)
+    FISH_COLORS(getFishColorIndex(TEX_SEAWEED)) = rgb(90, 200, 110)
+    FISH_COLORS(getFishColorIndex(TEX_SAND_DOLLAR)) = rgb(240, 225, 170)
+    FISH_COLORS(getFishColorIndex(TEX_TURTLE)) = rgb(90, 180, 110)
+    FISH_COLORS(getFishColorIndex(TEX_GLASS_FISH)) = rgb(200, 225, 240)
+    FISH_COLORS(getFishColorIndex(TEX_DIVER)) = rgb(245, 196, 62)
     FISH_COLORS(getFishColorIndex(TEX_PUFFER)) = rgb(250, 190, 54)
     FISH_COLORS(getFishColorIndex(TEX_CATFISH)) = rgb(160, 150, 121)
     FISH_COLORS(getFishColorIndex(TEX_GOLDFISH)) = rgb(255, 174, 48)
@@ -367,7 +385,12 @@ setup_score:
     global SCORE_BAR as progressBar = createProgressBar(SCORE_POS, SCORE_SIZE)
     SCORE_BAR.startVal = 0
     SCORE_BAR.endVal = getRoundSpan(0)
-    infoIndex = allocateInfoBlob(SCORE_POS.x - 4, SCORE_POS.y - 16, SCORE_SIZE.x + 8, 34, "Round Progress", "Popping fish fills the bar, and bigger groups are worth more. Fill it to finish the round and pick an upgrade.")
+    ` it is an upside down L: its name and its bar, all the way across, and its numbers, under the
+    ` right end of the bar. see THE ONE THAT IS NOT A RECTANGLE in fish_headers.
+    INFO_L_W = 100
+    INFO_L_H = 14
+    INFO_L_INDEX = INFO_LENGTH
+    infoIndex = allocateInfoBlob(SCORE_POS.x - 4, SCORE_POS.y - 16, SCORE_SIZE.x + 8, 22, "Round Progress", "Popping fish fills the bar, and bigger groups are worth more. Fill it to finish the round and pick an upgrade.")
     INFO_INDEX_SCORE_BAR = infoIndex
     
     global dim PROGRESS_BARS(1) as progressBar
@@ -503,29 +526,49 @@ return
 
 time# = 0
 update_frame:
+    ` the `perf lap` between the parts is for the frame timing log. see the names in fish.fbasic.
+    perf lap 8
     gosub frame_texts
+    perf lap 10
     gosub frame_scale_wave
+    perf lap 11
     gosub frame_fish_fx `after the scale wave, because it needs to know how big the fish ended up
+    perf lap 12
     gosub frame_score
+    perf lap 13
     gosub frame_passive_render
+    perf lap 14
     gosub frame_move_ability_render
+    perf lap 15
     gosub frame_free_moves
+    perf lap 16
     stepCursorShake()
     stepMultiplier()
+    perf lap 17
     stepCoral()
+    perf lap 18
     stepSkeletonGhosts()
+    perf lap 19
     stepTuna()
+    perf lap 20
     stepBeatLook()
+    perf lap 21
     gosub frame_hints
+    perf lap 22
     updateBubbles()
+    perf lap 23
     updateMusic()
+    perf lap 24
+    stepQuest()
     gosub frame_dbg
+    perf lap 25
 
     ` when the fish go home, the things around the board fade away. this comes last, so that it has
     ` the last word on how they look. see THE FISH GO HOME in fish_headers.
     if HUD_KEEP# < 1
         applyHudFade()
     endif
+    perf lap 26
 
 return
 
@@ -561,10 +604,13 @@ frame_fish_fx:
     next
 
     ` the same rings push the picture of the whole screen as they pass
+    perf lap 30
     gosub frame_ripples
+    perf lap 31
 
     ` which fish have one of their own kind at a corner. see DIAGONALS in fish_headers.
     stepDiagonalHints()
+    perf lap 32
     diagonalPeriod = CURRENT_PERIOD#
     diagonalNudgeTime# = DIAGONAL_HINT_SHUFFLE_MS
 
@@ -756,10 +802,14 @@ frame_dbg:
     ` summons the ancient one. the ending plays, and then the game ends, the way that it would have.
     ` Y wins the game the usual way, as if the last round had been got through, so the fish go home.
     ` M sounds the ding and starts a tune to move the cursor in time to. see THE DANCE in fish_headers.
+    ` B puts a bottle on the cell that the cursor is on. carry it up to the top row for the diver. see fish_headers_diver.
+    ` L puts a jellyfish there, and V a stingray.
+    ` O fills the album of the diver, so that the diver swims up and its ending plays. it brings the diver down first, if it is not.
     if is env set("FISH_DEBUG")
         if MENU_MODE = 0
             gosub frame_debug_cards
             gosub frame_debug_beat
+            gosub frame_debug_quests
             if INFO_MODE = 0
                 ` the dance. see THE DANCE in fish_headers.
                 if new key down(scancode("M"))
@@ -771,6 +821,32 @@ frame_dbg:
                         if CELLS(dbgBellyIndex).bellyUp < 2
                             CELLS(dbgBellyIndex).bellyUp = CELLS(dbgBellyIndex).bellyUp + 1
                         endif
+                    endif
+                endif
+
+                ` a bottle, for the diver. see fish_headers_diver.
+                if new key down(scancode("B"))
+                    dbgBottleIndex = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+                    CELLS(dbgBottleIndex).value = TEX_BOTTLE
+                    clearCellStack(dbgBottleIndex)
+                    updateCell(CELLS(dbgBottleIndex))
+                endif
+
+                ` the ending of the diver, right away
+                if new key down(scancode("O"))
+                    diverDebugWin(SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT)
+                endif
+
+                ` a jellyfish, or a stingray, without their cards
+                dbgSpawnKind = 0
+                if new key down(scancode("L")) then dbgSpawnKind = TEX_JELLY
+                if new key down(scancode("V")) then dbgSpawnKind = TEX_RAY
+                if dbgSpawnKind > 0
+                    dbgSpawnIndex = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+                    if CELLS(dbgSpawnIndex).value <> TEX_DIVER
+                        CELLS(dbgSpawnIndex).value = dbgSpawnKind
+                        clearCellStack(dbgSpawnIndex)
+                        updateCell(CELLS(dbgSpawnIndex))
                     endif
                 endif
 
@@ -833,6 +909,9 @@ frame_score:
         CURRENT_ROUND = CURRENT_ROUND + 1
         showRoundsLeft()
 
+        ` the quest of the round is over with it. see QUESTS in fish_headers_quests.
+        questRoundEnded()
+
 
         ` the bar stays full until an upgrade has been picked. then advanceScoreBar starts it on the next round.
         SCORE_BAR_HOLD = 1
@@ -846,7 +925,9 @@ frame_score:
 
         ` show ability upgrade! but not while fish are still popping. it waits for the board to settle,
         ` and for the points of the last fish to get onto the bar, so that none of the overflow is missed.
-        if SCORE_BAR_HOLD = 1 and REQUEST_COMBO_CHECK = 0 and LIVE_MOVE_ACTIVE = 0 and SCORE_TICK_COUNT = 0
+        ` and for a quest that the round ended on to go off in its bubbles. see A QUEST THAT THE ROUND ENDS ON in fish_headers_quests.
+        questLeaving = questHoldsRound()
+        if SCORE_BAR_HOLD = 1 and REQUEST_COMBO_CHECK = 0 and LIVE_MOVE_ACTIVE = 0 and SCORE_TICK_COUNT = 0 and questLeaving = 0
             roundWasLast = 0
             if getRoundsLeft() <= 0
                 ` a game that was won already, and is being carried on with, has no last round. see KEEP PLAYING in fish_headers.
@@ -1066,6 +1147,9 @@ handle_combos:
     ` a bottle that has got to the bottom row pays out, and is popped along with whatever else pops
     checkBottles()
 
+    ` there is one diver, at the most, and nothing has happened to it. see fish_headers_diver.
+    diverMend()
+
     ` clear the combo mask...
     for i = 1 to CELL_COUNT
         c = CELLS(i-1)
@@ -1134,6 +1218,10 @@ handle_combos:
     ` is scored, and the pops wait until the line has been seen. see DIAGONALS in fish_headers.
     judgeDiagonals()
     ghostWait = ghostWait + DIAGONAL_WAIT
+
+    ` and they wait for the diver, when it has a picture to take. see THE PICTURES in fish_headers_diver.
+    diverSnapAhead(groupId)
+    ghostWait = ghostWait + DIVER_SNAP_HOLD
 
     totalComboCount = 0
     CORAL_HELD_GROUPS = 0
@@ -1212,6 +1300,13 @@ handle_combos:
 
         if comboCount < comboNeed then skip `if this group is not big enough, then we can skip rendering the explosion
 
+        ` a quest may be holding the group back, to pop later. see SLEEPERS in fish_quests.
+        questHeld = 0
+        if comboForced = 0
+            questHeld = questHoldsGroup(g)
+        endif
+        if questHeld then skip
+
         ` every fish of the group is on coral, and has sung already. nothing has joined them, so they sit.
         ` when it was the last swap that put them together, out of fish that had all sung, they are
         ` happy about it: a heart comes up from each of them, and the multiplier does not hold the swap
@@ -1236,6 +1331,9 @@ handle_combos:
         groupBonus = 1
         if groupForce = FORCE_BUCKET then groupBonus = WASTE_BUCKET_BONUS
 
+        ` a quest can make a group worth nothing. see questGroupScore in fish_routines_quests.
+        groupBonus = groupBonus * questGroupScore(g)
+
         ` fish that are going into a stack are not a combo, so nothing gets added to them
         groupStock = isAbility_Passive_StockMarket()
         if groupForce = FORCE_BUNCH then groupStock = 0
@@ -1249,7 +1347,11 @@ handle_combos:
                 startIndex = rnd(CELL_COUNT)
                 for i = 0 to CELL_COUNT - 1
                     cellIndex = (i + startIndex) mod CELL_COUNT
-                    if CELLS(cellIndex).comboFillMask = 0
+                    ` not a fish that a quest has marked, or one of a quest's own. see questKeepsFish in fish_routines_quests.
+                    stockOk = 1
+                    if CELLS(cellIndex).comboFillMask > 0 then stockOk = 0
+                    if questKeepsFish(cellIndex) then stockOk = 0
+                    if stockOk
                         CELLS(cellIndex).comboFillId = g
                         CELLS(cellIndex).comboFillMask = 1
                         showPassiveUsed(ABILITY_INDEX_PASSIVE_STOCK_MARKET)
@@ -1481,6 +1583,9 @@ handle_combos:
     next
 
 
+    ` the diver takes a picture of every fish that is popping right next to it. see fish_headers_diver.
+    diverJudge()
+
     ` reset comboForce
     for i = 0 to CELL_COUNT - 1
         CELLS(i).comboForce = 0
@@ -1493,6 +1598,9 @@ handle_combos:
     ` and if that swap came at the end of one of the hidden patterns, this is where coral grows. the fish
     ` that are popping now were scored without it. see CORAL in fish_headers.
     judgeCoralCast(totalComboCount)
+
+    ` the quest of the round hears what is popping, and whether the last swap popped anything
+    questJudge(totalComboCount)
 
     ` the tests stop here. what pops has been decided and scored, and none of it has been animated yet.
     _combos_judged:
@@ -1522,6 +1630,13 @@ handle_combos:
 
         ` the board has settled, so this is when a move gets its chance to turn a fish belly up
         rollBellyUpFish()
+
+        ` and the quest of the round gets its turn to change the board
+        questSettled()
+
+        ` and a diver that is done, or out of air, swims up to the top and goes
+        diverSettled()
+        gosub diver_rise
         return
     endif
 
@@ -1645,6 +1760,12 @@ handle_combos:
             spawnBubbles(getCellX(CELLS(i).coord.x), getCellY(CELLS(i).coord.y), CELL_SIZE / 3, 8, 0, FISH_COLORS(getFishColorIndex(TEX_BOTTLE)))
         endif
     next
+
+    ` a quest may leave something behind the same way, or bring a fish back
+    questAfterPops()
+
+    ` and nothing pops the diver
+    diverAfterPops()
 
     ` for all cells that are not blown up, need to find out where they should live...
     startIndexOfLastRow = CELL_COUNT - CELL_COLUMN_COUNT
@@ -1770,6 +1891,9 @@ handle_combos:
 
             ` after a "known fill" swap, the new fish are all the kind that was moved. see KNOWN FILL in fish_headers.
             if KNOWN_FILL_VALUE > 0 then CELLS(i-1).value = KNOWN_FILL_VALUE
+
+            ` a quest may have its own idea of what drops in. see FORECAST in fish_quests.
+            CELLS(i-1).value = questNewFish(i - 1, CELLS(i-1).value)
             set sprite texture cell.spriteId, CELLS(i-1).value
             targetY = y - CELL_SIZE * 2
             startAlpha = 0
@@ -1841,6 +1965,9 @@ handle_board_expansion:
 
     ` the board is as big as it gets
     if CELL_COLUMN_COUNT >= GRID_MAX_COUNT and CELL_ROW_COUNT >= GRID_MAX_COUNT then return
+
+    ` nothing that the quest of the round knows about the board will be true on the new one, so it starts over
+    questBoardGrowing()
 
     ` remember how the board is laid out now, so that the fish can slide from there
     oldColumns = CELL_COLUMN_COUNT
@@ -1983,6 +2110,8 @@ handle_board_expansion:
     next
     scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
     gosub update_selection_position
+
+    questBoardGrew()
 
     ` the new fish may have landed next to two of their own kind
     REQUEST_COMBO_CHECK = 1

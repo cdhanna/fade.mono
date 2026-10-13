@@ -202,6 +202,11 @@ setup_menu:
         desc$ = "The one you summoned, on the main menu."
         ready = 1
     }
+    MENU_ITEMS(MENU_ITEM_SET_PHOTOS) = {
+        name$ = "Menu photos"
+        desc$ = "The photos you took, on the main menu."
+        ready = 1
+    }
 
     ` the lines of the page that "New Game" opens. refreshOptionLines writes the choice onto the end of the
     ` first three, and gives them a description of whatever is chosen.
@@ -275,6 +280,8 @@ setup_menu:
     OPTION_MENU_MONSTER = get pref(PREF_MENU_MONSTER, 1)
     if OPTION_MENU_REEF <> 0 then OPTION_MENU_REEF = 1
     if OPTION_MENU_MONSTER <> 0 then OPTION_MENU_MONSTER = 1
+    OPTION_MENU_PHOTOS = get pref(PREF_MENU_PHOTOS, 1)
+    if OPTION_MENU_PHOTOS <> 0 then OPTION_MENU_PHOTOS = 1
 
     ` the kind of game that was picked the last time is what "New Game" starts out on
     OPTION_GAME_LENGTH = get pref(PREF_GAME_LENGTH, GAME_LENGTH_REGULAR)
@@ -627,6 +634,9 @@ menu_pick:
         case MENU_ITEM_SET_MONSTER
             changeMenuOption(MENU_ITEM_SET_MONSTER, 1)
         endcase
+        case MENU_ITEM_SET_PHOTOS
+            changeMenuOption(MENU_ITEM_SET_PHOTOS, 1)
+        endcase
 
         case MENU_ITEM_SET_BACK
             ` back to whichever menu the options were opened from, with "Options" highlighted again.
@@ -725,6 +735,9 @@ handle_game_end:
     if CORAL_ENDING = CORAL_ENDING_ANCIENT
         MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = "The ancient one rose after " + str$(CURRENT_MOVE_COUNT) + " moves. Back to the title."
     endif
+    if CORAL_ENDING = CORAL_ENDING_DIVER
+        MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = "The album was filled in " + str$(CURRENT_MOVE_COUNT) + " moves. Back to the title."
+    endif
     setMenuPage(MENU_PAGE_GAME_OVER)
     selectMenuItem(0, 0)
 
@@ -747,9 +760,16 @@ handle_game_end:
     ` a game that ended with one of the two endings of the hidden game is over for good. it is back to
     ` the title. the high scores fade out before they are put away.
     if CORAL_ENDING > 0
+        ` the ending of the diver has a scene at the boat, once the main menu is back. see THE ENDING in fish_headers_diver.
+        endAtBoat = 0
+        if CORAL_ENDING = CORAL_ENDING_DIVER then endAtBoat = 1
+
         gosub menu_fade_out
         closeHighscores()
         gosub menu_quit_to_title
+        if endAtBoat
+            gosub diver_boat_scene
+        endif
         return
     endif
 
@@ -825,6 +845,12 @@ return
 menu_quit_to_title:
     gosub menu_fade_out
     gosub menu_open_main
+
+    ` after the ending of the diver, the main menu comes back see-through, and the scene at the boat
+    ` fades it in when it is over. see diver_boat_scene, in fish_routines_diver.
+    if CORAL_ENDING = CORAL_ENDING_DIVER
+        setMenuChromeAlpha(0)
+    endif
 
     TRANSITION_TO_MENU = 1
     gosub menu_transition
@@ -975,6 +1001,10 @@ menu_transition:
         BUBBLES(menuI) = bub
     next
 
+    ` coming back up from a game that ended with the album of the diver full, the wave is photo papers.
+    ` see THE ENDING in fish_headers_diver.
+    diverWaveStart(transitionDown)
+
     ` the wave starts below the screen, which leaves the mask empty. the screen is drawn before the mask is,
     ` so the screen is always looking at the mask from the frame before. the empty mask gets drawn once here,
     ` before the composite sprite is told to start using it.
@@ -1053,6 +1083,7 @@ menu_transition:
     for menuI = 0 to BUBBLE_COUNT - 1
         hide sprite BUBBLES(menuI).spriteId
     next
+    diverWaveEnd()
 
     ` the sound has been faded out by now. it is paused and not stopped, so that the next wave carries on from here.
     pause sfx SFX_BUBBLES
@@ -1139,6 +1170,9 @@ frame_transition:
             endif
         next
     next
+
+    ` the photo papers of the diver's ending go where the bubbles on the screen do
+    diverWaveStep(bubLine, transitionPrev#)
 
     ` the sound of the wave comes up quickly at the start, and dies away as the wave leaves the top of the screen
     bubVolume# = transitionNow# * 6
@@ -1292,6 +1326,8 @@ reset_game:
 
     resetMultiplier()
     resetCoral()
+    resetQuests()
+    diverReset()
 
     ` any score that was still floating up off of the fish
     for resetI = 0 to SCORE_TEXT_COUNT - 1
@@ -1436,6 +1472,12 @@ function setMenuPage(page)
                 skip
             endif
         endif
+        if i = MENU_ITEM_SET_PHOTOS
+            if page = MENU_PAGE_OPTIONS
+                if DIVER_SURFACE = 0 then hide text MENU_ITEMS(i).textId
+                skip
+            endif
+        endif
 
         if onPage
             MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = i
@@ -1461,6 +1503,11 @@ function setMenuPage(page)
                         MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_MONSTER
                         MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
                         show text MENU_ITEMS(MENU_ITEM_SET_MONSTER).textId
+                    endif
+                    if DIVER_SURFACE
+                        MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_PHOTOS
+                        MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+                        show text MENU_ITEMS(MENU_ITEM_SET_PHOTOS).textId
                     endif
                 endif
             endif
@@ -1561,6 +1608,11 @@ function refreshOptionLines()
     else
         set text MENU_ITEMS(MENU_ITEM_SET_MONSTER).textId, "Menu monster    off"
     endif
+    if OPTION_MENU_PHOTOS
+        set text MENU_ITEMS(MENU_ITEM_SET_PHOTOS).textId, "Menu photos    on"
+    else
+        set text MENU_ITEMS(MENU_ITEM_SET_PHOTOS).textId, "Menu photos    off"
+    endif
 
     ` and the kind of game onto the lines of the page that "New Game" opens
     lengthName$ = "regular"
@@ -1631,6 +1683,9 @@ function changeMenuOption(item, change)
         case MENU_ITEM_SET_MONSTER
             OPTION_MENU_MONSTER = 1 - OPTION_MENU_MONSTER
         endcase
+        case MENU_ITEM_SET_PHOTOS
+            OPTION_MENU_PHOTOS = 1 - OPTION_MENU_PHOTOS
+        endcase
 
         ` the lengths go around: short, regular, long, and back to short
         case MENU_ITEM_GAME_LENGTH
@@ -1657,6 +1712,7 @@ function changeMenuOption(item, change)
     set pref PREF_FULLSCREEN, OPTION_FULLSCREEN
     set pref PREF_MENU_REEF, OPTION_MENU_REEF
     set pref PREF_MENU_MONSTER, OPTION_MENU_MONSTER
+    set pref PREF_MENU_PHOTOS, OPTION_MENU_PHOTOS
 
     ` the lines have changed, so write them again. selecting the line again colors it and fills in its description.
     refreshOptionLines()

@@ -1,0 +1,447 @@
+remstart
+    QUESTS
+    from the third round on, every round has one quest: a little job on the board that is nothing to
+    do with filling the bar. finishing it pays out every point that the round still needs, so a
+    quest that is finished wins the round, however far the round had to go. the routines are in
+    fish_routines_quests, and
+    the list of quests, with what each one asks for, is at the top of that file.
+
+    a quest is always something that the player can leave alone. most of them only put something
+    on the board to be done, or not. the few that change how the game plays do nothing until the
+    player starts them. the pickup sits just off of the right edge of the board, where the cursor
+    cannot come to it by accident. see QUEST_STATE, and THE CURSOR STEPS OFF OF THE BOARD.
+
+    when a quest fails, it starts over: whatever it put on the board is cleaned away, and it is set
+    up afresh. a quest is not lost when the round ends. it carries on into the next round, and the
+    one after, until it is finished, and only then does a round bring a new one. so there is one
+    quest at a time, and at most one is finished in a round.
+
+    WHAT A QUEST HAS TO WORK WITH
+    - a mark on a fish. it goes wherever the fish goes, the same as a stack does, and it is gone
+      when the fish pops. QUEST_MARK holds them. swapCellStacks, in fish_funcs, takes them along.
+    - a spot on a cell, which stays put, whatever fish comes and goes. QUEST_SPOT holds them.
+    - five kinds of fish of its own. see THE QUEST KINDS.
+    - the numbers in QUEST_V, and the list in QUEST_LIST, to keep whatever else it needs.
+
+    WHAT A QUEST HEARS ABOUT. questEvent, in fish_routines_quests, passes these on to the quest:
+    - QEV_INIT     it is being set up, on a board that has settled
+    - QEV_START    the cursor stepped onto its pickup
+    - QEV_SWAP     a swap finished. the two fish have traded places already.
+    - QEV_STEP     the cursor came to a new cell, with a swap or without one
+    - QEV_JUDGE    handle_combos has looked at the board, and fish are popping
+    - QEV_SETTLE   handle_combos has looked at the board, and nothing pops. this is the only time
+                   that a quest changes the fish on the board, because nothing else is moving them.
+    - QEV_DRAW     once a frame, to draw itself
+remend
+
+global QUEST_FIRST_ROUND = 2 `the first round that has a quest, counting from 0. so the third round.
+global QUEST_COUNT = 32 `how many quests there are. they are numbered from 1. the saved game has room for 32.
+
+` the quests. the numbers are saved with the game, so a new quest goes on the end.
+global QUEST_LEFT_RIGHT = 1
+global QUEST_KRILL = 2
+global QUEST_LOST_PAIR = 3
+global QUEST_SEQUENCE = 4
+global QUEST_SHARK = 5
+global QUEST_PUFFERS = 6
+global QUEST_PROTECTED = 7
+global QUEST_SUNBEAM = 8
+global QUEST_CONTINUOUS = 9
+global QUEST_SEAWEED = 10
+global QUEST_WAKE = 11
+global QUEST_TURTLE = 12
+global QUEST_CUTTLEFISH = 13
+global QUEST_CONSTELLATION = 14
+global QUEST_REMORA = 15
+global QUEST_SLEEPERS = 16
+global QUEST_ECHO = 17
+global QUEST_PULSE = 18
+global QUEST_TOTEM = 19
+global QUEST_ROLL_CALL = 20
+global QUEST_GLASS_FISH = 21
+global QUEST_REFLECTION = 22
+global QUEST_TETHER = 23
+global QUEST_LANTERN = 24
+global QUEST_HATCH = 25
+global QUEST_FORECAST = 26
+global QUEST_MOORINGS = 27
+global QUEST_TRADE_PLACES = 28
+global QUEST_PILOT_FISH = 29
+global QUEST_FERRY = 30
+global QUEST_LASSO = 31
+global QUEST_TREASURE = 32
+
+` QUEST_STATE. what the quest of the round is doing.
+global QSTATE_NONE = 0 `there is no quest
+global QSTATE_OFFERED = 1 `its pickup is beside the board, and it does nothing until the cursor steps out onto that
+global QSTATE_ACTIVE = 2 `it is being played
+global QSTATE_DONE = 3 `it has been finished, and paid out
+
+global QUEST_ID = 0 `which quest the round has, or 0 for none
+global QUEST_STATE = 0
+global QUEST_LOG_PENDING = 0 `the quest that has been finished since the last upgrade was picked, or 0. see THE QUESTS IN THE LOG in fish_headers.
+global QUESTS_DONE = 0 `how many quests have been finished in the game that is being played. it is saved with the game.
+
+` EVERY QUEST IS PICKED UP. the quest of a round shows up as a pickup beside the board, and nothing
+` else: no name, no badge, and nothing on the board. it only starts when the cursor steps out onto
+` the pickup, and stepping out onto it again puts it down. a quest that fails starts over without
+` having to be picked up again, and QUEST_REARM is how questInitNow knows to do that. a quest that
+` was put down, or that a game was loaded with, waits to be picked up. one that the debug window
+` starts is picked up already.
+global QUEST_REARM = 0
+
+global QUEST_INIT_DUE = 0 `1 when the quest has to be set up, the next time that the board is settled
+global QUEST_HOLD = 0 `1 while the board is growing, when nothing can be set up on it
+global QUEST_SWEEP_DUE = 0 `1 when the fish that only a quest puts on the board have to be taken off of it, the next time that it is settled
+
+` THE UPGRADE SCREEN WAITS FOR THE SWEEP. when a quest that was finished is done with, at the end
+` of its round, the fish that only a quest puts on the board have to be off of it before the
+` upgrade screen comes up, and that has to wait for the board to settle. questHoldsRound, in
+` fish_routines_quests, is what frame_score asks. a quest that is not finished carries on into the
+` next round, so there is nothing to wait for then.
+global QUEST_LEAVE_UNTIL = 0 `the upgrade screen does not come up before this, in milliseconds of the game
+global QUEST_LEAVE_TIME = 550 `how long the bubbles get to be seen
+
+global QUEST_PICK_CELL = -1 `the cell that the pickup is beside. it is the last cell of a row.
+global QUEST_REWARD = 0 `what the quest that was just finished paid out
+global QUEST_FLOOR_PERCENT = 5 `a quest never pays less than this much of what the whole round takes
+
+` the events. see WHAT A QUEST HEARS ABOUT.
+global QEV_INIT = 1
+global QEV_START = 2
+global QEV_SWAP = 3
+global QEV_STEP = 4
+global QEV_JUDGE = 5
+global QEV_SETTLE = 6
+global QEV_DRAW = 7
+
+` what the quest knows about the swaps that handle_combos has not looked at the board for yet
+global QUEST_PENDING_SWAPS = 0 `how many there are
+global QUEST_SWAP_A = -1 `the two cells of the last one
+global QUEST_SWAP_B = -1
+global QUEST_SWAP_MARKED = 0 `1 when one of them moved a fish with a mark on it
+global QUEST_MISSED = 0 `1 when a swap has just been found to have popped nothing
+global QUEST_TICKS = 0 `how many swaps have been made since the board last settled
+global QUEST_CHAIN = 0 `how many times in a row the board has been looked at and found popping
+
+` the marks, the spots, and the rest of what a quest keeps
+global dim QUEST_MARK(400)
+global dim QUEST_SPOT(400)
+global dim QUEST_FRESH(400) `1 for a fish that has just dropped in. see FORECAST.
+global dim QUEST_REBORN(400) `the kind of fish that a cell gets back, once the fish that is popping in it has gone. 0 for none.
+global dim QUEST_TEMP(400) `scratch, for the searches
+global dim QUEST_STACK(400) `and more of it
+global dim QUEST_V(64)
+global dim QUEST_LIST(400)
+global QUEST_LIST_N = 0
+global dim QUEST_FORE(400) `the fish that are waiting above every column, 16 deep. see FORECAST.
+
+` the groups that are popping, as the quest sees them. questCollectGroups fills these in.
+global QUEST_GROUP_N = 0
+global dim QUEST_GROUP_ID(64)
+global dim QUEST_GROUP_KIND(64)
+global dim QUEST_GROUP_SIZE(64)
+
+` what the badge says
+global QUEST_PROG_NOW = 0
+global QUEST_PROG_NEED = 0 `0 when the quest has no count to show
+global QUEST_NOTE_KIND = 0 `a kind of fish to draw next to the count, or 0
+global QUEST_NOTE$ = " " `a few words that the badge says in place of the count
+global QUEST_NOTE_ON = 0 `1 when it is saying them
+global QUEST_NOTE_KEY = 0 `this changes whenever the words do
+
+` what the badge was last written for, so that it is only written again when something changes
+global QUEST_SHOWN_KEY = -1 `1 when it has been written, 0 when it is hidden, and -1 when it has to be written again
+global QUEST_SHOWN_ID = 0
+global QUEST_SHOWN_STATE = 0
+global QUEST_SHOWN_NOW = 0
+global QUEST_SHOWN_NEED = 0
+global QUEST_SHOWN_NOTE = 0
+
+` THE QUEST KINDS. five kinds of fish that only a quest puts on the board. load_textures, in
+` fish_routines, loads their pictures right after the bottle, so that they are fish 11 to 15: a fish
+` is saved as its number, and the arrays that go by kind have room for 16.
+` krill is a kind like any other, and three of it pop. the rest never match anything, not even each
+` other. findCombos, in fish_funcs, leaves them out. a quest that ends takes its own off of the board.
+global TEX_KRILL
+global TEX_SEAWEED
+global TEX_SAND_DOLLAR
+global TEX_TURTLE
+global TEX_GLASS_FISH
+global QUEST_SOLID_FROM = 12 `the kinds from here up never match. load_textures sets it to TEX_SEAWEED.
+global QUEST_SHARK_REACH = 2 `how many cells away from the shark a group can be, and still get eaten. so it bites five cells across.
+global QUEST_PUFFER_KIND = 1 `the pufferfish is the first picture that load_textures loads
+
+` the pictures that are not fish
+global TEX_Q_RING
+global TEX_Q_DOT
+global TEX_Q_SHARK
+global TEX_Q_STARFISH
+global TEX_Q_PEARL
+global TEX_Q_BUOY
+global TEX_Q_ANGLER
+global TEX_Q_EEL
+global TEX_Q_PILOT
+global TEX_Q_SHELL
+global TEX_Q_BAIT
+global TEX_Q_WHALE
+
+` HOW A QUEST IS DRAWN. there are three piles of things to draw with, and a quest takes from them
+` on every frame: squares of light under the fish, pictures on top of the fish, and numbers on top
+` of those. whatever a frame does not take is hidden. so a quest never has to keep track of what it
+` has on the screen, and nothing is left behind when it ends. questGlowCell, questIconAt and
+` questNumberAt, in fish_routines_quests, hand them out.
+global QUEST_GLOW_MAX = 120
+global dim QUEST_GLOW_SPRITES(120)
+global QUEST_GLOW_N = 0
+global QUEST_GLOW_SHOWN = 0 `how many the last frame took
+global QUEST_ICON_MAX = 48
+global dim QUEST_ICON_SPRITES(48)
+global QUEST_ICON_N = 0
+global QUEST_ICON_SHOWN = 0
+global QUEST_NUM_MAX = 8
+global dim QUEST_NUM_TEXTS(8)
+global QUEST_NUM_N = 0
+global QUEST_NUM_SHOWN = 0
+
+` THE ZONES. the squares of light are drawn by an effect of their own, QuestZoneEffect.fx: a faint
+` wash of color, with an outline around it that the water pushes about. the outline of the zone
+` that the cursor is on is drawn stronger, and the wash inside stays as it is.
+` questZone, in fish_routines_quests, tells the effect how to draw each one.
+
+` STAYING OUT OF THE WAY. a quest only draws what it cannot be played without: the thing itself, and
+` a ring around a fish that it has marked. everything that only explains it, like where its thing
+` is headed, or where its thing must not go, is drawn while the cursor is on the thing, and at no
+` other time. QUEST_FOCUS is 1 on a frame when the cursor is on a fish that the quest marked, or on
+` a fish of one of the quest's own kinds. a quest that has some other thing to point at, like the
+` shark, works that out for itself when it draws.
+global QUEST_FOCUS = 0
+
+` A LOOK AT THE QUEST. while the cursor is out on the pickup of a quest that has not been started,
+` the name of the quest shows up where its badge will go, with a question mark after it, in a puff
+` of bubbles. when the cursor comes away again, it fizzles out. starting the quest gives the name
+` a punch, and a lot more bubbles, and it stays. QUEST_PREVIEW is 1 on a frame that the name is
+` showing this way.
+global QUEST_PREVIEW = 0
+
+` POINTING THE QUEST OUT. while the cursor is out on the pickup of a quest that is running,
+` everything that the quest has on the board is pointed out: QUEST_HILITE is 1, which lights up
+` every fish of the quest's own kinds, makes the outlines of the fish that it marked strong, and
+` counts as the cursor being on the thing, so that whatever explains the quest is drawn too.
+global QUEST_HILITE = 0
+
+` SLIDING AND GLIDING. a thing of a quest that moves by itself does not jump from cell to cell.
+` a fish of the quest's that trades places with the fish next to it, like the turtle, slides: the
+` two pictures start where the other one was, and ease to where they belong. questSlideStart
+` starts it, and questStepSlide plays it. a picture that is not a fish, like the shark, glides:
+` where it is drawn chases the cell that it is on. QUEST_GLIDE_X# and QUEST_GLIDE_Y# are where it
+` is drawn.
+global QUEST_SLIDE_MS = -1 `when the slide started, or -1 when there is none
+global QUEST_SLIDE_TIME = 260 `how long it takes, in milliseconds
+global QUEST_SLIDE_A = 0 `the two cells
+global QUEST_SLIDE_B = 0
+global QUEST_GLIDE_X# = 0
+global QUEST_GLIDE_Y# = 0
+
+global QUEST_ZONE_FX_ID
+global QUEST_ZONE_FILL# = .15 `how much of its alpha the wash inside of a zone gets
+global QUEST_ZONE_EDGE# = 2.0 `and how much the outline gets
+global QUEST_ZONE_EDGE_ON# = 4.0 `and how much the outline of the zone that the cursor is on gets
+global QUEST_ZONE_WAVE# = 1.5 `how deep the waves of the outline are, in pixels. the outline is pushed in by up to twice this.
+
+global ORDER_QUEST_GLOW = 8 `on top of the coral and the specks, and underneath the cursor and the fish
+global ORDER_QUEST_ICON = 22 `on top of the fish, and underneath the bubbles
+global ORDER_QUEST_NUM = 23
+
+` THE BADGE. the quest of the round is named under the bar of the round, at the left end of it,
+` on one line: its picture, its name, how far along it is, and then whatever little pictures the
+` quest draws there. info mode explains it. the line is all the room that there is between the
+` bar and the board. it is the mirror of the multiplier, on the other side of the board. the songs
+` of the hidden game, and the special moves, have the left side from the multiplier down, and the
+` passives stack up toward this from the bottom: nine of them fit under it.
+global QUEST_BADGE_X = 160
+global QUEST_BADGE_Y = 31
+
+` where the little pictures that some quests draw on the badge start, after the name and the
+` count, and the middle of the line that they sit on. questDrawBadge works these out whenever the
+` words change, because how long the words are is what decides it.
+global QUEST_EXTRA_X = 0
+global QUEST_EXTRA_Y = 0
+
+` THE SLOT. from the first round that can have a quest, there is a faint empty strip where the
+` badge goes, which fades in, so that the place is there before there is a quest to put in it.
+global QUEST_SLOT_SPRITE
+global QUEST_SLOT_TWEEN_ID
+global QUEST_SLOT_ON = 0 `1 once it has faded in, in the game that is being played
+global QUEST_SLOT_WIDTH = 150
+
+` THE DOTS. while the strip has no quest named in it, it has dots in it, like words that are still
+` to come: one for every group of fish that has to pop in one turn to bring a quest. see A QUEST
+` ARRIVES. they fade in with the strip, and then they bounce, one after another, in a wave. after
+` that, whenever fish pop and the turn has not brought a quest, a dot bounces for every group that
+` has popped in the turn so far, and the rest of the dots shake from side to side: that many was
+` not enough, and it takes that many more. questJudge starts that, and questStepSlot plays it.
+` there are QUEST_DOT_BASE dots in the first round that can have a quest, and one more for every
+` QUEST_DOT_EVERY rounds after it, up to the eight that there is room for. questDotCount works it out.
+global QUEST_DOT_COUNT = 2 `how many dots there are in the round that is being played, which is how many groups it takes
+global QUEST_DOT_BASE = 2
+global QUEST_DOT_EVERY = 5
+global QUEST_DOTS_BOUNCE = 2 `how many of them bounce in the wave that is playing. the rest shake.
+global dim QUEST_DOT_SPRITES(8)
+global QUEST_DOTS_MS = 0 `when the wave that is playing started
+global QUEST_DOTS_MODE = 0 `0 for none, 1 for the one where they all bounce, and 2 for the one where the last ones shake
+global QUEST_DOT_GAP = 90 `how long after one dot the next one starts, in milliseconds
+global QUEST_DOT_TIME = 340 `how long the bounce of one dot lasts
+global QUEST_DOT_HIGH = 5 `how high it bounces, in pixels
+
+` and when a group that is big enough pops, all of the dots bounce, and the pickup of the quest
+` shows up beside the board as the last one lands. QUEST_ARRIVE_DUE_MS is when that is, or -1
+` when no pickup is on its way, and QUEST_ARRIVE_SWAP is 1 when the pickup that is on its way is
+` taking the place of one that was waiting. questStepArrive brings it.
+global QUEST_ARRIVE_DUE_MS = -1
+global QUEST_ARRIVE_SWAP = 0
+
+` THE PICKUP POPS. a pickup that is waiting, and gets swapped for another, does not just change. it
+` pops, the way that a fish does, for QUEST_SWAP_POINTS points times the multiplier, and its cell
+` is empty for QUEST_SWAP_GAP, and then the pickup of the other quest shows up in it.
+` QUEST_ARRIVE_SWAP is 1 while the old one is still to pop, and 2 while the new one is still to come.
+global QUEST_SWAP_POINTS = 10
+global QUEST_SWAP_GAP = 380 `in milliseconds
+global TEX_Q_CROSS `the X that drops a quest
+global TEX_Q_CHECK `the check mark that goes in the box of a quest that is done, and on its tile in the codec
+
+` THE FINISH. a quest can have a line of light run through what it was about, when it is finished,
+` with bubbles coming up from each spot as the line gets to it. the line is the ribbon of THE TAIL,
+` in gold. QUEST_FINISH# holds the spots that it runs through, in order, x and then y of each. the
+` quest gives the spots itself, before it calls questComplete: the wake gives the path that joined
+` the two edges, and it is the only one that has a line. a quest that gives no spots has none.
+` questFinishPoint adds a spot, and questStepFinish plays it.
+global dim QUEST_FINISH#(200)
+global QUEST_FINISH_N = 0 `how many spots there are
+global QUEST_FINISH_MS = -1 `when the line set off, or -1 when there is none
+global QUEST_FINISH_TIME = 900 `how long it takes to run, in milliseconds. questComplete works it out from how far it has to go.
+global QUEST_FINISH_AT = 0 `how many of the spots it has got to, and sent bubbles up from
+
+` THE PAYOUT. a quest that is finished does not put its points on the bar of the round all at once.
+` a little bar shows up over the name of the quest, full, and drains over QUEST_PAY_TIME, and the
+` points go onto the bar of the round a few at a time as it does, so that one is seen to pour into
+` the other. both of them fizz the whole time. the points are scored right away, all the same:
+` only when they show is spread out. questComplete starts it, and questStepPay draws it.
+global QUEST_PAY_MS = -1 `when it started, or -1 when there is none
+global QUEST_PAY_TIME = 2600 `how long it takes, in milliseconds
+global QUEST_PAY_PARTS = 40 `how many parts the points go onto the bar in
+global QUEST_PAY_WIDTH = 104 `how wide the little bar is
+global QUEST_PAY_BACK_SPRITE
+
+` the points float up off of the end of the little bar as it drains, a share at a time, the way
+` that a score floats up off of a fish. there are QUEST_PAY_TEXTS shares, or fewer for a payout
+` that is too small to cut that many ways, and the last one has whatever is left over.
+global QUEST_PAY_TEXTS = 8
+global QUEST_PAY_TEXT_COUNT = 0 `how many shares this payout has
+global QUEST_PAY_TEXT_N = 0 `how many of them have floated up so far
+global QUEST_PAY_GIVEN = 0 `how many points those were
+global QUEST_PAY_FILL_SPRITE
+
+` THE CURSOR STEPS OFF OF THE BOARD. the pickup of a quest is beside the board, on the right, and
+` the cursor can step out onto it from the cell next to it. while it is out there, QUEST_CURSOR_OUT
+` is 1, and the cell under the pickup shows a faint check mark. swapping the pickup down onto the
+` check mark starts the quest. the cursor goes with the pickup, and stays out on it, in its new
+` cell, until it is stepped back onto the board. when the cursor goes out to the
+` pickup of a quest that is running, the cell above it shows a faint red X, and swapping the
+` pickup up onto that drops the quest. stepping back toward the board brings the cursor in, and
+` no other move does anything out there.
+` the cursor is only drawn out there: SELECTION_POS is still the cell that it stepped off of, so
+` nothing else in the game has to know about a cell that is not on the board. see questCursorBumped.
+global QUEST_CURSOR_OUT = 0
+
+` THE SWAP ONTO THE MARK. swapping the pickup onto the check mark, or the X, is played out like a
+` swap of two fish: the pickup slides over, with the cursor, as the mark slides back, over
+` QUEST_ACCEPT_TIME. only when that is over does the quest start, or drop, and the pickup gets a
+` punch. nothing else can be done out there while it plays.
+` the pickup stays where it was swapped to. the check mark is in the cell under it, so a quest
+` that is running has its pickup one row further down than it showed up in, and QUEST_PICK_CELL
+` moves down a row with it. the X of a quest that is running is in the cell above its pickup,
+` which is where the pickup came from, and swapping it up onto the X puts it back there.
+global QUEST_ACCEPT_MS = -1 `when the swap started, or -1 when there is none
+global QUEST_ACCEPT_TIME = 190 `how long it takes, in milliseconds
+global QUEST_ACCEPT_DIR = 1 `the way that the swap that is playing goes: 1 for down, onto the check mark, and -1 for up, onto the X
+global QUEST_KEEP_ROW = -1 `the row that the pickup of a quest that was dropped goes back to, or -1 for any
+global QUEST_KEEP_OUT = 0 `1 when the cursor is to stay out on the pickup of a quest that was dropped, once it is waiting again
+global QUEST_PICK_PUNCH_TWEEN_ID `1 when the pickup has just been swapped, dying away to 0
+global QUEST_CURSOR_DOWN# = 0 `how far down the cursor is drawn, in cells, as it rides along with the swap
+global QUEST_CURSOR_EASED# = 0 `how far out it is drawn, from 0 to 1. it chases QUEST_CURSOR_OUT.
+global QUEST_BADGE_SPRITE
+global QUEST_BADGE_CHECK_SPRITE
+global QUEST_TITLE_TEXT_ID
+global QUEST_PROG_TEXT_ID
+global INFO_INDEX_QUEST = -1
+global INFO_INDEX_QUEST_PICK = -1 `the spot that info mode has for the pickup beside the board, and the cell under it
+global QUEST_PUNCH_TWEEN_ID `1 when the quest has just changed, dying away to 0
+
+` the whale that comes for the krill. it swims across the board once.
+global QUEST_WHALE_SPRITE
+global QUEST_WHALE_MS = -1 `when it set off, or -1 when it is not there
+global QUEST_WHALE_TIME = 1600 `how long it takes to cross, in milliseconds
+
+` THE QUESTS IN THE CODEC. every quest has an entry in the codec, after everything else that is in
+` it. a quest is seen, and so unlocked, the first time that it is the quest of a round. an entry
+` also has a check mark on it once its quest has been finished, in any game, ever. both are kept in
+` the preferences, in a run of numbers of their own, by the number of the quest. see fish_routines_codec.
+global CODEC_ENTRY_QUEST = -1 `the entry of the first quest, once setup_codec has run
+global QUEST_PREF_SEEN = 2400 `where the preferences keep which quests have been seen. it must not move.
+global QUEST_PREF_DONE = 2450 `and which have been finished
+global dim QUEST_EVER_DONE(40) `1 for every quest that has been finished in any game
+global dim CODEC_CHECK_SPRITES(17) `the check mark of every tile of a page of the codec, and one more for the big picture
+
+` THE QUEST IN THE SAVED GAME. the quest that is being played is saved with the game, as it is: how
+` far along it is, the fish that it has marked, the cells that it has lit, and everything that it
+` keeps in QUEST_V and QUEST_LIST. the fish of its own kinds are saved with the board, like any
+` fish. so a game that is closed in the middle of a quest carries on with it.
+` questPack puts all of that into QUEST_PACK, as plain numbers, and questUnpack takes it out again.
+` questSave and questLoad only move QUEST_PACK to and from the preferences, starting at
+` QUEST_PACK_PREF. what is where in QUEST_PACK:
+`     0        QUEST_STATE plus 10, so that 0 is a saved game from before any of this was saved
+`     1        QUEST_PICK_CELL plus 1
+`     2, 3     QUEST_PROG_NOW, QUEST_PROG_NEED
+`     4        QUEST_LIST_N
+`     5        QUEST_NOTE_ON
+`     6, 7     QUEST_REARM, QUEST_INIT_DUE
+`     10..73   QUEST_V
+`     100..199 the first hundred of QUEST_LIST
+`     200..399 for every cell of the board, its mark, plus a hundred times its spot
+` the fish that are waiting above the columns in FORECAST are not saved. new ones are picked.
+global dim QUEST_PACK(400)
+global QUEST_PACK_PREF = 2600 `where it is kept. it must not move. the high scores start at 3000.
+
+` the names of the quests, and what info mode says about each one. setup_quests fills these in.
+global dim QUEST_DEFS(40) as questDef
+
+` 1 for every quest that has been tried, which is to say picked up, in the game that is being
+` played. none comes around again until they all have been. it is saved with the game. see questNextQuest.
+global dim QUEST_USED(40)
+
+` A QUEST ARRIVES. the quest of a round does not show up when the round starts. it shows up when
+` enough groups of fish pop in one turn: the groups that a move pops, and every group that pops
+` after them as the fish fall, until the board is still again. how many it takes is how many dots
+` there are. see THE DOTS. its pickup fizzes in beside the board, in bubbles, as the last of those
+` groups is scored. a round in which no turn ever pops that many has no quest. while the pickup is
+` waiting to be picked up, another turn that pops that many swaps it for the pickup of another
+` quest, out of the ones that have not been tried. once a quest has been picked up, it is the
+` quest of the round. questJudge, in fish_routines_quests, counts the groups.
+global QUEST_ARRIVING = 0 `1 from the start of the round until the quest has been set up
+global QUEST_ARRIVE_READY = 0 `1 once a group that is big enough has popped
+global QUEST_TURN_GROUPS = 0 `how many groups have popped since the board was last still
+global QUEST_TURN_USED = 0 `1 when this turn has already brought a pickup, so that it does not bring another
+
+` THE TAIL. a ribbon of light along the path that the cursor took, for a quest that has the cursor
+` drag something behind it. it is drawn by an effect of its own, QuestTrailEffect.fx, on one sprite
+` that covers the screen. questTrailBegin, questTrailPoint and questTrailDraw, in
+` fish_routines_quests, are how a quest draws one. it has room for twelve spots.
+global QUEST_TRAIL_FX_ID
+global QUEST_TRAIL_SPRITE
+global dim QUEST_TRAIL#(24) `the spots, from the cursor back. x and then y of each.
+global QUEST_TRAIL_N = 0 `how many spots have been given on this frame
+global QUEST_TRAIL_ON = 0 `1 on a frame that a quest drew one
+global QUEST_FIZZ_DUE = 0 `1 when a quest has just been set up, and has not fizzed yet
+
+global DEBUG_QUEST_PICK = 1 `the quest that the slider of the debug window is on

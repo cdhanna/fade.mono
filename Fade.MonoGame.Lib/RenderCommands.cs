@@ -1105,6 +1105,41 @@ public partial class FadeMonoGameCommands
     /// <seealso cref="SetEffectParameter_Float">set effect param float</seealso>
     /// <seealso cref="SetEffectParameter_ColorInt">set effect param color</seealso>
     /// <seealso cref="SetEffectParameter_Texture">set effect param texture</seealso>
+    /// <summary>
+    /// <para>Sets how big a picture the screen effect works on, as a whole multiple of the render size.</para>
+    /// <para>Use it when the screen effect is expensive and the window is much bigger than the render size.</para>
+    /// </summary>
+    /// <remarks>
+    /// Without this, the screen effect runs once for every pixel of the window. A render size of
+    /// 570 by 320 shown in a 2560 by 1440 window is twenty times the pixels, and every one of them
+    /// runs the whole effect. With a scale of 2, the effect runs on a buffer of 1140 by 640
+    /// instead, and that buffer is stretched to the window with no effect.
+    ///
+    /// A scale of 0 goes back to the window, which is how it starts. When the window is no bigger
+    /// than the buffer would be, the buffer is skipped, so a scale never costs more than none.
+    ///
+    /// The buffer is stretched with hard pixels when the stretch is a whole number, and smoothed
+    /// when it is not, so a scale that does not divide the window evenly looks a little softer.
+    /// </remarks>
+    /// <example>
+    /// Run the screen effect at three times the render size, whatever the window is.
+    /// <code>
+    /// set render size 570, 320
+    /// set screen effect waterFx
+    /// set screen effect scale 3
+    /// </code>
+    /// </example>
+    /// <param name="scale">How many times the render size the picture of the effect is. 0 means the size of the window.</param>
+    /// <seealso cref="SetScreenEffect">set screen effect</seealso>
+    /// <seealso cref="SetRenderSize">set render size</seealso>
+    [FadeBasicCommand("set screen effect scale")]
+    public static void SetScreenEffectScale(int scale)
+    {
+        // FADE_SCREEN_EFFECT_SCALE is for trying sizes on a game that sets one, so it wins.
+        if (System.Environment.GetEnvironmentVariable("FADE_SCREEN_EFFECT_SCALE") != null) return;
+        RenderSystem.screenEffectScale = scale < 0 ? 0 : scale;
+    }
+
     [FadeBasicCommand("set screen effect")]
     public static void SetScreenEffect(int effectId)
     {

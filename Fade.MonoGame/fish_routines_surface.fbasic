@@ -258,6 +258,11 @@ frame_surface:
 
     ` the hull is not in the middle of the picture, because the diver's fins stick out of the back
     set effect param float3 SURFACE_FX_ID, "Boat", SURFACE_BOAT_X - 10, surfaceBoatY#, 60
+
+    ` the photos of the diver, on a line over the boat. see THE ENDING in fish_headers_diver.
+    surfaceBoatMid# = surfaceBoatY# + surfaceShift
+    surfaceBoatMid# = surfaceBoatMid# - 37
+    diverSurfaceStep(SURFACE_BOAT_X, surfaceBoatMid#)
 return
 
 
@@ -276,6 +281,7 @@ function showSurface(isVisible)
 
     ` the reefs and their fish go when the surface does. frame_surface brings them back.
     if isVisible = 0
+        diverSurfaceHide()
         hide sprite SURFACE_REEF_SPRITES(0)
         hide sprite SURFACE_REEF_SPRITES(1)
         for i = 0 to SURFACE_FISH_COUNT - 1

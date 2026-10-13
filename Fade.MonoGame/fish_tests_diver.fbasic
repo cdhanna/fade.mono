@@ -1,0 +1,473 @@
+remstart
+    THE TESTS OF THE DIVER
+    see fish_headers_diver for what the diver is. the top of fish_tests explains how the tests work.
+    the board of the tests only uses the kinds 1 to 5, so these use 6 and 7 for the fish that pop.
+    a fish of kind 6 goes in box 5 of the album.
+remend
+
+test diver_comes_down_for_a_bottle_carried_to_the_top_row from fishBoard
+    testPut(2, 1, TEX_BOTTLE)
+    testCursor(2, 1)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert CELLS(testIndex(2, 0)).value = TEX_DIVER, "the diver is where the bottle got to"
+    assert DIVER_ON = 1, "and it is down"
+    assert DIVER_AIR = DIVER_AIR_MAX, "with a full tank, because the swap that brought it took no air"
+    assert DIVER_SEEN = 1, "and the album shows from now on"
+    assert testPopCount() = 0, "the diver does not pop"
+    end
+endtest
+
+test diver_stays_up_for_a_bottle_swapped_along_the_top_row from fishBoard
+    testPut(2, 0, TEX_BOTTLE)
+    testCursor(2, 0)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+
+    assert CELLS(testIndex(3, 0)).value = TEX_BOTTLE, "the bottle is still a bottle"
+    assert DIVER_ON = 0, "and there is no diver"
+    end
+endtest
+
+test diver_stays_up_for_a_bottle_swapped_down_from_the_top_row from fishBoard
+    testPut(2, 0, TEX_BOTTLE)
+    testCursor(2, 0)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+
+    assert CELLS(testIndex(2, 1)).value = TEX_BOTTLE, "the bottle is still a bottle"
+    assert DIVER_ON = 0, "and there is no diver"
+    end
+endtest
+
+test diver_pictures_a_fish_that_pops_next_to_it from fishBoard
+    diverArrive(testIndex(2, 2))
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the three fish pop"
+    assert DIVER_PHOTOS(5) = 1, "and the diver has a picture of that kind"
+    assert DIVER_SNAPS = 1, "which is the one picture"
+    assert diverPhotoCount() = 1, "and the only one in the album"
+    assert testPops(2, 2) = 0, "the diver does not pop"
+    end
+endtest
+
+test diver_does_not_picture_a_group_that_does_not_touch_it from fishBoard
+    diverArrive(testIndex(2, 2))
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+    testPut(6, 2, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the three fish pop"
+    assert diverPhotoCount() = 0, "but none of them touches the diver"
+    end
+endtest
+
+test diver_does_not_picture_a_belly_up_fish from fishBoard
+    diverArrive(testIndex(2, 2))
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+    CELLS(testIndex(3, 2)).bellyUp = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the three fish pop"
+    assert diverPhotoCount() = 0, "but the one that touches the diver is belly up"
+    end
+endtest
+
+test diver_does_not_picture_a_skeleton from fishBoard
+    diverArrive(testIndex(2, 2))
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+    CELLS(testIndex(3, 2)).bellyUp = 2
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the three fish pop"
+    assert diverPhotoCount() = 0, "but the one that touches the diver is a skeleton"
+    end
+endtest
+
+test diver_keeps_a_picture_that_it_has_already from fishBoard
+    diverArrive(testIndex(2, 2))
+    DIVER_PHOTOS(5) = 1
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert DIVER_SNAPS = 0, "a kind that is in the album already is not a new picture"
+    assert diverPhotoCount() = 1, "and the album has the one"
+    tDvShots = DIVER_SHOT_ON(0) + DIVER_SHOT_ON(1) + DIVER_SHOT_ON(2) + DIVER_SHOT_ON(3)
+    assert tDvShots = 0, "the diver does not get its camera out for it"
+    tDvHeld = 0
+    if STING_DELAY(testIndex(3, 2)) >= DIVER_SNAP_AHEAD then tDvHeld = 1
+    assert tDvHeld = 0, "and the fish do not wait to pop"
+    end
+endtest
+
+test diver_is_passed_over_by_a_stingray from fishBoard
+    diverArrive(testIndex(1, 1))
+    testPut(0, 3, TEX_RAY)
+    testPut(1, 3, TEX_RAY)
+    testPut(2, 3, TEX_RAY)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert testPops(1, 1) = 0, "the diver does not pop"
+    assert testPops(1, 0), "but the fish above it does"
+    assert testPops(1, 2), "and the fish under it"
+    assert CELLS(testIndex(1, 1)).value = TEX_DIVER, "the diver is where it was"
+    tDvAny = 0
+    if DIVER_SNAPS > 0 then tDvAny = 1
+    assert tDvAny = 1, "and a fish that a stingray pops next to the diver is a picture"
+    end
+endtest
+
+test diver_is_not_stung from fishBoard
+    mock rnd
+    endmock 0
+    diverArrive(testIndex(2, 2))
+    testPut(1, 1, TEX_JELLY)
+    testPut(2, 1, TEX_JELLY)
+    testPut(3, 1, TEX_JELLY)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_spread
+
+    assert CELLS(testIndex(2, 2)).bellyUp = 0, "the diver is under a jellyfish that pops, and is fine"
+    assert DIVER_PHOTOS(7) = 1, "and it has a picture of the jellyfish"
+    end
+endtest
+
+test diver_uses_air_on_every_move from fishBoard
+    diverArrive(testIndex(2, 2))
+    testCursor(6, 6)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+
+    assert DIVER_AIR = DIVER_AIR_MAX - 1, "a swap somewhere else on the board took one move of air"
+    assert DIVER_ON = 1, "and the diver is still down"
+    end
+endtest
+
+test diver_goes_up_when_the_air_is_gone from fishBoard
+    diverArrive(testIndex(2, 2))
+    DIVER_AIR = 1
+    testCursor(6, 6)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+    runto _loop
+
+    assert DIVER_AIR = 0, "the swap took the last of the air"
+    assert DIVER_ON = 0, "so the diver has gone up"
+    assert diverFind() = -1, "and a fish has its cell"
+    assert DIVER_DONE = 0, "the album is not full"
+    end
+endtest
+
+test diver_ending_is_due_when_the_album_is_full from fishBoard
+    diverArrive(testIndex(2, 2))
+    for tDvSlot = 0 to DIVER_ALBUM_COUNT - 1
+        DIVER_PHOTOS(tDvSlot) = 1
+    next
+
+    ` this is what handle_combos calls when the board has settled
+    diverSettled()
+
+    assert DIVER_DONE = 1, "the diver is done"
+    assert DIVER_RISE_DUE = 1, "and is to swim up"
+    assert DIVER_RISE_HAPPY = 1, "with hearts"
+    assert DIVER_ENDING_DUE = 1, "and the ending of the game is due"
+    end
+endtest
+
+test diver_ending_is_not_due_when_the_air_runs_out from fishBoard
+    diverArrive(testIndex(2, 2))
+    DIVER_AIR = 0
+    diverSettled()
+
+    assert DIVER_RISE_DUE = 1, "the diver is to swim up"
+    assert DIVER_RISE_HAPPY = 0, "with no hearts"
+    assert DIVER_DONE = 0, "because it is not done"
+    assert DIVER_ENDING_DUE = 0, "so the game goes on"
+    end
+endtest
+
+test diver_ending_is_remembered_by_the_main_menu from fishBoard
+    DIVER_SURFACE = 0
+    coralEndingRemember(CORAL_ENDING_DIVER)
+
+    assert DIVER_SURFACE = 1, "the photos are over the boat from now on"
+    end
+endtest
+
+test diver_is_done_when_the_album_is_full from fishBoard
+    ` the ending draws frames of its own, and a test cannot run through those
+    DIVER_ENDING_HOLD = 1
+    diverArrive(testIndex(2, 2))
+    for tDvSlot = 0 to DIVER_ALBUM_COUNT - 1
+        DIVER_PHOTOS(tDvSlot) = 1
+    next
+    DIVER_PHOTOS(5) = 0
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert diverPhotoCount() = DIVER_ALBUM_COUNT, "that was the last picture"
+    assert DIVER_ON = 1, "the diver stays until the board has settled"
+
+    ` the fish pop, and new ones drop in, and then the board is looked at until nothing pops
+    for tDvPass = 0 to 5
+        runto _loop
+    next
+
+    assert DIVER_DONE = 1, "the diver is done"
+    assert DIVER_ON = 0, "and has gone up"
+    assert diverFind() = -1, "and a fish has its cell"
+    end
+endtest
+
+test diver_does_not_come_back_once_it_is_done from fishBoard
+    DIVER_DONE = 1
+    testPut(2, 1, TEX_BOTTLE)
+    testCursor(2, 1)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert CELLS(testIndex(2, 0)).value = TEX_BOTTLE, "the bottle is still a bottle"
+    assert DIVER_ON = 0, "and there is no diver"
+    end
+endtest
+
+test diver_is_the_only_one from fishBoard
+    diverArrive(testIndex(2, 2))
+    testPut(5, 5, TEX_DIVER)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert CELLS(testIndex(2, 2)).value = TEX_DIVER, "the diver is where it was"
+    tDvCopy = 0
+    if CELLS(testIndex(5, 5)).value = TEX_DIVER then tDvCopy = 1
+    assert tDvCopy = 0, "and the copy of it has turned into a fish"
+    end
+endtest
+
+test diver_comes_back_when_something_writes_over_it from fishBoard
+    diverArrive(testIndex(2, 2))
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    ` that look at the board has to finish before another one can be asked for
+    runto _loop
+    testPut(2, 2, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert CELLS(testIndex(2, 2)).value = TEX_DIVER, "the diver is back where it was"
+    assert DIVER_ON = 1, "and it is still down"
+    end
+endtest
+
+test diver_falls_like_a_fish from fishBoard
+    diverArrive(testIndex(2, 2))
+    testPut(2, 3, 6)
+    testPut(3, 3, 6)
+    testPut(4, 3, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert DIVER_PHOTOS(5) = 1, "the fish under the diver pops, and that is a picture"
+    for tDvPass = 0 to 5
+        runto _loop
+    next
+
+    assert CELLS(testIndex(2, 3)).value = TEX_DIVER, "the diver fell into the cell of the fish that popped under it"
+    assert DIVER_AT = testIndex(2, 3), "and that is where it is known to be"
+    end
+endtest
+
+test diver_can_be_swapped from fishBoard
+    diverArrive(testIndex(2, 2))
+    testCursor(2, 2)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+    runto _loop
+    runto _loop
+
+    assert CELLS(testIndex(3, 2)).value = TEX_DIVER, "the diver went where the swap took it"
+    assert DIVER_ON = 1, "and it is still down"
+    assert DIVER_AT = testIndex(3, 2), "and that is where it is known to be"
+    assert diverFind() = testIndex(3, 2), "and there is no other"
+    end
+endtest
+
+test diver_ids_are_its_own from fishBoard
+    tDvSfxClash = 0
+    tDvSpriteClash = 0
+    tDvLast = CELL_COUNT - 1
+    for tDvCell = 0 to tDvLast
+        if CELLS(tDvCell).explodeSfxId = SFX_DIVER_SPLASH then tDvSfxClash = tDvSfxClash + 1
+        if CELLS(tDvCell).explodeSfxId = SFX_DIVER_WATER then tDvSfxClash = tDvSfxClash + 1
+        if CELLS(tDvCell).spriteId = DIVER_BODY_SPRITE then tDvSpriteClash = tDvSpriteClash + 1
+        if CELLS(tDvCell).fxSpriteId = DIVER_BODY_SPRITE then tDvSpriteClash = tDvSpriteClash + 1
+    next
+    tDvBubLast = FLOAT_BUBBLE_COUNT - 1
+    for tDvBub = 0 to tDvBubLast
+        if FLOAT_BUBBLES(tDvBub).spriteId = DIVER_BODY_SPRITE then tDvSpriteClash = tDvSpriteClash + 1
+    next
+    if SFX_DIVER_SPLASH = SFX_SWAP then tDvSfxClash = tDvSfxClash + 1
+    if SFX_DIVER_SPLASH = SFX_DROP then tDvSfxClash = tDvSfxClash + 1
+    if SFX_DIVER_SPLASH = 100 then tDvSfxClash = tDvSfxClash + 1
+    if SFX_DIVER_WATER = 100 then tDvSfxClash = tDvSfxClash + 1
+
+    assert tDvSfxClash = 0, "no sound of the board is the splash, or the recording"
+    assert tDvSpriteClash = 0, "and no sprite of the board is the diver"
+    end
+endtest
+
+test diver_swims_up_past_the_fish_when_the_air_is_gone from fishBoard
+    diverArrive(testIndex(2, 3))
+    tDvOver = CELLS(testIndex(2, 2)).value
+    tDvTop = CELLS(testIndex(2, 0)).value
+    DIVER_AIR = 1
+    testCursor(6, 6)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+
+    ` the board settles, and the diver swims up, a row at a time. that is all in this one frame of the game.
+    runto _loop
+
+    assert DIVER_ON = 0, "the diver has gone up"
+    assert diverFind() = -1, "and is not on the board"
+    assert CELLS(testIndex(2, 3)).value = tDvOver, "the fish that was over it came down into its cell"
+    assert CELLS(testIndex(2, 1)).value = tDvTop, "and so did the fish that was on the top row"
+    end
+endtest
+
+test diver_holds_the_pops_back_for_a_picture from fishBoard
+    diverArrive(testIndex(2, 2))
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    tDvHeld = 0
+    if STING_DELAY(testIndex(3, 2)) >= DIVER_SNAP_AHEAD then tDvHeld = 1
+    assert tDvHeld = 1, "the fish that the diver is taking a picture of waits for it"
+    end
+endtest
+
+test diver_does_not_hold_the_pops_back_for_nothing from fishBoard
+    diverArrive(testIndex(2, 2))
+    testPut(4, 5, 6)
+    testPut(5, 5, 6)
+    testPut(6, 5, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    tDvHeld = 0
+    if STING_DELAY(testIndex(4, 5)) >= DIVER_SNAP_AHEAD then tDvHeld = 1
+    assert tDvHeld = 0, "a group that the diver cannot see pops when it usually would"
+    end
+endtest
+
+test diver_debug_win_fills_the_album from fishBoard
+    DIVER_ENDING_HOLD = 1
+    diverDebugWin(testIndex(4, 4))
+
+    assert DIVER_ON = 1, "the diver came down"
+    assert diverPhotoCount() = DIVER_ALBUM_COUNT, "with every picture taken"
+
+    ` the board settles, and the diver swims up and is done
+    runto _loop
+    runto _loop
+
+    assert DIVER_DONE = 1, "the diver is done"
+    assert DIVER_ON = 0, "and has gone up"
+    end
+endtest
+
+test diver_photos_have_a_line_on_the_options_page from fishBoard
+    tDvWas = DIVER_SURFACE
+    DIVER_SURFACE = 0
+    setMenuPage(MENU_PAGE_OPTIONS)
+    tDvPlain = MENU_PAGE_LENGTH
+    tDvHas = 0
+    for tDvLine = 0 to MENU_PAGE_LENGTH - 1
+        if MENU_PAGE_ITEMS(tDvLine) = MENU_ITEM_SET_PHOTOS then tDvHas = 1
+    next
+    assert tDvHas = 0, "no line for the photos before the album has been filled"
+
+    DIVER_SURFACE = 1
+    setMenuPage(MENU_PAGE_OPTIONS)
+    assert MENU_PAGE_LENGTH = tDvPlain + 1, "the photos get a line once they are there"
+    assert MENU_PAGE_ITEMS(MENU_PAGE_LENGTH - 2) = MENU_ITEM_SET_PHOTOS, "just above Back"
+    assert MENU_PAGE_ITEMS(MENU_PAGE_LENGTH - 1) = MENU_ITEM_SET_BACK, "and Back is still last"
+
+    tDvOn = OPTION_MENU_PHOTOS
+    changeMenuOption(MENU_ITEM_SET_PHOTOS, 1)
+    assert OPTION_MENU_PHOTOS = 1 - tDvOn, "picking the line turns the photos off or on"
+    changeMenuOption(MENU_ITEM_SET_PHOTOS, 1)
+    assert OPTION_MENU_PHOTOS = tDvOn, "and picking it again puts them back"
+
+    DIVER_SURFACE = tDvWas
+    end
+endtest
+
+test diver_ending_has_a_badge_of_its_own from fishBoard
+    tDvPacked = 1234 + CORAL_ENDING_DIVER * HISCORE_BADGE_STEP
+    assert getScoreBadge(tDvPacked) = CORAL_ENDING_DIVER, "a game that ended with the album full keeps its badge"
+    assert getScoreBadge(1234 + 4 * HISCORE_BADGE_STEP) = 0, "and a number that is no ending has none"
+    end
+endtest
+
+test diver_has_a_spot_in_info_mode_once_it_has_come_down from fishBoard
+    assert INFOS(INFO_INDEX_DIVER).enabled = 0, "info mode has nothing for the diver before it comes down"
+    diverArrive(testIndex(2, 2))
+    runto _loop
+    assert INFOS(INFO_INDEX_DIVER).enabled = 1, "and it has the album once it has"
+    end
+endtest
+
+test diver_is_in_the_codec_once_it_has_come_down from fishBoard
+    assert CODEC_ENTRY_DIVER = CARD_LENGTH + 13, "the diver comes after the crooked bar"
+    assert CODEC_ENTRY_ALBUM = CARD_LENGTH + 14, "and its ending after that"
+    assert getCodecPref(CODEC_ENTRY_DIVER) = CODEC_PREF_MORE + 3, "they are remembered after the crooked bar"
+    assert getCodecPref(CODEC_ENTRY_ALBUM) = CODEC_PREF_MORE + 4, "one after the other"
+    assert getCodecPref(CODEC_ENTRY_QUEST) = QUEST_PREF_SEEN + 1, "and the quests are remembered where they always were"
+
+    CODEC_SEEN(CODEC_ENTRY_DIVER) = 0
+    CODEC_SEEN(CODEC_ENTRY_ALBUM) = 0
+    diverArrive(testIndex(2, 2))
+    assert CODEC_SEEN(CODEC_ENTRY_DIVER) = 1, "the diver is in the codec once it has come down"
+    assert CODEC_SEEN(CODEC_ENTRY_ALBUM) = 0, "and its ending is still locked"
+
+    coralEndingRemember(CORAL_ENDING_DIVER)
+    assert CODEC_SEEN(CODEC_ENTRY_ALBUM) = 1, "until a game has ended with the album full"
+    end
+endtest
