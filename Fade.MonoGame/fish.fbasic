@@ -98,6 +98,7 @@ gosub setup_passive_drop `the page of the upgrade screen that drops a passive, w
 gosub setup_float_bubbles `these use the bubble effect, which the menu loads
 gosub setup_zaps
 gosub setup_tuna
+gosub setup_morse
 gosub setup_beat `these use the bubble effect too
 
 
@@ -108,9 +109,10 @@ isAbility_Wrap()
 sync
         dbg_count = 0
         
-` the debug inspector is only for working on the game. set the FISH_DEBUG environment variable to get it.
+` debug mode is for working on the game. set the FISH_DEBUG environment variable to start in it.
+` a player can turn it on too, by tapping out SOS. see DEBUG_MODE in fish_headers.
 if is env set("FISH_DEBUG")
-    enable debug inspector
+    debugModeOn()
 endif
 ` the parts of a frame, for the frame timing log. see `perf lap`, and FADE_PERF_LOG in Game1.
 perf name 1, "icons and water"

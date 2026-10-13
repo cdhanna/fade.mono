@@ -1,0 +1,459 @@
+remstart
+    THE TESTS OF THE TIDE
+    see fish_headers_tide for what the tide is. the top of fish_tests explains how the tests work.
+    the board of the tests only uses the kinds 1 to 5, so these use 6 and 7 for the fish that pop.
+
+    most of them have two fish of kind 6 at (3, 2) and (4, 2), and a third one under the cell to the
+    left of them, at (2, 3). trading (2, 2) and (2, 3) makes a row of three. it is a push when the
+    cursor starts on the 6 and carries it up, and a pull when the cursor starts above it and shoves it up.
+remend
+
+test tide_starts_at_high_water_in_the_day from fishBoard
+    assert TIDE_LEVEL = TIDE_RANGE, "the water is all the way in"
+    assert TIDE_CYCLES = 0, "the moon is new"
+    assert TIDE_NIGHT = 0, "and it is day"
+    end
+endtest
+
+test tide_comes_in_for_a_push from fishBoard
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    TIDE_LEVEL = 1
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the three fish pop"
+    assert TIDE_LAST_SWAP = TIDE_SWAP_PUSH, "the fish that the cursor carried is one of them, so it is a push"
+    assert TIDE_LEVEL = 2, "and the water comes in by one"
+    end
+endtest
+
+test tide_goes_out_for_a_pull from fishBoard
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    testCursor(2, 2)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the three fish pop"
+    assert TIDE_LAST_SWAP = TIDE_SWAP_PULL, "the fish that was shoved back is one of them, so it is a pull"
+    tTideWant = TIDE_RANGE - 1
+    assert TIDE_LEVEL = tTideWant, "and the water goes out by one"
+    end
+endtest
+
+test tide_stays_for_a_swap_that_is_both from fishBoard
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    testPut(2, 2, 7)
+    testPut(3, 3, 7)
+    testPut(4, 3, 7)
+    TIDE_LEVEL = 2
+    testCursor(2, 2)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+
+    assert totalComboCount = 2, "both rows pop"
+    assert TIDE_LAST_SWAP = TIDE_SWAP_BOTH, "each of the two fish is in one of them"
+    assert TIDE_LEVEL = 2, "so the water stays where it is"
+    end
+endtest
+
+test tide_stays_for_a_swap_that_pops_nothing from fishBoard
+    TIDE_LEVEL = 2
+    testCursor(2, 2)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+
+    assert totalComboCount = 0, "nothing pops"
+    assert TIDE_LAST_SWAP = TIDE_SWAP_NOTHING, "so it is neither"
+    assert TIDE_LEVEL = 2, "and the water stays where it is"
+    end
+endtest
+
+test tide_cycle_is_all_the_way_out_and_back_in from fishBoard
+    tideMove(1)
+    assert TIDE_CYCLES = 0, "a push at high water is not a cycle"
+
+    tTideN = 0
+    while tTideN < TIDE_RANGE
+        tTideN = tTideN + 1
+        tideMove(-1)
+    endwhile
+    assert TIDE_LEVEL = 0, "the water is all the way out"
+    assert TIDE_EBBED = 1, "and that is remembered"
+    assert TIDE_CYCLES = 0, "but it is not a cycle until it is back in"
+
+    tideMove(1)
+    tideMove(-1)
+    tTideN = 0
+    while tTideN < TIDE_RANGE
+        tTideN = tTideN + 1
+        tideMove(1)
+    endwhile
+    assert TIDE_LEVEL = TIDE_RANGE, "the water is all the way in"
+    assert TIDE_CYCLES = 1, "and that is one cycle, however it got there"
+    assert TIDE_EBBED = 0, "the next one has to go all the way out again"
+    end
+endtest
+
+test tide_night_falls_when_the_moon_is_full_and_the_coral_spreads from fishBoard
+    CORAL_CELLS(testIndex(3, 3)) = 1
+    coralRecount()
+
+    tTideN = 1
+    while tTideN < TIDE_CYCLES_TO_TURN
+        tTideN = tTideN + 1
+        tideDebugCycle()
+    endwhile
+    assert TIDE_NIGHT = 0, "one cycle short of a full moon, it is still day"
+    assert CORAL_COUNT = 1, "and the coral has not spread"
+
+    tideDebugCycle()
+    assert TIDE_NIGHT = 1, "the moon is full, and night falls"
+    assert TIDE_GREW = 1, "the one cell of coral spread to one more"
+    assert CORAL_COUNT = 2, "so there are two"
+    assert CORAL_SICK_COUNT = 0, "and coral comes from coral"
+    end
+endtest
+
+test tide_horror_coral_spreads_as_horror_coral from fishBoard
+    CORAL_CELLS(testIndex(3, 3)) = 1
+    CORAL_SICK(testIndex(3, 3)) = 1
+    coralRecount()
+
+    tideGrowCoral()
+    assert CORAL_COUNT = 2, "it spread to one more cell"
+    assert CORAL_SICK_COUNT = 2, "and that is horror coral too"
+    end
+endtest
+
+test tide_day_breaks_when_the_moves_of_the_night_are_used_up from fishBoard
+    CORAL_CELLS(testIndex(3, 3)) = 1
+    coralRecount()
+
+    tTideN = 0
+    while tTideN < TIDE_CYCLES_TO_TURN
+        tTideN = tTideN + 1
+        tideDebugCycle()
+    endwhile
+    assert TIDE_NIGHT = 1, "it is night"
+    assert TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES, "with all of its moves left"
+
+    tideDebugCycle()
+    assert TIDE_NIGHT = 1, "a cycle does not end the night"
+
+    tTideN = 1
+    while tTideN < TIDE_NIGHT_MOVES
+        tTideN = tTideN + 1
+        tideMoveMade(1)
+    endwhile
+    assert TIDE_NIGHT = 1, "and it is still night, with one move left"
+    tideMoveMade(-1)
+    assert TIDE_NIGHT_LEFT = 1, "a move that is given back does not make the night longer"
+
+    tideMoveMade(1)
+    assert TIDE_NIGHT = 0, "then day breaks"
+    assert TIDE_CYCLES = 0, "and the moon is new again"
+    assert CORAL_COUNT = 2, "the coral only spread the once, as night fell"
+    end
+endtest
+
+test tide_nothing_pops_at_night from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    SCORE_MULTIPLIER = 3
+    MULT_PROGRESS = 1
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert totalComboCount = 0, "the three fish do not pop"
+    assert testPopCount() = 0, "none of them"
+    assert TIDE_HELD_GROUPS = 1, "the night holds the group"
+    assert TIDE_BANKED(testIndex(2, 2)) = 1, "its fish are marked, the one that the swap brought"
+    assert TIDE_BANKED(testIndex(4, 2)) = 1, "and the ones that were there"
+    assert TIDE_BANKED(testIndex(2, 3)) = 0, "and no other"
+    assert TIDE_NIGHT_LEFT = 4, "the swap was one of the moves of the night"
+    assert SCORE_MULTIPLIER = 3, "the multiplier is left alone"
+    assert MULT_PROGRESS = 1, "and so is its bar"
+    end
+endtest
+
+test tide_a_miss_at_night_costs_the_multiplier_nothing from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    SCORE_MULTIPLIER = 3
+    MULT_PROGRESS = 1
+    testCursor(2, 2)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+
+    assert totalComboCount = 0, "nothing pops"
+    assert SCORE_MULTIPLIER = 3, "the multiplier is left alone"
+    assert MULT_PROGRESS = 1, "and so is its bar"
+    end
+endtest
+
+test tide_what_the_night_held_pops_when_day_breaks from fishBoard
+    TIDE_DAWN_MS = 0
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 1
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+    testPut(3, 5, 7)
+    testPut(4, 5, 7)
+    testPut(2, 6, 7)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert totalComboCount = 0, "the row that is there already does not pop at night"
+    assert TIDE_HELD_GROUPS = 1, "it is held"
+    runto _loop
+
+    ` the last move of the night puts a second row together
+    testCursor(2, 6)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert TIDE_NIGHT = 0, "that was the last move of the night, so day has broken"
+    assert totalComboCount = 2, "and both rows pop at once"
+    assert TIDE_HELD_GROUPS = 0, "nothing is held any more"
+    end
+endtest
+
+test tide_marks_fill_by_halves_and_empty_through_the_night from fishBoard
+    assert TIDE_SEEN = 0, "there are no marks to start with"
+    assert tideMarks() = 0, "and nothing to fill in"
+
+    tTideN = 0
+    while tTideN < TIDE_RANGE
+        tTideN = tTideN + 1
+        tideMove(-1)
+    endwhile
+    assert TIDE_SEEN = 0, "the water has been all the way out, and there are still no marks"
+
+    tTideN = 0
+    while tTideN < TIDE_RANGE
+        tTideN = tTideN + 1
+        tideMove(1)
+    endwhile
+    assert TIDE_SEEN = 1, "the first whole cycle is done, so the marks show from now on"
+    assert tideMarks() = 2, "and the first one is full"
+
+    tTideN = 0
+    while tTideN < TIDE_RANGE
+        tTideN = tTideN + 1
+        tideMove(-1)
+    endwhile
+    assert tideMarks() = 3, "from then on the halves show: the water is out, and half of the next one fills in"
+    tTideN = 0
+    while tTideN < TIDE_RANGE
+        tTideN = tTideN + 1
+        tideMove(1)
+    endwhile
+    assert tideMarks() = 4, "and the rest of it when the water is back in"
+
+    tTideN = 2
+    while tTideN < TIDE_CYCLES_TO_TURN
+        tTideN = tTideN + 1
+        tideDebugCycle()
+    endwhile
+    tTideFull = TIDE_CYCLES_TO_TURN * 2
+    assert TIDE_NIGHT = 1, "night has fallen"
+    assert tideMarks() = tTideFull, "and every mark is full"
+
+    tideMoveMade(1)
+    assert tideMarks() = tTideFull, "the first move of the night does not empty one yet"
+    tTideN = 1
+    tTideStop = TIDE_NIGHT_MOVES - 1
+    while tTideN < tTideStop
+        tTideN = tTideN + 1
+        tideMoveMade(1)
+    endwhile
+    assert tideMarks() = 1, "with one move left, there is half of a mark left"
+    end
+endtest
+
+
+test tide_the_light_comes_back_before_anything_pops from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 1
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+
+    tideMoveMade(1)
+    assert TIDE_NIGHT = 0, "day has broken"
+    assert TIDE_DAWN_UNTIL > 0, "and the pops are waiting for the light"
+
+    runto _loop
+    runto _loop
+    runto _loop
+    assert testPopCount() = 0, "so nothing has popped yet"
+    assert REQUEST_COMBO_CHECK = 1, "though the board is still due a look"
+
+    TIDE_DAWN_UNTIL = 0
+    runto _combos_judged
+    assert totalComboCount = 1, "when the light is back, the row pops"
+    end
+endtest
+
+test tide_info_mode_has_the_moon_once_there_is_one from fishBoard
+    runto _loop
+    assert INFO_INDEX_TIDE >= 0, "info mode has a spot for the moon"
+    assert INFOS(INFO_INDEX_TIDE).enabled = 0, "which is not there while the moon is new"
+
+    tideDebugCycle()
+    runto _loop
+    assert INFOS(INFO_INDEX_TIDE).enabled = 1, "after a cycle there is a moon, and the spot is there"
+    assert INFOS(INFO_INDEX_TIDE).size.y = TIDE_INFO_TALL, "it is the one spot, for the moon and the marks under it"
+    assert TIDE_INFO_STATE = 1, "and it says what it says in the day"
+
+    tTideN = 1
+    while tTideN < TIDE_CYCLES_TO_TURN
+        tTideN = tTideN + 1
+        tideDebugCycle()
+    endwhile
+    runto _loop
+    assert TIDE_INFO_STATE = 2, "at night it says something else"
+    end
+endtest
+
+test tide_the_specks_go_the_way_that_the_tide_runs from fishBoard
+    assert TIDE_FLOW = -1, "the tide wants a pull to start with, so the specks sink"
+    tideMove(-1)
+    assert TIDE_FLOW = -1, "one pull is not enough to change that"
+    tideMove(1)
+    assert TIDE_FLOW = -1, "and neither is a push"
+
+    tTideN = 0
+    while tTideN < TIDE_RANGE
+        tTideN = tTideN + 1
+        tideMove(-1)
+    endwhile
+    assert TIDE_FLOW = 1, "the water is all the way out, so now it wants a push, and the specks rise"
+    tideMove(1)
+    assert TIDE_FLOW = 1, "it goes on wanting one"
+
+    tTideN = 1
+    while tTideN < TIDE_RANGE
+        tTideN = tTideN + 1
+        tideMove(1)
+    endwhile
+    assert TIDE_FLOW = -1, "until the water is all the way back in, and then it wants a pull again"
+    end
+endtest
+
+test tide_the_specks_rise_while_the_tide_wants_a_push from fishBoard
+    runto _loop
+    TIDE_FLOW = 1
+    TIDE_FLOW_SHOWN# = 1
+    TIDE_DRIFT# = 0
+    TIDE_CLOCK_WAS# = SEABED_SNOW_CLOCK#
+    SEABED_SNOW_CLOCK# = SEABED_SNOW_CLOCK# + 0.1
+    stepTide()
+    tTideDrift = TIDE_DRIFT# * 1000
+    tTideLow = TIDE_RISE# * 100 - 1
+    tTideHigh = TIDE_RISE# * 100 + 1
+    assert tTideDrift >= tTideLow, "the time that the specks move by is taken back TIDE_RISE# times as fast as it goes"
+    assert tTideDrift <= tTideHigh, "and no faster"
+    assert tTideDrift > 100, "which is faster than it goes, so they rise"
+    end
+endtest
+
+test tide_a_song_is_cast_at_night_by_a_swap_that_pops_nothing from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+
+    ` the walk of the pattern, and a swap at the end of it that puts nothing together
+    testCursor(4, 6)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+    assert CORAL_COUNT = 0, "walking the pattern does nothing on its own"
+    runto _combos_judged
+
+    assert totalComboCount = 0, "the swap popped nothing"
+    assert CORAL_CASTS = 1, "and the pattern is cast all the same, because it is night"
+    assert CORAL_COUNT = 4, "coral grew on the four cells that the cursor walked over"
+    end
+endtest
+
+test tide_a_song_still_needs_a_pop_in_the_day from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+
+    testCursor(4, 6)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+
+    assert totalComboCount = 0, "the swap popped nothing"
+    assert CORAL_CASTS = 0, "so in the day the pattern is not cast"
+    assert CORAL_COUNT = 0, "and no coral grew"
+    end
+endtest
+
+test tide_a_belly_up_fish_does_not_pop_on_its_own_at_night from fishBoard
+    CELLS(testIndex(4, 4)).bellyUp = 1
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    popBellyUpFish(testIndex(4, 4))
+    assert CELLS(testIndex(4, 4)).comboForce = 0, "at night it is left alone"
+
+    TIDE_NIGHT = 0
+    popBellyUpFish(testIndex(4, 4))
+    assert CELLS(testIndex(4, 4)).comboForce > 0, "and in the day it pops, the same as ever"
+    end
+endtest
+
+test tide_a_song_sung_over_a_belly_up_fish_at_night_is_horror_coral from fishBoard
+    CORAL_SEQ_LENGTH(1) = 0
+    CORAL_SEQ_LENGTH(2) = 0
+    coralSetSequence(0, 76)
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+
+    ` the walk goes over a belly up fish, which is still there when the cursor has passed
+    CELLS(testIndex(4, 5)).bellyUp = 1
+    testCursor(4, 6)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(0, -1, 0, -1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+    runto _combos_judged
+
+    assert CELLS(testIndex(4, 5)).bellyUp = 1, "the belly up fish did not pop when the cursor came to it"
+    assert testPopCount() = 0, "and nothing else did"
+    assert CORAL_COUNT = 4, "the pattern is cast"
+    assert CORAL_SICK_COUNT = 4, "and what grew is horror coral"
+    end
+endtest

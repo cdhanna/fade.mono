@@ -113,10 +113,11 @@ endfunction tunaDone
 
 
 ` was it asked for on this frame? the word is typed on the keyboard. the debug keys use two of its
-` letters, so while they are on, the word does nothing and Q asks for it.
+` letters, so in debug mode the word does nothing and Q asks for it.
+` or it is tapped out in Morse code, on anything at all, which is how a controller says it. see MORSE in fish_headers.
 function tunaAsked()
     tunaWanted = 0
-    if is env set("FISH_DEBUG")
+    if DEBUG_MODE
         if new key down(scancode("Q"))
             tunaWanted = 1
         endif
@@ -129,6 +130,11 @@ function tunaAsked()
                 endif
             endif
         next
+    endif
+
+    morseListen()
+    if MORSE_HEARD = MORSE_WORD_TUNA
+        tunaWanted = 1
     endif
 endfunction tunaWanted
 
@@ -294,6 +300,9 @@ function tunaReset()
     TUNA_EASED# = 0
     TUNA_SHRINK# = 0
     tunaHideExtras()
+
+    ` and nobody is tapping the word out any more. see MORSE in fish_headers.
+    morseQuiet()
 endfunction
 
 
@@ -312,6 +321,7 @@ function stepTuna()
         if TUNA_SHOWN# > 0
             tunaHide()
         endif
+        morseQuiet()
         tunaCursor()
         exitfunction
     endif

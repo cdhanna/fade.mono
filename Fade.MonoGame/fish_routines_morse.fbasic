@@ -1,0 +1,856 @@
+goto routines_morse_exit
+
+remstart
+    MORSE
+    a word that is tapped out in Morse code, on anything that the player can press. see MORSE in fish_headers.
+
+    morseListen runs on every frame of the game. it counts what is held down, and morseStep turns
+    that into what happened: the radio came on (morseWake), or a push ended, or the radio went off
+    (morseSleep). a push is a dot or a dash (morsePush), and it goes on the end of the last pushes
+    that are remembered (morseMark). when the end of those is a word, the word is left in MORSE_HEARD
+    for that frame. morseListen does what most of the words do, and tunaAsked looks for TUNA.
+
+    the shooting star of the splash screen, whose trail spells CQ, is here too: see morseStarsMake.
+remend
+
+setup_morse:
+
+    morseAlphabet()
+
+    ` the tone plays all the time, with its volume at 0. morseListen turns it up while a push is held.
+    ` Tools/morse_bip_gen.py makes it, and two other takes, "clean" and "low", that can go here in its place.
+    load sfx clip reserve sfx clip id(SFX_CLIP_MORSE), "Fish/Audio/morse-bip-radio"
+    sfx reserve sfx id(SFX_MORSE), SFX_CLIP_MORSE
+    set sfx loop SFX_MORSE, 1
+    set sfx volume SFX_MORSE, 0
+    play sfx SFX_MORSE
+
+    ` the two signs: the radio is on, and the radio has gone off
+    load sfx clip reserve sfx clip id(SFX_CLIP_MORSE_ON), "Fish/Audio/morse-on"
+    sfx reserve sfx id(SFX_MORSE_ON), SFX_CLIP_MORSE_ON
+    set sfx volume SFX_MORSE_ON, MORSE_SIGN_VOLUME#
+    load sfx clip reserve sfx clip id(SFX_CLIP_MORSE_OFF), "Fish/Audio/morse-off"
+    sfx reserve sfx id(SFX_MORSE_OFF), SFX_CLIP_MORSE_OFF
+    set sfx volume SFX_MORSE_OFF, MORSE_SIGN_VOLUME#
+
+    ` the words. each one is its number, its capital letters, and how many of them there are.
+    ` whoever cares about a word looks for its number in MORSE_HEARD.
+    ` the dots and dashes of each are written out under THE SIGNALS, in fish_headers. keep that list up to date.
+    morseWord(MORSE_WORD_TUNA, "TUNA", 4)
+    morseWord(MORSE_WORD_SOS, "SOS", 3)
+    morseWord(MORSE_WORD_CQ, "CQ", 2)
+    morseWord(MORSE_WORD_SING, "SING", 4)
+    morseWord(MORSE_WORD_SONG, "SONG", 4)
+    morseWord(MORSE_WORD_CTHULHU, "CTHULHU", 7)
+
+    ` the radio does not give these away when it answers CQ. see morseReplyStart.
+    MORSE_WORD_SECRET(MORSE_WORD_SOS) = 1
+    MORSE_WORD_SECRET(MORSE_WORD_CQ) = 1
+
+    ` the entry of the codec that each of them unlocks when it is sent. CQ unlocks the radio itself,
+    ` and SOS has none: it is not in the codec.
+    mrsLastSetup = MORSE_WORD_ROOM - 1
+    for mrsSetup = 0 to mrsLastSetup
+        MORSE_WORD_CODEC(mrsSetup) = -1
+    next
+    MORSE_WORD_CODEC(MORSE_WORD_TUNA) = CODEC_ENTRY_TUNA
+    MORSE_WORD_CODEC(MORSE_WORD_CQ) = CODEC_ENTRY_RADIO
+    MORSE_WORD_CODEC(MORSE_WORD_SING) = CODEC_ENTRY_SING
+    MORSE_WORD_CODEC(MORSE_WORD_SONG) = CODEC_ENTRY_SONG
+    MORSE_WORD_CODEC(MORSE_WORD_CTHULHU) = CODEC_ENTRY_CTHULHU
+
+    morseAveragesBack()
+
+return
+
+
+routines_morse_exit:
+
+
+` the pushes of every letter: a 1, and then, in binary, a 0 for every dot and a 1 for every dash.
+` this is asked for more than once, because the splash screen needs it before setup_morse has run.
+function morseAlphabet()
+    MORSE_CODES(0) = 5 `A .-
+    MORSE_CODES(1) = 24 `B -...
+    MORSE_CODES(2) = 26 `C -.-.
+    MORSE_CODES(3) = 12 `D -..
+    MORSE_CODES(4) = 2 `E .
+    MORSE_CODES(5) = 18 `F ..-.
+    MORSE_CODES(6) = 14 `G --.
+    MORSE_CODES(7) = 16 `H ....
+    MORSE_CODES(8) = 4 `I ..
+    MORSE_CODES(9) = 23 `J .---
+    MORSE_CODES(10) = 13 `K -.-
+    MORSE_CODES(11) = 20 `L .-..
+    MORSE_CODES(12) = 7 `M --
+    MORSE_CODES(13) = 6 `N -.
+    MORSE_CODES(14) = 15 `O ---
+    MORSE_CODES(15) = 22 `P .--.
+    MORSE_CODES(16) = 29 `Q --.-
+    MORSE_CODES(17) = 10 `R .-.
+    MORSE_CODES(18) = 8 `S ...
+    MORSE_CODES(19) = 3 `T -
+    MORSE_CODES(20) = 9 `U ..-
+    MORSE_CODES(21) = 17 `V ...-
+    MORSE_CODES(22) = 11 `W .--
+    MORSE_CODES(23) = 25 `X -..-
+    MORSE_CODES(24) = 27 `Y -.--
+    MORSE_CODES(25) = 28 `Z --..
+endfunction
+
+
+` work out the pushes of some capital letters, of which there are `mrsLength`. they are left in
+` MORSE_SPELL: 0 for a dot, 1 for a dash, and a 2 after every letter.
+function morseSpell(mrsText$, mrsLength)
+    MORSE_SPELL_COUNT = 0
+    for mrsPlace = 1 to mrsLength
+        mrsCode = MORSE_CODES(asc(right$(left$(mrsText$, mrsPlace), 1)) - 65)
+
+        ` the 1 at the top of the code is not a push. the ones under it are, from the top down.
+        mrsTop = 1
+        mrsNext = 2
+        while mrsNext <= mrsCode
+            mrsTop = mrsNext
+            mrsNext = mrsNext * 2
+        endwhile
+        mrsCode = mrsCode - mrsTop
+        mrsTop = mrsTop / 2
+        while mrsTop >= 1
+            mrsDash = 0
+            if mrsCode >= mrsTop
+                mrsDash = 1
+                mrsCode = mrsCode - mrsTop
+            endif
+            MORSE_SPELL(MORSE_SPELL_COUNT) = mrsDash
+            MORSE_SPELL_COUNT = MORSE_SPELL_COUNT + 1
+            mrsTop = mrsTop / 2
+        endwhile
+        MORSE_SPELL(MORSE_SPELL_COUNT) = 2
+        MORSE_SPELL_COUNT = MORSE_SPELL_COUNT + 1
+    next
+endfunction
+
+
+` set a word. the letters are capitals, and there are `mrsLength` of them. the word is kept as the
+` pushes of its letters, one after another.
+function morseWord(mrsWord, mrsText$, mrsLength)
+    morseSpell(mrsText$, mrsLength)
+    mrsFirst = mrsWord * MORSE_MARK_ROOM
+    mrsSpellFirst = mrsWord * MORSE_SPELL_ROOM
+    mrsCount = 0
+    mrsLastSpelt = MORSE_SPELL_COUNT - 1
+    for mrsSpelt = 0 to mrsLastSpelt
+        ` the spelling is kept too, with the end of every letter in it, for when the radio answers
+        MORSE_WORD_SPELL(mrsSpellFirst + mrsSpelt) = MORSE_SPELL(mrsSpelt)
+        if MORSE_SPELL(mrsSpelt) < 2
+            MORSE_WORD_MARKS(mrsFirst + mrsCount) = MORSE_SPELL(mrsSpelt)
+            mrsCount = mrsCount + 1
+        endif
+    next
+    MORSE_WORD_LENGTH(mrsWord) = mrsCount
+    MORSE_WORD_SPELL_LENGTH(mrsWord) = MORSE_SPELL_COUNT
+    MORSE_WORD_SECRET(mrsWord) = 0
+    MORSE_WORD_NAME$(mrsWord) = mrsText$
+    if mrsWord >= MORSE_WORD_COUNT
+        MORSE_WORD_COUNT = mrsWord + 1
+    endif
+endfunction
+
+
+` the averages go back to what they are before anything has been heard
+function morseAveragesBack()
+    MORSE_DOT# = MORSE_DOT_START
+    MORSE_DASH# = MORSE_DASH_START
+    morseFindMiddle()
+endfunction
+
+
+` the middle of the two averages. a push that is longer than this is a dash.
+function morseFindMiddle()
+    MORSE_MIDDLE# = (MORSE_DOT# + MORSE_DASH#) / 2.0
+    if MORSE_MIDDLE# < MORSE_MIDDLE_MIN#
+        MORSE_MIDDLE# = MORSE_MIDDLE_MIN#
+    endif
+endfunction
+
+
+` the radio comes on. nothing has been heard yet, and nothing is known about how fast this player taps.
+` the codec has an entry for the radio from the first time on.
+function morseWake()
+    codecSeeCard(CODEC_ENTRY_RADIO)
+    MORSE_MODE = 1
+    MORSE_WAKING = 1
+    MORSE_WOKE = 1
+    MORSE_BUFFER_COUNT = 0
+    morseAveragesBack()
+endfunction
+
+
+` the radio goes off, because nobody pushed anything, or the player went back to the game
+function morseSleep()
+    MORSE_MODE = 0
+    MORSE_SLEPT = 1
+    MORSE_BUFFER_COUNT = 0
+endfunction
+
+
+` a push ended, that was held for this many milliseconds. it is a dot or a dash, and it moves the averages.
+function morsePush(mrsPushMs)
+    mrsPush# = mrsPushMs
+    mrsThird# = mrsPush# / 3.0
+    mrsTriple# = mrsPush# * 3.0
+    if mrsPush# > MORSE_MIDDLE#
+        MORSE_MARK = 1
+        MORSE_DASH# = (MORSE_DASH# + mrsPush#) / 2.0
+        MORSE_DOT# = MORSE_DOT# * .75 + mrsThird# * .25
+    else
+        MORSE_MARK = 0
+        MORSE_DOT# = (MORSE_DOT# + mrsPush#) / 2.0
+        MORSE_DASH# = MORSE_DASH# * .75 + mrsTriple# * .25
+    endif
+    morseFindMiddle()
+    morseMark(MORSE_MARK)
+endfunction
+
+
+` a push goes on the end of the ones that are remembered, where 0 is a dot and 1 is a dash. when
+` there is no more room, the oldest one is forgotten. then, if the end of them is a word, that word
+` has been heard, whatever came before it, and the radio goes off.
+function morseMark(mrsMark)
+    if MORSE_BUFFER_COUNT >= MORSE_MARK_ROOM
+        mrsLastKept = MORSE_MARK_ROOM - 2
+        for mrsShift = 0 to mrsLastKept
+            MORSE_BUFFER(mrsShift) = MORSE_BUFFER(mrsShift + 1)
+        next
+        MORSE_BUFFER_COUNT = MORSE_MARK_ROOM - 1
+    endif
+    MORSE_BUFFER(MORSE_BUFFER_COUNT) = mrsMark
+    MORSE_BUFFER_COUNT = MORSE_BUFFER_COUNT + 1
+
+    mrsLastWord = MORSE_WORD_COUNT - 1
+    for mrsHearWord = 0 to mrsLastWord
+        mrsLong = MORSE_WORD_LENGTH(mrsHearWord)
+        if MORSE_BUFFER_COUNT >= mrsLong
+            mrsFirst = mrsHearWord * MORSE_MARK_ROOM
+            mrsFrom = MORSE_BUFFER_COUNT - mrsLong
+            mrsSame = 1
+            mrsLastPlace = mrsLong - 1
+            for mrsPlace = 0 to mrsLastPlace
+                if MORSE_BUFFER(mrsFrom + mrsPlace) <> MORSE_WORD_MARKS(mrsFirst + mrsPlace)
+                    mrsSame = 0
+                endif
+            next
+            if mrsSame
+                MORSE_HEARD = mrsHearWord
+            endif
+        endif
+    next
+
+    if MORSE_HEARD >= 0
+        MORSE_MODE = 0
+        MORSE_BUFFER_COUNT = 0
+    endif
+endfunction
+
+
+` one frame of listening. `mrsDown` is how many things are held down, and `mrsNow` is the time, in milliseconds.
+function morseStep(mrsDown, mrsNow)
+    MORSE_HEARD = -1
+    MORSE_WOKE = 0
+    MORSE_SLEPT = 0
+
+    if mrsDown > 0
+        if MORSE_HELD = 0
+            MORSE_HELD = 1
+            MORSE_HELD_MS = mrsNow
+            MORSE_SPOILED = 0
+            MORSE_WAKING = 0
+        endif
+        mrsHeldFor = mrsNow - MORSE_HELD_MS
+
+        ` two things at once is a swap, or a special move. it is not a signal, and if the radio is
+        ` on, the player has gone back to the game, so it goes off.
+        if mrsDown > 1
+            MORSE_SPOILED = 1
+            if MORSE_MODE
+                morseSleep()
+            endif
+        endif
+
+        ` one thing, held for long enough, turns the radio on
+        if MORSE_MODE = 0
+            if MORSE_SPOILED = 0
+                if mrsHeldFor >= MORSE_WAKE_MS
+                    morseWake()
+                endif
+            endif
+        endif
+        exitfunction
+    endif
+
+    if MORSE_HELD
+        MORSE_HELD = 0
+        MORSE_FREE_MS = mrsNow
+        mrsPushed = mrsNow - MORSE_HELD_MS
+
+        ` the hold that turned the radio on is not a push, and neither is one that went on and on
+        mrsCounts = MORSE_MODE
+        if MORSE_WAKING then mrsCounts = 0
+        if MORSE_SPOILED then mrsCounts = 0
+        if mrsPushed > MORSE_PUSH_MAX_MS then mrsCounts = 0
+        MORSE_WAKING = 0
+        if mrsCounts
+            morsePush(mrsPushed)
+        endif
+        exitfunction
+    endif
+
+    ` nothing is held, and nothing was. when that has gone on for long enough, the radio goes off.
+    if MORSE_MODE
+        mrsQuiet = mrsNow - MORSE_FREE_MS
+        if mrsQuiet > MORSE_SLEEP_MS
+            morseSleep()
+        endif
+    endif
+endfunction
+
+
+` how many things the player is holding down. the two ways to say yes are one thing, because the
+` same key does both. the letters only count when nothing else is held: some of them are the keys of
+` the special moves. and the debug keys are letters, so in debug mode no letter counts.
+function morseInputs()
+    mrsHeld = 0
+    if action down(ACT_LEFT) then mrsHeld = mrsHeld + 1
+    if action down(ACT_RIGHT) then mrsHeld = mrsHeld + 1
+    if action down(ACT_UP) then mrsHeld = mrsHeld + 1
+    if action down(ACT_DOWN) then mrsHeld = mrsHeld + 1
+
+    mrsYes = action down(ACT_SWAP)
+    if action down(ACT_CONFIRM) then mrsYes = 1
+    if mrsYes then mrsHeld = mrsHeld + 1
+
+    mrsLastSlot = MOVE_SLOT_COUNT - 1
+    for mrsMove = 0 to mrsLastSlot
+        if action down(ACT_ABILITY(mrsMove)) then mrsHeld = mrsHeld + 1
+    next
+
+    if mrsHeld = 0
+        if DEBUG_MODE = 0
+            for mrsKey = 0 to 25
+                if key down(TUNA_KEYS(mrsKey)) then mrsHeld = mrsHeld + 1
+            next
+        endif
+    endif
+endfunction mrsHeld
+
+
+` turn the tone up, or down
+function morseSound(mrsVolume#)
+    if MORSE_WORD_COUNT > 0
+        if mrsVolume# = MORSE_SOUND#
+            exitfunction
+        endif
+        MORSE_SOUND# = mrsVolume#
+        set sfx volume SFX_MORSE, MORSE_SOUND#
+    endif
+endfunction
+
+
+` the radio goes off without a sound, and nothing is being held. this is for when the game is not
+` being played: a menu is up, or info mode is on, or the round is over.
+function morseQuiet()
+    MORSE_HELD = 0
+    MORSE_HEARD = -1
+    MORSE_MODE = 0
+    MORSE_WAKING = 0
+    MORSE_WOKE = 0
+    MORSE_SLEPT = 0
+    MORSE_BUFFER_COUNT = 0
+    MORSE_REPLY_ON = 0
+    MORSE_REPLY_LIT = 0
+    morseSound(0)
+    morseTentacleGone()
+endfunction
+
+
+` this runs on every frame of the game, from tunaAsked
+function morseListen()
+
+    ` the bar is full, so the round is over, and the upgrade screen is on its way. it stops the game
+    ` while it is up, and the tone must not be left sounding under it.
+    if SCORE_BAR_HOLD > 0
+        morseQuiet()
+        exitfunction
+    endif
+
+    mrsInputs = morseInputs()
+    morseStep(mrsInputs, game ms())
+
+    ` the two signs. the radio stops answering when it is turned on again.
+    if MORSE_WOKE
+        play sfx SFX_MORSE_ON
+        MORSE_REPLY_ON = 0
+        MORSE_REPLY_LIT = 0
+    endif
+    if MORSE_SLEPT
+        play sfx SFX_MORSE_OFF
+    endif
+
+    ` while the radio is on, the tone sounds for as long as a push is held. the rest of the hold that
+    ` turned it on is not a push.
+    mrsTone# = 0
+    if MORSE_MODE
+        if MORSE_HELD
+            if MORSE_WAKING = 0
+                mrsTone# = MORSE_VOLUME#
+            endif
+        endif
+    endif
+
+    ` any word unlocks its entry in the codec, and the radio taps back that it was received. CQ
+    ` gets a longer answer.
+    if MORSE_HEARD >= 0
+        morseLog(MORSE_HEARD)
+        if MORSE_HEARD = MORSE_WORD_CQ
+            morseReplyStart(game ms())
+        else
+            morseAck(game ms())
+        endif
+    endif
+
+    ` what the words do. TUNA is not here: tunaAsked looks for it.
+    if MORSE_HEARD = MORSE_WORD_SOS
+        morseSos()
+    endif
+    if MORSE_HEARD = MORSE_WORD_SING
+        morseSing()
+    endif
+    if MORSE_HEARD = MORSE_WORD_SONG
+        morseSing()
+    endif
+    if MORSE_HEARD = MORSE_WORD_CTHULHU
+        morseCthulhu(game ms())
+    endif
+    morseTentacleStep(game ms())
+
+    ` the radio taps its answer with the same tone, a little higher, so that it is not taken for the player
+    morseReplyStep(game ms())
+    mrsPitch# = 0
+    if MORSE_REPLY_ON
+        mrsPitch# = MORSE_REPLY_PITCH#
+        if MORSE_REPLY_LIT
+            mrsTone# = MORSE_VOLUME#
+        endif
+    endif
+    if mrsPitch# = MORSE_PITCH#
+        mrsPitchSame = 1
+    else
+        MORSE_PITCH# = mrsPitch#
+        set sfx pitch SFX_MORSE, MORSE_PITCH#
+    endif
+    morseSound(mrsTone#)
+endfunction
+
+
+` what SING does, and SONG. a hint of the hidden game plays, right away, the bright way that it
+` does after a group of five or more with the "listen" card: with more bubbles, and a trail. this
+` is what the K debug key does. when no pattern is out, there is nothing to hint at, and nothing happens.
+function morseSing()
+    MORSE_SING_COUNT = MORSE_SING_COUNT + 1
+    coralClearHint()
+    CORAL_HINT_AS_LISTEN = 1
+    mrsSang = coralStartAnyHint()
+    CORAL_HINT_TRAIL_ON = mrsSang
+endfunction
+
+
+` a word was sent. its entry in the codec is unlocked, if it has one.
+function morseLog(mrsWord)
+    if MORSE_WORD_CODEC(mrsWord) >= 0
+        codecSeeCard(MORSE_WORD_CODEC(mrsWord))
+    endif
+endfunction
+
+
+` the radio starts to tap something back, with nothing in it yet. see morseReplyAdd.
+function morseReplyClear(mrsNow)
+    MORSE_REPLY_LENGTH = 0
+    MORSE_REPLY_ON = 1
+    MORSE_REPLY_LIT = 0
+    MORSE_REPLY_AT = 0 - MORSE_REPLY_LEAD
+    MORSE_REPLY_CLOCK = 0
+    MORSE_REPLY_LAST_MS = mrsNow
+endfunction
+
+
+` what is in MORSE_SPELL goes on the end of what the radio taps back, as a 1 for every
+` MORSE_REPLY_UNIT_MS that the tone sounds and a 0 for every one that it does not: a dot is one,
+` a dash is three, with one of quiet after each, two more after a letter, and a longer wait
+` after the word. morseReplyStep plays it.
+function morseReplyAdd()
+    mrsLastSpelt = MORSE_SPELL_COUNT - 1
+    for mrsSpelt = 0 to mrsLastSpelt
+        mrsLit = 1
+        mrsDark = 1
+        if MORSE_SPELL(mrsSpelt) = 1
+            mrsLit = 3
+        endif
+        if MORSE_SPELL(mrsSpelt) = 2
+            mrsLit = 0
+            mrsDark = 2
+        endif
+        mrsUnit = 0
+        while mrsUnit < mrsLit
+            MORSE_REPLY(MORSE_REPLY_LENGTH) = 1
+            MORSE_REPLY_LENGTH = MORSE_REPLY_LENGTH + 1
+            mrsUnit = mrsUnit + 1
+        endwhile
+        mrsUnit = 0
+        while mrsUnit < mrsDark
+            MORSE_REPLY(MORSE_REPLY_LENGTH) = 0
+            MORSE_REPLY_LENGTH = MORSE_REPLY_LENGTH + 1
+            mrsUnit = mrsUnit + 1
+        endwhile
+    next
+    mrsUnit = 0
+    while mrsUnit < MORSE_REPLY_WAIT
+        MORSE_REPLY(MORSE_REPLY_LENGTH) = 0
+        MORSE_REPLY_LENGTH = MORSE_REPLY_LENGTH + 1
+        mrsUnit = mrsUnit + 1
+    endwhile
+endfunction
+
+
+` a word was heard, and the radio says so: it taps back .-. which is R, for "received".
+function morseAck(mrsNow)
+    morseReplyClear(mrsNow)
+    morseSpell("R", 1)
+    morseReplyAdd()
+endfunction
+
+
+` what CQ does: the radio answers. after the R, it taps out every word that there is, one after
+` another, but for the ones that are secret.
+function morseReplyStart(mrsNow)
+    morseAck(mrsNow)
+    mrsLastWord = MORSE_WORD_COUNT - 1
+    for mrsSayWord = 0 to mrsLastWord
+        if MORSE_WORD_SECRET(mrsSayWord) = 0
+            mrsSpellFirst = mrsSayWord * MORSE_SPELL_ROOM
+            MORSE_SPELL_COUNT = MORSE_WORD_SPELL_LENGTH(mrsSayWord)
+            mrsLastCopy = MORSE_SPELL_COUNT - 1
+            for mrsCopy = 0 to mrsLastCopy
+                MORSE_SPELL(mrsCopy) = MORSE_WORD_SPELL(mrsSpellFirst + mrsCopy)
+            next
+            morseReplyAdd()
+        endif
+    next
+endfunction
+
+
+` what CTHULHU does. one tentacle of the ancient one comes up from the bottom of the screen, at
+` the right, feels around for a moment, and sinks away again. it does nothing. it is the tentacles
+` of the ending, with all but one of them left out: see Lone in TentacleEffect.fx. while an ending
+` is playing, or is about to, the tentacles are busy, and nothing comes.
+function morseCthulhu(mrsNow)
+    MORSE_CTHULHU_COUNT = MORSE_CTHULHU_COUNT + 1
+    if CORAL_ENDING = 0
+        if CORAL_ENDING_DUE = 0
+            MORSE_TENTACLE_ON = 1
+            MORSE_TENTACLE_MS = mrsNow
+            MORSE_TENTACLE_UP# = 0
+            morseTentacleStep(mrsNow)
+            show sprite TENTACLE_SPRITE
+
+            ` and there is a scream from far away, the same as when horror coral grows. see MUSIC_SHOT_SCREAM.
+            playMusicShot(MUSIC_SHOT_SCREAM + rnd(MUSIC_SCREAM_COUNT))
+        endif
+    endif
+endfunction
+
+
+` move the tentacle along to this time, in milliseconds. it comes up, stays a moment, and goes
+` back down, gently at both ends.
+function morseTentacleStep(mrsNow)
+    if MORSE_TENTACLE_ON = 0
+        exitfunction
+    endif
+
+    ` an ending has started, and the tentacles are its own now
+    if CORAL_ENDING <> 0
+        MORSE_TENTACLE_ON = 0
+        exitfunction
+    endif
+
+    mrsTentacleAge = mrsNow - MORSE_TENTACLE_MS
+    if mrsTentacleAge >= MORSE_TENTACLE_LIFE_MS
+        morseTentacleGone()
+        exitfunction
+    endif
+
+    mrsAge# = mrsTentacleAge
+    mrsLife# = MORSE_TENTACLE_LIFE_MS
+    mrsPart# = mrsAge# / mrsLife#
+    mrsUp# = mrsPart# / .4
+    if mrsPart# > .4
+        mrsUp# = 1
+    endif
+    if mrsPart# > .65
+        mrsUp# = (1 - mrsPart#) / .35
+    endif
+    MORSE_TENTACLE_UP# = mrsUp# * mrsUp# * (3 - 2 * mrsUp#)
+
+    ` its moment to come up is at .04, and it takes .36 to come all of the way. see TENTACLE_QUICK.
+    mrsRise# = .04 + .36 * MORSE_TENTACLE_REACH# * MORSE_TENTACLE_UP#
+    set effect param float TENTACLE_FX_ID, "Time", mrsNow * .001
+    set effect param float2 TENTACLE_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT
+    set effect param float TENTACLE_FX_ID, "Rise", mrsRise#
+    set effect param float TENTACLE_FX_ID, "Lone", 1
+endfunction
+
+
+` the tentacle is gone, at once. the tentacles of an ending are left alone.
+function morseTentacleGone()
+    if MORSE_TENTACLE_ON
+        MORSE_TENTACLE_ON = 0
+        MORSE_TENTACLE_UP# = 0
+        if CORAL_ENDING = 0
+            hide sprite TENTACLE_SPRITE
+        endif
+    endif
+endfunction
+
+
+` move the answer of the radio along to this time, in milliseconds. MORSE_REPLY_LIT is 1 while its tone sounds.
+function morseReplyStep(mrsNow)
+    if MORSE_REPLY_ON = 0
+        MORSE_REPLY_LIT = 0
+        exitfunction
+    endif
+    mrsReplyStep = mrsNow - MORSE_REPLY_LAST_MS
+    MORSE_REPLY_LAST_MS = mrsNow
+    MORSE_REPLY_CLOCK = MORSE_REPLY_CLOCK + mrsReplyStep
+    while MORSE_REPLY_CLOCK >= MORSE_REPLY_UNIT_MS
+        MORSE_REPLY_CLOCK = MORSE_REPLY_CLOCK - MORSE_REPLY_UNIT_MS
+        MORSE_REPLY_AT = MORSE_REPLY_AT + 1
+    endwhile
+
+    MORSE_REPLY_LIT = 0
+    if MORSE_REPLY_AT >= MORSE_REPLY_LENGTH
+        MORSE_REPLY_ON = 0
+        exitfunction
+    endif
+    if MORSE_REPLY_AT >= 0
+        MORSE_REPLY_LIT = MORSE_REPLY(MORSE_REPLY_AT)
+    endif
+endfunction
+
+
+` what SOS does. help comes: debug mode is turned on, with its windows and its keys, which give
+` the player any card, and can win the game. this works in a shipped game too. the game is marked
+` as one that had it. see debugModeOn, in fish_routines_debug. the words "Debug Mode Enabled"
+` splash up, and a ring goes out from the middle of the board, to say that it was heard.
+function morseSos()
+    MORSE_SOS_COUNT = MORSE_SOS_COUNT + 1
+    debugModeOn()
+    debugSplashStart(game ms())
+    spawnShockwave(CELL_COLUMN_COUNT / 2, CELL_ROW_COUNT / 2, .6, 0)
+endfunction
+
+
+` THE SHOOTING STAR OF THE SPLASH SCREEN. every few seconds there is a chance, of one in
+` MORSE_STAR_ODDS, that a shooting star crosses the sky of the splash screen, somewhere new every
+` time. the trail that it leaves is broken up: it is the dots and dashes of
+` CQ, the word that gets the radio to give the others away. a dot is a short piece of trail and a
+` dash is a long one. the trail fades behind the star, and nothing says what it is.
+` the path is a row of steps, each MORSE_STAR_STEP pixels across and one pixel down, and the star
+` takes MORSE_STAR_UNIT_MS to cross one. a dot is one step of trail, and a dash is three, with a step
+` of nothing after each, and MORSE_STAR_LETTER_GAP more after a letter. there is a sprite for every step that has
+` trail on it. setup_credits makes them, and menu_run_splash shows them.
+function morseStarsMake()
+    morseAlphabet()
+    morseSpell("CQ", 2)
+
+    ` which steps of the path have trail on them: a 1 for every one that does
+    mrsGlints = 0
+    mrsLastSpelt = MORSE_SPELL_COUNT - 1
+    for mrsSpelt = 0 to mrsLastSpelt
+        mrsLit = 1
+        mrsDark = 1
+        if MORSE_SPELL(mrsSpelt) = 1
+            mrsLit = 3
+        endif
+        if MORSE_SPELL(mrsSpelt) = 2
+            mrsLit = 0
+            mrsDark = MORSE_STAR_LETTER_GAP
+        endif
+        mrsUnit = 0
+        while mrsUnit < mrsLit
+            MORSE_GLINT(mrsGlints) = 1
+            mrsGlints = mrsGlints + 1
+            mrsUnit = mrsUnit + 1
+        endwhile
+        mrsUnit = 0
+        while mrsUnit < mrsDark
+            MORSE_GLINT(mrsGlints) = 0
+            mrsGlints = mrsGlints + 1
+            mrsUnit = mrsUnit + 1
+        endwhile
+    next
+    MORSE_STAR_PATH = mrsGlints
+
+    ` a sprite for every step that has trail on it
+    MORSE_STAR_COUNT = 0
+    mrsLastStep = MORSE_STAR_PATH - 1
+    for mrsStepAt = 0 to mrsLastStep
+        if MORSE_GLINT(mrsStepAt)
+            reserve sprite id(mrsStarId)
+            sprite mrsStarId, MORSE_STAR_X + mrsStepAt * MORSE_STAR_STEP, MORSE_STAR_Y + mrsStepAt, TEX_PIXEL
+            set sprite offset mrsStarId, 0, 0
+            size sprite mrsStarId, MORSE_STAR_STEP, 1
+            color sprite mrsStarId, rgb(255, 245, 219)
+            order sprite mrsStarId, ORDER_MENU_TEXT
+            set sprite render target mrsStarId, TARGET_MENU
+            hide sprite mrsStarId
+            MORSE_STARS(MORSE_STAR_COUNT) = mrsStarId
+            MORSE_STAR_AT_STEP(MORSE_STAR_COUNT) = mrsStepAt
+            MORSE_STAR_COUNT = MORSE_STAR_COUNT + 1
+        endif
+    next
+
+    ` and the star itself, at the front of the trail
+    reserve sprite id(MORSE_STAR_HEAD)
+    sprite MORSE_STAR_HEAD, MORSE_STAR_X, MORSE_STAR_Y, TEX_PIXEL
+    set sprite offset MORSE_STAR_HEAD, 0, 0
+    size sprite MORSE_STAR_HEAD, 2, 1
+    color sprite MORSE_STAR_HEAD, rgb(255, 255, 255)
+    order sprite MORSE_STAR_HEAD, ORDER_MENU_TEXT
+    set sprite render target MORSE_STAR_HEAD, TARGET_MENU
+    hide sprite MORSE_STAR_HEAD
+endfunction
+
+
+` show the shooting star, with the camera this far down from the splash screen, and move it along.
+` it waits a moment before it first sets out, because the splash screen fades in from black, and
+` it waits again after every crossing.
+function morseStarsShow(mrsRise#)
+    mrsStarNow = game ms()
+    if MORSE_STAR_GOING = 0
+        MORSE_STAR_GOING = 1
+        MORSE_STAR_AT = 0 - MORSE_STAR_WAIT
+        MORSE_STAR_CROSSING = -1
+        MORSE_STAR_SEEN = 0
+        MORSE_STAR_CLOCK = 0
+        MORSE_STAR_LAST_MS = mrsStarNow
+    endif
+    mrsStarStep = mrsStarNow - MORSE_STAR_LAST_MS
+    MORSE_STAR_LAST_MS = mrsStarNow
+    MORSE_STAR_CLOCK = MORSE_STAR_CLOCK + mrsStarStep
+    while MORSE_STAR_CLOCK >= MORSE_STAR_UNIT_MS
+        MORSE_STAR_CLOCK = MORSE_STAR_CLOCK - MORSE_STAR_UNIT_MS
+        MORSE_STAR_AT = MORSE_STAR_AT + 1
+    endwhile
+
+    ` how far along its path the star is, in steps. past the end of the path, it is gone, and the
+    ` last of its trail is fading.
+    mrsHeadAt = -1
+    if MORSE_STAR_AT >= 0
+        mrsCycle = MORSE_STAR_PATH + MORSE_STAR_REST
+        mrsHeadAt = MORSE_STAR_AT mod mrsCycle
+
+        ` a new crossing: whether the star comes this time, and where
+        mrsCrossing = MORSE_STAR_AT / mrsCycle
+        if mrsCrossing <> MORSE_STAR_CROSSING
+            MORSE_STAR_CROSSING = mrsCrossing
+            morseStarRoll()
+        endif
+    endif
+    if MORSE_STAR_SEEN = 0
+        mrsHeadAt = -1
+    endif
+    mrsPartStep# = MORSE_STAR_CLOCK
+    mrsUnitMs# = MORSE_STAR_UNIT_MS
+    mrsPartStep# = mrsPartStep# / mrsUnitMs#
+    mrsFade# = MORSE_STAR_FADE
+
+    ` every piece of trail comes on as the star passes it, and fades away behind it
+    mrsLastStar = MORSE_STAR_COUNT - 1
+    for mrsStar = 0 to mrsLastStar
+        mrsStarId = MORSE_STARS(mrsStar)
+        mrsBehind = mrsHeadAt - MORSE_STAR_AT_STEP(mrsStar)
+        mrsGlow# = 0
+        if mrsHeadAt >= 0
+            if mrsBehind >= 0
+                mrsBehind# = mrsBehind
+                mrsGlow# = 1 - (mrsBehind# + mrsPartStep#) / mrsFade#
+                if mrsGlow# < 0
+                    mrsGlow# = 0
+                endif
+            endif
+        endif
+        position sprite mrsStarId, MORSE_STAR_X + MORSE_STAR_AT_STEP(mrsStar) * MORSE_STAR_STEP, MORSE_STAR_Y + MORSE_STAR_AT_STEP(mrsStar) - mrsRise#
+        set sprite alpha mrsStarId, 235 * mrsGlow#
+        show sprite mrsStarId
+    next
+
+    ` the star itself is only there while it is on its path
+    mrsHeadOn = 0
+    if mrsHeadAt >= 0
+        if mrsHeadAt < MORSE_STAR_PATH
+            mrsHeadOn = 1
+        endif
+    endif
+    if mrsHeadOn
+        mrsHeadX# = MORSE_STAR_X + (mrsHeadAt + mrsPartStep#) * MORSE_STAR_STEP
+        position sprite MORSE_STAR_HEAD, mrsHeadX#, MORSE_STAR_Y + mrsHeadAt - mrsRise#
+        show sprite MORSE_STAR_HEAD
+    else
+        hide sprite MORSE_STAR_HEAD
+    endif
+endfunction
+
+
+` a crossing is about to start. the star comes on one in MORSE_STAR_ODDS of them. its path starts
+` anywhere that keeps all of it on the splash screen, and off of the logos and the words under
+` them, which are in the middle.
+function morseStarRoll()
+    MORSE_STAR_SEEN = 0
+    if rnd(MORSE_STAR_ODDS) = 0
+        MORSE_STAR_SEEN = 1
+    endif
+
+    mrsPathWide = MORSE_STAR_PATH * MORSE_STAR_STEP
+    mrsRoomX = WORLD_WIDTH - mrsPathWide - MORSE_STAR_EDGE * 2
+    mrsRoomY = WORLD_HEIGHT - MORSE_STAR_PATH - MORSE_STAR_EDGE * 2
+    mrsTries = 0
+    mrsClear = 0
+    while mrsClear = 0
+        MORSE_STAR_X = MORSE_STAR_EDGE + rnd(mrsRoomX)
+        MORSE_STAR_Y = MORSE_STAR_EDGE + rnd(mrsRoomY)
+
+        ` the logos, and the words, are in a box in the middle of the screen. the path is clear of
+        ` it when all of it is to one side of the box, or above it, or below it.
+        mrsClear = 0
+        mrsPathRight = MORSE_STAR_X + mrsPathWide
+        mrsPathLow = MORSE_STAR_Y + MORSE_STAR_PATH
+        if mrsPathRight < WORLD_WIDTH / 2 - 130 then mrsClear = 1
+        if MORSE_STAR_X > WORLD_WIDTH / 2 + 130 then mrsClear = 1
+        if mrsPathLow < 84 then mrsClear = 1
+        if MORSE_STAR_Y > 216 then mrsClear = 1
+
+        ` it is found in a try or two. this is only so that it can never go on for ever.
+        mrsTries = mrsTries + 1
+        if mrsTries > 40 then mrsClear = 1
+    endwhile
+endfunction
+
+
+` put the shooting star away
+function morseStarsHide()
+    MORSE_STAR_GOING = 0
+    hide sprite MORSE_STAR_HEAD
+    mrsLastStar = MORSE_STAR_COUNT - 1
+    for mrsStar = 0 to mrsLastStar
+        hide sprite MORSE_STARS(mrsStar)
+    next
+endfunction

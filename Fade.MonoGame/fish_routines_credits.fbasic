@@ -63,22 +63,34 @@ setup_credits:
     ` the melodies in the music are adapted from these. they are written in setup_melodies, in fish_routines_music.
     addCreditText(400, 18, "Music adapted from the works of", 0)
     addCreditText(424, 40, "Claude Debussy", 1)
-    addCreditText(470, 16, "Clair de Lune, Arabesque No. 1, La fille aux cheveux de lin", 0)
-    addCreditText(506, 28, "and Erik Satie", 1)
-    addCreditText(538, 16, "Gymnopedie No. 1", 0)
+    addCreditText(470, 16, "Clair de Lune, Arabesque No. 1,", 0)
+    addCreditText(490, 16, "La fille aux cheveux de lin, Reverie", 0)
+    addCreditText(526, 28, "Erik Satie", 1)
+    addCreditText(558, 16, "Gymnopedie No. 1", 0)
+    addCreditText(594, 28, "Frederic Chopin", 1)
+    addCreditText(626, 16, "Nocturne Op. 9 No. 2, Funeral March,", 0)
+    addCreditText(646, 16, "Preludes Op. 28, No. 4 and No. 15", 0)
+    addCreditText(682, 28, "Ludwig van Beethoven", 1)
+    addCreditText(714, 16, "Moonlight Sonata", 0)
+    addCreditText(750, 28, "Pyotr Ilyich Tchaikovsky", 1)
+    addCreditText(782, 16, "Swan Lake", 0)
+    addCreditText(818, 28, "Sergei Rachmaninoff", 1)
+    addCreditText(850, 16, "Prelude in C-sharp Minor", 0)
+    addCreditText(886, 28, "and Gustav Holst", 1)
+    addCreditText(918, 16, "In the Bleak Midwinter", 0)
 
     ` the pictures of the fish are from a pack by pixelGnome
-    addCreditText(630, 18, "Fish icons by", 0)
-    addCreditText(654, 40, "pixelGnome", 1)
-    addCreditText(700, 16, "pixelgnome.itch.io/fish", 0)
+    addCreditText(1010, 18, "Fish icons by", 0)
+    addCreditText(1034, 40, "pixelGnome", 1)
+    addCreditText(1080, 16, "pixelgnome.itch.io/fish", 0)
 
     ` and the diver is from a pack by dkproductions
-    addCreditText(760, 18, "Diver by", 0)
-    addCreditText(784, 40, "dkproductions", 1)
-    addCreditText(830, 16, "dkproductions.itch.io/pixel-art-diver", 0)
+    addCreditText(1140, 18, "Diver by", 0)
+    addCreditText(1164, 40, "dkproductions", 1)
+    addCreditText(1210, 16, "dkproductions.itch.io/pixel-art-diver", 0)
 
     ` CREDIT_LENGTH, in the fish headers, is where the bottom of this last line is
-    addCreditText(930, 28, "Thanks for playing, friend", 1)
+    addCreditText(1310, 28, "Thanks for playing, friend", 1)
 
     ` the splash screen is drawn into the menu, on top of the sky. it is a long way up in that sky, and
     ` the logos are left behind up there when the camera comes down to the main menu.
@@ -115,6 +127,9 @@ setup_credits:
     color sprite SPLASH_BLACK_SPRITE, rgb(0, 0, 0)
     order sprite SPLASH_BLACK_SPRITE, ORDER_MENU + 20
     hide sprite SPLASH_BLACK_SPRITE
+
+    ` the shooting star of the splash screen has something to say. see MORSE in fish_headers.
+    morseStarsMake()
 return
 
 
@@ -192,6 +207,7 @@ menu_run_splash:
         set sprite alpha SPLASH_FADE_SPRITE, splashAlpha
         set sprite alpha SPLASH_MONOGAME_SPRITE, splashAlpha
         set text alpha SPLASH_TEXT_ID, splashAlpha
+        morseStarsShow(0)
 
         gosub frame_menu_render
         sync
@@ -214,6 +230,7 @@ menu_run_splash:
         position sprite SPLASH_FADE_SPRITE, WORLD_WIDTH / 2 - 60, 130 - splashRise#
         position sprite SPLASH_MONOGAME_SPRITE, WORLD_WIDTH / 2 + 60, 130 - splashRise#
         set text position SPLASH_TEXT_ID, WORLD_WIDTH / 2, 190 - splashRise#
+        morseStarsShow(splashRise#)
 
         ` the main menu fades in as the camera settles
         splashChrome# = (splashT# - .7) * 4
@@ -234,6 +251,7 @@ menu_run_splash:
     hide sprite SPLASH_FADE_SPRITE
     hide sprite SPLASH_MONOGAME_SPRITE
     hide text SPLASH_TEXT_ID
+    morseStarsHide()
     position sprite SPLASH_FADE_SPRITE, WORLD_WIDTH / 2 - 60, 130
     position sprite SPLASH_MONOGAME_SPRITE, WORLD_WIDTH / 2 + 60, 130
     set text position SPLASH_TEXT_ID, WORLD_WIDTH / 2, 190

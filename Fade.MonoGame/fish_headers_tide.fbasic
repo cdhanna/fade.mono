@@ -1,0 +1,174 @@
+remstart
+    THE TIDE
+    another hidden thing. nothing in the game says that it is there. this is a prototype. the routines
+    are in fish_routines_tide, and the tests are in fish_tests_tide.
+
+    PUSH AND PULL. a swap moves two fish: the one that the cursor carries, and the one that is shoved
+    back to where the cursor came from. a swap that pops something is one of three things.
+        a push      the fish that the cursor carried is in a group that pops. the cursor is in the pop.
+        a pull      the fish that was shoved back is in a group that pops, behind the cursor. the fish
+                    that the cursor carried is still under it.
+        both        each of the two is in a group that pops.
+    any swap can be made from either end, so which one it is only depends on which of the two fish the
+    cursor was on. most players go to the fish that they want to move, so most swaps are pushes.
+    a fish that sings on coral in place of popping counts the same as one that pops. a forced pop does
+    not count: only fish that matched do. and only a swap that is counted as a move does: a "free move"
+    and the special moves are not the tide's business, the same as they are not the multiplier's.
+
+    THE WATER. a push is the flood, and a pull is the ebb. the water is at one of a few levels, from low
+    water (0) to high water (TIDE_RANGE). a push brings it up by one, a pull takes it down by one, and
+    a swap that is both leaves it where it is. it starts at high water, and since most swaps are
+    pushes, that is where it stays for a player who does not know about any of this.
+
+    A CYCLE is the water going all the way out, and coming all the way back in: it counts when the
+    water gets to high water, having been at low water since the last time that it was. so it takes
+    TIDE_RANGE pulls more than pushes, and then as many pushes more than pulls.
+
+    THE MOON. every cycle moves the moon on. it takes TIDE_CYCLES_TO_TURN of them to get from a new
+    moon to a full one, and when it is full, night falls. the night lasts for TIDE_NIGHT_MOVES moves,
+    whatever they are, and the moon wanes as they are used up. then day breaks, with a new moon, and
+    it all starts over. tideMoveMade counts the moves. registerMove, in fish_funcs, calls it.
+
+    NOTHING POPS AT NIGHT. a group of fish that matched is held, for as long as it is night: it does
+    not pop, or sing, or score. the fish of a held group glow a little brighter than the rest, so it
+    can be seen that the group is there. when a swap puts a group together, there is a pulse: its fish
+    flash, bubbles come up from them, and a ring goes out. and that is all that happens.
+    the multiplier leaves every swap of the night alone. it does not fill, and it does not empty.
+    a song can still be sung. the swap at the end of a pattern does not have to pop anything at night,
+    since nothing can, so any swap there casts it. the pattern is walked the same as ever, with the
+    swaps at the ends of it that it needs. judgeCoralCast, in fish_routines_coral, lets it through.
+    the water does not move either, since nothing pops.
+    a forced pop still goes: the special moves, a stingray's column, a bottle that pays out.
+    but a belly up fish does not pop on its own when the cursor comes to it, the way that it does in
+    the day. it stays, and it is as dead as ever to a song, so a song that is sung over it at night
+    still brings horror coral. popBellyUpFish, in fish_funcs, leaves it alone.
+    WHEN DAY BREAKS, the board is looked at again, and every group that is on it pops at once. so the
+    night is for setting the board up. the light comes back first: nothing pops until TIDE_DAWN_MS
+    after day broke, and the night fades away more quickly than it came on, so that it is gone by then.
+    handle_combos does the waiting.
+
+    THE FISH SLEEP. while it is night, a little Z floats up from one fish or another, every so often.
+    a dead fish does not sleep, and neither does a bottle, or anything of a quest's. stepTideSleep
+    does that. the Z is one of the bubbles, drawn as a Z, and it floats up the way that the hearts of
+    the fish on coral do: slowly, fading in and back out, without a sound. see spawnSleepZ, and
+    BubbleEffect.fx.
+
+    THE MOON IN INFO MODE. once the first cycle of a game is done, info mode has a spot for the moon
+    and the marks under it. they are one thing there. what it says is different at night.
+    tideInfoRefresh keeps it up.
+    the moon is under the left end of the count of the rounds, inside the spot that info mode has for
+    that. so while the moon has a spot, the spot of the rounds is cut back to make room: it is its top
+    part, all the way across, with a leg hanging down from the right end of it, the same shape that the
+    bar of the round has. see AND A SECOND ONE in fish_headers.
+
+    WHEN NIGHT FALLS, THE CORAL SPAWNS. every cell of coral spreads to one of the cells right next to
+    it that has none, and what grows there is the same kind: coral from coral, and horror coral from
+    horror coral. tideGrowCoral does that. it happens the once, as night falls, and not when day breaks.
+
+    THE NIGHT DIVE. while it is night, the water is dark, and the fish are bioluminescent: their bodies
+    go dark, the pale parts of them and a scatter of spots light up in their own colors, and there is
+    a little halo around each one. waves of light go across the board. a fish that is dead does not
+    glow, and neither does a bottle, or anything that a quest put on the board. the coral glows too.
+    a jellyfish glows a good deal more than a fish does, and its light swells and sinks slowly.
+    every fish keeps its own colors, only dimmer, so that the kinds can still be told apart. what
+    lights up is the dark line around it, in the color of the fish.
+
+    WHAT SHOWS. nothing is written on the screen about any of this. this is what there is to see:
+        the surface     the underside of the surface of the water is along the top of the screen. it is
+                        up out of the way at high water, and it comes down the screen as the tide goes out.
+        the moon        seen through the water, at the top of the screen. it is a sliver after the first
+                        cycle and grows with every one, and it wanes with the moves of the night.
+        a ring          a shockwave crosses the board whenever a cycle is done, and a smaller one when
+                        the water gets to low water.
+        the drift       THE DRIFT. the specks in the water say what the tide wants next. they sink, the
+                        way that they always have, while it wants a pull: from the start of a game, and
+                        from the end of every cycle. once the water is all the way out, they turn
+                        around and rise, which is for a push, until it is all the way back in. they
+                        turn around slowly, so they hang still for a moment on the way. at night they
+                        sink. see SnowEffect.fx and SpecksEffect.fx. they rise faster than they sink,
+                        so that it cannot be taken for the water standing still. see TIDE_RISE#.
+                        the wobble of the water over the whole screen runs backward for as long as
+                        they rise. see TideBack in ScreenEffect.fx.
+        the marks       THE MARKS. a row of little marks under the moon, one for every cycle that it
+                        takes for night to fall. they are what the player can look at to see where they
+                        are. the left half of a mark fills in when the water has gone all the way out,
+                        and the rest of it when the water is all the way back in. at night they are all
+                        full, and they empty as the moves of the night are used up. they are not there
+                        until the first whole cycle of a game is done, so a player who has not found the
+                        tide never sees them, and the first that is seen of them is one full mark. the
+                        halves show from then on. tideMarks says how many halves are filled in.
+    see SeabedEffect.fx for the surface and the moon, FishEffect.fx for the fish, and CoralEffect.fx.
+
+    the "Tide" window of the debug panel (FISH_DEBUG) pushes and pulls, and turns night on and off.
+remend
+
+global TIDE_RANGE = 3 `how many levels the water has above low water. it is this many pulls from high water to low water.
+global TIDE_CYCLES_TO_TURN = 3 `how many cycles it takes for night to fall. SeabedEffect.fx draws this many marks: see MARK_COUNT there, which has to be kept the same by hand.
+global TIDE_NIGHT_MOVES = 12 `how many moves the night lasts
+
+global TIDE_LEVEL = 3 `where the water is, from 0 for low water to TIDE_RANGE for high water
+global TIDE_EBBED = 0 `1 when the water has been at low water since it was last at high water
+global TIDE_CYCLES = 0 `how many cycles the moon has had since day broke. night falls at TIDE_CYCLES_TO_TURN.
+global TIDE_NIGHT = 0 `1 while it is night
+global TIDE_SEEN = 0 `1 once a whole cycle has been done in this game. the marks show from then on. see THE MARKS.
+
+` THE DRIFT
+global TIDE_FLOW = -1 `what the tide wants next: -1 for a pull, which it is to start with, and 1 for a push
+global TIDE_FLOW_SHOWN# = 0 `how much the specks are rising, from 0 to 1. it chases that, slowly, and it is 0 at night.
+global TIDE_FLOW_EASE# = 0.0018 `how much of the way it goes in a millisecond
+global TIDE_DRIFT# = 0 `how much of the time that the specks move by has been taken back, in seconds. see Tide in SnowEffect.fx.
+global TIDE_CLOCK_WAS# = 0 `what that time was on the last frame. see SEABED_SNOW_CLOCK# in fish_headers.
+global TIDE_RISE# = 3 `how many times as fast as it goes that time is taken back. 2 makes the specks rise as fast as they sink, and 3 twice as fast.
+global TIDE_WAVE_BACK# = 0 `how much of the time has been taken back for the wobble of the water, in seconds. it is taken back twice as fast as it goes, so the wobble runs backward at its own speed.
+global TIDE_NIGHT_LEFT = 0 `how many moves of the night are left
+global TIDE_DAWN_MS = 800 `how long the light has to come back, before what the night held pops
+global TIDE_DAWN_UNTIL = 0 `when that is over, on the clock of the game, or 0 when day is not breaking
+global TIDE_DAY_EASE# = 0.005 `how much of the way the night goes in a millisecond, on the way out
+
+` THE FISH SLEEP
+global TIDE_SLEEP_NEXT_MS = 0 `when the next Z is due, on the clock of the game
+global TIDE_SLEEP_EVERY = 380 `a Z comes after this long, and up to as long again
+
+` THE MOON IN INFO MODE. where the middle of the moon is on the screen. SeabedEffect.fx draws it there:
+` see MOON_ACROSS and MOON_DOWN. the two have to be kept the same by hand.
+global TIDE_MOON_X = 434
+global TIDE_MOON_Y = 46
+global INFO_INDEX_TIDE = -1
+global TIDE_INFO_STATE = -1 `what the spot says now: 0 for nothing, 1 for the day, 2 for the night, and -1 when it has to be worked out again
+global TIDE_INFO_LEFT = 18 `the spot of the moon is this far to the left of the middle of the moon, and to the right. it is twice this wide.
+global TIDE_INFO_UP = 13 `and this far up from the middle of the moon
+global TIDE_INFO_TALL = 39 `and this tall, which takes in the marks
+global TIDE_ROUNDS_TALL = 0 `how tall the spot of the count of the rounds is when it is a plain rectangle. setup_tide takes it.
+global TIDE_DAWN_RING = 0 `1 when day has broken, and the ring that crosses the board for it has not been sent yet
+
+` the groups that the night is holding. see NOTHING POPS AT NIGHT.
+global dim TIDE_BANKED(400) `1 for every cell whose fish is in a group that is held. handle_combos works it out again on every look at the board.
+global TIDE_BANK_ANY = 0 `1 when any of TIDE_BANKED is set, so that there is something to clear
+global TIDE_HELD_GROUPS = 0 `how many groups the last look at the board held
+global TIDE_BANK_GLOW# = 0.45 `how much brighter the fish of a held group are
+global TIDE_JELLY_GLOW# = 0.9 `and how much brighter a jellyfish is at night, at its brightest
+global dim TIDE_PULSE_UNTIL(400) `when the flash of the fish in every cell is over, on the clock of the game
+global TIDE_PULSE_MS = 500 `how long the flash lasts
+
+` what handle_combos has seen of the last swap, in this look at the board. see tideSawGroup.
+global TIDE_SAW_PUSH = 0
+global TIDE_SAW_PULL = 0
+global TIDE_LAST_SWAP = 0 `what the last swap that was judged turned out to be. see the constants.
+#constant TIDE_SWAP_NOTHING 0
+#constant TIDE_SWAP_PUSH 1
+#constant TIDE_SWAP_PULL 2
+#constant TIDE_SWAP_BOTH 3
+
+global TIDE_GREW = 0 `how many cells the coral spread to, the last time that night fell
+global dim TIDE_SPAWN(400) `scratch, for tideGrowCoral: the cells that had coral before any of it spread
+
+` what is drawn chases what is so. stepTide moves these along on every frame.
+global TIDE_LEVEL_SHOWN# = 1 `where the surface is drawn, from 0 for low water to 1 for high water
+global TIDE_NIGHT_SHOWN# = 0 `how much of the night is drawn, from 0 to 1
+global TIDE_MOON_SHOWN# = 0 `how much of the moon is lit, from 0 for a new moon to 1 for a full one
+global TIDE_LAST_MS = 0
+global TIDE_LEVEL_EASE# = 0.004 `how much of the way the surface goes in a millisecond
+global TIDE_NIGHT_EASE# = 0.0012 `the night comes on slowly
+global TIDE_MOON_EASE# = 0.002
+
+global SAVE_PREF_TIDE = 60 `where the tide of the saved game is kept, after SAVE_PREF. see tideSave.

@@ -40,7 +40,7 @@ A cuttlefish cycles through the fish kinds in a known order, changing every move
 # Constellation
 Four marked fish of different kinds must be arranged into a shown shape (a line, a square, an L) using valid swaps.
 
-# Remora
+# Tail
 The cursor drags a tail through the last several cells it visited, and you may not cross your own tail. Make N combos without tangling. (maybe a game feature, not just a quest)
 
 # Sleepers

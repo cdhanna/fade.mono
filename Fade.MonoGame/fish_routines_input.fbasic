@@ -202,27 +202,20 @@ process_input:
 
             if moveAbility.movesLeft <= 0
                 usedAbility = 1
-                print "FOUND MOVE", moveAbility.moveValue
                 MOVE_ABILITY_BINDINGS(move.moveBindingIndex).movesLeft = moveAbility.resetTimer
                 gosub update_ability_texts
-                print "BACK FROM ROUTINE" + str$(moveAbility.movesLeft) + " / " + str$(moveAbility.resetTimer)
 
-                print "wtf", [MOVE_SHIFT], [MOVE_CLONE], moveAbility.moveValue
                 select moveAbility.moveValue
                     case [MOVE_SHIFT]
-                        print "DOING SHIFT"
                         doShift(SELECTION_POS, swapDir)
                     endcase
                     case [MOVE_CLONE]
-                        print "DOING CLONE"
                         doClone(SELECTION_POS, swapDir)
                     endcase
                     case [MOVE_BOMB3x3]
-                        print "DOING BOMB"
                         doBomb(SELECTION_POS, swapDir)
                     endcase
                     case [MOVE_LINE_OUT]
-                        print "DOING LINE OUT"
                         doLineOut(SELECTION_POS, swapDir)
                     endcase
                     case [MOVE_KNOWN_FILL]
@@ -243,11 +236,6 @@ process_input:
                         target.x = robotLineX(SELECTION_POS.x, swapDir.x, robotWent)
                         target.y = robotLineY(SELECTION_POS.y, swapDir.y, robotWent)
                     endcase
-                    case default 
-                        print "DOING NOTHING"
-
-                        `doSwap(SELECTION_POS, swapDir, 0)
-                    endcase 
                 endselect
 
                 ` shake the row of the move that just got used. this starts after the move has played out,

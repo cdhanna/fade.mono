@@ -3,7 +3,7 @@ goto routines_debug_exit
 remstart
     THE DEBUG CARDS
     a window in the debug panel, for working on the game, that gives the player any card there is.
-    it is only there when the FISH_DEBUG environment variable is set, and only while a game is being
+    it is only there in debug mode (see DEBUG_MODE in fish_headers), and only while a game is being
     played. frame_dbg, in fish_routines, comes here on every frame.
 
     there is a button for every card, under the kind of card that it is. a card that is owned has
@@ -89,6 +89,71 @@ return
 
 
 routines_debug_exit:
+
+
+` turn debug mode on: the inspector, the debug windows, and the debug keys. it stays on until the
+` game is closed. the game that is being played is marked as one that had it, and so is every game
+` after it: see isDebugEnvSet.
+function debugModeOn()
+    DEBUG_MODE = 1
+    GAME_DEBUG_USED = 1
+    enable debug inspector
+endfunction
+
+
+` the words "Debug Mode Enabled" splash up in the middle of the screen, for a moment. this is for
+` when a player turns debug mode on in the middle of a game, with SOS, so that they know that it
+` happened. `splashNow` is the time, in milliseconds.
+function debugSplashStart(splashNow)
+    if DEBUG_SPLASH_MADE = 0
+        DEBUG_SPLASH_MADE = 1
+        reserve text id(DEBUG_SPLASH_TEXT_ID)
+        text DEBUG_SPLASH_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT / 2, SCORE_FONT, "Debug Mode Enabled"
+        size text y DEBUG_SPLASH_TEXT_ID, 30
+        set text offset DEBUG_SPLASH_TEXT_ID, .5, .5
+        color text DEBUG_SPLASH_TEXT_ID, rgb(255, 226, 120)
+        enable text drop shadow DEBUG_SPLASH_TEXT_ID, 2, -2, rgb(0, 0, 0)
+        order text DEBUG_SPLASH_TEXT_ID, ORDER_INTRO
+    endif
+    DEBUG_SPLASH_ON = 1
+    DEBUG_SPLASH_MS = splashNow
+    show text DEBUG_SPLASH_TEXT_ID
+    debugSplashStep(splashNow)
+endfunction
+
+
+` move the words along to this time. they pop up from a little lower down, quickly, stay, and fade away.
+function debugSplashStep(splashNow)
+    if DEBUG_SPLASH_ON = 0
+        exitfunction
+    endif
+    splashAge = splashNow - DEBUG_SPLASH_MS
+    if splashAge >= DEBUG_SPLASH_LIFE_MS
+        DEBUG_SPLASH_ON = 0
+        hide text DEBUG_SPLASH_TEXT_ID
+        exitfunction
+    endif
+
+    splashAge# = splashAge
+    splashIn# = DEBUG_SPLASH_IN_MS
+    splashUp# = splashAge# / splashIn#
+    if splashUp# > 1
+        splashUp# = 1
+    endif
+    splashDrop# = 1 - splashUp#
+    set text position DEBUG_SPLASH_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + 26 * splashDrop# * splashDrop#
+
+    splashLeft# = DEBUG_SPLASH_LIFE_MS - splashAge
+    splashOut# = DEBUG_SPLASH_OUT_MS
+    splashShown# = splashLeft# / splashOut#
+    if splashShown# > 1
+        splashShown# = 1
+    endif
+    if splashUp# < splashShown#
+        splashShown# = splashUp#
+    endif
+    set text alpha DEBUG_SPLASH_TEXT_ID, 255 * splashShown#
+endfunction
 
 
 ` give the player a passive, or put a move in a slot, counting from 0. the slot does not matter for a

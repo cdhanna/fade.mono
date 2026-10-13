@@ -1,0 +1,604 @@
+goto routines_tide_exit
+
+remstart
+    THE TIDE
+    a hidden thing. see fish_headers_tide for the rules. this is a prototype.
+
+    the rest of the game only has to do these things:
+    - call tideSawGroup() for every group of fish that matched and is popping, and judgeTide() when
+      handle_combos has been through the groups, before judgeMultiplierSwaps forgets the swap
+    - call stepTide() on every frame. updateSeabed does, because the sea floor draws most of it.
+    - hand the fish effect -1 for a fish that does not glow at night. frame_fish_fx does.
+    - call tideLookStarts() at the start of every look at the board, and ask tideHoldsGroup() about
+      every group of fish that matched and is big enough, and leave the ones that it holds alone
+    - let judgeMultiplierSwaps know that it is night
+    - call tideMoveMade() for every move that is counted. registerMove does.
+    - hold off on looking at the board while TIDE_DAWN_UNTIL has not come. handle_combos does.
+    - call stepTideSleep() on every frame of the game. update_frame does.
+    - call tideReset() for a new game, and tideSave() and tideLoad() with the saved game
+remend
+
+` setup_coral comes here, before INFO_BASE_LENGTH is taken, so the spot that info mode has for the moon
+` stays when a new game starts. it is over the moon and the marks under it, which are one thing to
+` info mode, and it is not there until the first cycle of a game is done. see THE MOON IN INFO MODE
+` in fish_headers_tide.
+setup_tide:
+    INFO_INDEX_TIDE = allocateInfoBlob(TIDE_MOON_X - TIDE_INFO_LEFT, TIDE_MOON_Y - TIDE_INFO_UP, TIDE_INFO_LEFT * 2, TIDE_INFO_TALL, "The moon", "The moon comes with the push and flow of the tide")
+    setInfoBlobEnabled(INFO_INDEX_TIDE, 0)
+    TIDE_INFO_STATE = 0
+    TIDE_ROUNDS_TALL = INFOS(INFO_INDEX_ROUNDS).size.y
+return
+
+` a window in the debug panel. frame_dbg, in fish_routines, comes here on every frame, with FISH_DEBUG.
+frame_debug_tide:
+    begin debug window("Tide")
+    debug text "water " + str$(TIDE_LEVEL) + " of " + str$(TIDE_RANGE) + ", ebbed " + str$(TIDE_EBBED)
+    debug text "cycles " + str$(TIDE_CYCLES) + ", night " + str$(TIDE_NIGHT) + ", moves left " + str$(TIDE_NIGHT_LEFT)
+    debug text "groups held " + str$(TIDE_HELD_GROUPS)
+    debug text "last swap " + str$(TIDE_LAST_SWAP) + "  (1 push, 2 pull, 3 both)"
+    debug text "coral grew on " + str$(TIDE_GREW)
+    if debug button("push") = 1
+        tideMove(1)
+    endif
+    if debug button("pull") = 1
+        tideMove(-1)
+    endif
+    if debug button("a whole cycle") = 1
+        tideDebugCycle()
+    endif
+    if debug button("night falls / day breaks") = 1
+        if TIDE_NIGHT
+            tideDayBreaks()
+        else
+            debugTideLeft = TIDE_CYCLES_TO_TURN - TIDE_CYCLES
+            while debugTideLeft > 0
+                debugTideLeft = debugTideLeft - 1
+                tideDebugCycle()
+            endwhile
+        endif
+    endif
+    end debug window
+return
+
+routines_tide_exit:
+
+
+` a new game starts at high water, in the day, with a new moon
+function tideReset()
+    TIDE_LEVEL = TIDE_RANGE
+    TIDE_EBBED = 0
+    TIDE_CYCLES = 0
+    TIDE_NIGHT = 0
+    TIDE_NIGHT_LEFT = 0
+    TIDE_SEEN = 0
+    TIDE_FLOW = -1
+    TIDE_FLOW_SHOWN# = 0
+    TIDE_DAWN_UNTIL = 0
+    TIDE_INFO_STATE = -1
+    TIDE_SAW_PUSH = 0
+    TIDE_SAW_PULL = 0
+    TIDE_LAST_SWAP = TIDE_SWAP_NOTHING
+    TIDE_GREW = 0
+    TIDE_HELD_GROUPS = 0
+    tideClearBank()
+    for tideResetI = 0 to 399
+        TIDE_PULSE_UNTIL(tideResetI) = 0
+    next
+    tideSnap()
+endfunction
+
+
+` no fish is in a group that the night is holding
+function tideClearBank()
+    if TIDE_BANK_ANY
+        for tideBankI = 0 to 399
+            TIDE_BANKED(tideBankI) = 0
+        next
+        TIDE_BANK_ANY = 0
+    endif
+endfunction
+
+
+` what is drawn stops chasing, and is where it should be right away
+function tideSnap()
+    tideSnapWhole# = 1000
+    TIDE_LEVEL_SHOWN# = tideLevelShare()
+    TIDE_LEVEL_SHOWN# = TIDE_LEVEL_SHOWN# / tideSnapWhole#
+    TIDE_NIGHT_SHOWN# = TIDE_NIGHT
+    TIDE_MOON_SHOWN# = tideMoonShare()
+    TIDE_MOON_SHOWN# = TIDE_MOON_SHOWN# / tideSnapWhole#
+endfunction
+
+
+` where the water is, in thousandths: 0 at low water, and 1000 at high water
+function tideLevelShare()
+    tideShare = (TIDE_LEVEL * 1000) / TIDE_RANGE
+endfunction tideShare
+
+
+` how much of the moon is lit, in thousandths. it waxes with the cycles of the day, is full as night
+` falls, and wanes with the moves of the night.
+function tideMoonShare()
+    tideMoonLit = (TIDE_CYCLES * 1000) / TIDE_CYCLES_TO_TURN
+    if TIDE_NIGHT then tideMoonLit = (TIDE_NIGHT_LEFT * 1000) / TIDE_NIGHT_MOVES
+    if tideMoonLit > 1000 then tideMoonLit = 1000
+    if tideMoonLit < 0 then tideMoonLit = 0
+endfunction tideMoonLit
+
+
+` THE MARKS. how many halves of the marks under the moon are filled in, from 0 to twice as many as
+` there are cycles to a night. in the day, every cycle that is done is two, and the water having been
+` all the way out is one more. at night they are all full to start with, and they empty as the moves
+` of the night are used up. see fish_headers_tide.
+function tideMarks()
+    tideMarkFull = TIDE_CYCLES_TO_TURN * 2
+    tideMarkCount = TIDE_CYCLES * 2 + TIDE_EBBED
+    if TIDE_NIGHT
+        tideMarkCount = TIDE_NIGHT_LEFT * tideMarkFull + TIDE_NIGHT_MOVES
+        tideMarkCount = (tideMarkCount - 1) / TIDE_NIGHT_MOVES
+    endif
+    if tideMarkCount > tideMarkFull then tideMarkCount = tideMarkFull
+    if tideMarkCount < 0 then tideMarkCount = 0
+endfunction tideMarkCount
+
+
+` handle_combos has a group of fish that matched, and it is popping. if the last swap put one of its
+` two fish in it, that is a push, or a pull. see PUSH AND PULL in fish_headers_tide.
+` the fish that the cursor carried is in CORAL_SWAP_B, where the cursor ended up, and the fish that it
+` shoved back is in CORAL_SWAP_A, where the cursor came from. see stepLiveMove in fish_funcs.
+function tideSawGroup(tideGroup)
+    if MULT_PENDING_SWAPS > 0
+        if CORAL_SWAP_A >= 0
+            if CELLS(CORAL_SWAP_A).comboFillId = tideGroup then TIDE_SAW_PULL = 1
+            if CELLS(CORAL_SWAP_B).comboFillId = tideGroup then TIDE_SAW_PUSH = 1
+        endif
+    endif
+endfunction
+
+
+` handle_combos has been through the groups. if a swap was made since the last look at the board, this
+` is where the water moves for it. the fish that keep popping afterwards, as the board fills back in,
+` are not swaps, so they do nothing. this has to come before judgeMultiplierSwaps, which forgets the swap.
+function judgeTide()
+    tideWas = TIDE_SWAP_NOTHING
+    if TIDE_SAW_PUSH then tideWas = TIDE_SWAP_PUSH
+    if TIDE_SAW_PULL then tideWas = tideWas + TIDE_SWAP_PULL
+    TIDE_SAW_PUSH = 0
+    TIDE_SAW_PULL = 0
+
+    if MULT_PENDING_SWAPS > 0
+        TIDE_LAST_SWAP = tideWas
+        if tideWas = TIDE_SWAP_PUSH
+            tideMove(1)
+        endif
+        if tideWas = TIDE_SWAP_PULL
+            tideMove(-1)
+        endif
+    endif
+endfunction
+
+
+` the water comes in by one level, or goes out by one. when it gets back to high water, having been
+` all the way out, that is a cycle. see A CYCLE in fish_headers_tide.
+function tideMove(tideBy)
+    TIDE_LEVEL = TIDE_LEVEL + tideBy
+    if TIDE_LEVEL <= 0
+        TIDE_LEVEL = 0
+
+        ` the water has just got all the way out. half of a mark fills in, and a small ring crosses the
+        ` board. what the tide wants next is a push, so the specks turn around. see THE DRIFT in fish_headers_tide.
+        if TIDE_EBBED = 0
+            TIDE_EBBED = 1
+            TIDE_FLOW = 1
+            tideEbbX# = CELL_COLUMN_COUNT
+            tideEbbY# = CELL_ROW_COUNT
+            spawnShockwave(tideEbbX# * .5, tideEbbY# * .5, .3, 0)
+        endif
+    endif
+    if TIDE_LEVEL >= TIDE_RANGE
+        TIDE_LEVEL = TIDE_RANGE
+        if TIDE_EBBED
+            TIDE_EBBED = 0
+            TIDE_FLOW = -1
+            tideCycleDone()
+        endif
+    endif
+endfunction
+
+
+` a cycle is done, and the moon moves on. a ring crosses the board from the middle of it. when the
+` moon is full, night falls. see THE MOON in fish_headers_tide. a cycle that the debug panel makes in
+` the night does nothing.
+function tideCycleDone()
+    if TIDE_NIGHT = 0
+        TIDE_CYCLES = TIDE_CYCLES + 1
+        TIDE_SEEN = 1
+
+        tideRingX# = CELL_COLUMN_COUNT
+        tideRingY# = CELL_ROW_COUNT
+        spawnShockwave(tideRingX# * .5, tideRingY# * .5, .5, 0)
+
+        if TIDE_CYCLES >= TIDE_CYCLES_TO_TURN
+            TIDE_CYCLES = TIDE_CYCLES_TO_TURN
+            TIDE_NIGHT = 1
+            TIDE_SEEN = 1
+            TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
+            tideGrowCoral()
+        endif
+    endif
+endfunction
+
+
+` a move has been counted. the night is one move shorter, and when it has none left, day breaks.
+` registerMove, in fish_funcs, calls this. a move that is given back does not make the night longer.
+function tideMoveMade(tideMoves)
+    if TIDE_NIGHT
+        if tideMoves > 0
+            TIDE_NIGHT_LEFT = TIDE_NIGHT_LEFT - tideMoves
+            if TIDE_NIGHT_LEFT <= 0
+                tideDayBreaks()
+            endif
+        endif
+    endif
+endfunction
+
+
+` day breaks. the moon is new, and the board is looked at again, so every group that the night was
+` holding pops at once. see WHEN DAY BREAKS in fish_headers_tide.
+` registerMove gets here, and it is called from files that come before the size of the board is
+` declared, so this cannot use it. the ring that crosses the board is left for tideLookStarts.
+function tideDayBreaks()
+    TIDE_NIGHT = 0
+    TIDE_NIGHT_LEFT = 0
+    TIDE_CYCLES = 0
+    TIDE_HELD_GROUPS = 0
+    tideClearBank()
+    REQUEST_COMBO_CHECK = 1
+    TIDE_DAWN_RING = 1
+
+    ` the light comes back before anything pops
+    TIDE_DAWN_UNTIL = 0
+    if TIDE_DAWN_MS > 0 then TIDE_DAWN_UNTIL = game ms() + TIDE_DAWN_MS
+endfunction
+
+
+` THE FISH SLEEP. every so often in the night, a little Z floats up from a fish that is picked at
+` random. update_frame, in fish_routines, calls this on every frame of the game.
+function stepTideSleep()
+    if TIDE_NIGHT
+        tideSleepNow = game ms()
+        if tideSleepNow > TIDE_SLEEP_NEXT_MS
+            TIDE_SLEEP_NEXT_MS = tideSleepNow + TIDE_SLEEP_EVERY + rnd(TIDE_SLEEP_EVERY)
+
+            ` not a dead fish, and not a bottle or anything of a quest's. those do not glow either.
+            tideSleepCell = rnd(CELL_COUNT)
+            tideSleepOk = 1
+            if CELLS(tideSleepCell).value <= 0 then tideSleepOk = 0
+            if CELLS(tideSleepCell).value >= TEX_BOTTLE then tideSleepOk = 0
+            if CELLS(tideSleepCell).bellyUp > 0 then tideSleepOk = 0
+            if tideSleepOk
+                tideSleepColumn = tideSleepCell mod CELL_COLUMN_COUNT
+                tideSleepRow = tideSleepCell / CELL_COLUMN_COUNT
+                spawnSleepZ(getCellX(tideSleepColumn) + CELL_SIZE / 4, getCellY(tideSleepRow) - CELL_ART_SIZE / 2)
+            endif
+        endif
+    endif
+endfunction
+
+
+` one Z floats up from a spot on the screen. it is one of the bubbles, drawn as a Z, and everything
+` about how it moves is what spawnHeart, in fish_routines_bubbles, gives a heart: it drifts up slowly,
+` it fades in and back out over the whole of its life, and it makes no sound.
+function spawnSleepZ(tideZedX, tideZedY)
+    tideZedIndex = FLOAT_BUBBLE_NEXT
+    FLOAT_BUBBLE_NEXT = (FLOAT_BUBBLE_NEXT + 1) mod FLOAT_BUBBLE_COUNT
+
+    tideZed = FLOAT_BUBBLES(tideZedIndex)
+    tideZed.active = 1
+    tideZed.star = 0
+    tideZed.heart = 3
+    tideZed.age = 0
+    tideZed.alpha = 190
+    tideZed.delay = 1
+    tideZed.life = 1300 + rnd(700)
+    tideZed.phase = rnd(628)
+    tideZed.loud = 0
+
+    ` five pixels, which is one for every pixel of the Z
+    tideZed.size = 5
+
+    tideZed.x# = tideZedX
+    tideZed.y# = tideZedY
+    tideZed.vx# = rnd(21) - 10
+    tideZed.vy# = 0
+    tideZed.rise = 9 + rnd(7)
+
+    color sprite tideZed.spriteId, rgb(175, 205, 255)
+    order sprite tideZed.spriteId, ORDER_FLOAT_BUBBLES
+    hide sprite tideZed.spriteId
+
+    FLOAT_BUBBLES(tideZedIndex) = tideZed
+    FLOAT_BUBBLE_LIVE = FLOAT_BUBBLE_LIVE + 1
+endfunction
+
+
+` THE MOON IN INFO MODE. the spot is there once there is a moon to see, and it says something else at
+` night. this only touches the spot when what it should say has changed. stepTide calls it.
+function tideInfoRefresh()
+    if INFO_INDEX_TIDE >= 0
+        tideInfoWant = 0
+        if TIDE_SEEN then tideInfoWant = 1
+        if TIDE_NIGHT then tideInfoWant = 2
+        if tideInfoWant <> TIDE_INFO_STATE
+            TIDE_INFO_STATE = tideInfoWant
+            tideInfoBlob = INFOS(INFO_INDEX_TIDE)
+            tideInfoBlob.desc$ = "The moon comes with the push and flow of the tide"
+            if tideInfoWant = 2 then tideInfoBlob.desc$ = "Day returns soon"
+            INFOS(INFO_INDEX_TIDE) = tideInfoBlob
+
+            ` the spot of the count of the rounds makes room for it. it is cut back to what is over the
+            ` spot of the moon, with a leg down the right of it, two pixels clear of the moon's.
+            tideRoundsBlob = INFOS(INFO_INDEX_ROUNDS)
+            if tideInfoWant > 0
+                setInfoBlobEnabled(INFO_INDEX_TIDE, 1)
+
+                tideRoundsTop = TIDE_MOON_Y - TIDE_INFO_UP
+                tideRoundsTop = tideRoundsTop - 2
+                tideRoundsLeg = tideRoundsBlob.topLeft.x + tideRoundsBlob.size.x
+                tideRoundsEdge = TIDE_MOON_X + TIDE_INFO_LEFT + 2
+                INFO_L2_W = tideRoundsLeg - tideRoundsEdge
+                tideRoundsBlob.size.y = tideRoundsTop - tideRoundsBlob.topLeft.y
+                INFO_L2_H = TIDE_ROUNDS_TALL - tideRoundsBlob.size.y
+                INFO_L2_INDEX = INFO_INDEX_ROUNDS
+            else
+                setInfoBlobEnabled(INFO_INDEX_TIDE, 0)
+                tideRoundsBlob.size.y = TIDE_ROUNDS_TALL
+                INFO_L2_INDEX = -1
+            endif
+            INFOS(INFO_INDEX_ROUNDS) = tideRoundsBlob
+        endif
+    endif
+endfunction
+
+
+` NOTHING POPS AT NIGHT. see fish_headers_tide.
+
+` handle_combos is about to look at the board. the groups that were held the last time are forgotten,
+` and it finds the ones that there are now.
+function tideLookStarts()
+    TIDE_HELD_GROUPS = 0
+    tideClearBank()
+
+    ` day has just broken, and a ring crosses the board from the middle of it
+    if TIDE_DAWN_RING
+        TIDE_DAWN_RING = 0
+        tideDawnX# = CELL_COLUMN_COUNT
+        tideDawnY# = CELL_ROW_COUNT
+        spawnShockwave(tideDawnX# * .5, tideDawnY# * .5, .8, 0)
+    endif
+endfunction
+
+
+` handle_combos has a group of fish that matched, and it is big enough to pop. does the night hold it?
+` this says 1 if it does, and then the group is left alone. its fish are marked, so that they glow a
+` little brighter. `tideHoldSwapped` is 1 when the last swap put one of its two fish in the group: then
+` the group has just been made, and there is a pulse. its fish flash, bubbles come up from them, and a
+` ring goes out from where the cursor is.
+function tideHoldsGroup(tideHoldGroup, tideHoldSwapped)
+    tideHolds = 0
+    if TIDE_NIGHT
+        tideHolds = 1
+        TIDE_HELD_GROUPS = TIDE_HELD_GROUPS + 1
+        TIDE_BANK_ANY = 1
+
+        tideHoldPulse = 0
+        if tideHoldSwapped
+            if MULT_PENDING_SWAPS > 0 then tideHoldPulse = 1
+        endif
+        tideHoldUntil = game ms() + TIDE_PULSE_MS
+
+        tideHoldLast = CELL_COUNT - 1
+        for tideHoldI = 0 to tideHoldLast
+            if CELLS(tideHoldI).comboFillId = tideHoldGroup
+                TIDE_BANKED(tideHoldI) = 1
+                if tideHoldPulse
+                    TIDE_PULSE_UNTIL(tideHoldI) = tideHoldUntil
+                    tideHoldX = tideHoldI mod CELL_COLUMN_COUNT
+                    tideHoldY = tideHoldI / CELL_COLUMN_COUNT
+                    tideHoldTint = FISH_COLORS(getFishColorIndex(CELLS(tideHoldI).value))
+                    spawnBubbles(getCellX(tideHoldX), getCellY(tideHoldY), CELL_SIZE / 3, 5, 0, tideHoldTint)
+                endif
+            endif
+        next
+
+        if tideHoldPulse
+            if CORAL_SWAP_B >= 0
+                tideHoldRingX = CORAL_SWAP_B mod CELL_COLUMN_COUNT
+                tideHoldRingY = CORAL_SWAP_B / CELL_COLUMN_COUNT
+                spawnShockwave(tideHoldRingX, tideHoldRingY, .7, 0)
+            endif
+        endif
+    endif
+endfunction tideHolds
+
+
+` the coral spawns. every cell that has coral spreads to one of the four cells next to it that has
+` none, if there is one, starting from a side that is picked at random. what grows is the kind that
+` it grew from. the coral that grows here does not spread in its turn.
+` see WHEN NIGHT FALLS, THE CORAL SPAWNS in fish_headers_tide.
+function tideGrowCoral()
+    TIDE_GREW = 0
+    tideGrowSick = 0
+    tideGrowLast = CELL_COUNT - 1
+    for tideGrowI = 0 to tideGrowLast
+        TIDE_SPAWN(tideGrowI) = CORAL_CELLS(tideGrowI)
+    next
+
+    for tideGrowI = 0 to tideGrowLast
+        if TIDE_SPAWN(tideGrowI) = 1
+            tideGrowX = tideGrowI mod CELL_COLUMN_COUNT
+            tideGrowY = tideGrowI / CELL_COLUMN_COUNT
+            tideGrowWay = rnd(4)
+            tideGrowTries = 0
+            tideGrowDone = 0
+            while tideGrowTries < 4
+                tideGrowToX = tideGrowX
+                tideGrowToY = tideGrowY
+                if tideGrowWay = 0 then tideGrowToY = tideGrowY - 1
+                if tideGrowWay = 1 then tideGrowToX = tideGrowX + 1
+                if tideGrowWay = 2 then tideGrowToY = tideGrowY + 1
+                if tideGrowWay = 3 then tideGrowToX = tideGrowX - 1
+
+                tideGrowOk = 1
+                if tideGrowDone then tideGrowOk = 0
+                if tideGrowToX < 0 then tideGrowOk = 0
+                if tideGrowToX >= CELL_COLUMN_COUNT then tideGrowOk = 0
+                if tideGrowToY < 0 then tideGrowOk = 0
+                if tideGrowToY >= CELL_ROW_COUNT then tideGrowOk = 0
+                if tideGrowOk
+                    tideGrowTo = tideGrowToX + tideGrowToY * CELL_COLUMN_COUNT
+                    if CORAL_CELLS(tideGrowTo) = 0
+                        CORAL_CELLS(tideGrowTo) = 1
+                        CORAL_SICK(tideGrowTo) = CORAL_SICK(tideGrowI)
+
+                        tideGrowTint = rgb(255, 150, 140)
+                        if CORAL_SICK(tideGrowI)
+                            tideGrowTint = rgb(150, 190, 90)
+                            tideGrowSick = tideGrowSick + 1
+                        endif
+                        spawnBubbles(getCellX(tideGrowToX), getCellY(tideGrowToY), CELL_SIZE / 3, 6, TIDE_GREW * 40, tideGrowTint)
+
+                        TIDE_GREW = TIDE_GREW + 1
+                        tideGrowDone = 1
+                    endif
+                endif
+
+                tideGrowWay = (tideGrowWay + 1) mod 4
+                tideGrowTries = tideGrowTries + 1
+            endwhile
+        endif
+    next
+
+    if TIDE_GREW > 0
+        ` the music answers, the way that it does for a song: praise for coral, and a lament when
+        ` most of what grew is horror coral. see THE MUSIC OF THE CORAL in fish_headers.
+        tideGrowLament = 0
+        tideGrowSickTwice = tideGrowSick * 2
+        if tideGrowSickTwice > TIDE_GREW then tideGrowLament = 1
+        playCoralMusic(tideGrowLament)
+
+        coralRecount()
+        coralDebugRefresh()
+    endif
+endfunction
+
+
+` the water goes all the way out and comes all the way back in, for the debug panel
+function tideDebugCycle()
+    tideDebugN = 0
+    while tideDebugN < TIDE_RANGE
+        tideDebugN = tideDebugN + 1
+        tideMove(-1)
+    endwhile
+    tideDebugN = 0
+    while tideDebugN < TIDE_RANGE
+        tideDebugN = tideDebugN + 1
+        tideMove(1)
+    endwhile
+endfunction
+
+
+` move what is drawn a little closer to what is so, and tell the effects. updateSeabed, in
+` fish_routines_seabed, calls this on every frame. the effects lose their parameters when they are
+` reloaded, so they are all set every time.
+function stepTide()
+    tideNow = game ms()
+    tideElapsed# = tideNow - TIDE_LAST_MS
+    TIDE_LAST_MS = tideNow
+    if tideElapsed# > 50 then tideElapsed# = 50
+    if tideElapsed# < 0 then tideElapsed# = 0
+
+    tideWhole# = 1000
+    tideLevelWant# = tideLevelShare()
+    tideLevelWant# = tideLevelWant# / tideWhole#
+    tideStep# = tideElapsed# * TIDE_LEVEL_EASE#
+    if tideStep# > 1 then tideStep# = 1
+    TIDE_LEVEL_SHOWN# = TIDE_LEVEL_SHOWN# + (tideLevelWant# - TIDE_LEVEL_SHOWN#) * tideStep#
+
+    ` the night comes on slowly, and it goes more quickly, so that it is light again before anything pops
+    tideNightWant# = TIDE_NIGHT
+    tideStep# = tideElapsed# * TIDE_NIGHT_EASE#
+    if TIDE_NIGHT = 0 then tideStep# = tideElapsed# * TIDE_DAY_EASE#
+    if tideStep# > 1 then tideStep# = 1
+    TIDE_NIGHT_SHOWN# = TIDE_NIGHT_SHOWN# + (tideNightWant# - TIDE_NIGHT_SHOWN#) * tideStep#
+
+    tideMoonWant# = tideMoonShare()
+    tideMoonWant# = tideMoonWant# / tideWhole#
+    tideStep# = tideElapsed# * TIDE_MOON_EASE#
+    if tideStep# > 1 then tideStep# = 1
+    TIDE_MOON_SHOWN# = TIDE_MOON_SHOWN# + (tideMoonWant# - TIDE_MOON_SHOWN#) * tideStep#
+
+    ` THE DRIFT. the specks rise while the tide wants a push, and they turn around slowly. taking the
+    ` time that they move by back faster than it goes is what makes them rise. at night they sink.
+    tideFlowWant# = 0
+    if TIDE_FLOW > 0 then tideFlowWant# = 1
+    if TIDE_NIGHT then tideFlowWant# = 0
+    tideStep# = tideElapsed# * TIDE_FLOW_EASE#
+    if tideStep# > 1 then tideStep# = 1
+    TIDE_FLOW_SHOWN# = TIDE_FLOW_SHOWN# + (tideFlowWant# - TIDE_FLOW_SHOWN#) * tideStep#
+    tideClockStep# = SEABED_SNOW_CLOCK# - TIDE_CLOCK_WAS#
+    TIDE_CLOCK_WAS# = SEABED_SNOW_CLOCK#
+    if tideClockStep# < 0 then tideClockStep# = 0
+    if tideClockStep# > .2 then tideClockStep# = 0
+    TIDE_DRIFT# = TIDE_DRIFT# + TIDE_FLOW_SHOWN# * TIDE_RISE# * tideClockStep#
+
+    ` and the wobble of the water runs backward for as long as they do. see TideBack in ScreenEffect.fx.
+    TIDE_WAVE_BACK# = TIDE_WAVE_BACK# + TIDE_FLOW_SHOWN# * tideElapsed# * .002
+    set effect param float 1, "TideBack", TIDE_WAVE_BACK#
+    set effect param float2 SPECKS_FX_ID, "Tide", TIDE_DRIFT#, TIDE_FLOW_SHOWN#
+    set effect param float2 SNOW_FX_ID, "Tide", TIDE_DRIFT#, TIDE_FLOW_SHOWN#
+
+    tideTime# = tideNow * .001
+    ` the marks are not there until the water has been all the way out once
+    tideMarksNow# = -1
+    if TIDE_SEEN
+        tideMarksNow# = tideMarks()
+    endif
+    set effect param float4 SEABED_FX_ID, "Tide", TIDE_LEVEL_SHOWN#, TIDE_NIGHT_SHOWN#, TIDE_MOON_SHOWN#, tideMarksNow#
+    set effect param float2 FISH_FX_ID, "Night", TIDE_NIGHT_SHOWN#, tideTime#
+    set effect param float CORAL_FX_ID, "Night", TIDE_NIGHT_SHOWN#
+
+    tideInfoRefresh()
+endfunction
+
+
+` THE SAVED GAME. the tide is saved with the rest of it, so a game that is saved at night is loaded at night.
+function tideSave()
+    set pref SAVE_PREF + SAVE_PREF_TIDE, TIDE_LEVEL + 1
+    set pref SAVE_PREF + SAVE_PREF_TIDE + 1, TIDE_CYCLES
+    set pref SAVE_PREF + SAVE_PREF_TIDE + 2, TIDE_EBBED + TIDE_SEEN * 2 + TIDE_NIGHT_LEFT * 4
+endfunction
+
+` a game that was saved before there was a tide has none of this, and starts at high water with a new moon
+function tideLoad()
+    tideReset()
+    tideLoadLevel = get pref(SAVE_PREF + SAVE_PREF_TIDE, 0)
+    if tideLoadLevel > 0
+        TIDE_LEVEL = tideLoadLevel - 1
+        if TIDE_LEVEL > TIDE_RANGE then TIDE_LEVEL = TIDE_RANGE
+        TIDE_CYCLES = get pref(SAVE_PREF + SAVE_PREF_TIDE + 1, 0)
+        if TIDE_CYCLES < 0 then TIDE_CYCLES = 0
+        if TIDE_CYCLES > TIDE_CYCLES_TO_TURN then TIDE_CYCLES = 0
+        tideLoadFlags = get pref(SAVE_PREF + SAVE_PREF_TIDE + 2, 0)
+        TIDE_EBBED = tideLoadFlags mod 2
+        tideLoadFlags = tideLoadFlags / 2
+        TIDE_SEEN = tideLoadFlags mod 2
+        TIDE_NIGHT_LEFT = tideLoadFlags / 2
+        if TIDE_NIGHT_LEFT > TIDE_NIGHT_MOVES then TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
+        if TIDE_NIGHT_LEFT > 0
+            TIDE_NIGHT = 1
+            TIDE_CYCLES = TIDE_CYCLES_TO_TURN
+        endif
+    endif
+    tideSnap()
+endfunction

@@ -871,7 +871,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
         }
         
    
-        var f1Down = Keyboard.GetState().IsKeyDown(Keys.F1);
+        // F1 restarts the program, which is for working on a game. A shipped game turns
+        // DebugProgram off (see Program.cs), and a player who leans on F1 must not lose a run.
+        var f1Down = DebugProgram && Keyboard.GetState().IsKeyDown(Keys.F1);
         if ((!_justReloaded && f1Down) || _reloadRequestedFromUi)
         {
             // A host system may hold state a restart would invalidate -- a live

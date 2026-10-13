@@ -471,3 +471,48 @@ test diver_is_in_the_codec_once_it_has_come_down from fishBoard
     assert CODEC_SEEN(CODEC_ENTRY_ALBUM) = 1, "until a game has ended with the album full"
     end
 endtest
+
+test diver_is_not_replaced_by_the_sand_dollar from fishBoard
+    diverArrive(1)
+    questForce(QUEST_LEFT_RIGHT)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert CELLS(1).value = TEX_DIVER, "the diver is still in the cell that the sand dollar starts in"
+    assert CELLS(testIndex(1, 1)).value = TEX_SAND_DOLLAR, "and the sand dollar starts in the cell under it"
+    assert QUEST_STATE = QSTATE_ACTIVE, "so the quest is on"
+    end
+endtest
+
+test diver_is_not_replaced_by_the_turtle from fishBoard
+    ` every roll is 0, so the turtle asks for row 1 of the left edge
+    mock rnd
+    endmock 0
+    diverArrive(testIndex(0, 1))
+    questForce(QUEST_TURTLE)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert CELLS(testIndex(0, 1)).value = TEX_DIVER, "the diver is still in the cell that the turtle asked for"
+    assert CELLS(testIndex(0, 0)).value = TEX_TURTLE, "and the turtle starts in the cell above it"
+    end
+endtest
+
+test diver_is_not_replaced_by_the_glass_fish from fishBoard
+    ` every roll is 0, so the glass fish asks for the top left cell
+    mock rnd
+    endmock 0
+    diverArrive(0)
+    questForce(QUEST_GLASS_FISH)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert CELLS(0).value = TEX_DIVER, "the diver is still in the cell that the glass fish asked for"
+    assert CELLS(1).value = TEX_GLASS_FISH, "and the glass fish starts in the next cell along"
+    end
+endtest
+
+test diver_is_not_replaced_by_anything_that_a_quest_puts_down from fishBoard
+    diverArrive(testIndex(3, 3))
+    questPlaceKind(testIndex(3, 3), TEX_SEAWEED)
+    assert CELLS(testIndex(3, 3)).value = TEX_DIVER, "a quest that puts a thing in the cell of the diver puts nothing"
+    assert DIVER_ON = 1, "and the diver is still down"
+    end
+endtest

@@ -22,6 +22,13 @@ float Clock;     // the time that the specks move by, in seconds. it runs faster
 float Rainbow;   // 0 to 1. the specks turn the colors of the rainbow in a long run of pops, every time more fish pop.
 float Mood;      // how long the run of pops that is going on is, from 0 to 1. there are more specks.
 
+// THE TIDE. the specks say what the tide wants next. they sink, the way that they always have, while
+// it wants a pull, and they rise while it wants a push. x is how much of the time that the specks
+// move by has to be taken back to make them do that, in seconds: the game adds to it, twice as fast
+// as the time goes, for as long as they are rising. y is how much they are rising, from 0 to 1.
+// see THE DRIFT in fish_headers_tide.
+float2 Tide;
+
 // something small that swims along behind the fish, now and then, and the specks glow where it is.
 // see THE HINTS in fish_headers. xy is where it is, and zw is where it was a moment ago, both in pixels.
 // the specks glow all the way from the one to the other, and a lot less toward where it was, so that
@@ -121,6 +128,9 @@ float snow(float2 px, float square, float2 speed, float seed, float share, float
 	// row a little to one side and back, and further when the mood is high.
 	float2 q = px + 0.5 - Clock * speed;
 	q.x += sin(Clock * 0.45 + px.y * 0.03 + seed) * (2.5 + 4.0 * Mood);
+
+	// THE TIDE turns them around: they rise while it wants a push
+	q.y += Tide.x * speed.y;
 
 	// the speck stays clear of the edges of its square, so that none of it gets cut off
 	float2 cell = floor(q / square);

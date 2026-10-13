@@ -2339,8 +2339,10 @@ function questConvert(qTurnCell)
     spawnBubbles(getCellX(qTurnCell mod CELL_COLUMN_COUNT), getCellY(qTurnCell / CELL_COLUMN_COUNT), CELL_SIZE / 4, 5, 0, rgb(255, 255, 255))
 endfunction
 
-` put a fish of a kind in a cell, in place of whatever was there
+` put a fish of a kind in a cell, in place of whatever was there. nothing takes the place of the
+` diver, so a quest that has a cell in mind looks first, and takes another one. see fish_headers_diver.
 function questPlaceKind(qPutCell, qPutKind)
+    if CELLS(qPutCell).value = TEX_DIVER then exitfunction
     CELLS(qPutCell).value = qPutKind
     clearCellStack(qPutCell)
     updateCell(CELLS(qPutCell))

@@ -1,0 +1,503 @@
+remstart
+    THE TESTS OF MORSE
+    a word that is tapped out in Morse code. see MORSE in fish_headers, and fish_tests for how the tests work.
+    the clock does not run in a test, so the tests hand the time to morseStep themselves.
+remend
+
+test morse_every_letter_has_its_own_pushes from fishBoard
+    tMsSame = 0
+    for tMsOne = 0 to 25
+        for tMsOther = 0 to 25
+            if tMsOne <> tMsOther
+                if MORSE_CODES(tMsOne) = MORSE_CODES(tMsOther)
+                    tMsSame = tMsSame + 1
+                endif
+            endif
+        next
+    next
+    assert tMsSame = 0, "no two letters are the same pushes"
+
+    ` TUNA is - ..- -. .-
+    tMsFirst = MORSE_WORD_TUNA * MORSE_MARK_ROOM
+    assert MORSE_WORD_LENGTH(MORSE_WORD_TUNA) = 8, "the four letters of TUNA are eight pushes"
+    assert MORSE_WORD_MARKS(tMsFirst) = 1, "T is a dash"
+    assert MORSE_WORD_MARKS(tMsFirst + 1) = 0, "U is a dot,"
+    assert MORSE_WORD_MARKS(tMsFirst + 2) = 0, "a dot,"
+    assert MORSE_WORD_MARKS(tMsFirst + 3) = 1, "and a dash"
+    assert MORSE_WORD_MARKS(tMsFirst + 4) = 1, "N is a dash,"
+    assert MORSE_WORD_MARKS(tMsFirst + 5) = 0, "and a dot"
+    assert MORSE_WORD_MARKS(tMsFirst + 6) = 0, "A is a dot,"
+    assert MORSE_WORD_MARKS(tMsFirst + 7) = 1, "and a dash"
+
+    ` SOS is ... --- ...
+    tMsFirst = MORSE_WORD_SOS * MORSE_MARK_ROOM
+    assert MORSE_WORD_LENGTH(MORSE_WORD_SOS) = 9, "the three letters of SOS are nine pushes"
+    assert MORSE_WORD_MARKS(tMsFirst + 2) = 0, "the third is the last dot of the S"
+    assert MORSE_WORD_MARKS(tMsFirst + 3) = 1, "and the fourth is the first dash of the O"
+    assert MORSE_WORD_MARKS(tMsFirst + 8) = 0, "and it ends on a dot"
+
+    ` the shooting star of the splash screen: its trail is CQ, which is -.-. --.-
+    assert MORSE_STAR_PATH = 34, "the path is as long as CQ is: 18 steps of trail, and 16 of nothing"
+    assert MORSE_STAR_COUNT = 18, "there is a piece of trail for every step of five dashes and three dots"
+    assert MORSE_GLINT(0) + MORSE_GLINT(1) + MORSE_GLINT(2) = 3, "it starts with the dash of the C"
+    assert MORSE_GLINT(3) = 0, "and then a step of nothing"
+    assert MORSE_GLINT(4) = 1, "and then its dot"
+    assert MORSE_GLINT(5) = 0, "which is only one step long"
+    assert MORSE_GLINT(11) + MORSE_GLINT(12) + MORSE_GLINT(13) + MORSE_GLINT(14) + MORSE_GLINT(15) = 0, "after the last dot of the C there are five steps of nothing before the Q"
+    assert MORSE_GLINT(16) = 1, "which starts with a dash"
+    assert MORSE_STAR_AT_STEP(3) = 4, "the fourth piece of trail is that dot"
+
+    ` where it crosses, and whether it does
+    tMsOff = 0
+    tMsOnLogos = 0
+    tMsCame = 0
+    tMsPlaces = 0
+    tMsWasX = -1
+    for tMsRoll = 1 to 300
+        morseStarRoll()
+        tMsCame = tMsCame + MORSE_STAR_SEEN
+        if MORSE_STAR_X <> tMsWasX then tMsPlaces = tMsPlaces + 1
+        tMsWasX = MORSE_STAR_X
+        tMsRight = MORSE_STAR_X + MORSE_STAR_PATH * MORSE_STAR_STEP
+        tMsLow = MORSE_STAR_Y + MORSE_STAR_PATH
+        if MORSE_STAR_X < 0 then tMsOff = tMsOff + 1
+        if MORSE_STAR_Y < 0 then tMsOff = tMsOff + 1
+        if tMsRight > WORLD_WIDTH then tMsOff = tMsOff + 1
+        if tMsLow > WORLD_HEIGHT then tMsOff = tMsOff + 1
+
+        ` the logos, and the words under them, are in the middle
+        tMsInBox = 1
+        if tMsRight < WORLD_WIDTH / 2 - 130 then tMsInBox = 0
+        if MORSE_STAR_X > WORLD_WIDTH / 2 + 130 then tMsInBox = 0
+        if tMsLow < 84 then tMsInBox = 0
+        if MORSE_STAR_Y > 216 then tMsInBox = 0
+        tMsOnLogos = tMsOnLogos + tMsInBox
+    next
+    assert tMsOff = 0, "the whole of the path is on the screen, wherever it is"
+    assert tMsOnLogos = 0, "and it never crosses the logos"
+    assert tMsPlaces > 200, "it is somewhere else nearly every time"
+    assert tMsCame > 60, "the star comes on about a third of the crossings: more than a fifth of them,"
+    assert tMsCame < 140, "and less than half"
+    end
+endtest
+
+test morse_keeps_up_with_a_slow_hand_and_a_fast_one from fishBoard
+    ` a slow hand: the dots are as long as a dash is to begin with
+    morseQuiet()
+    morseAveragesBack()
+    morsePush(900)
+    assert MORSE_MARK = 1, "a slow dash"
+    morsePush(300)
+    assert MORSE_MARK = 0, "after a slow dash, a push of 300 is a dot"
+    morsePush(300)
+    morsePush(900)
+    assert MORSE_MARK = 1, "and the next slow dash is still a dash"
+
+    ` a fast hand: the dashes are shorter than that dot was
+    morseQuiet()
+    morseAveragesBack()
+    morsePush(250)
+    assert MORSE_MARK = 1, "a fast dash"
+    morsePush(70)
+    morsePush(70)
+    assert MORSE_MARK = 0, "and fast dots"
+    morsePush(300)
+    assert MORSE_MARK = 1, "for this hand, a push of 300 is a dash"
+
+    ` a lot of quick taps, the way that the cursor is moved, do not make a dash out of a slower tap
+    morseQuiet()
+    morseAveragesBack()
+    for tMsTap = 1 to 12
+        morsePush(60)
+    next
+    morsePush(150)
+    assert MORSE_MARK = 0, "a tap of 150 is still a dot"
+    end
+endtest
+
+test morse_remembers_the_last_pushes from fishBoard
+    ` STUNA: the S comes first, and the end of it all is still TUNA
+    morseQuiet()
+    morseAveragesBack()
+    MORSE_MODE = 1
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    morsePush(400)
+    morsePush(100)
+    morsePush(100)
+    morsePush(400)
+    morsePush(400)
+    morsePush(100)
+    morsePush(100)
+    assert MORSE_HEARD = -1, "ten pushes of STUNA are not a word"
+    morsePush(400)
+    assert MORSE_HEARD = MORSE_WORD_TUNA, "the eleventh makes the end of them TUNA"
+    assert MORSE_MODE = 0, "and the radio goes off when a word has been heard"
+    assert MORSE_BUFFER_COUNT = 0, "with nothing remembered"
+
+    ` SOS
+    MORSE_HEARD = -1
+    MORSE_MODE = 1
+    morseAveragesBack()
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    morsePush(400)
+    morsePush(400)
+    morsePush(400)
+    morsePush(100)
+    morsePush(100)
+    assert MORSE_HEARD = -1, "eight pushes of SOS are not a word"
+    morsePush(100)
+    assert MORSE_HEARD = MORSE_WORD_SOS, "the ninth is"
+
+    ` a lot more pushes than there is room for
+    MORSE_HEARD = -1
+    MORSE_MODE = 1
+    morseAveragesBack()
+    for tMsMany = 1 to 50
+        morsePush(100)
+    next
+    assert MORSE_BUFFER_COUNT = MORSE_MARK_ROOM, "only the last pushes are remembered"
+    assert MORSE_HEARD = -1, "and fifty dots are not a word"
+    morsePush(400)
+    morsePush(400)
+    morsePush(400)
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    assert MORSE_HEARD = MORSE_WORD_SOS, "the last of them were an S, so this is SOS"
+
+    ` CQ is -.-. --.-
+    MORSE_HEARD = -1
+    MORSE_MODE = 1
+    morseAveragesBack()
+    morsePush(400)
+    morsePush(100)
+    morsePush(400)
+    morsePush(100)
+    morsePush(400)
+    morsePush(400)
+    morsePush(100)
+    assert MORSE_HEARD = -1, "seven pushes of CQ are not a word"
+    morsePush(400)
+    assert MORSE_HEARD = MORSE_WORD_CQ, "the eighth is"
+
+    ` SING is ... .. -. --.
+    MORSE_HEARD = -1
+    MORSE_MODE = 1
+    morseAveragesBack()
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    morsePush(400)
+    morsePush(100)
+    morsePush(400)
+    morsePush(400)
+    assert MORSE_HEARD = -1, "nine pushes of SING are not a word"
+    morsePush(100)
+    assert MORSE_HEARD = MORSE_WORD_SING, "the tenth is"
+
+    ` SONG is ... --- -. --.
+    MORSE_HEARD = -1
+    MORSE_MODE = 1
+    morseAveragesBack()
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    morsePush(400)
+    morsePush(400)
+    morsePush(400)
+    morsePush(400)
+    morsePush(100)
+    morsePush(400)
+    morsePush(400)
+    assert MORSE_HEARD = -1, "ten pushes of SONG are not a word, and not SOS either"
+    morsePush(100)
+    assert MORSE_HEARD = MORSE_WORD_SONG, "the eleventh is"
+
+    ` CTHULHU is -.-. - .... ..- .-.. .... ..-
+    MORSE_HEARD = -1
+    MORSE_MODE = 1
+    morseAveragesBack()
+    morsePush(400)
+    morsePush(100)
+    morsePush(400)
+    morsePush(100)
+    morsePush(400)
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    morsePush(400)
+    morsePush(100)
+    morsePush(400)
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    morsePush(100)
+    assert MORSE_HEARD = -1, "twenty two pushes of CTHULHU are not a word, and no other word is in them"
+    morsePush(400)
+    assert MORSE_HEARD = MORSE_WORD_CTHULHU, "the twenty third is"
+
+    ` what SING and SONG do
+    tMsSang = MORSE_SING_COUNT
+    morseSing()
+    assert MORSE_SING_COUNT = tMsSang + 1, "a hint is asked for"
+    assert CORAL_HINT_AS_LISTEN = 1, "the bright way, as if the card were owned"
+
+    ` and what SOS does
+    assert DEBUG_MODE = 0, "debug mode is off to begin with"
+    GAME_DEBUG_USED = 0
+    tMsBefore = MORSE_SOS_COUNT
+    morseSos()
+    assert MORSE_SOS_COUNT = tMsBefore + 1, "SOS was heard"
+    assert DEBUG_MODE = 1, "and debug mode is on"
+    assert GAME_DEBUG_USED = 1, "and the game is marked as one that had it"
+    assert DEBUG_SPLASH_ON = 1, "and the words that say so splash up"
+    debugSplashStep(DEBUG_SPLASH_MS + DEBUG_SPLASH_LIFE_MS)
+    assert DEBUG_SPLASH_ON = 0, "for a moment"
+    end
+endtest
+
+test morse_radio_comes_on_and_goes_off from fishBoard
+    global tMsClock = 1000
+    morseQuiet()
+
+    ` pushes do nothing while the radio is off
+    testMorseTap(500, 150)
+    testMorseTap(100, 150)
+    assert MORSE_MODE = 0, "a push that is not long enough does not turn the radio on"
+    assert MORSE_BUFFER_COUNT = 0, "and it is not remembered"
+
+    ` two things held for a long time, like a swap that is waited on
+    morseStep(2, tMsClock)
+    morseStep(1, tMsClock + MORSE_WAKE_MS + 100)
+    assert MORSE_MODE = 0, "a hold with something else held does not turn the radio on"
+    morseStep(0, tMsClock + MORSE_WAKE_MS + 200)
+    tMsClock = tMsClock + 2000
+
+    ` one thing, held for long enough
+    morseStep(1, tMsClock)
+    morseStep(1, tMsClock + MORSE_WAKE_MS - 50)
+    assert MORSE_MODE = 0, "a little less than long enough is not long enough"
+    morseStep(1, tMsClock + MORSE_WAKE_MS)
+    assert MORSE_MODE = 1, "a long hold turns the radio on, while it is still held"
+    assert MORSE_WOKE = 1, "and the sign sounds on that frame"
+    morseStep(1, tMsClock + MORSE_WAKE_MS + 16)
+    assert MORSE_WOKE = 0, "and only on that frame"
+    tMsClock = tMsClock + MORSE_WAKE_MS + 300
+    morseStep(0, tMsClock)
+    assert MORSE_BUFFER_COUNT = 0, "the hold that turned it on is not a dot or a dash"
+    tMsClock = tMsClock + 300
+
+    ` TUNA, with no more of a wait after a letter than there is inside of one
+    testMorseTap(500, 150)
+    assert MORSE_BUFFER_COUNT = 1, "now a push is remembered"
+    testMorseTap(100, 150)
+    testMorseTap(100, 150)
+    testMorseTap(500, 150)
+    testMorseTap(500, 150)
+    testMorseTap(100, 150)
+    testMorseTap(100, 150)
+    assert MORSE_MODE = 1, "seven pushes of the word, and the radio is still on"
+    morseStep(1, tMsClock)
+    tMsClock = tMsClock + 500
+    morseStep(0, tMsClock)
+    assert MORSE_HEARD = MORSE_WORD_TUNA, "the eighth is the word, as soon as it is let go"
+    assert MORSE_MODE = 0, "and the radio goes off"
+    assert MORSE_SLEPT = 0, "without the sign, because the word was heard"
+    morseStep(0, tMsClock + 16)
+    assert MORSE_HEARD = -1, "the word is only heard for one frame"
+    tMsClock = tMsClock + 500
+
+    ` nobody pushes anything
+    testMorseWake()
+    testMorseTap(100, 150)
+    morseStep(0, tMsClock + MORSE_SLEEP_MS - 500)
+    assert MORSE_MODE = 1, "the radio waits for a while"
+    morseStep(0, tMsClock + MORSE_SLEEP_MS)
+    assert MORSE_MODE = 0, "and then it goes off"
+    assert MORSE_SLEPT = 1, "with its sign"
+    morseStep(0, tMsClock + MORSE_SLEEP_MS + 16)
+    assert MORSE_SLEPT = 0, "on that frame only"
+    tMsClock = tMsClock + MORSE_SLEEP_MS + 500
+
+    ` the player goes back to the game
+    testMorseWake()
+    morseStep(1, tMsClock)
+    morseStep(2, tMsClock + 100)
+    assert MORSE_MODE = 0, "two things held at once turn the radio off"
+    assert MORSE_SLEPT = 1, "with its sign"
+    morseStep(0, tMsClock + 200)
+    tMsClock = tMsClock + 500
+
+    ` a push that goes on and on
+    testMorseWake()
+    testMorseTap(MORSE_PUSH_MAX_MS + 100, 150)
+    assert MORSE_BUFFER_COUNT = 0, "a push that is held for too long is not a dash"
+    assert MORSE_MODE = 1, "and the radio stays on"
+    end
+
+    ` hold one thing down for `tMsLength` milliseconds, and then nothing for `tMsWait`
+    function testMorseTap(tMsLength, tMsWait)
+        morseStep(1, tMsClock)
+        tMsClock = tMsClock + tMsLength
+        morseStep(0, tMsClock)
+        tMsClock = tMsClock + tMsWait
+        morseStep(0, tMsClock)
+    endfunction
+
+    ` turn the radio on
+    function testMorseWake()
+        morseStep(1, tMsClock)
+        tMsClock = tMsClock + MORSE_WAKE_MS
+        morseStep(1, tMsClock)
+        tMsClock = tMsClock + 200
+        morseStep(0, tMsClock)
+        tMsClock = tMsClock + 200
+    endfunction
+endtest
+
+test morse_radio_answers_cq from fishBoard
+    morseQuiet()
+    morseReplyStart(1000)
+    assert MORSE_REPLY_ON = 1, "the radio is answering"
+
+    ` R is 2 dots and a dash, TUNA is 4 dots and 4 dashes, SING is 7 and 3, SONG is 5 and 6, and
+    ` CTHULHU is 17 and 6. a dash is three dots long.
+    tMsLit = 0
+    tMsLastUnit = MORSE_REPLY_LENGTH - 1
+    for tMsUnit = 0 to tMsLastUnit
+        tMsLit = tMsLit + MORSE_REPLY(tMsUnit)
+    next
+    assert tMsLit = 95, "it taps out R, and then TUNA, SING, SONG and CTHULHU, and not SOS, or CQ itself"
+    assert MORSE_REPLY(0) = 1, "it starts with the R: a dot,"
+    assert MORSE_REPLY(1) = 0, "a moment of quiet,"
+    assert MORSE_REPLY(2) + MORSE_REPLY(3) + MORSE_REPLY(4) = 3, "a dash,"
+    assert MORSE_REPLY(6) = 1, "and a dot"
+
+    morseReplyStep(1000)
+    assert MORSE_REPLY_LIT = 0, "it waits a moment before it starts"
+    tMsStart = 1000 + MORSE_REPLY_LEAD * MORSE_REPLY_UNIT_MS
+    morseReplyStep(tMsStart + 50)
+    assert MORSE_REPLY_LIT = 1, "then the tone sounds, for the dot of the R"
+    morseReplyStep(tMsStart + 150)
+    assert MORSE_REPLY_LIT = 0, "and stops"
+    morseReplyStep(tMsStart + 250)
+    assert MORSE_REPLY_LIT = 1, "and sounds again, for its dash"
+    tMsEnd = tMsStart + MORSE_REPLY_LENGTH * MORSE_REPLY_UNIT_MS
+    morseReplyStep(tMsEnd + 100)
+    assert MORSE_REPLY_ON = 0, "and when it has tapped them all out, it is done"
+    assert MORSE_REPLY_LIT = 0, "with the tone off"
+
+    ` turning the radio on again stops the answer
+    morseReplyStart(1000)
+    morseQuiet()
+    assert MORSE_REPLY_ON = 0, "the answer stops when the game is not being played"
+    end
+endtest
+
+test morse_radio_says_received_and_keeps_a_log from fishBoard
+    morseQuiet()
+    morseAck(1000)
+    assert MORSE_REPLY_ON = 1, "the radio taps something back"
+    tMsLit = 0
+    tMsLastUnit = MORSE_REPLY_LENGTH - 1
+    for tMsUnit = 0 to tMsLastUnit
+        tMsLit = tMsLit + MORSE_REPLY(tMsUnit)
+    next
+    assert tMsLit = 5, "an R, and nothing else: a dot, a dash and a dot"
+
+    ` the codec: the radio, and then a signal each, after the ending of the diver
+    assert CODEC_ENTRY_RADIO = CARD_LENGTH + 15, "the radio comes after the ending of the diver"
+    assert CODEC_ENTRY_CTHULHU = CARD_LENGTH + 18, "and SING, SONG and CTHULHU after it"
+    assert getCodecPref(CODEC_ENTRY_RADIO) = CODEC_PREF_MORE + 5, "they are remembered right after the ending of the diver"
+    assert getCodecPref(CODEC_ENTRY_CTHULHU) = CODEC_PREF_MORE + 8, "one after the other"
+    assert MORSE_WORD_CODEC(MORSE_WORD_SOS) = -1, "SOS is not in the codec at all"
+
+    CODEC_SEEN(CODEC_ENTRY_RADIO) = 0
+    CODEC_SEEN(CODEC_ENTRY_SING) = 0
+    CODEC_SEEN(CODEC_ENTRY_SONG) = 0
+    morseWake()
+    assert CODEC_SEEN(CODEC_ENTRY_RADIO) = 1, "the radio is unlocked when it first comes on"
+    assert CODEC_SEEN(CODEC_ENTRY_SING) = 0, "and no signal is, until it is sent"
+    morseLog(MORSE_WORD_SING)
+    assert CODEC_SEEN(CODEC_ENTRY_SING) = 1, "a signal that is sent is unlocked"
+    assert CODEC_SEEN(CODEC_ENTRY_SONG) = 0, "and only that one"
+
+    tMsBefore = 0
+    tMsLastEntry = CODEC_COUNT - 1
+    for tMsEntry = 0 to tMsLastEntry
+        tMsBefore = tMsBefore + CODEC_SEEN(tMsEntry)
+    next
+    morseLog(MORSE_WORD_SOS)
+    tMsAfter = 0
+    for tMsEntry = 0 to tMsLastEntry
+        tMsAfter = tMsAfter + CODEC_SEEN(tMsEntry)
+    next
+    assert tMsAfter = tMsBefore, "sending SOS unlocks nothing"
+    end
+endtest
+
+test morse_cthulhu_brings_a_tentacle_for_a_moment from fishBoard
+    morseQuiet()
+    morseCthulhu(1000)
+    assert MORSE_TENTACLE_ON = 1, "a tentacle is on its way up"
+
+    tMsHalf = MORSE_TENTACLE_LIFE_MS / 2
+    morseTentacleStep(1000 + tMsHalf)
+    tMsAllUp = 0
+    if MORSE_TENTACLE_UP# = 1 then tMsAllUp = 1
+    assert tMsAllUp = 1, "half way through, it is as far up as it comes"
+
+    morseTentacleStep(1000 + MORSE_TENTACLE_LIFE_MS)
+    assert MORSE_TENTACLE_ON = 0, "and then it is gone"
+
+    ` it does not come while an ending is on its way
+    CORAL_ENDING_DUE = 1
+    morseCthulhu(1000)
+    assert MORSE_TENTACLE_ON = 0, "the tentacles are busy when an ending is due"
+    assert MORSE_CTHULHU_COUNT = 2, "though the word was heard"
+    CORAL_ENDING_DUE = 0
+
+    ` and it goes when the game is not being played
+    morseCthulhu(1000)
+    morseQuiet()
+    assert MORSE_TENTACLE_ON = 0, "it is gone at once when a menu comes up"
+    end
+endtest
+
+test codec_texts_fit_in_their_slot from fishBoard
+    ` what the codec says about the highlighted entry starts 43 pixels under the top of that part of
+    ` the panel (see setup_codec), and it must not run past the bottom of the panel. that is room for
+    ` three lines. every entry is tried, the way it reads when it is found, and when it is not.
+    tFitRoom = CODEC_TOP + CODEC_HEIGHT - CODEC_DETAIL_TOP - 43
+    tFitRoom# = tFitRoom
+    tFitOver = 0
+    tFitLast = CODEC_COUNT - 1
+    for tFitEntry = 0 to tFitLast
+        CODEC_SELECTED = tFitEntry
+        CODEC_SEEN(tFitEntry) = 1
+        refreshCodec()
+        tFitTall# = get text size y(CODEC_DESC_TEXT_ID)
+        if tFitTall# > tFitRoom# then tFitOver = tFitOver + 1
+
+        CODEC_SEEN(tFitEntry) = 0
+        refreshCodec()
+        tFitTall# = get text size y(CODEC_DESC_TEXT_ID)
+        if tFitTall# > tFitRoom# then tFitOver = tFitOver + 1
+    next
+    assert tFitRoom >= 48, "there is room for three lines"
+    assert tFitOver = 0, "and nothing that the codec says about an entry is longer than that"
+    end
+endtest

@@ -19,6 +19,7 @@
 float Time;      // in seconds
 float2 Size;     // how big the screen is, in pixels
 float Rise;      // how far along it all is, from 0 (nothing has come up yet) to 1 (all of them are up)
+float Lone;      // 0 for all of it. 1 for one tentacle on its own, at the right, with no bad water and no dark edges: see CTHULHU, under MORSE in fish_headers.
 
 // a tentacle does not take the whole of that to come up. it waits for its own moment, and then it
 // comes up in three heaves, with a stop after each. this is how much of the whole all of that takes,
@@ -269,7 +270,7 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 	float2 fromMiddle = (px / Size - 0.5) * 2.0;
 	float cloud = clouds(px + float2(Time * 7.0, Time * 3.0), 34.0, 5.0) * 0.6 + clouds(px - float2(Time * 5.0, 0.0), 13.0, 9.0) * 0.4;
 	float corner = smoothstep(VIGNETTE_IN, 1.25, length(fromMiddle * float2(1.0, 0.92)) + (cloud - 0.5) * 0.22);
-	float dark = bands(saturate(corner * saturate(Rise * 2.5)), 10.0, px) * VIGNETTE_DARK;
+	float dark = bands(saturate(corner * saturate(Rise * 2.5)), 10.0, px) * VIGNETTE_DARK * (1.0 - Lone);
 	float4 scene = float4(VIGNETTE_COLOR, dark);
 
 	// they come up a few at a time, with a wait in between: three together on the right, then one on
@@ -282,6 +283,7 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 	back = over(back, tentacle(px, 0.63, 0.05, h * 0.76, 3.0, 0.46));
 	back = over(back, tentacle(px, 0.84, -0.12, h * 0.68, 4.0, 0.02));
 	back.rgb = lerp(back.rgb, VIGNETTE_COLOR, 0.5);
+	back.a *= 1.0 - Lone;
 	scene = over(scene, back);
 
 	float4 front = float4(0.0, 0.0, 0.0, 0.0);
@@ -289,11 +291,16 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 	front = over(front, tentacle(px, 0.31, 0.04, h * 0.90, 12.0, 0.36));
 	front = over(front, tentacle(px, 0.52, -0.03, h * 0.94, 13.0, 0.62));
 	front = over(front, tentacle(px, 0.73, -0.05, h * 0.88, 14.0, 0.07));
+
+	// the last one is the one that comes up on its own
+	front.a *= 1.0 - Lone;
 	front = over(front, tentacle(px, 0.92, -0.17, h * 0.76, 15.0, 0.04));
 	scene = over(scene, front);
 
 	// the bad water is in front of all of them, so that they come up out of it
-	scene = over(scene, badWater(px));
+	float4 water = badWater(px);
+	water.a *= 1.0 - Lone;
+	scene = over(scene, water);
 
 	return scene;
 }

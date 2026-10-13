@@ -140,6 +140,7 @@ setup_coral:
 
     gosub setup_coral_bars
     gosub setup_diver
+    gosub setup_tide
 
     resetCoral()
 
@@ -611,6 +612,7 @@ coral_finale_ancient:
         set effect param float TENTACLE_FX_ID, "Time", finNow * .001
         set effect param float2 TENTACLE_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT
         set effect param float TENTACLE_FX_ID, "Rise", finRise#
+        set effect param float TENTACLE_FX_ID, "Lone", 0
 
         ` the fish die where they are. each one has its own moment to turn into a skeleton: the lower down
         ` the board it is, the sooner, give or take. a few bubbles come off of it, the color of bone.
@@ -1317,7 +1319,12 @@ function judgeCoralCast(coralComboCount)
         coralCastSlot = CORAL_PENDING_SLOT
         CORAL_PENDING_SLOT = -1
 
-        if coralComboCount > 0
+        ` nothing pops at night, so at night the swap at the end of a pattern does not have to pop
+        ` anything. the pattern still has to be walked the way that it always does, with the swaps
+        ` at the ends of it. see NOTHING POPS AT NIGHT in fish_headers_tide.
+        coralCastGood = coralComboCount
+        if TIDE_NIGHT then coralCastGood = 1
+        if coralCastGood > 0
             ` a song that was sung with a dead fish brings horror coral. it is, if the cursor passed over
             ` a belly up fish on the way along the pattern, or if any of the fish that are popping is
             ` belly up. see HORROR CORAL in fish_headers.

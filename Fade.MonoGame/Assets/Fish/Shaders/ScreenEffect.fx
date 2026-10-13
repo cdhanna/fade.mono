@@ -19,6 +19,11 @@ sampler2D NoiseSampler = sampler_state
 	Texture = <Noise>;
 };
 float Time;
+
+// THE TIDE. how much of the time has to be taken back for the wobble of the water, in seconds. the
+// game adds to it, faster than the time goes, for as long as the tide wants a push, so the wobble runs
+// backward then. see THE DRIFT in fish_headers_tide. it is 0 until the game sets it.
+float TideBack;
 float2 Resolution;
 float TimeSpeed = 50.0;
 
@@ -292,15 +297,17 @@ float2 uv = texCoord;
 
     uv *= 1.0;
 
-    float result1 = makeWaves(uv2 + float2(Time * TimeSpeed, 0.0), Time, 0.1);
-    float result2 = makeWaves(uv2 - float2(Time * 0.8 * TimeSpeed, 0.0), Time * 0.8 + 0.06, 0.26);
+    // the wobble runs on a time of its own, which goes backward while the tide wants a push
+    float flowTime = Time - TideBack;
+    float result1 = makeWaves(uv2 + float2(flowTime * TimeSpeed, 0.0), flowTime, 0.1);
+    float result2 = makeWaves(uv2 - float2(flowTime * 0.8 * TimeSpeed, 0.0), flowTime * 0.8 + 0.06, 0.26);
 
     result1 = smoothstep(0.4, 1.1, 1.0 - abs(result1));
     result2 = smoothstep(0.4, 1.1, 1.0 - abs(result2));
 
     float result = 2.0 * smoothstep(0.35, 1.8, (result1 + result2) * 0.5);
 
-    float2 p = float2(result, result2) * 0.001 + 0.05 * sin(uv * 16.0 - cos(uv.yx * 16.0 + Time * TimeSpeed)) * 0.1;
+    float2 p = float2(result, result2) * 0.001 + 0.05 * sin(uv * 16.0 - cos(uv.yx * 16.0 + flowTime * TimeSpeed)) * 0.1;
 
     // the patch of calm water. the wobble dies away in it.
     float calm = wake(uv);

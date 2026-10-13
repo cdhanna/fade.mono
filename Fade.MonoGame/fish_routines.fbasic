@@ -19,10 +19,13 @@ load_audio:
     load sfx clip 100, "Fish/Audio/underwater-ambiencewav"
 
 
-    global SFX_CLIP_SWAP    
-    load sfx clip reserve sfx clip id(SFX_CLIP_SWAP), "Fish/Audio/river-and-stones"
+    ` the sound of a swap is a rush of the water that is already playing: a stretch of the underwater
+    ` ambience, with only the middle of it kept, that swells up and dies away. Tools/swap_swell_gen.py
+    ` makes it, and two other takes, "bright" and "quick", that can go here in its place.
+    global SFX_CLIP_SWAP
+    load sfx clip reserve sfx clip id(SFX_CLIP_SWAP), "Fish/Audio/swap-swell-soft"
     global SFX_SWAP
-    sfx reserve sfx id(SFX_SWAP), 100
+    sfx reserve sfx id(SFX_SWAP), SFX_CLIP_SWAP
     set sfx loop SFX_SWAP, 1
     set sfx volume SFX_SWAP 0
     play sfx SFX_SWAP
@@ -475,7 +478,6 @@ setup_selection:
 
     global SELECTION_SPRITE
     reserve sprite id(SELECTION_SPRITE)
-print SELECTION_SPRITE
     gosub update_selection_position
     size sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
     order sprite SELECTION_SPRITE, ORDER_SELECTION
@@ -546,6 +548,7 @@ update_frame:
     stepMultiplier()
     perf lap 17
     stepCoral()
+    stepTideSleep()
     perf lap 18
     stepSkeletonGhosts()
     perf lap 19
@@ -783,7 +786,29 @@ frame_fish_fx:
         tunaPushX# = TUNA_CELL_DX(i) * TUNA_EASED#
         tunaPushY# = TUNA_CELL_DY(i) * TUNA_EASED#
 
-        set sprite all texcoord2 c.spriteId, pushX# * fishSize# + tunaPushX#, pushY# * fishSize# + tunaPushY#, lift# + TUNA_SHRINK#, 0
+        ` at night the fish glow, but not a dead one, and not a bottle or anything of a quest's. the
+        ` effect takes -1 for a fish that does not. see THE NIGHT DIVE in fish_headers_tide.
+        ` the fish of a group that the night is holding are a little brighter, and one that is in a
+        ` group that was just made flashes. see NOTHING POPS AT NIGHT, in the same place.
+        nightGlow# = 0
+        if TIDE_NIGHT
+            if TIDE_BANKED(i) then nightGlow# = TIDE_BANK_GLOW#
+            if TIDE_PULSE_UNTIL(i) > shockNow
+                nightFlash# = TIDE_PULSE_UNTIL(i) - shockNow
+                nightFlashSpan# = TIDE_PULSE_MS
+                nightGlow# = nightGlow# + nightFlash# / nightFlashSpan#
+            endif
+        endif
+
+        ` a jellyfish glows a good deal more than a fish does at night, and its light swells and sinks
+        ` slowly, each one in its own time. it is only for fun. see THE NIGHT DIVE in fish_headers_tide.
+        if c.value = TEX_JELLY
+            nightGlow# = nightGlow# + TIDE_NIGHT_SHOWN# * TIDE_JELLY_GLOW# * (0.65 + 0.35 * sin(shockNow * .0028 + i * 1.7))
+        endif
+        if c.bellyUp > 0 then nightGlow# = -1
+        if c.value >= TEX_BOTTLE then nightGlow# = -1
+
+        set sprite all texcoord2 c.spriteId, pushX# * fishSize# + tunaPushX#, pushY# * fishSize# + tunaPushY#, lift# + TUNA_SHRINK#, nightGlow#
     next
 
 return
@@ -791,7 +816,7 @@ return
 dbg# = 1.0
 dbg_str$ = "world2"
 frame_dbg:
-    ` the debug keys are only for working on the game. set the FISH_DEBUG environment variable to get them.
+    ` the debug keys are only there in debug mode. see DEBUG_MODE in fish_headers.
     ` the debug panel also has a window that gives the player any card. see fish_routines_debug.
     ` U turns the fish above the cursor belly up, and a second press turns it into a skeleton.
     ` G grows coral on the cell that the cursor is on, and H grows horror coral there.
@@ -805,10 +830,12 @@ frame_dbg:
     ` B puts a bottle on the cell that the cursor is on. carry it up to the top row for the diver. see fish_headers_diver.
     ` L puts a jellyfish there, and V a stingray.
     ` O fills the album of the diver, so that the diver swims up and its ending plays. it brings the diver down first, if it is not.
-    if is env set("FISH_DEBUG")
+    if DEBUG_MODE
+        debugSplashStep(game ms())
         if MENU_MODE = 0
             gosub frame_debug_cards
             gosub frame_debug_beat
+            gosub frame_debug_tide
             gosub frame_debug_quests
             if INFO_MODE = 0
                 ` the dance. see THE DANCE in fish_headers.
@@ -1144,6 +1171,13 @@ handle_combos:
     ` a swap that is still playing out has not happened yet, so the board is not ready to be looked at
     if LIVE_MOVE_ACTIVE then return
 
+    ` day is breaking, and the light comes back before anything pops. see WHEN DAY BREAKS in fish_headers_tide.
+    if TIDE_DAWN_UNTIL > 0
+        dawnNow = game ms()
+        if dawnNow < TIDE_DAWN_UNTIL then return
+        TIDE_DAWN_UNTIL = 0
+    endif
+
     ` a bottle that has got to the bottom row pays out, and is popped along with whatever else pops
     checkBottles()
 
@@ -1160,6 +1194,9 @@ handle_combos:
     
         CELLS(i-1) = c
     next
+
+    ` the groups that the night was holding are found again. see NOTHING POPS AT NIGHT in fish_headers_tide.
+    tideLookStarts()
 
     ` the groups of the fish that a swap has just moved go through skeletons. see SKELETONS in fish_headers.
     skeletonsBeforeCombos()
@@ -1187,7 +1224,6 @@ handle_combos:
         if c.comboForce > 0
             if c.comboForce > maxComboForce then maxComboForce = c.comboForce
             CELLS(i).comboFillId = c.comboForce + groupId `by adding them together, there are no overlaps, right?
-            print "FORCING EXPLO" + str$(c.comboForce) + " " + str$(CELLS(i).comboFillId)
         endif
     next
 
@@ -1265,7 +1301,6 @@ handle_combos:
 
             if cell.comboFillId <> g then skip
             if cell.comboForce > 0
-                print "FORCE COMBO COUNT"
                 comboForced = 1
                 groupForce = cell.comboForce
             endif
@@ -1299,6 +1334,13 @@ handle_combos:
         endif
 
         if comboCount < comboNeed then skip `if this group is not big enough, then we can skip rendering the explosion
+
+        ` at night, nothing that matched pops. the group is held until day breaks. see NOTHING POPS AT NIGHT in fish_headers_tide.
+        nightHeld = 0
+        if comboForced = 0
+            nightHeld = tideHoldsGroup(g, comboSwapped)
+        endif
+        if nightHeld then skip
 
         ` a quest may be holding the group back, to pop later. see SLEEPERS in fish_quests.
         questHeld = 0
@@ -1379,6 +1421,11 @@ handle_combos:
 
         totalComboCount += 1
         scoreAdd = 0
+
+        ` the tide wants to know if the last swap put one of its two fish in this group. see fish_headers_tide.
+        if comboForced = 0
+            tideSawGroup(g)
+        endif
 
         ` animate the exit of the group
         randomG = (totalComboCount-1)
@@ -1537,7 +1584,6 @@ handle_combos:
             ` create basic tween SCORE_BAR.progressTweenId, getScoreRatio(0), getScoreRatio(scoreAdd), 100, 50
             ` the bar gets these when the fish pops, and not before. see THE SCORE THAT SHOWS in fish_headers.
             queueScore(scorePoints, delay)
-            print CURRENT_SCORE
 
         next
 
@@ -1590,6 +1636,10 @@ handle_combos:
     for i = 0 to CELL_COUNT - 1
         CELLS(i).comboForce = 0
     next
+
+    ` the swap that led to this look at the board was a push, or a pull, and the water moves for it.
+    ` this comes first, because the multiplier forgets the swap. see fish_headers_tide.
+    judgeTide()
 
     ` a swap that led to this look at the board either popped something, or it did not. the fish that are
     ` popping now were scored with the multiplier as it was, and a new one counts from the next pop.

@@ -30,7 +30,7 @@ setup_quest_defs:
     questDefine(QUEST_TURTLE, "Turtle", "After each swap it steps right, onto the kind of fish shown. It cannot be swapped. Reach the right edge.", TEX_TURTLE, 0)
     questDefine(QUEST_CUTTLEFISH, "Cuttlefish", "The ringed fish changes kind each swap, in the order shown, and survives pops. Pop it as each kind.", TEX_Q_RING, 0)
     questDefine(QUEST_CONSTELLATION, "Constellation", "Arrange the four ringed fish in the shape shown. A pop, or a swap that moves one and pops nothing, resets it.", TEX_Q_RING, 0)
-    questDefine(QUEST_REMORA, "Remora", "The cursor drags a long tail. Make 8 popping swaps without crossing it.", TEX_Q_EEL, TEX_Q_EEL)
+    questDefine(QUEST_REMORA, "Tail", "The cursor drags a long tail. Make 8 popping swaps without crossing it.", TEX_Q_EEL, TEX_Q_EEL)
     questDefine(QUEST_SLEEPERS, "Sleepers", "One kind sleeps for three moves, and its groups wait. Have two groups waiting when it wakes.", TEX_Q_SHELL, TEX_Q_SHELL)
     questDefine(QUEST_ECHO, "Echo", "A ghost repeats each swap four moves later, in the same place. Get three of its swaps to pop fish.", TEX_Q_RING, 0)
     questDefine(QUEST_PULSE, "Pulse", "Every fourth move, the lit cell turns its four corner fish into its own kind. Get three pops from that.", TEX_Q_DOT, 0)
@@ -106,7 +106,10 @@ endfunction qSideCell
 ` ---------------------------------------------------------------------------------------------
 function questLeftRight(qEv, qA, qB)
     if qEv = QEV_INIT
-        questPlaceKind(1, TEX_SAND_DOLLAR)
+        ` when the diver is in that cell, the sand dollar starts in the one under it
+        qDollarStart = 1
+        if CELLS(qDollarStart).value = TEX_DIVER then qDollarStart = 1 + CELL_COLUMN_COUNT
+        questPlaceKind(qDollarStart, TEX_SAND_DOLLAR)
         questProgress(1, CELL_COLUMN_COUNT - 1)
     endif
 
@@ -705,9 +708,12 @@ function questSeaweed(qEv, qA, qB)
                     if qWeedTall < CELL_ROW_COUNT
                         qWeedUp = (CELL_ROW_COUNT - 1 - qWeedTall) * CELL_COLUMN_COUNT + qWeedX
                         if CORAL_CELLS(qWeedUp)
-                            questPlaceKind(qWeedUp, TEX_SEAWEED)
-                            qWeedTall = qWeedTall + 1
-                            qWeedGrowing = 1
+                            ` it does not grow through the diver
+                            if CELLS(qWeedUp).value <> TEX_DIVER
+                                questPlaceKind(qWeedUp, TEX_SEAWEED)
+                                qWeedTall = qWeedTall + 1
+                                qWeedGrowing = 1
+                            endif
                         endif
                     endif
                 endwhile
@@ -893,6 +899,11 @@ function questTurtle(qEv, qA, qB)
     if qEv = QEV_INIT
         qTurtleRow = 1 + rnd(CELL_ROW_COUNT - 2)
         qTurtleAt = qTurtleRow * CELL_COLUMN_COUNT
+        ` when the diver is in that cell, the turtle starts in the one above it
+        if CELLS(qTurtleAt).value = TEX_DIVER
+            qTurtleRow = qTurtleRow - 1
+            qTurtleAt = qTurtleRow * CELL_COLUMN_COUNT
+        endif
         questPlaceKind(qTurtleAt, TEX_TURTLE)
         spawnBubbles(getCellX(0), getCellY(qTurtleRow), CELL_SIZE, 22, 0, rgb(150, 220, 130))
         spawnBubbles(getCellX(0), getCellY(qTurtleRow), CELL_SIZE / 2, 10, 120, rgb(255, 255, 255))
@@ -1660,6 +1671,8 @@ endfunction
 function questGlassFish(qEv, qA, qB)
     if qEv = QEV_INIT
         qGlassAt = rnd(CELL_COLUMN_COUNT)
+        ` when the diver is in that cell, the glass fish starts in the next one along
+        if CELLS(qGlassAt).value = TEX_DIVER then qGlassAt = (qGlassAt + 1) mod CELL_COLUMN_COUNT
         questPlaceKind(qGlassAt, TEX_GLASS_FISH)
         QUEST_V(0) = 0
         questProgress(0, CELL_ROW_COUNT - 1)

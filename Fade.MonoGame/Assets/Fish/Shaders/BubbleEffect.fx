@@ -24,7 +24,7 @@ struct VertexShaderOutput
 	// x is the size of the bubble in pixels, so that the rim can be measured in pixels.
 	// y is 1 to draw a solid circle instead, which is what goes into the bubble mask.
 	// z is 1 to draw a star with four points instead.
-	// w is 1 to draw a heart instead, and 2 to draw an eye instead.
+	// w is 1 to draw a heart instead, 2 to draw an eye instead, and 3 to draw a Z instead.
 	float4 Custom : TEXCOORD1;
 };
 
@@ -77,7 +77,7 @@ float4 MainPS(VertexShaderOutput input) : COLOR
 	// than a small one, but not as many more as it is bigger, so the pixels of a big eye are big.
 	// it is the white of an eye, with a few red veins at the edge of it, a yellow iris with a green
 	// ring around it, and a slit for a pupil. where it looks comes from how big it is.
-	float isEye = step(1.5, input.Custom.w);
+	float isEye = step(1.5, input.Custom.w) * step(input.Custom.w, 2.5);
 	float blocks = floor(clamp(input.Custom.x / 4.5, 7.0, 19.0));
 	float2 e = ((floor(input.TextureCoordinates * blocks) + 0.5) / blocks - 0.5) * 2.0;
 	float block = 2.0 / blocks;
@@ -96,6 +96,13 @@ float4 MainPS(VertexShaderOutput input) : COLOR
 	float3 color = lerp(input.Color.rgb, eye, isEye);
 	alpha = lerp(alpha, eyeHere, isEye);
 	float see = lerp(input.Color.a, 1.0, isEye);
+
+	// and when w is 3 it is a Z, for the fish that are asleep at night. see THE FISH SLEEP in
+	// fish_headers_tide. it is five pixels by five: the top row, the bottom row, and the line between
+	// them from the top right to the bottom left.
+	float2 zAt = floor(input.TextureCoordinates * 5.0);
+	float zed = max(max(step(zAt.y, 0.5), step(3.5, zAt.y)), step(abs(zAt.x + zAt.y - 4.0), 0.5));
+	alpha = lerp(alpha, zed, step(2.5, input.Custom.w));
 
 	return float4(color, see * alpha);
 }

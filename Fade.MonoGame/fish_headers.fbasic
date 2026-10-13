@@ -707,6 +707,15 @@ global INFO_L_FAINT as infoBorder `the two sides of the leg that the outline of 
 global INFO_L_CURSOR as infoBorder `and the same for the bright outline
 global INFO_HOLE2_SPRITE `the hole in the overlay for the leg
 
+` AND A SECOND ONE. the count of the rounds has a leg too, while there is a moon: the moon is under
+` the left end of it, and has a spot of its own. see THE MOON IN INFO MODE in fish_headers_tide.
+` it is -1 for as long as there is no moon, and then the count of the rounds is a plain rectangle.
+` only one thing is highlighted at a time, so the bright outline and the second hole are shared.
+global INFO_L2_INDEX = -1
+global INFO_L2_W = 0
+global INFO_L2_H = 0
+global INFO_L2_FAINT as infoBorder
+
 global INFO_BASE_LENGTH = 0 `how many infos there are before any upgrades have been picked. a new game goes back to this.
 
 ` the hint at the bottom of the screen while the game is being played
@@ -1205,7 +1214,15 @@ global STEAM_DETAIL_MULT = 1 `the highest that the multiplier got
 global STEAM_DETAIL_SEED = 2 `the seed of the board. there is no such thing yet, so it is 0.
 global STEAM_DETAIL_FLAGS = 3 `32 flags. the lowest two bits are the ending of the hidden game, and then STEAM_FLAG_DEBUG. the rest are 0.
 global STEAM_FLAG_DEBUG = 4 `the game was played with one of the debug environment variables set. see isDebugEnvSet.
-global GAME_DEBUG_USED = 0 `1 when the game that is being played has had one of them set at any time. it is saved with the game.
+global GAME_DEBUG_USED = 0 `1 when the game that is being played has had one of them set at any time, or has had debug mode on. it is saved with the game.
+global DEBUG_SPLASH_TEXT_ID = 0 `the words that splash up when SOS turns debug mode on. they are made the first time that they are needed.
+global DEBUG_SPLASH_MADE = 0 `1 once they have been made
+global DEBUG_SPLASH_ON = 0 `1 while they are on the screen
+global DEBUG_SPLASH_MS = 0 `when they came up
+global DEBUG_SPLASH_IN_MS = 180 `how long they take to pop up, in milliseconds
+global DEBUG_SPLASH_LIFE_MS = 1700 `how long they are there for, all told
+global DEBUG_SPLASH_OUT_MS = 450 `and how much of the end of that they fade away for
+global DEBUG_MODE = 0 `1 while debug mode is on: the debug windows, and the debug keys. the FISH_DEBUG environment variable turns it on from the start, and tapping out SOS turns it on in any game, even a shipped one. see debugModeOn, and MORSE.
 global STEAM_DETAIL_CHECK = 4 `the check, which Steam's commands fill in. see "set steam leaderboard check".
 ` detail 5 says whether the quests of the game follow the log of upgrades, and how many of them. see
 ` THE QUESTS ON STEAM, below. it is 0 for a score from before there were quests.
@@ -1257,7 +1274,7 @@ global CODEC_COUNT = 16 `how many entries there are: one for every card, and the
 ` first time that a line pays out. diagonalPayThrough, in fish_routines_diagonal, does that.
 ` and after that, the diver, and the ending of the diver. see fish_headers_diver. the diver is unlocked
 ` the first time that it comes down, and its ending the first time that a game ends with the album full.
-global CODEC_EXTRA_COUNT = 15
+global CODEC_EXTRA_COUNT = 19
 global CODEC_ENTRY_CROOKED = -1
 global TEX_CROOKED `the picture that it has in the codec
 global CODEC_ENTRY_TUNA = -1
@@ -1318,10 +1335,10 @@ global TEX_CREDIT_CHRIS
 global TARGET_CREDITS `the credits are drawn to a render target of their own, so that they can be faded in and out
 
 ` everything that rolls by in the credits. setup_credits fills these in.
-global CREDIT_MAX = 24
+global CREDIT_MAX = 32
 global CREDIT_COUNT = 0
 global dim CREDIT_LINES(CREDIT_MAX) as creditLine
-global CREDIT_LENGTH = 960 `how tall the whole roll is, from the top of the first line to the bottom of the last
+global CREDIT_LENGTH = 1340 `how tall the whole roll is, from the top of the first line to the bottom of the last
 global CREDIT_SPEED = 32 `how many pixels the credits roll in a second
 
 ` the logos that are shown when the game starts
@@ -1482,7 +1499,7 @@ global dim MUSIC_INSTRUMENT_VOLUME#(5) `how loud each instrument is next to the 
 
 ` the melodies are written in setup_melodies. all of their beats are kept in one long list,
 ` and every melody knows where it starts in the list and how many beats long it is.
-global MELODY_MAX = 32
+global MELODY_MAX = 48
 global MELODY_COUNT = 0
 global dim MELODY_FIRST(MELODY_MAX)
 global dim MELODY_LENGTH(MELODY_MAX)
@@ -2197,7 +2214,7 @@ global DIAGONAL_HINT_NOW_MS = -100000 `when the debug key last asked to see the 
 ` fish that they came out of, and the fish of the board go back to their places.
 ` the first time that it happens, it gets an entry in the codec. see CODEC_ENTRY_TUNA.
 ` nothing else moves while the code is up: the fish do not lean or shuffle, and no hint comes.
-` the debug keys use T and U, so with FISH_DEBUG set the word does nothing, and Q does it instead.
+` the debug keys use T and U, so in debug mode the word does nothing, and Q does it instead.
 ` there can be more than one code, and then one is picked at random every time. the codes are in
 ` fish_tuna_code, which build/make-tuna-qr.py writes. where they lead to is set there.
 ` the routines are in fish_routines_tuna.
@@ -2238,3 +2255,133 @@ global dim TUNA_CELL_AT(400) `and which module of the code that place is
 global TUNA_MID_X = 0 `the middle of the code on the screen, in pixels of the game
 global TUNA_MID_Y = 0
 global TUNA_SHRINK# = 0 `how much smaller the fish of the board are drawn on this frame. 0 is their own size, and -.5 is half of it.
+
+` MORSE. a word can be tapped out in Morse code, on anything that the player can press. so it
+` works on a controller, which has no letters. TUNA makes the QR code, the same as typing it does,
+` and SOS turns debug mode on, cheats and all, even in a shipped game. the words are set in setup_morse.
+`
+` THE SIGNALS. a dot is a short push, and a dash is a long one. these are all of them:
+`     TUNA    -  ..-  -.  .-        makes the QR code. see tunaAsked, in fish_routines_tuna.
+`     SOS     ...  ---  ...         turns debug mode on, and marks the game as one that had it. see morseSos, in fish_routines_morse.
+`     CQ      -.-.  --.-            the radio answers: it bips every signal back, but for this one and SOS. see morseReplyStart.
+`     SING    ...  ..  -.  --.      plays a hint of the hidden game, the bright way that a group of five does. see morseSing.
+`     SONG    ...  ---  -.  --.     the same.
+`     CTHULHU -.-.  -  ....  ..-  .-..  ....  ..-     a tentacle of the ancient one comes up for a moment, with a scream, and goes. see morseCthulhu.
+` when any of them has been heard, the radio taps back .-. which is R, for "received".
+` the codec has an entry for the radio, which is unlocked the first time that the radio comes on, and
+` which only gives CQ away. and it has an entry for every signal but SOS and CQ, which is unlocked when
+` that signal is sent. SOS is not in the codec at all. see CODEC_ENTRY_RADIO, and MORSE_WORD_CODEC.
+` a new one is a line here, a number like MORSE_WORD_SOS below, a morseWord in setup_morse, and
+` something that looks for the number in MORSE_HEARD. the letters are in morseAlphabet.
+`
+` first the radio has to be turned on: one thing is held down, on its own, for MORSE_WAKE_MS. a sign
+` sounds when it comes on. from then on every push is a dot or a dash, by how long it is held, and a
+` tone sounds for as long as it is held. the last pushes are remembered, and when the end of them is
+` the dots and dashes of a word, that word has been heard, whatever came before it. so STUNA is TUNA.
+` the quiet after a letter does not have to be any longer than the quiet inside of one.
+` when a word has been heard, the radio goes off. it also goes off, with another sign, when nobody
+` has pushed anything for MORSE_SLEEP_MS, or when two things are held at once, like a swap: then the
+` player has gone back to the game.
+` nobody taps at the same speed, so the game keeps an average of how long this player's dots are,
+` and of how long their dashes are, and a push is a dash when it is longer than the middle of the two.
+` every push moves its own average half way to itself, and pulls the other one along a little, to a
+` third or to three times its length, because that is how long they are meant to be.
+` now and then a shooting star crosses the sky of the splash screen, somewhere new every time, and its trail is the dots and dashes of CQ. see morseStarsMake.
+` Tools/morse_bip_gen.py makes the sounds. the routines are in fish_routines_morse.
+global MORSE_WAKE_MS = 2000 `how long one thing has to be held, on its own, to turn the radio on, in milliseconds
+global MORSE_SLEEP_MS = 3000 `and how long the radio waits for a push before it goes off again
+global MORSE_DOT_START = 100 `how long a dot is taken to be, in milliseconds, before any has been heard
+global MORSE_DASH_START = 300 `and a dash
+global MORSE_MIDDLE_MIN# = 160 `the middle of the two never goes under this, so that a lot of quick taps do not turn a slower tap into a dash
+global MORSE_PUSH_MAX_MS = 1500 `a push that is held for longer than this is not a dot or a dash
+global MORSE_VOLUME# = .3 `how loud the tone is. the same as VOLUME in Tools/morse_bip_gen.py.
+global MORSE_SIGN_VOLUME# = .35 `how loud the two signs are. the same as SIGN_VOLUME there.
+global MORSE_WORD_ROOM = 8 `how many words there can be
+global MORSE_MARK_ROOM = 32 `and how many pushes long a word can be. the last this many pushes are remembered.
+global MORSE_WORD_TUNA = 0 `the word that makes the QR code
+global MORSE_WORD_SOS = 1 `and the word that turns debug mode on
+global MORSE_WORD_CQ = 2 `the word that the radio answers
+global MORSE_WORD_SING = 3 `and the two words that play a hint of the hidden game
+global MORSE_WORD_SONG = 4
+global MORSE_WORD_CTHULHU = 5 `the word that a tentacle comes up for
+global CODEC_ENTRY_RADIO = -1 `the entry of the radio in the codec, once setup_codec has run. it is unlocked when the radio first comes on.
+global CODEC_ENTRY_SING = -1 `and the entries of the signals, each of which is unlocked when it is sent. TUNA has CODEC_ENTRY_TUNA.
+global CODEC_ENTRY_SONG = -1
+global CODEC_ENTRY_CTHULHU = -1
+global TEX_CODEC_RADIO `and the picture that it has. Tools/radio_icon_gen.py draws it.
+global MORSE_REPLY_LEAD = 3 `how long the radio waits before it taps anything back, as so many dots
+global MORSE_TENTACLE_LIFE_MS = 5200 `how long the tentacle of CTHULHU is there, from when it starts to come up until it is gone again
+global MORSE_TENTACLE_REACH# = .62 `how far up it comes, where 1 is as far as it comes in the ending
+global MORSE_TENTACLE_ON = 0 `1 while it is there
+global MORSE_TENTACLE_MS = 0 `when it started to come up
+global MORSE_TENTACLE_UP# = 0 `how far up it is right now, from 0 to 1
+global MORSE_CTHULHU_COUNT = 0 `how many times CTHULHU has been heard
+global dim MORSE_WORD_CODEC(8) `the entry of the codec that every word unlocks when it is sent, or -1 for none
+global dim MORSE_WORD_NAME$(8) `the letters of every word, for the codec
+global MORSE_SPELL_ROOM = 48 `how many numbers long the spelling of a word can be: its pushes, and a 2 after every letter
+global MORSE_REPLY_UNIT_MS = 100 `how long a dot is when the radio answers, in milliseconds
+global MORSE_REPLY_WAIT = 7 `how long the radio waits between one word and the next when it answers, as so many dots
+global MORSE_REPLY_PITCH# = .35 `how much higher the tone is when it is the radio that is tapping, so that it does not sound like the player
+global MORSE_MODE = 0 `1 while the radio is on
+global MORSE_WAKING = 0 `1 for the rest of the hold that turned the radio on. it is not a dot or a dash.
+global MORSE_WOKE = 0 `1 on the frame that the radio came on,
+global MORSE_SLEPT = 0 `and on the frame that it went off, because nobody pushed anything, or the player went back to the game
+global MORSE_DOT# = 100 `the average length of this player's dots, in milliseconds,
+global MORSE_DASH# = 300 `and of their dashes,
+global MORSE_MIDDLE# = 200 `and the middle of the two. a push that is longer than this is a dash.
+global MORSE_HELD = 0 `1 while something is held down
+global MORSE_HELD_MS = 0 `when it went down
+global MORSE_FREE_MS = 0 `and when the last push ended
+global MORSE_SPOILED = 0 `1 when more than one thing was held during the push, so that it does not count
+global MORSE_MARK = -1 `the last push that was heard: 0 for a dot, and 1 for a dash
+global MORSE_HEARD = -1 `the word that was finished on this frame, or -1
+global MORSE_SOUND# = 0 `how loud the tone is right now
+global MORSE_WORD_COUNT = 0 `how many words there are
+global MORSE_SOS_COUNT = 0 `how many times SOS has been heard
+global MORSE_SING_COUNT = 0 `and SING, or SONG
+global dim MORSE_WORD_SECRET(8) `1 for a word that the radio does not give away when it answers
+global dim MORSE_WORD_SPELL(384) `the spelling of every word, as morseSpell leaves it. each word has MORSE_SPELL_ROOM numbers.
+global dim MORSE_WORD_SPELL_LENGTH(8) `and how many numbers long each one is
+global dim MORSE_REPLY(1024) `the answer of the radio: a 1 for every dot of time that the tone sounds, and a 0 for every one that it does not
+global MORSE_REPLY_LENGTH = 0 `how many of those there are
+global MORSE_REPLY_ON = 0 `1 while the radio is answering
+global MORSE_REPLY_AT = 0 `how many dots of time into the answer it is. less than 0 while it waits to start.
+global MORSE_REPLY_CLOCK = 0 `the milliseconds that have gone by since the last whole dot
+global MORSE_REPLY_LAST_MS = 0 `when the answer was last moved along
+global MORSE_REPLY_LIT = 0 `1 while the tone of the answer sounds
+global MORSE_PITCH# = 0 `how high the tone is right now
+global dim MORSE_CODES(26) `the pushes of every letter, from A to Z: a 1, and then, in binary, a 0 for every dot and a 1 for every dash
+global dim MORSE_WORD_MARKS(256) `the pushes of every word: 0 for a dot, and 1 for a dash. each word has MORSE_MARK_ROOM of them.
+global dim MORSE_WORD_LENGTH(8) `how many pushes long every word is
+global dim MORSE_BUFFER(32) `the last pushes that were heard, the oldest first
+global MORSE_BUFFER_COUNT = 0 `and how many of them there are
+global dim MORSE_SPELL(64) `the pushes of the word that morseSpell was last asked for, with a 2 after every letter
+global MORSE_SPELL_COUNT = 0 `and how many numbers that is
+global MORSE_STAR_UNIT_MS = 70 `how long the shooting star of the splash screen takes to cross one step of its path, in milliseconds
+global MORSE_STAR_STEP = 3 `how many pixels across a step is. it is one pixel down.
+global MORSE_STAR_ODDS = 3 `the star only comes on one crossing in this many. the rest of the time the sky stays empty.
+global MORSE_STAR_EDGE = 14 `how far the path keeps from the edges of the splash screen, in pixels
+global MORSE_STAR_X = 96 `where on the splash screen the path of this crossing starts. it is somewhere else every time: see morseStarRoll.
+global MORSE_STAR_Y = 44
+global MORSE_STAR_SEEN = 0 `1 when the star comes on this crossing
+global MORSE_STAR_CROSSING = -1 `which crossing this is, counting from 0, or -1 before the first
+global MORSE_STAR_LETTER_GAP = 4 `how many steps of nothing there are after a letter, on top of the one that there is after every dot and dash
+global MORSE_STAR_FADE = 16 `how long a piece of trail takes to fade away behind the star, as so many steps
+global MORSE_STAR_REST = 34 `how long the sky is empty after a crossing, before the next one, the same way
+global MORSE_STAR_WAIT = 16 `and how long it is before the first crossing, while the splash screen fades in
+global MORSE_STAR_PATH = 0 `how many steps long the path is
+global MORSE_STAR_COUNT = 0 `how many of the steps have trail on them
+global MORSE_STAR_HEAD = 0 `the star itself
+global dim MORSE_STARS(64) `a sprite for every step that has trail on it,
+global dim MORSE_STAR_AT_STEP(64) `and which step of the path each one is
+global dim MORSE_GLINT(256) `a 1 for every step of the path that has trail on it, and a 0 for every one that does not
+global MORSE_STAR_GOING = 0 `1 while the shooting star is being shown
+global MORSE_STAR_AT = 0 `how many steps of time have gone by since it first set out. less than 0 while it waits.
+global MORSE_STAR_CLOCK = 0 `the milliseconds that have gone by since the last whole step
+global MORSE_STAR_LAST_MS = 0 `when it was last moved along
+global SFX_CLIP_MORSE `the tone
+global SFX_MORSE = 0
+global SFX_CLIP_MORSE_ON `the sign that the radio is on
+global SFX_MORSE_ON = 0
+global SFX_CLIP_MORSE_OFF `and that it has gone off
+global SFX_MORSE_OFF = 0

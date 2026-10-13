@@ -315,6 +315,10 @@ function popBellyUpFish(index)
     touched = CELLS(index)
     if touched.bellyUp <> 1 then exitfunction
 
+    ` nothing pops on its own at night, and that goes for a belly up fish too. it stays where it is, so
+    ` a song that is sung over it still brings horror coral. see NOTHING POPS AT NIGHT in fish_headers_tide.
+    if TIDE_NIGHT then exitfunction
+
     ` it is already going to pop, with the rest of the belly up fish, because of the waste bucket
     if touched.comboForce > 0 then exitfunction
 
@@ -1079,8 +1083,6 @@ function collectInput()
     endif
 
 endfunction
-
-global soap = 4
 
 
 
@@ -2278,5 +2280,8 @@ function registerMove(delta)
 
     ` every move takes some of the air of a diver that is down. see THE AIR in fish_headers_diver.
     diverMoveMade(delta)
+
+    ` and one of the moves of the night, when it is night. see THE MOON in fish_headers_tide.
+    tideMoveMade(delta)
 endfunction
 

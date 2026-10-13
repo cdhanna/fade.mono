@@ -4,6 +4,8 @@ name: CI
 # packages (Contracts, Game, Lib, Templates) via install.sh in dry-run mode
 # (no NuGet push, no WASM bundle). Catches compile/pack breakage before release.
 # The full WASM bundle + publish are exercised by the Release workflow.
+#
+# A second job, fish-tests, fetches the fish game's assets and runs its tests. See the job.
 
 on:
   push:
@@ -40,3 +42,151 @@ jobs:
         env:
           FADE_NUGET_DRYRUN: 'true'
         run: bash ./install.sh 0.0.0 0 nuget.org "" "" --skip-wasm
+
+  # The tests of the fish game (Fade.MonoGame/fish_tests*.fbasic). They drive the real game, so
+  # the game has to start: it gets a screen that is not there (Xvfb), a software OpenGL (Mesa),
+  # and a sound card that plays nothing (OpenAL's "null" driver).
+  #
+  # What the run leaves behind, as the "fish-test-results" artifact, pass or fail:
+  #   summary.md    the counts, each test that failed, each one that never ran. also on the run's page.
+  #   junit.xml     the same, for tools
+  #   results.tsv   every test and how it went
+  #   tests.log     everything that the game printed
+  #   tests.mp4     a recording of the screen for the whole run
+  #
+  # Needs the same two secrets as the Steam workflow, to fetch the art and the sound:
+  # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID. Without them (a pull request from a fork has
+  # none) the job says so and passes, without running anything.
+  fish-tests:
+    name: fish game tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GAME_PROJECT: Fade.MonoGame/Fade.MonoGame.csproj
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Look for the asset secrets
+        id: secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::The fish game tests were skipped: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are not available to this run."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup .NET
+        if: steps.secrets.outputs.found == 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Cache NuGet packages
+        if: steps.secrets.outputs.found == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-fish-tests-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.*.props') }}
+          restore-keys: |
+            nuget-fish-tests-${{ runner.os }}-
+
+      # The bundle that build/assets.lock pins. See the same step in steam.yml.
+      - name: Fetch bucket assets
+        if: steps.secrets.outputs.found == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash build/fetch-assets.sh
+
+      - name: Fetch Facepunch.Steamworks
+        if: steps.secrets.outputs.found == 'true'
+        run: bash build/fetch-steamworks.sh
+
+      # The tests run a Debug build, which compiles the game's shaders when it starts, so Wine
+      # has to be there at run time too, and not only for the build.
+      - name: Setup Wine for MGFXC (shader compilation)
+        if: steps.secrets.outputs.found == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wine64
+          wget -qO- https://monogame.net/downloads/net8_mgfxc_wine_setup.sh | bash
+          echo "MGFXC_WINE_PATH=$HOME/.winemonogame" >> "$GITHUB_ENV"
+
+      - name: Install a screen, OpenGL, sound and a recorder
+        if: steps.secrets.outputs.found == 'true'
+        run: sudo apt-get install -y xvfb libgl1-mesa-dri libopenal1 ffmpeg
+
+      - name: Build the game
+        if: steps.secrets.outputs.found == 'true'
+        run: dotnet build "$GAME_PROJECT" -c Debug -o game-out
+
+      - name: Run the tests
+        id: tests
+        if: steps.secrets.outputs.found == 'true'
+        env:
+          DISPLAY: ':99'
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          ALSOFT_DRIVERS: 'null'
+        run: |
+          mkdir -p test-results
+          results="$PWD/test-results"
+
+          # the game asks for a window of 1920x1080
+          Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp &
+          xvfb_pid=$!
+          sleep 2
+
+          cd game-out
+
+          # no window for this one: it only prints the names
+          ./Fade.MonoGame --list-tests > "$results/tests.list" 2>&1 || true
+
+          # half size and 15 frames a second keeps the recorder out of the game's way. the file is
+          # written in pieces, so that it still plays when the run was cut short.
+          ffmpeg -loglevel error -f x11grab -framerate 15 -video_size 1920x1080 -i :99 \
+            -vf scale=960:540 -c:v libx264 -preset ultrafast -pix_fmt yuv420p \
+            -movflags +frag_keyframe+empty_moov "$results/tests.mp4" &
+          ffmpeg_pid=$!
+
+          # the run has a limit of its own, and `timeout` is there for a run that does not keep to it.
+          # a test that hangs ends the run here, and the report names the first test that never ran.
+          set +e
+          timeout --signal=KILL 25m ./Fade.MonoGame --no-banner --no-progress --no-ansi \
+            --output Detailed --timeout 20m > "$results/tests.log" 2>&1
+          code=$?
+          set -e
+
+          kill -INT "$ffmpeg_pid" 2>/dev/null || true
+          wait "$ffmpeg_pid" 2>/dev/null || true
+          kill "$xvfb_pid" 2>/dev/null || true
+
+          cd ..
+          set +e
+          python3 build/test-report.py --log "$results/tests.log" --list "$results/tests.list" \
+            --exit-code "$code" --out "$results" > "$results/console.md"
+          report=$?
+          set -e
+          cat "$results/console.md" >> "$GITHUB_STEP_SUMMARY"
+          rm "$results/console.md"
+
+          # when nothing reported at all, the end of the log is the only clue
+          if [ "$report" != "0" ]; then
+            echo "----- the last lines of tests.log -----"
+            tail -n 60 "$results/tests.log"
+          fi
+          exit "$report"
+
+      - name: Upload the results
+        if: always() && steps.secrets.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fish-test-results
+          path: test-results/
+          if-no-files-found: warn
+          retention-days: 14

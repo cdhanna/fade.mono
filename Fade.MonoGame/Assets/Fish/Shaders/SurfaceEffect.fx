@@ -257,7 +257,8 @@ float3 sky(float2 px)
 	float bright = hash(wp + 31.0);
 	bright = 0.3 + 0.7 * bright * bright;
 	float twinkle = 0.7 + 0.3 * sin(Time * 2.0 + hash(wp + 7.0) * 40.0);
-	color += star * twinkle * bright * max(smoothstep(0.6, 0.95, h) * (1.0 - Day), space);
+	float starLight = star * twinkle * bright * max(smoothstep(0.6, 0.95, h) * (1.0 - Day), space);
+	color += starLight;
 
 	// and some bigger ones that are a little cross of pixels. there is at most one in every square of sky.
 	float2 cell = floor(wp / 26.0);
@@ -275,6 +276,10 @@ float3 sky(float2 px)
 	// in the day, with the thing there, the sky is a dark, sick green. see THE DARK BEHIND IT, further up.
 	float sick = Endings.y * Day;
 	color = lerp(color, lerp(SickLow, SickHigh, smoothstep(0.0, 0.75, h)), sick * SICK_SKY);
+
+	// the green is in front of the stars, and it would hide them. they are still there, so they are put back.
+	color += starLight * sick * SICK_SKY;
+	color = lerp(color, StarColor, bigStar * bigTwinkle * sick);
 	color += SunGlow * glow * glow * (1.0 - 0.75 * sick);
 
 	// long thin clouds, drifting. the bottom edge of a cloud is another color: in the evening the sun

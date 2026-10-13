@@ -56,6 +56,7 @@ setup_infos:
     INFO_CURSOR = createInfoBorder(ORDER_INFO_CURSOR)
     INFO_L_CURSOR = createInfoBorder(ORDER_INFO_CURSOR)
     INFO_L_FAINT = createInfoBorder(ORDER_INFO_BORDER)
+    INFO_L2_FAINT = createInfoBorder(ORDER_INFO_BORDER)
     reserve tween id(INFO_CURSOR_TWEEN_X)
     reserve tween id(INFO_CURSOR_TWEEN_Y)
     reserve tween id(INFO_CURSOR_TWEEN_W)
@@ -141,8 +142,16 @@ info_open:
                 show sprite INFO_L_FAINT.leftId
                 show sprite INFO_L_FAINT.bottomId
             else
-                layoutInfoBorder(infoItem.border, infoItem.topLeft.x, infoItem.topLeft.y, infoItem.size.x, infoItem.size.y)
-                showInfoBorder(infoItem.border, 1)
+                if i = INFO_L2_INDEX
+                    ` and so does the second one that has a leg. see AND A SECOND ONE in fish_headers.
+                    layoutInfoL(infoItem.border, INFO_L2_FAINT, infoItem.topLeft.x, infoItem.topLeft.y, infoItem.size.x, infoItem.size.y, INFO_L2_W, INFO_L2_H)
+                    showInfoBorder(infoItem.border, 1)
+                    show sprite INFO_L2_FAINT.leftId
+                    show sprite INFO_L2_FAINT.bottomId
+                else
+                    layoutInfoBorder(infoItem.border, infoItem.topLeft.x, infoItem.topLeft.y, infoItem.size.x, infoItem.size.y)
+                    showInfoBorder(infoItem.border, 1)
+                endif
             endif
         endif
     next
@@ -203,6 +212,7 @@ info_close:
     showInfoBorder(INFO_CURSOR, 0)
     showInfoBorder(INFO_L_CURSOR, 0)
     showInfoBorder(INFO_L_FAINT, 0)
+    showInfoBorder(INFO_L2_FAINT, 0)
     showInfoBorder(INFO_PANEL_BORDER, 0)
     hide text INFO_TITLE_TEXT_ID
     hide text INFO_DESC_TEXT_ID
@@ -262,13 +272,24 @@ frame_info_render:
     infoH = tweenVal(INFO_CURSOR_TWEEN_H)
     ` the one with a leg has a bright outline in the shape of an L, and a second hole for the leg.
     ` the second hole reaches up into the first, so that the two run together.
+    ` either of the two that can have a leg. see AND A SECOND ONE in fish_headers.
+    infoLegW = 0
+    infoLegH = 0
     if INFO_SELECTED = INFO_L_INDEX
-        layoutInfoL(INFO_CURSOR, INFO_L_CURSOR, infoX, infoY, infoW, infoH, INFO_L_W, INFO_L_H)
+        infoLegW = INFO_L_W
+        infoLegH = INFO_L_H
+    endif
+    if INFO_SELECTED = INFO_L2_INDEX
+        infoLegW = INFO_L2_W
+        infoLegH = INFO_L2_H
+    endif
+    if infoLegW > 0
+        layoutInfoL(INFO_CURSOR, INFO_L_CURSOR, infoX, infoY, infoW, infoH, infoLegW, infoLegH)
         show sprite INFO_L_CURSOR.leftId
         show sprite INFO_L_CURSOR.bottomId
-        infoLegX = infoX + infoW - (INFO_L_W + INFO_HOLE_PADDING)
+        infoLegX = infoX + infoW - (infoLegW + INFO_HOLE_PADDING)
         position sprite INFO_HOLE2_SPRITE, infoLegX, infoY + infoH - INFO_HOLE_PADDING * 3
-        size sprite INFO_HOLE2_SPRITE, INFO_L_W + INFO_HOLE_PADDING * 2, INFO_L_H + INFO_HOLE_PADDING * 4
+        size sprite INFO_HOLE2_SPRITE, infoLegW + INFO_HOLE_PADDING * 2, infoLegH + INFO_HOLE_PADDING * 4
         show sprite INFO_HOLE2_SPRITE
     else
         layoutInfoBorder(INFO_CURSOR, infoX, infoY, infoW, infoH)
@@ -286,6 +307,7 @@ frame_info_render:
     colorInfoBorder(INFO_CURSOR, rgb(255, 255, 255, 255 * infoFade# * infoPulse#))
     colorInfoBorder(INFO_L_CURSOR, rgb(255, 255, 255, 255 * infoFade# * infoPulse#))
     colorInfoBorder(INFO_L_FAINT, rgb(64, 128, 255, 160 * infoFade#))
+    colorInfoBorder(INFO_L2_FAINT, rgb(64, 128, 255, 160 * infoFade#))
     for i = 0 to INFO_LENGTH - 1
         if INFOS(i).enabled
             colorInfoBorder(INFOS(i).border, rgb(64, 128, 255, 160 * infoFade#))
@@ -468,6 +490,7 @@ function layoutInfoPanel(index)
     ` below the blob if there is room, otherwise above it, otherwise inside the bottom of it.
     panelY = blob.topLeft.y + blob.size.y + 6
     if index = INFO_L_INDEX then panelY = panelY + INFO_L_H `and below its leg, for the one that has one
+    if index = INFO_L2_INDEX then panelY = panelY + INFO_L2_H
     if panelY + panelH > WORLD_HEIGHT - 16 then panelY = blob.topLeft.y - panelH - 6
     if panelY < 4 then panelY = blob.topLeft.y + blob.size.y - panelH - 6
 

@@ -23,9 +23,42 @@
 //   texcoord2.z  how much bigger to draw the fish, as if it lifts up toward the eye. 0 is its own
 //                size, and 1 is twice as big. less than 0 draws it smaller: -.5 is half the size.
 //   texcoord2.w  how much brighter to draw it. 0 is its own color, and 1 is twice as bright.
+//                -1 is a fish that does not glow at night. see THE NIGHT, further down. at night,
+//                a fish that is drawn brighter glows more, too.
 
 Texture2D SpriteTexture;
 float4x4 MatrixTransform;
+
+// THE NIGHT. x is how much it is night, from 0 to 1, and y is the time, in seconds. see THE NIGHT DIVE in
+// fish_headers_tide. at night a fish is bioluminescent: its body is dimmer, but it keeps its own
+// colors, so that the kinds can still be told apart. the dark line around it lights up in the color
+// of the fish, and the pale parts of it are a little brighter. there is a halo around it, in the
+// same color. the light comes and goes in waves that cross the board. a fish that does not glow
+// only gets dimmer.
+// the game sets this on every frame. a parameter that the game never sets does not keep a value that
+// it is given here, so the things that never change are #defines instead.
+float2 Night;
+
+// what is left of the color of the body of a fish at night
+#define NIGHT_BODY float3(0.52, 0.57, 0.70)
+
+// a pixel of the picture that is darker than this is part of the line around the fish, or its eye
+#define NIGHT_LINE 0.16
+
+// the light of every fish leans toward this color, by this much
+#define NIGHT_LIGHT float3(0.25, 1.00, 0.90)
+#define NIGHT_LEAN 0.10
+
+// a fish is this many pixels across
+#define NIGHT_PIXELS 16.0
+
+// how far out the halo goes, where 1 is the size of a fish, and how strong it is at the middle
+#define NIGHT_HALO_REACH 0.95
+#define NIGHT_HALO 0.70
+
+// the waves of light: how fast they come, and how far apart they are across the screen and down it, in pixels
+#define NIGHT_WAVE_SPEED 1.9
+#define NIGHT_WAVE float2(0.040, 0.027)
 
 // how far each fish in a stack sits from the one in front of it, where 1 is the size of a fish.
 // this is on the face of the card, so it tilts along with it.
@@ -68,7 +101,9 @@ struct VertexShaderOutput
 	float3 AxisV : TEXCOORD2;
 	float3 Normal : TEXCOORD3;
 
-	float2 CountGlow : TEXCOORD4; // x is how many fish are in the stack, y is how much brighter to draw
+	// x is how many fish are in the stack, y is how much brighter to draw, z is how much it is night,
+	// and w is how brightly the fish glows right now, which is 0 for a fish that does not
+	float4 CountGlow : TEXCOORD4;
 };
 
 VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
@@ -103,7 +138,12 @@ VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
 	output.AxisV = float3(sinP * sinY, cosP, sinP * cosY);
 	output.Normal = float3(cosP * sinY, -sinP, cosP * cosY);
 
-	output.CountGlow = float2(clamp(custom.z, 1.0, MAX_STACK), max(custom2.w, 0.0));
+	// the wave of light gets to every fish at its own time, by where the middle of the fish is on the screen
+	float2 middle = position.xy - corner * custom.w * (1.0 + grow) * lift;
+	float wave = 0.5 + 0.5 * sin(Night.y * NIGHT_WAVE_SPEED - dot(middle, NIGHT_WAVE));
+	float glows = step(-0.5, custom2.w);
+
+	output.CountGlow = float4(clamp(custom.z, 1.0, MAX_STACK), max(custom2.w, 0.0), saturate(Night.x), glows * (0.62 + 0.38 * wave) * (1.0 + 1.6 * max(custom2.w, 0.0)));
 
 	output.Position = mul(position, MatrixTransform);
 	output.Color = color;
@@ -139,6 +179,29 @@ float4 SampleLayer(VertexShaderOutput input, float index)
 	return c;
 }
 
+// a number from 0 to 1 that is different for every spot
+float hash(float2 p)
+{
+	float3 p3 = frac(float3(p.x, p.y, p.x) * 0.1031);
+	p3 += dot(p3, p3.yzx + 33.33);
+	return frac((p3.x + p3.y) * p3.z);
+}
+
+// the color of the light that a fish of this color gives off: as bright as that color gets, and a little toward NIGHT_LIGHT
+float3 lightOf(float3 color)
+{
+	float top = max(color.r, max(color.g, color.b));
+	return lerp(color / max(top, 0.001), NIGHT_LIGHT, NIGHT_LEAN);
+}
+
+// what a spot of the picture adds to the color of the whole fish. the more color a spot has, the more it counts.
+float3 tasteOf(float2 spot)
+{
+	float4 c = tex2D(SpriteTextureSampler, spot);
+	float rich = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+	return c.rgb * c.a * (rich * rich + 0.03);
+}
+
 float4 MainPS(VertexShaderOutput input) : COLOR
 {
 	// back to front
@@ -151,8 +214,36 @@ float4 MainPS(VertexShaderOutput input) : COLOR
 		result.a = alpha;
 	}
 
-	// a fish that is told to glow gets brighter. nothing else here changes its colors.
-	result.rgb *= 1.0 + input.CountGlow.y;
+	// a fish that is told to glow gets brighter. nothing else here changes its colors, until it is night.
+	// at night most of that goes into its light, further down, so that the fish itself is not washed out.
+	result.rgb *= 1.0 + input.CountGlow.y * (1.0 - 0.8 * input.CountGlow.z);
+
+	// THE NIGHT. the color of the light of this fish is the color of the fish as a whole, which is
+	// looked up in a few spots of its picture.
+	float night = input.CountGlow.z;
+	float glow = input.CountGlow.w;
+	float3 taste = tasteOf(float2(0.50, 0.50)) + tasteOf(float2(0.34, 0.50)) + tasteOf(float2(0.66, 0.50)) + tasteOf(float2(0.50, 0.36)) + tasteOf(float2(0.50, 0.64));
+	float3 light = lightOf(taste);
+
+	// the body gets dimmer, and keeps its colors. the dark line around the fish lights up in the
+	// color of the fish, and so does its eye. the pale parts of it are a little brighter.
+	float shade = dot(result.rgb, float3(0.299, 0.587, 0.114));
+	float line0 = step(shade, NIGHT_LINE);
+	float pale = smoothstep(0.42, 0.80, shade);
+	float2 pixel = floor((input.Quad + 0.5) * NIGHT_PIXELS);
+	float3 lit = result.rgb * NIGHT_BODY * (1.0 + 0.55 * pale * glow);
+	lit += light * line0 * 0.90 * glow;
+	result.rgb = lerp(result.rgb, lit, night);
+
+	// and the halo, around the fish and behind it, in the same color. it comes in steps, with a
+	// checkerboard between one step and the next, like the light of the sea floor does, so that it
+	// has no hard edge.
+	float reach = saturate(1.0 - length(input.Quad) / NIGHT_HALO_REACH);
+	float checker = frac((pixel.x + pixel.y) * 0.5) * 2.0;
+	float halo = floor(reach * reach * reach * 9.0 + checker * 0.5) / 9.0 * NIGHT_HALO * night * glow;
+	float withHalo = result.a + halo * (1.0 - result.a);
+	result.rgb = (result.rgb * result.a + light * halo * (1.0 - result.a)) / max(withHalo, 0.001);
+	result.a = withHalo;
 
 	return result * input.Color;
 }

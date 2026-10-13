@@ -1328,6 +1328,7 @@ reset_game:
     resetCoral()
     resetQuests()
     diverReset()
+    tideReset()
 
     ` any score that was still floating up off of the fish
     for resetI = 0 to SCORE_TEXT_COUNT - 1
@@ -1430,15 +1431,16 @@ function setMenuPage(page)
         last = MENU_ITEM_CONFIRM_YES
     endif
 
-    ` the page is the run of items from the first to the last. the pause menu leaves out the high scores,
-    ` the codec and the credits, which are things to look at from the title, and not in the middle of a game.
+    ` the page is the run of items from the first to the last. the pause menu leaves out the high scores
+    ` and the credits, which are things to look at from the title, and not in the middle of a game.
+    ` it keeps the codec, so that what is on the board can be looked up.
     MENU_PAGE_FIRST = first
     MENU_PAGE_LENGTH = 0
     for i = 0 to MENU_ITEM_COUNT - 1
         onPage = 1
         if i < first or i > last then onPage = 0
         if page = MENU_PAGE_PAUSE
-            if i = MENU_ITEM_HIGHSCORES or i = MENU_ITEM_CODEC or i = MENU_ITEM_CREDITS then onPage = 0
+            if i = MENU_ITEM_HIGHSCORES or i = MENU_ITEM_CREDITS then onPage = 0
         endif
 
         ` the pause menu has "Inventory" right under "Resume"

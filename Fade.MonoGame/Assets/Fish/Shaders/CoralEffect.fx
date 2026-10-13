@@ -46,6 +46,7 @@ sampler2D ShadowTextureSampler = sampler_state
 float Time;      // in seconds
 float Mood;      // how long the run of pops that is going on is, from 0 to 1. the light is brighter.
 float2 Size;     // how big the screen is, in pixels
+float Night;     // how much it is night, from 0 to 1. the coral goes dark, and the bright parts of it glow. see THE NIGHT DIVE in fish_headers_tide.
 float4 Board;    // xy is the top left corner of the board, in pixels, and z is how big a cell is
 float2 Cells;    // how many columns and rows the board has
 
@@ -571,7 +572,13 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 	ray = smoothstep(0.45, 1.9, ray) * (0.85 + 0.15 * sin(Time * 0.6 + across * 0.1));
 	float reach = saturate(1.0 - (px.y / Size.y) * 1.05);
 	ray = bands(saturate(ray * reach * (0.55 + 1.3 * Mood) * (1.0 + 0.3 * cloud)), 10.0, px);
-	color += RayColor * ray * (0.10 + 0.30 * lit);
+	color += RayColor * ray * (0.10 + 0.30 * lit) * (1.0 - 0.6 * saturate(Night));
+
+	// THE NIGHT. the coral goes dark and blue, and the brighter a part of it is, the more it glows.
+	// the glow comes and goes in slow waves, the same as the light of the fish does.
+	float nightWave = 0.65 + 0.35 * sin(Time * 1.9 - px.x * 0.040 - px.y * 0.027);
+	float3 nightGlow = color * color * float3(0.75, 1.45, 1.35) * nightWave;
+	color = lerp(color, color * float3(0.26, 0.36, 0.60) + nightGlow, saturate(Night));
 
 	// the shade in the water around the rock. it is looked up a little way off, which is what moves it.
 	float shade = bands(pow(shadeAt(px - SHADE_SHIFT), SHADE_SOFT), SHADE_STEPS, px) * SHADE_DARK;

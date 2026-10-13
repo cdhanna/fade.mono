@@ -2,7 +2,7 @@ goto routines_codec_exit
 
 remstart
     THE CODEC
-    the codec is a page of the main menu that shows every upgrade there is to come across in the game.
+    the codec is a page of the main menu, and of the pause menu, that shows every upgrade there is to come across in the game.
     each one is a tile in a grid, and the tile that is highlighted is explained underneath the grid.
 
     an upgrade is locked until it has been seen in a game. a locked tile is a lock, and it does not
@@ -15,8 +15,10 @@ remstart
     seen when some of it grows on the board. see CODEC_ENTRY_CORAL in fish_headers. then the two
     endings, and then the special fish (jellyfish, stingray, bottle) and what can happen to a fish
     (belly up, skeletal, stacked, heart home), which are seen when one is on the board. and last, the
-    QR code that the fish make when TUNA is typed, which is seen when they make one. see TUNA in fish_headers.
+    QR code that the fish make when TUNA is typed, or tapped out in Morse code, which is seen when they make one. see TUNA in fish_headers.
     and after that, the crooked bar, which is seen when a line of fish pays out. see DIAGONALS in fish_headers.
+    and the diver, and its ending. and the radio, which is seen when it first comes on, and the
+    signals SING, SONG and CTHULHU, each of which is seen when it is sent. see MORSE in fish_headers.
     and after that, every quest, which is seen when it is the quest of a round, and has a check mark
     once it has been finished in any game. see THE QUESTS IN THE CODEC in fish_headers_quests.
 
@@ -49,6 +51,10 @@ setup_codec:
     CODEC_ENTRY_CROOKED = CARD_LENGTH + 12
     CODEC_ENTRY_DIVER = CARD_LENGTH + 13
     CODEC_ENTRY_ALBUM = CARD_LENGTH + 14
+    CODEC_ENTRY_RADIO = CARD_LENGTH + 15
+    CODEC_ENTRY_SING = CARD_LENGTH + 16
+    CODEC_ENTRY_SONG = CARD_LENGTH + 17
+    CODEC_ENTRY_CTHULHU = CARD_LENGTH + 18
 
     ` and then every quest. see THE QUESTS IN THE CODEC in fish_headers_quests.
     CODEC_ENTRY_QUEST = CARD_LENGTH + CODEC_EXTRA_COUNT
@@ -72,6 +78,7 @@ setup_codec:
     texture reserve texture id(TEX_ENDING_ALBUM), "Fish/Textures/ending_album"
     texture reserve texture id(TEX_CODEC_DIVER), "Fish/Textures/codec_diver"
     texture reserve texture id(TEX_CROOKED), "Fish/Textures/Cards/crooked_bar"
+    texture reserve texture id(TEX_CODEC_RADIO), "Fish/Textures/Cards/radio"
 
     ` what a locked entry has for a picture is a question mark, and not a lock, whatever the names say
     texture reserve texture id(TEX_LOCK), "Fish/Textures/Cards/question"
@@ -186,6 +193,7 @@ setup_codec:
     enable rich text CODEC_KIND_TEXT_ID
     color text CODEC_KIND_TEXT_ID, rgb(64, 128, 255)
 
+    ` there is room for three lines of this, and no more. the tests check every entry: see codec_texts_fit_in_their_slot.
     CODEC_DESC_TEXT_ID = createHighscoreText(CODEC_X + 86, CODEC_DETAIL_TOP + 43, 16, "desc")
     set text offset CODEC_DESC_TEXT_ID, 0, 0
     set text wrap CODEC_DESC_TEXT_ID, CODEC_WIDTH - 100
@@ -196,7 +204,7 @@ setup_codec:
 return
 
 
-` "Codec" on the main menu. show the codec, in place of the menu, until the player backs out.
+` "Codec" on the main menu, or on the pause menu. show the codec, in place of the menu, until the player backs out.
 menu_run_codec:
     openCodec()
     refreshCodec()
@@ -262,9 +270,13 @@ menu_run_codec:
         endif
     loop
 
-    ` back to the main menu, with "Codec" highlighted again
+    ` back to whichever menu the codec was opened from, with "Codec" highlighted again
     closeCodec()
-    setMenuPage(MENU_PAGE_MAIN)
+    if MENU_MODE = MENU_MODE_PAUSE
+        setMenuPage(MENU_PAGE_PAUSE)
+    else
+        setMenuPage(MENU_PAGE_MAIN)
+    endif
     selectMenuItem(getMenuRow(MENU_ITEM_CODEC), 0)
 return
 
@@ -373,6 +385,10 @@ function getCodecEntryTex(entryIndex)
     if entryIndex = CODEC_ENTRY_CROOKED then entryTex = TEX_CROOKED
     if entryIndex = CODEC_ENTRY_DIVER then entryTex = TEX_CODEC_DIVER
     if entryIndex = CODEC_ENTRY_ALBUM then entryTex = TEX_ENDING_ALBUM
+    if entryIndex = CODEC_ENTRY_RADIO then entryTex = TEX_CODEC_RADIO
+    if entryIndex = CODEC_ENTRY_SING then entryTex = TEX_CODEC_RADIO
+    if entryIndex = CODEC_ENTRY_SONG then entryTex = TEX_CODEC_RADIO
+    if entryIndex = CODEC_ENTRY_CTHULHU then entryTex = TEX_BADGE_TENTACLE
 
     ` a quest has the picture that is on its badge
     entryQuest = getCodecQuest(entryIndex)
@@ -513,6 +529,13 @@ function refreshCodec()
                 if shownEntry >= CODEC_ENTRY_JELLY and shownEntry <> CODEC_SELECTED
                     tileColor = rgb(190, 190, 190)
                 endif
+
+                ` the pictures of the radio, and of its signals, are white, like the art of a card
+                if shownEntry >= CODEC_ENTRY_RADIO and shownEntry <> CODEC_SELECTED
+                    if shownEntry <= CODEC_ENTRY_CTHULHU
+                        tileColor = rgb(150, 190, 255)
+                    endif
+                endif
                 color sprite CODEC_ICON_SPRITES(i), tileColor
 
                 ` a belly up fish is upside down
@@ -594,7 +617,17 @@ function refreshCodec()
 
         ` and the QR code is not on the board, or anywhere, until it is asked for
         if CODEC_SELECTED = CODEC_ENTRY_TUNA
-            set text CODEC_DESC_TEXT_ID, "Not found yet. It has to be spelled out. The Underwater Notes Await."
+            set text CODEC_DESC_TEXT_ID, "Not found yet. It has to be signaled. The Underwater Notes Await."
+        endif
+
+        ` the radio is there for whoever holds on, and it knows the signals
+        if CODEC_SELECTED = CODEC_ENTRY_RADIO
+            set text CODEC_DESC_TEXT_ID, "Not found yet. Hold on, and somebody may be listening."
+        endif
+        if CODEC_SELECTED > CODEC_ENTRY_RADIO
+            if CODEC_SELECTED <= CODEC_ENTRY_CTHULHU
+                set text CODEC_DESC_TEXT_ID, "Not found yet. The radio knows it."
+            endif
         endif
     else
         ` the size is set again, because it is worked out from the size of the texture
@@ -687,15 +720,42 @@ function refreshCodec()
 
         if CODEC_SELECTED = CODEC_ENTRY_TUNA
             set text CODEC_NAME_TEXT_ID, "Donate"
-            set text CODEC_DESC_TEXT_ID, "Type TUNA, and the fish line up into a QR code. Use a smart phone to read the code, and help a coral reef near you."
+            codecSignalText(MORSE_WORD_TUNA, "Type TUNA, or tap it out: ", ". The fish make a QR code. Read it with a phone, and help a coral reef.")
             set text CODEC_KIND_TEXT_ID, "secret"
+            exitfunction
+        endif
+
+        ` the radio, which only gives one signal away, and the signals that have an entry of their
+        ` own. SOS has none. see MORSE in fish_headers.
+        if CODEC_SELECTED = CODEC_ENTRY_RADIO
+            set text CODEC_NAME_TEXT_ID, "Radio"
+            codecSignalText(MORSE_WORD_CQ, "Hold one button for " + str$(MORSE_WAKE_MS / 1000) + " seconds to turn it on, then tap in Morse code. To call anyone, CQ: ", ". Something may answer.")
+            set text CODEC_KIND_TEXT_ID, "secret"
+            exitfunction
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_SING
+            set text CODEC_NAME_TEXT_ID, "Sing"
+            codecSignalText(MORSE_WORD_SING, "Tap out SING on the radio: ", ". A hint of the hidden game plays, the bright way, with a trail.")
+            set text CODEC_KIND_TEXT_ID, "signal"
+            exitfunction
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_SONG
+            set text CODEC_NAME_TEXT_ID, "Song"
+            codecSignalText(MORSE_WORD_SONG, "Tap out SONG on the radio: ", ". A hint of the hidden game plays, the bright way, with a trail.")
+            set text CODEC_KIND_TEXT_ID, "signal"
+            exitfunction
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_CTHULHU
+            set text CODEC_NAME_TEXT_ID, "Cthulhu"
+            codecSignalText(MORSE_WORD_CTHULHU, "Tap out CTHULHU on the radio: ", ". Something comes up to see who called.")
+            set text CODEC_KIND_TEXT_ID, "signal"
             exitfunction
         endif
 
         ` see DIAGONALS in fish_headers
         if CODEC_SELECTED = CODEC_ENTRY_CROOKED
             set text CODEC_NAME_TEXT_ID, "The Crooked Bar"
-            set text CODEC_DESC_TEXT_ID, "Swap a fish into a line of " + str$(DIAGONAL_LENGTH) + " of its kind, corner to corner. Each one stacks up, and the multiplier grows: by one, and one more for every fish past " + str$(DIAGONAL_LENGTH) + "."
+            set text CODEC_DESC_TEXT_ID, "Swap a fish into a line of " + str$(DIAGONAL_LENGTH) + " of its kind, corner to corner. Each stacks up. The multiplier grows by 1, plus 1 per fish past " + str$(DIAGONAL_LENGTH) + "."
             set text CODEC_KIND_TEXT_ID, "secret"
             exitfunction
         endif
@@ -737,4 +797,21 @@ function refreshCodec()
             endcase
         endselect
     endif
+endfunction
+
+
+` what the codec says about a signal: some words, then the dots and dashes of the signal, with
+` a gap after every letter, and then some more words. the dots and dashes are worked out from the
+` word itself, so they are never wrong. see morseWord, in fish_routines_morse.
+function codecSignalText(signalWord, signalLead$, signalTail$)
+    signalSays$ = signalLead$
+    signalFirst = signalWord * MORSE_SPELL_ROOM
+    signalLastSpelt = MORSE_WORD_SPELL_LENGTH(signalWord) - 2
+    for signalSpelt = 0 to signalLastSpelt
+        signalMark = MORSE_WORD_SPELL(signalFirst + signalSpelt)
+        if signalMark = 0 then signalSays$ = signalSays$ + "."
+        if signalMark = 1 then signalSays$ = signalSays$ + "-"
+        if signalMark = 2 then signalSays$ = signalSays$ + "  "
+    next
+    set text CODEC_DESC_TEXT_ID, signalSays$ + signalTail$
 endfunction
