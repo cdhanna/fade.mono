@@ -118,6 +118,15 @@ process_input:
         return
     endif
 
+    ` the walk of a box is over when the button of the move is let go. see ROTATE in fish_headers_fast.
+    if ROTATE_ON
+        rotateOver = rotateWalkOver()
+        if rotateOver
+            gosub rotate_finish
+            return
+        endif
+    endif
+
     if QUEUED_MOVE_NUM <= 0
         return
     endif
@@ -197,6 +206,24 @@ process_input:
                         liveStarted = startLiveMove(swapDir.x, swapDir.y, 0)
                         return
                     endif
+                endif
+            endif
+
+            ` "rotate" is walked: every step with its button held is a step of the walk, and the cursor
+            ` takes it like any other. a second turn is the end of the walk, and so is letting go of the
+            ` button, which is seen at the top of this routine. see ROTATE in fish_headers_fast.
+            if moveAbility.moveValue = [MOVE_ROTATE]
+                if moveAbility.movesLeft <= 0
+                    rotateStep = rotateWants(swapDir.x, swapDir.y)
+                    if rotateStep = 2
+                        gosub rotate_finish
+                        return
+                    endif
+                    liveStarted = startLiveMove(swapDir.x, swapDir.y, 0)
+                    if liveStarted
+                        rotateTook(move.moveBindingIndex, swapDir.x, swapDir.y)
+                    endif
+                    return
                 endif
             endif
 

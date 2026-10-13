@@ -1,0 +1,91 @@
+remstart
+    CAMEOS
+    some of the words that can be tapped out on the radio do nothing but bring somebody through:
+    a fish, or a few of them, or something bigger, that swims across the screen from the left to the
+    right, and is gone. nothing in the game says that these words are there, but the radio gives one
+    of them away, a new one every time, when it answers CQ: see morseReplyStart. see MORSE in
+    fish_headers. the routines are in fish_routines_cameo, and the tests are in fish_tests_cameo.
+
+    THE WORDS. these are all of them:
+        NEMO        -.  .  --  ---                          a clown fish, and a blue fish that comes after it
+        FREDDI      ..-.  .-.  .  -..  -..  ..              a yellow fish, and a little green one that keeps up with it
+        U571        ..-  .....  --...  .----                a submarine, with a ping
+        WILLY       .--  ..  .-..  .-..  -.--               the shadow of a whale goes over, with its call
+        PEARL       .--.  .  .-  .-.  .-..                  a black ship goes by, up at the top
+        DOPEFISH    -..  ---  .--.  .  ..-.  ..  ...  ....  a green fish with two big teeth
+        JAWS        .---  .-  .--  ...                      a fin, along the bottom, faster and faster, with two low notes
+        ARIEL       .-  .-.  ..  .  .-..                    a fork, turning over and over, and a mermaid who is after it
+        MYLEG       --  -.--  .-..  .  --.                  nobody comes, but somebody, somewhere, shouts "my leg!"
+
+    A SWIMMER is one thing that crosses. a word has one of them, or two, but for MYLEG, which
+    has none: it is only heard, a moment after the radio has said that it was received. setup_cameo makes every
+    swimmer of every word, each with its own sprite, and they wait, hidden. when a word is heard, its
+    swimmers set off (cameoStart), and cameoStep moves them, on every frame of the game. a swimmer
+    takes its own time to cross, and may wait a moment before it sets off, so that it comes after
+    the other one. it bobs up and down as it goes. the fin of JAWS starts slow and gets faster, and
+    the fork of ARIEL turns over as it goes.
+    a word that is sent again while its swimmers are out starts them over, from the left.
+    the swimmers go over the fish of the board, and under the words and numbers around it: see
+    ORDER_HUD_TEXT in fish_headers.
+
+    IN THE CODEC. every word has an entry, after the night, in the order of the words. it is locked
+    until the word is sent, the same as the entry that SING and SONG share is. its picture is whoever the
+    word brings. see CODEC_ENTRY_CAMEO in fish_headers, and cameoWord.
+
+    a new word is a line here, a number like MORSE_WORD_NEMO in fish_headers and a morseWord in
+    setup_morse, a cameoWord and a cameoSwimmer or two in setup_cameo, and one more in
+    CODEC_EXTRA_COUNT. the words must stay in a row, from MORSE_WORD_NEMO to MORSE_WORD_MYLEG, and
+    a new one goes on the end, so that the ones before it keep their preferences.
+
+    the pictures that the game did not have are drawn by Tools/cameo_art_gen.py, and the two sounds
+    are made by Tools/cameo_sounds_gen.py. none of it is taken from the films, the shows or the
+    games that the words are from.
+remend
+` on top of the fish, and underneath the words around the board and the bubbles. it is only one more than ORDER_FISH,
+` and that is enough: the swimmers are made thousands of sprites after the fish are, which the engine counts
+` as a few more in the order. see ORDER_HUD_TEXT in fish_headers. the tests check that it still comes out right.
+global ORDER_CAMEO = 21
+global CAMEO_ROOM = 16 `how many swimmers there can be, over all of the words
+global CAMEO_COUNT = 0 `how many there are
+global CAMEO_LIVE = 0 `how many of them are out, or waiting to set off
+global dim CAMEO_WORD(16) `the word that every swimmer comes for
+global dim CAMEO_SPRITE(16)
+global dim CAMEO_WIDE(16) `how wide it is drawn, in pixels of the game
+global dim CAMEO_Y(16) `how far down the screen it crosses
+global dim CAMEO_LIFE_MS(16) `how long it takes to cross
+global dim CAMEO_WAIT_MS(16) `how long after the word it sets off
+global dim CAMEO_BOB(16) `how far it bobs, up and down, in pixels
+global dim CAMEO_RUSH(16) `1 for one that starts slow and gets faster
+global dim CAMEO_SPIN(16) `1 for one that turns over and over
+global dim CAMEO_ON(16) `1 while it is out, or waiting to set off
+global dim CAMEO_START_MS(16) `when it sets off
+global dim CAMEO_X(16) `where it is right now
+global dim CAMEO_HEARD(24) `how many times each word has brought its swimmers out
+global CAMEO_BOB_RATE# = .003 `how fast they bob
+global CAMEO_SPIN_RATE# = .0016 `and how fast the ones that turn over do, in radians for every millisecond
+global CAMEO_WORD_COUNT = 0 `how many of the words there are. the first is MORSE_WORD_NEMO, and they are in a row.
+global dim CAMEO_ICON_TEX(16) `for every one of the words, counting from 0: the picture that it has in the codec,
+global dim CAMEO_ICON_W(16) `how big that picture is, in its own pixels,
+global dim CAMEO_ICON_H(16)
+global dim CAMEO_NAME$(16) `what the codec calls it,
+global dim CAMEO_SAYS$(16) `and what the codec says about it, after how it is tapped out
+global TEX_CAMEO_CLOWN `the pictures. the first two, and the whale, are fish that the game has anyway.
+global TEX_CAMEO_TANG
+global TEX_CAMEO_FREDDI
+global TEX_CAMEO_SUB
+global TEX_CAMEO_SHIP
+global TEX_CAMEO_DOPEFISH
+global TEX_CAMEO_FIN
+global TEX_CAMEO_FORK
+global TEX_CAMEO_MERMAID
+global SFX_CLIP_CAMEO_JAWS `the two low notes of JAWS
+global SFX_CAMEO_JAWS = 0
+global CAMEO_JAWS_VOLUME# = .55 `how loud they are. the same as JAWS_VOLUME in Tools/cameo_sounds_gen.py.
+global CAMEO_JAWS_MS = 9000 `how long they go on for, and so how long the fin takes. the same as JAWS_LENGTH there.
+global SFX_CLIP_CAMEO_LEG `and the shout of MYLEG
+global SFX_CAMEO_LEG = 0
+global CAMEO_LEG_VOLUME# = .7 `the same as LEG_VOLUME there
+global CAMEO_LEG_AT_MS = 1900 `how long after the word the shout comes: when the radio has tapped its R
+global CAMEO_LEG_DUE = 0 `1 while the shout is on its way
+global CAMEO_LEG_MS = 0 `when it comes
+global CAMEO_LEG_COUNT = 0 `how many times it has been shouted

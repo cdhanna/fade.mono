@@ -15,17 +15,27 @@ remstart
     seen when some of it grows on the board. see CODEC_ENTRY_CORAL in fish_headers. then the two
     endings, and then the special fish (jellyfish, stingray, bottle) and what can happen to a fish
     (belly up, skeletal, stacked, heart home), which are seen when one is on the board. and last, the
-    QR code that the fish make when TUNA is typed, or tapped out in Morse code, which is seen when they make one. see TUNA in fish_headers.
+    QR code that the fish make when SOS is typed, or tapped out in Morse code, which is seen when they make one. see TUNA in fish_headers.
     and after that, the crooked bar, which is seen when a line of fish pays out. see DIAGONALS in fish_headers.
     and the diver, and its ending. and the radio, which is seen when it first comes on, and the
-    signals SING, SONG and CTHULHU, each of which is seen when it is sent. see MORSE in fish_headers.
+    signals SING and SONG, which share an entry, and CTHULHU, each of which is seen when it is sent. see MORSE in fish_headers.
+    and the night, and then the words that bring somebody swimming through, each of which is seen
+    when it is sent, too. see CAMEOS in fish_headers_cameo.
     and after that, every quest, which is seen when it is the quest of a round, and has a check mark
     once it has been finished in any game. see THE QUESTS IN THE CODEC in fish_headers_quests.
 
-    there are more upgrades than fit in the grid, so the grid has pages. a page is CODEC_PAGE_SIZE
-    tiles, and there are only that many tile sprites: they are given the pictures of whichever page is
-    showing. the page that is showing is the one that the highlighted entry is on. going off of
-    either end of a row turns the page, and the arrows at the ends of the grid say so.
+    the entries are sorted into categories: upgrades, fish, secrets, signals, endings and quests. the
+    categories are listed down the left of the panel, and the grid only has the entries of the one
+    that the highlighted entry is in. the number of an entry is still what is written above, because
+    that is how it is remembered. see THE CATEGORIES OF THE CODEC in fish_headers.
+
+    there can be more entries in a category than fit in the grid, so the grid has pages. a page is
+    CODEC_PAGE_SIZE tiles, and there are only that many tile sprites: they are given the pictures of
+    whichever page is showing. the page that is showing is the one that the highlighted entry is on.
+    the pages are one under the other: going off of the bottom of the grid turns to the next page,
+    and off of the last page goes to the next category, and the arrows at the right of the grid say
+    whether there is a page above, or below. going left, off of the grid, goes onto the list of the
+    categories, where up and down go from one to the next. see codecGo.
 
     the rest of the game only has to call codecSeeCard() when a card is seen.
 
@@ -53,9 +63,13 @@ setup_codec:
     CODEC_ENTRY_ALBUM = CARD_LENGTH + 14
     CODEC_ENTRY_RADIO = CARD_LENGTH + 15
     CODEC_ENTRY_SING = CARD_LENGTH + 16
-    CODEC_ENTRY_SONG = CARD_LENGTH + 17
-    CODEC_ENTRY_CTHULHU = CARD_LENGTH + 18
-    CODEC_ENTRY_NIGHT = CARD_LENGTH + 19
+    CODEC_ENTRY_CTHULHU = CARD_LENGTH + 17
+    CODEC_ENTRY_NIGHT = CARD_LENGTH + 18
+    CODEC_ENTRY_CAMEO = CARD_LENGTH + CODEC_EXTRA_PLAIN
+
+    ` and the usual ending is the last of the entries that are not cards, after the last of the words
+    CODEC_ENTRY_GOODBYE = CARD_LENGTH + CODEC_EXTRA_COUNT
+    CODEC_ENTRY_GOODBYE = CODEC_ENTRY_GOODBYE - 1
 
     ` and then every quest. see THE QUESTS IN THE CODEC in fish_headers_quests.
     CODEC_ENTRY_QUEST = CARD_LENGTH + CODEC_EXTRA_COUNT
@@ -64,15 +78,41 @@ setup_codec:
         QUEST_EVER_DONE(codecI) = get pref(QUEST_PREF_DONE + codecI, 0)
     next
 
+    ` the categories, in the order of the list, and what is in each. every entry is in one of them.
+    CODEC_CAT_COUNT = 0
+    CODEC_ORDER_COUNT = 0
+    codecStartCategory("Upgrades")
+    codecFile(0, CARD_LENGTH)
+    codecStartCategory("Fish")
+    codecFile(CODEC_ENTRY_JELLY, 7)
+    codecStartCategory("Secrets")
+    codecFile(CODEC_ENTRY_CORAL, 2)
+    codecFile(CODEC_ENTRY_TUNA, 3)
+    codecFile(CODEC_ENTRY_RADIO, 1)
+    codecFile(CODEC_ENTRY_NIGHT, 1)
+    codecStartCategory("Signals")
+    codecFile(CODEC_ENTRY_SING, 2)
+    codecFile(CODEC_ENTRY_CAMEO, CODEC_ENTRY_GOODBYE - CODEC_ENTRY_CAMEO)
+    codecStartCategory("Endings")
+    codecFile(CODEC_ENTRY_GOODBYE, 1)
+    codecFile(CODEC_ENTRY_REEF, 2)
+    codecFile(CODEC_ENTRY_ALBUM, 1)
+    codecStartCategory("Quests")
+    codecFile(CODEC_ENTRY_QUEST, QUEST_COUNT)
+
     ` what has been seen, in every game that has ever been played
     for codecI = 0 to CODEC_COUNT - 1
         CODEC_SEEN(codecI) = get pref(getCodecPref(codecI), 0)
     next
 
+    ` SONG had an entry of its own once, which SING has now. whoever found that one has found this one.
+    if get pref(CODEC_PREF_MORE + 7, 0) then codecSeeCard(CODEC_ENTRY_SING)
+
     ` an ending that was reached before the codec had an entry for it counts, too
     if get pref(PREF_ENDING_REEF, 0) then codecSeeCard(CODEC_ENTRY_REEF)
     if get pref(PREF_ENDING_ANCIENT, 0) then codecSeeCard(CODEC_ENTRY_ANCIENT)
     if get pref(PREF_ENDING_DIVER, 0) then codecSeeCard(CODEC_ENTRY_ALBUM)
+    texture reserve texture id(TEX_ENDING_GOODBYE), "Fish/Textures/ending_home"
 
     texture reserve texture id(TEX_ENDING_REEF), "Fish/Textures/ending_reef"
     texture reserve texture id(TEX_ENDING_ANCIENT), "Fish/Textures/ending_ancient"
@@ -156,13 +196,55 @@ setup_codec:
         CODEC_HEART_SPRITES(codecI) = codecSprite
     next
 
-    ` the arrows at the two ends of the grid, and the page number in the corner of the panel
-    codecGridMiddle = CODEC_TOP + 26 + (CODEC_ROWS - 1) * CODEC_TILE / 2
-    CODEC_ARROW_TEXTS(0) = createHighscoreText(CODEC_X + 26, codecGridMiddle - 20, 40, "<")
-    CODEC_ARROW_TEXTS(1) = createHighscoreText(CODEC_X + CODEC_WIDTH - 26, codecGridMiddle - 20, 40, ">")
+    ` the arrows at the right of the grid, one that points up and one that points down, which say
+    ` that there is a page above, or one below. they are "<" and ">", turned a quarter of the way
+    ` around. and the page number on the corner of the panel.
+    CODEC_ARROW_TEXTS(0) = createHighscoreText(CODEC_X + CODEC_WIDTH - 16, getCodecTileY(0), 40, "<")
+    CODEC_ARROW_TEXTS(1) = createHighscoreText(CODEC_X + CODEC_WIDTH - 16, getCodecTileY(CODEC_PAGE_SIZE - 1), 40, ">")
+    for codecI = 0 to 1
+        set text offset CODEC_ARROW_TEXTS(codecI), .5, .5
+        rotate text CODEC_ARROW_TEXTS(codecI), 1.5708
+    next
     CODEC_PAGE_TEXT_ID = createHighscoreText(CODEC_X + CODEC_WIDTH - 8, CODEC_TOP - 20, 16, "page 1 of 1")
     set text offset CODEC_PAGE_TEXT_ID, 1, 0
     color text CODEC_PAGE_TEXT_ID, rgb(64, 128, 255)
+
+    ` the page number is above the panel, where there is only the main menu behind it, so it has a
+    ` piece of the panel of its own to be written on. refreshCodec makes it as wide as the words are.
+    reserve sprite id(CODEC_PAGE_BACK_SPRITE)
+    sprite CODEC_PAGE_BACK_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset CODEC_PAGE_BACK_SPRITE, 0, 0
+    color sprite CODEC_PAGE_BACK_SPRITE, rgb(10, 14, 30, 235)
+    order sprite CODEC_PAGE_BACK_SPRITE, ORDER_MENU_PANEL
+    set sprite render target CODEC_PAGE_BACK_SPRITE, TARGET_MENU
+    hide sprite CODEC_PAGE_BACK_SPRITE
+
+    ` the list of the categories, down the left of the panel, with a bar behind the one that the
+    ` highlighted entry is in, and a line between the list and the grid
+    for codecI = 0 to CODEC_CAT_COUNT - 1
+        CODEC_CAT_TEXTS(codecI) = createHighscoreText(CODEC_X + 12, CODEC_TOP + 5 + codecI * 14, 16, CODEC_CAT_NAME$(codecI))
+        set text offset CODEC_CAT_TEXTS(codecI), 0, 0
+    next
+
+    reserve sprite id(CODEC_CAT_BAR_SPRITE)
+    sprite CODEC_CAT_BAR_SPRITE, CODEC_X + 5, CODEC_TOP + 6, TEX_PIXEL
+    set sprite offset CODEC_CAT_BAR_SPRITE, 0, 0
+    size sprite CODEC_CAT_BAR_SPRITE, CODEC_SIDE - 10, 14
+    color sprite CODEC_CAT_BAR_SPRITE, rgb(64, 128, 255, 90)
+    order sprite CODEC_CAT_BAR_SPRITE, ORDER_MENU_PANEL + 1
+    set sprite render target CODEC_CAT_BAR_SPRITE, TARGET_MENU
+    hide sprite CODEC_CAT_BAR_SPRITE
+
+    codecSideHigh = CODEC_DETAIL_TOP - CODEC_TOP
+    codecSideHigh = codecSideHigh - 20
+    reserve sprite id(CODEC_SIDE_SPRITE)
+    sprite CODEC_SIDE_SPRITE, CODEC_X + CODEC_SIDE, CODEC_TOP + 8, TEX_PIXEL
+    set sprite offset CODEC_SIDE_SPRITE, 0, 0
+    size sprite CODEC_SIDE_SPRITE, 1, codecSideHigh
+    color sprite CODEC_SIDE_SPRITE, rgb(64, 128, 255, 120)
+    order sprite CODEC_SIDE_SPRITE, ORDER_MENU_PANEL + 1
+    set sprite render target CODEC_SIDE_SPRITE, TARGET_MENU
+    hide sprite CODEC_SIDE_SPRITE
 
     ` how many upgrades have been found, under the title
     CODEC_COUNT_TEXT_ID = createHighscoreText(WORLD_WIDTH / 2, CODEC_TOP - 20, 16, "0 of 0 found")
@@ -208,6 +290,7 @@ return
 
 ` "Codec" on the main menu, or on the pause menu. show the codec, in place of the menu, until the player backs out.
 menu_run_codec:
+    CODEC_ON_LIST = 0
     openCodec()
     refreshCodec()
 
@@ -219,51 +302,23 @@ menu_run_codec:
         if new action down(ACT_CONFIRM) then exit
         if new action down(ACT_PAUSE) then exit
 
-        ` left and right go along the row. going off of either end of it turns the page, and the pages
-        ` go around. up and down go between the rows.
-        codecPage = CODEC_SELECTED / CODEC_PAGE_SIZE
-        codecSlot = CODEC_SELECTED mod CODEC_PAGE_SIZE
-        codecRow = codecSlot / CODEC_COLUMNS
-        codecCol = codecSlot mod CODEC_COLUMNS
-        codecPageCount = getCodecPageCount()
+        ` see codecGo for where each direction goes. a press that goes nowhere makes no sound.
+        codecGoX = 0
+        codecGoY = 0
+        if new action down(ACT_RIGHT) then codecGoX = 1
+        if new action down(ACT_LEFT) then codecGoX = -1
+        if new action down(ACT_DOWN) then codecGoY = 1
+        if new action down(ACT_UP) then codecGoY = -1
+        codecWas = CODEC_SELECTED
+        codecWasOnList = CODEC_ON_LIST
+        if codecGoX <> 0 or codecGoY <> 0
+            codecGo(codecGoX, codecGoY)
+        endif
         codecMoved = 0
-        if new action down(ACT_RIGHT)
-            codecCol = codecCol + 1
-            codecNext = codecPage * CODEC_PAGE_SIZE + codecRow * CODEC_COLUMNS + codecCol
-            if codecCol >= CODEC_COLUMNS or codecNext >= CODEC_COUNT
-                codecCol = 0
-                codecPage = codecPage + 1
-                if codecPage >= codecPageCount then codecPage = 0
-            endif
-            codecMoved = 1
-        endif
-        if new action down(ACT_LEFT)
-            codecCol = codecCol - 1
-            if codecCol < 0
-                codecCol = CODEC_COLUMNS - 1
-                codecPage = codecPage - 1
-                if codecPage < 0 then codecPage = codecPageCount - 1
-            endif
-            codecMoved = 1
-        endif
-        if new action down(ACT_DOWN)
-            codecRow = codecRow + 1
-            if codecRow >= CODEC_ROWS then codecRow = 0
-            codecMoved = 1
-        endif
-        if new action down(ACT_UP)
-            codecRow = codecRow - 1
-            if codecRow < 0 then codecRow = CODEC_ROWS - 1
-            codecMoved = 1
-        endif
+        if CODEC_SELECTED <> codecWas then codecMoved = 1
+        if CODEC_ON_LIST <> codecWasOnList then codecMoved = 1
 
         if codecMoved
-            ` the last page may not be full. a spot with no tile on it gives way to the top row, and
-            ` then to the last tile that there is.
-            codecNext = codecPage * CODEC_PAGE_SIZE + codecRow * CODEC_COLUMNS + codecCol
-            if codecNext >= CODEC_COUNT then codecNext = codecPage * CODEC_PAGE_SIZE + codecCol
-            if codecNext >= CODEC_COUNT then codecNext = CODEC_COUNT - 1
-            CODEC_SELECTED = codecNext
             refreshCodec()
 
             ` the same swell of sound that the highlight of the menu makes when it moves
@@ -312,17 +367,34 @@ endfunction
 ` second one ran out of room.
 function getCodecPref(prefEntry)
     prefSlot = CODEC_PREF + prefEntry
+
+    ` there was room for 32 cards there. the ones after that are kept in a run of their own.
+    if prefEntry >= CODEC_PREF_CARD_ROOM
+        prefSlot = CODEC_PREF_LATE + (prefEntry - CODEC_PREF_CARD_ROOM)
+    endif
     if prefEntry >= CARD_LENGTH
         prefExtra = prefEntry - CARD_LENGTH
         prefSlot = CODEC_PREF_EXTRA + prefExtra
         if prefExtra >= CODEC_PREF_EXTRA_ROOM
             prefSlot = CODEC_PREF_MORE + (prefExtra - CODEC_PREF_EXTRA_ROOM)
+
+            ` SONG had an entry of its own once, right after SING. the ones that came after it are
+            ` still remembered where they were, one further along.
+            if prefEntry > CODEC_ENTRY_SING then prefSlot = prefSlot + 1
+        endif
+
+        ` and that one ran out too. the words that bring somebody swimming through have a third.
+        if prefExtra >= CODEC_EXTRA_PLAIN
+            prefSlot = CODEC_PREF_CAMEO + (prefExtra - CODEC_EXTRA_PLAIN)
         endif
 
         ` the quests have a run of their own, by the number of the quest
         if prefExtra >= CODEC_EXTRA_COUNT
             prefSlot = QUEST_PREF_SEEN + 1 + (prefExtra - CODEC_EXTRA_COUNT)
         endif
+
+        ` the usual ending moves along when there is a new word, so it is kept in a place of its own
+        if prefEntry = CODEC_ENTRY_GOODBYE then prefSlot = PREF_ENDING_HOME
     endif
 endfunction prefSlot
 
@@ -389,9 +461,16 @@ function getCodecEntryTex(entryIndex)
     if entryIndex = CODEC_ENTRY_ALBUM then entryTex = TEX_ENDING_ALBUM
     if entryIndex = CODEC_ENTRY_RADIO then entryTex = TEX_CODEC_RADIO
     if entryIndex = CODEC_ENTRY_SING then entryTex = TEX_CODEC_RADIO
-    if entryIndex = CODEC_ENTRY_SONG then entryTex = TEX_CODEC_RADIO
     if entryIndex = CODEC_ENTRY_CTHULHU then entryTex = TEX_BADGE_TENTACLE
     if entryIndex = CODEC_ENTRY_NIGHT then entryTex = TEX_CODEC_NIGHT
+
+    ` a word that brings somebody swimming through has the picture of whoever it brings
+    entryCameo = entryIndex - CODEC_ENTRY_CAMEO
+    if entryCameo >= 0
+        if entryCameo < CAMEO_WORD_COUNT then entryTex = CAMEO_ICON_TEX(entryCameo)
+    endif
+
+    if entryIndex = CODEC_ENTRY_GOODBYE then entryTex = TEX_ENDING_GOODBYE
 
     ` a quest has the picture that is on its badge
     entryQuest = getCodecQuest(entryIndex)
@@ -400,17 +479,136 @@ function getCodecEntryTex(entryIndex)
 endfunction entryTex
 
 
-` how many pages the grid has
-function getCodecPageCount()
-    pageCount = (CODEC_COUNT + CODEC_PAGE_SIZE - 1) / CODEC_PAGE_SIZE
+` a category starts here, in the list of the categories. the entries that are filed next are in it.
+function codecStartCategory(cdcCatName$)
+    CODEC_CAT_NAME$(CODEC_CAT_COUNT) = cdcCatName$
+    CODEC_CAT_FIRST(CODEC_CAT_COUNT) = CODEC_ORDER_COUNT
+    CODEC_CAT_SIZE(CODEC_CAT_COUNT) = 0
+    CODEC_CAT_COUNT = CODEC_CAT_COUNT + 1
+endfunction
+
+
+` put a run of entries, which are in a row, at the end of the category that was started last
+function codecFile(cdcFileEntry, cdcFileHowMany)
+    cdcFileCat = CODEC_CAT_COUNT - 1
+    cdcFileLast = cdcFileHowMany - 1
+    for cdcFileN = 0 to cdcFileLast
+        CODEC_ORDER(CODEC_ORDER_COUNT) = cdcFileEntry + cdcFileN
+        CODEC_ORDER_COUNT = CODEC_ORDER_COUNT + 1
+        CODEC_CAT_SIZE(cdcFileCat) = CODEC_CAT_SIZE(cdcFileCat) + 1
+    next
+endfunction
+
+
+` 1 when any of the entries of a category has been seen. until then, the list does not give its name.
+function codecCatSeen(cdcSeenCat)
+    cdcSeenAny = 0
+    cdcSeenFirst = CODEC_CAT_FIRST(cdcSeenCat)
+    cdcSeenLast = cdcSeenFirst + CODEC_CAT_SIZE(cdcSeenCat)
+    cdcSeenLast = cdcSeenLast - 1
+    for cdcSeenAt = cdcSeenFirst to cdcSeenLast
+        if CODEC_SEEN(CODEC_ORDER(cdcSeenAt)) then cdcSeenAny = 1
+    next
+endfunction cdcSeenAny
+
+
+` work out which category the highlighted entry is in, and which of the entries of that category it is
+function codecFindSelected()
+    cdcFindLast = CODEC_ORDER_COUNT - 1
+    for cdcFindAt = 0 to cdcFindLast
+        if CODEC_ORDER(cdcFindAt) = CODEC_SELECTED
+            for cdcFindCat = 0 to CODEC_CAT_COUNT - 1
+                if cdcFindAt >= CODEC_CAT_FIRST(cdcFindCat)
+                    CODEC_CAT = cdcFindCat
+                    CODEC_CAT_AT = cdcFindAt - CODEC_CAT_FIRST(cdcFindCat)
+                endif
+            next
+        endif
+    next
+endfunction
+
+
+` a direction has been pressed. cdcGoX is 1 for right and -1 for left, and cdcGoY is 1 for down and -1 for up.
+` in the grid, left and right go along the row, and left from the start of a row goes onto the list
+` of the categories. up and down go between the rows, and the pages are one under the other: going
+` off of the bottom of a page turns to the next one, and off of the last one goes to the category
+` after. going up is the same, the other way. the categories go around.
+` on the list, up and down go from category to category, and right goes back into the grid.
+function codecGo(cdcGoX, cdcGoY)
+    codecFindSelected()
+    cdcGoCat = CODEC_CAT
+    cdcGoAt = CODEC_CAT_AT
+    cdcGoSize = CODEC_CAT_SIZE(cdcGoCat)
+    cdcGoRow = cdcGoAt / CODEC_COLUMNS
+    cdcGoCol = cdcGoAt mod CODEC_COLUMNS
+
+    if CODEC_ON_LIST
+        if cdcGoX > 0 then CODEC_ON_LIST = 0
+        if cdcGoY <> 0
+            cdcGoCat = cdcGoCat + cdcGoY
+            if cdcGoCat >= CODEC_CAT_COUNT then cdcGoCat = 0
+            if cdcGoCat < 0 then cdcGoCat = CODEC_CAT_COUNT - 1
+            CODEC_SELECTED = CODEC_ORDER(CODEC_CAT_FIRST(cdcGoCat))
+        endif
+        exitfunction
+    endif
+
+    if cdcGoX > 0
+        cdcGoNext = cdcGoAt + 1
+        cdcGoLastCol = CODEC_COLUMNS - 1
+        if cdcGoCol < cdcGoLastCol
+            if cdcGoNext < cdcGoSize then cdcGoAt = cdcGoNext
+        endif
+    endif
+    if cdcGoX < 0
+        if cdcGoCol > 0
+            cdcGoAt = cdcGoAt - 1
+        else
+            CODEC_ON_LIST = 1
+        endif
+    endif
+    if cdcGoY > 0
+        ` a row that has no tiles on it is off of the end of the category. the next one starts at its top.
+        cdcGoRow = cdcGoRow + 1
+        cdcGoNext = cdcGoRow * CODEC_COLUMNS
+        if cdcGoNext >= cdcGoSize
+            cdcGoCat = cdcGoCat + 1
+            if cdcGoCat >= CODEC_CAT_COUNT then cdcGoCat = 0
+            cdcGoRow = 0
+        endif
+        cdcGoAt = cdcGoRow * CODEC_COLUMNS + cdcGoCol
+    endif
+    if cdcGoY < 0
+        ` and the category before is come into from underneath: at its last row
+        cdcGoRow = cdcGoRow - 1
+        if cdcGoRow < 0
+            cdcGoCat = cdcGoCat - 1
+            if cdcGoCat < 0 then cdcGoCat = CODEC_CAT_COUNT - 1
+            cdcGoNext = CODEC_CAT_SIZE(cdcGoCat) - 1
+            cdcGoRow = cdcGoNext / CODEC_COLUMNS
+        endif
+        cdcGoAt = cdcGoRow * CODEC_COLUMNS + cdcGoCol
+    endif
+
+    ` a row may not be full. a spot with no tile on it gives way to the last tile that there is.
+    cdcGoSize = CODEC_CAT_SIZE(cdcGoCat)
+    if cdcGoAt >= cdcGoSize then cdcGoAt = cdcGoSize - 1
+    CODEC_SELECTED = CODEC_ORDER(CODEC_CAT_FIRST(cdcGoCat) + cdcGoAt)
+endfunction
+
+
+` how many pages the grid has, for a category
+function getCodecPageCount(pageCat)
+    pageCount = (CODEC_CAT_SIZE(pageCat) + CODEC_PAGE_SIZE - 1) / CODEC_PAGE_SIZE
     if pageCount < 1 then pageCount = 1
 endfunction pageCount
 
 
 ` where the middle of a tile is on the screen. the tiles of a page are numbered along the top row and
-` then along the next. the grid is in the middle of the panel.
+` then along the next. the grid is in the middle of what the list of the categories leaves of the panel.
 function getCodecTileX(tileSlot)
-    gridLeft = CODEC_X + (CODEC_WIDTH - CODEC_COLUMNS * CODEC_TILE) / 2
+    gridRoom = CODEC_WIDTH - CODEC_SIDE
+    gridLeft = CODEC_X + CODEC_SIDE + (gridRoom - CODEC_COLUMNS * CODEC_TILE) / 2
     tileX = gridLeft + CODEC_TILE / 2 + (tileSlot mod CODEC_COLUMNS) * CODEC_TILE
 endfunction tileX
 
@@ -434,6 +632,12 @@ function openCodec()
     ` refreshCodec shows the tiles, because how many there are depends on the page
     show text CODEC_COUNT_TEXT_ID
     show text CODEC_PAGE_TEXT_ID
+    show sprite CODEC_PAGE_BACK_SPRITE
+    for i = 0 to CODEC_CAT_COUNT - 1
+        show text CODEC_CAT_TEXTS(i)
+    next
+    show sprite CODEC_CAT_BAR_SPRITE
+    show sprite CODEC_SIDE_SPRITE
     show text CODEC_ARROW_TEXTS(0)
     show text CODEC_ARROW_TEXTS(1)
     show sprite CODEC_DIVIDER_SPRITE
@@ -461,6 +665,12 @@ function closeCodec()
     next
     hide text CODEC_COUNT_TEXT_ID
     hide text CODEC_PAGE_TEXT_ID
+    hide sprite CODEC_PAGE_BACK_SPRITE
+    for i = 0 to CODEC_CAT_COUNT - 1
+        hide text CODEC_CAT_TEXTS(i)
+    next
+    hide sprite CODEC_CAT_BAR_SPRITE
+    hide sprite CODEC_SIDE_SPRITE
     hide text CODEC_ARROW_TEXTS(0)
     hide text CODEC_ARROW_TEXTS(1)
     hide sprite CODEC_DIVIDER_SPRITE
@@ -484,14 +694,40 @@ function refreshCodec()
     next
     set text CODEC_COUNT_TEXT_ID, str$(foundCount) + " of " + str$(CODEC_COUNT) + " found"
 
-    pageNow = CODEC_SELECTED / CODEC_PAGE_SIZE
-    pageCount = getCodecPageCount()
+    ` the grid has the category that the highlighted entry is in, and the list says which one that is
+    codecFindSelected()
+    ` a category that nothing has been found in does not say what it is, the same as a locked tile
+    for i = 0 to CODEC_CAT_COUNT - 1
+        catColor = rgb(150, 190, 255)
+        if codecCatSeen(i)
+            set text CODEC_CAT_TEXTS(i), CODEC_CAT_NAME$(i)
+        else
+            set text CODEC_CAT_TEXTS(i), "???"
+            catColor = rgb(120, 140, 185)
+        endif
+        if i = CODEC_CAT then catColor = rgb(255, 255, 255)
+        color text CODEC_CAT_TEXTS(i), catColor
+    next
+    position sprite CODEC_CAT_BAR_SPRITE, CODEC_X + 5, CODEC_TOP + 6 + CODEC_CAT * 14
+
+    pageNow = CODEC_CAT_AT / CODEC_PAGE_SIZE
+    pageCount = getCodecPageCount(CODEC_CAT)
     set text CODEC_PAGE_TEXT_ID, "page " + str$(pageNow + 1) + " of " + str$(pageCount)
 
-    ` the arrows are only lit when there is another page to turn to
+    ` what the page number is written on sits on the corner of the panel, and is as wide as the words
+    pageBackWide = get text size x(CODEC_PAGE_TEXT_ID) + 16
+    pageBackLeft = CODEC_X + CODEC_WIDTH
+    pageBackLeft = pageBackLeft - pageBackWide
+    position sprite CODEC_PAGE_BACK_SPRITE, pageBackLeft, CODEC_TOP - 23
+    size sprite CODEC_PAGE_BACK_SPRITE, pageBackWide, 23
+
+    ` an arrow is only lit when there is a page of the category that way
     arrowColor = rgb(64, 128, 255, 60)
-    if pageCount > 1 then arrowColor = rgb(255, 255, 255)
+    if pageNow > 0 then arrowColor = rgb(255, 255, 255)
     color text CODEC_ARROW_TEXTS(0), arrowColor
+    arrowColor = rgb(64, 128, 255, 60)
+    pageLast = pageCount - 1
+    if pageNow < pageLast then arrowColor = rgb(255, 255, 255)
     color text CODEC_ARROW_TEXTS(1), arrowColor
 
     ` the fish behind the fish of "stacked" only show while that entry does, and is unlocked
@@ -509,7 +745,12 @@ function refreshCodec()
     next
 
     for i = 0 to CODEC_PAGE_SIZE - 1
-        shownEntry = pageNow * CODEC_PAGE_SIZE + i
+        ` a tile that the category has no entry for has the number of an entry that there is not
+        shownEntry = CODEC_COUNT
+        shownAt = pageNow * CODEC_PAGE_SIZE + i
+        if shownAt < CODEC_CAT_SIZE(CODEC_CAT)
+            shownEntry = CODEC_ORDER(CODEC_CAT_FIRST(CODEC_CAT) + shownAt)
+        endif
         rotate sprite CODEC_ICON_SPRITES(i), 0
         if shownEntry < CODEC_COUNT
             ` the size is set again, because it is worked out from the size of the texture
@@ -518,6 +759,7 @@ function refreshCodec()
             if shownEntry >= CARD_LENGTH then tileSize = 32
             set sprite texture CODEC_ICON_SPRITES(i), getCodecEntryTex(shownEntry)
             size sprite CODEC_ICON_SPRITES(i), tileSize, tileSize
+            cameoIconSize(CODEC_ICON_SPRITES(i), shownEntry, 32) `not all of those pictures are square
             show sprite CODEC_ICON_SPRITES(i)
 
             if CODEC_SEEN(shownEntry)
@@ -538,6 +780,11 @@ function refreshCodec()
                     if shownEntry <= CODEC_ENTRY_NIGHT
                         tileColor = rgb(150, 190, 255)
                     endif
+                endif
+
+                ` and the house of the usual ending is white, like the heart and the eye of the other endings
+                if shownEntry = CODEC_ENTRY_GOODBYE and shownEntry <> CODEC_SELECTED
+                    tileColor = rgb(150, 190, 255)
                 endif
                 color sprite CODEC_ICON_SPRITES(i), tileColor
 
@@ -581,8 +828,13 @@ function refreshCodec()
         endif
     next
 
-    selectedSlot = CODEC_SELECTED mod CODEC_PAGE_SIZE
-    movePageOutline(CODEC_CURSOR, getCodecTileX(selectedSlot) - 18, getCodecTileY(selectedSlot) - 18, 36, 36)
+    selectedSlot = CODEC_CAT_AT mod CODEC_PAGE_SIZE
+    if CODEC_ON_LIST
+        ` the outline is on the list of the categories, around the bar
+        movePageOutline(CODEC_CURSOR, CODEC_X + 5, CODEC_TOP + 6 + CODEC_CAT * 14, CODEC_SIDE - 10, 14)
+    else
+        movePageOutline(CODEC_CURSOR, getCodecTileX(selectedSlot) - 18, getCodecTileY(selectedSlot) - 18, 36, 36)
+    endif
 
     ` the highlighted tile, explained. a locked one only says how to find it.
     if CODEC_SEEN(CODEC_SELECTED) = 0
@@ -620,7 +872,7 @@ function refreshCodec()
 
         ` and the QR code is not on the board, or anywhere, until it is asked for
         if CODEC_SELECTED = CODEC_ENTRY_TUNA
-            set text CODEC_DESC_TEXT_ID, "Not found yet. It has to be signaled. The Underwater Notes Await."
+            set text CODEC_DESC_TEXT_ID, "Not found yet. It has to be signaled. Save Our Seas."
         endif
 
         ` the radio is there for whoever holds on, and it knows the signals
@@ -637,6 +889,19 @@ function refreshCodec()
         if CODEC_SELECTED = CODEC_ENTRY_NIGHT
             set text CODEC_DESC_TEXT_ID, "Not found yet. The water comes in, and it goes out."
         endif
+
+        ` the words that bring somebody swimming through are signals too, and the radio gives one away at a time
+        lockedCameo = CODEC_SELECTED - CODEC_ENTRY_CAMEO
+        if lockedCameo >= 0
+            if lockedCameo < CAMEO_WORD_COUNT
+                set text CODEC_DESC_TEXT_ID, "Not found yet. The radio knows it."
+            endif
+        endif
+
+        ` the usual ending is there for whoever gets to the end of a game
+        if CODEC_SELECTED = CODEC_ENTRY_GOODBYE
+            set text CODEC_DESC_TEXT_ID, "Not found yet. Every game ends, if it is played through."
+        endif
     else
         ` the size is set again, because it is worked out from the size of the texture
         set sprite texture CODEC_BIG_SPRITE, getCodecEntryTex(CODEC_SELECTED)
@@ -648,6 +913,13 @@ function refreshCodec()
         if CODEC_SELECTED = CODEC_ENTRY_REEF
             set text CODEC_NAME_TEXT_ID, "The Reef, Saved"
             set text CODEC_DESC_TEXT_ID, "You listened."
+            set text CODEC_KIND_TEXT_ID, "ending"
+            exitfunction
+        endif
+        ` the usual ending says what it says when it plays. see finale_goodbye, in fish_routines_coral.
+        if CODEC_SELECTED = CODEC_ENTRY_GOODBYE
+            set text CODEC_NAME_TEXT_ID, "The Fish Go Home"
+            set text CODEC_DESC_TEXT_ID, "If they had a home..."
             set text CODEC_KIND_TEXT_ID, "ending"
             exitfunction
         endif
@@ -728,28 +1000,23 @@ function refreshCodec()
 
         if CODEC_SELECTED = CODEC_ENTRY_TUNA
             set text CODEC_NAME_TEXT_ID, "Donate"
-            codecSignalText(MORSE_WORD_TUNA, "Type TUNA, or tap it out: ", ". The fish make a QR code. Read it with a phone, and help a coral reef.")
+            codecSignalText(MORSE_WORD_SOS, "Type SOS, or tap it out: ", ". The fish make a QR code. Read it with a phone, and help a coral reef.")
             set text CODEC_KIND_TEXT_ID, "secret"
             exitfunction
         endif
 
         ` the radio, which only gives one signal away, and the signals that have an entry of their
-        ` own. SOS has none. see MORSE in fish_headers.
+        ` own. SOS has the entry of the QR code, above, and TUNA has none. see MORSE in fish_headers.
         if CODEC_SELECTED = CODEC_ENTRY_RADIO
             set text CODEC_NAME_TEXT_ID, "Radio"
             codecSignalText(MORSE_WORD_CQ, "Hold one button for " + str$(MORSE_WAKE_MS / 1000) + " seconds to turn it on, then tap in Morse code. To call anyone, CQ: ", ". Something may answer.")
             set text CODEC_KIND_TEXT_ID, "secret"
             exitfunction
         endif
+        ` SING and SONG do the same thing, so they are one entry, which either of them unlocks
         if CODEC_SELECTED = CODEC_ENTRY_SING
-            set text CODEC_NAME_TEXT_ID, "Sing"
-            codecSignalText(MORSE_WORD_SING, "Tap out SING on the radio: ", ". A hint of the hidden game plays, the bright way, with a trail.")
-            set text CODEC_KIND_TEXT_ID, "signal"
-            exitfunction
-        endif
-        if CODEC_SELECTED = CODEC_ENTRY_SONG
-            set text CODEC_NAME_TEXT_ID, "Song"
-            codecSignalText(MORSE_WORD_SONG, "Tap out SONG on the radio: ", ". A hint of the hidden game plays, the bright way, with a trail.")
+            set text CODEC_NAME_TEXT_ID, "Sing a Song"
+            codecTwoSignalText(MORSE_WORD_SING, MORSE_WORD_SONG, "Tap out SING: ", "  or SONG: ", ". A hint of the hidden game plays, with a trail.")
             set text CODEC_KIND_TEXT_ID, "signal"
             exitfunction
         endif
@@ -774,6 +1041,19 @@ function refreshCodec()
             set text CODEC_DESC_TEXT_ID, "Swap a fish into a line of " + str$(DIAGONAL_LENGTH) + " of its kind, corner to corner. Each stacks up. The multiplier grows by 1, plus 1 per fish past " + str$(DIAGONAL_LENGTH) + "."
             set text CODEC_KIND_TEXT_ID, "secret"
             exitfunction
+        endif
+
+        ` a word that brings somebody swimming through. see CAMEOS in fish_headers_cameo.
+        selectedCameo = CODEC_SELECTED - CODEC_ENTRY_CAMEO
+        if selectedCameo >= 0
+            if selectedCameo < CAMEO_WORD_COUNT
+                selectedWord = MORSE_WORD_NEMO + selectedCameo
+                cameoIconSize(CODEC_BIG_SPRITE, CODEC_SELECTED, 48)
+                set text CODEC_NAME_TEXT_ID, CAMEO_NAME$(selectedCameo)
+                codecSignalText(selectedWord, "Tap out " + MORSE_WORD_NAME$(selectedWord) + " on the radio: ", CAMEO_SAYS$(selectedCameo))
+                set text CODEC_KIND_TEXT_ID, "signal"
+                exitfunction
+            endif
         endif
 
         ` a quest says what info mode says about it in a game, and whether it has ever been finished
@@ -819,6 +1099,30 @@ endfunction
 ` what the codec says about a signal: some words, then the dots and dashes of the signal, with
 ` a gap after every letter, and then some more words. the dots and dashes are worked out from the
 ` word itself, so they are never wrong. see morseWord, in fish_routines_morse.
+function codecTwoSignalText(signalWord, signalOther, signalLead$, signalMiddle$, signalTail$)
+    signalSays$ = signalLead$
+    signalFirst = signalWord * MORSE_SPELL_ROOM
+    signalLastSpelt = MORSE_WORD_SPELL_LENGTH(signalWord) - 2
+    for signalSpelt = 0 to signalLastSpelt
+        signalMark = MORSE_WORD_SPELL(signalFirst + signalSpelt)
+        if signalMark = 0 then signalSays$ = signalSays$ + "."
+        if signalMark = 1 then signalSays$ = signalSays$ + "-"
+        if signalMark = 2 then signalSays$ = signalSays$ + "  "
+    next
+    signalSays$ = signalSays$ + signalMiddle$
+    signalFirst = signalOther * MORSE_SPELL_ROOM
+    signalLastSpelt = MORSE_WORD_SPELL_LENGTH(signalOther) - 2
+    for signalSpelt = 0 to signalLastSpelt
+        signalMark = MORSE_WORD_SPELL(signalFirst + signalSpelt)
+        if signalMark = 0 then signalSays$ = signalSays$ + "."
+        if signalMark = 1 then signalSays$ = signalSays$ + "-"
+        if signalMark = 2 then signalSays$ = signalSays$ + "  "
+    next
+    set text CODEC_DESC_TEXT_ID, signalSays$ + signalTail$
+endfunction
+
+
+` the same, for an entry that only has the one signal
 function codecSignalText(signalWord, signalLead$, signalTail$)
     signalSays$ = signalLead$
     signalFirst = signalWord * MORSE_SPELL_ROOM

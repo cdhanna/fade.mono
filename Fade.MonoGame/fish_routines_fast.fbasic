@@ -1,0 +1,632 @@
+goto routines_fast_exit
+
+remstart
+    THE FAST
+    see fish_headers_fast for what the fast is, what its ladder gives out, and what the modifiers are.
+
+    the upgrade screen, in fish_routines_ability, calls fastOpen when it comes up and fastClose when
+    it has been left, and assign_ability_selection deals the cards of a rung from FAST_OFFER.
+    process_input, in fish_routines_input, follows the walk of a box with rotateWants and rotateTook,
+    and comes to rotate_finish when the walk is over. update_frame, in fish_routines, calls
+    rotateDrawBox on every frame.
+    the rest of the game asks fastOath, and tells modSet what has happened in the game.
+remend
+
+` the walk of a box is over: the button was let go, or the cursor turned a second time. the fish go
+` around, if there is a box, and the move is used up. process_input comes here. the names in here
+` all start with "rotate", because the routines share their variables.
+rotate_finish:
+    rotateSlotWas = ROTATE_SLOT
+    doRotate()
+    if ROTATE_LAST_COUNT > 0
+        MOVE_ABILITY_BINDINGS(rotateSlotWas).movesLeft = MOVE_ABILITY_BINDINGS(rotateSlotWas).resetTimer
+        gosub update_ability_texts
+        create basic tween MOVE_ABILITY_BINDINGS(rotateSlotWas).useShakeTweenId, 1, 0, 500, 0
+
+        ` a special move is not a step of a hidden pattern, so the steps so far are forgotten. see CORAL in fish_headers.
+        coralTrailClear()
+        REQUEST_COMBO_CHECK = 1
+        BELLY_UP_ROLL_DUE = 1
+        gosub update_selection_position
+    endif
+return
+
+
+routines_fast_exit:
+
+
+` has the "oceanic oath" been taken? see fish_headers_fast.
+function fastOath()
+endfunction CARDS(ABILITY_INDEX_OATH).obtained > 0
+
+
+` THE MODIFIERS. see fish_headers_fast.
+
+` does this sum of modifiers have this one in it? `modWhich` is one of the MOD constants.
+function modHas(modSum, modWhich)
+    modOver = modSum / modWhich
+    modBit = modOver mod 2
+endfunction modBit
+
+
+` the game that is being played has had this happen in it. and the player has had it happen, from
+` now on, which is kept in the preferences. see A MODIFIER THAT THE PLAYER HAS NOT HAD in fish_headers_fast.
+function modSet(modNew)
+    if modHas(GAME_MODS, modNew) = 0
+        GAME_MODS = GAME_MODS + modNew
+    endif
+    if modHas(MODS_KNOWN, modNew) = 0
+        MODS_KNOWN = MODS_KNOWN + modNew
+        set pref PREF_MODS_KNOWN, MODS_KNOWN
+    endif
+endfunction
+
+
+` which modifiers the player has had in any game. setup_book, in fish_routines_book, calls this as
+` the game starts, before any game can add to them.
+function modsLoadKnown()
+    MODS_KNOWN = get pref(PREF_MODS_KNOWN, 0)
+    if MODS_KNOWN < 0 then MODS_KNOWN = 0
+    if MODS_KNOWN > MOD_ALL then MODS_KNOWN = 0
+endfunction
+
+
+` the MOD constant of a modifier, by its number, counting from 0: 1, 2, 4 and 8
+function modValue(modNumber)
+    modPower = 1
+    modCount = 0
+    while modCount < modNumber
+        modPower = modPower * 2
+        modCount = modCount + 1
+    endwhile
+endfunction modPower
+
+
+` THE MODIFIERS ON THE TABLES. see fish_headers_fast.
+
+` the modifiers of the game on a row of a table, added up. they are kept in the same number as the initials.
+function getScoreMods(packedName)
+    scoreMods = 0
+    if packedName > 0 then scoreMods = packedName / HISCORE_MOD_STEP
+    if scoreMods > MOD_ALL then scoreMods = 0
+endfunction scoreMods
+
+
+` is a game with these modifiers shown on the tables? it is not when the tile of any of them is
+` switched off. a modifier that the player has not had has no tile, and is always shown.
+function isModsShown(shownMods)
+    modsShown = 1
+    for modsShownN = 0 to MOD_COUNT - 1
+        modsShownIs = modValue(modsShownN)
+        if modHas(shownMods, modsShownIs)
+            if modHas(MODS_KNOWN, modsShownIs)
+                if HISCORE_ENDING_SHOWN(HISCORE_MOD_TILE + modsShownN) = 0 then modsShown = 0
+            endif
+        endif
+    next
+endfunction modsShown
+
+
+` the pictures of the modifiers, and their colors. this is asked for more than once, and only does
+` anything the first time.
+function modsMake()
+    if HISCORE_MOD_MADE then exitfunction
+    HISCORE_MOD_MADE = 1
+
+    texture reserve texture id(MOD_TEX(0)), "Fish/Textures/BadgeOath"
+    texture reserve texture id(MOD_TEX(1)), "Fish/Textures/BadgeEverCoral"
+    texture reserve texture id(MOD_TEX(2)), "Fish/Textures/BadgeNight"
+    texture reserve texture id(MOD_TEX(3)), "Fish/Textures/BadgeBeat"
+    MOD_COLOR(0) = rgb(255, 220, 96)
+    MOD_COLOR(1) = rgb(255, 140, 155)
+    MOD_COLOR(2) = rgb(160, 175, 255)
+    MOD_COLOR(3) = rgb(150, 235, 170)
+
+    ` the strip to the right of the table, and a picture for every modifier on every row of it
+    modsStripX = (WORLD_WIDTH - HISCORE_WIDTH) / 2 + HISCORE_WIDTH + 2
+    modsStripY = HISCORE_TOP + 22
+    reserve sprite id(HISCORE_MOD_BACK_SPRITE)
+    sprite HISCORE_MOD_BACK_SPRITE, modsStripX, modsStripY, TEX_PIXEL
+    set sprite offset HISCORE_MOD_BACK_SPRITE, 0, 0
+    size sprite HISCORE_MOD_BACK_SPRITE, MOD_COUNT * HISCORE_MOD_SIZE + 6, HISCORE_ROWS * HISCORE_ROW_HEIGHT + 4
+    color sprite HISCORE_MOD_BACK_SPRITE, rgb(10, 14, 30, 235)
+    order sprite HISCORE_MOD_BACK_SPRITE, ORDER_MENU_PANEL
+    set sprite render target HISCORE_MOD_BACK_SPRITE, TARGET_MENU
+    hide sprite HISCORE_MOD_BACK_SPRITE
+
+    for modsRow = 0 to HISCORE_ROWS - 1
+        for modsN = 0 to MOD_COUNT - 1
+            modsSprite = 0
+            reserve sprite id(modsSprite)
+            sprite modsSprite, modsStripX + 3 + modsN * HISCORE_MOD_SIZE, HISCORE_TOP + 27 + modsRow * HISCORE_ROW_HEIGHT, MOD_TEX(modsN)
+            set sprite offset modsSprite, 0, 0
+            size sprite modsSprite, HISCORE_MOD_SIZE, HISCORE_MOD_SIZE
+            order sprite modsSprite, ORDER_MENU_TEXT
+            set sprite render target modsSprite, TARGET_MENU
+            hide sprite modsSprite
+            HISCORE_MOD_SPRITES(modsRow * MOD_COUNT + modsN) = modsSprite
+        next
+    next
+endfunction
+
+
+` the pictures of the modifiers of every game on the table that is showing. refreshHighscoreTable,
+` in fish_routines_highscores, calls this when it has written the rows. the strip is only there when
+` some game on the table has a modifier.
+function modsDrawTable()
+    modsMake()
+    modsAny = 0
+    for modsRow = 0 to HISCORE_ROWS - 1
+        modsRowHas = 0
+        modsEntry = HISCORE_SHOWN(modsRow)
+        if modsEntry >= 0 then modsRowHas = getScoreMods(HISCORE_NAMES(modsEntry))
+        for modsN = 0 to MOD_COUNT - 1
+            modsSprite = HISCORE_MOD_SPRITES(modsRow * MOD_COUNT + modsN)
+            modsIs = modValue(modsN)
+            if modHas(modsRowHas, modsIs)
+                modsAny = 1
+
+                ` one that the player has not had is a question mark. the size is set again, because it is worked out from the size of the texture.
+                if modHas(MODS_KNOWN, modsIs)
+                    set sprite texture modsSprite, MOD_TEX(modsN)
+                    color sprite modsSprite, MOD_COLOR(modsN)
+                else
+                    set sprite texture modsSprite, TEX_LOCK
+                    color sprite modsSprite, rgb(120, 140, 185)
+                endif
+                size sprite modsSprite, HISCORE_MOD_SIZE, HISCORE_MOD_SIZE
+                show sprite modsSprite
+            else
+                hide sprite modsSprite
+            endif
+        next
+    next
+    if modsAny
+        show sprite HISCORE_MOD_BACK_SPRITE
+    else
+        hide sprite HISCORE_MOD_BACK_SPRITE
+    endif
+endfunction
+
+
+` put them away, with the rest of the table. hideHighscoreTexts calls this.
+function modsHideTable()
+    if HISCORE_MOD_MADE = 0 then exitfunction
+    hide sprite HISCORE_MOD_BACK_SPRITE
+    for modsHideN = 0 to HISCORE_ROWS * MOD_COUNT - 1
+        hide sprite HISCORE_MOD_SPRITES(modsHideN)
+    next
+endfunction
+
+
+` what the hint of the table calls a modifier, by its number
+function modsTileHint(modsHintN, modsHintOn)
+    modsHint$ = "the oath"
+    if modsHintN = 1 then modsHint$ = "coral"
+    if modsHintN = 2 then modsHint$ = "a night"
+    if modsHintN = 3 then modsHint$ = "a dance"
+    if modsHintOn
+        set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} hide games with " + modsHint$ + "    {pause} back"
+    else
+        set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} show games with " + modsHint$ + "    {pause} back"
+    endif
+endfunction
+
+
+` a new game. nobody is fasting, and nothing has happened yet.
+function fastReset()
+    FAST_STREAK = 0
+    FAST_RUNG = 0
+    FAST_OFFER_COUNT = 0
+    GAME_MODS = 0
+    ROTATE_ON = 0
+    ROTATE_LAST_COUNT = 0
+    rotateHideBox()
+endfunction
+
+
+` THE SAVED GAME. the fast and the modifiers are saved with the rest of it.
+function fastSave()
+    set pref SAVE_PREF + SAVE_PREF_FAST, FAST_STREAK
+    set pref SAVE_PREF + SAVE_PREF_FAST + 1, GAME_MODS
+endfunction
+
+` a game that was saved before there was a fast has neither. grantPassive has already said if the
+` oath was taken, and the coral and the night say so for themselves as they are loaded.
+function fastLoad()
+    FAST_STREAK = get pref(SAVE_PREF + SAVE_PREF_FAST, 0)
+    if FAST_STREAK < 0 then FAST_STREAK = 0
+    if FAST_STREAK > FAST_RUNG_OATH then FAST_STREAK = FAST_RUNG_OATH
+    fastLoadMods = get pref(SAVE_PREF + SAVE_PREF_FAST + 1, 0)
+    if fastLoadMods < 0 then fastLoadMods = 0
+    if fastLoadMods > MOD_ALL then fastLoadMods = 0
+    fastLoadWhich = 1
+    while fastLoadWhich <= MOD_ALL
+        if modHas(fastLoadMods, fastLoadWhich)
+            modSet(fastLoadWhich)
+        endif
+        fastLoadWhich = fastLoadWhich * 2
+    endwhile
+    FAST_RUNG = 0
+    ROTATE_ON = 0
+endfunction
+
+
+` THE LADDER. see fish_headers_fast.
+
+` an upgrade screen is coming up. is it a rung? FAST_RUNG says which, and FAST_OFFER has its cards.
+` the praise of the coral is sung for a rung.
+function fastOpen()
+    FAST_RUNG = 0
+    FAST_OFFER_COUNT = 0
+    fastHasRotate = CARDS(ABILITY_INDEX_MOVE_ROTATE).obtained > 0
+    fastHasBook = CARDS(ABILITY_INDEX_OPEN_BOOK).uses > 0
+
+    ` the first rung has the one card: "rotate", or "open book" for a player who has that already
+    if FAST_STREAK = FAST_RUNG_ROTATE
+        if fastHasRotate = 0
+            FAST_OFFER(0) = ABILITY_INDEX_MOVE_ROTATE
+            FAST_OFFER_COUNT = 1
+        else
+            if fastHasBook = 0
+                FAST_OFFER(0) = ABILITY_INDEX_OPEN_BOOK
+                FAST_OFFER_COUNT = 1
+            endif
+        endif
+        if FAST_OFFER_COUNT > 0 then FAST_RUNG = 1
+    endif
+
+    ` the second has both, or whichever of them the player does not have
+    if FAST_STREAK = FAST_RUNG_BOOK
+        if fastHasRotate = 0
+            FAST_OFFER(FAST_OFFER_COUNT) = ABILITY_INDEX_MOVE_ROTATE
+            FAST_OFFER_COUNT = FAST_OFFER_COUNT + 1
+        endif
+        if fastHasBook = 0
+            FAST_OFFER(FAST_OFFER_COUNT) = ABILITY_INDEX_OPEN_BOOK
+            FAST_OFFER_COUNT = FAST_OFFER_COUNT + 1
+        endif
+        if FAST_OFFER_COUNT > 0 then FAST_RUNG = 2
+    endif
+
+    ` and the last is the oath
+    if FAST_STREAK >= FAST_RUNG_OATH
+        FAST_OFFER(0) = ABILITY_INDEX_OATH
+        FAST_OFFER_COUNT = 1
+        FAST_RUNG = 3
+    endif
+
+    if FAST_RUNG > 0
+        playCoralMusic(0)
+    endif
+endfunction
+
+
+` does the upgrade screen come up as the book? it does for a player who has the "open book" card,
+` unless it is a rung of the ladder that is coming up. see THE BOOK in fish_headers_fast.
+function fastBookOn()
+    fastBook = 0
+    if CARDS(ABILITY_INDEX_OPEN_BOOK).uses > 0
+        if FAST_RUNG = 0 then fastBook = 1
+    endif
+endfunction fastBook
+
+
+` could this card be dealt on the upgrade screen right now? these are the rules that
+` assign_ability_selection, in fish_routines_ability, deals by, and the two have to be kept the same
+` by hand. the book has every card that this says yes to.
+function cardCanBeDealt(dealCard)
+    dealOk = 1
+
+    ` the cards that only a fast gives out are never dealt
+    if dealCard >= FAST_CARD_FROM then dealOk = 0
+
+    ` a card that is owned already, unless it can be taken more than once
+    if CARDS(dealCard).obtained > 0
+        if CARDS(dealCard).stackable = 0 then dealOk = 0
+    endif
+
+    ` the second copy of "bottom feeder" only makes sense once the first one is owned
+    if dealCard = ABILITY_INDEX_BOTTOM_FEEDER_2
+        if CARDS(ABILITY_INDEX_BOTTOM_FEEDER).obtained = 0 then dealOk = 0
+    endif
+
+    ` the two cards of the hidden game only come once it has been found
+    dealSong = 0
+    if dealCard = ABILITY_INDEX_QUICK_SONG then dealSong = 1
+    if dealCard = ABILITY_INDEX_MOVE_SONG then dealSong = 1
+    if dealSong
+        if CORAL_CASTS < CORAL_SONG_CARDS_AFTER then dealOk = 0
+    endif
+
+    ` the "tackle box" has nothing to open once every slot is open
+    if dealCard = ABILITY_INDEX_MOVE_SLOT
+        if MOVE_SLOTS_OPEN >= MOVE_SLOT_COUNT then dealOk = 0
+    endif
+
+    ` some cards can only be taken so many times
+    if CARDS(dealCard).maxUses > 0
+        if CARDS(dealCard).uses >= CARDS(dealCard).maxUses then dealOk = 0
+    endif
+endfunction dealOk
+
+
+` the upgrade screen has been left. `fastNothing` is 1 when it was left with nothing: no card, and no
+` passive dropped. that makes the fast one longer, and anything else ends it. leaving the oath ends it too.
+function fastClose(fastNothing)
+    if fastNothing
+        if FAST_RUNG = 3
+            FAST_STREAK = 0
+        else
+            FAST_STREAK = FAST_STREAK + 1
+        endif
+    else
+        FAST_STREAK = 0
+    endif
+    FAST_RUNG = 0
+endfunction
+
+
+` the line that takes nothing says how long the fast has been: a dot for every time
+function fastSkipLine()
+    fastLine$ = "take nothing"
+    fastDots = 0
+    while fastDots < FAST_STREAK
+        fastLine$ = fastLine$ + "."
+        fastDots = fastDots + 1
+    endwhile
+    set text UPGRADE_SKIP_TEXT_ID, fastLine$
+endfunction
+
+
+` ROTATE. see fish_headers_fast.
+
+` the cursor is about to take a step with the button of the move held. what does the walk make of
+` it? 1 is a step of the walk, and 2 is a second turn, which is the end of the walk: the step is
+` not taken, and the fish go around.
+function rotateWants(rotWantX, rotWantY)
+    rotWant = 1
+    if ROTATE_ON
+        ` how far the cursor has gone to the side of its first leg, and if this step is along that leg
+        rotWantSide = SELECTION_POS.y - ROTATE_FROM_Y
+        rotWantAlong = rotWantX
+        if ROTATE_AXIS = 2
+            rotWantSide = SELECTION_POS.x - ROTATE_FROM_X
+            rotWantAlong = rotWantY
+        endif
+        if rotWantSide <> 0
+            if rotWantAlong <> 0 then rotWant = 2
+        endif
+    endif
+endfunction rotWant
+
+
+` the cursor has set off on a step of the walk. the first one starts the walk, and says which way
+` its first leg goes. a walk that comes back to where it started is over, and nothing happens.
+function rotateTook(rotTookSlot, rotTookX, rotTookY)
+    if ROTATE_ON = 0
+        ROTATE_ON = 1
+        ROTATE_SLOT = rotTookSlot
+        ROTATE_FROM_X = SELECTION_POS.x
+        ROTATE_FROM_Y = SELECTION_POS.y
+        ROTATE_AXIS = 1
+        if rotTookX = 0 then ROTATE_AXIS = 2
+    else
+        rotTookAtX = SELECTION_POS.x + rotTookX
+        rotTookAtY = SELECTION_POS.y + rotTookY
+        if rotTookAtX = ROTATE_FROM_X
+            if rotTookAtY = ROTATE_FROM_Y then ROTATE_ON = 0
+        endif
+    endif
+endfunction
+
+
+` is the walk over? it is when the button of the move has been let go, which shows as soon as no
+` step is waiting, or when the step that is waiting was made without the button.
+function rotateWalkOver()
+    rotOver = 0
+    if QUEUED_MOVE_NUM <= 0
+        if action down(MOVE_ABILITY_BINDINGS(ROTATE_SLOT).actionId) = 0 then rotOver = 1
+    else
+        if QUEUED_MOVES(QUEUED_MOVE_TAIL).moveBindingIndex <> ROTATE_SLOT then rotOver = 1
+    endif
+endfunction rotOver
+
+
+` the fish around the edge of the box go one cell along it. the box has the cell that the walk
+` started on at one corner, and the cell that the cursor is on at the other. ROTATE_LAST_COUNT is
+` left as how many fish went, which is 0 when the walk never turned, and there is no box.
+` this stops the game while it plays, like the other special moves do.
+function doRotate()
+    ROTATE_ON = 0
+    ROTATE_LAST_COUNT = 0
+    ROTATE_RING_COUNT = 0
+    rotateHideBox()
+
+    rotGoX = SELECTION_POS.x - ROTATE_FROM_X
+    rotGoY = SELECTION_POS.y - ROTATE_FROM_Y
+    if rotGoX = 0 then exitfunction
+    if rotGoY = 0 then exitfunction
+
+    rotLeft = ROTATE_FROM_X
+    rotRight = SELECTION_POS.x
+    if rotLeft > rotRight
+        rotLeft = SELECTION_POS.x
+        rotRight = ROTATE_FROM_X
+    endif
+    rotTop = ROTATE_FROM_Y
+    rotBottom = SELECTION_POS.y
+    if rotTop > rotBottom
+        rotTop = SELECTION_POS.y
+        rotBottom = ROTATE_FROM_Y
+    endif
+
+    ` the edge of the box, clockwise from its top left corner: along the top, down the right side,
+    ` back along the bottom, and up the left side
+    rotN = 0
+    rotAt = rotLeft
+    while rotAt <= rotRight
+        ROTATE_RING(rotN) = rotAt + rotTop * CELL_COLUMN_COUNT
+        rotN = rotN + 1
+        rotAt = rotAt + 1
+    endwhile
+    rotAt = rotTop + 1
+    while rotAt <= rotBottom
+        ROTATE_RING(rotN) = rotRight + rotAt * CELL_COLUMN_COUNT
+        rotN = rotN + 1
+        rotAt = rotAt + 1
+    endwhile
+    rotAt = rotRight - 1
+    while rotAt >= rotLeft
+        ROTATE_RING(rotN) = rotAt + rotBottom * CELL_COLUMN_COUNT
+        rotN = rotN + 1
+        rotAt = rotAt - 1
+    endwhile
+    rotAt = rotBottom - 1
+    while rotAt > rotTop
+        ROTATE_RING(rotN) = rotLeft + rotAt * CELL_COLUMN_COUNT
+        rotN = rotN + 1
+        rotAt = rotAt - 1
+    endwhile
+
+    ` the fish go the way that the cursor turned. right and then down is clockwise, and so is
+    ` every walk that turns to its own right.
+    rotSame = 0
+    if rotGoX > 0
+        if rotGoY > 0 then rotSame = 1
+    endif
+    if rotGoX < 0
+        if rotGoY < 0 then rotSame = 1
+    endif
+    rotClockwise = rotSame
+    if ROTATE_AXIS = 2 then rotClockwise = 1 - rotSame
+
+    ` the other way is the same edge, walked backward
+    if rotClockwise = 0
+        rotLow = 0
+        rotHigh = rotN - 1
+        while rotLow < rotHigh
+            rotSwapCell = ROTATE_RING(rotLow)
+            ROTATE_RING(rotLow) = ROTATE_RING(rotHigh)
+            ROTATE_RING(rotHigh) = rotSwapCell
+            rotLow = rotLow + 1
+            rotHigh = rotHigh - 1
+        endwhile
+    endif
+    ROTATE_RING_COUNT = rotN
+
+    ` every fish slides to the next cell of the edge
+    spawnCursorWake(SELECTION_POS.x, SELECTION_POS.y)
+    if ROTATE_TWEEN_ID = 0
+        reserve tween id(ROTATE_TWEEN_ID)
+    endif
+    create basic tween ROTATE_TWEEN_ID, 0, 1, ROTATE_TIME, 0
+    create basic tween SWAP_TWEEN_SFX, 0, 1, ROTATE_TIME, 0
+    set tween type SWAP_TWEEN_SFX, 1
+    while is tween done(ROTATE_TWEEN_ID) < 1
+        rotGone# = tweenVal(ROTATE_TWEEN_ID)
+        rotK = 0
+        while rotK < rotN
+            rotFromCell = ROTATE_RING(rotK)
+            rotNext = rotK + 1
+            if rotNext >= rotN then rotNext = 0
+            rotToCell = ROTATE_RING(rotNext)
+            rotFromX = getCellX(rotFromCell mod CELL_COLUMN_COUNT)
+            rotFromY = getCellY(rotFromCell / CELL_COLUMN_COUNT)
+            rotToX = getCellX(rotToCell mod CELL_COLUMN_COUNT)
+            rotToY = getCellY(rotToCell / CELL_COLUMN_COUNT)
+            rotSlideX# = rotToX - rotFromX
+            rotSlideY# = rotToY - rotFromY
+            rotSlideX# = rotFromX + rotSlideX# * rotGone#
+            rotSlideY# = rotFromY + rotSlideY# * rotGone#
+            position sprite CELLS(rotFromCell).spriteId, rotSlideX#, rotSlideY#
+            rotK = rotK + 1
+        endwhile
+        set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
+        updateBubbles()
+        sync
+    endwhile
+    set sfx volume SFX_SWAP, 0
+
+    ` and then the board is told. trading the first cell of the edge with every other one in turn
+    ` leaves every fish one cell further along it. whatever goes with a fish goes with it.
+    rotK = 1
+    while rotK < rotN
+        rotFirstCell = ROTATE_RING(0)
+        rotOtherCell = ROTATE_RING(rotK)
+        rotKind = CELLS(rotFirstCell).value
+        CELLS(rotFirstCell).value = CELLS(rotOtherCell).value
+        CELLS(rotOtherCell).value = rotKind
+        swapCellStacks(rotFirstCell, rotOtherCell)
+        rotK = rotK + 1
+    endwhile
+    rotK = 0
+    while rotK < rotN
+        updateCell(CELLS(ROTATE_RING(rotK)))
+        rotK = rotK + 1
+    endwhile
+
+    ` a fish that came down onto the bottom row landed there, the same as with "shift"
+    rotK = 0
+    while rotK < rotN
+        rotToCell = ROTATE_RING(rotK)
+        rotBefore = rotK - 1
+        if rotBefore < 0 then rotBefore = rotN - 1
+        rotFromCell = ROTATE_RING(rotBefore)
+        rotToRow = rotToCell / CELL_COLUMN_COUNT
+        rotFromRow = rotFromCell / CELL_COLUMN_COUNT
+        rotLastRow = CELL_ROW_COUNT - 1
+        if rotToRow = rotLastRow
+            if rotFromRow < rotLastRow
+                fishHitBottom(rotToCell, 0)
+            endif
+        endif
+        rotK = rotK + 1
+    endwhile
+
+    registerMove(1)
+
+    ` a ring goes out from the middle of the box, as big as the one of any special move
+    rotMidX# = rotLeft + rotRight
+    rotMidY# = rotTop + rotBottom
+    spawnShockwave(rotMidX# * .5, rotMidY# * .5, SHOCK_ABILITY_STRENGTH#, 0)
+
+    ROTATE_LAST_COUNT = rotN
+    ROTATE_LAST_CLOCKWISE = rotClockwise
+endfunction
+
+
+` the outline of the box, while it is being walked. it is around the cell that the walk started on
+` and the cell that the cursor is on, and everything between them. update_frame calls this.
+function rotateDrawBox()
+    if ROTATE_ON = 0
+        rotateHideBox()
+        exitfunction
+    endif
+    if ROTATE_BOX_MADE = 0
+        ROTATE_BOX = createInfoBorder(ORDER_FISH + 5)
+        ROTATE_BOX_MADE = 1
+    endif
+
+    rotBoxLeft = ROTATE_FROM_X
+    if SELECTION_POS.x < rotBoxLeft then rotBoxLeft = SELECTION_POS.x
+    rotBoxTop = ROTATE_FROM_Y
+    if SELECTION_POS.y < rotBoxTop then rotBoxTop = SELECTION_POS.y
+    rotBoxWide = abs(SELECTION_POS.x - ROTATE_FROM_X) + 1
+    rotBoxTall = abs(SELECTION_POS.y - ROTATE_FROM_Y) + 1
+    rotBoxHalf = CELL_SIZE / 2
+    layoutInfoBorder(ROTATE_BOX, getCellX(rotBoxLeft) - rotBoxHalf, getCellY(rotBoxTop) - rotBoxHalf, rotBoxWide * CELL_SIZE, rotBoxTall * CELL_SIZE)
+
+    ` it pulses the same way that the cursor of info mode does
+    rotBoxPulse# = .7 + .3 * sin(game ms() * .008)
+    colorInfoBorder(ROTATE_BOX, rgb(255, 255, 255, 255 * rotBoxPulse#))
+    showInfoBorder(ROTATE_BOX, 1)
+endfunction
+
+
+` the outline is put away
+function rotateHideBox()
+    if ROTATE_BOX_MADE
+        showInfoBorder(ROTATE_BOX, 0)
+    endif
+endfunction

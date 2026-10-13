@@ -1,0 +1,164 @@
+remstart
+    THE TESTS OF THE FLASHLIGHT
+    see THE FLASHLIGHT in fish_headers_diver for what it is. the top of fish_tests explains how the
+    tests work. the board of the tests only uses the kinds 1 to 5, so these use 6 and 7 for the
+    fish that match. the diver is at (2, 2) in most of them.
+remend
+
+test flashlight_keeps_the_fish_beside_the_diver_awake from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    diverArrive(testIndex(2, 2))
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+    testPut(3, 5, 7)
+    testPut(4, 5, 7)
+    testPut(5, 5, 7)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert testPops(3, 2) = 1, "the fish beside the diver is in the light, so its group pops"
+    assert testPops(5, 2) = 1, "all of it, the fish that are further off too"
+    assert testPops(3, 5) = 0, "the group that is out in the dark does not"
+    assert TIDE_HELD_GROUPS = 1, "the night holds that one"
+    assert DIVER_PHOTOS(5) = 1, "and the diver takes its picture, the same as in the day"
+    end
+endtest
+
+test flashlight_does_not_reach_the_corners from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    diverArrive(testIndex(2, 2))
+    testPut(3, 3, 6)
+    testPut(4, 3, 6)
+    testPut(5, 3, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert testPopCount() = 0, "a group that only comes to a corner of the diver is asleep"
+    assert TIDE_HELD_GROUPS = 1, "and the night holds it"
+    end
+endtest
+
+test flashlight_lights_the_cells_above_and_below_too from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    diverArrive(testIndex(2, 2))
+    testPut(2, 1, 6)
+    testPut(3, 1, 6)
+    testPut(4, 1, 6)
+    testPut(0, 3, 7)
+    testPut(1, 3, 7)
+    testPut(2, 3, 7)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert testPops(4, 1) = 1, "the group that has a fish over the diver pops"
+    assert testPops(0, 3) = 1, "and so does the one that has a fish under it"
+    assert TIDE_HELD_GROUPS = 0, "nothing is held"
+    end
+endtest
+
+test flashlight_swap_fills_the_multiplier_and_takes_no_air from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    SCORE_MULTIPLIER = 3
+    MULT_PROGRESS = 1
+    diverArrive(testIndex(2, 1))
+    tFlAir = DIVER_AIR
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the swap brings a fish in under the diver, and its group pops"
+    assert MULT_PROGRESS = 2, "the bar of the multiplier fills, the way that it does in the day"
+    assert TIDE_NIGHT_LEFT = 4, "the swap was one of the moves of the night"
+    assert DIVER_AIR = tFlAir, "which take no air, when the diver stays where it is"
+    end
+endtest
+
+test flashlight_is_nothing_without_the_night from fishBoard
+    diverArrive(testIndex(2, 2))
+    runto _loop
+    assert DIVER_LIGHT_AT = -1, "there is no light in the day"
+    assert diverLightOn(testIndex(3, 2)) = 0, "and no fish is in it"
+    end
+endtest
+
+test flashlight_is_drawn_around_the_diver_at_night from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    tideSnap()
+    diverArrive(testIndex(0, 2))
+    runto _loop
+
+    assert DIVER_LIGHT_AT = testIndex(0, 2), "the light is where the diver is"
+    assert diverLightOn(testIndex(1, 2)) = 1, "the cell beside the diver is in it,"
+    assert diverLightOn(testIndex(0, 1)) = 1, "and the one over it,"
+    assert diverLightOn(testIndex(0, 3)) = 1, "and the one under it"
+    assert diverLightOn(testIndex(1, 3)) = 0, "the one at the corner is not"
+    assert diverLightOn(testIndex(0, 2)) = 0, "and neither is the diver's own"
+    assert diverLightOn(testIndex(CELL_COLUMN_COUNT - 1, 1)) = 0, "nor the one that is around the edge of the board"
+
+    ` day breaks, and the light goes with the night
+    TIDE_NIGHT = 0
+    tideSnap()
+    runto _loop
+    assert DIVER_LIGHT_AT = -1, "the diver puts it away in the day"
+    end
+endtest
+
+test flashlight_costs_air_to_carry_somewhere_else from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    diverArrive(testIndex(2, 2))
+    tFlAir = DIVER_AIR
+    tFlMoves = CURRENT_MOVE_COUNT
+
+    ` a swap somewhere else on the board
+    testCursor(6, 6)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+    assert DIVER_AIR = tFlAir, "a swap of the night that leaves the diver alone takes no air"
+    runto _loop
+
+    ` the cursor carries the diver one cell to the right
+    testCursor(2, 2)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+    assert CELLS(testIndex(3, 2)).value = TEX_DIVER, "the diver is swapped along"
+    assert DIVER_AIR = tFlAir - 1, "and that takes one move of air, night or not"
+    assert CURRENT_MOVE_COUNT = tFlMoves, "the moves of the night are still not counted"
+    runto _loop
+
+    ` and the fish beside it is swapped into its cell, which shoves the diver back
+    testCursor(2, 2)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+    assert CELLS(testIndex(2, 2)).value = TEX_DIVER, "the diver is shoved back"
+    assert DIVER_AIR = tFlAir - 2, "which takes one more"
+    end
+endtest
+
+test flashlight_goes_up_with_the_diver_when_the_air_runs_out_at_night from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    diverArrive(testIndex(2, 2))
+    DIVER_AIR = 1
+    testCursor(2, 2)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+    runto _loop
+
+    assert DIVER_AIR = 0, "moving the diver took the last of the air"
+    assert DIVER_ON = 0, "so the diver has gone up, in the middle of the night"
+    assert TIDE_NIGHT = 1, "which goes on without it"
+    end
+endtest

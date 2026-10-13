@@ -1,0 +1,387 @@
+remstart
+    THE TESTS OF THE FAST
+    see fish_headers_fast for what the fast is, and what "rotate" and the oath do. the top of
+    fish_tests explains how the tests work. the board of the tests only uses the kinds 1 to 5, so
+    these use 6 and 7 for the fish that are followed.
+
+    the keys are mocked in the tests, so no button is ever held, and the walk of a box is over as
+    soon as no step of it is waiting.
+remend
+
+` walk a box without the keys: from one cell, the first leg across or up and down, to another
+function testRotateWalk(tFromX, tFromY, tAxis, tToX, tToY)
+    ROTATE_ON = 1
+    ROTATE_SLOT = 0
+    ROTATE_FROM_X = tFromX
+    ROTATE_FROM_Y = tFromY
+    ROTATE_AXIS = tAxis
+    SELECTION_POS.x = tToX
+    SELECTION_POS.y = tToY
+endfunction
+
+test rotate_right_and_then_down_is_clockwise from fishBoard
+    testPut(2, 2, 6)
+    testPut(3, 2, 7)
+    tRtA = CELLS(testIndex(3, 3)).value
+    tRtB = CELLS(testIndex(2, 3)).value
+    testRotateWalk(2, 2, 1, 3, 3)
+
+    doRotate()
+
+    assert ROTATE_LAST_COUNT = 4, "the four fish of the box go around"
+    assert ROTATE_LAST_CLOCKWISE = 1, "clockwise"
+    assert CELLS(testIndex(3, 2)).value = 6, "the one at the top left goes right,"
+    assert CELLS(testIndex(3, 3)).value = 7, "the one at the top right goes down,"
+    assert CELLS(testIndex(2, 3)).value = tRtA, "the one at the bottom right goes left,"
+    assert CELLS(testIndex(2, 2)).value = tRtB, "and the one at the bottom left goes up"
+    assert CURRENT_MOVE_COUNT = 1, "all of it counts as one move"
+    assert ROTATE_ON = 0, "and the walk is over"
+    end
+endtest
+
+test rotate_right_and_then_up_is_the_other_way from fishBoard
+    testPut(2, 3, 6)
+    testRotateWalk(2, 3, 1, 3, 2)
+
+    doRotate()
+
+    assert ROTATE_LAST_CLOCKWISE = 0, "the fish go the way that the cursor walked"
+    assert CELLS(testIndex(3, 3)).value = 6, "so the one that it started on goes right, along the bottom"
+    end
+endtest
+
+test rotate_down_and_then_right_is_the_other_way_too from fishBoard
+    testPut(2, 2, 6)
+    testRotateWalk(2, 2, 2, 3, 3)
+
+    doRotate()
+
+    assert ROTATE_LAST_CLOCKWISE = 0, "the fish go the way that the cursor walked"
+    assert CELLS(testIndex(2, 3)).value = 6, "so the one that it started on goes down"
+    end
+endtest
+
+test rotate_takes_the_edge_of_a_bigger_box_and_leaves_the_middle from fishBoard
+    testPut(2, 2, 6)
+    testPut(3, 3, 7)
+    CELLS(testIndex(2, 2)).stack = 2
+    CELLS(testIndex(2, 2)).bellyUp = 1
+    testRotateWalk(2, 2, 1, 4, 5)
+
+    doRotate()
+
+    assert ROTATE_LAST_COUNT = 10, "a box of three by four has ten fish around its edge"
+    assert CELLS(testIndex(3, 2)).value = 6, "the fish at the corner goes one along"
+    assert CELLS(testIndex(3, 2)).stack = 2, "and takes its stack with it,"
+    assert CELLS(testIndex(3, 2)).bellyUp = 1, "and stays belly up"
+    assert CELLS(testIndex(2, 2)).stack = 0, "the fish that took its place has none"
+    assert CELLS(testIndex(3, 3)).value = 7, "and the fish in the middle of the box stay where they are"
+    end
+endtest
+
+test rotate_with_no_turn_is_no_move from fishBoard
+    testPut(2, 2, 6)
+    testRotateWalk(2, 2, 1, 5, 2)
+
+    doRotate()
+
+    assert ROTATE_LAST_COUNT = 0, "a walk that never turned has no box"
+    assert CELLS(testIndex(2, 2)).value = 6, "so the fish stay where they are"
+    assert CURRENT_MOVE_COUNT = 0, "and it is not a move"
+    assert ROTATE_ON = 0, "and the walk is over"
+    end
+endtest
+
+test rotate_is_walked_with_its_button from fishBoard
+    grantMoveToSlot(ABILITY_INDEX_MOVE_ROTATE, 0)
+    testPut(2, 2, 6)
+    testCursor(2, 2)
+    testQueueMove(1, 0, 0, 0)
+    testQueueMove(0, 1, 0, 0)
+    for tRtFrame = 1 to 40
+        runto _loop
+    next
+
+    assert ROTATE_LAST_COUNT = 4, "right and then down, and the four fish go around"
+    assert CELLS(testIndex(3, 2)).value = 6, "the one that the walk started on goes right"
+    assert SELECTION_POS.x = 3, "the cursor is at the far corner of the box,"
+    assert SELECTION_POS.y = 3, "where the walk left it"
+    assert CURRENT_MOVE_COUNT = 1, "it is one move"
+    assert ROTATE_COOLDOWN = 0, "the move never has to recharge"
+    assert MOVE_ABILITY_BINDINGS(0).movesLeft = 0, "so it is ready again right away"
+    assert ROTATE_ON = 0, "the walk is over"
+    end
+endtest
+
+test rotate_walk_that_never_turns_is_not_used_up from fishBoard
+    grantMoveToSlot(ABILITY_INDEX_MOVE_ROTATE, 0)
+    testPut(2, 2, 6)
+    testCursor(2, 2)
+    testQueueMove(1, 0, 0, 0)
+    testQueueMove(1, 0, 0, 0)
+    for tRtFrame = 1 to 40
+        runto _loop
+    next
+
+    assert SELECTION_POS.x = 4, "the cursor went two cells"
+    assert ROTATE_LAST_COUNT = 0, "but there is no box"
+    assert CELLS(testIndex(2, 2)).value = 6, "so nothing went around"
+    assert CURRENT_MOVE_COUNT = 0, "it is not a move"
+    assert MOVE_ABILITY_BINDINGS(0).movesLeft = 0, "and the move is still ready"
+    assert ROTATE_ON = 0, "the walk is over"
+    end
+endtest
+
+test rotate_second_turn_is_the_end_of_the_walk from fishBoard
+    grantMoveToSlot(ABILITY_INDEX_MOVE_ROTATE, 0)
+    testPut(2, 2, 6)
+    testCursor(2, 2)
+    testQueueMove(1, 0, 0, 0)
+    testQueueMove(0, 1, 0, 0)
+    testQueueMove(0, 1, 0, 0)
+    testQueueMove(1, 0, 0, 0)
+    for tRtFrame = 1 to 50
+        runto _loop
+    next
+
+    assert ROTATE_LAST_COUNT = 6, "right, down and down again is a box of two by three"
+    assert SELECTION_POS.x = 3, "and the step of the second turn is not taken"
+    assert SELECTION_POS.y = 4, "so the cursor is at the corner of the box"
+    assert CELLS(testIndex(3, 2)).value = 6, "the fish went around"
+    end
+endtest
+
+test rotate_walk_back_to_the_start_is_nothing from fishBoard
+    grantMoveToSlot(ABILITY_INDEX_MOVE_ROTATE, 0)
+    testCursor(2, 2)
+    testQueueMove(1, 0, 0, 0)
+    testQueueMove(-1, 0, 0, 0)
+    for tRtFrame = 1 to 40
+        runto _loop
+    next
+
+    assert SELECTION_POS.x = 2, "the cursor is back where it started"
+    assert ROTATE_ON = 0, "and the walk is over"
+    assert CURRENT_MOVE_COUNT = 0, "it is not a move"
+    assert MOVE_ABILITY_BINDINGS(0).movesLeft = 0, "and the move is still ready"
+    end
+endtest
+
+test fast_is_as_long_as_the_screens_left_with_nothing from fishBoard
+    assert FAST_STREAK = 0, "nobody is fasting to start with"
+    fastOpen()
+    fastClose(1)
+    assert FAST_STREAK = 1, "leaving an upgrade screen with nothing is a fast"
+    fastOpen()
+    fastClose(1)
+    assert FAST_STREAK = 2, "and so is the next"
+    fastOpen()
+    fastClose(0)
+    assert FAST_STREAK = 0, "taking something ends it"
+    end
+endtest
+
+test fast_first_rung_is_rotate_and_nothing_else from fishBoard
+    FAST_STREAK = 1
+    fastOpen()
+    assert FAST_RUNG = 0, "one time is not a rung"
+
+    FAST_STREAK = FAST_RUNG_ROTATE
+    fastOpen()
+    assert FAST_RUNG = 1, "two times is the first rung"
+    assert FAST_OFFER_COUNT = 1, "which has the one card"
+    assert FAST_OFFER(0) = ABILITY_INDEX_MOVE_ROTATE, "and it is rotate"
+
+    fastClose(1)
+    assert FAST_STREAK = 3, "leaving it carries the fast on"
+    fastOpen()
+    assert FAST_RUNG = 0, "and the screen after it is like any other"
+    end
+endtest
+
+test fast_second_rung_has_the_open_book_too from fishBoard
+    FAST_STREAK = FAST_RUNG_BOOK
+    fastOpen()
+    assert FAST_RUNG = 2, "four times is the second rung"
+    assert FAST_OFFER_COUNT = 2, "which has two cards"
+    assert FAST_OFFER(0) = ABILITY_INDEX_MOVE_ROTATE, "rotate,"
+    assert FAST_OFFER(1) = ABILITY_INDEX_OPEN_BOOK, "and the open book"
+    end
+endtest
+
+test fast_rung_only_offers_what_the_player_does_not_have from fishBoard
+    CARDS(ABILITY_INDEX_MOVE_ROTATE).obtained = 1
+    FAST_STREAK = FAST_RUNG_ROTATE
+    fastOpen()
+    assert FAST_OFFER_COUNT = 1, "the first rung still has one card"
+    assert FAST_OFFER(0) = ABILITY_INDEX_OPEN_BOOK, "but it is the open book, for a player who has rotate"
+
+    FAST_STREAK = FAST_RUNG_BOOK
+    fastOpen()
+    assert FAST_OFFER_COUNT = 1, "and the second rung has the one that is left"
+
+    CARDS(ABILITY_INDEX_OPEN_BOOK).uses = 1
+    fastOpen()
+    assert FAST_RUNG = 0, "with both, it is an upgrade screen like any other"
+    end
+endtest
+
+test fast_last_rung_is_the_oath from fishBoard
+    FAST_STREAK = FAST_RUNG_OATH
+    fastOpen()
+    assert FAST_RUNG = 3, "six times is the last rung"
+    assert FAST_OFFER_COUNT = 1, "which has the one card"
+    assert FAST_OFFER(0) = ABILITY_INDEX_OATH, "the oath"
+
+    fastClose(1)
+    assert FAST_STREAK = 0, "leaving the oath is the end of the fast"
+    end
+endtest
+
+test oath_keeps_the_multiplier_from_going_down from fishBoard
+    grantPassive(ABILITY_INDEX_OATH)
+    assert fastOath() = 1, "the oath has been taken"
+    assert modHas(GAME_MODS, MOD_OATH) = 1, "and the game is marked with it"
+
+    SCORE_MULTIPLIER = 3
+    MULT_PROGRESS = 1
+    testCursor(2, 2)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+    assert MULT_PROGRESS = 0, "a swap that pops nothing still empties the bar"
+    assert SCORE_MULTIPLIER = 3, "and leaves the multiplier alone"
+    runto _loop
+
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+    assert SCORE_MULTIPLIER = 3, "and the next one takes nothing off of it either"
+    end
+endtest
+
+test oath_goes_straight_on_to_the_next_round from fishBoard
+    grantPassive(ABILITY_INDEX_OATH)
+    tOathEnd = SCORE_BAR.endVal
+    SCORE_BAR_HOLD = 1
+    runto _loop
+    runto _loop
+
+    assert REQUEST_ABILITY_SELECTION = 0, "no upgrade screen is asked for"
+    assert SCORE_BAR_HOLD = 0, "the bar has emptied out"
+    tOathStart = SCORE_BAR.startVal
+    assert tOathStart = tOathEnd, "and the next round has started, from where the last one ended"
+    end
+endtest
+
+test modifiers_are_what_has_happened_in_the_game from fishBoard
+    assert GAME_MODS = 0, "nothing has happened yet"
+    modSet(MOD_NIGHT)
+    modSet(MOD_NIGHT)
+    assert GAME_MODS = MOD_NIGHT, "a thing that happens twice is still the one modifier"
+    modSet(MOD_CORAL)
+    assert modHas(GAME_MODS, MOD_CORAL) = 1, "coral,"
+    assert modHas(GAME_MODS, MOD_NIGHT) = 1, "and the night"
+    assert modHas(GAME_MODS, MOD_OATH) = 0, "but not the oath,"
+    assert modHas(GAME_MODS, MOD_BEAT) = 0, "or a dance"
+    end
+endtest
+
+test modifiers_come_with_coral_and_with_the_night from fishBoard
+    CORAL_CELLS(testIndex(2, 2)) = 1
+    coralRecount()
+    assert modHas(GAME_MODS, MOD_CORAL) = 1, "a game that has had coral is marked with it"
+
+    TIDE_DAWN_MS = 0
+    tideDebugCycle()
+    tideDebugCycle()
+    tideDebugCycle()
+    assert TIDE_NIGHT = 1, "three cycles bring the night"
+    assert modHas(GAME_MODS, MOD_NIGHT) = 1, "and a game that has had a night is marked with that"
+    end
+endtest
+
+test fast_cards_are_kept_apart_in_the_codec from fishBoard
+    assert getCodecPref(31) = CODEC_PREF + 31, "the cards that there were before keep their places in the preferences"
+    assert getCodecPref(ABILITY_INDEX_MOVE_ROTATE) = CODEC_PREF_LATE, "and the ones of the fast have a run of their own,"
+    assert getCodecPref(ABILITY_INDEX_OATH) = CODEC_PREF_LATE + 2, "which does not run into anything"
+    assert getCodecPref(CODEC_ENTRY_CORAL) = CODEC_PREF_EXTRA, "and the entries that are not cards are where they were"
+    end
+endtest
+
+test modifiers_go_onto_the_table_with_the_game from fishBoard
+    tModPacked = 100 + CORAL_ENDING_DIVER * HISCORE_BADGE_STEP + (MOD_OATH + MOD_NIGHT) * HISCORE_MOD_STEP
+    assert getScoreInitials(tModPacked) = 100, "the initials are still the initials"
+    assert getScoreBadge(tModPacked) = CORAL_ENDING_DIVER, "the badge of the ending is still the badge"
+    assert getScoreMods(tModPacked) = MOD_OATH + MOD_NIGHT, "and the modifiers are on top of them"
+    assert getScoreMods(100 + CORAL_ENDING_DIVER * HISCORE_BADGE_STEP) = 0, "a game from before there were modifiers has none"
+    end
+endtest
+
+test modifiers_have_tiles_once_the_player_has_had_them from fishBoard
+    MODS_KNOWN = 0
+    layoutEndingTiles()
+    tModTiles = HISCORE_TILE_COUNT
+    showAllEndings()
+    assert isModsShown(MOD_NIGHT) = 1, "a modifier that the player has not had has no tile, and its games are always shown"
+
+    modSet(MOD_NIGHT)
+    layoutEndingTiles()
+    assert HISCORE_TILE_COUNT = tModTiles + 1, "one that the player has had has a tile"
+    assert HISCORE_TILE_ENDING(tModTiles) = HISCORE_MOD_TILE + 2, "which is the tile of the night"
+
+    HISCORE_ENDING_SHOWN(HISCORE_MOD_TILE + 2) = 0
+    assert isModsShown(MOD_NIGHT) = 0, "with the tile switched off, a game that had a night is left out"
+    assert isModsShown(MOD_NIGHT + MOD_OATH) = 0, "whatever else it had"
+    assert isModsShown(MOD_OATH) = 1, "and a game that had none is still shown"
+    assert isModsShown(0) = 1, "and so is a game with no modifiers at all"
+    showAllEndings()
+    assert isModsShown(MOD_NIGHT) = 1, "and they all come back"
+    end
+endtest
+
+test fast_cards_are_not_written_in_the_log from fishBoard
+    QUEST_LOG_PENDING = 3
+    logUpgrade(ABILITY_INDEX_MOVE_ROTATE)
+    assert GAME_LOG_COUNT = 0, "a card that only a fast gives out is not written down"
+    assert QUEST_LOG_PENDING = 3, "and the quest of the round waits for the next upgrade"
+    logUpgrade(ABILITY_INDEX_WRAP)
+    assert GAME_LOG_COUNT = 1, "which is written down as it always was"
+    assert logQuestOf(GAME_LOG(0)) = 3, "with the quest"
+    end
+endtest
+
+test book_has_every_card_that_can_be_dealt from fishBoard
+    buildBookList()
+    tBookAll = BOOK_COUNT
+    tBookOk = 0
+    if tBookAll > 20 then tBookOk = 1
+    assert tBookOk = 1, "the book has most of the cards in it to start with"
+    assert cardCanBeDealt(ABILITY_INDEX_MOVE_ROTATE) = 0, "but not the ones that only a fast gives out"
+    assert cardCanBeDealt(ABILITY_INDEX_OATH) = 0, "none of them"
+    assert cardCanBeDealt(ABILITY_INDEX_BOTTOM_FEEDER_2) = 0, "or the second bottom feeder, before the first"
+    assert cardCanBeDealt(ABILITY_INDEX_QUICK_SONG) = 0, "or the cards of the hidden game, before it is found"
+
+    grantPassive(ABILITY_INDEX_WRAP)
+    grantPassive(ABILITY_INDEX_BOTTOM_FEEDER)
+    buildBookList()
+    tBookWant = tBookAll - 1
+    assert BOOK_COUNT = tBookWant, "the two passives that are owned leave it, and the second bottom feeder comes in"
+    assert cardCanBeDealt(ABILITY_INDEX_WRAP) = 0, "seamless is not in it any more"
+    assert cardCanBeDealt(ABILITY_INDEX_MOVE_BUNDLE) = 1, "a card that can be taken again always is"
+
+    assert fastBookOn() = 0, "the upgrade screen is not the book without the card"
+    CARDS(ABILITY_INDEX_OPEN_BOOK).uses = 1
+    assert fastBookOn() = 1, "and it is with it"
+    FAST_RUNG = 1
+    assert fastBookOn() = 0, "but not on a rung of the fast, which has its own cards"
+    FAST_RUNG = 0
+    end
+endtest
+
+test debug_button_ends_the_round from fishBoard
+    tEndWant = SCORE_BAR.endVal
+    debugEndRound()
+    tEndOk = 0
+    if CURRENT_SCORE >= tEndWant then tEndOk = 1
+    assert tEndOk = 1, "the points that the round still needed are scored"
+    end
+endtest

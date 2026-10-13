@@ -1,0 +1,152 @@
+remstart
+    THE TESTS OF THE MESSAGE IN THE BOTTLE
+    see THE MESSAGE IN THE BOTTLE in fish_headers for what it is. the top of fish_tests explains how
+    the tests work. a mock of rnd that says 0 makes the chance come up, and picks the first word.
+
+    CQ is 3 dots and 5 dashes, SOS is 6 dots and 3 dashes, SONG is 5 and 6, and CTHULHU is 17 and 6.
+    a dash is three dots long, so that is 18, 15, 23 and 35 dots of tone.
+remend
+
+` how many dots of time the tone sounds for, in what the radio is tapping
+function testBottleTone()
+    tBtTone = 0
+    tBtLastUnit = MORSE_REPLY_LENGTH - 1
+    for tBtUnit = 0 to tBtLastUnit
+        tBtTone = tBtTone + MORSE_REPLY(tBtUnit)
+    next
+endfunction tBtTone
+
+test bottle_on_coral_taps_out_cq_the_first_time from fishBoard
+    mock rnd
+    endmock 0
+    morseQuiet()
+    MORSE_BOTTLE_HEARD = 0
+    tBtRow = CELL_ROW_COUNT - 1
+    testPut(4, tBtRow, TEX_BOTTLE)
+    CORAL_CELLS(testIndex(4, tBtRow)) = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert SCORE_MULTIPLIER = 1 + BOTTLE_MULT_GAIN, "the bottle pays out, the same as ever"
+    assert MORSE_BOTTLE_WORD = MORSE_WORD_CQ, "and the first message that there ever is, is CQ"
+    assert MORSE_REPLY_ON = 1, "the radio taps it out"
+    assert testBottleTone() = 18, "and only that"
+    assert MORSE_BOTTLE_HEARD = 1, "and it is remembered"
+    end
+endtest
+
+test bottle_off_of_coral_has_no_message from fishBoard
+    mock rnd
+    endmock 0
+    morseQuiet()
+    tBtRow = CELL_ROW_COUNT - 1
+    testPut(4, tBtRow, TEX_BOTTLE)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert SCORE_MULTIPLIER = 1 + BOTTLE_MULT_GAIN, "the bottle pays out"
+    assert MORSE_BOTTLE_WORD = -1, "but there is no message in it"
+    assert MORSE_REPLY_ON = 0, "and the radio is quiet"
+    assert MORSE_BOTTLE_HEARD = 0, "and the first message is still to come"
+    end
+endtest
+
+test bottle_has_a_message_thirty_times_in_a_hundred from fishBoard
+    ` the first roll is one too many, and the second is just low enough
+    global tBtRolls = 0
+    mock rnd
+        tBtRolls = tBtRolls + 1
+        tBtRoll = MORSE_BOTTLE_CHANCE - 1
+        if tBtRolls = 1
+            tBtRoll = MORSE_BOTTLE_CHANCE
+        endif
+    endmock tBtRoll
+    morseQuiet()
+    MORSE_BOTTLE_HEARD = 0
+    tBtCell = testIndex(4, CELL_ROW_COUNT - 1)
+    CORAL_CELLS(tBtCell) = 1
+
+    assert MORSE_BOTTLE_CHANCE = 30, "it is thirty in a hundred"
+    morseBottle(tBtCell)
+    assert MORSE_BOTTLE_WORD = -1, "a roll of thirty is no message"
+    assert MORSE_REPLY_ON = 0, "and the radio is quiet"
+    assert MORSE_BOTTLE_HEARD = 0, "and the first message is still to come"
+    morseBottle(tBtCell)
+    assert MORSE_BOTTLE_WORD = MORSE_WORD_CQ, "a roll of twenty nine is one"
+    end
+endtest
+
+test bottle_taps_out_another_word_after_the_first from fishBoard
+    ` the first roll of every bottle is for the chance, and the second picks the word
+    global tBtPickRolls = 0
+    global tBtPick = 0
+    mock rnd
+        tBtPickRolls = tBtPickRolls + 1
+        tBtPickRoll = 0
+        if tBtPickRolls = 2
+            tBtPickRoll = tBtPick
+        endif
+    endmock tBtPickRoll
+    morseQuiet()
+    MORSE_BOTTLE_HEARD = 1
+    tBtCell = testIndex(4, CELL_ROW_COUNT - 1)
+    CORAL_CELLS(tBtCell) = 1
+
+    morseBottle(tBtCell)
+    assert MORSE_BOTTLE_WORD = MORSE_WORD_SOS, "it is SOS,"
+    assert testBottleTone() = 15, "and the radio taps that out"
+
+    morseQuiet()
+    tBtPickRolls = 0
+    tBtPick = 1
+    morseBottle(tBtCell)
+    assert MORSE_BOTTLE_WORD = MORSE_WORD_SING, "or SING,"
+
+    morseQuiet()
+    tBtPickRolls = 0
+    tBtPick = 2
+    morseBottle(tBtCell)
+    assert MORSE_BOTTLE_WORD = MORSE_WORD_SONG, "or SONG"
+    assert testBottleTone() = 23, "and never the tentacle, on coral that is well"
+    end
+endtest
+
+test bottle_on_horror_coral_taps_out_cthulhu from fishBoard
+    mock rnd
+    endmock 0
+    morseQuiet()
+    tBtCell = testIndex(4, CELL_ROW_COUNT - 1)
+    CORAL_CELLS(tBtCell) = 1
+    CORAL_SICK(tBtCell) = 1
+
+    ` the first message is CQ, whatever the coral
+    MORSE_BOTTLE_HEARD = 0
+    morseBottle(tBtCell)
+    assert MORSE_BOTTLE_WORD = MORSE_WORD_CQ, "the first message is CQ, on horror coral too"
+
+    morseQuiet()
+    morseBottle(tBtCell)
+    assert MORSE_BOTTLE_WORD = MORSE_WORD_CTHULHU, "and after that, horror coral has the one word"
+    assert testBottleTone() = 35, "which the radio taps out"
+    assert MORSE_TENTACLE_ON = 0, "nothing comes of it. it is only heard."
+    end
+endtest
+
+test bottle_says_nothing_while_the_radio_is_answering from fishBoard
+    mock rnd
+    endmock 0
+    morseQuiet()
+    MORSE_BOTTLE_HEARD = 0
+    tBtCell = testIndex(4, CELL_ROW_COUNT - 1)
+    CORAL_CELLS(tBtCell) = 1
+
+    morseAck(1000)
+    tBtWas = MORSE_REPLY_LENGTH
+    morseBottle(tBtCell)
+    assert MORSE_BOTTLE_WORD = -1, "the radio is busy, and the bottle has nothing to say"
+    assert MORSE_REPLY_LENGTH = tBtWas, "what the radio was tapping is left alone"
+    assert MORSE_BOTTLE_HEARD = 0, "and the first message is still to come"
+    end
+endtest

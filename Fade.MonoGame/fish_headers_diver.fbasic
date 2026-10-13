@@ -30,7 +30,8 @@ remstart
     are saved with it. diverJudge takes them, when handle_combos has decided what pops.
 
     THE AIR. the diver has DIVER_AIR_MAX moves of air. every move that is counted takes one, whether
-    it moved the diver or not. when the air is gone and the board has settled, the diver swims up to
+    it moved the diver or not. the moves of the night are not counted, and take none, but for a swap
+    that moves the diver itself, which takes one: diverNightSwap. when the air is gone and the board has settled, the diver swims up to
     the top row, trading places with the fish over it, one row after another, and then up and away,
     and a fish takes its place. the game waits while it does. diver_rise does that. another bottle
     brings the diver back, with a full tank.
@@ -49,6 +50,21 @@ remstart
     WHEN THE LAST PICTURE IS TAKEN the diver is done, and goes up as soon as the board has settled.
     DIVER_DONE is 1 from then on, and no bottle brings the diver back. that is the end of the game.
     see THE ENDING, further down.
+
+    THE FLASHLIGHT. at night the diver has a flashlight. see fish_headers_tide for the night.
+    the fish in the four cells that touch the diver are in the light, and they can not sleep: a
+    group of fish that matched, with any of its fish in one of those cells, is not held by the night.
+    it pops, and scores, and fills the bar of the multiplier, the way that any group does in the day,
+    and the diver takes its pictures. whatever falls in because of it is held, unless it is in the
+    light too. diverLights says if a group is, and tideHoldsGroup, in fish_routines_tide, asks it.
+    the night takes no air from a diver that stays put, so one that is down when night falls can be
+    there for all of it. carrying the light somewhere else is what costs. see THE AIR.
+    what shows: a pool of pale light on the water around the diver, which reaches the four cells and
+    not the corners, with a brighter beam the way that the diver faces, and the flashlight itself,
+    under the diver's chin. DiverLightEffect.fx draws the pool. the fish in the light are drawn the way
+    that they are in the day: they do not go dark, and they do not glow. frame_fish_fx, in
+    fish_routines, hands the fish effect -2 for them. and no Z comes up from them. all of it comes
+    and goes with the night, by TIDE_NIGHT_SHOWN#. diverStep draws it.
 remend
 
 global TEX_DIVER `the kind of fish that the diver is. load_textures, in fish_routines, loads its picture right after the kinds of the quests.
@@ -88,6 +104,17 @@ global DIVER_FRAME_MS = 90 `how long a frame lasts
 global DIVER_BODY_SPRITE = 0
 global DIVER_LEAVE_SPRITE = 0
 global DIVER_LEAVE_MS = -100000 `when the diver started up
+
+` THE FLASHLIGHT. see the top of this file.
+global DIVER_LIGHT_FX_ID = 0
+global DIVER_LIGHT_SPRITE = 0 `the pool of light. it is under the fish.
+global DIVER_TORCH_SPRITE = 0 `the flashlight itself, and the bright end of it. they are on top of the diver.
+global DIVER_LENS_SPRITE = 0
+global DIVER_LIGHT_AT = -1 `the cell that the light is drawn around on this frame, or -1 when there is none. frame_fish_fx reads it.
+global DIVER_LIGHT_CELLS# = 3.6 `how big the sprite of the pool is, in cells. the pool itself is smaller: see REACH in DiverLightEffect.fx.
+global DIVER_TORCH_X = 11 `where the flashlight is, from the middle of the diver, in pixels, when the diver faces right
+global DIVER_TORCH_Y = 3
+global ORDER_DIVER_LIGHT = 8 `on top of the coral, and underneath the cursor and the fish
 global DIVER_LEAVE_X = 0
 global DIVER_LEAVE_Y = 0
 

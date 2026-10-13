@@ -1,0 +1,174 @@
+remstart
+    THE TESTS OF THE CAMEOS
+    the things that swim through when one of the secret words is tapped out. see CAMEOS in
+    fish_headers_cameo, and fish_tests for how the tests work. the clock does not run in a test, so
+    the tests hand the time to cameoStart and cameoStep themselves.
+remend
+
+test cameo_words_can_all_be_tapped_out from fishBoard
+    ` every word is heard on its last push, and no other word is heard on the way there
+    tCmEarly = 0
+    tCmWrong = 0
+    tCmNoEntry = 0
+    tCmNobody = 0
+    for tCmWord = MORSE_WORD_NEMO to MORSE_WORD_MYLEG
+        morseQuiet()
+        MORSE_MODE = 1
+        tCmFirst = tCmWord * MORSE_MARK_ROOM
+        tCmLastPush = MORSE_WORD_LENGTH(tCmWord) - 1
+        for tCmPush = 0 to tCmLastPush
+            MORSE_HEARD = -1
+            morseMark(MORSE_WORD_MARKS(tCmFirst + tCmPush))
+            if tCmPush < tCmLastPush
+                if MORSE_HEARD >= 0 then tCmEarly = tCmEarly + 1
+            endif
+        next
+        if MORSE_HEARD <> tCmWord then tCmWrong = tCmWrong + 1
+
+        ` and each of them brings somebody, and has an entry of its own in the codec
+        tCmEntry = CODEC_ENTRY_CAMEO + (tCmWord - MORSE_WORD_NEMO)
+        if MORSE_WORD_CODEC(tCmWord) <> tCmEntry then tCmNoEntry = tCmNoEntry + 1
+        cameoGone()
+        cameoStart(tCmWord, 1000)
+        if CAMEO_LIVE = 0
+            if tCmWord <> MORSE_WORD_MYLEG then tCmNobody = tCmNobody + 1
+        endif
+    next
+    cameoGone()
+    assert tCmEarly = 0, "no word is heard before its last push"
+    assert tCmWrong = 0, "and every one of them is heard on it"
+    assert tCmNoEntry = 0, "every one has an entry in the codec, in the order of the words"
+    assert tCmNobody = 0, "and brings somebody, but for MYLEG, which is only heard"
+    assert CAMEO_WORD_COUNT = 9, "there are nine of them"
+
+    ` U571 is ..- ..... --... .----
+    tCmFirst = MORSE_WORD_U571 * MORSE_MARK_ROOM
+    assert MORSE_WORD_LENGTH(MORSE_WORD_U571) = 18, "a letter and three digits are eighteen pushes"
+    assert MORSE_WORD_MARKS(tCmFirst + 3) + MORSE_WORD_MARKS(tCmFirst + 7) = 0, "5 is five dots"
+    assert MORSE_WORD_MARKS(tCmFirst + 8) + MORSE_WORD_MARKS(tCmFirst + 9) = 2, "7 starts with two dashes"
+    assert MORSE_WORD_MARKS(tCmFirst + 13) = 0, "and 1 is a dot,"
+    assert MORSE_WORD_MARKS(tCmFirst + 14) + MORSE_WORD_MARKS(tCmFirst + 17) = 2, "and four dashes"
+    morseQuiet()
+    end
+endtest
+
+test cameo_word_unlocks_its_entry_in_the_codec from fishBoard
+    tCmJaws = MORSE_WORD_CODEC(MORSE_WORD_JAWS)
+    tCmNemo = MORSE_WORD_CODEC(MORSE_WORD_NEMO)
+    tCmLastEntry = MORSE_WORD_CODEC(MORSE_WORD_MYLEG)
+    assert tCmNemo = CODEC_ENTRY_NIGHT + 1, "the entries of the words come right after the night"
+    assert CODEC_ENTRY_GOODBYE = tCmLastEntry + 1, "the usual ending comes right after them"
+    assert CODEC_ENTRY_QUEST = tCmLastEntry + 2, "and then the quests"
+    assert getCodecPref(tCmNemo) = CODEC_PREF_CAMEO, "they are remembered in a run of their own"
+    assert getCodecPref(CODEC_ENTRY_NIGHT) = CODEC_PREF_MORE + 9, "and the night is remembered where it always was"
+    assert getCodecPref(CODEC_ENTRY_QUEST) = QUEST_PREF_SEEN + 1, "and so are the quests"
+
+    CODEC_SEEN(tCmJaws) = 0
+    CODEC_SEEN(tCmNemo) = 0
+    morseLog(MORSE_WORD_JAWS)
+    assert CODEC_SEEN(tCmJaws) = 1, "a word that is sent is unlocked"
+    assert CODEC_SEEN(tCmNemo) = 0, "and only that one"
+    assert getCodecEntryTex(tCmJaws) = TEX_CAMEO_FIN, "its picture is whoever it brings"
+    end
+endtest
+
+test cameo_swims_across_and_is_gone from fishBoard
+    cameoGone()
+    cameoStart(MORSE_WORD_SOS, 1000)
+    assert CAMEO_LIVE = 0, "a word that is not one of them brings nobody"
+
+    tCmClown = -1
+    tCmTang = -1
+    tCmLastOne = CAMEO_COUNT - 1
+    for tCmOne = 0 to tCmLastOne
+        if CAMEO_WORD(tCmOne) = MORSE_WORD_NEMO
+            if tCmClown < 0
+                tCmClown = tCmOne
+            else
+                tCmTang = tCmOne
+            endif
+        endif
+    next
+    assert tCmTang > tCmClown, "NEMO has two swimmers"
+
+    cameoStart(MORSE_WORD_NEMO, 1000)
+    assert CAMEO_LIVE = 2, "and both of them set off"
+    assert CAMEO_HEARD(MORSE_WORD_NEMO) = 1, "the word was heard once"
+
+    cameoStep(1001)
+    assert CAMEO_X(tCmClown) < 0, "the first one starts off the left of the screen"
+    tCmHalf = CAMEO_LIFE_MS(tCmClown) / 2
+    cameoStep(1000 + tCmHalf)
+    tCmMiddle = WORLD_WIDTH / 2
+    tCmOff = CAMEO_X(tCmClown) - tCmMiddle
+    assert tCmOff < 4, "half way through it is in the middle,"
+    assert tCmOff > -4, "or very near it"
+    assert CAMEO_X(tCmTang) < CAMEO_X(tCmClown), "and the other one is behind it"
+
+    tCmDone = 1000 + CAMEO_LIFE_MS(tCmClown)
+    cameoStep(tCmDone)
+    assert CAMEO_LIVE = 1, "the first one gets across first"
+    cameoStep(tCmDone + CAMEO_WAIT_MS(tCmTang))
+    assert CAMEO_LIVE = 0, "and then the other, and they are gone"
+
+    ` and they go when the game is not being played
+    cameoStart(MORSE_WORD_NEMO, 1000)
+    cameoStart(MORSE_WORD_DOPEFISH, 1000)
+    assert CAMEO_LIVE = 3, "two words can be out at once"
+    morseQuiet()
+    assert CAMEO_LIVE = 0, "they are gone at once when the round is over"
+
+    ` they go over the fish, and under the words around the board
+    ` the engine draws a sprite further forward the later that it was made, and a thousand sprites
+    ` later is as good as one more in the order. so the order of a swimmer is worked out in
+    ` thousandths, with the number of its sprite added on. the fish are given room for two thousand
+    ` sprites, and the words are kept five hundred clear.
+    tCmLowest = ORDER_CAMEO * 1000 + CAMEO_SPRITE(0)
+    tCmHighest = ORDER_CAMEO * 1000 + CAMEO_SPRITE(tCmLastOne) + 500
+    tCmFishTop = ORDER_FISH * 1000 + 2000
+    tCmWords = ORDER_HUD_TEXT * 1000
+    tCmOverFish = 0
+    if tCmLowest > tCmFishTop then tCmOverFish = 1
+    tCmUnderWords = 0
+    if tCmHighest < tCmWords then tCmUnderWords = 1
+    assert tCmOverFish = 1, "a swimmer is drawn over the fish"
+    assert tCmUnderWords = 1, "and under the words and numbers around the board"
+    end
+endtest
+
+test cameo_my_leg_is_only_heard from fishBoard
+    cameoGone()
+    tCmShouts = CAMEO_LEG_COUNT
+    cameoStart(MORSE_WORD_MYLEG, 1000)
+    assert CAMEO_LIVE = 0, "nobody sets off"
+    assert CAMEO_LEG_DUE = 1, "but a shout is on its way"
+    cameoStep(1000 + CAMEO_LEG_AT_MS - 100)
+    assert CAMEO_LEG_COUNT = tCmShouts, "it does not come while the radio is saying that it heard"
+    cameoStep(1000 + CAMEO_LEG_AT_MS)
+    assert CAMEO_LEG_COUNT = tCmShouts + 1, "and then it does"
+    assert CAMEO_LEG_DUE = 0, "once"
+    cameoStep(1000 + CAMEO_LEG_AT_MS + 5000)
+    assert CAMEO_LEG_COUNT = tCmShouts + 1, "and only once"
+
+    ` and it does not come when the round is over first
+    cameoStart(MORSE_WORD_MYLEG, 1000)
+    morseQuiet()
+    cameoStep(1000 + CAMEO_LEG_AT_MS)
+    assert CAMEO_LEG_COUNT = tCmShouts + 1, "a shout that was on its way is dropped when the game is not being played"
+    tCmLegEntry = MORSE_WORD_CODEC(MORSE_WORD_MYLEG)
+    assert getCodecEntryTex(tCmLegEntry) = TEX_CODEC_RADIO, "in the codec, it has the picture of the radio"
+
+    ` the fin of JAWS starts slow
+    cameoStart(MORSE_WORD_JAWS, 1000)
+    tCmFin = 0
+    tCmLastOne = CAMEO_COUNT - 1
+    for tCmOne = 0 to tCmLastOne
+        if CAMEO_WORD(tCmOne) = MORSE_WORD_JAWS then tCmFin = tCmOne
+    next
+    tCmHalf = CAMEO_LIFE_MS(tCmFin) / 2
+    cameoStep(1000 + tCmHalf)
+    tCmNear = WORLD_WIDTH / 2 - 100
+    assert CAMEO_X(tCmFin) < tCmNear, "half way through its time, the fin is nowhere near half way across"
+    cameoGone()
+    end
+endtest

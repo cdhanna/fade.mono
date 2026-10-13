@@ -8,7 +8,7 @@ remstart
     that into what happened: the radio came on (morseWake), or a push ended, or the radio went off
     (morseSleep). a push is a dot or a dash (morsePush), and it goes on the end of the last pushes
     that are remembered (morseMark). when the end of those is a word, the word is left in MORSE_HEARD
-    for that frame. morseListen does what most of the words do, and tunaAsked looks for TUNA.
+    for that frame. morseListen does what most of the words do, and tunaAsked looks for SOS.
 
     the shooting star of the splash screen, whose trail spells CQ, is here too: see morseStarsMake.
 remend
@@ -43,23 +43,36 @@ setup_morse:
     morseWord(MORSE_WORD_SONG, "SONG", 4)
     morseWord(MORSE_WORD_CTHULHU, "CTHULHU", 7)
 
-    ` the radio does not give these away when it answers CQ. see morseReplyStart.
-    MORSE_WORD_SECRET(MORSE_WORD_SOS) = 1
-    MORSE_WORD_SECRET(MORSE_WORD_CQ) = 1
+    ` the words that bring somebody swimming through. see CAMEOS in fish_headers_cameo.
+    morseWord(MORSE_WORD_NEMO, "NEMO", 4)
+    morseWord(MORSE_WORD_FREDDI, "FREDDI", 6)
+    morseWord(MORSE_WORD_U571, "U571", 4)
+    morseWord(MORSE_WORD_WILLY, "WILLY", 5)
+    morseWord(MORSE_WORD_PEARL, "PEARL", 5)
+    morseWord(MORSE_WORD_DOPEFISH, "DOPEFISH", 8)
+    morseWord(MORSE_WORD_JAWS, "JAWS", 4)
+    morseWord(MORSE_WORD_ARIEL, "ARIEL", 5)
+    morseWord(MORSE_WORD_MYLEG, "MYLEG", 5)
 
     ` the entry of the codec that each of them unlocks when it is sent. CQ unlocks the radio itself,
-    ` and SOS has none: it is not in the codec.
+    ` and TUNA has none: it is not in the codec. the words that bring somebody swimming through have an entry each, in a row.
     mrsLastSetup = MORSE_WORD_ROOM - 1
     for mrsSetup = 0 to mrsLastSetup
         MORSE_WORD_CODEC(mrsSetup) = -1
     next
-    MORSE_WORD_CODEC(MORSE_WORD_TUNA) = CODEC_ENTRY_TUNA
+    MORSE_WORD_CODEC(MORSE_WORD_SOS) = CODEC_ENTRY_TUNA
     MORSE_WORD_CODEC(MORSE_WORD_CQ) = CODEC_ENTRY_RADIO
     MORSE_WORD_CODEC(MORSE_WORD_SING) = CODEC_ENTRY_SING
-    MORSE_WORD_CODEC(MORSE_WORD_SONG) = CODEC_ENTRY_SONG
+    MORSE_WORD_CODEC(MORSE_WORD_SONG) = CODEC_ENTRY_SING
     MORSE_WORD_CODEC(MORSE_WORD_CTHULHU) = CODEC_ENTRY_CTHULHU
+    for mrsSetup = MORSE_WORD_NEMO to MORSE_WORD_MYLEG
+        MORSE_WORD_CODEC(mrsSetup) = CODEC_ENTRY_CAMEO + (mrsSetup - MORSE_WORD_NEMO)
+    next
 
     morseAveragesBack()
+
+    ` has this player heard the first message in a bottle? see THE MESSAGE IN THE BOTTLE in fish_headers.
+    MORSE_BOTTLE_HEARD = get pref(PREF_BOTTLE_RADIO, 0)
 
 return
 
@@ -67,7 +80,7 @@ return
 routines_morse_exit:
 
 
-` the pushes of every letter: a 1, and then, in binary, a 0 for every dot and a 1 for every dash.
+` the pushes of every letter, and of every digit after them: a 1, and then, in binary, a 0 for every dot and a 1 for every dash.
 ` this is asked for more than once, because the splash screen needs it before setup_morse has run.
 function morseAlphabet()
     MORSE_CODES(0) = 5 `A .-
@@ -96,15 +109,29 @@ function morseAlphabet()
     MORSE_CODES(23) = 25 `X -..-
     MORSE_CODES(24) = 27 `Y -.--
     MORSE_CODES(25) = 28 `Z --..
+    MORSE_CODES(26) = 63 `0 -----
+    MORSE_CODES(27) = 47 `1 .----
+    MORSE_CODES(28) = 39 `2 ..---
+    MORSE_CODES(29) = 35 `3 ...--
+    MORSE_CODES(30) = 33 `4 ....-
+    MORSE_CODES(31) = 32 `5 .....
+    MORSE_CODES(32) = 48 `6 -....
+    MORSE_CODES(33) = 56 `7 --...
+    MORSE_CODES(34) = 60 `8 ---..
+    MORSE_CODES(35) = 62 `9 ----.
 endfunction
 
 
-` work out the pushes of some capital letters, of which there are `mrsLength`. they are left in
+` work out the pushes of some capital letters, or digits, of which there are `mrsLength`. they are left in
 ` MORSE_SPELL: 0 for a dot, 1 for a dash, and a 2 after every letter.
 function morseSpell(mrsText$, mrsLength)
     MORSE_SPELL_COUNT = 0
     for mrsPlace = 1 to mrsLength
-        mrsCode = MORSE_CODES(asc(right$(left$(mrsText$, mrsPlace), 1)) - 65)
+        ` the letters start at 65, and the digits at 48. the digits come after the 26 letters.
+        mrsLetter = asc(right$(left$(mrsText$, mrsPlace), 1))
+        mrsCodeAt = mrsLetter - 65
+        if mrsLetter < 65 then mrsCodeAt = mrsLetter - 22
+        mrsCode = MORSE_CODES(mrsCodeAt)
 
         ` the 1 at the top of the code is not a push. the ones under it are, from the top down.
         mrsTop = 1
@@ -149,7 +176,6 @@ function morseWord(mrsWord, mrsText$, mrsLength)
     next
     MORSE_WORD_LENGTH(mrsWord) = mrsCount
     MORSE_WORD_SPELL_LENGTH(mrsWord) = MORSE_SPELL_COUNT
-    MORSE_WORD_SECRET(mrsWord) = 0
     MORSE_WORD_NAME$(mrsWord) = mrsText$
     if mrsWord >= MORSE_WORD_COUNT
         MORSE_WORD_COUNT = mrsWord + 1
@@ -370,6 +396,7 @@ function morseQuiet()
     MORSE_REPLY_LIT = 0
     morseSound(0)
     morseTentacleGone()
+    cameoGone()
 endfunction
 
 
@@ -418,9 +445,9 @@ function morseListen()
         endif
     endif
 
-    ` what the words do. TUNA is not here: tunaAsked looks for it.
-    if MORSE_HEARD = MORSE_WORD_SOS
-        morseSos()
+    ` what the words do. SOS is not here: tunaAsked looks for it.
+    if MORSE_HEARD = MORSE_WORD_TUNA
+        morseCheat()
     endif
     if MORSE_HEARD = MORSE_WORD_SING
         morseSing()
@@ -432,6 +459,12 @@ function morseListen()
         morseCthulhu(game ms())
     endif
     morseTentacleStep(game ms())
+
+    ` and some words only bring somebody swimming through. see CAMEOS in fish_headers_cameo.
+    if MORSE_HEARD >= 0
+        cameoStart(MORSE_HEARD, game ms())
+    endif
+    cameoStep(game ms())
 
     ` the radio taps its answer with the same tone, a little higher, so that it is not taken for the player
     morseReplyStep(game ms())
@@ -485,7 +518,7 @@ endfunction
 
 ` what is in MORSE_SPELL goes on the end of what the radio taps back, as a 1 for every
 ` MORSE_REPLY_UNIT_MS that the tone sounds and a 0 for every one that it does not: a dot is one,
-` a dash is three, with one of quiet after each, two more after a letter, and a longer wait
+` a dash is three, with one of quiet after each, MORSE_REPLY_LETTER_GAP more after a letter, and a longer wait
 ` after the word. morseReplyStep plays it.
 function morseReplyAdd()
     mrsLastSpelt = MORSE_SPELL_COUNT - 1
@@ -497,7 +530,7 @@ function morseReplyAdd()
         endif
         if MORSE_SPELL(mrsSpelt) = 2
             mrsLit = 0
-            mrsDark = 2
+            mrsDark = MORSE_REPLY_LETTER_GAP
         endif
         mrsUnit = 0
         while mrsUnit < mrsLit
@@ -529,22 +562,62 @@ function morseAck(mrsNow)
 endfunction
 
 
-` what CQ does: the radio answers. after the R, it taps out every word that there is, one after
-` another, but for the ones that are secret.
+` what CQ does: the radio answers. after the R, it taps out two words: SING or SONG, and then one
+` of the words that bring somebody swimming through, a new one every time. see CAMEOS in
+` fish_headers_cameo. it never gives away SOS, TUNA, CTHULHU, or CQ itself.
 function morseReplyStart(mrsNow)
     morseAck(mrsNow)
-    mrsLastWord = MORSE_WORD_COUNT - 1
-    for mrsSayWord = 0 to mrsLastWord
-        if MORSE_WORD_SECRET(mrsSayWord) = 0
-            mrsSpellFirst = mrsSayWord * MORSE_SPELL_ROOM
-            MORSE_SPELL_COUNT = MORSE_WORD_SPELL_LENGTH(mrsSayWord)
-            mrsLastCopy = MORSE_SPELL_COUNT - 1
-            for mrsCopy = 0 to mrsLastCopy
-                MORSE_SPELL(mrsCopy) = MORSE_WORD_SPELL(mrsSpellFirst + mrsCopy)
-            next
-            morseReplyAdd()
-        endif
+    MORSE_REPLY_SONG = MORSE_WORD_SING
+    if rnd(2) = 1 then MORSE_REPLY_SONG = MORSE_WORD_SONG
+    mrsFunCount = MORSE_WORD_MYLEG + 1 - MORSE_WORD_NEMO
+    MORSE_REPLY_FUN = MORSE_WORD_NEMO + rnd(mrsFunCount)
+    morseReplyWord(MORSE_REPLY_SONG)
+    morseReplyWord(MORSE_REPLY_FUN)
+endfunction
+
+
+` one of the words goes on the end of what the radio taps back
+function morseReplyWord(mrsAddWord)
+    mrsSpellFirst = mrsAddWord * MORSE_SPELL_ROOM
+    MORSE_SPELL_COUNT = MORSE_WORD_SPELL_LENGTH(mrsAddWord)
+    mrsLastCopy = MORSE_SPELL_COUNT - 1
+    for mrsCopy = 0 to mrsLastCopy
+        MORSE_SPELL(mrsCopy) = MORSE_WORD_SPELL(mrsSpellFirst + mrsCopy)
     next
+    morseReplyAdd()
+endfunction
+
+
+` THE MESSAGE IN THE BOTTLE. see fish_headers. a bottle has just paid out in this cell. when the
+` cell has coral on it, the bottle may have a message in it, and then the radio taps the word out.
+` MORSE_BOTTLE_WORD is left as the word, or as -1 when there was no message.
+function morseBottle(mrsBottleCell)
+    MORSE_BOTTLE_WORD = -1
+    if CORAL_CELLS(mrsBottleCell) = 0 then exitfunction
+
+    ` the radio is busy with an answer of its own
+    if MORSE_REPLY_ON then exitfunction
+    if rnd(100) >= MORSE_BOTTLE_CHANCE then exitfunction
+
+    ` the first one ever is CQ. after that, horror coral has the one word, and coral has the others.
+    mrsBottleSays = MORSE_WORD_CQ
+    if MORSE_BOTTLE_HEARD
+        if CORAL_SICK(mrsBottleCell)
+            mrsBottleSays = MORSE_WORD_CTHULHU
+        else
+            mrsBottlePick = rnd(3)
+            mrsBottleSays = MORSE_WORD_SOS
+            if mrsBottlePick = 1 then mrsBottleSays = MORSE_WORD_SING
+            if mrsBottlePick = 2 then mrsBottleSays = MORSE_WORD_SONG
+        endif
+    else
+        MORSE_BOTTLE_HEARD = 1
+        set pref PREF_BOTTLE_RADIO, 1
+    endif
+
+    MORSE_BOTTLE_WORD = mrsBottleSays
+    morseReplyClear(game ms())
+    morseReplyWord(mrsBottleSays)
 endfunction
 
 
@@ -646,12 +719,12 @@ function morseReplyStep(mrsNow)
 endfunction
 
 
-` what SOS does. help comes: debug mode is turned on, with its windows and its keys, which give
+` what TUNA does: debug mode is turned on, with its windows and its keys, which give
 ` the player any card, and can win the game. this works in a shipped game too. the game is marked
 ` as one that had it. see debugModeOn, in fish_routines_debug. the words "Debug Mode Enabled"
 ` splash up, and a ring goes out from the middle of the board, to say that it was heard.
-function morseSos()
-    MORSE_SOS_COUNT = MORSE_SOS_COUNT + 1
+function morseCheat()
+    MORSE_CHEAT_COUNT = MORSE_CHEAT_COUNT + 1
     debugModeOn()
     debugSplashStart(game ms())
     spawnShockwave(CELL_COLUMN_COUNT / 2, CELL_ROW_COUNT / 2, .6, 0)

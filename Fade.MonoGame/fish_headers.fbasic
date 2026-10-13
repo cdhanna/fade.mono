@@ -8,8 +8,8 @@ global SCORE_POS as vec = {
 }
 
 
-global dim CARDS(32) as ability
-global CARD_LENGTH = 32
+global dim CARDS(35) as ability
+global CARD_LENGTH = 35
 
 global CURRENT_MOVE_COUNT = 0
 global MOVE_COUNT_TEXT_ID
@@ -115,6 +115,19 @@ global RAY_MAX = 3 `how many times the card can be taken
 ` and it is gone. handle_combos leaves the bottle, and checkBottles, in fish_funcs, pays it out.
 global BOTTLE_GROUP_SIZE = 5 `how many fish a group needs to leave a bottle
 global BOTTLE_MULT_GAIN = 1 `how much a bottle adds to the multiplier
+
+` THE MESSAGE IN THE BOTTLE. a bottle that pays out on a cell that has coral on it may have a message
+` in it: MORSE_BOTTLE_CHANCE times in a hundred, the radio taps a word out, the way that it taps its
+` answers. nothing happens because of it. it is there to be heard, and written down. see MORSE, further down.
+` the first one that a player ever hears is CQ, which is the word that the radio answers. that is
+` remembered from one game to the next. every one after it is SOS, SING or SONG, when the coral is
+` well, and it is CTHULHU when the bottle paid out on horror coral, and never otherwise.
+` it is never TUNA. and a bottle says nothing while the radio is already tapping.
+` checkBottles, in fish_funcs, asks morseBottle, in fish_routines_morse, for every bottle that pays out.
+#constant PREF_BOTTLE_RADIO 14
+global MORSE_BOTTLE_CHANCE = 30 `how many bottles in a hundred have a message, of the ones that pay out on coral
+global MORSE_BOTTLE_HEARD = 0 `1 once this player has heard the first message, which is CQ. setup_morse reads it.
+global MORSE_BOTTLE_WORD = -1 `the word of the last message, or -1 when the last bottle had none. the tests read this.
 
 ` ZAPS. little bolts of lightning that jump from one spot on the board to another, and are gone again.
 ` the top of fish_routines_zap explains how they work.
@@ -246,6 +259,10 @@ global ORDER_ABILITY_ART = ORDER_ABILITY_BACKDROP + 3
 global ORDER_ABILITY_TEXT = ORDER_ABILITY_BACKDROP + 4
 
 global ORDER_FISH = 20
+` the words and numbers around the board: on top of the fish, and of whatever swims over them. see ORDER_CAMEO in fish_headers_cameo.
+` the engine draws a sprite a little further forward the later that it was made: a thousand sprites later is as good as one
+` more in the order. the swimmers are made late, so there has to be a gap between their order and this one.
+global ORDER_HUD_TEXT = 26
 global ORDER_SELECTION = 10
 
 ` THE FISH EFFECT. every fish on the board is drawn with it. it tilts the fish like a card in 3d,
@@ -437,13 +454,13 @@ global OVERFLOW_POINTS = 0 `how many points are in the one that is being filled
 global OVERFLOW_NEED = 0 `and how many it takes
 global OVERFLOW_SPRITE
 
-` HOW LONG A ROUND IS. round n needs SCORE_ROUND_BASE * n ^ SCORE_ROUND_POWER# points: 400, 1020, 1760, 2600, 3510,
-` then about 8950 for round 10, 22830 for round 20, and 39460 for round 30. getRoundSpan, in fish_funcs, works it out.
+` HOW LONG A ROUND IS. round n needs SCORE_ROUND_BASE * n ^ SCORE_ROUND_POWER# points: 400, 1130, 2080, 3200, 4470,
+` then about 12650 for round 10, 35780 for round 20, and 65730 for round 30. getRoundSpan, in fish_funcs, works it out.
 ` the base is how long the first round is, and it scales every round. the power is how much steeper the later
 ` rounds get: at 1 every round adds the same amount, and at 2 they pull away fast. it wants to grow about as
 ` fast as what a move scores does, so that the upgrades keep coming at a steady pace.
 global SCORE_ROUND_BASE = 400
-global SCORE_ROUND_POWER# = 1.35
+global SCORE_ROUND_POWER# = 1.5
 global SCORE_BAR_FIZZ_MS = 0 `when the full bar lets off its next bubbles
 global SCORE_BAR_FIZZ_GAP = 55 `how many milliseconds there are between them
 
@@ -1025,11 +1042,11 @@ global dim HISCORE_BADGE_SPRITES(8) `one for every row of the table
 ` had it shows a question mark where its badge would be, and the ending has no tile of its own. all
 ` of the endings like that share one tile, with a question mark on it, which comes after the others.
 ` so there are three tiles when every ending is known, and one when none of them are.
-global dim HISCORE_ENDING_SHOWN(4) `by ending: one of the CORAL_ENDING constants, and 0 is the mystery ones. 1 is shown.
+global dim HISCORE_ENDING_SHOWN(16) `by ending: one of the CORAL_ENDING constants, and 0 is the mystery ones. 1 is shown.
 global dim HISCORE_ENDING_KNOWN(4) `by ending: 1 if the player has got to it. loadKnownEndings reads it from the preferences.
-global dim HISCORE_ENDING_TILES(3) `the block of color of every tile
-global dim HISCORE_ENDING_ICONS(3) `and the badge that is on it
-global dim HISCORE_TILE_ENDING(3) `which ending every tile is for, or 0 for the tile of the mystery ones
+global dim HISCORE_ENDING_TILES(8) `the block of color of every tile
+global dim HISCORE_ENDING_ICONS(8) `and the badge that is on it
+global dim HISCORE_TILE_ENDING(8) `which ending every tile is for, or 0 for the tile of the mystery ones. from HISCORE_MOD_TILE on, it is the tile of a modifier. see THE MODIFIERS ON THE TABLES in fish_headers_fast.
 global HISCORE_TILE_COUNT = 3 `how many tiles there are
 global HISCORE_TILE_MARK `the question mark on the tile of the mystery ones
 global dim HISCORE_MYSTERY_TEXTS(8) `the question mark of every row of the table, for a game with a mystery ending
@@ -1214,17 +1231,17 @@ global STEAM_BIT_LOG_COUNT = 19 `7 bits: how many upgrades are in the log
 global STEAM_BIT_GAP_WIDTH = 26 `4 bits: how many bits every gap of the log takes
 global STEAM_DETAIL_MULT = 1 `the highest that the multiplier got
 global STEAM_DETAIL_SEED = 2 `the seed of the board. there is no such thing yet, so it is 0.
-global STEAM_DETAIL_FLAGS = 3 `32 flags. the lowest two bits are the ending of the hidden game, and then STEAM_FLAG_DEBUG. the rest are 0.
+global STEAM_DETAIL_FLAGS = 3 `32 flags. the lowest two bits are the ending of the hidden game, and then STEAM_FLAG_DEBUG. the four after that are the modifiers of the game: see STEAM_FLAG_MODS in fish_headers_fast. the rest are 0.
 global STEAM_FLAG_DEBUG = 4 `the game was played with one of the debug environment variables set. see isDebugEnvSet.
 global GAME_DEBUG_USED = 0 `1 when the game that is being played has had one of them set at any time, or has had debug mode on. it is saved with the game.
-global DEBUG_SPLASH_TEXT_ID = 0 `the words that splash up when SOS turns debug mode on. they are made the first time that they are needed.
+global DEBUG_SPLASH_TEXT_ID = 0 `the words that splash up when TUNA turns debug mode on. they are made the first time that they are needed.
 global DEBUG_SPLASH_MADE = 0 `1 once they have been made
 global DEBUG_SPLASH_ON = 0 `1 while they are on the screen
 global DEBUG_SPLASH_MS = 0 `when they came up
 global DEBUG_SPLASH_IN_MS = 180 `how long they take to pop up, in milliseconds
 global DEBUG_SPLASH_LIFE_MS = 1700 `how long they are there for, all told
 global DEBUG_SPLASH_OUT_MS = 450 `and how much of the end of that they fade away for
-global DEBUG_MODE = 0 `1 while debug mode is on: the debug windows, and the debug keys. the FISH_DEBUG environment variable turns it on from the start, and tapping out SOS turns it on in any game, even a shipped one. see debugModeOn, and MORSE.
+global DEBUG_MODE = 0 `1 while debug mode is on: the debug windows, and the debug keys. the FISH_DEBUG environment variable turns it on from the start, and tapping out TUNA turns it on in any game, even a shipped one. see debugModeOn, and MORSE.
 global STEAM_DETAIL_CHECK = 4 `the check, which Steam's commands fill in. see "set steam leaderboard check".
 ` detail 5 says whether the quests of the game follow the log of upgrades, and how many of them. see
 ` THE QUESTS ON STEAM, below. it is 0 for a score from before there were quests.
@@ -1270,14 +1287,23 @@ global CODEC_COUNT = 16 `how many entries there are: one for every card, and the
 ` fish_routines_codec, does that. new entries go on the end, so that the ones before them keep their preferences.
 ` the last of what can happen to a fish is heart home: a fish that is sitting on coral that is well, where
 ` it is happy, and sends up hearts. see A FISH ON CORAL, further down.
-` and after that, the QR code that the fish make when TUNA is typed. see TUNA, at the end. it is unlocked
+` and after that, the QR code that the fish make when SOS is typed. see TUNA, at the end. it is unlocked
 ` the first time that the fish make one.
 ` and after that, the lines of fish, corner to corner. see DIAGONALS, at the end. the entry is unlocked the
 ` first time that a line pays out. diagonalPayThrough, in fish_routines_diagonal, does that.
 ` and after that, the diver, and the ending of the diver. see fish_headers_diver. the diver is unlocked
 ` the first time that it comes down, and its ending the first time that a game ends with the album full.
-` and last, the night. see THE NIGHT IN THE CODEC in fish_headers_tide. it is unlocked the first time that night falls.
-global CODEC_EXTRA_COUNT = 20
+` and then the night. see THE NIGHT IN THE CODEC in fish_headers_tide. it is unlocked the first time that night falls.
+` and last, the words that bring somebody swimming through, one entry each, in the order of the words. each is
+` unlocked when it is sent. see CAMEOS in fish_headers_cameo. they have a run of preferences of their own.
+` and after those, the ending that a game has when it is won the usual way, and the fish go home. see
+` THE FISH GO HOME, further up. it is unlocked the first time that they do. it is always the last of
+` these, whatever comes before it, so it has a preference of its own, and not one that goes by where it is.
+global CODEC_EXTRA_COUNT = 29
+global CODEC_ENTRY_GOODBYE = -1
+global TEX_ENDING_GOODBYE `the picture that it has: a house. Tools/ending_home_gen.py draws it.
+global CODEC_EXTRA_PLAIN = 19 `how many of those come before the words that bring somebody swimming through
+global CODEC_ENTRY_CAMEO = -1 `the entry of the first of those words, once setup_codec has run
 global CODEC_ENTRY_CROOKED = -1
 global TEX_CROOKED `the picture that it has in the codec
 global CODEC_ENTRY_TUNA = -1
@@ -1305,17 +1331,21 @@ global CODEC_PREF = 57
 global CODEC_PREF_EXTRA = 90 `and the same for the entries that are not cards, so that a new card does not move them
 ` there is only room for ten there, before the saved game starts. the ones after the tenth are kept from here on.
 global CODEC_PREF_EXTRA_ROOM = 10
+global CODEC_PREF_CARD_ROOM = 32 `how many cards there is room for at CODEC_PREF, before the entries that are not cards start
+global CODEC_PREF_LATE = 2700 `the cards after that are kept from here on. it must not move.
 global CODEC_PREF_MORE = 40
+global CODEC_PREF_CAMEO = 2500 `and there is only room for ten there too. the words that bring somebody swimming through are kept from here on. it must not move.
 
 ` where the codec goes on the screen
 global CODEC_COLUMNS = 8 `how many upgrades there are on a row of the grid
 global CODEC_ROWS = 2 `and how many rows there are on a page of it
 global CODEC_PAGE_SIZE = 16 `how many tiles that makes. there is a sprite for every tile of a page, and no more.
 global CODEC_PAGE_TEXT_ID `says which page is showing
-global dim CODEC_ARROW_TEXTS(2) `the arrows at the two ends of the grid, which say that there are more pages
+global dim CODEC_ARROW_TEXTS(2) `the arrows at the right of the grid, which say that there is a page above, or below
 global CODEC_TILE = 40 `how far apart the tiles of the grid are
-global CODEC_X = 75
-global CODEC_WIDTH = 420
+global CODEC_X = 45
+global CODEC_WIDTH = 480
+global CODEC_SIDE = 96 `how much of that width the list of the categories has, on the left of the grid
 global CODEC_TOP = 80
 global CODEC_HEIGHT = 194
 global CODEC_DETAIL_TOP = 178 `where the part that explains the highlighted tile starts
@@ -1330,6 +1360,24 @@ global CODEC_KIND_TEXT_ID
 global CODEC_DESC_TEXT_ID
 global CODEC_CURSOR as infoBorder
 global CODEC_SELECTED = 0 `the entry that is highlighted
+
+` THE CATEGORIES OF THE CODEC. the entries are sorted into categories, which are listed down the left
+` of the panel, and the grid only has the entries of one of them. the number of an entry never
+` changes, because that is how it is remembered, so the categories are a list of their own:
+` CODEC_ORDER has every entry, category after category. setup_codec fills it in.
+global CODEC_CAT_COUNT = 0 `how many categories there are
+global dim CODEC_CAT_NAME$(8)
+global dim CODEC_CAT_FIRST(8) `where in CODEC_ORDER the entries of every category start,
+global dim CODEC_CAT_SIZE(8) `and how many of them there are
+global dim CODEC_CAT_TEXTS(8) `the name of every category, in the list
+global dim CODEC_ORDER(128)
+global CODEC_ORDER_COUNT = 0
+global CODEC_CAT = 0 `the category that the highlighted entry is in. codecFindSelected works these two out.
+global CODEC_CAT_AT = 0 `and which of the entries of that category it is, counting from 0
+global CODEC_ON_LIST = 0 `1 while the outline is on the list of the categories, and not on a tile of the grid
+global CODEC_CAT_BAR_SPRITE `the bar behind the name of that category
+global CODEC_SIDE_SPRITE `the line between the list and the grid
+global CODEC_PAGE_BACK_SPRITE `what the page number is written on, so that it can be read over the main menu
 
 ` THE CREDITS, AND THE SPLASH SCREEN. the routines are in fish_routines_credits.
 global TEX_LOGO_FADE
@@ -1567,6 +1615,16 @@ global BEAT_PULSE_MAX = 800 `and one that is slower than this is too slow to fee
 global BEAT_WINDOW = 95 `a move this many milliseconds from a beat, either side, is in time
 global BEAT_LEAD_PULSES = 2 `how many beats ahead of the first note the ding is
 global BEAT_PERFECT = 35 `a move this many milliseconds from a beat, either side, is a perfect one
+` THE LAG. a note is heard a little after the beat that it is on, because the sound takes time to come
+` out, and a move that is made to what is heard is that much late. so every move is judged as if it had
+` been made BEAT_LATENCY milliseconds sooner. to find the number: with FISH_DEBUG, dance a tune or two,
+` moving on every beat that is heard, and the "Dance" window says how late the moves were on average.
+` that average is the number. the slider in the window tries one out, and this line is where it is kept.
+global BEAT_LATENCY = 0
+global BEAT_RAW_LAST = 0 `how far from the beat the last move was, before the lag was taken off. less than 0 is early.
+global BEAT_RAW_SUM = 0 `all of those added up, since the count was last started over. for the debug panel.
+global BEAT_RAW_COUNT = 0 `and how many of them there were
+global BEAT_RAW_IN = 0 `how many of those moves were in time, with the lag as it was then
 global BEAT_FLASH# = 0 `how white the last move made the outline of the cursor, from 0 to 1
 global BEAT_FLASH_AT = 0 `when that move was
 global BEAT_FLASHING = 0 `1 while the outline is not back to its own color yet
@@ -1809,6 +1867,7 @@ global CORAL_DEEP_SCREAM_LOW# = .25 `how much lower one can be played than it is
 ` the FISH_MENU_REEF and FISH_MENU_ANCIENT environment variables put them there, for working on the game.
 #constant PREF_ENDING_REEF 8
 #constant PREF_ENDING_ANCIENT 9
+#constant PREF_ENDING_HOME 15
 ` the player can turn either of them off again, on the options page, once it is there. the lines for
 ` them are not on the page until then. frame_surface, in fish_routines_surface, is what listens.
 #constant PREF_MENU_REEF 10
@@ -2206,7 +2265,7 @@ global dim DIAGONAL_HINT_DELAY(400) `and how long after a wave of the current se
 global dim DIAGONAL_HINT_PLACE(400) `and which fish of its line it is, counting from 0 at the left end
 global DIAGONAL_HINT_NOW_MS = -100000 `when the debug key last asked to see the shuffle, right away, on every line that has one. see frame_dbg.
 
-` TUNA. a silly secret. typing the word TUNA while the fish are on the screen makes them into a QR code,
+` TUNA. a silly secret. typing the word SOS while the fish are on the screen makes them into a QR code,
 ` that a phone can read. a pool of light falls on the water, and there is a dark fish in it for every
 ` dark module of the code. where a module is light there is no fish, only the water. the fish of the
 ` board each go to a dark module of their own, anywhere in the code, and get smaller. then the rest of
@@ -2217,7 +2276,8 @@ global DIAGONAL_HINT_NOW_MS = -100000 `when the debug key last asked to see the 
 ` fish that they came out of, and the fish of the board go back to their places.
 ` the first time that it happens, it gets an entry in the codec. see CODEC_ENTRY_TUNA.
 ` nothing else moves while the code is up: the fish do not lean or shuffle, and no hint comes.
-` the debug keys use T and U, so in debug mode the word does nothing, and Q does it instead.
+` the debug keys use O, so in debug mode the word does nothing, and Q does it instead.
+` it is still called TUNA here because that was the word once. now TUNA is the word that turns debug mode on: see MORSE.
 ` there can be more than one code, and then one is picked at random every time. the codes are in
 ` fish_tuna_code, which build/make-tuna-qr.py writes. where they lead to is set there.
 ` the routines are in fish_routines_tuna.
@@ -2239,6 +2299,7 @@ global TUNA_START_MS = 0 `when it started
 global TUNA_FROM_X = 0 `where the cursor was then
 global TUNA_FROM_Y = 0
 global TUNA_TYPED = 0 `how many letters of the word have been typed so far
+global TUNA_WORD_LENGTH = 3 `how many letters the word has
 global dim TUNA_WORD(4) `the letters of the word, where 0 is A
 global dim TUNA_KEYS(26) `the key of every letter, from A to Z
 global TUNA_CODE_COUNT = 0 `how many codes there are to pick from. each one leads somewhere else.
@@ -2260,22 +2321,26 @@ global TUNA_MID_Y = 0
 global TUNA_SHRINK# = 0 `how much smaller the fish of the board are drawn on this frame. 0 is their own size, and -.5 is half of it.
 
 ` MORSE. a word can be tapped out in Morse code, on anything that the player can press. so it
-` works on a controller, which has no letters. TUNA makes the QR code, the same as typing it does,
-` and SOS turns debug mode on, cheats and all, even in a shipped game. the words are set in setup_morse.
+` works on a controller, which has no letters. SOS makes the QR code, the same as typing it does,
+` and TUNA turns debug mode on, cheats and all, even in a shipped game. the words are set in setup_morse.
 `
 ` THE SIGNALS. a dot is a short push, and a dash is a long one. these are all of them:
-`     TUNA    -  ..-  -.  .-        makes the QR code. see tunaAsked, in fish_routines_tuna.
-`     SOS     ...  ---  ...         turns debug mode on, and marks the game as one that had it. see morseSos, in fish_routines_morse.
-`     CQ      -.-.  --.-            the radio answers: it bips every signal back, but for this one and SOS. see morseReplyStart.
+`     SOS     ...  ---  ...         makes the QR code. see tunaAsked, in fish_routines_tuna.
+`     TUNA    -  ..-  -.  .-        turns debug mode on, and marks the game as one that had it. see morseCheat, in fish_routines_morse.
+`     CQ      -.-.  --.-            the radio answers: it bips back SING or SONG, and then one of the words that bring somebody swimming through. see morseReplyStart.
 `     SING    ...  ..  -.  --.      plays a hint of the hidden game, the bright way that a group of five does. see morseSing.
 `     SONG    ...  ---  -.  --.     the same.
 `     CTHULHU -.-.  -  ....  ..-  .-..  ....  ..-     a tentacle of the ancient one comes up for a moment, with a scream, and goes. see morseCthulhu.
+` and there are words that only bring somebody swimming through, like NEMO. they are secret, the same as TUNA,
+` but each has an entry in the codec. see CAMEOS in fish_headers_cameo, which has the list of them.
 ` when any of them has been heard, the radio taps back .-. which is R, for "received".
+` a bottle can tap one of them out too. see THE MESSAGE IN THE BOTTLE, with BOTTLES, at the top.
 ` the codec has an entry for the radio, which is unlocked the first time that the radio comes on, and
-` which only gives CQ away. and it has an entry for every signal but SOS and CQ, which is unlocked when
-` that signal is sent. SOS is not in the codec at all. see CODEC_ENTRY_RADIO, and MORSE_WORD_CODEC.
+` which only gives CQ away. and it has an entry for every signal but TUNA and CQ, which is unlocked when
+` that signal is sent. TUNA is not in the codec at all. see CODEC_ENTRY_RADIO, and MORSE_WORD_CODEC.
 ` a new one is a line here, a number like MORSE_WORD_SOS below, a morseWord in setup_morse, and
-` something that looks for the number in MORSE_HEARD. the letters are in morseAlphabet.
+` something that looks for the number in MORSE_HEARD. the letters are in morseAlphabet, and so are
+` the digits, which only U571 has.
 `
 ` first the radio has to be turned on: one thing is held down, on its own, for MORSE_WAKE_MS. a sign
 ` sounds when it comes on. from then on every push is a dot or a dash, by how long it is held, and a
@@ -2299,17 +2364,27 @@ global MORSE_MIDDLE_MIN# = 160 `the middle of the two never goes under this, so 
 global MORSE_PUSH_MAX_MS = 1500 `a push that is held for longer than this is not a dot or a dash
 global MORSE_VOLUME# = .3 `how loud the tone is. the same as VOLUME in Tools/morse_bip_gen.py.
 global MORSE_SIGN_VOLUME# = .35 `how loud the two signs are. the same as SIGN_VOLUME there.
-global MORSE_WORD_ROOM = 8 `how many words there can be
+global MORSE_WORD_ROOM = 24 `how many words there can be
 global MORSE_MARK_ROOM = 32 `and how many pushes long a word can be. the last this many pushes are remembered.
-global MORSE_WORD_TUNA = 0 `the word that makes the QR code
-global MORSE_WORD_SOS = 1 `and the word that turns debug mode on
+global MORSE_WORD_TUNA = 0 `the word that turns debug mode on
+global MORSE_WORD_SOS = 1 `and the word that makes the QR code
 global MORSE_WORD_CQ = 2 `the word that the radio answers
 global MORSE_WORD_SING = 3 `and the two words that play a hint of the hidden game
 global MORSE_WORD_SONG = 4
 global MORSE_WORD_CTHULHU = 5 `the word that a tentacle comes up for
+global MORSE_WORD_NEMO = 6 `and the words that bring somebody swimming through. see CAMEOS in fish_headers_cameo.
+global MORSE_WORD_FREDDI = 7
+global MORSE_WORD_U571 = 8
+global MORSE_WORD_WILLY = 9
+global MORSE_WORD_PEARL = 10
+global MORSE_WORD_DOPEFISH = 11
+global MORSE_WORD_JAWS = 12
+global MORSE_WORD_ARIEL = 13
+global MORSE_WORD_MYLEG = 14
 global CODEC_ENTRY_RADIO = -1 `the entry of the radio in the codec, once setup_codec has run. it is unlocked when the radio first comes on.
-global CODEC_ENTRY_SING = -1 `and the entries of the signals, each of which is unlocked when it is sent. TUNA has CODEC_ENTRY_TUNA.
-global CODEC_ENTRY_SONG = -1
+` and the entries of the signals, each of which is unlocked when it is sent. SOS has CODEC_ENTRY_TUNA.
+` SING and SONG do the same thing, and share this one. SONG had an entry of its own once: see getCodecPref.
+global CODEC_ENTRY_SING = -1
 global CODEC_ENTRY_CTHULHU = -1
 global TEX_CODEC_RADIO `and the picture that it has. Tools/radio_icon_gen.py draws it.
 global MORSE_REPLY_LEAD = 3 `how long the radio waits before it taps anything back, as so many dots
@@ -2319,11 +2394,14 @@ global MORSE_TENTACLE_ON = 0 `1 while it is there
 global MORSE_TENTACLE_MS = 0 `when it started to come up
 global MORSE_TENTACLE_UP# = 0 `how far up it is right now, from 0 to 1
 global MORSE_CTHULHU_COUNT = 0 `how many times CTHULHU has been heard
-global dim MORSE_WORD_CODEC(8) `the entry of the codec that every word unlocks when it is sent, or -1 for none
-global dim MORSE_WORD_NAME$(8) `the letters of every word, for the codec
+global dim MORSE_WORD_CODEC(24) `the entry of the codec that every word unlocks when it is sent, or -1 for none
+global dim MORSE_WORD_NAME$(24) `the letters of every word, for the codec
 global MORSE_SPELL_ROOM = 48 `how many numbers long the spelling of a word can be: its pushes, and a 2 after every letter
-global MORSE_REPLY_UNIT_MS = 100 `how long a dot is when the radio answers, in milliseconds
-global MORSE_REPLY_WAIT = 7 `how long the radio waits between one word and the next when it answers, as so many dots
+` the radio taps slowly, and leaves more room after a letter and after a word than Morse code asks for
+` (which is two more dots after a letter, and six after a word), so that it can be followed by ear.
+global MORSE_REPLY_UNIT_MS = 150 `how long a dot is when the radio answers, in milliseconds
+global MORSE_REPLY_LETTER_GAP = 4 `how much longer the quiet after a letter is than the quiet after a dot or a dash, as so many dots
+global MORSE_REPLY_WAIT = 10 `how long the radio waits between one word and the next when it answers, as so many dots
 global MORSE_REPLY_PITCH# = .35 `how much higher the tone is when it is the radio that is tapping, so that it does not sound like the player
 global MORSE_MODE = 0 `1 while the radio is on
 global MORSE_WAKING = 0 `1 for the rest of the hold that turned the radio on. it is not a dot or a dash.
@@ -2340,11 +2418,12 @@ global MORSE_MARK = -1 `the last push that was heard: 0 for a dot, and 1 for a d
 global MORSE_HEARD = -1 `the word that was finished on this frame, or -1
 global MORSE_SOUND# = 0 `how loud the tone is right now
 global MORSE_WORD_COUNT = 0 `how many words there are
-global MORSE_SOS_COUNT = 0 `how many times SOS has been heard
+global MORSE_CHEAT_COUNT = 0 `how many times TUNA has been heard
 global MORSE_SING_COUNT = 0 `and SING, or SONG
-global dim MORSE_WORD_SECRET(8) `1 for a word that the radio does not give away when it answers
-global dim MORSE_WORD_SPELL(384) `the spelling of every word, as morseSpell leaves it. each word has MORSE_SPELL_ROOM numbers.
-global dim MORSE_WORD_SPELL_LENGTH(8) `and how many numbers long each one is
+global MORSE_REPLY_SONG = -1 `the two words that the radio last answered CQ with: SING or SONG,
+global MORSE_REPLY_FUN = -1 `and one of the words that bring somebody swimming through
+global dim MORSE_WORD_SPELL(1152) `the spelling of every word, as morseSpell leaves it. each word has MORSE_SPELL_ROOM numbers.
+global dim MORSE_WORD_SPELL_LENGTH(24) `and how many numbers long each one is
 global dim MORSE_REPLY(1024) `the answer of the radio: a 1 for every dot of time that the tone sounds, and a 0 for every one that it does not
 global MORSE_REPLY_LENGTH = 0 `how many of those there are
 global MORSE_REPLY_ON = 0 `1 while the radio is answering
@@ -2353,9 +2432,9 @@ global MORSE_REPLY_CLOCK = 0 `the milliseconds that have gone by since the last 
 global MORSE_REPLY_LAST_MS = 0 `when the answer was last moved along
 global MORSE_REPLY_LIT = 0 `1 while the tone of the answer sounds
 global MORSE_PITCH# = 0 `how high the tone is right now
-global dim MORSE_CODES(26) `the pushes of every letter, from A to Z: a 1, and then, in binary, a 0 for every dot and a 1 for every dash
-global dim MORSE_WORD_MARKS(256) `the pushes of every word: 0 for a dot, and 1 for a dash. each word has MORSE_MARK_ROOM of them.
-global dim MORSE_WORD_LENGTH(8) `how many pushes long every word is
+global dim MORSE_CODES(36) `the pushes of every letter, from A to Z, and then of every digit, from 0 to 9: a 1, and then, in binary, a 0 for every dot and a 1 for every dash
+global dim MORSE_WORD_MARKS(768) `the pushes of every word: 0 for a dot, and 1 for a dash. each word has MORSE_MARK_ROOM of them.
+global dim MORSE_WORD_LENGTH(24) `how many pushes long every word is
 global dim MORSE_BUFFER(32) `the last pushes that were heard, the oldest first
 global MORSE_BUFFER_COUNT = 0 `and how many of them there are
 global dim MORSE_SPELL(64) `the pushes of the word that morseSpell was last asked for, with a 2 after every letter

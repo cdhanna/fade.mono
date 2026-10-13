@@ -19,6 +19,7 @@ setup_multiplier:
     ` the count of moves is, and it sits right underneath it.
     reserve text id(multLabelTextId)
     text multLabelTextId, MULT_POS.x, MULT_POS.y, SCORE_FONT, "Multiplier"
+    order text multLabelTextId, ORDER_HUD_TEXT
     size text y multLabelTextId, 16
     set text offset multLabelTextId, 0, 0
     color text multLabelTextId, rgb(64, 128, 255, 200)
@@ -28,6 +29,7 @@ setup_multiplier:
     ` the multiplier itself. stepMultiplier colors it and sizes it on every frame.
     reserve text id(MULT_TEXT_ID)
     text MULT_TEXT_ID, MULT_POS.x + 24, MULT_POS.y + 43, SCORE_FONT, "x1"
+    order text MULT_TEXT_ID, ORDER_HUD_TEXT
     size text y MULT_TEXT_ID, 30
     set text offset MULT_TEXT_ID, .5, 1
     color text MULT_TEXT_ID, rgb(64, 128, 255, 200)
@@ -49,6 +51,7 @@ setup_multiplier:
     ` how many swaps in a row there have been, out of how many it takes
     reserve text id(MULT_NUM_TEXT_ID)
     text MULT_NUM_TEXT_ID, MULT_POS.x + MULT_BAR_WIDTH, MULT_POS.y + 48, SCORE_FONT, "0/2"
+    order text MULT_NUM_TEXT_ID, ORDER_HUD_TEXT
     size text y MULT_NUM_TEXT_ID, 15
     set text offset MULT_NUM_TEXT_ID, 1, 0
     color text MULT_NUM_TEXT_ID, rgb(64, 128, 255, 200)
@@ -115,7 +118,10 @@ function judgeMultiplierSwaps(comboCount)
                     if MULT_PROGRESS > 0
                         MULT_PROGRESS = 0
                     else
-                        SCORE_MULTIPLIER = SCORE_MULTIPLIER - 1
+                        ` under the "oceanic oath", the multiplier never goes down. see fish_headers_fast.
+                        if fastOath() = 0
+                            SCORE_MULTIPLIER = SCORE_MULTIPLIER - 1
+                        endif
                     endif
                 endwhile
                 if SCORE_MULTIPLIER < 1 then SCORE_MULTIPLIER = 1

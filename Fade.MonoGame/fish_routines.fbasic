@@ -269,6 +269,11 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_LOWER_BAR).artTexId), "Fish/Textures/Cards/lower_the_bar"
     texture reserve texture id(CARDS(ABILITY_INDEX_MIDNIGHT_CRAB).artTexId), "Fish/Textures/Cards/midnight_crab"
 
+    ` the cards that only a fast gives out. see THE FAST in fish_headers_fast. Tools/fast_art_gen.py draws them.
+    texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_ROTATE).artTexId), "Fish/Textures/Cards/rotate"
+    texture reserve texture id(CARDS(ABILITY_INDEX_OPEN_BOOK).artTexId), "Fish/Textures/Cards/see_all"
+    texture reserve texture id(CARDS(ABILITY_INDEX_OATH).artTexId), "Fish/Textures/Cards/oceanic_oath"
+
 return
 
 setup_grid:
@@ -425,6 +430,7 @@ setup_score:
     ` set up the "moves" label on left
     reserve text id(MOVE_TEXT_ID)
     text MOVE_TEXT_ID, 32, SCORE_POS.y - 16, SCORE_FONT, "Moves"
+    order text MOVE_TEXT_ID, ORDER_HUD_TEXT
     size text y MOVE_TEXT_ID, 20
     set text offset MOVE_TEXT_ID, 0, 0
     color text MOVE_TEXT_ID, rgb(64, 128, 255, 200)
@@ -437,6 +443,7 @@ setup_score:
     ` re-use id, and set up "rounds left" label on right
     reserve text id(MOVE_TEXT_ID)
     text MOVE_TEXT_ID, 570 - 32, SCORE_POS.y - 16, SCORE_FONT, "Rounds Left"
+    order text MOVE_TEXT_ID, ORDER_HUD_TEXT
     size text y MOVE_TEXT_ID, 20
     set text offset MOVE_TEXT_ID, 1, 0
     color text MOVE_TEXT_ID, rgb(64, 128, 255, 200)
@@ -448,6 +455,7 @@ setup_score:
 
     reserve text id(MOVE_COUNT_TEXT_ID)
     text MOVE_COUNT_TEXT_ID, 32 + 24 SCORE_POS.y + 42, SCORE_FONT, "0"
+    order text MOVE_COUNT_TEXT_ID, ORDER_HUD_TEXT
     size text y MOVE_COUNT_TEXT_ID, 42
 
     set text offset MOVE_COUNT_TEXT_ID, .5, 1
@@ -456,6 +464,7 @@ setup_score:
 
     reserve text id(ROUND_COUNT_TEXT_ID)
     text ROUND_COUNT_TEXT_ID, 570 - 64 - 10 SCORE_POS.y + 42, SCORE_FONT, str$(getRoundsLeft())
+    order text ROUND_COUNT_TEXT_ID, ORDER_HUD_TEXT
     size text y ROUND_COUNT_TEXT_ID, 42
     set text offset ROUND_COUNT_TEXT_ID, .5, 1
     color text ROUND_COUNT_TEXT_ID, rgb(64, 128, 255, 200)
@@ -556,6 +565,7 @@ update_frame:
     stepTuna()
     perf lap 20
     stepBeatLook()
+    rotateDrawBox() `the outline of the box of a "rotate". see fish_headers_fast.
     perf lap 21
     gosub frame_hints
     perf lap 22
@@ -617,6 +627,19 @@ frame_fish_fx:
     perf lap 32
     diagonalPeriod = CURRENT_PERIOD#
     diagonalNudgeTime# = DIAGONAL_HINT_SHUFFLE_MS
+
+    ` the cell that the diver's flashlight is in, or -1, and how far from it the cells to each side of
+    ` it are. one that is off of the edge of the board is 0, which is the diver's own cell. see THE FLASHLIGHT
+    ` in fish_headers_diver.
+    torchAt = DIVER_LIGHT_AT
+    torchUp = 0 - CELL_COLUMN_COUNT
+    torchRight = 0
+    torchLeft = 0
+    if torchAt >= 0
+        torchColumn = torchAt mod CELL_COLUMN_COUNT
+        if torchColumn < CELL_COLUMN_COUNT - 1 then torchRight = 1
+        if torchColumn > 0 then torchLeft = -1
+    endif
 
     for i = 0 to CELL_COUNT - 1
         c = CELLS(i)
@@ -807,6 +830,16 @@ frame_fish_fx:
         if c.bellyUp > 0 then nightGlow# = -1
         if c.value >= TEX_BOTTLE then nightGlow# = -1
 
+        ` a fish in the light of the diver's flashlight is drawn the way that it is in the day. the
+        ` effect takes -2 for that. see THE FLASHLIGHT in fish_headers_diver.
+        if torchAt >= 0
+            torchGap = i - torchAt
+            if torchGap = CELL_COLUMN_COUNT then nightGlow# = -2
+            if torchGap = torchUp then nightGlow# = -2
+            if torchGap = torchRight then nightGlow# = -2
+            if torchGap = torchLeft then nightGlow# = -2
+        endif
+
         set sprite all texcoord2 c.spriteId, pushX# * fishSize# + tunaPushX#, pushY# * fishSize# + tunaPushY#, lift# + TUNA_SHRINK#, nightGlow#
     next
 
@@ -964,7 +997,10 @@ frame_score:
                 REQUEST_GAME_END = 1
                 SCORE_BAR_HOLD = 2
             else
-                if GAME_ZEN
+                ` and neither does a game under the "oceanic oath". see fish_headers_fast.
+                roundNoUpgrade = GAME_ZEN
+                if fastOath() then roundNoUpgrade = 1
+                if roundNoUpgrade
                     ` a zen game has no upgrades. the bar empties out, and the next round starts.
                     advanceScoreBar()
                 else

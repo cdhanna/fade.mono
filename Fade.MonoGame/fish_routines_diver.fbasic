@@ -63,6 +63,30 @@ setup_diver:
     order sprite DIVER_LEAVE_SPRITE, ORDER_FISH + 2
     hide sprite DIVER_LEAVE_SPRITE
 
+    ` the flashlight: the pool of light, under the fish, and the flashlight itself, on top of the
+    ` diver, which is a few dark pixels with a bright end. see THE FLASHLIGHT in fish_headers_diver.
+    reserve effect id(DIVER_LIGHT_FX_ID)
+    effect DIVER_LIGHT_FX_ID, "Fish/Shaders/DiverLightEffect"
+    reserve sprite id(DIVER_LIGHT_SPRITE)
+    sprite DIVER_LIGHT_SPRITE, 0, 0, TEX_PIXEL
+    set sprite effect DIVER_LIGHT_SPRITE, DIVER_LIGHT_FX_ID
+    order sprite DIVER_LIGHT_SPRITE, ORDER_DIVER_LIGHT
+    hide sprite DIVER_LIGHT_SPRITE
+
+    reserve sprite id(DIVER_TORCH_SPRITE)
+    sprite DIVER_TORCH_SPRITE, 0, 0, TEX_PIXEL
+    size sprite DIVER_TORCH_SPRITE, 3, 2
+    color sprite DIVER_TORCH_SPRITE, rgb(150, 156, 172)
+    order sprite DIVER_TORCH_SPRITE, ORDER_FISH + 2
+    hide sprite DIVER_TORCH_SPRITE
+
+    reserve sprite id(DIVER_LENS_SPRITE)
+    sprite DIVER_LENS_SPRITE, 0, 0, TEX_PIXEL
+    size sprite DIVER_LENS_SPRITE, 1, 2
+    color sprite DIVER_LENS_SPRITE, rgb(255, 246, 180)
+    order sprite DIVER_LENS_SPRITE, ORDER_FISH + 3
+    hide sprite DIVER_LENS_SPRITE
+
     ` the shots: a viewfinder, a photo paper, and the fish on the paper, for each. see THE SHOTS in fish_headers_diver.
     for dvSetupI = 0 to DIVER_SHOT_COUNT - 1
         dvSetupId = 0
@@ -420,7 +444,56 @@ function diverReset()
     next
     hide sprite DIVER_BODY_SPRITE
     hide sprite DIVER_LEAVE_SPRITE
+    DIVER_LIGHT_AT = -1
+    hide sprite DIVER_LIGHT_SPRITE
+    hide sprite DIVER_TORCH_SPRITE
+    hide sprite DIVER_LENS_SPRITE
 endfunction
+
+
+` THE FLASHLIGHT. see fish_headers_diver. is any fish of this group in the light of the diver? that
+` is one of the four cells that touch it. this is asked while handle_combos goes through the groups,
+` so diverMend has been, and DIVER_AT is where the diver is.
+function diverLights(dvLightGroup)
+    dvLights = 0
+    if DIVER_ON
+        if DIVER_AT >= 0
+            dvLightX = DIVER_AT mod CELL_COLUMN_COUNT
+            dvLightY = DIVER_AT / CELL_COLUMN_COUNT
+            if dvLightX > 0
+                if CELLS(DIVER_AT - 1).comboFillId = dvLightGroup then dvLights = 1
+            endif
+            if dvLightX < CELL_COLUMN_COUNT - 1
+                if CELLS(DIVER_AT + 1).comboFillId = dvLightGroup then dvLights = 1
+            endif
+            if dvLightY > 0
+                if CELLS(DIVER_AT - CELL_COLUMN_COUNT).comboFillId = dvLightGroup then dvLights = 1
+            endif
+            if dvLightY < CELL_ROW_COUNT - 1
+                if CELLS(DIVER_AT + CELL_COLUMN_COUNT).comboFillId = dvLightGroup then dvLights = 1
+            endif
+        endif
+    endif
+endfunction dvLights
+
+
+` is this cell in the light that is being drawn? stepTideSleep asks, because no Z comes up from a
+` fish that the light keeps awake.
+function diverLightOn(dvLitCell)
+    dvLit = 0
+    if DIVER_LIGHT_AT >= 0
+        dvLitColumn = DIVER_LIGHT_AT mod CELL_COLUMN_COUNT
+        dvLitGap = dvLitCell - DIVER_LIGHT_AT
+        if dvLitGap = CELL_COLUMN_COUNT then dvLit = 1
+        if dvLitGap = 0 - CELL_COLUMN_COUNT then dvLit = 1
+        if dvLitGap = 1
+            if dvLitColumn < CELL_COLUMN_COUNT - 1 then dvLit = 1
+        endif
+        if dvLitGap = -1
+            if dvLitColumn > 0 then dvLit = 1
+        endif
+    endif
+endfunction dvLit
 
 
 ` the cell that the diver is in, or -1 when it is not on the board
@@ -515,6 +588,19 @@ function diverMoveMade(dvMoves)
     if dvMoves <= 0 then exitfunction
     DIVER_AIR = DIVER_AIR - dvMoves
     if DIVER_AIR < 0 then DIVER_AIR = 0
+endfunction
+
+
+` a swap of the night has traded the fish in these two cells. the moves of the night take no air,
+` but for the ones that move the diver: swimming is what uses it up. see THE AIR in fish_headers_diver.
+function diverNightSwap(dvNightA, dvNightB)
+    if DIVER_ON = 0 then exitfunction
+    dvNightMoved = 0
+    if CELLS(dvNightA).value = TEX_DIVER then dvNightMoved = 1
+    if CELLS(dvNightB).value = TEX_DIVER then dvNightMoved = 1
+    if dvNightMoved
+        diverMoveMade(1)
+    endif
 endfunction
 
 
@@ -972,6 +1058,39 @@ function diverStep()
         show sprite DIVER_BODY_SPRITE
     else
         hide sprite DIVER_BODY_SPRITE
+    endif
+
+    ` THE FLASHLIGHT. see fish_headers_diver. it is there for as long as any of the night is. the
+    ` diver puts it away to swim up.
+    dvLightOn = 0
+    if dvBodyAt >= 0
+        if TIDE_NIGHT_SHOWN# > .01 then dvLightOn = 1
+        if DIVER_RISING then dvLightOn = 0
+    endif
+    DIVER_LIGHT_AT = -1
+    if dvLightOn
+        DIVER_LIGHT_AT = dvBodyAt
+        dvLightFace = 1
+        if DIVER_FACE_LEFT then dvLightFace = -1
+        dvLightSize# = CELL_SIZE * DIVER_LIGHT_CELLS#
+        dvLensX = dvLightFace * (DIVER_TORCH_X + 2)
+        position sprite DIVER_LIGHT_SPRITE, sprite x(dvBodyCell), sprite y(dvBodyCell)
+        size sprite DIVER_LIGHT_SPRITE, dvLightSize#, dvLightSize#
+        set effect param float4 DIVER_LIGHT_FX_ID, "Light", TIDE_NIGHT_SHOWN#, dvNow * .001, dvLightFace, CELL_SIZE
+        set effect param float2 DIVER_LIGHT_FX_ID, "Lens", dvLensX, DIVER_TORCH_Y
+        show sprite DIVER_LIGHT_SPRITE
+
+        dvTorchAlpha = 255 * TIDE_NIGHT_SHOWN#
+        position sprite DIVER_TORCH_SPRITE, sprite x(dvBodyCell) + dvLightFace * DIVER_TORCH_X, sprite y(dvBodyCell) + dvBodyBob# + DIVER_TORCH_Y
+        set sprite alpha DIVER_TORCH_SPRITE, dvTorchAlpha
+        show sprite DIVER_TORCH_SPRITE
+        position sprite DIVER_LENS_SPRITE, sprite x(dvBodyCell) + dvLensX, sprite y(dvBodyCell) + dvBodyBob# + DIVER_TORCH_Y
+        set sprite alpha DIVER_LENS_SPRITE, dvTorchAlpha
+        show sprite DIVER_LENS_SPRITE
+    else
+        hide sprite DIVER_LIGHT_SPRITE
+        hide sprite DIVER_TORCH_SPRITE
+        hide sprite DIVER_LENS_SPRITE
     endif
 
     ` the diver on the way up, upright, which fades

@@ -22,6 +22,7 @@ test beat_moves_in_time_are_counted from fishBoard
     BEAT_LAST_MS = 10000
     BEAT_HIT_MS = -1
     BEAT_STREAK = 0
+    BEAT_LATENCY = 0
 
     BEAT_FLASHING = 0
 
@@ -178,5 +179,31 @@ test beat_bubbles_have_evenly_spaced_places from fishBoard
     tTuneBeats = (MELODY_LENGTH(MELODY_PLAYING) + BEAT_PULSE_STEPS - 1) / BEAT_PULSE_STEPS
     tPlaces = (BEAT_LEAD_PULSES + tTuneBeats) - 1
     assert BEAT_BUBBLE_SLOTS = tPlaces, "one for every beat after the ding, to the last beat of the tune"
+    end
+endtest
+
+test beat_moves_are_judged_as_if_made_sooner from fishBoard
+    ` the same dance, with a lag of 120 milliseconds. see THE LAG in fish_headers.
+    BEAT_ON = 1
+    BEAT_DING_MS = -1
+    BEAT_PULSE = 500
+    BEAT_LAST_MS = 10000
+    BEAT_HIT_MS = -1
+    BEAT_STREAK = 0
+    BEAT_LATENCY = 120
+    BEAT_RAW_SUM = 0
+    BEAT_RAW_COUNT = 0
+    BEAT_RAW_IN = 0
+
+    assert beatJudge(10620) = 1, "a move that is late by as much as the lag is in time"
+    assert BEAT_LAST_OFF = 0, "and it is right on the beat"
+    assert BEAT_RAW_LAST = 120, "but what is kept for working out the lag is how late it really was"
+    assert beatJudge(11010) = 0, "a move right on the beat is too soon now"
+    assert BEAT_RAW_LAST = 10, "and that one really was 10 late"
+    assert BEAT_RAW_COUNT = 2, "both of them are counted"
+    assert BEAT_RAW_SUM = 130, "and added up"
+    assert BEAT_RAW_IN = 1, "and one of them was in time"
+    BEAT_LATENCY = 0
+    BEAT_ON = 0
     end
 endtest

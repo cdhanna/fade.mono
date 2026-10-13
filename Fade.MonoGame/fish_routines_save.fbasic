@@ -109,6 +109,9 @@ save_game:
     ` where the water is, and the moon. see fish_headers_tide.
     tideSave()
 
+    ` how long the fast has been, and the modifiers of the game. see fish_headers_fast.
+    fastSave()
+
     end pref batch
 
     SAVE_SIGNATURE = saveSignature()
@@ -241,6 +244,9 @@ load_game:
     ` and the tide, with the moon as it was saved
     tideLoad()
 
+    ` and the fast, and the modifiers of the game
+    fastLoad()
+
     ` what was just loaded is what is saved, so there is nothing new to save yet
     SAVE_SIGNATURE = saveSignature()
 return
@@ -308,6 +314,7 @@ function saveSignature()
     signature = signature + CORAL_COUNT * 67 + CORAL_CASTS * 71 + GAME_ENDLESS * 73
     signature = signature + QUESTS_DONE * 79 + QUEST_ID * 83 + QUEST_STATE * 89 + QUEST_ARRIVING * 97
     signature = signature + QUEST_PROG_NOW * 103 + QUEST_PICK_CELL * 107 + QUEST_LIST_N * 109
+    signature = signature + FAST_STREAK * 113 + GAME_MODS * 127
     for i = 0 to CARD_LENGTH - 1
         signature = signature + CARDS(i).uses * (37 + i)
     next
@@ -329,6 +336,11 @@ endfunction signature
 function grantPassive(abilityIndex)
     CARDS(abilityIndex).uses = CARDS(abilityIndex).uses + 1
     codecSeeCard(abilityIndex) `a zen game is given its passive without it ever being offered
+
+    ` a game that has taken the oath has it for good. see THE MODIFIERS in fish_headers_fast.
+    if abilityIndex = ABILITY_INDEX_OATH
+        modSet(MOD_OATH)
+    endif
 
     if CARDS(abilityIndex).obtained
         ` the row fades in again to show the change

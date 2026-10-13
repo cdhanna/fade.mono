@@ -25,6 +25,7 @@
 //   texcoord2.w  how much brighter to draw it. 0 is its own color, and 1 is twice as bright.
 //                -1 is a fish that does not glow at night. see THE NIGHT, further down. at night,
 //                a fish that is drawn brighter glows more, too.
+//                -2 is a fish in the light of the diver's flashlight, which is drawn the way that it is in the day.
 //                10 more than that is a fish that shimmers around its edge at night, which is a jellyfish.
 
 Texture2D SpriteTexture;
@@ -147,11 +148,14 @@ VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
 	float wave = 0.5 + 0.5 * sin(Night.y * NIGHT_WAVE_SPEED - dot(middle, NIGHT_WAVE));
 	float glows = step(-0.5, custom2.w);
 
+	// -2 says that the fish is in the light of the diver's flashlight, and it is not night for that fish
+	float lamp = step(custom2.w, -1.5);
+
 	// 10 or more says that it shimmers, and what is left over is how much brighter it is
 	float shimmers = step(5.0, custom2.w);
 	float brighter = max(custom2.w - 10.0 * shimmers, 0.0);
 
-	output.CountGlow = float4(clamp(custom.z, 1.0, MAX_STACK), brighter, saturate(Night.x), glows * (0.62 + 0.38 * wave) * (1.0 + 1.6 * brighter));
+	output.CountGlow = float4(clamp(custom.z, 1.0, MAX_STACK), brighter, saturate(Night.x) * (1.0 - lamp), glows * (0.62 + 0.38 * wave) * (1.0 + 1.6 * brighter));
 	output.Shimmer = shimmers;
 
 	output.Position = mul(position, MatrixTransform);

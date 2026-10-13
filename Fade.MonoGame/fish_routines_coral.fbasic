@@ -189,6 +189,9 @@ return
 ` THE FISH GO HOME. see fish_headers. handle_game_end, in fish_routines_menu, comes here when a game has
 ` been won the usual way. like the two endings, it draws frames of its own, and everything in it starts with "fin".
 finale_goodbye:
+    ` the codec has an entry for this ending from now on. see CODEC_ENTRY_GOODBYE in fish_headers.
+    codecSeeCard(CODEC_ENTRY_GOODBYE)
+
     set text CORAL_END_TEXT_ID, "The fish need to go home, now. Bye bye!"
     color text CORAL_END_TEXT_ID, rgb(200, 228, 255)
     set text CORAL_END_SUB_TEXT_ID, "If they had a home..."
@@ -977,6 +980,11 @@ function coralRecount()
     endif
     if CORAL_SICK_COUNT > 0
         codecSeeCard(CODEC_ENTRY_HORROR)
+    endif
+
+    ` and a game that has had coral has had it for good. see THE MODIFIERS in fish_headers_fast.
+    if CORAL_COUNT > 0
+        modSet(MOD_CORAL)
     endif
 endfunction
 
@@ -2091,10 +2099,16 @@ function coralRunesRefresh()
         next
     next
 
-    ` info mode only explains them once there is one to explain
+    ` info mode only explains them once there is one to explain. its spot is only as tall as the rows
+    ` that have a song in them, because the bars and the album of the diver sit right under those.
     coralRuneAny = 0
     if CORAL_USED_COUNT > 0 then coralRuneAny = 1
-    setInfoBlobEnabled(INFO_INDEX_SONGS, coralRuneAny)
+    coralRuneInfoRows = (CORAL_USED_COUNT + CORAL_RUNE_COLUMNS - 1) / CORAL_RUNE_COLUMNS
+    if coralRuneInfoRows < 1 then coralRuneInfoRows = 1
+    coralRuneBlob = INFOS(INFO_INDEX_SONGS)
+    coralRuneBlob.size.y = coralRuneInfoRows * CORAL_RUNE_HEIGHT + 8
+    coralRuneBlob.enabled = coralRuneAny
+    INFOS(INFO_INDEX_SONGS) = coralRuneBlob
 endfunction
 
 ` the dots of the songs twinkle, each in its own time, and the song of the pattern that was cast last

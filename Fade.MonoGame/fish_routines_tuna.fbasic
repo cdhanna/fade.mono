@@ -28,13 +28,12 @@ setup_tuna:
     ` the picture that this has in the codec: the bass looks the most like a tuna
     CODEC_TUNA_TEX = TEX_BASS
 
-    ` the word
-    TUNA_WORD(0) = 19
-    TUNA_WORD(1) = 20
-    TUNA_WORD(2) = 13
-    TUNA_WORD(3) = 0
+    ` the word, which is SOS
+    TUNA_WORD(0) = 18
+    TUNA_WORD(1) = 14
+    TUNA_WORD(2) = 18
 
-    ` every letter is listened for, and not only the four of the word, so that a wrong letter starts it over
+    ` every letter is listened for, and not only the ones of the word, so that a wrong letter starts it over
     for tunaI = 0 to 25
         TUNA_KEYS(tunaI) = scancode(chr$(65 + tunaI))
     next
@@ -105,14 +104,14 @@ function tunaType(tunaLetter)
             TUNA_TYPED = 1
         endif
     endif
-    if TUNA_TYPED >= 4
+    if TUNA_TYPED >= TUNA_WORD_LENGTH
         TUNA_TYPED = 0
         tunaDone = 1
     endif
 endfunction tunaDone
 
 
-` was it asked for on this frame? the word is typed on the keyboard. the debug keys use two of its
+` was it asked for on this frame? the word, SOS, is typed on the keyboard. the debug keys use one of its
 ` letters, so in debug mode the word does nothing and Q asks for it.
 ` or it is tapped out in Morse code, on anything at all, which is how a controller says it. see MORSE in fish_headers.
 function tunaAsked()
@@ -133,7 +132,7 @@ function tunaAsked()
     endif
 
     morseListen()
-    if MORSE_HEARD = MORSE_WORD_TUNA
+    if MORSE_HEARD = MORSE_WORD_SOS
         tunaWanted = 1
     endif
 endfunction tunaWanted

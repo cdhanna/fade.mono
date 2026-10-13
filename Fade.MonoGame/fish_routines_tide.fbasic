@@ -377,6 +377,7 @@ function tideCycleDone()
 
             ` the codec has an entry for it, from the first night on
             codecSeeCard(CODEC_ENTRY_NIGHT)
+            modSet(MOD_NIGHT) `see THE MODIFIERS in fish_headers_fast
 
             ` the low bell of nightfall, and the music goes down to the deep. see THE SOUNDS OF THE TIDE in fish_headers_tide.
             tidePlaySound(TIDE_SFX_NIGHT, TIDE_VOL_NIGHT#, 0)
@@ -460,6 +461,9 @@ function stepTideSleep()
             if CELLS(tideSleepCell).value <= 0 then tideSleepOk = 0
             if CELLS(tideSleepCell).value >= TEX_BOTTLE then tideSleepOk = 0
             if CELLS(tideSleepCell).bellyUp > 0 then tideSleepOk = 0
+
+            ` and not a fish that the diver's flashlight keeps awake. see THE FLASHLIGHT in fish_headers_diver.
+            if diverLightOn(tideSleepCell) then tideSleepOk = 0
             if tideSleepOk
                 tideSleepColumn = tideSleepCell mod CELL_COLUMN_COUNT
                 tideSleepRow = tideSleepCell / CELL_COLUMN_COUNT
@@ -588,6 +592,12 @@ function tideHoldsGroup(tideHoldGroup, tideHoldSwapped)
                 endif
             next
         endif
+    endif
+
+    ` the diver has a flashlight, and the fish in the light of it can not sleep. see THE FLASHLIGHT
+    ` in fish_headers_diver.
+    if tideHoldNight
+        if diverLights(tideHoldGroup) then tideHoldNight = 0
     endif
 
     if tideHoldNight

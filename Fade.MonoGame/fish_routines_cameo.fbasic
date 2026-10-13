@@ -1,0 +1,266 @@
+goto routines_cameo_exit
+
+remstart
+    CAMEOS
+    the things that swim through when one of the secret words is tapped out on the radio. see
+    CAMEOS in fish_headers_cameo.
+
+    setup_cameo makes every swimmer. morseListen, in fish_routines_morse, hands every word that is
+    heard to cameoStart, and moves them along with cameoStep, on every frame of the game.
+remend
+
+setup_cameo:
+
+    texture reserve texture id(TEX_CAMEO_CLOWN), "Fish/Textures/Clownfish"
+    texture reserve texture id(TEX_CAMEO_TANG), "Fish/Textures/Surgeonfish"
+    texture reserve texture id(TEX_CAMEO_FREDDI), "Fish/Textures/Cameos/Freddi"
+    texture reserve texture id(TEX_CAMEO_SUB), "Fish/Textures/Cameos/Sub"
+    texture reserve texture id(TEX_CAMEO_SHIP), "Fish/Textures/Cameos/Ship"
+    texture reserve texture id(TEX_CAMEO_DOPEFISH), "Fish/Textures/Cameos/Dopefish"
+    texture reserve texture id(TEX_CAMEO_FIN), "Fish/Textures/Cameos/Fin"
+    texture reserve texture id(TEX_CAMEO_FORK), "Fish/Textures/Cameos/Fork"
+    texture reserve texture id(TEX_CAMEO_MERMAID), "Fish/Textures/Cameos/Mermaid"
+
+    load sfx clip reserve sfx clip id(SFX_CLIP_CAMEO_JAWS), "Fish/Audio/cameo-jaws"
+    sfx reserve sfx id(SFX_CAMEO_JAWS), SFX_CLIP_CAMEO_JAWS
+    set sfx volume SFX_CAMEO_JAWS, CAMEO_JAWS_VOLUME#
+    load sfx clip reserve sfx clip id(SFX_CLIP_CAMEO_LEG), "Fish/Audio/cameo-my-leg"
+    sfx reserve sfx id(SFX_CAMEO_LEG), SFX_CLIP_CAMEO_LEG
+    set sfx volume SFX_CAMEO_LEG, CAMEO_LEG_VOLUME#
+
+    ` the words, as the codec has them: the picture of each, how wide and how high that picture is,
+    ` in its own pixels, its name, and what the codec says after how it is tapped out. that has to
+    ` be short: with the dots and dashes, there is only room for three lines.
+    cameoWord(MORSE_WORD_NEMO, TEX_CAMEO_CLOWN, 16, 16, "Nemo", ". Somebody has been found.")
+    cameoWord(MORSE_WORD_FREDDI, TEX_CAMEO_FREDDI, 16, 16, "Freddi", ". A case for two junior detectives.")
+    cameoWord(MORSE_WORD_U571, TEX_CAMEO_SUB, 48, 20, "U-571", ". Run silent.")
+    cameoWord(MORSE_WORD_WILLY, TEX_Q_WHALE, 32, 16, "Willy", ". Something big goes free.")
+    cameoWord(MORSE_WORD_PEARL, TEX_CAMEO_SHIP, 40, 34, "Pearl", ". Black sails.")
+    cameoWord(MORSE_WORD_DOPEFISH, TEX_CAMEO_DOPEFISH, 24, 24, "Dopefish", ". It lives.")
+    cameoWord(MORSE_WORD_JAWS, TEX_CAMEO_FIN, 16, 16, "Jaws", ". You may need a bigger boat.")
+    cameoWord(MORSE_WORD_ARIEL, TEX_CAMEO_FORK, 16, 16, "Ariel", ". It is for combing hair.")
+
+    ` MYLEG brings nobody, so it has the picture of the radio, which is drawn as big as the others
+    cameoWord(MORSE_WORD_MYLEG, TEX_CODEC_RADIO, 16, 16, "My Leg", ". Somebody always gets hurt.")
+
+    ` the swimmers. each one is its word, its picture, how wide and how high it is drawn, how far
+    ` down the screen it crosses, how long it takes, how long it waits first, and how far it bobs.
+    ` the pictures are drawn at twice their size, or more, so that they are not taken for fish of the board.
+
+    ` the clown fish goes first, and the blue fish comes after it, a little higher up
+    cameoSwimmer(MORSE_WORD_NEMO, TEX_CAMEO_CLOWN, 32, 32, 150, 9000, 0, 5)
+    cameoSwimmer(MORSE_WORD_NEMO, TEX_CAMEO_TANG, 32, 32, 132, 9000, 900, 7)
+
+    ` the little green one is a fish of the board, at its own size
+    cameoSwimmer(MORSE_WORD_FREDDI, TEX_CAMEO_FREDDI, 32, 32, 176, 10000, 0, 5)
+    cameoSwimmer(MORSE_WORD_FREDDI, TEX_BASS, 16, 16, 190, 10000, 1100, 6)
+
+    cameoSwimmer(MORSE_WORD_U571, TEX_CAMEO_SUB, 144, 60, 96, 20000, 0, 2)
+
+    ` the whale is all black, and can be seen through: it is only its shadow
+    cameoSwimmer(MORSE_WORD_WILLY, TEX_Q_WHALE, 320, 160, 150, 15000, 0, 6)
+    color sprite CAMEO_SPRITE(CAMEO_COUNT - 1), rgb(0, 0, 0, 105)
+
+    cameoSwimmer(MORSE_WORD_PEARL, TEX_CAMEO_SHIP, 80, 68, 38, 22000, 0, 2)
+    cameoSwimmer(MORSE_WORD_DOPEFISH, TEX_CAMEO_DOPEFISH, 72, 72, 190, 13000, 0, 9)
+
+    ` the fin sticks up from under the bottom of the screen
+    cameoSwimmer(MORSE_WORD_JAWS, TEX_CAMEO_FIN, 32, 32, WORLD_HEIGHT - 15, CAMEO_JAWS_MS, 0, 0)
+    CAMEO_RUSH(CAMEO_COUNT - 1) = 1
+
+    ` the fork turns over and over, and the mermaid comes after it, a little faster than it goes
+    cameoSwimmer(MORSE_WORD_ARIEL, TEX_CAMEO_FORK, 32, 32, 120, 11000, 0, 8)
+    CAMEO_SPIN(CAMEO_COUNT - 1) = 1
+    cameoSwimmer(MORSE_WORD_ARIEL, TEX_CAMEO_MERMAID, 64, 32, 124, 9500, 2400, 6)
+
+return
+
+
+routines_cameo_exit:
+
+
+` what the codec has for a word. see setup_cameo for what these are.
+function cameoWord(camWord, camIconTex, camIconW, camIconH, camName$, camSays$)
+    camWordN = camWord - MORSE_WORD_NEMO
+    CAMEO_ICON_TEX(camWordN) = camIconTex
+    CAMEO_ICON_W(camWordN) = camIconW
+    CAMEO_ICON_H(camWordN) = camIconH
+    CAMEO_NAME$(camWordN) = camName$
+    CAMEO_SAYS$(camWordN) = camSays$
+    if camWordN >= CAMEO_WORD_COUNT
+        CAMEO_WORD_COUNT = camWordN + 1
+    endif
+endfunction
+
+
+` the codec is showing an entry on this sprite, in a square that is `camSizeBox` pixels across. when
+` the entry is a word that brings somebody swimming through, the sprite is given the shape of the
+` picture of that word, as many times its own size as fit in the square. the codec makes every
+` picture square otherwise, and not all of these are. nothing happens for any other entry.
+function cameoIconSize(camSizeSprite, camSizeEntry, camSizeBox)
+    camSizeN = camSizeEntry - CODEC_ENTRY_CAMEO
+    if camSizeN < 0
+        exitfunction
+    endif
+    if camSizeN >= CAMEO_WORD_COUNT
+        exitfunction
+    endif
+
+    camSizeMost = CAMEO_ICON_W(camSizeN)
+    if CAMEO_ICON_H(camSizeN) > camSizeMost
+        camSizeMost = CAMEO_ICON_H(camSizeN)
+    endif
+    camSizeBy = 1
+    camSizeTwice = camSizeMost * 2
+    camSizeThrice = camSizeMost * 3
+    if camSizeTwice <= camSizeBox
+        camSizeBy = 2
+    endif
+    if camSizeThrice <= camSizeBox
+        camSizeBy = 3
+    endif
+    size sprite camSizeSprite, CAMEO_ICON_W(camSizeN) * camSizeBy, CAMEO_ICON_H(camSizeN) * camSizeBy
+endfunction
+
+
+` make a swimmer. it waits, hidden, until its word is heard. see setup_cameo for what the numbers are.
+function cameoSwimmer(camWord, camTex, camWide, camHigh, camY, camLifeMs, camWaitMs, camBob)
+    if CAMEO_COUNT >= CAMEO_ROOM
+        exitfunction
+    endif
+    reserve sprite id(camSpriteId)
+    sprite camSpriteId, 0, 0, camTex
+    set sprite offset camSpriteId, .5, .5
+    size sprite camSpriteId, camWide, camHigh
+    order sprite camSpriteId, ORDER_CAMEO
+    hide sprite camSpriteId
+
+    CAMEO_WORD(CAMEO_COUNT) = camWord
+    CAMEO_SPRITE(CAMEO_COUNT) = camSpriteId
+    CAMEO_WIDE(CAMEO_COUNT) = camWide
+    CAMEO_Y(CAMEO_COUNT) = camY
+    CAMEO_LIFE_MS(CAMEO_COUNT) = camLifeMs
+    CAMEO_WAIT_MS(CAMEO_COUNT) = camWaitMs
+    CAMEO_BOB(CAMEO_COUNT) = camBob
+    CAMEO_RUSH(CAMEO_COUNT) = 0
+    CAMEO_SPIN(CAMEO_COUNT) = 0
+    CAMEO_ON(CAMEO_COUNT) = 0
+    CAMEO_START_MS(CAMEO_COUNT) = 0
+    CAMEO_X(CAMEO_COUNT) = 0
+    CAMEO_COUNT = CAMEO_COUNT + 1
+endfunction
+
+
+` a word was heard, at this time, in milliseconds. its swimmers set off, if it has any, and the
+` sound that goes with them plays.
+function cameoStart(camWord, camNow)
+    if CAMEO_COUNT = 0
+        exitfunction
+    endif
+
+    ` MYLEG has no swimmers. it is only heard, in a moment.
+    if camWord = MORSE_WORD_MYLEG
+        CAMEO_LEG_DUE = 1
+        CAMEO_LEG_MS = camNow + CAMEO_LEG_AT_MS
+        CAMEO_HEARD(camWord) = CAMEO_HEARD(camWord) + 1
+        exitfunction
+    endif
+
+    camOut = 0
+    camLast = CAMEO_COUNT - 1
+    for camI = 0 to camLast
+        if CAMEO_WORD(camI) = camWord
+            if CAMEO_ON(camI) = 0
+                CAMEO_LIVE = CAMEO_LIVE + 1
+            endif
+            CAMEO_ON(camI) = 1
+            CAMEO_START_MS(camI) = camNow + CAMEO_WAIT_MS(camI)
+            hide sprite CAMEO_SPRITE(camI)
+            camOut = camOut + 1
+        endif
+    next
+    if camOut = 0
+        exitfunction
+    endif
+    CAMEO_HEARD(camWord) = CAMEO_HEARD(camWord) + 1
+
+    if camWord = MORSE_WORD_U571
+        playMusicShot(MUSIC_SHOT_PING)
+    endif
+    if camWord = MORSE_WORD_WILLY
+        playMusicShot(MUSIC_SHOT_WHALE_LOW)
+    endif
+    if camWord = MORSE_WORD_PEARL
+        playMusicShot(MUSIC_SHOT_BOAT_PASS)
+    endif
+    if camWord = MORSE_WORD_JAWS
+        play sfx SFX_CAMEO_JAWS
+    endif
+endfunction
+
+
+` move every swimmer that is out along to this time, in milliseconds. one that has got to the other
+` side is gone. and the shout of MYLEG comes when it is due.
+function cameoStep(camNow)
+    if CAMEO_LEG_DUE
+        if camNow >= CAMEO_LEG_MS
+            CAMEO_LEG_DUE = 0
+            CAMEO_LEG_COUNT = CAMEO_LEG_COUNT + 1
+            play sfx SFX_CAMEO_LEG
+        endif
+    endif
+    if CAMEO_LIVE = 0
+        exitfunction
+    endif
+
+    camLast = CAMEO_COUNT - 1
+    for camI = 0 to camLast
+        if CAMEO_ON(camI)
+            camAge = camNow - CAMEO_START_MS(camI)
+            if camAge >= CAMEO_LIFE_MS(camI)
+                CAMEO_ON(camI) = 0
+                CAMEO_LIVE = CAMEO_LIVE - 1
+                hide sprite CAMEO_SPRITE(camI)
+            else
+                if camAge >= 0
+                    camAge# = camAge
+                    camLife# = CAMEO_LIFE_MS(camI)
+                    camPart# = camAge# / camLife#
+                    if CAMEO_RUSH(camI)
+                        camPart# = camPart# * camPart#
+                    endif
+
+                    ` from all of the way off the left of the screen to all of the way off the right
+                    camSpan# = WORLD_WIDTH + CAMEO_WIDE(camI)
+                    camX# = camSpan# * camPart# - CAMEO_WIDE(camI) * .5
+                    camY# = CAMEO_Y(camI) + sin(camAge# * CAMEO_BOB_RATE# + camI * 1.7) * CAMEO_BOB(camI)
+                    position sprite CAMEO_SPRITE(camI), camX#, camY#
+                    if CAMEO_SPIN(camI)
+                        rotate sprite CAMEO_SPRITE(camI), camAge# * CAMEO_SPIN_RATE#
+                    endif
+                    show sprite CAMEO_SPRITE(camI)
+                    CAMEO_X(camI) = camX#
+                endif
+            endif
+        endif
+    next
+endfunction
+
+
+` every swimmer is gone, at once, and so is the sound of the fin, and a shout that was on its way
+` does not come. this is for when the game is not being played. see morseQuiet.
+function cameoGone()
+    CAMEO_LEG_DUE = 0
+    if CAMEO_LIVE = 0
+        exitfunction
+    endif
+    camLast = CAMEO_COUNT - 1
+    for camI = 0 to camLast
+        if CAMEO_ON(camI)
+            CAMEO_ON(camI) = 0
+            hide sprite CAMEO_SPRITE(camI)
+        endif
+    next
+    CAMEO_LIVE = 0
+    pause sfx SFX_CAMEO_JAWS
+endfunction

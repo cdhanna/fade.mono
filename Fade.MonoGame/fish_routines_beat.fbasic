@@ -37,6 +37,23 @@ frame_debug_beat:
     endif
     debug text "in a row: " + str$(BEAT_STREAK)
     debug text "last move was off by " + str$(BEAT_LAST_OFF) + " ms"
+
+    ` THE LAG. see fish_headers. these are measured from the beat itself, before the lag is taken off.
+    debug separator
+    debug text "last move, before the lag: " + str$(BEAT_RAW_LAST) + " ms"
+    if BEAT_RAW_COUNT > 0
+        debugBeatAverage = BEAT_RAW_SUM / BEAT_RAW_COUNT
+        debug text "average of " + str$(BEAT_RAW_COUNT) + " moves: " + str$(debugBeatAverage) + " ms"
+        debug text "in time: " + str$(BEAT_RAW_IN) + " of " + str$(BEAT_RAW_COUNT)
+    else
+        debug text "no moves counted yet"
+    endif
+    if debug button("start the count over") = 1
+        BEAT_RAW_SUM = 0
+        BEAT_RAW_COUNT = 0
+        BEAT_RAW_IN = 0
+    endif
+    debugBeatLagMoved = debug int slider("lag, in ms", BEAT_LATENCY, -100, 300)
     debugBeatHanging = 0
     for debugBeatI = 0 to BEAT_BUBBLE_MAX - 1
         if BEAT_BUBBLE_STATE(debugBeatI) = BEAT_BUBBLE_HANGING then debugBeatHanging = debugBeatHanging + 1
@@ -187,11 +204,24 @@ function beatJudge(beatAt)
     if BEAT_PULSE <= 0 then beatOpen = 0
 
     if beatOpen
+        ` how far it was from the closest beat as it is, for working out the lag. see THE LAG in fish_headers.
+        beatRawSince = beatAt - BEAT_LAST_MS
+        if beatRawSince < 0 then beatRawSince = 0
+        beatRaw = beatRawSince mod BEAT_PULSE
+        beatRawTwice = beatRaw * 2
+        if beatRawTwice > BEAT_PULSE then beatRaw = beatRaw - BEAT_PULSE
+        BEAT_RAW_LAST = beatRaw
+        BEAT_RAW_SUM = BEAT_RAW_SUM + beatRaw
+        BEAT_RAW_COUNT = BEAT_RAW_COUNT + 1
+
+        ` the move is judged as if it had been made that much sooner
+        beatHeard = beatAt - BEAT_LATENCY
+
         ` how far it is past the beat before it, and which beat that was
-        beatSince = beatAt - BEAT_LAST_MS
+        beatSince = beatHeard - BEAT_LAST_MS
         if beatSince < 0 then beatSince = 0
         beatOff = beatSince mod BEAT_PULSE
-        beatNear = beatAt - beatOff
+        beatNear = beatHeard - beatOff
         BEAT_LAST_OFF = beatOff
 
         ` or it is closer to the beat after it
@@ -214,6 +244,7 @@ function beatJudge(beatAt)
         BEAT_FLASHING = 1
 
         if beatOff <= BEAT_WINDOW
+            BEAT_RAW_IN = BEAT_RAW_IN + 1
             if beatNear <> BEAT_HIT_MS
                 BEAT_HIT_MS = beatNear
                 BEAT_STREAK = BEAT_STREAK + 1
@@ -251,6 +282,9 @@ function beatCashBubble(cashBubble)
     playBubblePop(BEAT_BUBBLE_X(cashBubble), BEAT_BUBBLE_SIZE(cashBubble), BEAT_POP_VOLUME#)
 
     if tutorialMovesOff() then exitfunction
+
+    ` a game that a dance has paid out in has had one. see THE MODIFIERS in fish_headers_fast.
+    modSet(MOD_BEAT)
     fillMultiplierBar()
     wiggleMultiplierBar()
     refreshMultiplier(150)

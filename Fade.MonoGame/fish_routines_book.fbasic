@@ -1,0 +1,352 @@
+goto routines_book_exit
+
+remstart
+    THE BOOK
+    the page of the upgrade screen that lays out every card that could have been dealt. see THE BOOK
+    in fish_headers_fast for what it is.
+
+    handle_ability_selection, in fish_routines_ability, comes to handle_book when the line under the
+    cards is picked, and to book_show and book_run when the upgrade screen comes up as the book.
+    BOOK_PICK says how it went: the card that was taken, or -1 if the player went back to the cards.
+
+    the names in here all start with "book", because this runs in the middle of
+    handle_ability_selection, and it must not touch anything that it is in the middle of using.
+remend
+
+` this comes after setup_upgrade_wipe, because everything here is drawn to the render target of the upgrade screen
+setup_book:
+
+    ` which modifiers the player has had, in any game. see THE MODIFIERS ON THE TABLES in fish_headers_fast.
+    ` it is read here because this is the one routine of the fast that runs as the game starts.
+    modsLoadKnown()
+
+    ` the fade goes from 0 (put away) to 1 (showing)
+    reserve tween id(BOOK_FADE_TWEEN_ID)
+    create basic tween BOOK_FADE_TWEEN_ID, 0, 0, 1, 0
+
+    ` a dark panel behind all of it, like a card, so that the board does not show through the pictures
+    reserve sprite id(BOOK_PANEL_SPRITE)
+    sprite BOOK_PANEL_SPRITE, WORLD_WIDTH / 2 - 245, 82, TEX_PIXEL
+    set sprite offset BOOK_PANEL_SPRITE, 0, 0
+    size sprite BOOK_PANEL_SPRITE, 490, 202
+    order sprite BOOK_PANEL_SPRITE, ORDER_ABILITY_CARD
+    set sprite render target BOOK_PANEL_SPRITE, TARGET_UPGRADE
+    hide sprite BOOK_PANEL_SPRITE
+
+    ` the pictures. the art of a card is 48 pixels across, and is drawn at half of that, the same as in the codec.
+    for bookN = 0 to BOOK_ROOM - 1
+        bookSpriteId = 0
+        reserve sprite id(bookSpriteId)
+        sprite bookSpriteId, 0, 0, TEX_PIXEL
+        set sprite offset bookSpriteId, .5, .5
+        size sprite bookSpriteId, 24, 24
+        order sprite bookSpriteId, ORDER_ABILITY_ART
+        set sprite render target bookSpriteId, TARGET_UPGRADE
+        hide sprite bookSpriteId
+        BOOK_SPRITES(bookN) = bookSpriteId
+    next
+
+    ` the name of the highlighted card, what kind it is, and what it does, under the grid
+    reserve text id(BOOK_NAME_TEXT_ID)
+    text BOOK_NAME_TEXT_ID, WORLD_WIDTH / 2, 206, SCORE_FONT, "name"
+    size text y BOOK_NAME_TEXT_ID, 20
+    set text offset BOOK_NAME_TEXT_ID, .5, 0
+    color text BOOK_NAME_TEXT_ID, rgb(255, 255, 255)
+    order text BOOK_NAME_TEXT_ID, ORDER_ABILITY_TEXT
+    set text render target BOOK_NAME_TEXT_ID, TARGET_UPGRADE
+    hide text BOOK_NAME_TEXT_ID
+
+    reserve text id(BOOK_KIND_TEXT_ID)
+    text BOOK_KIND_TEXT_ID, WORLD_WIDTH / 2, 226, SCORE_FONT, "kind"
+    size text y BOOK_KIND_TEXT_ID, 16
+    set text offset BOOK_KIND_TEXT_ID, .5, 0
+    enable rich text BOOK_KIND_TEXT_ID
+    color text BOOK_KIND_TEXT_ID, rgb(64, 128, 255)
+    order text BOOK_KIND_TEXT_ID, ORDER_ABILITY_TEXT
+    set text render target BOOK_KIND_TEXT_ID, TARGET_UPGRADE
+    hide text BOOK_KIND_TEXT_ID
+
+    reserve text id(BOOK_DESC_TEXT_ID)
+    text BOOK_DESC_TEXT_ID, WORLD_WIDTH / 2, 244, SCORE_FONT, "desc"
+    size text y BOOK_DESC_TEXT_ID, 16
+    set text offset BOOK_DESC_TEXT_ID, .5, 0
+    set text wrap BOOK_DESC_TEXT_ID, 460
+    set text align BOOK_DESC_TEXT_ID, .5
+    enable rich text BOOK_DESC_TEXT_ID
+    color text BOOK_DESC_TEXT_ID, rgb(150, 190, 255)
+    order text BOOK_DESC_TEXT_ID, ORDER_ABILITY_TEXT
+    set text render target BOOK_DESC_TEXT_ID, TARGET_UPGRADE
+    hide text BOOK_DESC_TEXT_ID
+
+return
+
+
+` the player picked the line that opens the book. the cards go away, and the book takes their
+` place, until a card is taken from it, or the player goes back. BOOK_PICK says how it went.
+handle_book:
+    BOOK_INSTANT = 0
+    gosub book_show
+    gosub book_run
+return
+
+
+` the cards go away, and the book takes their place. with BOOK_INSTANT, nothing is waited for: the
+` upgrade screen has not been brought in yet, and the book is what the wave of bubbles brings in.
+book_show:
+
+    BOOK_PICK = -1
+    buildBookList()
+    if BOOK_COUNT <= 0 then return
+
+    ` the cards shrink away, and the title goes with them, because it is about to say something else
+    showInfoBorder(ABILITY_CURSOR, 0)
+    hide text UPGRADE_SKIP_TEXT_ID `the page has what the card does where these lines are
+    hide text UPGRADE_REROLL_TEXT_ID
+    hide text UPGRADE_DROP_TEXT_ID
+    if BOOK_INSTANT
+        for bookN = 0 to choiceCount
+            create basic tween ABILITY_CHOICES(bookN).sizeTweenId, 0, 0, 1, 0
+        next
+    else
+        for bookN = 0 to choiceCount
+            create basic tween ABILITY_CHOICES(bookN).sizeTweenId, get local transform scale x(ABILITY_CHOICES(bookN).transformId), 0, 200, 0
+        next
+        create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 1, 0, 200, 0
+        while is tween done(ABILITY_SELECT_LABEL_FADE_TWEEN_ID) < 1
+            gosub frame_ability_selection
+            sync
+        endwhile
+    endif
+
+    set text ABILITY_SELECT_LABEL_TEXT_ID, "Open Book"
+    size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
+
+    ` the pictures, in rows, with the grid in the middle of the screen
+    for bookN = 0 to BOOK_COUNT - 1
+        sprite BOOK_SPRITES(bookN), getBookTileX(bookN), getBookTileY(bookN), CARDS(BOOK_CARDS(bookN)).artTexId
+        size sprite BOOK_SPRITES(bookN), 24, 24
+        show sprite BOOK_SPRITES(bookN)
+    next
+    show sprite BOOK_PANEL_SPRITE
+    show text BOOK_NAME_TEXT_ID
+    show text BOOK_KIND_TEXT_ID
+    show text BOOK_DESC_TEXT_ID
+
+    BOOK_SELECTED = 0
+    gosub book_refresh
+
+    if BOOK_INSTANT
+        create basic tween BOOK_FADE_TWEEN_ID, 1, 1, 1, 0
+        create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 1, 1, 1, 0
+    else
+        create basic tween BOOK_FADE_TWEEN_ID, 0, 1, 200, 0
+        create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 0, 1, 200, 0
+    endif
+    gosub frame_book
+
+return
+
+
+` write what the highlighted card is, and which keys do what. this is called whenever that changes.
+book_refresh:
+
+    bookAboutCard = BOOK_CARDS(BOOK_SELECTED)
+    set text BOOK_NAME_TEXT_ID, CARDS(bookAboutCard).name$
+
+    ` a card that runs out says how many of it are left, the same as it does when it is dealt
+    bookAbout$ = CARDS(bookAboutCard).desc$
+    if CARDS(bookAboutCard).maxUses > 0
+        bookAbout$ = bookAbout$ + " " + str$(CARDS(bookAboutCard).maxUses - CARDS(bookAboutCard).uses) + " left."
+    endif
+    set text BOOK_DESC_TEXT_ID, bookAbout$
+
+    select CARDS(bookAboutCard).abilityType
+        case ABILITY_TYPE_PASSIVE
+            set text BOOK_KIND_TEXT_ID, "{passive} passive"
+        endcase
+        case ABILITY_TYPE_MOVE
+            ` a move says whether there is room for it, the same as its card does
+            bookSlotsLeft = 0
+            for bookSlotN = 0 to MOVE_SLOTS_OPEN - 1
+                if MOVE_ABILITY_BINDINGS(bookSlotN).assigned = 0 then bookSlotsLeft = bookSlotsLeft + 1
+            next
+            bookKind$ = "{move} move, " + str$(bookSlotsLeft) + " slots left"
+            if bookSlotsLeft = 1 then bookKind$ = "{move} move, 1 slot left"
+            if bookSlotsLeft = 0 then bookKind$ = "{move} move, no slots left"
+            set text BOOK_KIND_TEXT_ID, bookKind$
+        endcase
+        case ABILITY_TYPE_INSTANT
+            set text BOOK_KIND_TEXT_ID, "{instant} instant"
+        endcase
+    endselect
+
+    set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} take it    {pause} go back"
+
+return
+
+
+` let the player look through the book, until they take a card, or go back. then the book is put
+` away, and when no card was taken, the cards that were dealt come back.
+book_run:
+
+    if BOOK_COUNT <= 0 then return
+    showInfoBorder(ABILITY_CURSOR, 1)
+
+    bookLeave = 0
+    while bookLeave = 0
+
+        bookSide = 0
+        if new action down(ACT_RIGHT) then bookSide = 1
+        if new action down(ACT_LEFT) then bookSide = -1
+        bookDown = 0
+        if new action down(ACT_DOWN) then bookDown = 1
+        if new action down(ACT_UP) then bookDown = -1
+
+        ` left and right go along the row, and around from one end of it to the other. up and down
+        ` go to the row above or below, and stop at the top and the bottom. the last row may be short.
+        bookWas = BOOK_SELECTED
+        bookLastTile = BOOK_COUNT - 1
+        if bookSide <> 0
+            bookRowFirst = (BOOK_SELECTED / BOOK_COLUMNS) * BOOK_COLUMNS
+            bookRowLast = bookRowFirst + BOOK_COLUMNS
+            bookRowLast = bookRowLast - 1
+            if bookRowLast > bookLastTile then bookRowLast = bookLastTile
+            BOOK_SELECTED = BOOK_SELECTED + bookSide
+            if BOOK_SELECTED < bookRowFirst then BOOK_SELECTED = bookRowLast
+            if BOOK_SELECTED > bookRowLast then BOOK_SELECTED = bookRowFirst
+        endif
+        if bookDown <> 0
+            bookJump = BOOK_SELECTED + bookDown * BOOK_COLUMNS
+            if bookJump >= 0
+                if bookJump > bookLastTile
+                    ` the row below is short. if there is one at all, go to the end of it.
+                    bookLastRow = bookLastTile / BOOK_COLUMNS
+                    bookThisRow = BOOK_SELECTED / BOOK_COLUMNS
+                    if bookLastRow > bookThisRow
+                        BOOK_SELECTED = bookLastTile
+                    endif
+                else
+                    BOOK_SELECTED = bookJump
+                endif
+            endif
+        endif
+        if BOOK_SELECTED <> bookWas
+            ` the outline leaves some bubbles behind on the tile that it was around
+            spawnWakeBubbles(getBookTileX(bookWas) - 14, getBookTileY(bookWas) - 14, 28, 28, 6, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
+            gosub book_refresh
+        endif
+
+        if new action down(ACT_PAUSE) then bookLeave = 1
+        if new action down(ACT_CONFIRM)
+            BOOK_PICK = BOOK_CARDS(BOOK_SELECTED)
+            bookLeave = 1
+        endif
+
+        gosub frame_ability_selection
+        gosub frame_book
+        sync
+    endwhile
+
+    ` put the page away. when a card was taken, handle_ability_selection closes the rest of the
+    ` screen after this, and the title stays until it does.
+    showInfoBorder(ABILITY_CURSOR, 0)
+    create basic tween BOOK_FADE_TWEEN_ID, 1, 0, 200, 0
+    if BOOK_PICK < 0
+        create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 1, 0, 200, 0
+    endif
+    while is tween done(BOOK_FADE_TWEEN_ID) < 1
+        gosub frame_ability_selection
+        gosub frame_book
+        sync
+    endwhile
+    gosub book_hide
+
+    ` the player went back, so the cards that were dealt come in, with the lines under them
+    if BOOK_PICK < 0
+        set text ABILITY_SELECT_LABEL_TEXT_ID, "Select Upgrade"
+        size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
+        create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 0, 1, 200, 0
+        for bookN = 0 to choiceCount
+            bookCardScale# = .95
+            if bookN = ABILITY_SELECTION_INDEX
+                if UPGRADE_SKIP_SELECTED = 0 then bookCardScale# = 1.05
+            endif
+            create basic tween ABILITY_CHOICES(bookN).sizeTweenId, 0, bookCardScale#, 200, bookN * 50
+        next
+        show text UPGRADE_SKIP_TEXT_ID
+        show text UPGRADE_REROLL_TEXT_ID
+        show text UPGRADE_DROP_TEXT_ID
+        set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} take it"
+        showInfoBorder(ABILITY_CURSOR, 1)
+    endif
+
+return
+
+
+book_hide:
+    for bookN = 0 to BOOK_ROOM - 1
+        hide sprite BOOK_SPRITES(bookN)
+    next
+    hide sprite BOOK_PANEL_SPRITE
+    hide text BOOK_NAME_TEXT_ID
+    hide text BOOK_KIND_TEXT_ID
+    hide text BOOK_DESC_TEXT_ID
+    BOOK_COUNT = 0
+return
+
+
+` everything on this page that changes from frame to frame. this comes after frame_ability_selection,
+` which puts the bright outline around a card, so that the outline ends up where this page wants it.
+frame_book:
+
+    if BOOK_COUNT <= 0 then return
+    bookFade# = tweenVal(BOOK_FADE_TWEEN_ID)
+
+    ` the pictures are the blue of the art of a card, and the highlighted one is white
+    for bookN = 0 to BOOK_COUNT - 1
+        if bookN = BOOK_SELECTED
+            color sprite BOOK_SPRITES(bookN), rgb(255, 255, 255, 255 * bookFade#)
+        else
+            color sprite BOOK_SPRITES(bookN), rgb(64, 128, 255, 200 * bookFade#)
+        endif
+    next
+    color sprite BOOK_PANEL_SPRITE, rgb(10, 14, 30, 235 * bookFade#)
+    set text alpha BOOK_NAME_TEXT_ID, 255 * bookFade#
+    set text alpha BOOK_KIND_TEXT_ID, 255 * bookFade#
+    set text alpha BOOK_DESC_TEXT_ID, 255 * bookFade#
+
+    layoutInfoBorder(ABILITY_CURSOR, getBookTileX(BOOK_SELECTED) - 14, getBookTileY(BOOK_SELECTED) - 14, 28, 28)
+
+return
+
+
+routines_book_exit:
+
+
+` which cards are in the book: every one that could be dealt, in the order of CARDS. BOOK_COUNT is
+` left as how many there are.
+function buildBookList()
+    BOOK_COUNT = 0
+    bookLastCard = FAST_CARD_FROM - 1
+    for bookCard = 0 to bookLastCard
+        if BOOK_COUNT < BOOK_ROOM
+            if cardCanBeDealt(bookCard)
+                BOOK_CARDS(BOOK_COUNT) = bookCard
+                BOOK_COUNT = BOOK_COUNT + 1
+            endif
+        endif
+    next
+endfunction
+
+
+` where the middle of a tile of the grid is. the rows are in the middle of the screen, and a row that
+` is short starts at the left, under the first tile of the row above it.
+function getBookTileX(bookTile)
+    bookTileColumn = bookTile mod BOOK_COLUMNS
+    bookGridWide = (BOOK_COLUMNS - 1) * BOOK_TILE
+    bookGridLeft = WORLD_WIDTH / 2 - bookGridWide / 2
+endfunction bookGridLeft + bookTileColumn * BOOK_TILE
+
+function getBookTileY(bookTile)
+    bookTileRow = bookTile / BOOK_COLUMNS
+endfunction BOOK_TOP + bookTileRow * BOOK_TILE

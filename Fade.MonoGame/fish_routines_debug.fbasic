@@ -20,6 +20,14 @@ frame_debug_cards:
     debugLabel$ = "" `debug_card_label, further down, fills this in
     begin debug window("Cards")
 
+    ` the round is over, right away: the points that it still needs are scored, and the upgrade
+    ` screen comes up the way that it does for any round that is won. see debugEndRound.
+    if debug button("end the round") = 1
+        debugEndRound()
+    endif
+    debug text "fast: " + str$(FAST_STREAK) + " in a row"
+    debug separator
+
     debug text "passives"
     for debugCardI = 0 to CARD_LENGTH - 1
         if CARDS(debugCardI).abilityType = ABILITY_TYPE_PASSIVE
@@ -91,6 +99,20 @@ return
 routines_debug_exit:
 
 
+` score the points that the round still needs, so that it is over. the bar fills, and what comes
+` next is what comes after any round: the upgrade screen, or the next round, or the end of the game.
+` it does nothing while the bar is full already. the button of the debug panel calls this.
+function debugEndRound()
+    if SCORE_BAR_HOLD > 0 then exitfunction
+    debugEndLeft = SCORE_BAR.endVal - CURRENT_SCORE
+    if debugEndLeft < 10 then debugEndLeft = 10
+
+    ` to the next 10 up, like everything else that scores
+    debugEndLeft = ((debugEndLeft + 9) / 10) * 10
+    queueScore(debugEndLeft, 0)
+endfunction
+
+
 ` turn debug mode on: the inspector, the debug windows, and the debug keys. it stays on until the
 ` game is closed. the game that is being played is marked as one that had it, and so is every game
 ` after it: see isDebugEnvSet.
@@ -102,7 +124,7 @@ endfunction
 
 
 ` the words "Debug Mode Enabled" splash up in the middle of the screen, for a moment. this is for
-` when a player turns debug mode on in the middle of a game, with SOS, so that they know that it
+` when a player turns debug mode on in the middle of a game, with TUNA, so that they know that it
 ` happened. `splashNow` is the time, in milliseconds.
 function debugSplashStart(splashNow)
     if DEBUG_SPLASH_MADE = 0

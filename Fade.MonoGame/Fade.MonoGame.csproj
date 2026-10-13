@@ -16,6 +16,14 @@
     <PropertyGroup Condition="'$(Configuration)' == 'Debug' and '$(FadeMonoGamePlatform)' != 'Web'">
         <DefineConstants>$(DefineConstants);FADE_CONTENT_HOTRELOAD</DefineConstants>
     </PropertyGroup>
+    <!-- A Debug build of the fish game has its debug data in Launch/GeneratedFade.g.cs as one string
+         constant, on top of the bytecode. Together they passed what the compiler lets a program have in
+         string constants (about 8.39 million characters, error CS8103) in October 2026. This flag has the
+         compiler keep long strings as data instead, which has no such limit. It needs the compiler of the
+         .NET 9 SDK or later. A Release build has no debug data, is nowhere near the limit, and is left alone. -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+        <Features>$(Features);experimental-data-section-string-literals</Features>
+    </PropertyGroup>
     <PropertyGroup>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <ApplicationIcon>Icon.ico</ApplicationIcon>
@@ -184,16 +192,20 @@
         <FadeSource Include="fish_headers_quests.fbasic" />
         <FadeSource Include="fish_headers_diver.fbasic" />
         <FadeSource Include="fish_headers_tide.fbasic" />
+        <FadeSource Include="fish_headers_fast.fbasic" />
+        <FadeSource Include="fish_headers_cameo.fbasic" />
         <FadeSource Include="fish.fbasic" />
 
         <FadeSource Include="fish_routines_ability.fbasic" />
         <FadeSource Include="fish_routines_equip.fbasic" />
         <FadeSource Include="fish_routines_upgrade.fbasic" />
         <FadeSource Include="fish_routines_drop.fbasic" />
+        <FadeSource Include="fish_routines_book.fbasic" />
         <FadeSource Include="fish_routines_info.fbasic" />
 
         <FadeSource Include="fish_routines.fbasic" />
         <FadeSource Include="fish_routines_input.fbasic" />
+        <FadeSource Include="fish_routines_fast.fbasic" />
         <FadeSource Include="fish_routines_menu.fbasic" />
         <FadeSource Include="fish_routines_surface.fbasic" />
         <FadeSource Include="fish_routines_seabed.fbasic" />
@@ -214,6 +226,7 @@
         <FadeSource Include="fish_routines_music.fbasic" />
         <FadeSource Include="fish_routines_beat.fbasic" />
         <FadeSource Include="fish_routines_morse.fbasic" />
+        <FadeSource Include="fish_routines_cameo.fbasic" />
         <FadeSource Include="fish_routines_tuna.fbasic" />
         <FadeSource Include="fish_tuna_code.fbasic" />
         <FadeSource Include="fish_routines_quests.fbasic" />
@@ -225,6 +238,7 @@
         <FadeSource Include="fish_tests.fbasic" />
         <FadeSource Include="fish_tests_tuna.fbasic" />
         <FadeSource Include="fish_tests_morse.fbasic" />
+        <FadeSource Include="fish_tests_cameo.fbasic" />
         <FadeSource Include="fish_tests_beat.fbasic" />
         <FadeSource Include="fish_tests_speed.fbasic" />
         <FadeSource Include="fish_tests_overflow.fbasic" />
@@ -232,6 +246,9 @@
         <FadeSource Include="fish_tests_quests.fbasic" />
         <FadeSource Include="fish_tests_diver.fbasic" />
         <FadeSource Include="fish_tests_tide.fbasic" />
+        <FadeSource Include="fish_tests_bottle.fbasic" />
+        <FadeSource Include="fish_tests_flashlight.fbasic" />
+        <FadeSource Include="fish_tests_fast.fbasic" />
         <!-- <FadeSource Include="game.fbasic" /> -->
     </ItemGroup>
     

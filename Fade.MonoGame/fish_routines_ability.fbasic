@@ -285,6 +285,33 @@ setup_abilities:
         moveValue = [MOVE_BUNCH_UP]
     }
 
+    ` the three cards that only a fast gives out. see THE FAST in fish_headers_fast. they are never
+    ` dealt: assign_ability_selection passes over every card from FAST_CARD_FROM on.
+    CARDS(ABILITY_INDEX_MOVE_ROTATE) = {
+        name$ = "rotate"
+        desc$ = "Hold, and walk two sides of a box. Let go, and the fish around its edge go one along"
+        obtained = 0
+        abilityType = ABILITY_TYPE_MOVE
+        stackable = 0
+        moveClock = ROTATE_COOLDOWN
+        moveValue = [MOVE_ROTATE]
+    }
+    CARDS(ABILITY_INDEX_OPEN_BOOK) = {
+        name$ = "open book"
+        desc$ = "Upgrade selection shows every available card."
+        obtained = 0
+        abilityType = ABILITY_TYPE_INSTANT,
+        stackable = 1
+        maxUses = 1
+    }
+    CARDS(ABILITY_INDEX_OATH) = {
+        name$ = "oceanic oath"
+        desc$ = "Take only memories. No more upgrades at round breaks. Multiplier will never go down."
+        obtained = 0
+        abilityType = ABILITY_TYPE_PASSIVE
+        stackable = 0
+    }
+
 return
 
 
@@ -415,6 +442,7 @@ setup_passives:
         create basic tween passive.shakeTweenId, 0, 0, 1, 0
 
         text passive.titleTextId, WORLD_WIDTH - 120, ABILITY_ROWS_Y - i*18, SCORE_FONT, "???"
+        order text passive.titleTextId, ORDER_HUD_TEXT
         set text offset passive.titleTextId, 0, 0
         size text x passive.titleTextId, HUD_LIST_WIDTH, .1, HUD_LIST_SCALE#
         color text passive.titleTextId, rgb(64, 128, 255, 200)
@@ -457,6 +485,7 @@ setup_moves:
         create basic tween moveAbility.useShakeTweenId, 0, 0, 1, 0
 
         text moveAbility.titleTextId, 16, ABILITY_ROWS_Y - i*18, SCORE_FONT, "!!!"
+        order text moveAbility.titleTextId, ORDER_HUD_TEXT
         set text offset moveAbility.titleTextId, 0, 0
         size text x moveAbility.titleTextId, HUD_LIST_WIDTH, .1, HUD_LIST_SCALE#
         color text moveAbility.titleTextId, rgb(64, 128, 255, 200)
@@ -465,6 +494,7 @@ setup_moves:
 
         ` a picture of the key that uses the move. it scales from its middle when it punches.
         text moveAbility.keyTextId, 16 + 100 + 10, ABILITY_ROWS_Y + 10 - i*18, SCORE_FONT, "{move1}"
+        order text moveAbility.keyTextId, ORDER_HUD_TEXT
         enable rich text moveAbility.keyTextId
         set text offset moveAbility.keyTextId, .5, .5
         size text y moveAbility.keyTextId, 16 `the key icons are sharpest at this size
@@ -473,6 +503,7 @@ setup_moves:
 
         ` how many more moves until it can be used again
         text moveAbility.timerTextId, 16 + 100 + 22, ABILITY_ROWS_Y - i*18, SCORE_FONT, "1"
+        order text moveAbility.timerTextId, ORDER_HUD_TEXT
         set text offset moveAbility.timerTextId, 0, 0
         size text x moveAbility.timerTextId, 100, .1, .3
         color text moveAbility.timerTextId, rgb(64, 128, 255, 200)
@@ -523,6 +554,14 @@ assign_ability_selection:
         2. TODO: add rarity handling
     remend
 
+    ` a rung of the fast has cards of its own, and they are not picked at random. see THE LADDER in fish_headers_fast.
+    if FAST_RUNG > 0
+        for i = 0 to choiceCount
+            CARD_CHOICE_INDEXES(i) = FAST_OFFER(i)
+        next
+        return
+    endif
+
     for i = 0 to choiceCount
         
         ` need to fill up this index.
@@ -543,6 +582,9 @@ assign_ability_selection:
 
                 ` need to make sure we are not offering the same thing twice
                 valid = 1
+
+                ` the cards that only a fast gives out are never dealt. see THE FAST in fish_headers_fast.
+                if candidate >= FAST_CARD_FROM then valid = 0
 
                 ` the second copy of "bottom feeder" only makes sense once the first one is owned
                 if candidate = ABILITY_INDEX_BOTTOM_FEEDER_2 and CARDS(ABILITY_INDEX_BOTTOM_FEEDER).obtained = 0
@@ -690,10 +732,18 @@ bind_ability_choices:
     next
 
     ` the line that deals new cards says what the next time costs. see THE REROLL in fish_headers.
-    if UPGRADE_REROLLS >= UPGRADE_REROLL_MAX
+    rerollsGone = 0
+    if UPGRADE_REROLLS >= UPGRADE_REROLL_MAX then rerollsGone = 1
+    if FAST_RUNG > 0 then rerollsGone = 1
+    if rerollsGone
         set text UPGRADE_REROLL_TEXT_ID, "no rerolls left"
     else
         set text UPGRADE_REROLL_TEXT_ID, "reroll for " + str$(getRerollCost()) + " moves"
+    endif
+
+    ` with the "open book" card there is nothing to deal for, and the line opens the book. see THE BOOK in fish_headers_fast.
+    if fastBookOn()
+        set text UPGRADE_REROLL_TEXT_ID, "open the book"
     endif
 return
 
@@ -702,6 +752,9 @@ return
 ` in fish_headers. the new cards pop in one after the other, and the screen stays up.
 reroll_ability_choices:
     if UPGRADE_REROLLS >= UPGRADE_REROLL_MAX then return
+
+    ` the cards of a rung of the fast are what they are. see THE LADDER in fish_headers_fast.
+    if FAST_RUNG > 0 then return
 
     ` the price of it is moves, and they are counted whatever the hour is. they are not moves of the
     ` night, so they do not bring the day any closer. see THE MOVES OF THE NIGHT in fish_headers_tide.
@@ -757,6 +810,15 @@ handle_ability_selection:
     ` the number of the last one, counting from 0. see DEEP POCKETS in fish_headers.
     choiceCount = getUpgradeChoiceCount() - 1
     ABILITY_SELECTION_INDEX = rnd(choiceCount) + 1
+
+    ` a fast that is long enough changes what is on offer: a rung of the ladder has cards of its own,
+    ` and may have only the one. see THE LADDER in fish_headers_fast.
+    fastOpen()
+    if FAST_RUNG > 0
+        choiceCount = FAST_OFFER_COUNT - 1
+        ABILITY_SELECTION_INDEX = 0
+    endif
+    fastSkipLine()
     UPGRADE_REROLLS = 0
     UPGRADE_REROLLING = 0
     gosub bind_ability_choices
@@ -799,13 +861,33 @@ handle_ability_selection:
     show text UPGRADE_REROLL_TEXT_ID
     show text UPGRADE_DROP_TEXT_ID
 
+    ` with the "open book" card, the upgrade screen comes up as the book: every card that could have
+    ` been dealt. it is put up now, so that it is what the wave brings in. see THE BOOK in fish_headers_fast.
+    bookComesUp = fastBookOn()
+    if bookComesUp
+        BOOK_INSTANT = 1
+        gosub book_show
+        BOOK_INSTANT = 0
+    endif
+
     TRANSITION_FOR_UPGRADE = 1
     TRANSITION_TO_MENU = 1
     gosub menu_transition
     TRANSITION_FOR_UPGRADE = 0
 
+    ` the card that was taken from the book, or -1. it stands in for the card that is highlighted.
+    bookTaken = -1
+
 
     do
+
+        ` the book is up, and the player looks through it before anything else. going back from it
+        ` leaves the cards that were dealt, and the lines under them.
+        if bookComesUp
+            bookComesUp = 0
+            gosub book_run
+            bookTaken = BOOK_PICK
+        endif
 
         ` allow left/right input
         dir = 0
@@ -898,12 +980,28 @@ handle_ability_selection:
         if new action down(ACT_CONFIRM) then upgradePicked = 1
         if new action down(ACT_UP) and skipLeft = 0 then upgradePicked = 1
 
+        ` a card that was taken from the book is the pick, whatever is highlighted
+        if bookTaken >= 0
+            upgradePicked = 1
+            UPGRADE_SKIP_SELECTED = 0
+        endif
+
         ` the line that deals new cards does that, and the screen stays up
         if upgradePicked
             if UPGRADE_SKIP_SELECTED
                 if UPGRADE_ROW_PICK = 1
                     upgradePicked = 0
-                    gosub reroll_ability_choices
+                    if fastBookOn()
+                        ` with the "open book" card, this line opens the book. a card that is taken from it is the pick.
+                        gosub handle_book
+                        bookTaken = BOOK_PICK
+                        if bookTaken >= 0
+                            upgradePicked = 1
+                            UPGRADE_SKIP_SELECTED = 0
+                        endif
+                    else
+                        gosub reroll_ability_choices
+                    endif
                 endif
 
                 ` the line that drops a passive opens the list of them. when one is dropped, that is
@@ -926,11 +1024,20 @@ handle_ability_selection:
             upgradeType = -1
             if UPGRADE_SKIP_SELECTED = 0
                 selectedAbilityIndex = ABILITY_CHOICES(ABILITY_SELECTION_INDEX).abilityIndex
+                if bookTaken >= 0 then selectedAbilityIndex = bookTaken
                 upgradeType = CARDS(selectedAbilityIndex).abilityType
 
                 ` write down what was picked, and on which move, for the table of high scores
                 logUpgrade(selectedAbilityIndex)
             endif
+
+            ` taking nothing is a fast, and anything else ends it. see THE FAST in fish_headers_fast.
+            ` the line that drops a passive is under the cards too, and that is not nothing.
+            fastTookNothing = 0
+            if UPGRADE_SKIP_SELECTED
+                if UPGRADE_ROW_PICK = 0 then fastTookNothing = 1
+            endif
+            fastClose(fastTookNothing)
             select upgradeType
 
                 ` when it is a passive, all we need to do is add it the bindings
@@ -981,7 +1088,7 @@ handle_ability_selection:
             set text INFO_HINT_TEXT_ID, GAME_HINT$
             reset text render target INFO_HINT_TEXT_ID
             hintMode(1)
-            order text INFO_HINT_TEXT_ID, 0
+            order text INFO_HINT_TEXT_ID, ORDER_HUD_TEXT
             set text alpha INFO_HINT_TEXT_ID, 140
 
             ` the bar of the round's progress was held full all this time. now it starts on the next round.
@@ -1018,6 +1125,9 @@ frame_ability_selection:
     color text UPGRADE_SKIP_TEXT_ID, rgb(150, 190, 255, 200)
     color text UPGRADE_REROLL_TEXT_ID, rgb(150, 190, 255, 200)
     if UPGRADE_REROLLS >= UPGRADE_REROLL_MAX
+        color text UPGRADE_REROLL_TEXT_ID, rgb(150, 190, 255, 90)
+    endif
+    if FAST_RUNG > 0
         color text UPGRADE_REROLL_TEXT_ID, rgb(150, 190, 255, 90)
     endif
     ` the line that drops a passive is dim when there is none to drop

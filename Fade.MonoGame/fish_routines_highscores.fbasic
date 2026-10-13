@@ -114,7 +114,7 @@ setup_highscores:
     showAllEndings()
     loadKnownEndings()
     HISCORE_TILE_MARK = createHighscoreText(0, 0, 16, "?")
-    for hsI = 0 to 2
+    for hsI = 0 to 7
         hsTileX = getEndingTileX(hsI)
         hsTileY = getEndingTileY()
 
@@ -305,6 +305,11 @@ highscore_table_hint:
             set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} hide " + hsHintEnding$ + " endings" + hsHintEnd$
         else
             set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} show " + hsHintEnding$ + " endings" + hsHintEnd$
+        endif
+
+        ` the tile of a modifier says what it leaves out. see THE TILES OF THE MODIFIERS in fish_headers_fast.
+        if hsHintTile >= HISCORE_MOD_TILE
+            modsTileHint(hsHintTile - HISCORE_MOD_TILE, HISCORE_ENDING_SHOWN(hsHintTile))
         endif
     else
         set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} details" + hsHintEnd$
@@ -606,7 +611,8 @@ highscore_game_end:
     hsEndPlace = -1
     if hsEndTable >= 0
         ` a game that ended with one of the two endings of the hidden game takes its badge with it
-        hsEndPlace = insertHighscore(hsEndTable, hsPacked + CORAL_ENDING * HISCORE_BADGE_STEP, CURRENT_MOVE_COUNT, BEST_MULTIPLIER)
+        ` and its modifiers go with it too. see THE MODIFIERS ON THE TABLES in fish_headers_fast.
+        hsEndPlace = insertHighscore(hsEndTable, hsPacked + CORAL_ENDING * HISCORE_BADGE_STEP + GAME_MODS * HISCORE_MOD_STEP, CURRENT_MOVE_COUNT, BEST_MULTIPLIER)
         if hsEndPlace >= 0
             ` the upgrades that were picked go onto the table with it
             takeGameLog(hsEndTable * HISCORE_ROWS + hsEndPlace)
@@ -721,7 +727,12 @@ endfunction
 ` the same number as the initials. see HISCORE_BADGE_STEP in fish_headers.
 function getScoreBadge(packedName)
     scoreBadge = 0
-    if packedName > 0 then scoreBadge = packedName / HISCORE_BADGE_STEP
+
+    ` the modifiers of the game are on top of the badge. see THE MODIFIERS ON THE TABLES in fish_headers_fast.
+    if packedName > 0
+        scoreBadgePart = packedName mod HISCORE_MOD_STEP
+        scoreBadge = scoreBadgePart / HISCORE_BADGE_STEP
+    endif
     if scoreBadge > CORAL_ENDING_DIVER then scoreBadge = 0
 endfunction scoreBadge
 
@@ -782,7 +793,8 @@ endfunction shownTable
 
 ` THE ENDINGS THAT ARE SHOWN. see fish_headers.
 function showAllEndings()
-    for i = 0 to 3
+    ` the tiles of the modifiers are in here too, from HISCORE_MOD_TILE on. see fish_headers_fast.
+    for i = 0 to 15
         HISCORE_ENDING_SHOWN(i) = 1
     next
 endfunction
@@ -828,6 +840,14 @@ function layoutEndingTiles()
         HISCORE_TILE_ENDING(HISCORE_TILE_COUNT) = 0
         HISCORE_TILE_COUNT = HISCORE_TILE_COUNT + 1
     endif
+
+    ` and then one for every modifier that the player has had. see THE TILES OF THE MODIFIERS in fish_headers_fast.
+    for i = 0 to MOD_COUNT - 1
+        if modHas(MODS_KNOWN, modValue(i))
+            HISCORE_TILE_ENDING(HISCORE_TILE_COUNT) = HISCORE_MOD_TILE + i
+            HISCORE_TILE_COUNT = HISCORE_TILE_COUNT + 1
+        endif
+    next
     if HISCORE_ENDING_AT >= HISCORE_TILE_COUNT then HISCORE_ENDING_AT = HISCORE_TILE_COUNT - 1
 endfunction
 
@@ -857,7 +877,11 @@ function buildShownHighscores(tableIndex)
         shownEntry = shownFirst + i
         if HISCORE_MOVES(shownEntry) < HISCORE_EMPTY_MOVES
             shownBadge = getScoreBadge(HISCORE_NAMES(shownEntry))
-            if isEndingShown(shownBadge)
+            shownOk = isEndingShown(shownBadge)
+
+            ` and without the ones that had a modifier that is switched off. see fish_headers_fast.
+            if isModsShown(getScoreMods(HISCORE_NAMES(shownEntry))) = 0 then shownOk = 0
+            if shownOk
                 HISCORE_SHOWN(HISCORE_SHOWN_COUNT) = shownEntry
                 HISCORE_SHOWN_COUNT = HISCORE_SHOWN_COUNT + 1
             endif
@@ -925,6 +949,11 @@ function fillOnlineTable(boardId)
                 if stmEnding < 0 then stmEnding = 0
                 if isEndingShown(stmEnding) = 0 then stmGood = 0
 
+                ` and one that had a modifier that is switched off. see THE TILES OF THE MODIFIERS in fish_headers_fast.
+                stmMods = steam score bits(boardId, stmRow, STEAM_DETAIL_FLAGS * 32 + 3, 4)
+                if stmMods < 0 then stmMods = 0
+                if isModsShown(stmMods) = 0 then stmGood = 0
+
                 if stmGood
                     unpackSteamScore(boardId, stmRow, stmFirst + HISCORE_ONLINE_COUNT)
                     HISCORE_ONLINE_ROWS(HISCORE_ONLINE_COUNT) = stmRow
@@ -951,7 +980,12 @@ function unpackSteamScore(boardId, steamRow, scoreIndex)
     if stmBadge > CORAL_ENDING_DIVER then stmBadge = 0
     if stmBadge < 0 then stmBadge = 0
 
-    HISCORE_NAMES(scoreIndex) = stmInitials + stmBadge * HISCORE_BADGE_STEP
+    ` and its modifiers are the four flags after the one for debug. see THE MODIFIERS ON THE TABLES in fish_headers_fast.
+    stmHadMods = steam score bits(boardId, steamRow, STEAM_DETAIL_FLAGS * 32 + 3, 4)
+    if stmHadMods < 0 then stmHadMods = 0
+    if stmHadMods > MOD_ALL then stmHadMods = 0
+
+    HISCORE_NAMES(scoreIndex) = stmInitials + stmBadge * HISCORE_BADGE_STEP + stmHadMods * HISCORE_MOD_STEP
     HISCORE_MOVES(scoreIndex) = steam score(boardId, steamRow) / 1000
     HISCORE_MULTS(scoreIndex) = stmMult
 
@@ -1007,7 +1041,7 @@ endfunction
 ` is the game running with one of the environment variables that are only for working on it? they
 ` skip parts of the game, or show things that a player should not see, and FISH_DEBUG can win a game
 ` with a key. a score from a game that had one set says so, in STEAM_FLAG_DEBUG.
-` debug mode counts as well, however it was turned on: a player can do that by tapping out SOS.
+` debug mode counts as well, however it was turned on: a player can do that by tapping out TUNA.
 ` FISH_VERSION is not one of them: every shipped game has it.
 function isDebugEnvSet()
     debugSet = DEBUG_MODE
@@ -1056,7 +1090,8 @@ function sendGameToSteam(tableIndex, packedName)
     ` the flags: which of the two endings of the hidden game it had, or 0, and whether it was played with
     ` a debug environment variable set, now or before it was saved and carried on with
     if isDebugEnvSet() then GAME_DEBUG_USED = 1
-    set steam score detail STEAM_DETAIL_FLAGS, CORAL_ENDING + GAME_DEBUG_USED * STEAM_FLAG_DEBUG
+    ` and the modifiers of the game, in the four flags after that. see THE MODIFIERS ON THE TABLES in fish_headers_fast.
+    set steam score detail STEAM_DETAIL_FLAGS, CORAL_ENDING + GAME_DEBUG_USED * STEAM_FLAG_DEBUG + GAME_MODS * STEAM_FLAG_MODS
 
     sendBit = STEAM_BIT_LOG
     sendLast = 0
@@ -1117,6 +1152,11 @@ endfunction
 
 ` write down that an upgrade was picked, on the move that the game is up to. see THE LOG OF UPGRADES in fish_headers.
 function logUpgrade(cardIndex)
+    ` the upgrades that only a fast gives out are not written down, so that the log of a game does not
+    ` give them away to somebody who has not found them. the log on Steam has no room for their
+    ` numbers, either. the quest of the round waits for the next upgrade. see fish_headers_fast.
+    if cardIndex >= FAST_CARD_FROM then exitfunction
+
     if GAME_LOG_COUNT < HISCORE_LOG_MAX
         ` the quest that was finished in the round goes with it. see THE QUESTS IN THE LOG in fish_headers.
         logMoves = CURRENT_MOVE_COUNT
@@ -1373,10 +1413,11 @@ function hideHighscoreTexts()
         hide text HISCORE_TAB_TEXTS(i)
         hide sprite HISCORE_TAB_SPRITES(i)
     next
-    for i = 0 to 2
+    for i = 0 to 7
         hide sprite HISCORE_ENDING_TILES(i)
         hide sprite HISCORE_ENDING_ICONS(i)
     next
+    modsHideTable() `the pictures of the modifiers, to the right of the rows. see fish_headers_fast.
     hide text HISCORE_TILE_MARK
     for i = 0 to HISCORE_ROWS - 1
         hide text HISCORE_MYSTERY_TEXTS(i)
@@ -1590,7 +1631,8 @@ function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
     ` the tile of an ending has its badge in its own color when its games are shown, and is dark when they are not
     ` the tile of the mystery endings has a question mark on it and no badge
     hide text HISCORE_TILE_MARK
-    for i = 0 to 2
+    modsDrawTable() `the pictures of the modifiers of every game, to the right of the rows. see fish_headers_fast.
+    for i = 0 to 7
         if i < HISCORE_TILE_COUNT
             tileEnding = HISCORE_TILE_ENDING(i)
             tileAtX = getEndingTileX(i)
@@ -1621,10 +1663,20 @@ function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
                 if tileEnding = CORAL_ENDING_ANCIENT then tileTex = TEX_BADGE_TENTACLE
                 if tileEnding = CORAL_ENDING_DIVER then tileTex = TEX_BADGE_MASK
 
+                ` the tile of a modifier has the picture of the modifier, which is smaller. see THE TILES OF THE MODIFIERS in fish_headers_fast.
+                tileIconSize = 16
+                tileIconIn = 1
+                if tileEnding >= HISCORE_MOD_TILE
+                    tileTex = MOD_TEX(tileEnding - HISCORE_MOD_TILE)
+                    if HISCORE_ENDING_SHOWN(tileEnding) then tileColor = MOD_COLOR(tileEnding - HISCORE_MOD_TILE)
+                    tileIconSize = HISCORE_MOD_SIZE
+                    tileIconIn = 3
+                endif
+
                 ` the size is set again, because it is worked out from the size of the texture
                 set sprite texture HISCORE_ENDING_ICONS(i), tileTex
-                size sprite HISCORE_ENDING_ICONS(i), 16, 16
-                position sprite HISCORE_ENDING_ICONS(i), tileAtX + 1, tileAtY + 1
+                size sprite HISCORE_ENDING_ICONS(i), tileIconSize, tileIconSize
+                position sprite HISCORE_ENDING_ICONS(i), tileAtX + tileIconIn, tileAtY + tileIconIn
                 color sprite HISCORE_ENDING_ICONS(i), tileColor
                 show sprite HISCORE_ENDING_ICONS(i)
             endif

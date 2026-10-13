@@ -1,0 +1,157 @@
+remstart
+    THE FAST
+    another hidden thing. nothing in the game says that it is there. the routines are in
+    fish_routines_fast, and the tests are in fish_tests_fast.
+
+    the upgrade screen has a line that takes none of the cards. taking nothing is a fast, and the
+    game counts how many upgrade screens in a row have been left that way: FAST_STREAK. taking a card
+    ends the fast, and so does dropping a passive. dealing the cards again does not.
+    the line says how long the fast has been: it has a dot after it for every time.
+
+    THE LADDER. a fast that is long enough changes what the next upgrade screen offers. these are
+    the rungs, by how long the fast is when the screen comes up. FAST_RUNG is the one that is up.
+        2   "rotate", and nothing else
+        4   "rotate", or "open book"
+        6   "oceanic oath", and nothing else
+    a rung only offers what the player does not have. the first one offers "open book" to a player
+    who has "rotate" already, and a rung that has nothing left to offer is an upgrade screen like any
+    other. the cards of a rung can not be dealt again.
+    the screens in between are the usual ones. leaving the oath is the end of the fast: it starts
+    over from nothing. the praise of the coral is sung when a rung comes up. see fastOpen.
+    the three cards are never dealt any other way. FAST_CARD_FROM is the first of them, and
+    assign_ability_selection, in fish_routines_ability, passes over every card from there on.
+
+    ROTATE. a special move. the button is held, and the cursor is walked: one way, for as far as the
+    player likes, and then a turn to one side, for as far as the player likes. the cell that it
+    started on and the cell that it is on are two corners of a box. when the button is let go, the
+    fish around the edge of the box all go one cell along it, the way that the cursor turned: right
+    and then down is clockwise. a second turn does the same as letting go. going back along a leg
+    takes it back, and a walk that is back where it started is no move at all.
+    a walk that never turned has no box. nothing happens, and the move is not used up.
+    it never has to recharge. it counts as one move, and it is not a swap: the multiplier and the tide leave it alone, and the
+    steps of the walk are not the steps of a song. an outline shows the box while it is being walked.
+    rotateWants and rotateTook follow the walk, for process_input, in fish_routines_input. doRotate
+    turns the box.
+
+    OPEN BOOK. an instant. from then on, the upgrade screen does not deal cards. it lays out every
+    card that could have been dealt, in a grid like the one of the codec, and the player takes any
+    one of them. see THE BOOK, further down.
+
+    OCEANIC OATH. a passive. "Take only memories. No more upgrades at round breaks. Multiplier will
+    never go down." no upgrade screen comes up again: a round that is won goes straight on to the
+    next, the way that it does in a zen game. and a swap that pops nothing still empties the bar of
+    the multiplier, but it never takes one off of the multiplier itself. fastOath says if it is taken.
+
+    THE MODIFIERS. things that a game can have had happen in it, which are not how it ended. a game
+    has any number of them. GAME_MODS is the ones that the game that is being played has had, added
+    up: each one is a power of two. they are saved with the game, they go onto the table of high
+    scores with it, and to Steam. see THE MODIFIERS ON THE TABLES, further down.
+        MOD_OATH    the "oceanic oath" was taken
+        MOD_CORAL   coral grew, of either kind
+        MOD_NIGHT   night fell
+        MOD_BEAT    a move was made in time with a tune. see THE DANCE in fish_headers.
+    modSet, in fish_routines_fast, is how a game gets one.
+remend
+
+` the cards. they go after the cards that there were before, which keep their numbers.
+#constant FAST_CARD_FROM 32
+global ABILITY_INDEX_MOVE_ROTATE = 32
+#constant ABILITY_INDEX_OPEN_BOOK 33
+global ABILITY_INDEX_OATH = 34
+
+` THE LADDER
+global FAST_STREAK = 0 `how many upgrade screens in a row have been left with nothing. it is saved with the game.
+global FAST_RUNG = 0 `the rung that the upgrade screen that is up is, or 0 for an upgrade screen like any other
+global FAST_RUNG_ROTATE = 2 `how long the fast is when each rung comes up
+global FAST_RUNG_BOOK = 4
+global FAST_RUNG_OATH = 6
+global dim FAST_OFFER(4) `the cards of the rung that is up
+global FAST_OFFER_COUNT = 0
+global SAVE_PREF_FAST = 50 `where the fast of the saved game is kept, after SAVE_PREF: how long it is, and then the modifiers
+
+` ROTATE
+global ROTATE_COOLDOWN = 0 `how many moves it takes to recharge. it never has to.
+global ROTATE_TIME = 220 `how long the fish take to go around, in milliseconds
+global ROTATE_ON = 0 `1 while the box is being walked
+global ROTATE_SLOT = -1 `the slot of the move that is walking it
+global ROTATE_FROM_X = 0 `the cell that the walk started on
+global ROTATE_FROM_Y = 0
+global ROTATE_AXIS = 0 `which way the first leg went: 1 for across, and 2 for up or down
+global ROTATE_BOX as infoBorder `the outline of the box
+global ROTATE_BOX_MADE = 0 `1 once the outline has been made. it is made the first time that it is needed.
+global ROTATE_LAST_COUNT = 0 `how many fish the last one moved. 0 means that there was no box. the tests read this.
+global ROTATE_LAST_CLOCKWISE = 0 `and which way they went
+global dim ROTATE_RING(80) `the cells around the edge of the box, in the order that the fish go along it
+global ROTATE_RING_COUNT = 0
+global ROTATE_TWEEN_ID = 0
+
+` THE MODIFIERS
+#constant MOD_OATH 1
+#constant MOD_CORAL 2
+#constant MOD_NIGHT 4
+#constant MOD_BEAT 8
+#constant MOD_COUNT 4
+#constant MOD_ALL 15
+global GAME_MODS = 0 `the modifiers of the game that is being played, added up
+
+remstart
+    THE BOOK. the page that the upgrade screen has for a player with the "open book" card: every card
+    that could have been dealt, as a grid of little pictures, like the grid of the codec, with the
+    name of the highlighted one under the grid, and what it does. the player takes any one of them.
+    it is what the upgrade screen comes up as. the pause key goes back to the cards that were dealt,
+    and the lines under them: taking nothing is still there, and so is dropping a passive. the line
+    that deals new cards opens the book again in place of that, since there is nothing to deal for.
+    a rung of the fast is not the book. it has its own cards.
+    the routines are in fish_routines_book. like the page that drops a passive, it borrows the title
+    and the bright outline of the upgrade screen, and is drawn to the same render target.
+    cardCanBeDealt, in fish_routines_fast, says which cards are in it. it has the same rules that
+    assign_ability_selection, in fish_routines_ability, deals by, and the two have to be kept the same by hand.
+remend
+global BOOK_ROOM = 32 `how many cards there is room for, which is every card that can be dealt
+global BOOK_COLUMNS = 8 `how many there are on a row of the grid
+global BOOK_TILE = 30 `how far apart the tiles of the grid are
+global BOOK_TOP = 102 `where the middle of the first row is
+global BOOK_COUNT = 0 `how many cards are in it
+global dim BOOK_CARDS(32) `and which they are
+global dim BOOK_SPRITES(32) `the picture of every one
+global BOOK_SELECTED = 0 `the one that is highlighted
+global BOOK_PICK = -1 `the card that was taken from it, or -1 when the player went back
+global BOOK_INSTANT = 0 `1 to put the page up without the cards shrinking away first, for when the upgrade screen comes up as the book
+global BOOK_FADE_TWEEN_ID = 0 `0 when the page is put away, and 1 when it is showing
+global BOOK_NAME_TEXT_ID = 0
+global BOOK_KIND_TEXT_ID = 0
+global BOOK_DESC_TEXT_ID = 0
+global BOOK_PANEL_SPRITE = 0 `the dark panel that the grid and the words are on
+
+remstart
+    THE MODIFIERS ON THE TABLES. the modifiers of a game go onto the table of high scores with it,
+    in the same number as its initials and the badge of its ending: they are how many times
+    HISCORE_MOD_STEP is added on top of those. see HISCORE_BADGE_STEP in fish_headers. getScoreMods,
+    in fish_routines_fast, takes them out again. on Steam they are four of the flags of the score,
+    from STEAM_FLAG_MODS on, which an older version of the game does not look at.
+    every row of a table has a little picture for each modifier that its game had, in a strip of
+    their own to the right of the table, one column for each modifier. modsDrawTable draws them.
+    the upgrades of the fast are not written in the log of a game, so the log of somebody else's
+    game does not give the cards away. logUpgrade, in fish_routines_highscores, passes over them.
+
+    A MODIFIER THAT THE PLAYER HAS NOT HAD is not given away, the same as an ending that the player
+    has not got to: its picture on a row is a question mark, and it has no tile. the ones that the
+    player has had, in any game, are kept in the preferences, added up, at PREF_MODS_KNOWN.
+
+    THE TILES OF THE MODIFIERS. every modifier that the player has had has a tile, after the tiles of
+    the endings. see THE ENDINGS THAT ARE SHOWN in fish_headers. a tile that is switched off leaves
+    the games that had that modifier out of the table. HISCORE_TILE_ENDING is HISCORE_MOD_TILE plus
+    the number of the modifier for those tiles, counting from 0, and HISCORE_ENDING_SHOWN has
+    whether they are switched on at the same place. isModsShown says if a game is shown.
+remend
+global HISCORE_MOD_STEP = 80000 `more than the initials and any badge of an ending come to
+global HISCORE_MOD_TILE = 10 `the first of the numbers that the tiles of the modifiers have
+global STEAM_FLAG_MODS = 8 `the first of the four flags that are the modifiers
+#constant PREF_MODS_KNOWN 15
+global MODS_KNOWN = 0 `the modifiers that the player has had in any game, added up. modsLoadKnown reads it.
+global dim MOD_TEX(4) `the picture of every modifier. Tools/fast_art_gen.py draws them.
+global dim MOD_COLOR(4) `and its color
+global HISCORE_MOD_MADE = 0 `1 once the pictures of the rows have been made. they are made the first time that a table is shown.
+global dim HISCORE_MOD_SPRITES(32) `for every row of the table, a picture for every modifier
+global HISCORE_MOD_BACK_SPRITE = 0 `the strip that they are on
+global HISCORE_MOD_SIZE = 12 `how big one of the pictures is, and how far apart they are

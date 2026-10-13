@@ -255,12 +255,12 @@ test morse_remembers_the_last_pushes from fishBoard
     assert MORSE_SING_COUNT = tMsSang + 1, "a hint is asked for"
     assert CORAL_HINT_AS_LISTEN = 1, "the bright way, as if the card were owned"
 
-    ` and what SOS does
+    ` and what TUNA does
     assert DEBUG_MODE = 0, "debug mode is off to begin with"
     GAME_DEBUG_USED = 0
-    tMsBefore = MORSE_SOS_COUNT
-    morseSos()
-    assert MORSE_SOS_COUNT = tMsBefore + 1, "SOS was heard"
+    tMsBefore = MORSE_CHEAT_COUNT
+    morseCheat()
+    assert MORSE_CHEAT_COUNT = tMsBefore + 1, "TUNA was heard"
     assert DEBUG_MODE = 1, "and debug mode is on"
     assert GAME_DEBUG_USED = 1, "and the game is marked as one that had it"
     assert DEBUG_SPLASH_ON = 1, "and the words that say so splash up"
@@ -369,18 +369,22 @@ test morse_radio_comes_on_and_goes_off from fishBoard
 endtest
 
 test morse_radio_answers_cq from fishBoard
+    ` the dice say 0, so it is the first of each
+    mock rnd
+    endmock 0
     morseQuiet()
     morseReplyStart(1000)
     assert MORSE_REPLY_ON = 1, "the radio is answering"
 
-    ` R is 2 dots and a dash, TUNA is 4 dots and 4 dashes, SING is 7 and 3, SONG is 5 and 6, and
-    ` CTHULHU is 17 and 6. a dash is three dots long.
+    ` R is 2 dots and a dash, SING is 7 dots and 3 dashes, and NEMO is 2 and 6. a dash is three dots long.
+    assert MORSE_REPLY_SONG = MORSE_WORD_SING, "it says SING, or SONG,"
+    assert MORSE_REPLY_FUN = MORSE_WORD_NEMO, "and then one of the words that bring somebody swimming through"
     tMsLit = 0
     tMsLastUnit = MORSE_REPLY_LENGTH - 1
     for tMsUnit = 0 to tMsLastUnit
         tMsLit = tMsLit + MORSE_REPLY(tMsUnit)
     next
-    assert tMsLit = 95, "it taps out R, and then TUNA, SING, SONG and CTHULHU, and not SOS, or CQ itself"
+    assert tMsLit = 41, "it taps out R, and then those two, and nothing else"
     assert MORSE_REPLY(0) = 1, "it starts with the R: a dot,"
     assert MORSE_REPLY(1) = 0, "a moment of quiet,"
     assert MORSE_REPLY(2) + MORSE_REPLY(3) + MORSE_REPLY(4) = 3, "a dash,"
@@ -389,14 +393,16 @@ test morse_radio_answers_cq from fishBoard
     morseReplyStep(1000)
     assert MORSE_REPLY_LIT = 0, "it waits a moment before it starts"
     tMsStart = 1000 + MORSE_REPLY_LEAD * MORSE_REPLY_UNIT_MS
-    morseReplyStep(tMsStart + 50)
+    tMsDot = MORSE_REPLY_UNIT_MS
+    tMsHalfDot = tMsDot / 2
+    morseReplyStep(tMsStart + tMsHalfDot)
     assert MORSE_REPLY_LIT = 1, "then the tone sounds, for the dot of the R"
-    morseReplyStep(tMsStart + 150)
+    morseReplyStep(tMsStart + tMsDot + tMsHalfDot)
     assert MORSE_REPLY_LIT = 0, "and stops"
-    morseReplyStep(tMsStart + 250)
+    morseReplyStep(tMsStart + tMsDot + tMsDot + tMsHalfDot)
     assert MORSE_REPLY_LIT = 1, "and sounds again, for its dash"
     tMsEnd = tMsStart + MORSE_REPLY_LENGTH * MORSE_REPLY_UNIT_MS
-    morseReplyStep(tMsEnd + 100)
+    morseReplyStep(tMsEnd + tMsHalfDot)
     assert MORSE_REPLY_ON = 0, "and when it has tapped them all out, it is done"
     assert MORSE_REPLY_LIT = 0, "with the tone off"
 
@@ -420,32 +426,38 @@ test morse_radio_says_received_and_keeps_a_log from fishBoard
 
     ` the codec: the radio, and then a signal each, after the ending of the diver
     assert CODEC_ENTRY_RADIO = CARD_LENGTH + 15, "the radio comes after the ending of the diver"
-    assert CODEC_ENTRY_CTHULHU = CARD_LENGTH + 18, "and SING, SONG and CTHULHU after it"
+    assert CODEC_ENTRY_CTHULHU = CARD_LENGTH + 17, "and SING, which is SONG too, and CTHULHU after it"
     assert getCodecPref(CODEC_ENTRY_RADIO) = CODEC_PREF_MORE + 5, "they are remembered right after the ending of the diver"
-    assert getCodecPref(CODEC_ENTRY_CTHULHU) = CODEC_PREF_MORE + 8, "one after the other"
-    assert MORSE_WORD_CODEC(MORSE_WORD_SOS) = -1, "SOS is not in the codec at all"
+    assert getCodecPref(CODEC_ENTRY_SING) = CODEC_PREF_MORE + 6, "one after the other,"
+    assert getCodecPref(CODEC_ENTRY_CTHULHU) = CODEC_PREF_MORE + 8, "but for the place that SONG had when it had an entry of its own, which is passed over"
+    assert MORSE_WORD_CODEC(MORSE_WORD_SONG) = CODEC_ENTRY_SING, "SING and SONG share one entry"
+    assert MORSE_WORD_CODEC(MORSE_WORD_TUNA) = -1, "TUNA is not in the codec at all"
+    assert MORSE_WORD_CODEC(MORSE_WORD_SOS) = CODEC_ENTRY_TUNA, "and SOS has the entry of the QR code"
 
     CODEC_SEEN(CODEC_ENTRY_RADIO) = 0
     CODEC_SEEN(CODEC_ENTRY_SING) = 0
-    CODEC_SEEN(CODEC_ENTRY_SONG) = 0
+    CODEC_SEEN(CODEC_ENTRY_CTHULHU) = 0
     morseWake()
     assert CODEC_SEEN(CODEC_ENTRY_RADIO) = 1, "the radio is unlocked when it first comes on"
     assert CODEC_SEEN(CODEC_ENTRY_SING) = 0, "and no signal is, until it is sent"
     morseLog(MORSE_WORD_SING)
     assert CODEC_SEEN(CODEC_ENTRY_SING) = 1, "a signal that is sent is unlocked"
-    assert CODEC_SEEN(CODEC_ENTRY_SONG) = 0, "and only that one"
+    assert CODEC_SEEN(CODEC_ENTRY_CTHULHU) = 0, "and only that one"
+    CODEC_SEEN(CODEC_ENTRY_SING) = 0
+    morseLog(MORSE_WORD_SONG)
+    assert CODEC_SEEN(CODEC_ENTRY_SING) = 1, "SONG unlocks the same entry that SING does"
 
     tMsBefore = 0
     tMsLastEntry = CODEC_COUNT - 1
     for tMsEntry = 0 to tMsLastEntry
         tMsBefore = tMsBefore + CODEC_SEEN(tMsEntry)
     next
-    morseLog(MORSE_WORD_SOS)
+    morseLog(MORSE_WORD_TUNA)
     tMsAfter = 0
     for tMsEntry = 0 to tMsLastEntry
         tMsAfter = tMsAfter + CODEC_SEEN(tMsEntry)
     next
-    assert tMsAfter = tMsBefore, "sending SOS unlocks nothing"
+    assert tMsAfter = tMsBefore, "sending TUNA unlocks nothing"
     end
 endtest
 
@@ -499,5 +511,101 @@ test codec_texts_fit_in_their_slot from fishBoard
     next
     assert tFitRoom >= 48, "there is room for three lines"
     assert tFitOver = 0, "and nothing that the codec says about an entry is longer than that"
+    end
+endtest
+
+test codec_files_every_entry_in_one_category from fishBoard
+    ` every entry is in the list of the categories once, so there is no entry that the grid cannot get to
+    dim tCatTimes(128)
+    tCatLast = CODEC_ORDER_COUNT - 1
+    for tCatN = 0 to tCatLast
+        tCatEntry = CODEC_ORDER(tCatN)
+        tCatTimes(tCatEntry) = tCatTimes(tCatEntry) + 1
+    next
+    tCatWrong = 0
+    tCatLast = CODEC_COUNT - 1
+    for tCatN = 0 to tCatLast
+        if tCatTimes(tCatN) <> 1 then tCatWrong = tCatWrong + 1
+    next
+    assert CODEC_ORDER_COUNT = CODEC_COUNT, "the categories have as many entries as there are"
+    assert tCatWrong = 0, "and every entry is in one of them, once"
+    assert CODEC_CAT_COUNT = 6, "upgrades, fish, secrets, signals, endings and quests"
+
+    ` the highlighted entry says which category the grid has, and where in it the outline is
+    CODEC_SELECTED = CODEC_ENTRY_ALBUM
+    codecFindSelected()
+    assert CODEC_CAT = 4, "the ending of the diver is with the endings"
+    assert CODEC_CAT_AT = 3, "after the other three"
+    CODEC_SELECTED = CODEC_ENTRY_QUEST + 20
+    codecFindSelected()
+    assert CODEC_CAT = 5, "a quest is with the quests"
+    assert CODEC_CAT_AT = 20, "in the order of the quests"
+    assert getCodecPageCount(5) = 2, "which fill two pages"
+    assert getCodecPageCount(4) = 1, "and the endings do not fill one"
+    end
+endtest
+
+test codec_category_has_no_name_until_something_in_it_is_found from fishBoard
+    CODEC_SEEN(CODEC_ENTRY_GOODBYE) = 0
+    CODEC_SEEN(CODEC_ENTRY_REEF) = 0
+    CODEC_SEEN(CODEC_ENTRY_ANCIENT) = 0
+    CODEC_SEEN(CODEC_ENTRY_ALBUM) = 0
+    assert codecCatSeen(4) = 0, "nothing has been found in the endings"
+    CODEC_SEEN(CODEC_ENTRY_ALBUM) = 1
+    assert codecCatSeen(4) = 1, "one ending is enough for the list to say what they are"
+    assert codecCatSeen(5) = 0, "and that does nothing for the quests"
+    end
+endtest
+
+test codec_has_an_entry_for_the_usual_ending from fishBoard
+    assert CODEC_ENTRY_QUEST = CODEC_ENTRY_GOODBYE + 1, "the usual ending is the last entry before the quests"
+    assert getCodecPref(CODEC_ENTRY_GOODBYE) = PREF_ENDING_HOME, "and it is remembered in a place of its own"
+    assert getCodecEntryTex(CODEC_ENTRY_GOODBYE) = TEX_ENDING_GOODBYE, "its picture is a house"
+    assert CODEC_SEEN(CODEC_ENTRY_GOODBYE) = 0, "it is locked to begin with"
+    CODEC_SELECTED = CODEC_ENTRY_GOODBYE
+    codecFindSelected()
+    assert CODEC_CAT = 4, "it is with the endings"
+    assert CODEC_CAT_AT = 0, "and it is the first of them"
+    end
+endtest
+
+test codec_pages_go_up_and_down from fishBoard
+    ` the quests fill two pages, which are one under the other
+    CODEC_ON_LIST = 0
+    CODEC_SELECTED = CODEC_ENTRY_QUEST + 9
+    codecGo(0, 1)
+    assert CODEC_SELECTED = CODEC_ENTRY_QUEST + 17, "down from the bottom of a page is the top of the next one"
+    codecGo(0, -1)
+    assert CODEC_SELECTED = CODEC_ENTRY_QUEST + 9, "and up from there is back again"
+
+    ` and the categories are one under the other, too, and go around
+    CODEC_SELECTED = CODEC_ENTRY_QUEST + 25
+    codecGo(0, 1)
+    assert CODEC_SELECTED = 1, "down from the last page of the last category is the top of the first one"
+    codecGo(0, -1)
+    assert CODEC_SELECTED = CODEC_ENTRY_QUEST + 25, "and up from there is the bottom of the last one"
+    CODEC_SELECTED = CODEC_ENTRY_ALBUM
+    codecGo(0, 1)
+    assert CODEC_SELECTED = CODEC_ENTRY_QUEST + 3, "a category that has one row is left by going down from it"
+
+    ` left and right stay on the row
+    CODEC_SELECTED = CODEC_ENTRY_ALBUM
+    codecGo(1, 0)
+    assert CODEC_SELECTED = CODEC_ENTRY_ALBUM, "there is nothing to the right of the last tile of a row"
+    codecGo(-1, 0)
+    assert CODEC_SELECTED = CODEC_ENTRY_ANCIENT, "left goes along the row"
+    assert CODEC_ON_LIST = 0, "and stays in the grid"
+
+    ` and left from the start of a row is the list of the categories
+    CODEC_SELECTED = CODEC_ENTRY_GOODBYE
+    codecGo(-1, 0)
+    assert CODEC_ON_LIST = 1, "left from the first tile of a row goes onto the list"
+    assert CODEC_SELECTED = CODEC_ENTRY_GOODBYE, "which leaves the grid as it is"
+    codecGo(0, 1)
+    assert CODEC_SELECTED = CODEC_ENTRY_QUEST, "down on the list is the next category, from its start"
+    assert CODEC_ON_LIST = 1, "still on the list"
+    codecGo(1, 0)
+    assert CODEC_ON_LIST = 0, "and right goes back into the grid"
+    assert CODEC_SELECTED = CODEC_ENTRY_QUEST, "at the same tile"
     end
 endtest
