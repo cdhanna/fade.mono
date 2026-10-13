@@ -25,6 +25,7 @@
 //   texcoord2.w  how much brighter to draw it. 0 is its own color, and 1 is twice as bright.
 //                -1 is a fish that does not glow at night. see THE NIGHT, further down. at night,
 //                a fish that is drawn brighter glows more, too.
+//                10 more than that is a fish that shimmers around its edge at night, which is a jellyfish.
 
 Texture2D SpriteTexture;
 float4x4 MatrixTransform;
@@ -104,6 +105,9 @@ struct VertexShaderOutput
 	// x is how many fish are in the stack, y is how much brighter to draw, z is how much it is night,
 	// and w is how brightly the fish glows right now, which is 0 for a fish that does not
 	float4 CountGlow : TEXCOORD4;
+
+	// 1 for a fish that shimmers around its edge at night
+	float Shimmer : TEXCOORD5;
 };
 
 VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
@@ -143,7 +147,12 @@ VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
 	float wave = 0.5 + 0.5 * sin(Night.y * NIGHT_WAVE_SPEED - dot(middle, NIGHT_WAVE));
 	float glows = step(-0.5, custom2.w);
 
-	output.CountGlow = float4(clamp(custom.z, 1.0, MAX_STACK), max(custom2.w, 0.0), saturate(Night.x), glows * (0.62 + 0.38 * wave) * (1.0 + 1.6 * max(custom2.w, 0.0)));
+	// 10 or more says that it shimmers, and what is left over is how much brighter it is
+	float shimmers = step(5.0, custom2.w);
+	float brighter = max(custom2.w - 10.0 * shimmers, 0.0);
+
+	output.CountGlow = float4(clamp(custom.z, 1.0, MAX_STACK), brighter, saturate(Night.x), glows * (0.62 + 0.38 * wave) * (1.0 + 1.6 * brighter));
+	output.Shimmer = shimmers;
 
 	output.Position = mul(position, MatrixTransform);
 	output.Color = color;
@@ -202,6 +211,15 @@ float3 tasteOf(float2 spot)
 	return c.rgb * c.a * (rich * rich + 0.03);
 }
 
+// 1 where the picture has something in it, at a spot on the quad. this is the picture lying flat, which
+// is close enough for the pixels right next to a fish.
+float solidAt(float2 quad)
+{
+	float2 uv = quad + 0.5;
+	float inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+	return step(0.5, tex2D(SpriteTextureSampler, uv).a) * inside;
+}
+
 float4 MainPS(VertexShaderOutput input) : COLOR
 {
 	// back to front
@@ -244,6 +262,21 @@ float4 MainPS(VertexShaderOutput input) : COLOR
 	float withHalo = result.a + halo * (1.0 - result.a);
 	result.rgb = (result.rgb * result.a + light * halo * (1.0 - result.a)) / max(withHalo, 0.001);
 	result.a = withHalo;
+
+	// THE SHIMMER, for a jellyfish. the pixels right around the edge of its picture light up, the ones
+	// that are empty and have a pixel of the picture next to them. a bright stretch goes around the
+	// edge, and every pixel of it twinkles in its own time, so it never holds still.
+	float one = 1.0 / NIGHT_PIXELS;
+	float2 spot = (pixel + 0.5) / NIGHT_PIXELS - 0.5;
+	float beside = max(max(solidAt(spot + float2(one, 0.0)), solidAt(spot - float2(one, 0.0))), max(solidAt(spot + float2(0.0, one)), solidAt(spot - float2(0.0, one))));
+	float rim = beside * (1.0 - solidAt(spot));
+	float around = atan2(spot.y, spot.x);
+	float sweep = 0.5 + 0.5 * sin(around * 2.0 - Night.y * 3.2);
+	float twinkle = 0.5 + 0.5 * sin(Night.y * 9.0 + hash(pixel + 29.0) * 40.0);
+	float shimmer = rim * saturate(0.25 + 0.75 * sweep * sweep) * (0.45 + 0.55 * twinkle) * night * input.Shimmer;
+	float3 shimmerColor = lerp(light, float3(1.0, 1.0, 1.0), 0.6);
+	result.rgb = lerp(result.rgb, shimmerColor, shimmer);
+	result.a = max(result.a, shimmer);
 
 	return result * input.Color;
 }

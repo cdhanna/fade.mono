@@ -164,6 +164,14 @@ setup_abilities:
         abilityType = ABILITY_TYPE_PASSIVE
         stackable = 0
     }
+    ` see MIDNIGHT CRAB in fish_headers_tide. it is a hint that there is a night.
+    CARDS(ABILITY_INDEX_MIDNIGHT_CRAB) = {
+        name$ = "midnight crab"
+        desc$ = "Crabs are awake at night time"
+        obtained = 0
+        abilityType = ABILITY_TYPE_PASSIVE
+        stackable = 0
+    }
     CARDS(ABILITY_INDEX_BOTTLES) = {
         name$ = "bottles"
         desc$ = "a group of " + str$(BOTTLE_GROUP_SIZE) + " or more leaves a bottle. on the bottom row, it adds " + str$(BOTTLE_MULT_GAIN) + " to the multiplier."
@@ -695,7 +703,11 @@ return
 reroll_ability_choices:
     if UPGRADE_REROLLS >= UPGRADE_REROLL_MAX then return
 
+    ` the price of it is moves, and they are counted whatever the hour is. they are not moves of the
+    ` night, so they do not bring the day any closer. see THE MOVES OF THE NIGHT in fish_headers_tide.
+    TIDE_MOVE_IS_PRICE = 1
     registerMove(getRerollCost())
+    TIDE_MOVE_IS_PRICE = 0
     UPGRADE_REROLLS = UPGRADE_REROLLS + 1
 
     for i = 0 to choiceCount

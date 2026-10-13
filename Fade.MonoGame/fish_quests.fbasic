@@ -31,7 +31,7 @@ setup_quest_defs:
     questDefine(QUEST_CUTTLEFISH, "Cuttlefish", "The ringed fish changes kind each swap, in the order shown, and survives pops. Pop it as each kind.", TEX_Q_RING, 0)
     questDefine(QUEST_CONSTELLATION, "Constellation", "Arrange the four ringed fish in the shape shown. A pop, or a swap that moves one and pops nothing, resets it.", TEX_Q_RING, 0)
     questDefine(QUEST_REMORA, "Tail", "The cursor drags a long tail. Make 8 popping swaps without crossing it.", TEX_Q_EEL, TEX_Q_EEL)
-    questDefine(QUEST_SLEEPERS, "Sleepers", "One kind sleeps for three moves, and its groups wait. Have two groups waiting when it wakes.", TEX_Q_SHELL, TEX_Q_SHELL)
+    questDefine(QUEST_SLEEPERS, "Sleepers", "One kind sleeps for three moves, and its groups wait. Have three groups waiting when it wakes.", TEX_Q_SHELL, TEX_Q_SHELL)
     questDefine(QUEST_ECHO, "Echo", "A ghost repeats each swap four moves later, in the same place. Get three of its swaps to pop fish.", TEX_Q_RING, 0)
     questDefine(QUEST_PULSE, "Pulse", "Every fourth move, the lit cell turns its four corner fish into its own kind. Get three pops from that.", TEX_Q_DOT, 0)
     questDefine(QUEST_TOTEM, "Totem", "Stack the four kinds shown, top to bottom, in the marked column.", TEX_Q_RING, 0)
@@ -1289,7 +1289,7 @@ function questSleepers(qEv, qA, qB)
     if qEv = QEV_START
         QUEST_V(0) = rnd(7) + 1
         QUEST_V(1) = 3
-        questProgress(0, 2)
+        questProgress(0, 3)
         REQUEST_COMBO_CHECK = 1
     endif
 
@@ -1301,12 +1301,12 @@ function questSleepers(qEv, qA, qB)
     if qEv = QEV_SETTLE
         QUEST_V(3) = QUEST_V(2)
         QUEST_V(2) = 0
-        questProgress(QUEST_V(3), 2)
+        questProgress(QUEST_V(3), 3)
 
         QUEST_V(1) = QUEST_V(1) - qA
         if QUEST_V(1) <= 0
             ` it wakes. with enough groups waiting, that is the quest done, and they all go off.
-            if QUEST_V(3) >= 2
+            if QUEST_V(3) >= 3
                 questComplete()
                 exitfunction
             endif
@@ -1317,10 +1317,18 @@ function questSleepers(qEv, qA, qB)
     endif
 
     if qEv = QEV_DRAW
-        ` which kind is asleep, how long for, and which kind is next
+        ` which kind is asleep, how long for, and the three kinds that sleep after it, each one
+        ` fainter than the one before
         questIconAt(QUEST_V(0), QUEST_EXTRA_X + 7, QUEST_EXTRA_Y, 13, rgb(170, 170, 220, 255))
         questWordAt(QUEST_EXTRA_X + 25, QUEST_EXTRA_Y, "z" + str$(QUEST_V(1)), rgb(190, 200, 255))
-        questIconAt((QUEST_V(0) mod 7) + 1, QUEST_EXTRA_X + 44, QUEST_EXTRA_Y + 1, 10, rgb(255, 255, 255, 110))
+        qSleepKind = QUEST_V(0)
+        qSleepN = 0
+        while qSleepN < 3
+            qSleepKind = (qSleepKind mod 7) + 1
+            qSleepAlpha = 140 - qSleepN * 35
+            questIconAt(qSleepKind, QUEST_EXTRA_X + 44 + qSleepN * 13, QUEST_EXTRA_Y + 1, 10, rgb(255, 255, 255, qSleepAlpha))
+            qSleepN = qSleepN + 1
+        endwhile
     endif
 endfunction
 

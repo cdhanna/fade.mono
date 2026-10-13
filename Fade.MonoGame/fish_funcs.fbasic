@@ -2274,14 +2274,23 @@ function registerMove(delta)
     ` the very first game does not count moves until the count is on the screen
     if tutorialMovesOff() then exitfunction
 
+    ` a move of the night is not counted. it takes one off of what the night has left, and that is all.
+    ` a move that is given back, and the price of something, are counted the same as ever, and are
+    ` not moves of the night. see THE MOVES OF THE NIGHT in fish_headers_tide.
+    if TIDE_NIGHT
+        if delta > 0
+            if TIDE_MOVE_IS_PRICE = 0
+                tideMoveMade(delta)
+                exitfunction
+            endif
+        endif
+    endif
+
     ` register the move against the score
     CURRENT_MOVE_COUNT = CURRENT_MOVE_COUNT + delta
     set text MOVE_COUNT_TEXT_ID, str$(CURRENT_MOVE_COUNT)
 
     ` every move takes some of the air of a diver that is down. see THE AIR in fish_headers_diver.
     diverMoveMade(delta)
-
-    ` and one of the moves of the night, when it is night. see THE MOON in fish_headers_tide.
-    tideMoveMade(delta)
 endfunction
 

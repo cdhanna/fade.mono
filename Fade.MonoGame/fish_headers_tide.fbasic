@@ -45,7 +45,25 @@ remstart
     WHEN DAY BREAKS, the board is looked at again, and every group that is on it pops at once. so the
     night is for setting the board up. the light comes back first: nothing pops until TIDE_DAWN_MS
     after day broke, and the night fades away more quickly than it came on, so that it is gone by then.
+    that is longer than the light takes, so that the sound of daybreak is heard before the pops are.
     handle_combos does the waiting.
+
+    THE MOVES OF THE NIGHT are not counted. the count of moves is the score of the game, and it stands
+    still for as long as it is night: a move of the night takes one off of the moves that the night
+    has left, and that is all that it does. it takes no air from the diver either.
+    a move that is given back is not a move of the night, so it comes off of the count as it would in
+    the day. and the price of dealing new cards on the upgrade screen is counted, and is not a move
+    of the night: it does not bring the day any closer. TIDE_MOVE_IS_PRICE says that it is that.
+    registerMove, in fish_funcs, is where all of this is.
+
+    MIDNIGHT CRAB. a passive. "Crabs are awake at night time", it says, which is a hint that there is
+    a night. with it, a group of crabs is not held at night: it pops, and scores, and fills the bar of
+    the multiplier, like any group does in the day. whatever falls in because of it is held, unless it
+    is crabs too. tideHoldsGroup lets the crabs through.
+
+    THE NIGHT IN THE CODEC. the codec has an entry for the night, which is a secret like the crooked
+    bar is: it is locked until night first falls in any game, and then it says how the night is
+    brought on. tideCycleDone unlocks it.
 
     THE FISH SLEEP. while it is night, a little Z floats up from one fish or another, every so often.
     a dead fish does not sleep, and neither does a bottle, or anything of a quest's. stepTideSleep
@@ -69,7 +87,8 @@ remstart
     go dark, the pale parts of them and a scatter of spots light up in their own colors, and there is
     a little halo around each one. waves of light go across the board. a fish that is dead does not
     glow, and neither does a bottle, or anything that a quest put on the board. the coral glows too.
-    a jellyfish glows a good deal more than a fish does, and its light swells and sinks slowly.
+    a jellyfish shimmers: the pixels right around the edge of it light up, and a bright stretch
+    goes around and around it, twinkling. it is no brighter than a fish otherwise.
     every fish keeps its own colors, only dimmer, so that the kinds can still be told apart. what
     lights up is the dark line around it, in the color of the fish.
 
@@ -99,6 +118,30 @@ remstart
                         halves show from then on. tideMarks says how many halves are filled in.
     see SeabedEffect.fx for the surface and the moon, FishEffect.fx for the fish, and CoralEffect.fx.
 
+    THE SOUNDS OF THE TIDE. Tools/tide_sounds_gen.py makes them, out of recordings that the game has
+    already, and it makes samples of how they sound in the game. this is when each one is heard:
+        tide-ebb        the water gets all the way out: a wave drawing back down a shore
+        tide-flow       the water gets all the way back in, and a cycle is done: a wave coming up it
+                        there are TIDE_WAVE_TAKES takes of each, cut from two recordings of waves:
+                        three big waves from the one, and three gentle ones from the other. one is
+                        picked at random every time, never the one that played last, and it is played
+                        a little higher or lower, and a little louder or quieter. tidePlayWave does that.
+                        and its pitch slides for as long as it plays, the way that the water is going:
+                        down for a wave that is going out, and up for one that is coming in. it slides
+                        by TIDE_WAVE_ROLL# octaves, over TIDE_WAVE_ROLL_MS. tideStepSounds does that.
+        night-fall      night falls, in place of that. the music of the coral plays too, if any spread.
+        night-pulse     a swap puts a group together at night. it is a muffled thup, the same every time.
+        crab-click      a group of crabs pops at night, with the "midnight crab" card
+        dawn-swell      day breaks. it builds for as long as the light takes to come back.
+        night-breath    a loop, heard all through the night: the water swelling and sinking slowly
+        jelly-hum       a loop, heard at night while there is a jellyfish on the board
+    the night has no ambience of its own. tideNightMusic turns the layers of the music that there
+    are already: it takes the music down to the deep and keeps it there, turns the recording of the
+    water down and the slow copy of it up, brings the crackle of the reef up, and takes most of the
+    surf away. and the recording of the water is played a little lower for as long as it is night.
+    every few seconds of the night, one high bell of the music is heard, quietly.
+    the two loops are quiet while a menu is up.
+
     the "Tide" window of the debug panel (FISH_DEBUG) pushes and pulls, and turns night on and off.
 remend
 
@@ -121,7 +164,10 @@ global TIDE_CLOCK_WAS# = 0 `what that time was on the last frame. see SEABED_SNO
 global TIDE_RISE# = 3 `how many times as fast as it goes that time is taken back. 2 makes the specks rise as fast as they sink, and 3 twice as fast.
 global TIDE_WAVE_BACK# = 0 `how much of the time has been taken back for the wobble of the water, in seconds. it is taken back twice as fast as it goes, so the wobble runs backward at its own speed.
 global TIDE_NIGHT_LEFT = 0 `how many moves of the night are left
-global TIDE_DAWN_MS = 800 `how long the light has to come back, before what the night held pops
+global TIDE_MOVE_IS_PRICE = 0 `1 while the moves that are being registered are a price that is being paid, and not moves that are being made. see THE MOVES OF THE NIGHT.
+global CODEC_ENTRY_NIGHT = -1 `the entry of the night in the codec, once setup_codec has run
+global TEX_CODEC_NIGHT `the picture that it has there
+global TIDE_DAWN_MS = 1400 `how long the light has to come back, before what the night held pops
 global TIDE_DAWN_UNTIL = 0 `when that is over, on the clock of the game, or 0 when day is not breaking
 global TIDE_DAY_EASE# = 0.005 `how much of the way the night goes in a millisecond, on the way out
 
@@ -146,7 +192,6 @@ global dim TIDE_BANKED(400) `1 for every cell whose fish is in a group that is h
 global TIDE_BANK_ANY = 0 `1 when any of TIDE_BANKED is set, so that there is something to clear
 global TIDE_HELD_GROUPS = 0 `how many groups the last look at the board held
 global TIDE_BANK_GLOW# = 0.45 `how much brighter the fish of a held group are
-global TIDE_JELLY_GLOW# = 0.9 `and how much brighter a jellyfish is at night, at its brightest
 global dim TIDE_PULSE_UNTIL(400) `when the flash of the fish in every cell is over, on the clock of the game
 global TIDE_PULSE_MS = 500 `how long the flash lasts
 
@@ -170,5 +215,42 @@ global TIDE_LAST_MS = 0
 global TIDE_LEVEL_EASE# = 0.004 `how much of the way the surface goes in a millisecond
 global TIDE_NIGHT_EASE# = 0.0012 `the night comes on slowly
 global TIDE_MOON_EASE# = 0.002
+
+` THE SOUNDS OF THE TIDE. setup_tide loads them. how loud each one is, from 0 to 1, is the same number
+` that Tools/tide_sounds_gen.py has for its samples, and the two have to be kept the same by hand.
+global TIDE_WAVE_TAKES = 6 `how many takes there are of a wave going out, and of one coming in. the first three are big waves, and the rest are gentle ones.
+global dim TIDE_SFX_EBBS(6)
+global dim TIDE_SFX_FLOWS(6)
+global TIDE_WAVE_LAST_EBB = -1 `the take that played last, so that the next one is another
+global TIDE_WAVE_LAST_FLOW = -1
+global TIDE_WAVE_PITCH = 4 `how far the pitch of a wave can wander, either way, in hundredths of an octave
+global TIDE_SFX_NIGHT = 0
+global TIDE_SFX_PULSE = 0
+global TIDE_SFX_CRAB = 0
+global TIDE_SFX_DAWN = 0
+global TIDE_SFX_BREATH = 0
+global TIDE_SFX_HUM = 0
+global TIDE_VOL_EBB# = 0.3
+global TIDE_VOL_FLOW# = 0.3
+global TIDE_WAVE_ROLL# = 0.2 `how far the pitch of a wave slides while it plays, in octaves. half of it is over the pitch that the wave was given, and half is under.
+global TIDE_WAVE_ROLL_MS = 3400 `and how long it takes to
+global TIDE_ROLL_SFX = 0 `the wave whose pitch is sliding now, or 0 for none
+global TIDE_ROLL_FROM# = 0 `the pitch that it started at, and the one that it is on its way to
+global TIDE_ROLL_TO# = 0
+global TIDE_ROLL_START_MS = 0 `when it started, on the clock of the game
+global TIDE_VOL_NIGHT# = 0.6
+global TIDE_VOL_PULSE# = 0.55
+global TIDE_VOL_CRAB# = 0.4
+global TIDE_VOL_DAWN# = 0.6
+global TIDE_VOL_BREATH# = 0.35
+global TIDE_VOL_HUM# = 0.18
+global TIDE_VOL_PLINK# = 0.14 `one of the little bells of the night
+global TIDE_NIGHT_PITCH# = -0.2 `how much lower the recording of the water is played at night, in octaves
+global TIDE_MUSIC_NIGHT = 0 `1 while the layers of the music are turned the way that they are for the night. see tideNightMusic.
+global TIDE_PLINK_NEXT_MS = 0 `when the next little bell is due, on the clock of the game
+global TIDE_PLINK_GAP_MIN = 3000 `a bell comes after somewhere between these, in milliseconds
+global TIDE_PLINK_GAP_MAX = 8000
+global TIDE_JELLIES = 0 `how many jellyfish are on the board, as of the last time that they were counted at night
+global TIDE_HUM_SHOWN# = 0 `how much of the hum is heard, from 0 to 1. it chases whether there are any.
 
 global SAVE_PREF_TIDE = 60 `where the tide of the saved game is kept, after SAVE_PREF. see tideSave.

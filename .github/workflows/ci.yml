@@ -13,6 +13,11 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      upload_test_results:
+        description: "Record the fish game tests, and upload the results as an artifact"
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -47,12 +52,15 @@ jobs:
   # the game has to start: it gets a screen that is not there (Xvfb), a software OpenGL (Mesa),
   # and a sound card that plays nothing (OpenAL's "null" driver).
   #
-  # What the run leaves behind, as the "fish-test-results" artifact, pass or fail:
-  #   summary.md    the counts, each test that failed, each one that never ran. also on the run's page.
+  # The counts, each test that failed, and each one that never ran are always on the run's page.
+  #
+  # Nothing is uploaded unless the workflow is run by hand ("Run workflow") with the box for the
+  # results ticked. Then the run leaves this behind, as the "fish-test-results" artifact, pass or fail:
+  #   summary.md    what is on the run's page
   #   junit.xml     the same, for tools
   #   results.tsv   every test and how it went
   #   tests.log     everything that the game printed
-  #   tests.mp4     a recording of the screen for the whole run
+  #   tests.mp4     a recording of the screen for the whole run. it is only made for these runs.
   #
   # Needs the same two secrets as the Steam workflow, to fetch the art and the sound:
   # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID. Without them (a pull request from a fork has
@@ -133,6 +141,7 @@ jobs:
           DISPLAY: ':99'
           LIBGL_ALWAYS_SOFTWARE: '1'
           ALSOFT_DRIVERS: 'null'
+          KEEP_RESULTS: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_test_results }}
         run: |
           mkdir -p test-results
           results="$PWD/test-results"
@@ -147,12 +156,16 @@ jobs:
           # no window for this one: it only prints the names
           ./Fade.MonoGame --list-tests > "$results/tests.list" 2>&1 || true
 
+          # the screen is only recorded when the results are going to be uploaded.
           # half size and 15 frames a second keeps the recorder out of the game's way. the file is
           # written in pieces, so that it still plays when the run was cut short.
-          ffmpeg -loglevel error -f x11grab -framerate 15 -video_size 1920x1080 -i :99 \
-            -vf scale=960:540 -c:v libx264 -preset ultrafast -pix_fmt yuv420p \
-            -movflags +frag_keyframe+empty_moov "$results/tests.mp4" &
-          ffmpeg_pid=$!
+          ffmpeg_pid=""
+          if [ "$KEEP_RESULTS" = "true" ]; then
+            ffmpeg -loglevel error -f x11grab -framerate 15 -video_size 1920x1080 -i :99 \
+              -vf scale=960:540 -c:v libx264 -preset ultrafast -pix_fmt yuv420p \
+              -movflags +frag_keyframe+empty_moov "$results/tests.mp4" &
+            ffmpeg_pid=$!
+          fi
 
           # the run has a limit of its own, and `timeout` is there for a run that does not keep to it.
           # a test that hangs ends the run here, and the report names the first test that never ran.
@@ -162,8 +175,10 @@ jobs:
           code=$?
           set -e
 
-          kill -INT "$ffmpeg_pid" 2>/dev/null || true
-          wait "$ffmpeg_pid" 2>/dev/null || true
+          if [ -n "$ffmpeg_pid" ]; then
+            kill -INT "$ffmpeg_pid" 2>/dev/null || true
+            wait "$ffmpeg_pid" 2>/dev/null || true
+          fi
           kill "$xvfb_pid" 2>/dev/null || true
 
           cd ..
@@ -182,8 +197,9 @@ jobs:
           fi
           exit "$report"
 
+      # only for a run that was started by hand, with the box ticked
       - name: Upload the results
-        if: always() && steps.secrets.outputs.found == 'true'
+        if: always() && steps.secrets.outputs.found == 'true' && github.event_name == 'workflow_dispatch' && inputs.upload_test_results
         uses: actions/upload-artifact@v4
         with:
           name: fish-test-results

@@ -55,6 +55,7 @@ setup_codec:
     CODEC_ENTRY_SING = CARD_LENGTH + 16
     CODEC_ENTRY_SONG = CARD_LENGTH + 17
     CODEC_ENTRY_CTHULHU = CARD_LENGTH + 18
+    CODEC_ENTRY_NIGHT = CARD_LENGTH + 19
 
     ` and then every quest. see THE QUESTS IN THE CODEC in fish_headers_quests.
     CODEC_ENTRY_QUEST = CARD_LENGTH + CODEC_EXTRA_COUNT
@@ -79,6 +80,7 @@ setup_codec:
     texture reserve texture id(TEX_CODEC_DIVER), "Fish/Textures/codec_diver"
     texture reserve texture id(TEX_CROOKED), "Fish/Textures/Cards/crooked_bar"
     texture reserve texture id(TEX_CODEC_RADIO), "Fish/Textures/Cards/radio"
+    texture reserve texture id(TEX_CODEC_NIGHT), "Fish/Textures/Cards/night_dive"
 
     ` what a locked entry has for a picture is a question mark, and not a lock, whatever the names say
     texture reserve texture id(TEX_LOCK), "Fish/Textures/Cards/question"
@@ -389,6 +391,7 @@ function getCodecEntryTex(entryIndex)
     if entryIndex = CODEC_ENTRY_SING then entryTex = TEX_CODEC_RADIO
     if entryIndex = CODEC_ENTRY_SONG then entryTex = TEX_CODEC_RADIO
     if entryIndex = CODEC_ENTRY_CTHULHU then entryTex = TEX_BADGE_TENTACLE
+    if entryIndex = CODEC_ENTRY_NIGHT then entryTex = TEX_CODEC_NIGHT
 
     ` a quest has the picture that is on its badge
     entryQuest = getCodecQuest(entryIndex)
@@ -530,9 +533,9 @@ function refreshCodec()
                     tileColor = rgb(190, 190, 190)
                 endif
 
-                ` the pictures of the radio, and of its signals, are white, like the art of a card
+                ` the pictures of the radio, and of its signals, are white, like the art of a card, and so is the one of the night
                 if shownEntry >= CODEC_ENTRY_RADIO and shownEntry <> CODEC_SELECTED
-                    if shownEntry <= CODEC_ENTRY_CTHULHU
+                    if shownEntry <= CODEC_ENTRY_NIGHT
                         tileColor = rgb(150, 190, 255)
                     endif
                 endif
@@ -628,6 +631,11 @@ function refreshCodec()
             if CODEC_SELECTED <= CODEC_ENTRY_CTHULHU
                 set text CODEC_DESC_TEXT_ID, "Not found yet. The radio knows it."
             endif
+        endif
+
+        ` the night is found by whoever watches which way the water is going. see fish_headers_tide.
+        if CODEC_SELECTED = CODEC_ENTRY_NIGHT
+            set text CODEC_DESC_TEXT_ID, "Not found yet. The water comes in, and it goes out."
         endif
     else
         ` the size is set again, because it is worked out from the size of the texture
@@ -749,6 +757,14 @@ function refreshCodec()
             set text CODEC_NAME_TEXT_ID, "Cthulhu"
             codecSignalText(MORSE_WORD_CTHULHU, "Tap out CTHULHU on the radio: ", ". Something comes up to see who called.")
             set text CODEC_KIND_TEXT_ID, "signal"
+            exitfunction
+        endif
+
+        ` see THE NIGHT IN THE CODEC in fish_headers_tide
+        if CODEC_SELECTED = CODEC_ENTRY_NIGHT
+            set text CODEC_NAME_TEXT_ID, "Night Dive"
+            set text CODEC_DESC_TEXT_ID, "Pop with the fish you shove aside to pull the tide out, then the one you carry to push it in. " + str$(TIDE_CYCLES_TO_TURN) + " tides bring the night."
+            set text CODEC_KIND_TEXT_ID, "secret"
             exitfunction
         endif
 

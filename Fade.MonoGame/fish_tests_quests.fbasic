@@ -371,7 +371,7 @@ test quest_free_move_can_move_a_quest_thing from fishBoard
 endtest
 
 test quest_has_a_codec_entry_that_is_marked_when_it_is_finished from fishBoard
-    assert CODEC_ENTRY_QUEST = CARD_LENGTH + 19, "the quests come after everything else in the codec"
+    assert CODEC_ENTRY_QUEST = CARD_LENGTH + 20, "the quests come after everything else in the codec"
     tEntry = CODEC_ENTRY_QUEST + QUEST_WAKE - 1
     assert getCodecQuest(tEntry) = QUEST_WAKE, "an entry knows which quest it is"
     assert getCodecQuest(CODEC_ENTRY_CROOKED) = 0, "and the entry before the quests is not one"
@@ -1081,8 +1081,13 @@ test quest_lost_pair_starts_over_when_a_miss_moves_one from fishBoard
     stepQuest()
     tOne = questFindMark(1)
 
-    ` a swap somewhere else that pops nothing is none of its business
-    questSwapDone(testIndex(0, 8), testIndex(1, 8))
+    ` a swap somewhere else that pops nothing is none of its business. the pair is put in a row
+    ` that is picked at random, both of them in the same one, so "somewhere else" is another row:
+    ` a swap in the row of the pair could be a swap of one of them.
+    tPairRow = tOne / CELL_COLUMN_COUNT
+    tFarRow = 8
+    if tPairRow = 8 then tFarRow = 0
+    questSwapDone(testIndex(0, tFarRow), testIndex(1, tFarRow))
     questJudge(0)
     questSettled()
     assert QUEST_STATE = QSTATE_ACTIVE, "a miss that moved neither of the pair leaves them be"
@@ -1175,6 +1180,29 @@ test quest_sleepers_hold_a_group_back from fishBoard
     assert totalComboCount = 0, "a group of the kind that is asleep does not pop"
     assert testPopCount() = 0, "none of its fish do"
     assert QUEST_V(2) = 1, "and it is counted as waiting"
+    end
+endtest
+
+test quest_sleepers_need_three_groups_waiting from fishBoard
+    questForce(QUEST_SLEEPERS)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    QUEST_V(0) = 6
+
+    ` it wakes with two groups waiting, and that is not enough
+    QUEST_V(1) = 1
+    QUEST_V(2) = 2
+    questSleepers(QEV_SETTLE, 1, 0)
+    assert QUEST_STATE = QSTATE_ACTIVE, "two groups waiting do not finish the quest"
+    assert QUEST_V(0) = 7, "the next kind goes to sleep"
+    assert QUEST_PROG_NEED = 3, "the badge asks for three"
+
+    ` the next one wakes with three
+    QUEST_V(1) = 1
+    QUEST_V(2) = 3
+    questSleepers(QEV_SETTLE, 1, 0)
+    assert QUEST_STATE = QSTATE_DONE, "three groups waiting finish it"
     end
 endtest
 

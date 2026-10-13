@@ -27,6 +27,19 @@ setup_tide:
     setInfoBlobEnabled(INFO_INDEX_TIDE, 0)
     TIDE_INFO_STATE = 0
     TIDE_ROUNDS_TALL = INFOS(INFO_INDEX_ROUNDS).size.y
+
+    ` THE SOUNDS OF THE TIDE. see fish_headers_tide. the two loops play all of the time, with their
+    ` volume at 0, the way that the layers of the music do.
+    for tideSetupTake = 0 to TIDE_WAVE_TAKES - 1
+        TIDE_SFX_EBBS(tideSetupTake) = tideLoadSound("Fish/Audio/tide-ebb-" + str$(tideSetupTake + 1), SFX_GROUP_SFX, 0)
+        TIDE_SFX_FLOWS(tideSetupTake) = tideLoadSound("Fish/Audio/tide-flow-" + str$(tideSetupTake + 1), SFX_GROUP_SFX, 0)
+    next
+    TIDE_SFX_NIGHT = tideLoadSound("Fish/Audio/night-fall", SFX_GROUP_MUSIC, 0)
+    TIDE_SFX_PULSE = tideLoadSound("Fish/Audio/night-pulse", SFX_GROUP_SFX, 0)
+    TIDE_SFX_CRAB = tideLoadSound("Fish/Audio/crab-click", SFX_GROUP_SFX, 0)
+    TIDE_SFX_DAWN = tideLoadSound("Fish/Audio/dawn-swell", SFX_GROUP_MUSIC, 0)
+    TIDE_SFX_BREATH = tideLoadSound("Fish/Audio/night-breath", SFX_GROUP_MUSIC, 1)
+    TIDE_SFX_HUM = tideLoadSound("Fish/Audio/jelly-hum", SFX_GROUP_MUSIC, 1)
 return
 
 ` a window in the debug panel. frame_dbg, in fish_routines, comes here on every frame, with FISH_DEBUG.
@@ -63,6 +76,136 @@ return
 routines_tide_exit:
 
 
+` THE SOUNDS OF THE TIDE. see fish_headers_tide.
+
+` load one of them, and say which sound it is. a loop starts playing right away, with its volume at 0.
+function tideLoadSound(tideLoadPath$, tideLoadGroup, tideLoadLoops)
+    tideLoadClip = 0
+    tideLoadSfx = 0
+    reserve sfx clip id(tideLoadClip)
+    load sfx clip tideLoadClip, tideLoadPath$
+    reserve sfx id(tideLoadSfx)
+    sfx tideLoadSfx, tideLoadClip
+    set sfx group tideLoadSfx, tideLoadGroup
+    if tideLoadLoops
+        set sfx loop tideLoadSfx, 1
+        set sfx volume tideLoadSfx, 0
+        play sfx tideLoadSfx
+    endif
+endfunction tideLoadSfx
+
+
+` play one of them, this loud, and this many octaves higher than it is
+function tidePlaySound(tidePlaySfx, tidePlayLoud#, tidePlayPitch#)
+    if tidePlaySfx > 0
+        set sfx volume tidePlaySfx, tidePlayLoud#
+        set sfx pitch tidePlaySfx, tidePlayPitch#
+        set sfx pan tidePlaySfx, 0
+        play sfx tidePlaySfx
+    endif
+endfunction
+
+
+` play a wave: one that is coming in when `tideWaveIn` is 1, and one that is going out when it is 0.
+` it is one of the takes, picked at random, and not the one that played last. it is a little higher
+` or lower than it was recorded, and a little louder or quieter, so no two are quite the same.
+function tidePlayWave(tideWaveIn)
+    tideWaveLast = TIDE_WAVE_LAST_EBB
+    if tideWaveIn then tideWaveLast = TIDE_WAVE_LAST_FLOW
+
+    tideWaveTake = rnd(TIDE_WAVE_TAKES)
+    if tideWaveTake = tideWaveLast then tideWaveTake = (tideWaveTake + 1) mod TIDE_WAVE_TAKES
+
+    tideWavePitch# = (rnd(TIDE_WAVE_PITCH * 2 + 1) - TIDE_WAVE_PITCH) * .01
+    tideWaveLoud# = .88 + rnd(13) * .01
+
+    ` its pitch slides the way that the water is going: up for a wave that is coming in, and down for
+    ` one that is going out. it starts half of the slide to one side of its pitch, and ends half of
+    ` it to the other. tideStepSounds moves it along.
+    tideWaveHalf# = TIDE_WAVE_ROLL# * .5
+    if tideWaveIn
+        TIDE_WAVE_LAST_FLOW = tideWaveTake
+        TIDE_ROLL_SFX = TIDE_SFX_FLOWS(tideWaveTake)
+        TIDE_ROLL_FROM# = tideWavePitch# - tideWaveHalf#
+        TIDE_ROLL_TO# = tideWavePitch# + tideWaveHalf#
+        tidePlaySound(TIDE_ROLL_SFX, TIDE_VOL_FLOW# * tideWaveLoud#, TIDE_ROLL_FROM#)
+    else
+        TIDE_WAVE_LAST_EBB = tideWaveTake
+        TIDE_ROLL_SFX = TIDE_SFX_EBBS(tideWaveTake)
+        TIDE_ROLL_FROM# = tideWavePitch# + tideWaveHalf#
+        TIDE_ROLL_TO# = tideWavePitch# - tideWaveHalf#
+        tidePlaySound(TIDE_ROLL_SFX, TIDE_VOL_EBB# * tideWaveLoud#, TIDE_ROLL_FROM#)
+    endif
+    TIDE_ROLL_START_MS = game ms()
+endfunction
+
+
+` turn the layers of the music the way that they are for the night, or back to the way that they are
+` in the day. the night is down in the deep, and it stays there: the recording of the water is turned
+` down and the slow copy of it up, the crackle of the reef comes up, and most of the surf goes.
+` the levels that the layers wander between in the day are the ones that setup_music gives them.
+function tideNightMusic(tideMusicNight)
+    if tideMusicNight <> TIDE_MUSIC_NIGHT
+        TIDE_MUSIC_NIGHT = tideMusicNight
+        if tideMusicNight
+            setMusicDepth(1, 3)
+            MUSIC_SCENE_MS = game ms() + 100000000
+            fadeMusicLayer(MUSIC_LAYER_AMBIENCE, .45, 3)
+            setMusicLayerDrift(MUSIC_LAYER_AMBIENCE_LOW, .9, 1)
+            fadeMusicLayer(MUSIC_LAYER_AMBIENCE_LOW, 1, 3)
+            setMusicLayerDrift(MUSIC_LAYER_CRACKLE, .9, 1)
+            fadeMusicLayer(MUSIC_LAYER_CRACKLE, 1, 3)
+            setMusicLayerDrift(MUSIC_LAYER_SURF_ABOVE, .1, .25)
+            fadeMusicLayer(MUSIC_LAYER_SURF_ABOVE, .15, 3)
+
+            ` the first of the little bells waits for the bell of nightfall to ring out
+            TIDE_PLINK_NEXT_MS = game ms() + 6000
+        else
+            MUSIC_SCENE_MS = game ms() + musicWait(MUSIC_SCENE_GAP_MIN, MUSIC_SCENE_GAP_MAX)
+            fadeMusicLayer(MUSIC_LAYER_AMBIENCE, 1, .8)
+            setMusicLayerDrift(MUSIC_LAYER_AMBIENCE_LOW, .35, 1)
+            setMusicLayerDrift(MUSIC_LAYER_CRACKLE, .3, 1)
+            setMusicLayerDrift(MUSIC_LAYER_SURF_ABOVE, .5, 1)
+            fadeMusicLayer(MUSIC_LAYER_SURF_ABOVE, .8, 1.5)
+        endif
+    endif
+endfunction
+
+
+` the sounds that go on for as long as it is night. stepTide calls this on every frame, with how many
+` milliseconds have gone by. the recording of the water is played lower, the water breathes, and a
+` jellyfish hums. the two loops are quiet while a menu is up.
+function tideStepSounds(tideSoundElapsed#)
+    ` the pitch of the wave that is playing slides along. see tidePlayWave.
+    if TIDE_ROLL_SFX > 0
+        tideRollGone# = game ms() - TIDE_ROLL_START_MS
+        tideRollSpan# = TIDE_WAVE_ROLL_MS
+        tideRollAt# = tideRollGone# / tideRollSpan#
+        if tideRollAt# < 0 then tideRollAt# = 0
+        if tideRollAt# > 1 then tideRollAt# = 1
+        set sfx pitch TIDE_ROLL_SFX, TIDE_ROLL_FROM# + (TIDE_ROLL_TO# - TIDE_ROLL_FROM#) * tideRollAt#
+        if tideRollAt# >= 1 then TIDE_ROLL_SFX = 0
+    endif
+
+    if TIDE_SFX_BREATH > 0
+        set sfx pitch MUSIC_LAYERS(MUSIC_LAYER_AMBIENCE).sfxId, TIDE_NIGHT_SHOWN# * TIDE_NIGHT_PITCH#
+
+        tideSoundLoud# = TIDE_NIGHT_SHOWN#
+        if MENU_MODE <> 0 then tideSoundLoud# = 0
+        set sfx volume TIDE_SFX_BREATH, tideSoundLoud# * TIDE_VOL_BREATH#
+
+        tideHumWant# = 0
+        if TIDE_NIGHT
+            if TIDE_JELLIES > 0 then tideHumWant# = 1
+        endif
+        tideHumStep# = tideSoundElapsed# * .002
+        if tideHumStep# > 1 then tideHumStep# = 1
+        TIDE_HUM_SHOWN# = TIDE_HUM_SHOWN# + (tideHumWant# - TIDE_HUM_SHOWN#) * tideHumStep#
+        set sfx volume TIDE_SFX_HUM, tideSoundLoud# * TIDE_HUM_SHOWN# * TIDE_VOL_HUM#
+    endif
+endfunction
+
+
 ` a new game starts at high water, in the day, with a new moon
 function tideReset()
     TIDE_LEVEL = TIDE_RANGE
@@ -80,6 +223,9 @@ function tideReset()
     TIDE_LAST_SWAP = TIDE_SWAP_NOTHING
     TIDE_GREW = 0
     TIDE_HELD_GROUPS = 0
+    TIDE_JELLIES = 0
+    TIDE_HUM_SHOWN# = 0
+    tideNightMusic(0)
     tideClearBank()
     for tideResetI = 0 to 399
         TIDE_PULSE_UNTIL(tideResetI) = 0
@@ -166,6 +312,9 @@ function judgeTide()
     TIDE_SAW_PUSH = 0
     TIDE_SAW_PULL = 0
 
+    ` the water does not move at night, whatever pops. see MIDNIGHT CRAB in fish_headers_tide.
+    if TIDE_NIGHT then tideWas = TIDE_SWAP_NOTHING
+
     if MULT_PENDING_SWAPS > 0
         TIDE_LAST_SWAP = tideWas
         if tideWas = TIDE_SWAP_PUSH
@@ -193,6 +342,7 @@ function tideMove(tideBy)
             tideEbbX# = CELL_COLUMN_COUNT
             tideEbbY# = CELL_ROW_COUNT
             spawnShockwave(tideEbbX# * .5, tideEbbY# * .5, .3, 0)
+            tidePlayWave(0)
         endif
     endif
     if TIDE_LEVEL >= TIDE_RANGE
@@ -224,6 +374,16 @@ function tideCycleDone()
             TIDE_SEEN = 1
             TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
             tideGrowCoral()
+
+            ` the codec has an entry for it, from the first night on
+            codecSeeCard(CODEC_ENTRY_NIGHT)
+
+            ` the low bell of nightfall, and the music goes down to the deep. see THE SOUNDS OF THE TIDE in fish_headers_tide.
+            tidePlaySound(TIDE_SFX_NIGHT, TIDE_VOL_NIGHT#, 0)
+            tideNightMusic(1)
+        else
+            ` the wave that comes back in
+            tidePlayWave(1)
         endif
     endif
 endfunction
@@ -256,6 +416,10 @@ function tideDayBreaks()
     REQUEST_COMBO_CHECK = 1
     TIDE_DAWN_RING = 1
 
+    ` the rush that builds while the light comes back, and the music comes back up
+    tidePlaySound(TIDE_SFX_DAWN, TIDE_VOL_DAWN#, 0)
+    tideNightMusic(0)
+
     ` the light comes back before anything pops
     TIDE_DAWN_UNTIL = 0
     if TIDE_DAWN_MS > 0 then TIDE_DAWN_UNTIL = game ms() + TIDE_DAWN_MS
@@ -267,8 +431,28 @@ endfunction
 function stepTideSleep()
     if TIDE_NIGHT
         tideSleepNow = game ms()
+
+        ` every few seconds, one high bell of the music, quietly. see THE SOUNDS OF THE TIDE in fish_headers_tide.
+        if tideSleepNow > TIDE_PLINK_NEXT_MS
+            TIDE_PLINK_NEXT_MS = tideSleepNow + musicWait(TIDE_PLINK_GAP_MIN, TIDE_PLINK_GAP_MAX)
+            tidePlinkPick = rnd(5)
+            tidePlinkNote = D5
+            if tidePlinkPick = 1 then tidePlinkNote = F5
+            if tidePlinkPick = 2 then tidePlinkNote = G5
+            if tidePlinkPick = 3 then tidePlinkNote = A5
+            if tidePlinkPick = 4 then tidePlinkNote = C6
+            playMusicNote(INSTRUMENT_BELL, tidePlinkNote, TIDE_VOL_PLINK#)
+        endif
+
         if tideSleepNow > TIDE_SLEEP_NEXT_MS
             TIDE_SLEEP_NEXT_MS = tideSleepNow + TIDE_SLEEP_EVERY + rnd(TIDE_SLEEP_EVERY)
+
+            ` and the jellyfish are counted, for the hum of them
+            TIDE_JELLIES = 0
+            tideSleepLast = CELL_COUNT - 1
+            for tideSleepI = 0 to tideSleepLast
+                if CELLS(tideSleepI).value = TEX_JELLY then TIDE_JELLIES = TIDE_JELLIES + 1
+            next
 
             ` not a dead fish, and not a bottle or anything of a quest's. those do not glow either.
             tideSleepCell = rnd(CELL_COUNT)
@@ -386,7 +570,27 @@ endfunction
 ` ring goes out from where the cursor is.
 function tideHoldsGroup(tideHoldGroup, tideHoldSwapped)
     tideHolds = 0
+
+    ` with the "midnight crab" card, the crabs are awake, and a group of them pops the same as it
+    ` does in the day. the kind of a group is the kind of any fish of it.
+    tideHoldNight = TIDE_NIGHT
     if TIDE_NIGHT
+        if CARDS(ABILITY_INDEX_MIDNIGHT_CRAB).obtained > 0
+            tideHoldLast = CELL_COUNT - 1
+            for tideHoldI = 0 to tideHoldLast
+                if CELLS(tideHoldI).comboFillId = tideHoldGroup
+                    if CELLS(tideHoldI).value = TEX_CRAB
+                        tideHoldNight = 0
+                        showPassiveUsed(ABILITY_INDEX_MIDNIGHT_CRAB)
+                        tidePlaySound(TIDE_SFX_CRAB, TIDE_VOL_CRAB#, (rnd(11) - 5) * .01)
+                    endif
+                    exit
+                endif
+            next
+        endif
+    endif
+
+    if tideHoldNight
         tideHolds = 1
         TIDE_HELD_GROUPS = TIDE_HELD_GROUPS + 1
         TIDE_BANK_ANY = 1
@@ -410,6 +614,10 @@ function tideHoldsGroup(tideHoldGroup, tideHoldSwapped)
                 endif
             endif
         next
+
+        if tideHoldPulse
+            tidePlaySound(TIDE_SFX_PULSE, TIDE_VOL_PULSE#, 0)
+        endif
 
         if tideHoldPulse
             if CORAL_SWAP_B >= 0
@@ -569,6 +777,7 @@ function stepTide()
     set effect param float CORAL_FX_ID, "Night", TIDE_NIGHT_SHOWN#
 
     tideInfoRefresh()
+    tideStepSounds(tideElapsed#)
 endfunction
 
 
@@ -600,5 +809,6 @@ function tideLoad()
             TIDE_CYCLES = TIDE_CYCLES_TO_TURN
         endif
     endif
+    tideNightMusic(TIDE_NIGHT)
     tideSnap()
 endfunction

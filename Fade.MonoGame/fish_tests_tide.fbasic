@@ -457,3 +457,125 @@ test tide_a_song_sung_over_a_belly_up_fish_at_night_is_horror_coral from fishBoa
     assert CORAL_SICK_COUNT = 4, "and what grew is horror coral"
     end
 endtest
+
+test tide_the_moves_of_the_night_are_not_counted from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    tTideMoves = CURRENT_MOVE_COUNT
+
+    registerMove(1)
+    assert CURRENT_MOVE_COUNT = tTideMoves, "a move of the night is not counted"
+    assert TIDE_NIGHT_LEFT = 4, "it takes one off of what the night has left"
+
+    TIDE_MOVE_IS_PRICE = 1
+    registerMove(3)
+    TIDE_MOVE_IS_PRICE = 0
+    tTideWant = tTideMoves + 3
+    assert CURRENT_MOVE_COUNT = tTideWant, "the price of new cards is counted, whatever the hour is"
+    assert TIDE_NIGHT_LEFT = 4, "and it does not bring the day any closer"
+
+    registerMove(-1)
+    tTideWant = tTideMoves + 2
+    assert CURRENT_MOVE_COUNT = tTideWant, "a move that is given back comes off of the count"
+    assert TIDE_NIGHT_LEFT = 4, "and the night is no longer for it"
+    end
+endtest
+
+test tide_crabs_are_awake_at_night_with_the_midnight_crab from fishBoard
+    CARDS(ABILITY_INDEX_MIDNIGHT_CRAB).obtained = 1
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    TIDE_LEVEL = 1
+    testPut(3, 2, TEX_CRAB)
+    testPut(4, 2, TEX_CRAB)
+    testPut(5, 2, TEX_CRAB)
+    testPut(3, 5, 6)
+    testPut(4, 5, 6)
+    testPut(5, 5, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert testPops(3, 2) = 1, "the crabs are awake, so they pop"
+    assert testPops(5, 2) = 1, "all of them"
+    assert testPops(3, 5) = 0, "the fish are asleep, and they do not"
+    assert TIDE_HELD_GROUPS = 1, "the night holds the one group"
+    assert TIDE_LEVEL = 1, "and the water does not move at night"
+    end
+endtest
+
+test tide_crabs_sleep_like_the_rest_without_the_card from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    testPut(3, 2, TEX_CRAB)
+    testPut(4, 2, TEX_CRAB)
+    testPut(5, 2, TEX_CRAB)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert testPopCount() = 0, "nothing pops"
+    end
+endtest
+
+test tide_the_codec_has_the_night_once_night_has_fallen from fishBoard
+    assert CODEC_ENTRY_NIGHT > 0, "the codec has an entry for the night"
+    assert CODEC_SEEN(CODEC_ENTRY_NIGHT) = 0, "which is locked to start with"
+
+    tTideN = 1
+    while tTideN < TIDE_CYCLES_TO_TURN
+        tTideN = tTideN + 1
+        tideDebugCycle()
+    endwhile
+    assert CODEC_SEEN(CODEC_ENTRY_NIGHT) = 0, "it is still locked, one cycle short"
+    tideDebugCycle()
+    assert CODEC_SEEN(CODEC_ENTRY_NIGHT) = 1, "and night falling unlocks it"
+    end
+endtest
+
+test tide_the_music_goes_down_for_the_night_and_comes_back from fishBoard
+    assert TIDE_SFX_EBBS(0) > 0, "the sounds of the tide are loaded"
+    assert TIDE_SFX_FLOWS(5) > 0, "every take of the waves"
+    assert TIDE_SFX_HUM > 0, "all of them"
+    assert TIDE_MUSIC_NIGHT = 0, "the music is the way that it is in the day"
+
+    tTideN = 0
+    while tTideN < TIDE_CYCLES_TO_TURN
+        tTideN = tTideN + 1
+        tideDebugCycle()
+    endwhile
+    assert TIDE_MUSIC_NIGHT = 1, "night has fallen, and the music has gone down for it"
+    tTideDeep = 0
+    if MUSIC_DEPTH_TARGET# > .9 then tTideDeep = 1
+    assert tTideDeep = 1, "to the deep"
+
+    tideDayBreaks()
+    assert TIDE_MUSIC_NIGHT = 0, "and when day breaks it comes back"
+    end
+endtest
+
+test tide_the_pitch_of_a_wave_slides_the_way_that_the_water_goes from fishBoard
+    tidePlayWave(0)
+    tTideDown = 0
+    if TIDE_ROLL_TO# < TIDE_ROLL_FROM# then tTideDown = 1
+    assert TIDE_ROLL_SFX > 0, "a wave that is going out is playing"
+    assert tTideDown = 1, "and its pitch is on the way down"
+
+    tidePlayWave(1)
+    tTideUp = 0
+    if TIDE_ROLL_TO# > TIDE_ROLL_FROM# then tTideUp = 1
+    assert tTideUp = 1, "the pitch of a wave that is coming in is on the way up"
+    end
+endtest
+
+rem TIDETEMP-BEGIN
+test tide_temp_shots from fishBoard
+    tShotUntil# = wall ms() + 900
+    tShotGo = 1
+    while tShotGo
+        runto _loop
+        tShotNow# = wall ms()
+        if tShotNow# > tShotUntil# then tShotGo = 0
+    endwhile
+    screenshot "C:/proj/fade.mono/dbg_tide1.png"
+    end
+endtest
+rem TIDETEMP-END

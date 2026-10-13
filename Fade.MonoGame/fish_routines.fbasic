@@ -267,6 +267,7 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_BUNCH_UP).artTexId), "Fish/Textures/Cards/bunch_up"
     texture reserve texture id(CARDS(ABILITY_INDEX_SNEAKING_DEATH).artTexId), "Fish/Textures/Cards/sneaking_death"
     texture reserve texture id(CARDS(ABILITY_INDEX_LOWER_BAR).artTexId), "Fish/Textures/Cards/lower_the_bar"
+    texture reserve texture id(CARDS(ABILITY_INDEX_MIDNIGHT_CRAB).artTexId), "Fish/Textures/Cards/midnight_crab"
 
 return
 
@@ -800,11 +801,9 @@ frame_fish_fx:
             endif
         endif
 
-        ` a jellyfish glows a good deal more than a fish does at night, and its light swells and sinks
-        ` slowly, each one in its own time. it is only for fun. see THE NIGHT DIVE in fish_headers_tide.
-        if c.value = TEX_JELLY
-            nightGlow# = nightGlow# + TIDE_NIGHT_SHOWN# * TIDE_JELLY_GLOW# * (0.65 + 0.35 * sin(shockNow * .0028 + i * 1.7))
-        endif
+        ` a jellyfish shimmers around its edge at night. it is only for fun. the effect takes 10 more
+        ` for that. see THE NIGHT DIVE in fish_headers_tide.
+        if c.value = TEX_JELLY then nightGlow# = nightGlow# + 10
         if c.bellyUp > 0 then nightGlow# = -1
         if c.value >= TEX_BOTTLE then nightGlow# = -1
 
