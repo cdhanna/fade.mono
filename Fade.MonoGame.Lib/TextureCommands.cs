@@ -335,6 +335,53 @@ public partial class FadeMonoGameCommands
     }
 
     /// <summary>
+    /// <para>Loads a texture from an image file on disk while the game runs, instead of from the
+    /// content pipeline.</para>
+    /// <para>Returns <c>1</c> when the file was loaded, and <c>0</c> when there is no such file or
+    /// it could not be read. Then the texture ID is left exactly as it was.</para>
+    /// </summary>
+    /// <remarks>
+    /// This is for art that is not built into the game: pictures a player or an artist drops into
+    /// a folder next to the game, to be seen without rebuilding it. The file can be a <c>.png</c>,
+    /// <c>.jpg</c> or <c>.bmp</c>. A PNG keeps its transparency.
+    ///
+    /// A relative path is relative to the folder the executable is in, not to the working
+    /// directory, so a folder shipped next to the game is found however it is started. Include
+    /// the extension.
+    ///
+    /// Because a missing file changes nothing, the usual pattern is to load the built-in texture
+    /// with <see cref="LoadTexture">texture</see> first, and then call this with the same ID to
+    /// let a file replace it when there is one. The texture can be any size: sprites that are
+    /// given a size with <see cref="SizeSprite">size sprite</see> are drawn at that size anyway.
+    ///
+    /// A file loaded this way is not watched for changes. Run the command again to pick up an
+    /// edit. In the browser there are no files, and this always returns <c>0</c>.
+    /// </remarks>
+    /// <example>
+    /// Let a file next to the game replace the built-in ghost:
+    /// <code>
+    /// texture 1, "ghost"
+    /// replaced = texture file(1, "CustomArt/ghost.png")
+    /// sprite 1, 100, 100, 1
+    ///
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
+    /// </code>
+    /// </example>
+    /// <param name="textureId">The ID to load the texture into. An existing texture there is replaced only if the file loads.</param>
+    /// <param name="filePath">Path to the image file, with its extension. Relative paths start at the executable's folder.</param>
+    /// <returns><c>1</c> if the file was loaded into the ID, <c>0</c> if not.</returns>
+    /// <seealso cref="LoadTexture">texture</seealso>
+    /// <seealso cref="SizeSprite">size sprite</seealso>
+    [FadeBasicCommand("texture file")]
+    public static int LoadTextureFile(int textureId, string filePath)
+    {
+        return TextureSystem.LoadTextureFromFile(textureId, filePath) ? 1 : 0;
+    }
+
+    /// <summary>
     /// <para>Splits a texture into a grid of frames for spritesheet animation.</para>
     /// <para>Each cell in the grid becomes a separate frame you can select with
     /// <see cref="SetSpriteFrame">set sprite frame</see>. Frames are numbered left-to-right,

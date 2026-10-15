@@ -198,6 +198,7 @@
         <FadeSource Include="fish_headers_cameo.fbasic" />
         <FadeSource Include="fish_headers_angler.fbasic" />
         <FadeSource Include="fish_headers_questtalk.fbasic" />
+        <FadeSource Include="fish_headers_customart.fbasic" />
         <FadeSource Include="fish.fbasic" />
 
         <FadeSource Include="fish_routines_ability.fbasic" />
@@ -208,6 +209,7 @@
         <FadeSource Include="fish_routines_info.fbasic" />
 
         <FadeSource Include="fish_routines.fbasic" />
+        <FadeSource Include="fish_routines_customart.fbasic" />
         <FadeSource Include="fish_routines_input.fbasic" />
         <FadeSource Include="fish_routines_fast.fbasic" />
         <FadeSource Include="fish_routines_seed.fbasic" />
@@ -319,6 +321,16 @@
          It is not in git, and a CI build never has one, so it cannot reach a depot. It must
          not: with it, the game starts without a license. Without it, a build on a dev machine
          simply runs with no Steam. -->
+    <!-- The folder that art can be dropped into to replace the game's own, without a rebuild.
+         Only its readme ships; the pictures are put there by whoever is trying them out. See
+         fish_routines_customart.fbasic. -->
+    <ItemGroup>
+        <None Remove="CustomArt\**" />
+        <Content Include="CustomArt\README.txt">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
     <ItemGroup Condition="Exists('steam_appid.txt')">
         <None Remove="steam_appid.txt" />
         <Content Include="steam_appid.txt">

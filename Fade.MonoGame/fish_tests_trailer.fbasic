@@ -40,6 +40,7 @@ abstract test trailerShot
     endmock 0
     ` a shot that has to press a key (to pick a card) sets TR_PRESS to 1 for a frame: every key is down then
     global TR_PRESS = 0
+    global TR_Q_CLOSE = 0 `the frame of the video that the quest talk box bubbles away on
     mock new action down
     endmock TR_PRESS
 
@@ -675,15 +676,15 @@ abstract test trailerShot
             grantMoveToSlot(ABILITY_INDEX_MOVE_LINE_OUT, 1)
         endif
         if tTrHand >= 3
-            grantPassive(ABILITY_INDEX_LISTEN)
             grantMoveToSlot(ABILITY_INDEX_MOVE_ROBOT, 2)
         endif
         if tTrHand >= 4
-            grantPassive(ABILITY_INDEX_QUICK_SONG)
+            grantPassive(ABILITY_INDEX_LISTEN)
             grantMoveToSlot(ABILITY_INDEX_MOVE_SONG, 0)
             grantMoveToSlot(ABILITY_INDEX_MOVE_SHIFT, 1)
         endif
         if tTrHand >= 5
+            grantPassive(ABILITY_INDEX_QUICK_SONG)
             grantPassive(ABILITY_INDEX_JELLIES)
             grantMoveToSlot(ABILITY_INDEX_MOVE_CLONER, 2)
         endif
@@ -886,6 +887,33 @@ abstract test trailerShot
             if TR_WALK_Y = TR_WALK_TO_Y then tTrThere = 1
         endif
     endfunction tTrThere
+
+    ` every frame of a quest shot: the box stays up through the swaps, until the frame it bubbles away on
+    function trailerQuestTick()
+        QTALK_SWAPS = 0
+        if record frame count() >= TR_Q_CLOSE
+            if QTALK_ON = 1
+                if QTALK_CLOSING = 0
+                    record mark "close"
+                endif
+            endif
+            questTalkClose()
+        else
+            ` a quest that fails starts over, and that takes the box away. it is put straight back.
+            if QTALK_ON = 0
+                show sprite QTALK_BOX_SPRITE
+                show sprite QTALK_FACE_SPRITE
+                showInfoBorder(QTALK_BOX_BORDER, 1)
+                show text QTALK_NAME_TEXT_ID
+                show text QTALK_TEXT_ID
+                set text reveal QTALK_TEXT_ID, -1
+                QTALK_ON = 1
+                QTALK_CLOSING = 0
+                QTALK_DONE_MS = game ms()
+                create basic tween QTALK_FADE_TWEEN_ID, 1, 1, 10, 0
+            endif
+        endif
+    endfunction
 
     ` a move, the way that the keys ask for one. tTrSwap is 1 for a swap, 0 to only move the cursor.
     function trailerMove(tTrDirX, tTrDirY, tTrSwap)
@@ -1505,6 +1533,48 @@ test trailer_night_held from trailerShot
         DIVER_FACE_LEFT = 1
         runto update_frame
     next
+
+    ` and day breaks, the way it does in the game when the night has no moves left: the light comes back,
+    ` a ring crosses the board, and the three groups that the night held all pop at once. see WHEN DAY
+    ` BREAKS in fish_headers_tide.
+    record mark "dawn"
+    tideDayBreaks()
+    for tTrFrame = 1 to 150
+        DIVER_FACE_LEFT = 1
+        runto update_frame
+    next
+
+    ` then the round is won: the score counts up to the end of the bar, the wave of bubbles brings up the
+    ` upgrade screen, and the player takes "listen". the upgrade screen blocks, so update_frame does not run
+    ` while it is up. the coral shot bubbles in from it, with the hint that "listen" shows.
+    QUEST_LEAVE_UNTIL = 0
+    tS8Left = SCORE_BAR.endVal - CURRENT_SCORE
+    if tS8Left > 0
+        queueScore(tS8Left + 10, 0)
+    endif
+    runto frame_ability_selection
+    record mark "wave"
+    trailerOffer(0, ABILITY_INDEX_JELLIES)
+    trailerOffer(1, ABILITY_INDEX_LISTEN)
+    trailerOffer(2, ABILITY_INDEX_QUICK_SONG)
+    trailerUpgradeTo(0, 1, 0)
+    for tTrFrame = 1 to 60
+        runto frame_ability_selection
+    next
+    trailerUpgradeTo(1, 200, 1)
+    for tTrFrame = 1 to 110
+        runto frame_ability_selection
+    next
+    TR_PRESS = 1
+    record mark "pick"
+    runto frame_ability_selection
+    trailerUpgradeTo(1, 1, 0)
+    runto frame_ability_selection
+    TR_PRESS = 0
+    ` the cut bubbles out over the last second and a half of this
+    for tTrFrame = 1 to 110
+        runto update_frame
+    next
     record stop
     end
 endtest
@@ -1565,27 +1635,68 @@ test trailer_coral_sings from trailerShot
     trailerSongGo(1, 0)
     trailerSongGo(1, 0)
     trailerSongEnd()
-    for tTrFrame = 1 to 90
+    trailerSongStart(3, 0, 0)
+    trailerSongGo(0, 1)
+    trailerSongGo(0, 1)
+    trailerSongGo(0, 1)
+    trailerSongGo(0, 1)
+    trailerSongGo(-1, 0)
+    trailerSongGo(-1, 0)
+    trailerSongEnd()
+    for tTrFrame = 1 to 120
         runto update_frame
     next
-    ` the cursor comes from the top left, where the night left it, and walks down to the goldfish
-    ` while the last song grows in
     trailerCursor(2, 2)
     trailerWalkTo(2, 4)
+    ` the shot opens on the reef, and a hint goes by with the trail of light that "listen" gives it: along
+    ` the longest pattern that is out, quicker than in the game, so that it is seen going by. see THE HINTS and
+    ` LISTEN in fish_headers.
+    CORAL_HINT_STEP_MS = 520
+    CORAL_HINT_AS_LISTEN = 1
+    tS9Slot = -1
+    tS9Best = 0
+    for tS9N = 0 to CORAL_LIVE_MAX - 1
+        if CORAL_SEQ_LENGTH(tS9N) > tS9Best
+            tS9Best = CORAL_SEQ_LENGTH(tS9N)
+            tS9Slot = tS9N
+        endif
+    next
+    ` the patterns that are out are shorter than the five cells the hint should cross, so the shot makes
+    ` one more, in an empty slot: the longest one out, with its last step taken again
+    tS9Free = CORAL_LIVE_MAX - 1
+    for tS9N = 0 to CORAL_LIVE_MAX - 1
+        if CORAL_SEQ_LENGTH(tS9N) = 0 then tS9Free = tS9N
+    next
+    if tS9Best < 4
+        if tS9Slot >= 0
+            for tS9N = 0 to tS9Best - 1
+                CORAL_SEQ_STEPS((tS9Free * CORAL_STEP_MAX) + tS9N) = CORAL_SEQ_STEPS((tS9Slot * CORAL_STEP_MAX) + tS9N)
+            next
+            CORAL_SEQ_STEPS((tS9Free * CORAL_STEP_MAX) + tS9Best) = CORAL_SEQ_STEPS((tS9Slot * CORAL_STEP_MAX) + (tS9Best - 1))
+            CORAL_SEQ_LENGTH(tS9Free) = tS9Best + 1
+            tS9Slot = tS9Free
+            tS9Best = tS9Best + 1
+        endif
+    endif
     trailerRecord("trailer_coral_sings")
-    ` and one more song grows in, in the shot
-    for tS9F = 0 to 50
-        trailerWalkStep()
-        if tS9F = 8
-            record mark "song"
-            trailerSongStart(3, 0, 0)
-            trailerSongGo(0, 1)
-            trailerSongGo(0, 1)
-            trailerSongGo(0, 1)
-            trailerSongGo(0, 1)
-            trailerSongGo(-1, 0)
-            trailerSongGo(-1, 0)
-            trailerSongEnd()
+    ` the cut bubbles in over the first second and a half or so, so the hint waits for it
+    for tS9F = 1 to 80
+        runto update_frame
+    next
+    record mark "hint"
+    coralClearHint()
+    if tS9Slot >= 0
+        tS9Made = coralStartHint(tS9Slot)
+    else
+        tS9Made = coralStartAnyHint()
+    endif
+    CORAL_HINT_TRAIL_ON = tS9Made
+    ` as long as the hint takes to go by: a step is 520 ms, which is about 31 frames
+    ` and the cursor walks down to the goldfish as the hint gets to its end
+    tS9Wait = (tS9Best * 31) + 40
+    for tS9F = 1 to tS9Wait
+        if tS9F > (tS9Wait - 50)
+            trailerWalkStep()
         endif
         runto update_frame
     next
@@ -1609,24 +1720,6 @@ test trailer_horror_ghosts from trailerShot
     ` the very same board, with the very same fish, and lights the horror coral.
     trailerHudLevel(3)
     trailerTech(6)
-    ` a patch of coral that is well, on the left, for info mode to tell apart from the horror coral
-    trailerSongStart(1, 2, 0)
-    trailerSongGo(1, 0)
-    trailerSongGo(1, 0)
-    trailerSongGo(0, 1)
-    trailerSongGo(-1, 0)
-    trailerSongGo(-1, 0)
-    trailerSongGo(0, 1)
-    trailerSongGo(1, 0)
-    trailerSongGo(1, 0)
-    trailerSongEnd()
-    trailerSongStart(1, 5, 0)
-    trailerSongGo(1, 0)
-    trailerSongGo(1, 0)
-    trailerSongGo(0, 1)
-    trailerSongGo(-1, 0)
-    trailerSongGo(-1, 0)
-    trailerSongEnd()
     ` three songs of horror coral, around where the fish are planted, and ragged at the edges
     trailerHorrorCoral()
     trailerPut(5, 4, TEX_PUFFER)
@@ -1696,7 +1789,6 @@ endtest
 ` thirds of the board, so this is done again on every frame.
 function trailerInfoCoral()
     trailerInfoAround(INFO_INDEX_GRID, 0, 0, CELL_COLUMN_COUNT - 1, CELL_ROW_COUNT - 1, 0, 0)
-    trailerInfoAround(INFO_INDEX_CORAL, 1, 2, 3, 6, 0, 0)
     trailerInfoAround(INFO_INDEX_CORAL_SICK, 4, 2, 8, 7, 0, 0)
 endfunction
 
@@ -2326,9 +2418,11 @@ endtest
 ` THE QUESTS, sixteen of them, for the cut to lay out on one screen (see "grid" in build/trailer_cut.json).
 ` each quest is forced on a board of its own, and its creature starts to talk about it as the video starts
 ` (see THE QUEST TALK in fish_headers_questtalk). the box is a little higher than in the game, so that the
-` crop of the grid has all of it. then the cursor makes three swaps that pop, walking to the one that pops
-` the most each time, so that the quest has things to do. the first one is shown on its own for a while,
-` so it waits a little longer before its first swap.
+` crop of the grid has all of it. they all wait the same, and the grid starts them all at the same frame, so
+` that every box in it is up and its line is out. the cursor makes swaps that pop, walking to the one that
+` pops the most each time, so that the quest has things to do, and the box stays up through them. then the
+` boxes bubble away, one after the other, from the top left corner of the grid down to the bottom right:
+` each one on frame 632, and 7 frames later for every step that its place in the grid is from the corner.
 
 test trailer_quest_01 from trailerShot
     trailerHudLevel(0)
@@ -2344,13 +2438,16 @@ test trailer_quest_01 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 632
     trailerRecord("trailer_quest_01")
     questTalkStart(QUEST_SHARK)
     for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -2359,6 +2456,7 @@ test trailer_quest_01 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -2371,12 +2469,12 @@ test trailer_quest_01 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest
-
 test trailer_quest_02 from trailerShot
     trailerHudLevel(0)
     trailerDeal(32)
@@ -2391,13 +2489,16 @@ test trailer_quest_02 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 639
     trailerRecord("trailer_quest_02")
     questTalkStart(QUEST_REMORA)
-    for tTqF = 1 to 30
+    for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -2406,6 +2507,7 @@ test trailer_quest_02 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -2418,12 +2520,12 @@ test trailer_quest_02 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest
-
 test trailer_quest_03 from trailerShot
     trailerHudLevel(0)
     trailerDeal(33)
@@ -2438,13 +2540,16 @@ test trailer_quest_03 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 646
     trailerRecord("trailer_quest_03")
     questTalkStart(QUEST_SUNBEAM)
-    for tTqF = 1 to 30
+    for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -2453,6 +2558,7 @@ test trailer_quest_03 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -2465,12 +2571,12 @@ test trailer_quest_03 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest
-
 test trailer_quest_04 from trailerShot
     trailerHudLevel(0)
     trailerDeal(34)
@@ -2485,13 +2591,16 @@ test trailer_quest_04 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 653
     trailerRecord("trailer_quest_04")
     questTalkStart(QUEST_SEAWEED)
-    for tTqF = 1 to 30
+    for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -2500,6 +2609,7 @@ test trailer_quest_04 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -2512,12 +2622,12 @@ test trailer_quest_04 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest
-
 test trailer_quest_05 from trailerShot
     trailerHudLevel(0)
     trailerDeal(35)
@@ -2532,13 +2642,16 @@ test trailer_quest_05 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 639
     trailerRecord("trailer_quest_05")
     questTalkStart(QUEST_WAKE)
-    for tTqF = 1 to 30
+    for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -2547,6 +2660,7 @@ test trailer_quest_05 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -2559,12 +2673,12 @@ test trailer_quest_05 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest
-
 test trailer_quest_06 from trailerShot
     trailerHudLevel(0)
     trailerDeal(36)
@@ -2579,13 +2693,16 @@ test trailer_quest_06 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 646
     trailerRecord("trailer_quest_06")
     questTalkStart(QUEST_TURTLE)
-    for tTqF = 1 to 30
+    for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -2594,6 +2711,7 @@ test trailer_quest_06 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -2606,12 +2724,12 @@ test trailer_quest_06 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest
-
 test trailer_quest_07 from trailerShot
     trailerHudLevel(0)
     trailerDeal(37)
@@ -2626,13 +2744,16 @@ test trailer_quest_07 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 653
     trailerRecord("trailer_quest_07")
     questTalkStart(QUEST_CUTTLEFISH)
-    for tTqF = 1 to 30
+    for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -2641,6 +2762,7 @@ test trailer_quest_07 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -2653,12 +2775,12 @@ test trailer_quest_07 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest
-
 test trailer_quest_08 from trailerShot
     trailerHudLevel(0)
     trailerDeal(38)
@@ -2673,13 +2795,16 @@ test trailer_quest_08 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 660
     trailerRecord("trailer_quest_08")
     questTalkStart(QUEST_CONSTELLATION)
-    for tTqF = 1 to 30
+    for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -2688,6 +2813,7 @@ test trailer_quest_08 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -2700,12 +2826,12 @@ test trailer_quest_08 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest
-
 test trailer_quest_09 from trailerShot
     trailerHudLevel(0)
     trailerDeal(39)
@@ -2720,13 +2846,16 @@ test trailer_quest_09 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 646
     trailerRecord("trailer_quest_09")
     questTalkStart(QUEST_ECHO)
-    for tTqF = 1 to 30
+    for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -2735,6 +2864,7 @@ test trailer_quest_09 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -2747,12 +2877,12 @@ test trailer_quest_09 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest
-
 test trailer_quest_10 from trailerShot
     trailerHudLevel(0)
     trailerDeal(40)
@@ -2767,13 +2897,16 @@ test trailer_quest_10 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 653
     trailerRecord("trailer_quest_10")
     questTalkStart(QUEST_PULSE)
-    for tTqF = 1 to 30
+    for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -2782,6 +2915,7 @@ test trailer_quest_10 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -2794,12 +2928,12 @@ test trailer_quest_10 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest
-
 test trailer_quest_11 from trailerShot
     trailerHudLevel(0)
     trailerDeal(41)
@@ -2814,13 +2948,16 @@ test trailer_quest_11 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 660
     trailerRecord("trailer_quest_11")
     questTalkStart(QUEST_TOTEM)
-    for tTqF = 1 to 30
+    for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -2829,6 +2966,7 @@ test trailer_quest_11 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -2841,12 +2979,12 @@ test trailer_quest_11 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest
-
 test trailer_quest_12 from trailerShot
     trailerHudLevel(0)
     trailerDeal(42)
@@ -2861,13 +2999,16 @@ test trailer_quest_12 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 667
     trailerRecord("trailer_quest_12")
     questTalkStart(QUEST_GLASS_FISH)
-    for tTqF = 1 to 30
+    for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -2876,6 +3017,7 @@ test trailer_quest_12 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -2888,12 +3030,12 @@ test trailer_quest_12 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest
-
 test trailer_quest_13 from trailerShot
     trailerHudLevel(0)
     trailerDeal(43)
@@ -2908,13 +3050,16 @@ test trailer_quest_13 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 653
     trailerRecord("trailer_quest_13")
     questTalkStart(QUEST_TETHER)
-    for tTqF = 1 to 30
+    for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -2923,6 +3068,7 @@ test trailer_quest_13 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -2935,12 +3081,12 @@ test trailer_quest_13 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest
-
 test trailer_quest_14 from trailerShot
     trailerHudLevel(0)
     trailerDeal(44)
@@ -2955,13 +3101,16 @@ test trailer_quest_14 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 660
     trailerRecord("trailer_quest_14")
     questTalkStart(QUEST_LANTERN)
-    for tTqF = 1 to 30
+    for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -2970,6 +3119,7 @@ test trailer_quest_14 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -2982,12 +3132,12 @@ test trailer_quest_14 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest
-
 test trailer_quest_15 from trailerShot
     trailerHudLevel(0)
     trailerDeal(45)
@@ -3002,13 +3152,16 @@ test trailer_quest_15 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 667
     trailerRecord("trailer_quest_15")
     questTalkStart(QUEST_PILOT_FISH)
-    for tTqF = 1 to 30
+    for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -3017,6 +3170,7 @@ test trailer_quest_15 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -3029,12 +3183,12 @@ test trailer_quest_15 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest
-
 test trailer_quest_16 from trailerShot
     trailerHudLevel(0)
     trailerDeal(46)
@@ -3049,13 +3203,16 @@ test trailer_quest_16 from trailerShot
     ` the box fades with what is around the board, so that is up, with every part of it off but the quest
     QTALK_ENABLED = 1
     QTALK_BOX_Y = 196
+    QTALK_HOLD_MS = 600000
     HUD_KEEP# = .9999
+    TR_Q_CLOSE = 674
     trailerRecord("trailer_quest_16")
     questTalkStart(QUEST_FERRY)
-    for tTqF = 1 to 30
+    for tTqF = 1 to 150
         runto update_frame
+        trailerQuestTick()
     next
-    for tTqSwap = 1 to 3
+    while record frame count() < 830
         trailerBestSwap()
         tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
         tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
@@ -3064,6 +3221,7 @@ test trailer_quest_16 from trailerShot
         while trailerWalked() = 0
             trailerWalkStep()
             runto update_frame
+            trailerQuestTick()
             tTqGuard = tTqGuard + 1
             if tTqGuard > 200
                 trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
@@ -3076,8 +3234,9 @@ test trailer_quest_16 from trailerShot
         endif
         for tTqF = 1 to 70
             runto update_frame
+            trailerQuestTick()
         next
-    next
+    endwhile
     record stop
     end
 endtest

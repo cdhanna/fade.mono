@@ -172,6 +172,22 @@ function questTalkStop()
 endfunction
 
 
+` the box goes, bubbling away: it fades, and bubbles come up out of all of it
+function questTalkClose()
+    if QTALK_ON = 0 then exitfunction
+    if QTALK_CLOSING then exitfunction
+    if QTALK_DONE_MS = 0
+        set text reveal QTALK_TEXT_ID, -1
+        QTALK_DONE_MS = game ms()
+    endif
+    QTALK_CLOSING = 1
+    create basic tween QTALK_FADE_TWEEN_ID, 1, 0, 300, 0
+    for qtPopN = 1 to 18
+        spawnBubblesOnLayer(QTALK_BOX_X + rnd(QTALK_BOX_W + 1), QTALK_BOX_Y + rnd(QTALK_BOX_H + 1), 0, 1, rnd(200), rgb(255, 210, 120), ORDER_QTALK + 1, FLOAT_BUBBLE_LOUD_ODDS, 255, getBoardBubbleScale())
+    next
+endfunction
+
+
 ` a swap was made. while the line is being said, the rest of it comes at once. after that, two swaps
 ` and the box goes.
 function questTalkMoved()
@@ -217,8 +233,7 @@ function questTalkStep(qtNow)
             if qtSince > QTALK_HOLD_MS then qtGoes = 1
             if QTALK_SWAPS >= 2 then qtGoes = 1
             if qtGoes
-                QTALK_CLOSING = 1
-                create basic tween QTALK_FADE_TWEEN_ID, 1, 0, 300, 0
+                questTalkClose()
             endif
         else
             if is tween done(QTALK_FADE_TWEEN_ID) >= 1

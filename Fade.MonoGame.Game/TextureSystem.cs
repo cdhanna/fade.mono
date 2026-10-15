@@ -224,6 +224,45 @@ public class TextureSystem
         return true;
     }
 
+    /// <summary>
+    /// Make a texture out of an image file on disk (a .png, .jpg or .bmp), read while the game
+    /// runs instead of built into the content. A relative path is relative to the folder the
+    /// executable is in, not the working directory, so it finds files shipped next to the game.
+    ///
+    /// A missing file is not an error: the id is left as it was and this returns false, so a
+    /// game can load its own texture first and then offer a file to replace it. A file that is
+    /// there but cannot be read is logged, and also returns false.
+    /// </summary>
+    public static bool LoadTextureFromFile(int textureId, string path)
+    {
+#if BROWSER
+        return false;
+#else
+        if (string.IsNullOrEmpty(path)) return false;
+        var fullPath = Path.IsPathRooted(path) ? path : Path.Combine(AppContext.BaseDirectory, path);
+        if (!File.Exists(fullPath)) return false;
+
+        Texture2D texture;
+        try
+        {
+            using var stream = File.OpenRead(fullPath);
+            texture = Texture2D.FromStream(GameSystem.game.GraphicsDevice, stream);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[fade] texture file could not be read: '{fullPath}': {ex.Message}");
+            return false;
+        }
+
+        GetTextureIndex(textureId, out var index, out var runtimeTex);
+        runtimeTex.descriptor = new TextureDescriptor { imageFilePath = fullPath };
+        runtimeTex.SetComputedTexture(texture);
+        textures[index] = runtimeTex;
+        Console.WriteLine($"[fade] texture {textureId} loaded from file '{fullPath}' ({texture.Width} x {texture.Height})");
+        return true;
+#endif
+    }
+
     public static void LoadSpriteFontFromContent(int fontId, string path)
     {
         var xnaFont = GameSystem.game.Content.Load<SpriteFontXna>(path);

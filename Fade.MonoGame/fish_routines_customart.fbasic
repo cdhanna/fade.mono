@@ -1,0 +1,56 @@
+
+` CUSTOM ART
+` a picture in the CustomArt folder next to the game takes the place of the game's own. this is
+` for trying out new art without building it into the game: drop a png in, start the game.
+` CustomArt/README.txt says which files are looked for, and what size to draw them. keep the two
+` in step: a name here that is not in the readme is one nobody knows to make.
+`
+` a name can end in _b (Pufferfish_b.png), and then the fish effect draws a black line around it.
+` that one is looked for first. see CUSTOM_ART_OUTLINE in fish_headers_customart.
+`
+` texture file leaves the texture alone when there is no such file, so this runs after
+` load_textures, over the textures that are already there.
+load_custom_art:
+    ` the seven that every game starts with
+    loadCustomArt(TEX_PUFFER, TEX_PUFFER, "CustomArt/Pufferfish_b.png", "CustomArt/Pufferfish.png")
+    loadCustomArt(TEX_CATFISH, TEX_CATFISH, "CustomArt/Catfish_b.png", "CustomArt/Catfish.png")
+    loadCustomArt(TEX_GOLDFISH, TEX_GOLDFISH, "CustomArt/Goldfish_b.png", "CustomArt/Goldfish.png")
+    loadCustomArt(TEX_ANGELFISH, TEX_ANGELFISH, "CustomArt/Angelfish_b.png", "CustomArt/Angelfish.png")
+    loadCustomArt(TEX_CRAB, TEX_CRAB, "CustomArt/Crab_b.png", "CustomArt/Crab.png")
+    loadCustomArt(TEX_BASS, TEX_BASS, "CustomArt/Bass_b.png", "CustomArt/Bass.png")
+    loadCustomArt(TEX_WORM, TEX_WORM, "CustomArt/Worm_b.png", "CustomArt/Worm.png")
+
+    ` the ones that come with their cards
+    loadCustomArt(TEX_JELLY, TEX_JELLY, "CustomArt/Jellyfish_b.png", "CustomArt/Jellyfish.png")
+    loadCustomArt(TEX_RAY, TEX_RAY, "CustomArt/Stingray_b.png", "CustomArt/Stingray.png")
+    loadCustomArt(TEX_BOTTLE, TEX_BOTTLE, "CustomArt/Bottle_b.png", "CustomArt/Bottle.png")
+
+    ` the ones that quests put on the board
+    loadCustomArt(TEX_KRILL, TEX_KRILL, "CustomArt/Krill_b.png", "CustomArt/Krill.png")
+    loadCustomArt(TEX_SEAWEED, TEX_SEAWEED, "CustomArt/Seaweed_b.png", "CustomArt/Seaweed.png")
+    loadCustomArt(TEX_SAND_DOLLAR, TEX_SAND_DOLLAR, "CustomArt/SandDollar_b.png", "CustomArt/SandDollar.png")
+    loadCustomArt(TEX_TURTLE, TEX_TURTLE, "CustomArt/Turtle_b.png", "CustomArt/Turtle.png")
+    loadCustomArt(TEX_GLASS_FISH, TEX_GLASS_FISH, "CustomArt/GlassFish_b.png", "CustomArt/GlassFish.png")
+
+    ` what a fish leaves behind. the ghost is not drawn with the fish effect, so it has no _b.
+    loadCustomArt(TEX_BONES, CUSTOM_ART_BONES_SLOT, "CustomArt/Bones_b.png", "CustomArt/Bones.png")
+    customArtGhost = texture file(TEX_GHOST, "CustomArt/Ghost.png")
+    CUSTOM_ART_COUNT = CUSTOM_ART_COUNT + customArtGhost
+
+    if CUSTOM_ART_COUNT > 0
+        print "custom art: " + str$(CUSTOM_ART_COUNT) + " pictures from the CustomArt folder"
+    endif
+return
+
+` the picture with a line around it if there is one, and the plain one if not. slot is where
+` CUSTOM_ART_OUTLINE keeps which it was.
+function loadCustomArt(artTexId, artSlot, outlinedPath$, plainPath$)
+    artOk = texture file(artTexId, outlinedPath$)
+    if artOk
+        CUSTOM_ART_OUTLINE(artSlot) = 1
+    else
+        CUSTOM_ART_OUTLINE(artSlot) = 0
+        artOk = texture file(artTexId, plainPath$)
+    endif
+    CUSTOM_ART_COUNT = CUSTOM_ART_COUNT + artOk
+endfunction

@@ -853,6 +853,16 @@ frame_fish_fx:
             if torchGap = torchLeft then nightGlow# = -2
         endif
 
+        ` a picture from the CustomArt folder whose name ends in _b gets a black line drawn around it.
+        ` the effect takes 100 more for that. see fish_headers_customart.
+        customOutline = CUSTOM_ART_OUTLINE(c.value)
+        if skeletonWant
+            customOutline = CUSTOM_ART_OUTLINE(CUSTOM_ART_BONES_SLOT)
+        endif
+        if customOutline
+            nightGlow# = nightGlow# + 100
+        endif
+
         set sprite all texcoord2 c.spriteId, pushX# * fishSize# + tunaPushX#, pushY# * fishSize# + tunaPushY#, lift# + TUNA_SHRINK#, nightGlow#
     next
 

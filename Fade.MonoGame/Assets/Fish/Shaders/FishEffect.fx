@@ -27,6 +27,9 @@
 //                a fish that is drawn brighter glows more, too.
 //                -2 is a fish in the light of the diver's flashlight, which is drawn the way that it is in the day.
 //                10 more than that is a fish that shimmers around its edge at night, which is a jellyfish.
+//                100 more than all of that is a fish with a black line drawn around it, one pixel wide,
+//                just outside its picture. that is for art from the CustomArt folder that has no line
+//                of its own. see fish_headers_customart.
 
 Texture2D SpriteTexture;
 float4x4 MatrixTransform;
@@ -107,8 +110,8 @@ struct VertexShaderOutput
 	// and w is how brightly the fish glows right now, which is 0 for a fish that does not
 	float4 CountGlow : TEXCOORD4;
 
-	// 1 for a fish that shimmers around its edge at night
-	float Shimmer : TEXCOORD5;
+	// x is 1 for a fish that shimmers around its edge at night, and y is 1 for one with a black line around it
+	float2 Flags : TEXCOORD5;
 };
 
 VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
@@ -146,6 +149,9 @@ VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
 	// the wave of light gets to every fish at its own time, by where the middle of the fish is on the screen
 	float2 middle = position.xy - corner * custom.w * (1.0 + grow) * lift;
 	float wave = 0.5 + 0.5 * sin(Night.y * NIGHT_WAVE_SPEED - dot(middle, NIGHT_WAVE));
+	// 100 more says that it has a line around it. the rest is read from what is left.
+	float outline = step(50.0, custom2.w);
+	custom2.w -= 100.0 * outline;
 	float glows = step(-0.5, custom2.w);
 
 	// -2 says that the fish is in the light of the diver's flashlight, and it is not night for that fish
@@ -156,11 +162,20 @@ VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
 	float brighter = max(custom2.w - 10.0 * shimmers, 0.0);
 
 	output.CountGlow = float4(clamp(custom.z, 1.0, MAX_STACK), brighter, saturate(Night.x) * (1.0 - lamp), glows * (0.62 + 0.38 * wave) * (1.0 + 1.6 * brighter));
-	output.Shimmer = shimmers;
+	output.Flags = float2(shimmers, outline);
 
 	output.Position = mul(position, MatrixTransform);
 	output.Color = color;
 	return output;
+}
+
+// 1 where the picture has something in it, at a spot on the quad. this is the picture lying flat, which
+// is close enough for the pixels right next to a fish.
+float solidAt(float2 quad)
+{
+	float2 uv = quad + 0.5;
+	float inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+	return step(0.5, tex2D(SpriteTextureSampler, uv).a) * inside;
 }
 
 // one fish of the stack. index 0 is the one in front.
@@ -185,7 +200,17 @@ float4 SampleLayer(VertexShaderOutput input, float index)
 	float2 uv = float2(dot(input.AxisU, hit), dot(input.AxisV, hit)) - slot * STACK_SHIFT;
 
 	float4 c = tex2D(SpriteTextureSampler, uv + .5);
-	c.a *= step(max(abs(uv.x), abs(uv.y)), .5) * step(.001, there);
+	c.a *= step(max(abs(uv.x), abs(uv.y)), .5);
+
+	// THE LINE AROUND IT. an empty pixel with a pixel of the picture right next to it is black. this is
+	// on the face of the card, so the line tilts and turns over with the fish. the pixels are the ones
+	// that the fish is drawn at, NIGHT_PIXELS across, whatever the size of the picture.
+	float one = 1.0 / NIGHT_PIXELS;
+	float2 cell = (floor((uv + .5) * NIGHT_PIXELS) + .5) / NIGHT_PIXELS - .5;
+	float beside = max(max(solidAt(cell + float2(one, 0.0)), solidAt(cell - float2(one, 0.0))), max(solidAt(cell + float2(0.0, one)), solidAt(cell - float2(0.0, one))));
+	float line1 = beside * step(c.a, .5) * input.Flags.y;
+	c = lerp(c, float4(0, 0, 0, 1), line1);
+	c.a *= step(.001, there);
 
 	// the ones in the back are darker, so that the one in front stands out
 	c.rgb *= pow(STACK_SHADE, slot);
@@ -213,15 +238,6 @@ float3 tasteOf(float2 spot)
 	float4 c = tex2D(SpriteTextureSampler, spot);
 	float rich = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
 	return c.rgb * c.a * (rich * rich + 0.03);
-}
-
-// 1 where the picture has something in it, at a spot on the quad. this is the picture lying flat, which
-// is close enough for the pixels right next to a fish.
-float solidAt(float2 quad)
-{
-	float2 uv = quad + 0.5;
-	float inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
-	return step(0.5, tex2D(SpriteTextureSampler, uv).a) * inside;
 }
 
 float4 MainPS(VertexShaderOutput input) : COLOR
@@ -277,7 +293,7 @@ float4 MainPS(VertexShaderOutput input) : COLOR
 	float around = atan2(spot.y, spot.x);
 	float sweep = 0.5 + 0.5 * sin(around * 2.0 - Night.y * 3.2);
 	float twinkle = 0.5 + 0.5 * sin(Night.y * 9.0 + hash(pixel + 29.0) * 40.0);
-	float shimmer = rim * saturate(0.25 + 0.75 * sweep * sweep) * (0.45 + 0.55 * twinkle) * night * input.Shimmer;
+	float shimmer = rim * saturate(0.25 + 0.75 * sweep * sweep) * (0.45 + 0.55 * twinkle) * night * input.Flags.x;
 	float3 shimmerColor = lerp(light, float3(1.0, 1.0, 1.0), 0.6);
 	result.rgb = lerp(result.rgb, shimmerColor, shimmer);
 	result.a = max(result.a, shimmer);
