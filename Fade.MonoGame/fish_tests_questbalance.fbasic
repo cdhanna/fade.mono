@@ -1,0 +1,289 @@
+remstart
+    THE TESTS OF HOW HARD THE QUESTS ARE
+    a finished quest wins the round, so a quest that is over in a swap or two is a round for
+    nothing. these hold the quests to the numbers and the rules that were picked to stop that.
+    see fish_tests_quests for how a quest is driven from a test.
+remend
+
+test quest_lasso_needs_four_knots_in_the_loop from fishBoard
+    testCursor(3, 3)
+    questForce(QUEST_LASSO)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_PROG_NEED = 4, "it takes four swaps that pop on the way around"
+
+    ` the ringed fish is in the middle of the board, and a ring of eight cells goes around it
+    tQbLast = CELL_COUNT - 1
+    for tQbI = 0 to tQbLast
+        QUEST_MARK(tQbI) = 0
+    next
+    QUEST_MARK(testIndex(4, 4)) = 1
+
+    ` all the way around with no swaps at all
+    questCursorStepped(testIndex(3, 3), testIndex(4, 3))
+    questCursorStepped(testIndex(4, 3), testIndex(5, 3))
+    questCursorStepped(testIndex(5, 3), testIndex(5, 4))
+    questCursorStepped(testIndex(5, 4), testIndex(5, 5))
+    questCursorStepped(testIndex(5, 5), testIndex(4, 5))
+    questCursorStepped(testIndex(4, 5), testIndex(3, 5))
+    questCursorStepped(testIndex(3, 5), testIndex(3, 4))
+    questCursorStepped(testIndex(3, 4), testIndex(3, 3))
+    assert QUEST_STATE = QSTATE_ACTIVE, "a walk around the fish, and nothing more, is not enough any more"
+    assert QUEST_LIST_N = 0, "and the rope starts again from nothing"
+
+    ` around again, with a swap that pops on every other step
+    questSwapDone(testIndex(3, 3), testIndex(4, 3))
+    questCursorStepped(testIndex(3, 3), testIndex(4, 3))
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    assert QUEST_PROG_NOW = 1, "a swap that pops ties a knot, which the badge counts"
+    questCursorStepped(testIndex(4, 3), testIndex(5, 3))
+    questSwapDone(testIndex(5, 3), testIndex(5, 4))
+    questCursorStepped(testIndex(5, 3), testIndex(5, 4))
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    questCursorStepped(testIndex(5, 4), testIndex(5, 5))
+    questSwapDone(testIndex(5, 5), testIndex(4, 5))
+    questCursorStepped(testIndex(5, 5), testIndex(4, 5))
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    questCursorStepped(testIndex(4, 5), testIndex(3, 5))
+    assert QUEST_PROG_NOW = 3, "three knots so far"
+    questSwapDone(testIndex(3, 5), testIndex(3, 4))
+    questCursorStepped(testIndex(3, 5), testIndex(3, 4))
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    assert QUEST_STATE = QSTATE_ACTIVE, "four knots, and the loop is not closed yet"
+    questCursorStepped(testIndex(3, 4), testIndex(3, 3))
+    assert QUEST_STATE = QSTATE_DONE, "closing a loop with four knots in it around the fish is the quest done"
+    end
+endtest
+
+test quest_lasso_counts_the_swap_that_closes_the_loop from fishBoard
+    testCursor(3, 3)
+    questForce(QUEST_LASSO)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tQbEnd = CELL_COUNT - 1
+    for tQbJ = 0 to tQbEnd
+        QUEST_MARK(tQbJ) = 0
+    next
+    QUEST_MARK(testIndex(4, 4)) = 1
+
+    ` three knots on the way around
+    questSwapDone(testIndex(3, 3), testIndex(4, 3))
+    questCursorStepped(testIndex(3, 3), testIndex(4, 3))
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    questCursorStepped(testIndex(4, 3), testIndex(5, 3))
+    questSwapDone(testIndex(5, 3), testIndex(5, 4))
+    questCursorStepped(testIndex(5, 3), testIndex(5, 4))
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    questCursorStepped(testIndex(5, 4), testIndex(5, 5))
+    questSwapDone(testIndex(5, 5), testIndex(4, 5))
+    questCursorStepped(testIndex(5, 5), testIndex(4, 5))
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    questCursorStepped(testIndex(4, 5), testIndex(3, 5))
+    questCursorStepped(testIndex(3, 5), testIndex(3, 4))
+
+    ` and the loop is closed with a swap
+    questSwapDone(testIndex(3, 4), testIndex(3, 3))
+    questCursorStepped(testIndex(3, 4), testIndex(3, 3))
+    assert QUEST_STATE = QSTATE_ACTIVE, "whether the swap that closes the loop pops is not known yet"
+    questJudge(1)
+    assert QUEST_STATE = QSTATE_DONE, "it popped, so it was the fourth knot"
+    end
+endtest
+
+test quest_lasso_closing_swap_that_misses_is_not_a_knot from fishBoard
+    testCursor(3, 3)
+    questForce(QUEST_LASSO)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tQbStop = CELL_COUNT - 1
+    for tQbK = 0 to tQbStop
+        QUEST_MARK(tQbK) = 0
+    next
+    QUEST_MARK(testIndex(4, 4)) = 1
+
+    questSwapDone(testIndex(3, 3), testIndex(4, 3))
+    questCursorStepped(testIndex(3, 3), testIndex(4, 3))
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    questCursorStepped(testIndex(4, 3), testIndex(5, 3))
+    questSwapDone(testIndex(5, 3), testIndex(5, 4))
+    questCursorStepped(testIndex(5, 3), testIndex(5, 4))
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    questCursorStepped(testIndex(5, 4), testIndex(5, 5))
+    questSwapDone(testIndex(5, 5), testIndex(4, 5))
+    questCursorStepped(testIndex(5, 5), testIndex(4, 5))
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    questCursorStepped(testIndex(4, 5), testIndex(3, 5))
+    questCursorStepped(testIndex(3, 5), testIndex(3, 4))
+    questSwapDone(testIndex(3, 4), testIndex(3, 3))
+    questCursorStepped(testIndex(3, 4), testIndex(3, 3))
+    questJudge(0)
+    questSettled()
+    assert QUEST_STATE = QSTATE_ACTIVE, "a swap that closes the loop and pops nothing is no knot"
+    assert QUEST_V(3) = 0, "and the loop is not waiting on it any more"
+    end
+endtest
+
+test quest_tether_tugs_the_buoy_one_cell from fishBoard
+    testCursor(8, 4)
+    questForce(QUEST_TETHER)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    if QUEST_STATE = QSTATE_OFFERED
+        questPickUp()
+    endif
+    QUEST_V(0) = testIndex(8, 4)
+    testCursor(6, 2)
+    questSwapDone(testIndex(7, 2), testIndex(6, 2))
+    questJudge(1)
+    assert QUEST_V(0) = testIndex(7, 3), "a swap that pops tugs the buoy one cell toward the cursor, corner ways"
+    questJudge(0)
+    questSettled()
+    questJudge(1)
+    assert QUEST_V(0) = testIndex(7, 3), "and only a swap does it, not a fall"
+    end
+endtest
+
+test quest_ferry_takes_three_pops_a_trip from fishBoard
+    testCursor(1, 2)
+    questForce(QUEST_FERRY)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tQbStar = QUEST_V(1)
+    assert tQbStar = testIndex(0, 2), "the first starfish waits at the left edge"
+
+    ` the starfish is picked up, and carried with one swap that pops, all the way across
+    questCursorStepped(testIndex(1, 2), tQbStar)
+    assert QUEST_V(0) = 1, "the cursor has the starfish"
+    questSwapDone(tQbStar, testIndex(1, 2))
+    questCursorStepped(tQbStar, testIndex(1, 2))
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    for tQbCol = 1 to 7
+        questCursorStepped(testIndex(tQbCol, 2), testIndex(tQbCol + 1, 2))
+    next
+    assert QUEST_V(6) = 0, "one pop on the way is not enough to set it down"
+    assert QUEST_V(0) = 1, "and it is still being carried"
+
+    ` two more swaps that pop, down the far edge, and then a step along it
+    questSwapDone(testIndex(8, 2), testIndex(8, 3))
+    questCursorStepped(testIndex(8, 2), testIndex(8, 3))
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    questSwapDone(testIndex(8, 3), testIndex(8, 4))
+    questCursorStepped(testIndex(8, 3), testIndex(8, 4))
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    questCursorStepped(testIndex(8, 4), testIndex(8, 3))
+    assert QUEST_V(6) = 1, "three pops on the way, and the starfish is across"
+    end
+endtest
+
+test quest_sequence_has_four_different_kinds from fishBoard
+    questForce(QUEST_SEQUENCE)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_PROG_NEED = 4, "it takes four kinds"
+    tQbSame = 0
+    for tQbA = 0 to 3
+        for tQbB = 0 to 3
+            if tQbA <> tQbB
+                if QUEST_V(tQbA) = QUEST_V(tQbB) then tQbSame = 1
+            endif
+        next
+    next
+    assert tQbSame = 0, "and they are all different"
+    end
+endtest
+
+test quest_pilot_fish_has_a_ring_in_every_fifth from fishBoard
+    testCursor(4, 4)
+    questForce(QUEST_PILOT_FISH)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_PROG_NEED = 5, "it takes five rings"
+    tQbInBand = 1
+    for tQbRing = 0 to 4
+        tQbRingX = QUEST_V(1 + tQbRing) mod CELL_COLUMN_COUNT
+        tQbBandFrom = (tQbRing * CELL_COLUMN_COUNT) / 5
+        tQbBandTo = ((tQbRing + 1) * CELL_COLUMN_COUNT) / 5
+        if tQbRingX < tQbBandFrom then tQbInBand = 0
+        if tQbRingX >= tQbBandTo then tQbInBand = 0
+    next
+    assert tQbInBand = 1, "one ring in each fifth of the board, from left to right"
+    end
+endtest
+
+test quest_seaweed_needs_two_stalks_at_the_top from fishBoard
+    questForce(QUEST_SEAWEED)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tQbRowLast = CELL_ROW_COUNT - 1
+    for tQbRow = 0 to tQbRowLast
+        testPut(1, tQbRow, TEX_SEAWEED)
+    next
+    questSettled()
+    assert QUEST_STATE = QSTATE_ACTIVE, "one stalk to the top is not enough"
+    for tQbRow = 0 to tQbRowLast
+        testPut(6, tQbRow, TEX_SEAWEED)
+    next
+    questSettled()
+    assert QUEST_STATE = QSTATE_DONE, "two stalks to the top are the quest done"
+    end
+endtest
+
+test quest_moorings_has_one_in_every_quarter from fishBoard
+    questForce(QUEST_MOORINGS)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_LIST_N = 8, "four cells, each with the kind that it wants"
+    tQbQuarters = 0
+    for tQbMoor = 0 to 3
+        tQbMoorCell = QUEST_LIST(tQbMoor * 2)
+        tQbMoorX = tQbMoorCell mod CELL_COLUMN_COUNT
+        tQbMoorY = tQbMoorCell / CELL_COLUMN_COUNT
+        tQbQuarter = 0
+        if tQbMoorX >= CELL_COLUMN_COUNT / 2 then tQbQuarter = 1
+        if tQbMoorY >= CELL_ROW_COUNT / 2 then tQbQuarter = tQbQuarter + 2
+        if tQbQuarter = tQbMoor then tQbQuarters = tQbQuarters + 1
+    next
+    assert tQbQuarters = 4, "one in each quarter of the board"
+    end
+endtest
+
+test quest_continuous_and_puffers_take_more_swaps from fishBoard
+    CURRENT_ROUND = 2
+    questForce(QUEST_CONTINUOUS)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_PROG_NEED = 12, "a dozen popping swaps in a row, in the first round that has quests"
+    CURRENT_ROUND = 30
+    questForce(QUEST_CONTINUOUS)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_PROG_NEED = 18, "and eighteen by round thirty"
+    CURRENT_ROUND = 2
+    end
+endtest

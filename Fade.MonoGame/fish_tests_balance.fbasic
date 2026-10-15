@@ -1,0 +1,219 @@
+` THE BALANCE BOT. a long test (see the long tests in fish_tests_seed): it plays a whole regular game
+` of a seed, the way a careful player who only ever swaps would, and prints a line for every round:
+` how many moves the round took, how many points a move scored, and how high the multiplier was. it is
+` there to see how hard the rounds are, from the first to the last, when the numbers of HOW LONG A
+` ROUND IS in fish_headers are changed. it asserts nothing about them.
+`
+` every swap is the one that pops the most fish: it looks at every swap there is, and at the size of
+` the groups that the two fish would be in after it. it takes the first card on the upgrade screen
+` that is not a move, and it never picks up a quest, so a round is only ever won by filling its bar.
+`     FISH_TESTS_LONG=1 Fade.MonoGame.exe --filter-uid fade::long_balance_bot_plays_a_game
+` and the lines that start with "balance:" are the numbers. FISH_BALANCE_SEED picks the seed.
+
+` how many fish the group that a cell is in has, as the board is now
+function tbGroupSize(tbFrom)
+    tbKind = CELLS(tbFrom).value
+    tbCount = 0
+    if tbKind > 0
+        for tbI = 0 to CELL_COUNT - 1
+            QUEST_TEMP(tbI) = 0
+        next
+        QUEST_STACK(0) = tbFrom
+        QUEST_TEMP(tbFrom) = 1
+        tbTop = 1
+        while tbTop > 0
+            tbTop = tbTop - 1
+            tbAt = QUEST_STACK(tbTop)
+            tbCount = tbCount + 1
+            for tbSide = 0 to 3
+                tbNext = questSide(tbAt, tbSide)
+                if tbNext >= 0
+                    if QUEST_TEMP(tbNext) = 0
+                        if CELLS(tbNext).value = tbKind
+                            QUEST_TEMP(tbNext) = 1
+                            QUEST_STACK(tbTop) = tbNext
+                            tbTop = tbTop + 1
+                        endif
+                    endif
+                endif
+            next
+        endwhile
+    endif
+endfunction tbCount
+
+` how many fish a swap of two cells would pop: the groups of 3 or more that the two fish are in after it
+function tbSwapWorth(tbA, tbB)
+    tbWorth = 0
+    tbKindA = CELLS(tbA).value
+    tbKindB = CELLS(tbB).value
+    if tbKindA > 0
+        if tbKindB > 0
+            if tbKindA <> tbKindB
+                CELLS(tbA).value = tbKindB
+                CELLS(tbB).value = tbKindA
+                tbSizeA = tbGroupSize(tbA)
+                tbSizeB = tbGroupSize(tbB)
+                if tbSizeA >= 3 then tbWorth = tbWorth + tbSizeA
+                if tbSizeB >= 3 then tbWorth = tbWorth + tbSizeB
+                CELLS(tbA).value = tbKindA
+                CELLS(tbB).value = tbKindB
+            endif
+        endif
+    endif
+endfunction tbWorth
+
+test long_balance_bot_plays_a_game from fishBoard
+    if val(env$("FISH_TESTS_LONG")) = 0 then end
+
+    global tbPress = 0
+    mock new action down
+    endmock tbPress
+
+    tbSeed = val(env$("FISH_BALANCE_SEED"))
+    if tbSeed < 1 then tbSeed = 4321
+    OPTION_GAME_SEED = tbSeed
+    OPTION_GAME_LENGTH = GAME_LENGTH_REGULAR
+    OPTION_GAME_ZEN = 0
+    REQUEST_SEED_RESTART = 1
+    runto _loop
+
+    tbRoundMoves = CURRENT_MOVE_COUNT
+    tbRoundScore = CURRENT_SCORE
+    tbLastRound = CURRENT_ROUND
+    tbSwaps = 0
+    tbStuck = 0
+    ` a swap that the game would not make, or that pops nothing, is not tried again until the score moves
+    global dim tbBanCell(64)
+    global dim tbBanDown(64)
+    tbBans = 0
+    tbRefused = 0
+    tbDone = 0
+    print "balance: seed " + str$(tbSeed)
+    while tbDone = 0
+        ` the swap that pops the most
+        tbBest = 0
+        tbBestCell = 0
+        tbBestDown = 0
+        for tbCell = 0 to CELL_COUNT - 1
+            tbCol = tbCell mod CELL_COLUMN_COUNT
+            tbRow = tbCell / CELL_COLUMN_COUNT
+            tbBanRight = 0
+            tbBanBelow = 0
+            for tbB = 0 to tbBans - 1
+                if tbBanCell(tbB) = tbCell
+                    if tbBanDown(tbB) then tbBanBelow = 1
+                    if tbBanDown(tbB) = 0 then tbBanRight = 1
+                endif
+            next
+            if tbCol < CELL_COLUMN_COUNT - 1
+                tbW = tbSwapWorth(tbCell, tbCell + 1)
+                if tbBanRight then tbW = -1
+                if tbW > tbBest
+                    tbBest = tbW
+                    tbBestCell = tbCell
+                    tbBestDown = 0
+                endif
+            endif
+            if tbRow < CELL_ROW_COUNT - 1
+                tbW = tbSwapWorth(tbCell, tbCell + CELL_COLUMN_COUNT)
+                if tbBanBelow then tbW = -1
+                if tbW > tbBest
+                    tbBest = tbW
+                    tbBestCell = tbCell
+                    tbBestDown = 1
+                endif
+            endif
+        next
+        testCursor(tbBestCell mod CELL_COLUMN_COUNT, tbBestCell / CELL_COLUMN_COUNT)
+        if tbBestDown
+            testQueueMove(0, 1, 1, -1)
+        else
+            testQueueMove(1, 0, 1, -1)
+        endif
+        tbSwaps = tbSwaps + 1
+        tbMovesBefore = CURRENT_MOVE_COUNT
+        tbScoreBefore = CURRENT_SCORE
+
+        ` the board settles, and a round that is won brings the upgrade screen
+        tbFrames = 0
+        tbBusy = 1
+        while tbBusy
+            runto _loop
+            tbFrames = tbFrames + 1
+            if REQUEST_ABILITY_SELECTION
+                tbPress = 1
+                tbShut = 0
+                while tbShut = 0
+                    runto frame_ability_selection
+                    tbFade# = tweenVal(INFO_FADE_TWEEN_ID)
+                    if tbFade# < 1
+                        tbShut = 1
+                    else
+                        tbPick = -1
+                        for tbCard = 0 to choiceCount
+                            tbOffer = ABILITY_CHOICES(tbCard).abilityIndex
+                            if tbPick < 0
+                                if CARDS(tbOffer).abilityType <> ABILITY_TYPE_MOVE then tbPick = tbCard
+                            endif
+                        next
+                        if tbPick >= 0
+                            ABILITY_SELECTION_INDEX = tbPick
+                            UPGRADE_SKIP_SELECTED = 0
+                        else
+                            UPGRADE_SKIP_SELECTED = 1
+                            UPGRADE_ROW_PICK = 0
+                        endif
+                    endif
+                endwhile
+                tbPress = 0
+                runto _loop
+            endif
+            tbBusy = 0
+            if REQUEST_COMBO_CHECK then tbBusy = 1
+            if LIVE_MOVE_ACTIVE then tbBusy = 1
+            if QUEUED_MOVE_NUM > 0 then tbBusy = 1
+            if SCORE_TICK_COUNT > 0 then tbBusy = 1
+            if SCORE_BAR_HOLD = 1 then tbBusy = 1
+            if REQUEST_ABILITY_SELECTION then tbBusy = 1
+            if tbFrames > 900
+                print "balance: stuck: combo " + str$(REQUEST_COMBO_CHECK) + " live " + str$(LIVE_MOVE_ACTIVE) + " queued " + str$(QUEUED_MOVE_NUM) + " ticks " + str$(SCORE_TICK_COUNT) + " hold " + str$(SCORE_BAR_HOLD) + " ability " + str$(REQUEST_ABILITY_SELECTION)
+                tbBusy = 0
+                tbStuck = tbStuck + 1
+            endif
+        endwhile
+
+        ` a swap that was refused, or that popped nothing (its groups were not what the game calls a match),
+        ` is not tried again until the score has moved
+        tbNoGood = 0
+        if CURRENT_MOVE_COUNT = tbMovesBefore then tbNoGood = 1
+        if CURRENT_SCORE = tbScoreBefore then tbNoGood = 1
+        if tbNoGood
+            if tbBans < 64
+                tbBanCell(tbBans) = tbBestCell
+                tbBanDown(tbBans) = tbBestDown
+                tbBans = tbBans + 1
+            endif
+            tbRefused = tbRefused + 1
+        else
+            tbBans = 0
+        endif
+        if val(env$("FISH_BALANCE_TRACE")) = 1
+            print "balance: swap " + str$(tbSwaps) + " worth " + str$(tbBest) + " frames " + str$(tbFrames) + " ms " + str$(game ms()) + " score " + str$(CURRENT_SCORE) + " round " + str$(CURRENT_ROUND) + " night " + str$(TIDE_NIGHT) + " info " + str$(INFO_MODE) + " at " + str$(tbBestCell) + " down " + str$(tbBestDown) + " cursor " + str$(SELECTION_POS.x) + "," + str$(SELECTION_POS.y) + " kinds " + str$(CELLS(tbBestCell).value) + " quest " + str$(QUEST_STATE) + " bar " + str$(SCORE_BAR.endVal) + " hold " + str$(SCORE_BAR_HOLD)
+        endif
+        if CURRENT_ROUND <> tbLastRound
+            tbMoves = CURRENT_MOVE_COUNT - tbRoundMoves
+            tbPoints = CURRENT_SCORE - tbRoundScore
+            tbPer = 0
+            if tbMoves > 0 then tbPer = tbPoints / tbMoves
+            print "balance: round " + str$(tbLastRound + 1) + " moves " + str$(tbMoves) + " points " + str$(tbPoints) + " per-move " + str$(tbPer) + " mult " + str$(SCORE_MULTIPLIER) + " best-mult " + str$(BEST_MULTIPLIER) + " span " + str$(getRoundSpan(tbLastRound)) + " cells " + str$(CELL_COUNT)
+            tbRoundMoves = CURRENT_MOVE_COUNT
+            tbRoundScore = CURRENT_SCORE
+            tbLastRound = CURRENT_ROUND
+        endif
+        if CURRENT_ROUND >= GAME_ROUND_CAP then tbDone = 1
+        if tbSwaps > 2500 then tbDone = 1
+    endwhile
+    print "balance: done after " + str$(tbSwaps) + " swaps, " + str$(CURRENT_MOVE_COUNT) + " moves, stuck " + str$(tbStuck) + ", refused " + str$(tbRefused)
+    OPTION_GAME_SEED = 0
+    end
+endtest

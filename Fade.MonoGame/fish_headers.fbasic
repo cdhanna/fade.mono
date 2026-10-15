@@ -473,13 +473,22 @@ global OVERFLOW_POINTS = 0 `how many points are in the one that is being filled
 global OVERFLOW_NEED = 0 `and how many it takes
 global OVERFLOW_SPRITE
 
-` HOW LONG A ROUND IS. round n needs SCORE_ROUND_BASE * n ^ SCORE_ROUND_POWER# points: 400, 1130, 2080, 3200, 4470,
-` then about 12650 for round 10, 35780 for round 20, and 65730 for round 30. getRoundSpan, in fish_funcs, works it out.
-` the base is how long the first round is, and it scales every round. the power is how much steeper the later
-` rounds get: at 1 every round adds the same amount, and at 2 they pull away fast. it wants to grow about as
-` fast as what a move scores does, so that the upgrades keep coming at a steady pace.
+` HOW LONG A ROUND IS. round n needs SCORE_ROUND_BASE * n ^ SCORE_ROUND_POWER# points, and from the round after
+` SCORE_ROUND_RAMP_FROM on, SCORE_ROUND_RAMP_PERCENT more of that for every round past it: 400, 1130, 2080, 3200,
+` 4830, then 18720 for round 10, 81570 for round 20, and 202440 for round 30. getRoundSpan, in fish_funcs,
+` works it out. the base is how long the first round is, and it scales every round. the power is how much steeper
+` the later rounds get: at 1 every round adds the same amount, and at 2 they pull away fast. it wants to grow about
+` as fast as what a move scores does, so that the upgrades keep coming at a steady pace.
+` the ramp is there because what a move scores grows much faster than any power, late in a game: the multiplier
+` has no top, the full bar turns what spills past it into more multiplier, and the cards pile up. the balance bot
+` (fish_tests_balance) took 2 to 10 moves a round from round 9 to round 19 without it, and none at all for round
+` 10 of seed 4321, where the swap before it set off enough to fill the whole of the next round. at 12 percent it
+` took 10 to 144, because with the rounds that much longer the bar was never overfilled, and the multiplier
+` stayed low. the bot keeps its streak worse than a person does, so a person's game sits between the two.
 global SCORE_ROUND_BASE = 400
 global SCORE_ROUND_POWER# = 1.5
+global SCORE_ROUND_RAMP_FROM = 4 `the last round that takes only the power
+global SCORE_ROUND_RAMP_PERCENT = 8 `how much more a round takes, for every round past that
 global SCORE_BAR_FIZZ_MS = 0 `when the full bar lets off its next bubbles
 global SCORE_BAR_FIZZ_GAP = 55 `how many milliseconds there are between them
 

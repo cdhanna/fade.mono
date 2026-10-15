@@ -841,6 +841,15 @@ function getRoundSpan(roundIndex)
     roundBase# = SCORE_ROUND_BASE
     roundSpan# = roundBase# * pow(roundNumber#, SCORE_ROUND_POWER#)
 
+    ` the ramp of the later rounds. see HOW LONG A ROUND IS in fish_headers.
+    roundPast = roundIndex + 1
+    roundPast = roundPast - SCORE_ROUND_RAMP_FROM
+    if roundPast > 0
+        roundRamp# = roundPast * SCORE_ROUND_RAMP_PERCENT
+        roundRamp# = 1 + roundRamp# / 100.0
+        roundSpan# = roundSpan# * roundRamp#
+    endif
+
     ` to the nearest 10, because everything that scores is a multiple of 10
     roundTens = (roundSpan# + 5) / 10
     roundSpan = roundTens * 10

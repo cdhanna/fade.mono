@@ -96,7 +96,7 @@ test quest_none_before_the_third_round from fishBoard
     assert INFOS(INFO_INDEX_QUEST).enabled = 1, "and then info mode explains it"
     tOne = questFindMark(1)
     tTwo = questFindMark(2)
-    assert tTwo = tOne + 4, "the lost pair are four cells apart in a row"
+    assert tTwo = tOne + 6, "the lost pair are six cells apart in a row"
     assert QUEST_USED(QUEST_LOST_PAIR) = 1, "and now it has been tried"
 
     ` once it has been picked up, a turn that pops enough does not swap it for anything
@@ -495,7 +495,7 @@ test quest_seaweed_grows_in_every_column_that_pops_on_the_bottom from fishBoard
     questJudge(0)
     questSettled()
     assert CELLS(testIndex(5, tBottom)).value = TEX_SEAWEED, "the seaweed is there once the pops are over"
-    assert QUEST_PROG_NOW = 3, "and the badge counts the tallest stalk"
+    assert QUEST_PROG_NOW = 4, "and the badge counts the two tallest stalks together: three and one"
     end
 endtest
 
@@ -607,7 +607,7 @@ test quest_remora_drags_a_long_tail from fishBoard
     questForce(QUEST_REMORA)
     REQUEST_COMBO_CHECK = 0
     stepQuest()
-    assert QUEST_V(1) = 8, "it takes eight swaps that pop fish"
+    assert QUEST_V(1) = 10, "it takes ten swaps that pop fish"
 
     ` the cursor walks twelve cells, along the top two rows and back, without crossing itself
     for tWalk = 0 to 7
@@ -728,12 +728,12 @@ test quest_other_than_the_wake_finishes_with_no_line from fishBoard
     end
 endtest
 
-test quest_avoid_puffers_takes_a_dozen_swaps from fishBoard
+test quest_avoid_puffers_takes_nine_swaps from fishBoard
     CURRENT_ROUND = 2
     questForce(QUEST_PUFFERS)
     REQUEST_COMBO_CHECK = 0
     stepQuest()
-    assert QUEST_PROG_NEED = 12, "it takes twelve swaps in a row in the first round that has quests"
+    assert QUEST_PROG_NEED = 9, "it takes nine swaps in a row in the first round that has quests"
     end
 endtest
 
@@ -743,6 +743,12 @@ test quest_pilot_fish_takes_a_ring_with_a_swap_from_it from fishBoard
     REQUEST_COMBO_CHECK = 0
     stepQuest()
     tRing = QUEST_V(1)
+
+    ` the cell next to the ring, that the cursor comes from, must not be a ring of its own. the
+    ` second ring is in the next fifth of the board, so it can be.
+    for tRingOther = 2 to 5
+        if QUEST_V(tRingOther) = tRing + 1 then QUEST_V(tRingOther) = tRing + 3
+    next
 
     ` the cursor walks onto the ring, and the little fish is one step behind
     questCursorStepped(tRing + 1, tRing)
