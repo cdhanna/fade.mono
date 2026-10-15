@@ -517,6 +517,16 @@ function updateMusic()
             ` every note is a little louder or quieter than the last, the way that a person would play it
             playMusicNote(MELODY_INSTRUMENT(m), MELODY_NOTES(MELODY_FIRST(m) + MELODY_STEP), MELODY_VOLUME# * MELODY_GAIN# * (.8 + rnd(21) * .01))
 
+            ` a note on a beat sends a glimmer along the trail of the glow, and a rest sends none. a beat of a
+            ` quick tune is two of its notes, the same as for a dance. see WHAT SHOWS in fish_headers_glow.
+            glowNoteNow = MELODY_NOTES(MELODY_FIRST(m) + MELODY_STEP)
+            glowNoteBeat = MELODY_STEP mod BEAT_PULSE_STEPS
+            if glowNoteNow <> REST
+                if glowNoteBeat = 0
+                    glowMusicBeat(glowNoteNow)
+                endif
+            endif
+
             ` a dance counts its beats from when this one was due. a quick tune is counted at half speed.
             if BEAT_ON
                 beatOnStep = MELODY_STEP mod BEAT_PULSE_STEPS

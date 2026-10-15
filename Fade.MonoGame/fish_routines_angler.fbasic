@@ -1,0 +1,1508 @@
+goto routines_angler_exit
+
+remstart
+    THE ANGLER. see fish_headers_angler for what it is.
+    handle_angler, from the main loop, brings it when the card has been taken. angler_from_info, from
+    handle_info_input in fish_routines_info, brings it when a kept light is spent. angler_run is the
+    scene, and it does not come back until the angler has gone.
+remend
+
+` the main loop comes here once, at the start, after everything that the angler draws on top of
+setup_angler:
+    texture reserve texture id(TEX_ANGLER), "Fish/Textures/Angler"
+    texture reserve texture id(TEX_ANGLER_BULB), "Fish/Textures/AnglerBulb"
+    texture reserve texture id(TEX_ANGLER_GLOW), "Fish/Textures/AnglerGlow"
+    texture reserve texture id(TEX_ANGLER_ICON), "Fish/Textures/AnglerIcon"
+
+    ` a kept light, in a line of text: {bulb}. it is white, so the text tints it, like {instant}.
+    font icon SCORE_FONT, 14, "bulb", TEX_ANGLER_ICON
+
+    ` the dark is the dark of info mode. these all go on top of it. they are made late, and their ids
+    ` count for a few steps of the order, so the words are well above the box. see ORDER_HUD_TEXT in fish_headers.
+    reserve sprite id(ANGLER_GLOW_SPRITE)
+    sprite ANGLER_GLOW_SPRITE, -500, -500, TEX_ANGLER_GLOW
+    set sprite offset ANGLER_GLOW_SPRITE, .5, .5
+    order sprite ANGLER_GLOW_SPRITE, ORDER_INFO_PANEL
+    hide sprite ANGLER_GLOW_SPRITE
+
+    reserve sprite id(ANGLER_SPRITE)
+    sprite ANGLER_SPRITE, -500, -500, TEX_ANGLER
+    set sprite offset ANGLER_SPRITE, 0, 0
+    size sprite ANGLER_SPRITE, 52 * ANGLER_SCALE, 34 * ANGLER_SCALE
+    order sprite ANGLER_SPRITE, ORDER_INFO_PANEL + 2
+    hide sprite ANGLER_SPRITE
+
+    reserve sprite id(ANGLER_BULB_SPRITE)
+    sprite ANGLER_BULB_SPRITE, -500, -500, TEX_ANGLER_BULB
+    set sprite offset ANGLER_BULB_SPRITE, .5, 0
+    size sprite ANGLER_BULB_SPRITE, 7 * ANGLER_SCALE, 10 * ANGLER_SCALE
+    order sprite ANGLER_BULB_SPRITE, ORDER_INFO_PANEL + 3
+    hide sprite ANGLER_BULB_SPRITE
+
+    ` the box that it talks in looks like the panel of info mode
+    reserve sprite id(ANGLER_BOX_SPRITE)
+    sprite ANGLER_BOX_SPRITE, -500, -500, TEX_PIXEL
+    set sprite offset ANGLER_BOX_SPRITE, 0, 0
+    size sprite ANGLER_BOX_SPRITE, ANGLER_BOX_W, ANGLER_BOX_H
+    order sprite ANGLER_BOX_SPRITE, ORDER_INFO_PANEL
+    hide sprite ANGLER_BOX_SPRITE
+    ANGLER_BOX_BORDER = createInfoBorder(ORDER_INFO_PANEL + 1)
+    ANGLER_CURSOR = createInfoBorder(ORDER_ANGLER_TEXT + 1)
+
+    reserve text id(ANGLER_SAY_TEXT_ID)
+    text ANGLER_SAY_TEXT_ID, -500, -500, SCORE_FONT, "words"
+    set text offset ANGLER_SAY_TEXT_ID, 0, 0
+    size text y ANGLER_SAY_TEXT_ID, 16
+    set text wrap ANGLER_SAY_TEXT_ID, ANGLER_BOX_W - 20
+    enable rich text ANGLER_SAY_TEXT_ID `so that it can show the keys, like {info}
+    color text ANGLER_SAY_TEXT_ID, rgb(255, 236, 190)
+    order text ANGLER_SAY_TEXT_ID, ORDER_ANGLER_TEXT
+    hide text ANGLER_SAY_TEXT_ID
+
+    for angSetupN = 0 to 3
+        angSetupId = 0
+        reserve text id(angSetupId)
+        text angSetupId, -500, -500, SCORE_FONT, "question"
+        set text offset angSetupId, 0, 0
+        size text y angSetupId, 16
+        enable rich text angSetupId
+        order text angSetupId, ORDER_ANGLER_TEXT
+        hide text angSetupId
+        ANGLER_LINE_TEXTS(angSetupN) = angSetupId
+    next
+
+    ` the voice. see THE VOICE in fish_headers_angler. a few sounds take turns, so that one bubble can
+    ` ring on while the next one starts.
+    load sfx clip reserve sfx clip id(SFX_CLIP_ANGLER(0)), "Fish/Audio/angler-ah"
+    load sfx clip reserve sfx clip id(SFX_CLIP_ANGLER(1)), "Fish/Audio/angler-eh"
+    load sfx clip reserve sfx clip id(SFX_CLIP_ANGLER(2)), "Fish/Audio/angler-ee"
+    load sfx clip reserve sfx clip id(SFX_CLIP_ANGLER(3)), "Fish/Audio/angler-oh"
+    load sfx clip reserve sfx clip id(SFX_CLIP_ANGLER(4)), "Fish/Audio/angler-oo"
+    load sfx clip reserve sfx clip id(SFX_CLIP_ANGLER(5)), "Fish/Audio/angler-uh"
+    for angSetupN = 0 to ANGLER_VOICE_ROOM - 1
+        angSetupSfx = 0
+        sfx reserve sfx id(angSetupSfx), SFX_CLIP_ANGLER(0)
+        ANGLER_VOICE_SFX(angSetupN) = angSetupSfx
+    next
+
+    reserve tween id(ANGLER_SWIM_TWEEN_ID)
+    create basic tween ANGLER_SWIM_TWEEN_ID, 0, 0, 1, 0
+    reserve tween id(ANGLER_UP_TWEEN_ID)
+    create basic tween ANGLER_UP_TWEEN_ID, 0, 0, 1, 0
+    reserve tween id(ANGLER_SAY_FADE_TWEEN_ID)
+    create basic tween ANGLER_SAY_FADE_TWEEN_ID, 0, 0, 1, 0
+
+    gosub setup_angler_topics
+
+    ` what this player has kept, and heard, in any game
+    ANGLER_BANKED = get pref(ANGLER_PREF, 0)
+    if ANGLER_BANKED > ANGLER_BANK_MAX then ANGLER_BANKED = ANGLER_BANK_MAX
+    if ANGLER_BANKED < 0 then ANGLER_BANKED = 0
+    ANGLER_STAMP = get pref(ANGLER_PREF + 1, 0)
+    ANGLER_MET = get pref(ANGLER_PREF + 2, 0)
+    angLastTopic = ANGLER_TOPIC_COUNT - 1
+    for angSetupN = 0 to angLastTopic
+        ANGLER_HEARD(angSetupN) = get pref(ANGLER_PREF_HEARD + angSetupN, 0)
+    next
+    anglerHintRefresh()
+return
+
+
+` THE TOPICS. the numbers are the order that they are made in, and they are kept in the preferences,
+` so a new one goes on the end, and none is ever taken out. the constants are the ones that
+` anglerTopicOpen and the others ask about by name.
+#constant ANGLER_T_SCORE 0
+#constant ANGLER_T_MULT 1
+#constant ANGLER_T_MOVES 2
+#constant ANGLER_T_CARDS 3
+#constant ANGLER_T_SLOTS 4
+#constant ANGLER_T_STACK 5
+#constant ANGLER_T_BELLY 6
+#constant ANGLER_T_BONES 7
+#constant ANGLER_T_JELLY 8
+#constant ANGLER_T_RAY 9
+#constant ANGLER_T_BOTTLE 10
+#constant ANGLER_T_QUEST 11
+#constant ANGLER_T_CORAL 12
+#constant ANGLER_T_HORROR 13
+#constant ANGLER_T_SONGS 14
+#constant ANGLER_T_MOON 15
+#constant ANGLER_T_NIGHT 16
+#constant ANGLER_T_DIVER 17
+#constant ANGLER_T_CROOKED 18
+#constant ANGLER_T_INFO 19
+#constant ANGLER_R_STILL 20
+#constant ANGLER_R_SING 21
+#constant ANGLER_R_FAST 22
+#constant ANGLER_R_TIDE 23
+#constant ANGLER_R_CORNERS 24
+#constant ANGLER_R_RADIO 25
+#constant ANGLER_R_SOS 26
+#constant ANGLER_R_LIFT 27
+#constant ANGLER_R_BEAT 28
+#constant ANGLER_R_OLD_ONE 29
+#constant ANGLER_R_BOTTLE_TALK 30
+#constant ANGLER_R_STAR 31
+#constant ANGLER_R_DEAD_SONG 32
+#constant ANGLER_R_CLOWN 33
+#constant ANGLER_R_LEG 34
+#constant ANGLER_R_CALL 41
+
+setup_angler_topics:
+    ANGLER_TOPIC_COUNT = 0
+
+    ` every topic is: its tier, the question, the first page of the answer, and the second page, or " "
+    ` when there is none. a page fits about 200 letters.
+
+    ` the plain ones. they say how the game works. the angler is wise, kind, a doofus, and easily
+    ` lost, and very happy to have somebody to talk to. it likes a word that is fun to say. what it
+    ` says about the game is always true. its own life is fair game.
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "How do I finish a round?",
+        "Pop fish! Bigger bunches bring bigger bucks: three pay 60, four pay 100, five pay a fabulous, flabbergasting 150, all times the multiplier.",
+        "Fill the bar and the round is yours, and you pick an upgrade. Oh, I love upgrades. Then the next round wants a little more. You got this, buddy.")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "How does the multiplier grow?",
+        "Every swap that pops something slaps a step into the little bar. Fill it, and the multiplier goes up one! Then it wants three more swaps than last time. Greedy, greedy bar.",
+        "Swap and pop nothing? Splat. The bar empties. Do it again while it is empty and you lose one. Special moves never touch it. Keep popping, pal.")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "Why are my moves counted?",
+        "Your moves are your score, and fewer is better. Wander the cursor all you like, that is free. Every swap costs one. Every special move costs one.",
+        "Dealing the cards again costs moves too. The negative moves card gives some back. How? Do not ask me how. Time is soup. Take your time, friend.")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "Which card should I take?",
+        "A passive is always on. A move sits on a button and needs a nap between uses. An instant happens once. Like me! Hello! Goodbye soon!",
+        "Under the cards you can take nothing, pay moves to deal again, or drop a passive you are tired of. Plop. Gone. Pick what feels right, pal.")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "How do I use a special move?",
+        "Hold the button beside the move, then press a direction. Whack! The little number counts the moves until it is ready again. Patience, patience.",
+        "In info mode, press {confirm} on a move to put it on another button. Very soothing. Like rearranging teeth. Arrange away, buddy.")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "Why are some fish stacked?",
+        "A stacked fish has more of its kind squished up behind it. When it pops, the whole wobbly pile pops, and every one of them scores. A family pack!",
+        "Whatever a fish does when it pops, a stack does again for every fish in it. Squish math. Stack them high, friend.")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "What about the belly up fish?",
+        "They are... resting. Bonk one with the cursor and it pops, along with every belly up fish touching it. No group needed. Rude! But tidy. Bonk away, pal.",
+        " ")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "Why are there bones?",
+        "Hurt a fish twice and you get bones. Bones will not pop when you bonk them, but they join the group of a fish you swap in beside them. Good bones. Be nice to them, buddy.",
+        " ")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "Do the jellyfish sting?",
+        "Oh, they sting. When a jellyfish pops, every fish next to it might get zapped. Zapped once, belly up. Zapped twice, bones. Jiggly, jumpy, jabby little jerks.",
+        " ")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "What do the stingrays do?",
+        "When a stingray pops, it clears the column it faces. Right way up, it clears upward. Belly up, it clears down. One big flat slap. Enjoy the slap, friend.",
+        " ")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "What are the bottles for?",
+        "Pop a group of five or more and it leaves a bottle. Get the bottle to the bottom row and the multiplier goes up one. Bones in a bottle? Two! Do not ask. Cheers, pal.",
+        " ")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "What is a quest?",
+        "Pop enough groups in one move, and a quest swims up beside the board. Step the cursor onto it to read it, then swap it down onto the check mark to take it.",
+        "Finish it, and it pays whatever the round still needs. All of it! I went on a quest once. Forgot what it was. Go get it, buddy.")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "What does the coral do?",
+        "A fish on living coral will not pop. It sings instead, and scores three times as much. Happy home, happy fish. I live in a damp, dim, dismal hole. It is fine. Cozy.",
+        "And when the game ends, every fish with a coral home gets to stay. Everybody else swims off. Grow them a home, friend.")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "What is the dark coral?",
+        "That is coral that heard a song sung over the dead. Spooky, spooky. Fish on it go belly up, then bones. I do not go over there. Neither should you. Probably.",
+        "Sing a clean song across it, and it heals right up. Coral forgives. I hold grudges, grumpy, grimy grudges, but coral forgives. Stay sunny, pal.")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "What are those little shapes?",
+        "Every one is a song you sang! The two bars beside them fill as the coral grows: one for the living kind, and one for the dark kind.",
+        "Cover enough of the board with one kind, and the game ends right there. Pick the lovely one. Please. I believe in you, buddy.")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "What does the moon want?",
+        "Pop with the fish you shove aside, and the tide slides out. Pop with the fish you carry, and it slides back in. The moon likes things tidy. Slosh, slosh.",
+        "Take the tide all the way out and all the way in three times, and night falls. It looks exactly like my house. Come visit, friend.")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "What happens at night?",
+        "The fish snooze. Groups glow, but they wait for morning to pop, and moves at night do not count against you. Free moves! Sort of! Shh.",
+        "When the day comes back, everything that waited pops all at once. Big bubbly boom. I would cover my ears. Do I have ears? Sleep tight, pal.")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "Who is the diver?",
+        "The diver snaps a picture of any fish that pops right beside them. Nine kinds of sea life fill the album. Never once a picture of me. Not once.",
+        "The diver has eight moves of air, then swims back up. Another bottle brings them back down. Breathing air sounds so dry. Say cheese, buddy.")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "Why did the corners pay?",
+        "Four of a kind, corner to corner, made by your swap: a crooked line! Every fish in it stacks up, and the multiplier grows. Crooked, cockeyed, kooky, and correct.",
+        " ")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        "How do I learn more?",
+        "Press {info} any time. Everything with an outline can be explained. The codec, in the pause menu, remembers everything you have found. Better than me. Curious is good, friend.",
+        " ")
+
+    ` the rumors. secrets of the sea, every one of them true.
+    anglerTopic(ANGLER_TIER_RUMOR,
+        "What is the still water?",
+        "Watch the water. Now and then a patch goes still, and creeps from cell to cell. The shape it draws is a song. Nobody believes me. You believe me, right, pal?",
+        " ")
+    anglerTopic(ANGLER_TIER_RUMOR,
+        "Can the coral sing?",
+        "Swap. Then walk the shape the still water drew, one cursor step at a time. Then swap again, and make something pop.",
+        "Do that, and the coral sings, and grows wherever you walked. Yes, really! I am very wise. It says so on my... no, that is a tooth. Sing it, buddy.")
+    anglerTopic(ANGLER_TIER_RUMOR,
+        "What if I take nothing?",
+        "Take nothing at the upgrade screen. Then again. And again. Rumble, grumble, tumble. The line counts how hungry you are, in little dots.",
+        "The hungry and the patient get offered cards that are never dealt any other way. I am very patient. I have been waiting here for... wait, what were we doing?")
+    anglerTopic(ANGLER_TIER_RUMOR,
+        "Does the moon do anything?",
+        "Pop with the fish you shove aside until the tide is all the way out. Then with the fish you carry, until it is all the way in. The moon is counting. Wave hello, friend.",
+        " ")
+    anglerTopic(ANGLER_TIER_RUMOR,
+        "Do fish touch at the corners?",
+        "Fish that only kiss at the corners still count! Four in a crooked line pays, if your swap made it. Nobody tells you that. I am telling you that. You are welcome, pal.",
+        " ")
+
+    ` the deep ones
+    anglerTopic(ANGLER_TIER_DEEP,
+        "Is there a radio down here?",
+        "Hold one button still for two whole breaths, and a radio wakes up. Tap on it, short and long. Dots and dashes. Bip, bip, bop.",
+        "Tap C-Q to call anyone at all. Somebody might answer! Something answered me once. A rock. A lovely, listening, lumpy rock. Talk soon, buddy.")
+    anglerTopic(ANGLER_TIER_DEEP,
+        "Can the fish call for help?",
+        "Tap S-O-S on the radio, or just type it, and the fish will draw you a map to a real reef. Up there! I hear it is very bright. Too bright. Go say hi for me, friend.",
+        " ")
+    anglerTopic(ANGLER_TIER_DEEP,
+        "Who is on the boat?",
+        "Swap a bottle up into the top row. Up, not down. Somebody comes splashing down from the boat with a camera! I have been practicing my good side. I do not have one.",
+        " ")
+    anglerTopic(ANGLER_TIER_DEEP,
+        "Do the fish dance?",
+        "When a bell rings before a tune, step the cursor on the beat. The bubbles stay, and each is a step of the multiplier. I danced once. Wiggled, wobbled, went wrong.",
+        " ")
+    anglerTopic(ANGLER_TIER_DEEP,
+        "Who is the old one?",
+        "Spell its name on the radio, C-T-H-U-L-H-U, in dots and dashes. Something sloppy, slimy and sizable comes up to see who called. Do not say I sent you, pal.",
+        " ")
+    anglerTopic(ANGLER_TIER_DEEP,
+        "Do the bottles talk?",
+        "A bottle that pays out on coral sometimes taps a message on the radio. Mail! Soggy mail! I never get mail. Write me sometime, buddy.",
+        " ")
+    anglerTopic(ANGLER_TIER_DEEP,
+        "What is in the sky?",
+        "Before the game, sometimes, a falling star streaks across the sky. Its trail spells two letters, in dots and dashes. I wished on one once. Make a wish, friend.",
+        " ")
+    anglerTopic(ANGLER_TIER_DEEP,
+        "What wakes in the dark?",
+        "Sing over the dead, and the coral sings back in another voice. Let the dark coral cover the board, and something old, odd and oozing wakes up. Grumpy. I get it.",
+        " ")
+    anglerTopic(ANGLER_TIER_DEEP,
+        "Is the clownfish lost?",
+        "A clownfish answers to his name, tapped on the radio. N-E-M-O. He is not lost any more. Apparently it was a whole big thing. Glad he is home, pal.",
+        " ")
+    anglerTopic(ANGLER_TIER_DEEP,
+        "Did somebody get hurt?",
+        "Tap M-Y-L-E-G on the radio, and listen. Oof. Ouch. Poor guy. Every single time. Stay safe out there, buddy.",
+        " ")
+
+    ` and the silly ones, for when every true thing has been said. they say that they are silly.
+    anglerTopic(ANGLER_TIER_SILLY,
+        "What are you, anyway?",
+        "I swallowed a lantern once. Now I am one. That is not advice. Or maybe it is. I am not your dad. Love you though, pal.",
+        " ")
+    anglerTopic(ANGLER_TIER_SILLY,
+        "What is the moon made of?",
+        "Fish, mostly. I have not checked. I am not going up there. Far too dry. You go, friend. Tell me how it is.",
+        " ")
+    anglerTopic(ANGLER_TIER_SILLY,
+        "What about a giant spiral?",
+        "Walk the cursor in a giant spiral, around and around and around, and you will get dizzy. That is all it does. I checked. Twice. Then I flopped over. Sit down, buddy.",
+        " ")
+    anglerTopic(ANGLER_TIER_SILLY,
+        "Who pays for your light?",
+        "Nobody knows! I have never seen a bill. If one comes, I will eat it. Chomp. Paid. Money tips from your pal.",
+        " ")
+    anglerTopic(ANGLER_TIER_SILLY,
+        "What is the secret of everything?",
+        "Blink slowly. I cannot blink, so I would not know. Ask a fish with eyelids. Are there any? Huh. Good question, friend.",
+        " ")
+    anglerTopic(ANGLER_TIER_SILLY,
+        "Are sharks just big fish?",
+        "Sharks are fish who never took nothing at the upgrade screen. Big, bitey, bossy babies. I am joking. Mostly. Do not tell them I said that, buddy.",
+        " ")
+
+    ` and the topics that came later. they go on the end, so that the numbers of the others do not move.
+    anglerTopic(ANGLER_TIER_DEEP,
+        "Can I call you?",
+        "Wake the radio, then tap out H-E-L-P, or I-N-F-O, and I will come swimming. No light needed. Ask me as much as you like.",
+        "Call anytime, pal. Day or night. Mostly night. It is always night down here.")
+return
+
+
+` the card was taken, and the upgrade screen has gone, or it was called on the radio. the main loop
+` comes here, after handle_ability_selection.
+handle_angler:
+    ` see THE CALL in fish_headers_angler. it waits for the radio to finish tapping back that it heard,
+    ` and then a moment more, so that the answer is not cut off.
+    angCallGo = 0
+    if ANGLER_CALL_PENDING
+        if MORSE_REPLY_ON
+            ANGLER_CALL_AT_MS = 0
+        else
+            if ANGLER_CALL_AT_MS = 0 then ANGLER_CALL_AT_MS = game ms() + ANGLER_CALL_PAUSE_MS
+            if game ms() >= ANGLER_CALL_AT_MS then angCallGo = 1
+        endif
+    endif
+    if angCallGo
+        ANGLER_CALL_PENDING = 0
+        ANGLER_CALL_AT_MS = 0
+        ANGLER_FROM_CARD = 0
+        ANGLER_FROM_RADIO = 1
+        ANGLER_ANCHOR = -1
+        gosub angler_run
+        ANGLER_FROM_RADIO = 0
+    endif
+
+    if ANGLER_PENDING = 0 then return
+    ANGLER_PENDING = 0
+    ANGLER_FROM_CARD = 1
+    ANGLER_ANCHOR = -1
+    gosub angler_run
+return
+
+
+` a kept light was spent in info mode, on the thing that was highlighted. handle_info_input comes here,
+` after info mode has closed.
+angler_from_info:
+    ANGLER_FROM_CARD = 0
+    anglerTopicForBlob(ANGLER_SPOT)
+    ANGLER_ANCHOR = ANGLER_FOUND
+    gosub angler_run
+return
+
+
+` the whole scene: the dark comes down, the angler swims in, offers the questions, answers one, and goes.
+` when it was called on the radio, it asks if there is anything else, and it can go around again.
+angler_run:
+    questTalkStop() `the quest talk borrows its voices
+    ANGLER_ASKED = -1
+    anglerScanBoard()
+    anglerPickTopics(ANGLER_ANCHOR)
+
+    ` it starts at the bottom, with the light around the bulb
+    ANGLER_SPOT = -1
+    ANGLER_FRAME_DONE = 0
+    create basic tween ANGLER_UP_TWEEN_ID, 0, 0, 1, 0
+    create basic tween ANGLER_SWIM_TWEEN_ID, 0, 1, ANGLER_SWIM_MS, 0
+    create basic tween INFO_FADE_TWEEN_ID, 0, 1, 300, 0
+
+    show sprite INFO_MASK_SPRITE
+    show sprite INFO_HOLE_SPRITE
+    hide sprite INFO_HOLE2_SPRITE
+    show sprite ANGLER_SPRITE
+    show sprite ANGLER_BULB_SPRITE
+    show sprite ANGLER_GLOW_SPRITE
+    show sprite ANGLER_BOX_SPRITE
+    showInfoBorder(ANGLER_BOX_BORDER, 1)
+    hintMode(0)
+    size text y INFO_HINT_TEXT_ID, 16
+    order text INFO_HINT_TEXT_ID, ORDER_INFO_TEXT
+
+    ` it greets the player, and the questions come up under that
+    angGreet = rnd(3)
+    ` they are short enough to fit on one line, above the questions
+    angGreet$ = "Oh! A visitor. I love visitors!"
+    if angGreet = 1 then angGreet$ = "Ask me anything. I know... things."
+    if angGreet = 2 then angGreet$ = "Hmm? Looking for luminescence in low light?"
+    if angGreet = 3 then angGreet$ = "I can teach you things, yes, yes."
+
+    angChosen = -1 `angler_choose sets this. it is further down, and a name has to be set before it is read.
+
+    ` the very first time, it says who it is, before anything else. see THE FIRST MEETING in fish_headers_angler.
+    angFirstMeeting = 1 - ANGLER_MET
+    angFirstAsked = 0
+    if angFirstMeeting
+        set text INFO_HINT_TEXT_ID, "{confirm} go on"
+        anglerSay("Don't be alarmed, I am a friend!")
+        gosub angler_wait
+        anglerSay("I saw you looking sort of lost and confused down here in the dark... do you need some help? I can help, most likely...")
+        gosub angler_wait
+    endif
+    angAgain = 1
+    while angAgain
+        angAgain = 0
+
+        ` the questions, and the line under them: keeping the light, for the card, and going back
+        ` without asking, from info mode or the radio
+        angPickLast = ANGLER_PICK_COUNT - 1
+        for angLineN = 0 to angPickLast
+            set text ANGLER_LINE_TEXTS(angLineN), ANGLER_ASK$(ANGLER_PICK(angLineN))
+        next
+        if ANGLER_FROM_CARD
+            if ANGLER_BANKED >= ANGLER_BANK_MAX
+                set text ANGLER_LINE_TEXTS(ANGLER_PICK_COUNT), "Keep the light for later (you have " + str$(ANGLER_BANK_MAX) + ")"
+            else
+                set text ANGLER_LINE_TEXTS(ANGLER_PICK_COUNT), "Keep the light for later {bulb}"
+            endif
+        else
+            set text ANGLER_LINE_TEXTS(ANGLER_PICK_COUNT), "Never mind"
+        endif
+        anglerSay(angGreet$)
+        ANGLER_LINE_LAST = ANGLER_PICK_COUNT
+        set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} ask"
+        gosub angler_choose
+        set text INFO_HINT_TEXT_ID, "{confirm} go on"
+
+        if angChosen < ANGLER_PICK_COUNT
+            ` a question. from info mode, a light that was kept is spent on it. a call costs nothing.
+            ANGLER_ASKED = ANGLER_PICK(angChosen)
+            if ANGLER_FROM_CARD = 0
+                if ANGLER_FROM_RADIO = 0
+                    anglerBankSpend()
+                endif
+            endif
+            anglerHear(ANGLER_ASKED)
+            angFirstAsked = 1
+
+            ` the light goes to what it is about, if that is on the screen. the angler gets out of the way of it.
+            anglerTopicBlob(ANGLER_ASKED)
+            ANGLER_SPOT = ANGLER_FOUND
+            if ANGLER_SPOT >= 0
+                anglerSpotRect()
+                angSpotY = ANGLER_SPOT_Y + ANGLER_SPOT_H / 2
+                if angSpotY > WORLD_HEIGHT / 2
+                    create basic tween ANGLER_UP_TWEEN_ID, 0, 1, 450, 0
+                endif
+            endif
+
+            anglerSay(ANGLER_SAY$(ANGLER_ASKED))
+            gosub angler_wait
+            if ANGLER_PAGES(ANGLER_ASKED) > 1
+                anglerSay(ANGLER_MORE$(ANGLER_ASKED))
+                gosub angler_wait
+            endif
+
+            ` called on the radio, it is in no hurry. it asks if there is anything else.
+            if ANGLER_FROM_RADIO
+                angElse = rnd(2)
+                angElse$ = "Anything else, buddy?"
+                if angElse = 1 then angElse$ = "Another one? I have got all day, pal."
+                if angElse = 2 then angElse$ = "More? Ooh, I love more."
+                anglerSay(angElse$)
+                set text ANGLER_LINE_TEXTS(0), "Ask another question"
+                set text ANGLER_LINE_TEXTS(1), "Goodbye for now"
+                ANGLER_LINE_LAST = 1
+                set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} pick"
+                gosub angler_choose
+                set text INFO_HINT_TEXT_ID, "{confirm} go on"
+                if angChosen = 0
+                    ` around again, with new questions, about the board as it is now. the light comes back to the angler.
+                    angAgain = 1
+                    ANGLER_SPOT = -1
+                    create basic tween ANGLER_UP_TWEEN_ID, tweenVal(ANGLER_UP_TWEEN_ID), 0, 450, 0
+                    anglerScanBoard()
+                    anglerPickTopics(-1)
+                    angGreet$ = "Ooh, what else? Pick one, pal."
+                endif
+            endif
+        else
+            if ANGLER_FROM_CARD
+                anglerBankAdd()
+                anglerSay("Saving me for later? Smart! Press {info} and find my light whenever you need me. I will be right here. See you later, pal.")
+                gosub angler_wait
+            endif
+        endif
+    endwhile
+
+    ` and the very first time, it says how its light can be kept, before it goes. when the light was
+    ` kept the first time, that was said already.
+    if angFirstMeeting
+        if angFirstAsked
+            set text INFO_HINT_TEXT_ID, "{confirm} go on"
+            anglerSay("Oh! One more thing, pal. Next time, you can keep my light for later, instead of asking right away.")
+            gosub angler_wait
+            anglerSay("Save up to " + str$(ANGLER_BANK_MAX) + " of them. They stay with you, from game to game. Press {info}, and ask whenever you like. Bye for now, friend!")
+            gosub angler_wait
+        endif
+        anglerMeet()
+    endif
+
+    ` it swims off the way that it came, and the dark goes with it
+    ANGLER_SPOT = -1
+    create basic tween ANGLER_SWIM_TWEEN_ID, 1, 0, ANGLER_SWIM_MS, 0
+    create basic tween INFO_FADE_TWEEN_ID, 1, 0, ANGLER_SWIM_MS, 0
+    create basic tween ANGLER_SAY_FADE_TWEEN_ID, tweenVal(ANGLER_SAY_FADE_TWEEN_ID), 0, 250, 0
+    while is tween done(ANGLER_SWIM_TWEEN_ID) < 1
+        gosub angler_frame
+    endwhile
+
+    hide sprite INFO_MASK_SPRITE
+    hide sprite INFO_HOLE_SPRITE
+    hide sprite ANGLER_SPRITE
+    hide sprite ANGLER_BULB_SPRITE
+    hide sprite ANGLER_GLOW_SPRITE
+    hide sprite ANGLER_BOX_SPRITE
+    showInfoBorder(ANGLER_BOX_BORDER, 0)
+    hide text ANGLER_SAY_TEXT_ID
+    create basic tween INFO_FADE_TWEEN_ID, 0, 0, 1, 0
+    set effect param float INFO_FX_ID, "Fade", 0
+
+    ` hand the hint back to the game, the same way that info mode does
+    set text INFO_HINT_TEXT_ID, GAME_HINT$
+    hintMode(1)
+    size text y INFO_HINT_TEXT_ID, 16
+    order text INFO_HINT_TEXT_ID, ORDER_HUD_TEXT
+    set text alpha INFO_HINT_TEXT_ID, 140
+return
+
+
+` pick a line, from 0 to ANGLER_LINE_LAST, into angChosen. the last line is the one that goes back:
+` the info key and the pause key pick it too, except for the card, which has to be answered. nothing
+` can be picked until the angler has swum all the way in, and the confirm button finishes what it is
+` saying first.
+angler_choose:
+    for angLineN = 0 to ANGLER_LINE_LAST
+        show text ANGLER_LINE_TEXTS(angLineN)
+    next
+    ANGLER_LINES_SHOWN = 1
+    ANGLER_CHOICE = 0
+    showInfoBorder(ANGLER_CURSOR, 1)
+
+    angChosen = -1
+    while angChosen < 0
+        gosub angler_frame
+        if is tween done(ANGLER_SWIM_TWEEN_ID) > 0
+            angChoiceWas = ANGLER_CHOICE
+            if new action down(ACT_DOWN) then ANGLER_CHOICE = ANGLER_CHOICE + 1
+            if new action down(ACT_UP) then ANGLER_CHOICE = ANGLER_CHOICE - 1
+            if ANGLER_CHOICE > ANGLER_LINE_LAST then ANGLER_CHOICE = 0
+            if ANGLER_CHOICE < 0 then ANGLER_CHOICE = ANGLER_LINE_LAST
+
+            ` the line that keeps the light cannot be picked when there is no room, so it is passed over
+            if anglerLineOff(ANGLER_CHOICE)
+                ANGLER_CHOICE = 0
+                if angChoiceWas = 0 then ANGLER_CHOICE = ANGLER_LINE_LAST - 1
+            endif
+
+            if new action down(ACT_CONFIRM)
+                if ANGLER_SPEAKING
+                    anglerSpeakAll()
+                else
+                    angChosen = ANGLER_CHOICE
+                endif
+            endif
+
+            if ANGLER_FROM_CARD = 0
+                if new action down(ACT_INFO) then angChosen = ANGLER_LINE_LAST
+                if new action down(ACT_PAUSE) then angChosen = ANGLER_LINE_LAST
+            endif
+        endif
+    endwhile
+
+    ANGLER_LINES_SHOWN = 0
+    for angLineN = 0 to ANGLER_LINE_LAST
+        hide text ANGLER_LINE_TEXTS(angLineN)
+    next
+    showInfoBorder(ANGLER_CURSOR, 0)
+return
+
+
+` wait for the confirm button, while the words are up
+angler_wait:
+    angWaited = 0
+    while angWaited = 0
+        gosub angler_frame
+        if new action down(ACT_CONFIRM)
+            if ANGLER_SPEAKING
+                anglerSpeakAll()
+            else
+                angWaited = 1
+            endif
+        endif
+    endwhile
+return
+
+
+` one frame of the scene. the game goes on underneath, the same as it does under info mode.
+angler_frame:
+    gosub frame_input_icons
+    gosub frame_angler
+    gosub update_frame
+    sync
+return
+
+
+` lay everything out where it is on this frame
+frame_angler:
+    angFade# = tweenVal(INFO_FADE_TWEEN_ID)
+    set effect param float INFO_FX_ID, "Fade", angFade#
+
+    ` it swims in from the left, at the bottom of the screen, or at the top while its light shows
+    ` something down there. the box is beside it.
+    angSwim# = tweenVal(ANGLER_SWIM_TWEEN_ID)
+    angUp# = tweenVal(ANGLER_UP_TWEEN_ID)
+    angBoxX = 150
+    angBoxY# = 196 - 176 * angUp#
+    angX# = -120 + 132 * angSwim#
+    angBob# = sin(game ms() * .002) * 2
+    angY# = angBoxY# + 22 + angBob#
+    position sprite ANGLER_SPRITE, angX#, angY#
+
+    anglerSpeakStep()
+
+    ` the light hangs from the end of its stalk, and swings a little
+    angTipX# = angX# + ANGLER_TIP_X * ANGLER_SCALE + sin(game ms() * .003) * 1.5
+    angTipY# = angY# + ANGLER_TIP_Y * ANGLER_SCALE
+    position sprite ANGLER_BULB_SPRITE, angTipX#, angTipY#
+    angGlowY# = angTipY# + 12
+    angGlowSize# = 84 + sin(game ms() * .004) * 6
+    position sprite ANGLER_GLOW_SPRITE, angTipX#, angGlowY#
+    size sprite ANGLER_GLOW_SPRITE, angGlowSize#, angGlowSize#
+    color sprite ANGLER_GLOW_SPRITE, rgb(255, 220, 140, 150 * angFade#)
+    color sprite ANGLER_SPRITE, rgb(255, 255, 255, 255 * angFade#)
+    color sprite ANGLER_BULB_SPRITE, rgb(255, 255, 255, 255 * angFade#)
+
+    ` the hole in the dark is around the light, or on whatever it is showing. it slides there.
+    angWantX# = angTipX# - ANGLER_LIGHT_HOLE / 2
+    angWantY# = angGlowY# - ANGLER_LIGHT_HOLE / 2
+    angWantW# = ANGLER_LIGHT_HOLE
+    angWantH# = ANGLER_LIGHT_HOLE
+    if ANGLER_SPOT >= 0
+        anglerSpotRect()
+        angWantX# = ANGLER_SPOT_X
+        angWantY# = ANGLER_SPOT_Y
+        angWantW# = ANGLER_SPOT_W
+        angWantH# = ANGLER_SPOT_H
+    endif
+    if ANGLER_FRAME_DONE = 0
+        ANGLER_HOLE_X# = angWantX#
+        ANGLER_HOLE_Y# = angWantY#
+        ANGLER_HOLE_W# = angWantW#
+        ANGLER_HOLE_H# = angWantH#
+        ANGLER_FRAME_DONE = 1
+    endif
+    ANGLER_HOLE_X# = ANGLER_HOLE_X# + (angWantX# - ANGLER_HOLE_X#) * .15
+    ANGLER_HOLE_Y# = ANGLER_HOLE_Y# + (angWantY# - ANGLER_HOLE_Y#) * .15
+    ANGLER_HOLE_W# = ANGLER_HOLE_W# + (angWantW# - ANGLER_HOLE_W#) * .15
+    ANGLER_HOLE_H# = ANGLER_HOLE_H# + (angWantH# - ANGLER_HOLE_H#) * .15
+    position sprite INFO_HOLE_SPRITE, ANGLER_HOLE_X# - INFO_HOLE_PADDING, ANGLER_HOLE_Y# - INFO_HOLE_PADDING
+    size sprite INFO_HOLE_SPRITE, ANGLER_HOLE_W# + INFO_HOLE_PADDING * 2, ANGLER_HOLE_H# + INFO_HOLE_PADDING * 2
+    set effect param float2 INFO_MASK_FX_ID, "Size", ANGLER_HOLE_W# + INFO_HOLE_PADDING * 2, ANGLER_HOLE_H# + INFO_HOLE_PADDING * 2
+
+    ` the box, and the words in it
+    position sprite ANGLER_BOX_SPRITE, angBoxX, angBoxY#
+    color sprite ANGLER_BOX_SPRITE, rgb(10, 14, 30, 235 * angFade#)
+    layoutInfoBorder(ANGLER_BOX_BORDER, angBoxX, angBoxY#, ANGLER_BOX_W, ANGLER_BOX_H)
+    colorInfoBorder(ANGLER_BOX_BORDER, rgb(255, 210, 120, 160 * angFade#))
+
+    set text position ANGLER_SAY_TEXT_ID, angBoxX + 10, angBoxY# + 7
+    set text alpha ANGLER_SAY_TEXT_ID, 255 * angFade# * tweenVal(ANGLER_SAY_FADE_TWEEN_ID)
+
+    if ANGLER_LINES_SHOWN
+        for angLineN = 0 to ANGLER_LINE_LAST
+            angLineY# = angBoxY# + 30 + angLineN * 17
+            set text position ANGLER_LINE_TEXTS(angLineN), angBoxX + 18, angLineY#
+            angLineColor = rgb(150, 190, 255, 255 * angFade#)
+            if angLineN = ANGLER_CHOICE then angLineColor = rgb(255, 255, 255, 255 * angFade#)
+            if anglerLineOff(angLineN) then angLineColor = rgb(150, 190, 255, 90 * angFade#)
+            color text ANGLER_LINE_TEXTS(angLineN), angLineColor
+        next
+        angCursorY# = angBoxY# + 28 + ANGLER_CHOICE * 17
+        layoutInfoBorder(ANGLER_CURSOR, angBoxX + 8, angCursorY#, ANGLER_BOX_W - 16, 18)
+        angPulse# = .8 + .2 * sin(game ms() * .006)
+        colorInfoBorder(ANGLER_CURSOR, rgb(255, 255, 255, 255 * angFade# * angPulse#))
+    endif
+    set text alpha INFO_HINT_TEXT_ID, 255 * angFade#
+return
+
+
+` info mode puts the kept lights in its hint, with the key that asks. info_open comes here, after it
+` has written the hint, with infoEnabledCount.
+angler_info_hint:
+    if ANGLER_BANKED <= 0 then return
+    angHintBulbs$ = ""
+    for angHintN = 1 to ANGLER_BANKED
+        angHintBulbs$ = angHintBulbs$ + "{bulb}"
+    next
+    if infoEnabledCount > 1
+        set text INFO_HINT_TEXT_ID, "{dir} look around    {confirm} ask " + angHintBulbs$ + "    {info} back to game"
+    else
+        set text INFO_HINT_TEXT_ID, "{confirm} ask " + angHintBulbs$ + "    {info} back to game"
+    endif
+return
+
+
+` a window in the debug panel. frame_dbg, in fish_routines, comes here on every frame, in debug mode.
+frame_debug_angler:
+    begin debug window("Angler")
+    debug text "lights kept: " + str$(ANGLER_BANKED) + " of " + str$(ANGLER_BANK_MAX)
+    if debug button("clear the lights") = 1
+        anglerBankSet(0)
+    endif
+    if debug button("fill the lights") = 1
+        anglerBankSet(ANGLER_BANK_MAX)
+    endif
+    debug separator
+    debug text "answers heard: " + str$(ANGLER_STAMP)
+    if debug button("bring the angler") = 1
+        ANGLER_PENDING = 1
+    endif
+    debug text "met: " + str$(ANGLER_MET)
+    if debug button("forget what was heard") = 1
+        anglerForget()
+    endif
+    end debug window
+return
+
+
+routines_angler_exit:
+
+
+` make a topic. setup_angler_topics makes them all, in order. `more$` is " " for one with only one page.
+function anglerTopic(angTier, angAsk$, angSay$, angMore$)
+    angT = ANGLER_TOPIC_COUNT
+    ANGLER_TIER(angT) = angTier
+    ANGLER_ASK$(angT) = angAsk$
+    ANGLER_SAY$(angT) = angSay$
+    ANGLER_MORE$(angT) = angMore$
+    ANGLER_PAGES(angT) = 2
+    if angMore$ = " " then ANGLER_PAGES(angT) = 1
+    ANGLER_TOPIC_COUNT = ANGLER_TOPIC_COUNT + 1
+endfunction
+
+
+` put new words in the box. they are said one letter at a time. see THE VOICE in fish_headers_angler.
+function anglerSay(angSayWords$)
+    set text ANGLER_SAY_TEXT_ID, angSayWords$
+    show text ANGLER_SAY_TEXT_ID
+    create basic tween ANGLER_SAY_FADE_TWEEN_ID, 1, 1, 1, 0
+    set text reveal ANGLER_SAY_TEXT_ID, 0
+    ANGLER_SPEAKING = 1
+    ANGLER_SAID = 0
+    ANGLER_WORD_BUBBLES = 0
+    ANGLER_SAY_NEXT_MS = game ms()
+endfunction
+
+
+` say the rest of the line at once
+function anglerSpeakAll()
+    ANGLER_SPEAKING = 0
+    set text reveal ANGLER_SAY_TEXT_ID, -1
+endfunction
+
+
+` say the letters that are due. frame_angler comes here on every frame.
+function anglerSpeakStep()
+    if ANGLER_SPEAKING = 0 then exitfunction
+    angStepNow = game ms()
+
+    ` after a long frame, it carries on from now, rather than saying a heap of letters at once
+    angStepLate = angStepNow - ANGLER_SAY_NEXT_MS
+    if angStepLate > 200 then ANGLER_SAY_NEXT_MS = angStepNow
+
+    angStepGo = 1
+    while angStepGo
+        angStepGo = 0
+        if ANGLER_SPEAKING
+            if ANGLER_SAY_NEXT_MS <= angStepNow then angStepGo = 1
+        endif
+        if angStepGo
+            anglerSpeakLetter()
+        endif
+    endwhile
+endfunction
+
+
+` say the next letter
+function anglerSpeakLetter()
+    angStepChar = text reveal char(ANGLER_SAY_TEXT_ID, ANGLER_SAID)
+    if angStepChar < 0
+        anglerSpeakAll()
+        exitfunction
+    endif
+    ANGLER_SAID = ANGLER_SAID + 1
+    set text reveal ANGLER_SAY_TEXT_ID, ANGLER_SAID
+
+    angStepWait = ANGLER_LETTER_MS
+    if angStepChar = 44 then angStepWait = ANGLER_COMMA_MS
+    if angStepChar = 58 then angStepWait = ANGLER_COMMA_MS
+    if angStepChar = 46 then angStepWait = ANGLER_STOP_MS
+    if angStepChar = 63 then angStepWait = ANGLER_STOP_MS
+    if angStepChar = 33 then angStepWait = ANGLER_STOP_MS
+    ANGLER_SAY_NEXT_MS = ANGLER_SAY_NEXT_MS + angStepWait
+
+    if angStepChar = 32 then ANGLER_WORD_BUBBLES = 0
+    angStepAt = ANGLER_SAID - 1
+    anglerVowelAt(angStepAt)
+    if ANGLER_FOUND >= 0
+        anglerBubble(ANGLER_FOUND, angStepAt)
+    endif
+endfunction
+
+
+` the letter at a place in what is being said, in small letters: a to z are 97 to 122
+function anglerLetter(angLetterAt)
+    angLetter = -1
+    if angLetterAt >= 0
+        angLetter = text reveal char(ANGLER_SAY_TEXT_ID, angLetterAt)
+    endif
+    if angLetter >= 65
+        if angLetter <= 90 then angLetter = angLetter + 32
+    endif
+endfunction angLetter
+
+
+` 1 for a, e, i, o and u
+function anglerIsVowel(angVowelCode)
+    angIsVowel = 0
+    if angVowelCode = 97 then angIsVowel = 1
+    if angVowelCode = 101 then angIsVowel = 1
+    if angVowelCode = 105 then angIsVowel = 1
+    if angVowelCode = 111 then angIsVowel = 1
+    if angVowelCode = 117 then angIsVowel = 1
+endfunction angIsVowel
+
+
+` the sound for the vowel at a place, in ANGLER_FOUND: 0 ah, 1 eh, 2 ee, 3 oh, 4 oo, 5 uh. or -1, when
+` it is not a vowel, or not the first of a run of them. the same as vowel_of in Tools/angler_voice_gen.py.
+function anglerVowelAt(angVowelAt)
+    ANGLER_FOUND = -1
+    angVowelC = anglerLetter(angVowelAt)
+    angVowelPrev = anglerLetter(angVowelAt - 1)
+    angVowelNext = anglerLetter(angVowelAt + 1)
+    angVowelPrevIs = anglerIsVowel(angVowelPrev)
+    if angVowelPrevIs then exitfunction
+
+    ` a y is a vowel in the middle of a word, and not at the start of one
+    if angVowelC = 121
+        if angVowelPrev >= 97
+            if angVowelPrev <= 122 then ANGLER_FOUND = 2
+        endif
+        exitfunction
+    endif
+
+    if angVowelC = 97 then ANGLER_FOUND = 0
+    if angVowelC = 101
+        ANGLER_FOUND = 1
+        if angVowelNext = 101 then ANGLER_FOUND = 2
+        if angVowelNext = 97 then ANGLER_FOUND = 2
+    endif
+    if angVowelC = 105 then ANGLER_FOUND = 2
+    if angVowelC = 111
+        ANGLER_FOUND = 3
+        if angVowelNext = 111 then ANGLER_FOUND = 4
+        if angVowelNext = 117 then ANGLER_FOUND = 4
+    endif
+    if angVowelC = 117 then ANGLER_FOUND = 5
+endfunction
+
+
+` how the word that a place is in ends, in ANGLER_WORD_END: 0, or 1 for ?, 2 for !, and 3 for ...
+function anglerWordEnds(angEndAt)
+    ANGLER_WORD_END = 0
+    angEndDots = 0
+    angEndLast = 0
+    angEndC = text reveal char(ANGLER_SAY_TEXT_ID, angEndAt)
+    angEndGo = 1
+    while angEndGo
+        angEndGo = 0
+        if angEndC > 0
+            if angEndC <> 32 then angEndGo = 1
+        endif
+        if angEndGo
+            if angEndC = 46
+                angEndDots = angEndDots + 1
+            else
+                angEndDots = 0
+            endif
+            angEndLast = angEndC
+            angEndAt = angEndAt + 1
+            angEndC = text reveal char(ANGLER_SAY_TEXT_ID, angEndAt)
+        endif
+    endwhile
+    if angEndLast = 63 then ANGLER_WORD_END = 1
+    if angEndLast = 33 then ANGLER_WORD_END = 2
+    if angEndDots >= 3 then ANGLER_WORD_END = 3
+endfunction
+
+
+` one bubble of its voice, for the vowel at a place in the line. see THE VOICE in fish_headers_angler.
+function anglerBubble(angBubbleSound, angBubbleAt)
+    angBubbleSfx = ANGLER_VOICE_SFX(ANGLER_VOICE_NEXT)
+    ANGLER_VOICE_NEXT = (ANGLER_VOICE_NEXT + 1) mod ANGLER_VOICE_ROOM
+
+    angBubbleRoll = rnd(200)
+    angBubblePitch# = (angBubbleRoll - 100) * .01 * ANGLER_JITTER#
+    angBubbleVolume# = ANGLER_VOICE_VOLUME#
+    anglerWordEnds(angBubbleAt)
+    if ANGLER_WORD_END = 1
+        angBubblePitch# = angBubblePitch# + ANGLER_ASK_PITCH# + ANGLER_ASK_STEP# * ANGLER_WORD_BUBBLES
+    endif
+    if ANGLER_WORD_END = 2 then angBubbleVolume# = angBubbleVolume# * ANGLER_SHOUT#
+    if ANGLER_WORD_END = 3
+        for angBubbleN = 0 to ANGLER_WORD_BUBBLES
+            angBubbleVolume# = angBubbleVolume# * ANGLER_TRAIL#
+        next
+    endif
+    if angBubbleVolume# > 1 then angBubbleVolume# = 1
+    ANGLER_WORD_BUBBLES = ANGLER_WORD_BUBBLES + 1
+
+    sfx angBubbleSfx, SFX_CLIP_ANGLER(angBubbleSound)
+    set sfx pitch angBubbleSfx, angBubblePitch#
+    set sfx volume angBubbleSfx, angBubbleVolume#
+    play sfx angBubbleSfx
+endfunction
+
+
+` 1 for the line under the questions, when it keeps the light and there is no room for another
+function anglerLineOff(angOffLine)
+    angOff = 0
+    if angOffLine = ANGLER_PICK_COUNT
+        if ANGLER_FROM_CARD = 1 and ANGLER_LINE_LAST = ANGLER_PICK_COUNT
+            if ANGLER_BANKED >= ANGLER_BANK_MAX then angOff = 1
+        endif
+    endif
+endfunction angOff
+
+
+` the bulbs after the hint for info mode, one for every light that is kept
+function anglerHintRefresh()
+    if HINT_PART_TEXTS(2) = 0 then exitfunction
+    angRefresh$ = "{info} info"
+    if ANGLER_BANKED > 0
+        angRefresh$ = angRefresh$ + " "
+        for angRefreshN = 1 to ANGLER_BANKED
+            angRefresh$ = angRefresh$ + "{bulb}"
+        next
+    endif
+    set text HINT_PART_TEXTS(2), angRefresh$
+endfunction
+
+
+` keep a light for later. it says 1 if there was room.
+function anglerBankAdd()
+    angAdded = 0
+    if ANGLER_BANKED < ANGLER_BANK_MAX
+        ANGLER_BANKED = ANGLER_BANKED + 1
+        set pref ANGLER_PREF, ANGLER_BANKED
+        angAdded = 1
+    endif
+    anglerHintRefresh()
+endfunction angAdded
+
+
+` set how many lights are kept. the debug window does this.
+function anglerBankSet(angSetTo)
+    ANGLER_BANKED = angSetTo
+    set pref ANGLER_PREF, ANGLER_BANKED
+    anglerHintRefresh()
+endfunction
+
+
+` the player has met the angler, and it will not say who it is again
+function anglerMeet()
+    ANGLER_MET = 1
+    set pref ANGLER_PREF + 2, 1
+endfunction
+
+
+` forget every answer that has been heard, so that it all comes around again from the start, rumors
+` and all, and forget having met it, so that it says who it is again. the debug window does this.
+function anglerForget()
+    ANGLER_MET = 0
+    set pref ANGLER_PREF + 2, 0
+    angForgetLast = ANGLER_TOPIC_COUNT - 1
+    for angForgetN = 0 to angForgetLast
+        ANGLER_HEARD(angForgetN) = 0
+        set pref ANGLER_PREF_HEARD + angForgetN, 0
+    next
+    ANGLER_STAMP = 0
+    set pref ANGLER_PREF + 1, 0
+endfunction
+
+
+` spend a light that was kept
+function anglerBankSpend()
+    if ANGLER_BANKED > 0
+        ANGLER_BANKED = ANGLER_BANKED - 1
+        set pref ANGLER_PREF, ANGLER_BANKED
+    endif
+    anglerHintRefresh()
+endfunction
+
+
+` a topic has been heard. it is stamped with a count that only goes up, so that the one that was
+` heard longest ago can be found.
+function anglerHear(angHeard)
+    ANGLER_STAMP = ANGLER_STAMP + 1
+    ANGLER_HEARD(angHeard) = ANGLER_STAMP
+    set pref ANGLER_PREF + 1, ANGLER_STAMP
+    set pref ANGLER_PREF_HEARD + angHeard, ANGLER_STAMP
+endfunction
+
+
+` what is on the board right now, for anglerTopicNear. it is looked at once, when the angler comes.
+function anglerScanBoard()
+    ANGLER_SEE_STACK = 0
+    ANGLER_SEE_BELLY = 0
+    ANGLER_SEE_BONES = 0
+    ANGLER_SEE_JELLY = 0
+    ANGLER_SEE_RAY = 0
+    ANGLER_SEE_BOTTLE = 0
+    angScanLast = CELL_COUNT - 1
+    for angScanN = 0 to angScanLast
+        angScanKind = CELLS(angScanN).value
+        if CELLS(angScanN).stack > 0 then ANGLER_SEE_STACK = 1
+        if CELLS(angScanN).bellyUp = 1 then ANGLER_SEE_BELLY = 1
+        if CELLS(angScanN).bellyUp = 2 then ANGLER_SEE_BONES = 1
+        if angScanKind = TEX_JELLY then ANGLER_SEE_JELLY = 1
+        if angScanKind = TEX_RAY then ANGLER_SEE_RAY = 1
+        if angScanKind = TEX_BOTTLE then ANGLER_SEE_BOTTLE = 1
+    next
+endfunction
+
+
+` 1 when a codec entry has been seen, in any game
+function anglerSeen(angSeenEntry)
+    angSeenIt = 0
+    if angSeenEntry >= 0
+        if CODEC_SEEN(angSeenEntry) then angSeenIt = 1
+    endif
+endfunction angSeenIt
+
+
+` where the blob that the light is showing is, in ANGLER_SPOT_X, _Y, _W and _H
+function anglerSpotRect()
+    angRectBlob = INFOS(ANGLER_SPOT)
+    ANGLER_SPOT_X = angRectBlob.topLeft.x
+    ANGLER_SPOT_Y = angRectBlob.topLeft.y
+    ANGLER_SPOT_W = angRectBlob.size.x
+    ANGLER_SPOT_H = angRectBlob.size.y
+endfunction
+
+
+` 1 when a blob of info mode is on the screen, and can be shown
+function anglerBlobUp(angBlobN)
+    angBlobOn = 0
+    if angBlobN >= 0
+        if angBlobN < INFO_LENGTH
+            if INFOS(angBlobN).enabled then angBlobOn = 1
+        endif
+    endif
+endfunction angBlobOn
+
+
+` the blob of info mode that a topic is about, in ANGLER_FOUND, or -1. only one that is on the screen.
+function anglerTopicBlob(angBlobTopic)
+    ANGLER_FOUND = -1
+    select angBlobTopic
+        case ANGLER_T_SCORE
+            ANGLER_FOUND = INFO_INDEX_SCORE_BAR
+        endcase
+        case ANGLER_T_MULT
+            ANGLER_FOUND = INFO_INDEX_MULTIPLIER
+        endcase
+        case ANGLER_T_MOVES
+            ANGLER_FOUND = INFO_INDEX_MOVE_COUNT
+        endcase
+        case ANGLER_T_SLOTS
+            ANGLER_FOUND = INFO_INDEX_MOVES
+        endcase
+        case ANGLER_T_QUEST
+            ANGLER_FOUND = INFO_INDEX_QUEST
+            if anglerBlobUp(INFO_INDEX_QUEST) = 0 then ANGLER_FOUND = INFO_INDEX_QUEST_PICK
+        endcase
+        case ANGLER_T_CORAL
+            ANGLER_FOUND = INFO_INDEX_CORAL
+        endcase
+        case ANGLER_T_HORROR
+            ANGLER_FOUND = INFO_INDEX_CORAL_SICK
+        endcase
+        case ANGLER_T_SONGS
+            ANGLER_FOUND = INFO_INDEX_SONGS
+        endcase
+        case ANGLER_T_MOON
+            ANGLER_FOUND = INFO_INDEX_TIDE
+        endcase
+        case ANGLER_T_DIVER
+            ANGLER_FOUND = INFO_INDEX_DIVER
+        endcase
+        case ANGLER_T_STACK
+            ANGLER_FOUND = INFO_INDEX_GRID
+        endcase
+        case ANGLER_T_BELLY
+            ANGLER_FOUND = INFO_INDEX_GRID
+        endcase
+        case ANGLER_T_BONES
+            ANGLER_FOUND = INFO_INDEX_GRID
+        endcase
+        case ANGLER_T_JELLY
+            ANGLER_FOUND = INFO_INDEX_GRID
+        endcase
+        case ANGLER_T_RAY
+            ANGLER_FOUND = INFO_INDEX_GRID
+        endcase
+        case ANGLER_T_BOTTLE
+            ANGLER_FOUND = INFO_INDEX_GRID
+        endcase
+    endselect
+    if anglerBlobUp(ANGLER_FOUND) = 0 then ANGLER_FOUND = -1
+endfunction
+
+
+` the topic for a blob of info mode, in ANGLER_FOUND, or -1 when nothing is about it. the board
+` itself is about whatever is on it that can be asked about.
+function anglerTopicForBlob(angForBlob)
+    ANGLER_FOUND = -1
+    if angForBlob < 0 then exitfunction
+    if angForBlob = INFO_INDEX_SCORE_BAR then ANGLER_FOUND = ANGLER_T_SCORE
+    if angForBlob = INFO_INDEX_MULTIPLIER then ANGLER_FOUND = ANGLER_T_MULT
+    if angForBlob = INFO_INDEX_MOVE_COUNT then ANGLER_FOUND = ANGLER_T_MOVES
+    if angForBlob = INFO_INDEX_ROUNDS then ANGLER_FOUND = ANGLER_T_SCORE
+    if angForBlob = INFO_INDEX_PASSIVES then ANGLER_FOUND = ANGLER_T_CARDS
+    if angForBlob = INFO_INDEX_MOVES then ANGLER_FOUND = ANGLER_T_SLOTS
+    if angForBlob = INFO_INDEX_QUEST then ANGLER_FOUND = ANGLER_T_QUEST
+    if angForBlob = INFO_INDEX_QUEST_PICK then ANGLER_FOUND = ANGLER_T_QUEST
+    if angForBlob = INFO_INDEX_CORAL then ANGLER_FOUND = ANGLER_T_CORAL
+    if angForBlob = INFO_INDEX_CORAL_SICK then ANGLER_FOUND = ANGLER_T_HORROR
+    if angForBlob = INFO_INDEX_SONGS then ANGLER_FOUND = ANGLER_T_SONGS
+    if angForBlob = INFO_INDEX_TIDE then ANGLER_FOUND = ANGLER_T_MOON
+    if angForBlob = INFO_INDEX_DIVER then ANGLER_FOUND = ANGLER_T_DIVER
+
+    ` the passives and the moves explain themselves, one by one. asking about one is asking about the cards.
+    if ANGLER_FOUND < 0
+        if angForBlob >= INFO_BASE_LENGTH then ANGLER_FOUND = ANGLER_T_CARDS
+    endif
+    if angForBlob = INFO_INDEX_GRID
+        anglerScanBoard()
+        ANGLER_FOUND = -1
+        if ANGLER_SEE_STACK then ANGLER_FOUND = ANGLER_T_STACK
+        if ANGLER_SEE_BOTTLE then ANGLER_FOUND = ANGLER_T_BOTTLE
+        if ANGLER_SEE_RAY then ANGLER_FOUND = ANGLER_T_RAY
+        if ANGLER_SEE_JELLY then ANGLER_FOUND = ANGLER_T_JELLY
+        if ANGLER_SEE_BONES then ANGLER_FOUND = ANGLER_T_BONES
+        if ANGLER_SEE_BELLY then ANGLER_FOUND = ANGLER_T_BELLY
+        ` one that has been heard already gives way to the round, which every board is about
+        if ANGLER_FOUND >= 0
+            if ANGLER_HEARD(ANGLER_FOUND) > 0 then ANGLER_FOUND = -1
+        endif
+        if ANGLER_FOUND < 0 then ANGLER_FOUND = ANGLER_T_SCORE
+    endif
+endfunction
+
+
+` 1 when a plain topic is about something that is on the board, or on the screen, right now
+function anglerTopicNear(angNearTopic)
+    angNear = 0
+    select angNearTopic
+        case ANGLER_T_STACK
+            angNear = ANGLER_SEE_STACK
+        endcase
+        case ANGLER_T_BELLY
+            angNear = ANGLER_SEE_BELLY
+        endcase
+        case ANGLER_T_BONES
+            angNear = ANGLER_SEE_BONES
+        endcase
+        case ANGLER_T_JELLY
+            angNear = ANGLER_SEE_JELLY
+        endcase
+        case ANGLER_T_RAY
+            angNear = ANGLER_SEE_RAY
+        endcase
+        case ANGLER_T_BOTTLE
+            angNear = ANGLER_SEE_BOTTLE
+        endcase
+        case ANGLER_T_QUEST
+            if QUEST_ID > 0 then angNear = 1
+        endcase
+        case ANGLER_T_CORAL
+            angNear = anglerBlobUp(INFO_INDEX_CORAL)
+        endcase
+        case ANGLER_T_HORROR
+            angNear = anglerBlobUp(INFO_INDEX_CORAL_SICK)
+        endcase
+        case ANGLER_T_SONGS
+            if CORAL_CASTS > 0 then angNear = 1
+        endcase
+        case ANGLER_T_MOON
+            angNear = anglerBlobUp(INFO_INDEX_TIDE)
+        endcase
+        case ANGLER_T_NIGHT
+            angNear = TIDE_NIGHT
+        endcase
+        case ANGLER_T_DIVER
+            angNear = DIVER_ON
+        endcase
+        case ANGLER_T_SLOTS
+            if MOVE_ABILITY_COUNT > 0 then angNear = 1
+        endcase
+    endselect
+endfunction angNear
+
+
+` 1 when a plain topic can be asked about at all. the special fish and the hidden things are only
+` explained once the player has come across them, or they are on the screen. the rest always can be.
+function anglerTopicOpen(angOpenTopic)
+    angOpen = 1
+    select angOpenTopic
+        case ANGLER_T_STACK
+            angOpen = anglerSeen(CODEC_ENTRY_STACK)
+        endcase
+        case ANGLER_T_BELLY
+            angOpen = anglerSeen(CODEC_ENTRY_BELLY)
+        endcase
+        case ANGLER_T_BONES
+            angOpen = anglerSeen(CODEC_ENTRY_SKELETON)
+        endcase
+        case ANGLER_T_JELLY
+            angOpen = anglerSeen(CODEC_ENTRY_JELLY)
+        endcase
+        case ANGLER_T_RAY
+            angOpen = anglerSeen(CODEC_ENTRY_RAY)
+        endcase
+        case ANGLER_T_BOTTLE
+            angOpen = anglerSeen(CODEC_ENTRY_BOTTLE)
+        endcase
+        case ANGLER_T_QUEST
+            angOpen = 0
+            if CURRENT_ROUND >= QUEST_FIRST_ROUND then angOpen = 1
+        endcase
+        case ANGLER_T_CORAL
+            angOpen = anglerSeen(CODEC_ENTRY_CORAL)
+        endcase
+        case ANGLER_T_HORROR
+            angOpen = anglerSeen(CODEC_ENTRY_HORROR)
+        endcase
+        case ANGLER_T_SONGS
+            angOpen = anglerSeen(CODEC_ENTRY_CORAL)
+        endcase
+        case ANGLER_T_MOON
+            angOpen = TIDE_SEEN
+            if anglerSeen(CODEC_ENTRY_NIGHT) then angOpen = 1
+        endcase
+        case ANGLER_T_NIGHT
+            angOpen = anglerSeen(CODEC_ENTRY_NIGHT)
+        endcase
+        case ANGLER_T_DIVER
+            angOpen = anglerSeen(CODEC_ENTRY_DIVER)
+        endcase
+        case ANGLER_T_CROOKED
+            angOpen = anglerSeen(CODEC_ENTRY_CROOKED)
+        endcase
+    endselect
+    if anglerTopicNear(angOpenTopic) then angOpen = 1
+endfunction angOpen
+
+
+` 1 when a rumor can be told. the rumors of the coral wait until coral has grown, in any game: the
+` angler tells more about the coral, and does not give away that there is any. the rest always can be.
+function anglerRumorOpen(angRumorOpenTopic)
+    angRumorIsOpen = 1
+    angRumorCoral = 0
+    if angRumorOpenTopic = ANGLER_R_STILL then angRumorCoral = 1
+    if angRumorOpenTopic = ANGLER_R_SING then angRumorCoral = 1
+    if angRumorOpenTopic = ANGLER_R_DEAD_SONG then angRumorCoral = 1
+    if angRumorCoral
+        angRumorIsOpen = anglerSeen(CODEC_ENTRY_CORAL)
+        if CORAL_COUNT > 0 then angRumorIsOpen = 1
+    endif
+endfunction angRumorIsOpen
+
+
+` 1 when the player has found the secret of a rumor already, so that it is not worth much to them
+function anglerRumorKnown(angKnownTopic)
+    angKnown = 0
+    select angKnownTopic
+        case ANGLER_R_STILL
+            if CORAL_CASTS > 0 then angKnown = 1
+            if anglerSeen(CODEC_ENTRY_CORAL) then angKnown = 1
+        endcase
+        case ANGLER_R_SING
+            angKnown = anglerSeen(CODEC_ENTRY_CORAL)
+        endcase
+        case ANGLER_R_FAST
+            angKnown = anglerSeen(ABILITY_INDEX_MOVE_ROTATE)
+        endcase
+        case ANGLER_R_TIDE
+            angKnown = anglerSeen(CODEC_ENTRY_NIGHT)
+        endcase
+        case ANGLER_R_CORNERS
+            angKnown = anglerSeen(CODEC_ENTRY_CROOKED)
+        endcase
+        case ANGLER_R_RADIO
+            angKnown = anglerSeen(CODEC_ENTRY_RADIO)
+        endcase
+        case ANGLER_R_SOS
+            angKnown = anglerSeen(CODEC_ENTRY_TUNA)
+        endcase
+        case ANGLER_R_LIFT
+            angKnown = anglerSeen(CODEC_ENTRY_DIVER)
+        endcase
+        case ANGLER_R_OLD_ONE
+            angKnown = anglerSeen(CODEC_ENTRY_CTHULHU)
+        endcase
+        case ANGLER_R_DEAD_SONG
+            angKnown = anglerSeen(CODEC_ENTRY_ANCIENT)
+        endcase
+        case ANGLER_R_CLOWN
+            if CODEC_ENTRY_CAMEO >= 0
+                angKnown = anglerSeen(CODEC_ENTRY_CAMEO)
+            endif
+        endcase
+        case ANGLER_R_CALL
+            angKnown = anglerSeen(CODEC_ENTRY_CALL)
+        endcase
+        case ANGLER_R_LEG
+            if CODEC_ENTRY_CAMEO >= 0
+                angKnown = anglerSeen(CODEC_ENTRY_CAMEO + 8)
+            endif
+        endcase
+    endselect
+endfunction angKnown
+
+
+` a number from 0 to one less than angRollOf, with rnd. never with a stream: see THE QUESTIONS.
+function anglerRoll(angRollOf)
+    angRolled = rnd(angRollOf)
+    if angRolled >= angRollOf then angRolled = angRollOf - 1
+    if angRolled < 0 then angRolled = 0
+endfunction angRolled
+
+
+` 1 when a topic is one of the ones that are on offer already
+function anglerPicked(angPickedTopic)
+    angIsPicked = 0
+    if ANGLER_PICK_COUNT > 0
+        angPickedLast = ANGLER_PICK_COUNT - 1
+        for angPickedN = 0 to angPickedLast
+            if ANGLER_PICK(angPickedN) = angPickedTopic then angIsPicked = 1
+        next
+    endif
+endfunction angIsPicked
+
+
+` pick one plain topic that is not on offer yet, into ANGLER_FOUND, or -1. one that has not been
+` heard comes first, and one that is near comes before that, when angWantNear is 1. when every one
+` has been heard, it is the one that was heard longest ago.
+function anglerPickPlain(angWantNear)
+    ANGLER_FOUND = -1
+    angPlainCount = 0
+    angPlainLast = ANGLER_TOPIC_COUNT - 1
+    for angPlainN = 0 to angPlainLast
+        angPlainOk = 0
+        if ANGLER_TIER(angPlainN) = ANGLER_TIER_PLAIN
+            if ANGLER_HEARD(angPlainN) = 0
+                if anglerPicked(angPlainN) = 0
+                    if anglerTopicOpen(angPlainN) then angPlainOk = 1
+                    if angWantNear
+                        if anglerTopicNear(angPlainN) = 0 then angPlainOk = 0
+                    endif
+                endif
+            endif
+        endif
+        if angPlainOk
+            ANGLER_CANDIDATES(angPlainCount) = angPlainN
+            angPlainCount = angPlainCount + 1
+        endif
+    next
+    if angPlainCount > 0
+        ANGLER_FOUND = ANGLER_CANDIDATES(anglerRoll(angPlainCount))
+        exitfunction
+    endif
+    if angWantNear then exitfunction
+
+    ` every one has been heard. the one that was heard longest ago comes around again.
+    angOldest = -1
+    for angPlainN = 0 to angPlainLast
+        if ANGLER_TIER(angPlainN) = ANGLER_TIER_PLAIN
+            if anglerPicked(angPlainN) = 0
+                if anglerTopicOpen(angPlainN)
+                    if angOldest < 0
+                        angOldest = angPlainN
+                    else
+                        if ANGLER_HEARD(angPlainN) < ANGLER_HEARD(angOldest) then angOldest = angPlainN
+                    endif
+                endif
+            endif
+        endif
+    next
+    ANGLER_FOUND = angOldest
+endfunction
+
+
+` pick the rumor, into ANGLER_FOUND. the first tier that still has one that has not been heard is the
+` one that it comes from, and in that tier, one whose secret the player has not found comes first.
+` when all of the true ones have been heard, it is the silly one that was heard longest ago.
+function anglerPickRumor()
+    ANGLER_FOUND = -1
+    for angRumorTier = ANGLER_TIER_RUMOR to ANGLER_TIER_DEEP
+        if ANGLER_FOUND < 0
+            for angRumorPass = 0 to 1
+                if ANGLER_FOUND < 0
+                    angRumorCount = 0
+                    angRumorLast = ANGLER_TOPIC_COUNT - 1
+                    for angRumorN = 0 to angRumorLast
+                        if ANGLER_TIER(angRumorN) = angRumorTier
+                            if ANGLER_HEARD(angRumorN) = 0
+                                angRumorOk = anglerRumorOpen(angRumorN)
+                                if angRumorPass = 0
+                                    if anglerRumorKnown(angRumorN) then angRumorOk = 0
+                                endif
+                                if angRumorOk
+                                    ANGLER_CANDIDATES(angRumorCount) = angRumorN
+                                    angRumorCount = angRumorCount + 1
+                                endif
+                            endif
+                        endif
+                    next
+                    if angRumorCount > 0
+                        ANGLER_FOUND = ANGLER_CANDIDATES(anglerRoll(angRumorCount))
+                    endif
+                endif
+            next
+        endif
+    next
+    if ANGLER_FOUND >= 0 then exitfunction
+
+    angSillyLast = ANGLER_TOPIC_COUNT - 1
+    for angSillyN = 0 to angSillyLast
+        if ANGLER_TIER(angSillyN) = ANGLER_TIER_SILLY
+            if ANGLER_FOUND < 0
+                ANGLER_FOUND = angSillyN
+            else
+                if ANGLER_HEARD(angSillyN) < ANGLER_HEARD(ANGLER_FOUND) then ANGLER_FOUND = angSillyN
+            endif
+        endif
+    next
+endfunction
+
+
+` the three questions that are on offer: one about the board, or the thing that was asked about in
+` info mode, one more plain one, and a rumor. see THE QUESTIONS in fish_headers_angler.
+function anglerPickTopics(angAnchor)
+    ANGLER_PICK_COUNT = 0
+
+    angFirst = angAnchor
+    if angFirst < 0
+        anglerPickPlain(1)
+        angFirst = ANGLER_FOUND
+    endif
+    if angFirst < 0
+        anglerPickPlain(0)
+        angFirst = ANGLER_FOUND
+    endif
+    if angFirst >= 0
+        ANGLER_PICK(ANGLER_PICK_COUNT) = angFirst
+        ANGLER_PICK_COUNT = ANGLER_PICK_COUNT + 1
+    endif
+
+    anglerPickPlain(0)
+    if ANGLER_FOUND >= 0
+        ANGLER_PICK(ANGLER_PICK_COUNT) = ANGLER_FOUND
+        ANGLER_PICK_COUNT = ANGLER_PICK_COUNT + 1
+    endif
+
+    anglerPickRumor()
+    if ANGLER_FOUND >= 0
+        ANGLER_PICK(ANGLER_PICK_COUNT) = ANGLER_FOUND
+        ANGLER_PICK_COUNT = ANGLER_PICK_COUNT + 1
+    endif
+endfunction

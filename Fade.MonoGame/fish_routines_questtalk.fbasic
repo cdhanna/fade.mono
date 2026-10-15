@@ -1,0 +1,379 @@
+goto routines_questtalk_exit
+
+remstart
+    THE QUEST TALK. see fish_headers_questtalk.
+    the rest of the game only has to do these things:
+    - gosub setup_questtalk once, after setup_angler, whose voices it borrows. fish.fbasic does.
+    - call questTalkStart(quest) when the player takes a quest. questPickToggle, in fish_routines_quests, does.
+    - call questTalkStep(game ms()) on every frame. update_frame does, after stepQuest.
+    - call questTalkMoved() for every swap. questSwapDone does.
+    - call questTalkStop() when the box has to go at once: a new game, the round ending, the quest
+      starting over, the angler, the pause menu.
+remend
+
+setup_questtalk:
+    reserve sprite id(QTALK_BOX_SPRITE)
+    sprite QTALK_BOX_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset QTALK_BOX_SPRITE, 0, 0
+    order sprite QTALK_BOX_SPRITE, ORDER_QTALK
+    hide sprite QTALK_BOX_SPRITE
+    QTALK_BOX_BORDER = createInfoBorder(ORDER_QTALK + 1)
+    showInfoBorder(QTALK_BOX_BORDER, 0)
+
+    reserve sprite id(QTALK_FACE_SPRITE)
+    sprite QTALK_FACE_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset QTALK_FACE_SPRITE, .5, .5
+    order sprite QTALK_FACE_SPRITE, ORDER_QTALK + 3
+    hide sprite QTALK_FACE_SPRITE
+
+    reserve text id(QTALK_NAME_TEXT_ID)
+    text QTALK_NAME_TEXT_ID, 0, 0, SCORE_FONT, "name"
+    size text y QTALK_NAME_TEXT_ID, 13
+    set text offset QTALK_NAME_TEXT_ID, 0, 0
+    color text QTALK_NAME_TEXT_ID, rgb(255, 210, 120)
+    order text QTALK_NAME_TEXT_ID, ORDER_QTALK + 6
+    hide text QTALK_NAME_TEXT_ID
+
+    reserve text id(QTALK_TEXT_ID)
+    text QTALK_TEXT_ID, 0, 0, SCORE_FONT, "line"
+    size text y QTALK_TEXT_ID, 14
+    set text offset QTALK_TEXT_ID, 0, 0
+    enable rich text QTALK_TEXT_ID
+    set text wrap QTALK_TEXT_ID, QTALK_BOX_W - 72
+    color text QTALK_TEXT_ID, rgb(255, 236, 190)
+    order text QTALK_TEXT_ID, ORDER_QTALK + 6
+    hide text QTALK_TEXT_ID
+
+    reserve tween id(QTALK_FADE_TWEEN_ID)
+    create basic tween QTALK_FADE_TWEEN_ID, 0, 0, 1, 0
+
+    ` the five voices, six sounds each, one for every vowel: ah, eh, ee, oh, oo, uh
+    for qtSetupVoice = 0 to 4
+        qtSetupName$ = "squeak"
+        if qtSetupVoice = 1 then qtSetupName$ = "bubbly"
+        if qtSetupVoice = 2 then qtSetupName$ = "gruff"
+        if qtSetupVoice = 3 then qtSetupName$ = "bloop"
+        if qtSetupVoice = 4 then qtSetupName$ = "clicky"
+        for qtSetupVowel = 0 to 5
+            qtSetupVowel$ = "ah"
+            if qtSetupVowel = 1 then qtSetupVowel$ = "eh"
+            if qtSetupVowel = 2 then qtSetupVowel$ = "ee"
+            if qtSetupVowel = 3 then qtSetupVowel$ = "oh"
+            if qtSetupVowel = 4 then qtSetupVowel$ = "oo"
+            if qtSetupVowel = 5 then qtSetupVowel$ = "uh"
+            qtSetupClip = qtSetupVoice * 6 + qtSetupVowel
+            load sfx clip reserve sfx clip id(QTALK_CLIPS(qtSetupClip)), "Fish/Audio/voice-" + qtSetupName$ + "-" + qtSetupVowel$
+        next
+    next
+
+    gosub setup_questtalk_lines
+return
+
+
+` WHO SAYS WHAT. the quest, the name of the one who talks, its voice (see QTALK_VOICE), its picture, its voice in hundredths of an
+` octave above the angler's, and the line. a line has room for two short lines in the box. every line has to
+` stay true to the rules of its quest, which are in questDefine, in fish_quests.
+setup_questtalk_lines:
+    qtLine(QUEST_LEFT_RIGHT, "Sandy", 0, TEX_SAND_DOLLAR, 20, "Roll me to the right edge? Only with swaps that pop!")
+    qtLine(QUEST_KRILL, "Old Barnacle", 2, TEX_Q_WHALE, -60, "So hungry... swaps that miss make krill. Fill half the board!")
+    qtLine(QUEST_LOST_PAIR, "Goldie", 0, TEX_GOLDFISH, 25, "My twin is lost! Bring the two ringed fish side by side?")
+    qtLine(QUEST_SEQUENCE, "Professor Bass", 2, TEX_BASS, -10, "Pop the three kinds I show, in order. Out of turn? Start over.")
+    qtLine(QUEST_SHARK, "Finn", 2, TEX_Q_SHARK, -35, "Pop near me, and I eat it. Eight popping swaps, if you dare.")
+    qtLine(QUEST_PUFFERS, "Puff", 1, TEX_PUFFER, 15, "Don't pop me! And keep the popping swaps coming, one by one.")
+    qtLine(QUEST_PROTECTED, "Angela", 3, TEX_ANGELFISH, 20, "Keep the ringed fish safe. No swaps, and no pops on it!")
+    qtLine(QUEST_SUNBEAM, "Glimmer", 0, TEX_KRILL, 45, "Follow my light! Pop fish in the lit column as it moves.")
+    qtLine(QUEST_CONTINUOUS, "Dash", 3, TEX_CATFISH, -20, "Keep it going! Every swap has to pop something.")
+    qtLine(QUEST_SEAWEED, "Kelp", 3, TEX_SEAWEED, -10, "Plant me with pops on the bottom row, and grow me to the top!")
+    qtLine(QUEST_WAKE, "Ripple", 3, TEX_RAY, 10, "Pops leave a glow. Draw me a glowing path, edge to edge.")
+    qtLine(QUEST_TURTLE, "Grandpa Shell", 2, TEX_TURTLE, -25, "I step right after every swap... onto the fish I show.")
+    qtLine(QUEST_CUTTLEFISH, "Inky", 1, TEX_CATFISH, 30, "I change with every swap. Pop me as each kind, in turn!")
+    qtLine(QUEST_CONSTELLATION, "Stella", 1, TEX_Q_STARFISH, 35, "Four ringed fish, in the shape of the stars. Careful now.")
+    qtLine(QUEST_REMORA, "Slinky", 3, TEX_Q_EEL, -30, "I'll follow you everywhere. Just don't cross my tail.")
+    qtLine(QUEST_SLEEPERS, "Snooze", 3, TEX_Q_SHELL, -15, "Shh... one kind is asleep. Have three groups waiting for it.")
+    qtLine(QUEST_ECHO, "Echo", 1, TEX_JELLY, 40, "I copy your swaps, four moves later. Make mine pop!")
+    qtLine(QUEST_PULSE, "Thump", 3, TEX_PUFFER, 0, "Every fourth move, I pulse. Pop what I make!")
+    qtLine(QUEST_TOTEM, "Chief Crab", 4, TEX_CRAB, 10, "Stack the four kinds, top to bottom, in my column.")
+    qtLine(QUEST_ROLL_CALL, "Captain Crab", 4, TEX_CRAB, 5, "Ringed fish, sound off! Pop them in the order of the colors.")
+    qtLine(QUEST_GLASS_FISH, "Crystal", 0, TEX_GLASS_FISH, 45, "Lower me to the bottom, gently. A long fall, and I shatter!")
+    qtLine(QUEST_REFLECTION, "Mirror", 3, TEX_ANGELFISH, 20, "Make the marked row read the same from both ends.")
+    qtLine(QUEST_TETHER, "Bobby", 3, TEX_Q_BUOY, 0, "Stay within three cells of me, and take me to the far corner!")
+    qtLine(QUEST_LANTERN, "Wick", 2, TEX_Q_ANGLER, -20, "Steps burn my light, and pops fill it. Light all three pearls!")
+    qtLine(QUEST_HATCH, "Mama Pearl", 1, TEX_Q_PEARL, 15, "My eggs count down. Pop each one right as it hits zero!")
+    qtLine(QUEST_FORECAST, "Breezy", 0, TEX_GOLDFISH, 30, "I see what falls next. Finish groups as the new fish land.")
+    qtLine(QUEST_MOORINGS, "Skipper", 3, TEX_Q_BUOY, -10, "Each colored cell wants its own fish. Fill all three at once.")
+    qtLine(QUEST_TRADE_PLACES, "The Twins", 1, TEX_CAMEO_TANG, 25, "We want to trade homes! Swap our ringed fish, no misses.")
+    qtLine(QUEST_PILOT_FISH, "Pip", 0, TEX_Q_PILOT, 50, "I'm right behind you! Pop while I sit on each lit cell.")
+    qtLine(QUEST_FERRY, "Starry", 1, TEX_Q_STARFISH, 35, "Carry us from the left edge to the right, popping as you go!")
+    qtLine(QUEST_LASSO, "Wrangler Worm", 3, TEX_WORM, 0, "Walk a loop around the ringed fish, with a pop on the way.")
+    qtLine(QUEST_TREASURE, "Old Clam", 2, TEX_Q_SHELL, -30, "Warmer... colder... pop the fish on the buried cell.")
+return
+
+routines_questtalk_exit:
+
+
+function qtLine(qtLineId, qtLineWho$, qtLineVoice, qtLineTex, qtLinePitch, qtLineSay$)
+    QTALK_VOICE(qtLineId) = qtLineVoice
+    QTALK_WHO$(qtLineId) = qtLineWho$
+    QTALK_TEX(qtLineId) = qtLineTex
+    QTALK_PITCH(qtLineId) = qtLinePitch
+    QTALK_SAY$(qtLineId) = qtLineSay$
+endfunction
+
+
+` a new game: nothing has been said
+function questTalkReset()
+    questTalkStop()
+    for qtResetN = 0 to 32
+        QTALK_SAID(qtResetN) = 0
+    next
+endfunction
+
+
+` the player has taken a quest. its creature says its line, once a game.
+function questTalkStart(qtStartId)
+    if QTALK_ENABLED = 0 then exitfunction
+    if qtStartId < 1 then exitfunction
+    if qtStartId > 32 then exitfunction
+    if QTALK_SAID(qtStartId) then exitfunction
+    QTALK_SAID(qtStartId) = 1
+    QTALK_ID = qtStartId
+    set text QTALK_NAME_TEXT_ID, QTALK_WHO$(qtStartId)
+    set text QTALK_TEXT_ID, QTALK_SAY$(qtStartId)
+    set text reveal QTALK_TEXT_ID, 0
+    set sprite texture QTALK_FACE_SPRITE, QTALK_TEX(qtStartId)
+    qtFaceW = 42
+    if QTALK_TEX(qtStartId) = TEX_Q_WHALE then qtFaceW = 84
+    size sprite QTALK_FACE_SPRITE, qtFaceW, 42
+    show sprite QTALK_BOX_SPRITE
+    show sprite QTALK_FACE_SPRITE
+    showInfoBorder(QTALK_BOX_BORDER, 1)
+    show text QTALK_NAME_TEXT_ID
+    show text QTALK_TEXT_ID
+    QTALK_ON = 1
+    QTALK_CLOSING = 0
+    QTALK_DONE_MS = 0
+    QTALK_SWAPS = 0
+    QTALK_SAID_LETTERS = 0
+    QTALK_WORD_BUBBLES = 0
+    QTALK_SAY_NEXT_MS = game ms() + 250
+    create basic tween QTALK_FADE_TWEEN_ID, 0, 1, 200, 0
+endfunction
+
+
+` the box goes, at once
+function questTalkStop()
+    QTALK_ON = 0
+    QTALK_CLOSING = 0
+    hide sprite QTALK_BOX_SPRITE
+    hide sprite QTALK_FACE_SPRITE
+    showInfoBorder(QTALK_BOX_BORDER, 0)
+    hide text QTALK_NAME_TEXT_ID
+    hide text QTALK_TEXT_ID
+endfunction
+
+
+` a swap was made. while the line is being said, the rest of it comes at once. after that, two swaps
+` and the box goes.
+function questTalkMoved()
+    if QTALK_ON = 0 then exitfunction
+    if QTALK_DONE_MS = 0
+        set text reveal QTALK_TEXT_ID, -1
+        QTALK_DONE_MS = game ms()
+        exitfunction
+    endif
+    QTALK_SWAPS = QTALK_SWAPS + 1
+endfunction
+
+
+` every frame: the letters that are due, where the box is, how much of it shows, and whether it goes
+function questTalkStep(qtNow)
+    if QTALK_ON = 0 then exitfunction
+    if INFO_MODE
+        questTalkStop()
+        exitfunction
+    endif
+
+    ` say the letters that are due. after a long frame, it carries on from now.
+    if QTALK_DONE_MS = 0
+        qtLate = qtNow - QTALK_SAY_NEXT_MS
+        if qtLate > 200 then QTALK_SAY_NEXT_MS = qtNow
+        qtGo = 1
+        while qtGo
+            qtGo = 0
+            if QTALK_DONE_MS = 0
+                if QTALK_SAY_NEXT_MS <= qtNow then qtGo = 1
+            endif
+            if qtGo
+                qtSpeakLetter(qtNow)
+            endif
+        endwhile
+    endif
+
+    ` it goes a while after the line is out, or after two swaps, and fades as it does
+    if QTALK_DONE_MS > 0
+        if QTALK_CLOSING = 0
+            qtSince = qtNow - QTALK_DONE_MS
+            qtGoes = 0
+            if qtSince > QTALK_HOLD_MS then qtGoes = 1
+            if QTALK_SWAPS >= 2 then qtGoes = 1
+            if qtGoes
+                QTALK_CLOSING = 1
+                create basic tween QTALK_FADE_TWEEN_ID, 1, 0, 300, 0
+            endif
+        else
+            if is tween done(QTALK_FADE_TWEEN_ID) >= 1
+                questTalkStop()
+                exitfunction
+            endif
+        endif
+    endif
+
+    ` the box, the picture bobbing a little, the name, and the line
+    qtFade# = tweenVal(QTALK_FADE_TWEEN_ID) * HUD_KEEP#
+    qtX = QTALK_BOX_X
+    qtY = QTALK_BOX_Y
+    position sprite QTALK_BOX_SPRITE, qtX, qtY
+    size sprite QTALK_BOX_SPRITE, QTALK_BOX_W, QTALK_BOX_H
+    color sprite QTALK_BOX_SPRITE, rgb(10, 14, 30, 235 * qtFade#)
+    layoutInfoBorder(QTALK_BOX_BORDER, qtX, qtY, QTALK_BOX_W, QTALK_BOX_H)
+    colorInfoBorder(QTALK_BOX_BORDER, rgb(255, 210, 120, 160 * qtFade#))
+    qtBob# = sin(qtNow * .004) * 2
+    position sprite QTALK_FACE_SPRITE, qtX + 32, qtY + QTALK_BOX_H / 2 + qtBob#
+    set sprite alpha QTALK_FACE_SPRITE, 255 * qtFade#
+    set text position QTALK_NAME_TEXT_ID, qtX + 64, qtY + 6
+    set text alpha QTALK_NAME_TEXT_ID, 255 * qtFade#
+    set text position QTALK_TEXT_ID, qtX + 64, qtY + 22
+    set text alpha QTALK_TEXT_ID, 255 * qtFade#
+endfunction
+
+
+` say the next letter: the same as anglerSpeakLetter, in fish_routines_angler, for the quest talk's text
+function qtSpeakLetter(qtLetterNow)
+    qtChar = text reveal char(QTALK_TEXT_ID, QTALK_SAID_LETTERS)
+    if qtChar < 0
+        set text reveal QTALK_TEXT_ID, -1
+        QTALK_DONE_MS = qtLetterNow
+        exitfunction
+    endif
+    QTALK_SAID_LETTERS = QTALK_SAID_LETTERS + 1
+    set text reveal QTALK_TEXT_ID, QTALK_SAID_LETTERS
+
+    qtWait = QTALK_LETTER_MS
+    if qtChar = 44 then qtWait = ANGLER_COMMA_MS
+    if qtChar = 58 then qtWait = ANGLER_COMMA_MS
+    if qtChar = 46 then qtWait = ANGLER_STOP_MS
+    if qtChar = 63 then qtWait = ANGLER_STOP_MS
+    if qtChar = 33 then qtWait = ANGLER_STOP_MS
+    QTALK_SAY_NEXT_MS = QTALK_SAY_NEXT_MS + qtWait
+
+    if qtChar = 32 then QTALK_WORD_BUBBLES = 0
+    qtAt = QTALK_SAID_LETTERS - 1
+    qtVowelAt(qtAt)
+    if QTALK_FOUND >= 0
+        qtBubble(QTALK_FOUND, qtAt)
+    endif
+endfunction
+
+
+` the letter at a place in the line, in small letters
+function qtLetter(qtLetterAt)
+    qtL = -1
+    if qtLetterAt >= 0
+        qtL = text reveal char(QTALK_TEXT_ID, qtLetterAt)
+    endif
+    if qtL >= 65
+        if qtL <= 90 then qtL = qtL + 32
+    endif
+endfunction qtL
+
+
+` the sound for the vowel at a place, in QTALK_FOUND, the same way as anglerVowelAt
+function qtVowelAt(qtVAt)
+    QTALK_FOUND = -1
+    qtVC = qtLetter(qtVAt)
+    qtVPrev = qtLetter(qtVAt - 1)
+    qtVNext = qtLetter(qtVAt + 1)
+    qtVPrevIs = anglerIsVowel(qtVPrev)
+    if qtVPrevIs then exitfunction
+    if qtVC = 121
+        if qtVPrev >= 97
+            if qtVPrev <= 122 then QTALK_FOUND = 2
+        endif
+        exitfunction
+    endif
+    if qtVC = 97 then QTALK_FOUND = 0
+    if qtVC = 101
+        QTALK_FOUND = 1
+        if qtVNext = 101 then QTALK_FOUND = 2
+        if qtVNext = 97 then QTALK_FOUND = 2
+    endif
+    if qtVC = 105 then QTALK_FOUND = 2
+    if qtVC = 111
+        QTALK_FOUND = 3
+        if qtVNext = 111 then QTALK_FOUND = 4
+        if qtVNext = 117 then QTALK_FOUND = 4
+    endif
+    if qtVC = 117 then QTALK_FOUND = 5
+endfunction
+
+
+` how the word at a place ends, in QTALK_WORD_END: 0, 1 for ?, 2 for !, 3 for ...
+function qtWordEnds(qtEAt)
+    QTALK_WORD_END = 0
+    qtEDots = 0
+    qtELast = 0
+    qtEC = text reveal char(QTALK_TEXT_ID, qtEAt)
+    qtEGo = 1
+    while qtEGo
+        qtEGo = 0
+        if qtEC > 0
+            if qtEC <> 32 then qtEGo = 1
+        endif
+        if qtEGo
+            if qtEC = 46
+                qtEDots = qtEDots + 1
+            else
+                qtEDots = 0
+            endif
+            qtELast = qtEC
+            qtEAt = qtEAt + 1
+            qtEC = text reveal char(QTALK_TEXT_ID, qtEAt)
+        endif
+    endwhile
+    if qtELast = 63 then QTALK_WORD_END = 1
+    if qtELast = 33 then QTALK_WORD_END = 2
+    if qtEDots >= 3 then QTALK_WORD_END = 3
+endfunction
+
+
+` one bubble of the voice of the one who is talking, at its own pitch
+function qtBubble(qtBSound, qtBAt)
+    qtBSfx = ANGLER_VOICE_SFX(ANGLER_VOICE_NEXT)
+    ANGLER_VOICE_NEXT = (ANGLER_VOICE_NEXT + 1) mod ANGLER_VOICE_ROOM
+
+    qtBRoll = rnd(200)
+    qtBPitch# = (qtBRoll - 100) * .01 * ANGLER_JITTER#
+    qtBVoice# = QTALK_PITCH(QTALK_ID)
+    qtBPitch# = qtBPitch# + qtBVoice# * .01
+    qtBVolume# = ANGLER_VOICE_VOLUME#
+    qtWordEnds(qtBAt)
+    if QTALK_WORD_END = 1
+        qtBPitch# = qtBPitch# + ANGLER_ASK_PITCH# + ANGLER_ASK_STEP# * QTALK_WORD_BUBBLES
+    endif
+    if QTALK_WORD_END = 2 then qtBVolume# = qtBVolume# * ANGLER_SHOUT#
+    if QTALK_WORD_END = 3
+        for qtBN = 0 to QTALK_WORD_BUBBLES
+            qtBVolume# = qtBVolume# * ANGLER_TRAIL#
+        next
+    endif
+    if qtBVolume# > 1 then qtBVolume# = 1
+    if qtBPitch# > 1 then qtBPitch# = 1
+    if qtBPitch# < -1 then qtBPitch# = -1
+    QTALK_WORD_BUBBLES = QTALK_WORD_BUBBLES + 1
+
+    qtBClip = QTALK_VOICE(QTALK_ID) * 6 + qtBSound
+    sfx qtBSfx, QTALK_CLIPS(qtBClip)
+    set sfx pitch qtBSfx, qtBPitch#
+    set sfx volume qtBSfx, qtBVolume#
+    play sfx qtBSfx
+endfunction

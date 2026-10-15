@@ -141,6 +141,7 @@ setup_coral:
     gosub setup_coral_bars
     gosub setup_diver
     gosub setup_tide
+    gosub setup_glow
 
     resetCoral()
 
@@ -881,7 +882,7 @@ function coralMakeSequence(coralMakeSlot)
     while coralMakeFound = 0 and coralMakeTries < 200
         coralMakeTries = coralMakeTries + 1
         for coralMakeN = 0 to coralMakeLength - 1
-            CORAL_TRY_STEPS(coralMakeN) = rnd(4)
+            CORAL_TRY_STEPS(coralMakeN) = random stream(RNG_BOARD, 4)
         next
         coralMakeFound = coralTryIsGood(coralMakeLength)
     endwhile
@@ -2363,34 +2364,38 @@ endfunction
 ` with HUD_KEEP# at 1, this puts back the ones that nothing else draws again on every frame.
 function applyHudFade()
     hudKeep# = HUD_KEEP#
+    hudBar# = hudKeep# * HUD_KEEP_BAR#
+    hudMult# = hudKeep# * HUD_KEEP_MULT#
+    hudCards# = hudKeep# * HUD_KEEP_CARDS#
+    hudSongs# = hudKeep# * HUD_KEEP_SONGS#
 
     ` the bar of the round, and the rounds that are left
-    set sprite alpha SCORE_BAR.backgroundSpriteId, 128 * hudKeep#
+    set sprite alpha SCORE_BAR.backgroundSpriteId, 128 * hudBar#
     hudBarAlpha = 200
     if SCORE_BAR_HOLD > 0 then hudBarAlpha = 255
-    set sprite alpha SCORE_BAR.foregroundSpriteId, hudBarAlpha * hudKeep#
-    set sprite alpha OVERFLOW_SPRITE, 255 * hudKeep#
-    set text alpha SCORE_BAR.textNumId, 200 * hudKeep#
-    set text alpha SCORE_BAR.textTitleId, 200 * hudKeep#
-    set text alpha ROUNDS_LABEL_TEXT_ID, 200 * hudKeep#
-    set text alpha ROUND_COUNT_TEXT_ID, 200 * hudKeep#
+    set sprite alpha SCORE_BAR.foregroundSpriteId, hudBarAlpha * hudBar#
+    set sprite alpha OVERFLOW_SPRITE, 255 * hudBar#
+    set text alpha SCORE_BAR.textNumId, 200 * hudBar#
+    set text alpha SCORE_BAR.textTitleId, 200 * hudBar#
+    set text alpha ROUNDS_LABEL_TEXT_ID, 200 * hudBar#
+    set text alpha ROUND_COUNT_TEXT_ID, 200 * hudBar#
 
     ` the bar of the multiplier, and the numbers under it. the multiplier itself stays.
-    set sprite alpha MULT_BAR_BACK_SPRITE, 128 * hudKeep#
-    set sprite alpha MULT_BAR_FILL_SPRITE, 200 * hudKeep#
-    set text alpha MULT_NUM_TEXT_ID, 200 * hudKeep#
+    set sprite alpha MULT_BAR_BACK_SPRITE, 128 * hudMult#
+    set sprite alpha MULT_BAR_FILL_SPRITE, 200 * hudMult#
+    set text alpha MULT_NUM_TEXT_ID, 200 * hudMult#
 
     ` the passives
     if PASSIVE_COUNT > 0
         for hudN = 0 to PASSIVE_COUNT - 1
-            set text alpha PASSIVE_BINDINGS(hudN).titleTextId, tweenVal(PASSIVE_BINDINGS(hudN).fadeTweenId) * 255 * hudKeep#
+            set text alpha PASSIVE_BINDINGS(hudN).titleTextId, tweenVal(PASSIVE_BINDINGS(hudN).fadeTweenId) * 255 * hudCards#
         next
     endif
 
     ` the special moves, their keys, and the numbers of the ones that are recharging
     for hudN = 0 to MOVE_SLOT_COUNT - 1
         if MOVE_ABILITY_BINDINGS(hudN).assigned
-            hudMove# = tweenVal(MOVE_ABILITY_BINDINGS(hudN).fadeTweenId) * hudKeep#
+            hudMove# = tweenVal(MOVE_ABILITY_BINDINGS(hudN).fadeTweenId) * hudCards#
             set text alpha MOVE_ABILITY_BINDINGS(hudN).titleTextId, hudMove# * 255
             if MOVE_ABILITY_BINDINGS(hudN).movesLeft > 0
                 set text alpha MOVE_ABILITY_BINDINGS(hudN).keyTextId, hudMove# * 70
@@ -2401,24 +2406,24 @@ function applyHudFade()
             endif
         endif
     next
-    set sprite alpha COOLDOWN_CLOCK_SPRITE, 200 * tweenVal(COOLDOWN_CLOCK_TWEEN_ID) * hudKeep#
+    set sprite alpha COOLDOWN_CLOCK_SPRITE, 200 * tweenVal(COOLDOWN_CLOCK_TWEEN_ID) * hudCards#
 
     ` the songs, and the two bars under them. the ones that are not showing are hidden, and stay hidden.
     if CORAL_USED_COUNT > 0
         for hudN = 0 to CORAL_USED_COUNT * CORAL_RUNE_DOTS - 1
-            set sprite alpha CORAL_RUNE_SPRITES(hudN), 200 * hudKeep#
-            set sprite alpha CORAL_RUNE_LINKS(hudN), CORAL_RUNE_LINK_ALPHA * hudKeep#
+            set sprite alpha CORAL_RUNE_SPRITES(hudN), 200 * hudSongs#
+            set sprite alpha CORAL_RUNE_LINKS(hudN), CORAL_RUNE_LINK_ALPHA * hudSongs#
         next
     endif
-    set sprite alpha CORAL_BAR_BACKS(0), 128 * hudKeep#
-    set sprite alpha CORAL_BAR_BACKS(1), 170 * hudKeep#
-    set sprite alpha CORAL_BAR_FILLS(0), 225 * hudKeep#
-    set sprite alpha CORAL_BAR_FILLS(1), 225 * hudKeep#
+    set sprite alpha CORAL_BAR_BACKS(0), 128 * hudSongs#
+    set sprite alpha CORAL_BAR_BACKS(1), 170 * hudSongs#
+    set sprite alpha CORAL_BAR_FILLS(0), 225 * hudSongs#
+    set sprite alpha CORAL_BAR_FILLS(1), 225 * hudSongs#
     for hudN = 0 to CORAL_BAR_DRIP_COUNT - 1
-        set sprite alpha CORAL_BAR_DRIPS(hudN), 255 * hudKeep#
+        set sprite alpha CORAL_BAR_DRIPS(hudN), 255 * hudSongs#
     next
     for hudN = 0 to CORAL_BAR_WISP_COUNT * CORAL_BAR_WISP_TALL - 1
-        set sprite alpha CORAL_BAR_WISPS(hudN), 255 * hudKeep#
+        set sprite alpha CORAL_BAR_WISPS(hudN), 255 * hudSongs#
     next
 endfunction
 
@@ -2477,7 +2482,7 @@ function rollHorrorCoral()
 
             ` a fish that was belly up before this move may turn into a skeleton
             if horrorState = 1
-                if rnd(100) < HORROR_SKELETON_CHANCE
+                if random stream(RNG_BOARD, 100) < HORROR_SKELETON_CHANCE
                     CELLS(horrorIndex).bellyUp = 2
                     spawnBubbles(getCellX(horrorX), getCellY(horrorY), CELL_SIZE / 3, 10, 0, rgb(236, 232, 204))
                 endif
@@ -2486,7 +2491,7 @@ function rollHorrorCoral()
             ` and a fish that was fine may go belly up. it does not do both on the same move.
             if horrorState = 0
                 if horrorIndex <> horrorCursor
-                    if rnd(100) < HORROR_BELLY_CHANCE
+                    if random stream(RNG_BOARD, 100) < HORROR_BELLY_CHANCE
                         CELLS(horrorIndex).bellyUp = 1
                         spawnBubbles(getCellX(horrorX), getCellY(horrorY), CELL_SIZE / 3, 8, 0, rgb(150, 190, 90))
                     endif

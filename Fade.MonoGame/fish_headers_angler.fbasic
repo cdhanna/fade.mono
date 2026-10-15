@@ -1,0 +1,180 @@
+remstart
+    THE ANGLER
+    an old angler fish who lives in the dark, and knows how the sea works. the "bright idea" card
+    brings it, and it answers a question. the routines are in fish_routines_angler, and the tests
+    are in fish_tests_angler. the pictures are drawn by Tools/angler_art_gen.py.
+
+    THE CARD. "bright idea" is an instant, and it is dealt like any other card, by the seed. it is
+    rare: when the deal lands on it, one more roll of the cards says if it stays (ANGLER_DEAL_CHANCE).
+    that roll is on the stream of the cards, so a seed deals it the same way every time. nothing that
+    the player knows has a say in whether it is dealt. it is not in the book, which has no room for
+    it, and it is not written in the log of a game, which has no room for its number either.
+
+    THE QUESTIONS. when the card is taken, the upgrade screen goes away, the dark of info mode comes
+    down, and the angler swims in at the bottom of the screen with its light. it offers three
+    questions, and a fourth line that keeps the light for later. which questions they are is picked
+    with rnd, never with a stream: they depend on what this player has heard before, and a stream
+    roll that one player makes and another does not would make the same seed deal two games.
+        the first is about something that is on the board right now, if anything there has not been
+        explained yet. a question asked from info mode puts the thing that was highlighted here.
+        the second is about anything else that has not been explained yet.
+        the third is a rumor: a secret of the sea. the rumors come in tiers, and a tier is only
+        offered once every rumor of the tier before it has been heard. the last tier is silly, and
+        only comes once all of the true ones have been heard. the rumors of the coral wait until
+        coral has grown, in any game, so that the angler does not give the coral away. see
+        anglerRumorOpen.
+    once every plain question has been heard, the ones that were heard longest ago come around
+    again. ANGLER_HEARD keeps when each topic was last heard, as a count that only goes up.
+    the answer is one or two pages. while it is being said, the hole in the dark goes to the part
+    of the screen that it is about, if it is about one, so the light of the angler shows it.
+
+    KEEPING THE LIGHT. the fourth line keeps the question for later. it is kept in the preferences,
+    so it lasts from one game to the next. there is room for ANGLER_BANK_MAX of them: with that many,
+    the line is dim and cannot be picked. the card is still dealt then, because the seed deals it.
+    a kept light is a little bulb, {bulb}, after the hint for info mode along the bottom of the
+    screen, one for every light. in info mode the hint says that the confirm button asks, and asking
+    spends one. the confirm button on a special move still opens the page that moves the moves.
+    asking from info mode has a line that goes back without asking, in place of keeping the light.
+
+    THE VOICE. the angler says its words one letter at a time, and talks in bubbles: every vowel that
+    starts a run of vowels plays a little bubble for that vowel. there are six of them: ah, eh, ee,
+    oh, oo and uh. Tools/angler_voice_gen.py makes them, in one of a few styles, and renders samples
+    of every style saying whole lines, by the same rules as these:
+        the last word before a question mark goes up, a little more for every bubble of it.
+        a word before ! is louder.
+        the last word before ... fades away, every bubble quieter than the one before.
+        a comma, and the end of a sentence, are a pause.
+    the confirm button says the rest of it at once. the engine draws only the letters that have
+    been said, with `set text reveal`, and the line is laid out whole from the start, so the words do
+    not jump from line to line as they come. anglerSpeakStep does it, on every frame of the scene.
+
+    THE CALL. HELP, or INFO, tapped out on the radio, brings the angler too, without the card and
+    without a light, as often as it is called. see MORSE in fish_headers. the two words share one entry
+    in the codec, in the signals, right after the words that bring somebody swimming through, and right
+    before the usual ending: CODEC_ENTRY_CALL. it waits for the radio to tap back its R, the way it does
+    for any word, and comes a moment after that. it offers its questions, and a line that goes back without
+    asking. after it has answered, it asks if there is anything else: another question, with new ones
+    picked about the board as it is then, or goodbye for now. a deep rumor tells of the call.
+
+    THE FIRST MEETING. the very first time that the player meets the angler, however that came about, it
+    says who it is before it offers anything: that it is a friend, and that it can help. and when it
+    has answered that first question, it says, before it goes, that its light can be kept for later,
+    up to ANGLER_BANK_MAX of them, from game to game, and asked in info mode. when the light was kept
+    the first time, that was said already, so it goes without it. ANGLER_MET says if it has happened,
+    and it is kept in the preferences. "forget what was heard", in the debug window, forgets it too.
+
+    every answer must be true, the rumors most of all. a player who is told a lie by the one who
+    explains things stops listening. the silly ones say plainly that they are silly. TUNA is never
+    told: it turns on the debug mode.
+remend
+
+` the card. an instant, so it is a constant, like the other instants: handle_ability_instant_effect picks between them by number.
+#constant ABILITY_INDEX_ANGLER 35
+global ANGLER_DEAL_CHANCE = 35 `how many times in a hundred the deal keeps it, when it lands on it
+
+global ANGLER_BANK_MAX = 4 `how many lights can be kept for later
+global ANGLER_BANKED = 0 `how many are kept. it is read from the preferences when the game starts.
+global ANGLER_PENDING = 0 `1 when the card has been taken, and the angler comes once the upgrade screen has gone
+global ANGLER_FROM_CARD = 0 `1 while the angler came for the card, and 0 while it came from info mode, or the radio
+global ANGLER_FROM_RADIO = 0 `1 while it came because it was called on the radio. see THE CALL.
+global ANGLER_CALL_PENDING = 0 `1 when it has been called. it comes once the radio has tapped back its answer.
+global ANGLER_CALL_PAUSE_MS = 400 `how long after the answer it comes, in milliseconds
+global ANGLER_CALL_AT_MS = 0 `when it comes, once the answer is over, or 0 while it is still being tapped
+global MORSE_WORD_HELP = 15 `the two words that call it. they come after the words of the cameos.
+global MORSE_WORD_INFO = 16
+global CODEC_ENTRY_CALL = -1 `the entry that the two of them share, once setup_codec has run
+global ANGLER_ANCHOR = -1 `the topic of the thing that was highlighted in info mode, or -1
+global ANGLER_FOUND = -1 `what the last of the functions that look for a topic, or a blob, found
+global dim ANGLER_CANDIDATES(64) `the topics that one of those is picking between
+
+` what is on the board, when the angler comes. see anglerScanBoard.
+global ANGLER_SEE_STACK = 0
+global ANGLER_SEE_BELLY = 0
+global ANGLER_SEE_BONES = 0
+global ANGLER_SEE_JELLY = 0
+global ANGLER_SEE_RAY = 0
+global ANGLER_SEE_BOTTLE = 0
+
+` where it is all kept, in the preferences. it must not move.
+global ANGLER_PREF = 4000 `the lights that are kept, then the count of what has been heard, then whether it has been met
+global ANGLER_PREF_HEARD = 4100 `and when each topic was heard, one number for each
+
+` THE TOPICS. every one is a number, in the order that they are made in setup_angler_topics. the
+` numbers are kept in the preferences, so a new topic goes on the end.
+#constant ANGLER_TIER_PLAIN 0
+#constant ANGLER_TIER_RUMOR 1
+#constant ANGLER_TIER_DEEP 2
+#constant ANGLER_TIER_SILLY 3
+global ANGLER_TOPIC_ROOM = 64
+global ANGLER_TOPIC_COUNT = 0
+global dim ANGLER_ASK$(64) `the question, as the player would ask it
+global dim ANGLER_SAY$(64) `the answer
+global dim ANGLER_MORE$(64) `and the second page of it, when there is one
+global dim ANGLER_PAGES(64) `1 or 2
+global dim ANGLER_TIER(64)
+global dim ANGLER_HEARD(64) `when it was last heard, or 0 for never. see ANGLER_STAMP.
+global ANGLER_STAMP = 0 `goes up by one for every answer
+global ANGLER_MET = 0 `1 once the player has met the angler, in any game. see THE FIRST MEETING.
+
+` the questions that are on offer, and the line under them
+global dim ANGLER_PICK(3)
+global ANGLER_PICK_COUNT = 0
+global ANGLER_CHOICE = 0 `the line that is highlighted. ANGLER_PICK_COUNT is the line under the questions.
+global ANGLER_LINE_LAST = 0 `the last of the lines that are up: the line under the questions, or the second of the two that ask if there is anything else
+global ANGLER_ASKED = -1 `the topic that was picked, or -1 when the light was kept, or nothing was asked
+
+` THE SCENE
+global ANGLER_SCALE = 2 `how many pixels of the game a pixel of the pictures is
+global ANGLER_TIP_X = 47 `where the light hangs from, in the pixels of Angler.png. see ANGLER_TIP in Tools/angler_art_gen.py.
+global ANGLER_TIP_Y = 9
+global ORDER_ANGLER_TEXT = ORDER_INFO_TEXT + 10 `the words. see setup_angler for why they are so far above the box.
+global ANGLER_BOX_W = 404 `the box that it talks in
+global ANGLER_BOX_H = 96
+global ANGLER_LIGHT_HOLE = 70 `how big the hole in the dark is around the light, when it is not showing anything
+global ANGLER_SWIM_MS = 700 `how long it takes to swim in, and out
+global ANGLER_SPRITE = 0
+global ANGLER_BULB_SPRITE = 0
+global ANGLER_GLOW_SPRITE = 0
+global ANGLER_BOX_SPRITE = 0
+global ANGLER_BOX_BORDER as infoBorder
+global ANGLER_CURSOR as infoBorder
+global ANGLER_SAY_TEXT_ID = 0
+global dim ANGLER_LINE_TEXTS(4) `the questions, and the line under them
+global ANGLER_SWIM_TWEEN_ID = 0 `0 when it is off the screen to the left, and 1 when it is where it talks from
+global ANGLER_UP_TWEEN_ID = 0 `0 when it talks from the bottom of the screen, and 1 from the top
+global ANGLER_SAY_FADE_TWEEN_ID = 0 `the words fade in
+global ANGLER_LINES_SHOWN = 0 `1 while the questions are showing
+global ANGLER_SPOT = -1 `the info blob that the light is showing, or -1 for the light itself
+global ANGLER_SPOT_X = 0 `and where it is. see anglerSpotRect.
+global ANGLER_SPOT_Y = 0
+global ANGLER_SPOT_W = 0
+global ANGLER_SPOT_H = 0
+global ANGLER_HOLE_X# = 0 `where the hole in the dark is now. it slides to where it should be.
+global ANGLER_HOLE_Y# = 0
+global ANGLER_HOLE_W# = 0
+global ANGLER_HOLE_H# = 0
+global ANGLER_FRAME_DONE = 0 `1 once frame_angler has laid everything out at least once
+
+` THE VOICE
+global ANGLER_LETTER_MS = 38 `how long a letter takes to say
+global ANGLER_COMMA_MS = 150 `and a comma, or a colon
+global ANGLER_STOP_MS = 260 `and the end of a sentence
+global ANGLER_VOICE_VOLUME# = .55 `the same as VOICE_VOLUME in Tools/angler_voice_gen.py
+global ANGLER_ASK_PITCH# = .35 `how much the last word before a ? goes up, in octaves
+global ANGLER_ASK_STEP# = .12 `and how much more for every bubble of it after the first
+global ANGLER_SHOUT# = 1.6 `how many times as loud a word is before a !
+global ANGLER_TRAIL# = .55 `every bubble of the last word before ... is this many times as loud as the one before
+global ANGLER_JITTER# = .06 `how far the pitch of a bubble wanders, either way, in octaves
+global dim SFX_CLIP_ANGLER(6) `ah, eh, ee, oh, oo, uh
+global ANGLER_VOICE_ROOM = 4 `how many bubbles can be sounding at once
+global dim ANGLER_VOICE_SFX(4)
+global ANGLER_VOICE_NEXT = 0
+global ANGLER_SPEAKING = 0 `1 while a line is being said
+global ANGLER_SAID = 0 `how many letters of it have been said
+global ANGLER_SAY_NEXT_MS = 0 `when the next one is due
+global ANGLER_WORD_BUBBLES = 0 `how many bubbles the word that is being said has had
+global ANGLER_WORD_END = 0 `how the word that a letter is in ends: 0, or 1 for ?, 2 for !, and 3 for ...
+global TEX_ANGLER
+global TEX_ANGLER_BULB
+global TEX_ANGLER_GLOW
+global TEX_ANGLER_ICON

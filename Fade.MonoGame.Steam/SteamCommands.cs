@@ -291,6 +291,45 @@ public partial class FadeSteamCommands
     }
 
     /// <summary>
+    /// <para>Checks whether the Steam overlay is up over the game right now.</para>
+    /// <para>Returns <c>1</c> while it is, and <c>0</c> while it is not, or when Steam is not up.</para>
+    /// </summary>
+    /// <remarks>
+    /// The player brings the overlay up with a key or a button of their own, at any time,
+    /// and the game is not asked first. It keeps running underneath, and it gets no keys
+    /// while the overlay is up. So a game that can be lost by not looking at it should
+    /// pause itself when this turns to <c>1</c>.
+    ///
+    /// It is also <c>1</c> while the overlay is up because the game opened it, with
+    /// <see cref="OpenSteamOverlay">open steam overlay</see>.
+    /// </remarks>
+    /// <example>
+    /// Stop the clock of the game while the overlay is up:
+    /// <code>
+    /// font 1, "font"
+    /// text 1, 470, 200, 1, "0"
+    /// ticks = 0
+    ///
+    /// DO
+    ///   IF steam overlay open() = 0
+    ///     ticks = ticks + 1
+    ///     set text 1, str$(ticks)
+    ///   ENDIF
+    ///   sync
+    /// LOOP
+    /// </code>
+    /// </example>
+    /// <returns><c>1</c> while the overlay is up, <c>0</c> while it is not.</returns>
+    /// <seealso cref="IsSteamOverlayEnabled">steam overlay enabled</seealso>
+    /// <seealso cref="OpenSteamOverlay">open steam overlay</seealso>
+    [FadeBasicCommand("steam overlay open")]
+    public static int IsSteamOverlayOpen()
+    {
+        if (!SteamSystem.Available) return 0;
+        return SteamSystem.OverlayOpen ? 1 : 0;
+    }
+
+    /// <summary>
     /// <para>Opens the Steam overlay over the game, on the page that you name.</para>
     /// </summary>
     /// <remarks>
@@ -298,7 +337,8 @@ public partial class FadeSteamCommands
     /// <c>officialgamegroup</c>, <c>stats</c> and <c>achievements</c>.
     ///
     /// The game keeps running underneath the overlay, and it still gets no keys while the
-    /// overlay is up. If the game should pause, pause it yourself before you call this.
+    /// overlay is up. If the game should pause, pause it yourself before you call this, or
+    /// watch <see cref="IsSteamOverlayOpen">steam overlay open</see>.
     ///
     /// Nothing happens when the overlay is off. See
     /// <see cref="IsSteamOverlayEnabled">steam overlay enabled</see>.

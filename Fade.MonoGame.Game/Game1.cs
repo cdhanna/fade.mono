@@ -692,6 +692,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
 #if !BROWSER
     protected override void OnExiting(object sender, ExitingEventArgs args)
     {
+        RecordSystem.Finish();
         HostSystemRegistry.Shutdown();
         Content.Dispose();
         // In test mode the debug session's auto-EXITED at end-of-program is
@@ -810,6 +811,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
     protected override void Update(GameTime gameTime)
     {
+        // a recording steps the clock by one frame of the video per frame. see RecordSystem.
+        gameTime = RecordSystem.Clock(gameTime, advance: true);
 #if !BROWSER
         // Escape to quit only makes sense on desktop. Browser closes the tab.
         // A game can turn it off with `disable escape quit`, to use the key for something else.
@@ -1215,6 +1218,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
     protected override void Draw(GameTime gameTime)
     {
+        gameTime = RecordSystem.Clock(gameTime, advance: false);
         if (_vm.instructionIndex <= 4) return; // the VM hasn't started yet; so don't draw anything...
         if (_perfLog) _perfDrawStart = System.Diagnostics.Stopwatch.GetTimestamp();
 
@@ -1254,6 +1258,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
             // pixels wider than their neighbours, so it is smoothed.
             if (Math.Abs(screenSourceScale - MathF.Round(screenSourceScale)) > 0.001f) screenSampler = SamplerState.LinearClamp;
         }
+
+        // the same picture, at the recording's own size, before anything that is only for the window
+        RecordSystem.Capture(GraphicsDevice, _spriteBatch, screenSource, screenEffect);
 
         GraphicsDevice.SetRenderTarget(null);
         GraphicsDevice.Clear(Color.Black);

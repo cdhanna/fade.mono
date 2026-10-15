@@ -26,6 +26,12 @@ public struct TextSprite
     // The cached layout, for text that is rich or that wraps. Go through RichTextSystem to read
     // it, because it is only rebuilt on demand.
     public RichTextLayout layout;
+
+    // A typewriter. When revealOn is set, only the first `reveal` characters of the text are drawn,
+    // counting an icon as one. The whole text is still laid out, so nothing moves as more of it
+    // shows. Only text that goes through a layout (rich, or wrapped) can be revealed.
+    public bool revealOn;
+    public int reveal;
 }
 
 

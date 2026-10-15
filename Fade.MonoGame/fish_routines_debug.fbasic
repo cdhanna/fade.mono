@@ -82,6 +82,41 @@ frame_debug_cards:
     debug text "the lean of a pair, as the current passes"
     debugHintMoved = debug float slider("lean (radians)", DIAGONAL_HINT_LEAN#, 0, .6)
     end debug window
+
+    ` the icons of the keys and the buttons, for a device that is not the one in use. the kinds other
+    ` than the keyboard and the xbox controller are steam's pictures, so they need steam to be up.
+    ` see DEBUG_ICON_FORCE and STEAM'S PICTURES OF THE BUTTONS in fish_headers.
+    begin debug window("Input icons")
+    debugIconWas = DEBUG_ICON_FORCE
+    debugIconSays$ = "as played"
+    if DEBUG_ICON_FORCE = 0 then debugIconSays$ = "keyboard"
+    if DEBUG_ICON_FORCE = 3 then debugIconSays$ = "xbox (our sheet)"
+    if DEBUG_ICON_FORCE = 13 then debugIconSays$ = "playstation 5"
+    if DEBUG_ICON_FORCE = 5 then debugIconSays$ = "playstation 4"
+    if DEBUG_ICON_FORCE = 10 then debugIconSays$ = "switch pro"
+    if DEBUG_ICON_FORCE = 14 then debugIconSays$ = "steam deck"
+    if DEBUG_ICON_FORCE = 1 then debugIconSays$ = "steam controller"
+    debug text "showing: " + debugIconSays$
+    if steam available() = 0 then debug text "steam is not up, so every controller shows the sheet"
+    debug separator
+    if debug button("as played") = 1 then DEBUG_ICON_FORCE = -1
+    if debug button("keyboard") = 1 then DEBUG_ICON_FORCE = 0
+    if debug button("xbox (our sheet)") = 1 then DEBUG_ICON_FORCE = 3
+    debug separator
+    debug text "steam's pictures"
+    if debug button("playstation 5") = 1 then DEBUG_ICON_FORCE = 13
+    if debug button("playstation 4") = 1 then DEBUG_ICON_FORCE = 5
+    if debug button("switch pro") = 1 then DEBUG_ICON_FORCE = 10
+    if debug button("steam deck") = 1 then DEBUG_ICON_FORCE = 14
+    if debug button("steam controller") = 1 then DEBUG_ICON_FORCE = 1
+    end debug window
+
+    ` steam is told too, so that it hands out the pictures of that kind. 0 is whatever is really there.
+    if DEBUG_ICON_FORCE <> debugIconWas
+        debugIconKind = 0
+        if DEBUG_ICON_FORCE > 0 then debugIconKind = DEBUG_ICON_FORCE
+        set steam input type debugIconKind
+    endif
 return
 
 

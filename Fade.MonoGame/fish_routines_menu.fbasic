@@ -225,6 +225,11 @@ setup_menu:
         desc$ = "Start with the first dive, or not."
         ready = 1
     }
+    MENU_ITEMS(MENU_ITEM_GAME_SEED) = {
+        name$ = "Seed"
+        desc$ = "Games with the same seed deal the same fish."
+        ready = 1
+    }
     MENU_ITEMS(MENU_ITEM_GAME_START) = {
         name$ = "Start"
         desc$ = "Start the game."
@@ -306,6 +311,16 @@ setup_menu:
         enable text drop shadow menuTextId, 2, -2, rgb(0,0,0)
         order text menuTextId, ORDER_MENU_TEXT
         set text render target menuTextId, TARGET_MENU
+
+        reserve text id(MENU_ITEMS(menuI).valueTextId)
+        menuTextId = MENU_ITEMS(menuI).valueTextId
+        text menuTextId, WORLD_WIDTH / 2, 0, SCORE_FONT, "value"
+        size text y menuTextId, 20
+        set text offset menuTextId, 1, 0
+        enable text drop shadow menuTextId, 2, -2, rgb(0,0,0)
+        order text menuTextId, ORDER_MENU_TEXT
+        set text render target menuTextId, TARGET_MENU
+        hide text menuTextId
     next
 
     ` the description says what the highlighted line does
@@ -503,13 +518,18 @@ menu_pick:
             if menuFirstGame
                 OPTION_GAME_LENGTH = GAME_LENGTH_REGULAR
                 OPTION_GAME_ZEN = 0
+                OPTION_GAME_SEED = 0
                 gosub menu_start_game
             else
-                ` the intro has to be asked for every time
+                ` the intro has to be asked for every time, and so does a seed
                 OPTION_GAME_INTRO = 0
+                OPTION_GAME_SEED = 0
 
                 ` ask what kind of game it should be. "Start" is highlighted to start with, so that picking
-                ` it straight away plays the same kind of game as the last time.
+                ` it straight away plays the same kind of game as the last time. the lines are given their
+                ` values first, the same as the options page, because setMenuPage only shows the value of a
+                ` line that has one already.
+                refreshOptionLines()
                 setMenuPage(MENU_PAGE_NEW_GAME)
                 refreshOptionLines()
                 selectMenuItem(getMenuRow(MENU_ITEM_GAME_START), 0)
@@ -525,6 +545,11 @@ menu_pick:
         endcase
         case MENU_ITEM_GAME_INTRO
             changeMenuOption(MENU_ITEM_GAME_INTRO, 1)
+        endcase
+
+        ` the seed is entered on a page of its own. see THE PAGE WHERE A SEED IS ENTERED in fish_headers_seed.
+        case MENU_ITEM_GAME_SEED
+            gosub menu_run_seed_entry
         endcase
 
         case MENU_ITEM_GAME_START
@@ -595,6 +620,11 @@ menu_pick:
 
         case MENU_ITEM_HIGHSCORES
             gosub menu_run_highscores
+
+            ` the page of one score can ask for a new game on the seed of that score. see PLAY THIS SEED in fish_headers_seed.
+            if HISCORE_PLAY_SEED > 0
+                gosub highscore_play_seed
+            endif
         endcase
 
         case MENU_ITEM_CODEC
@@ -613,6 +643,7 @@ menu_pick:
         endcase
 
         case MENU_ITEM_OPTIONS
+            refreshOptionLines()
             setMenuPage(MENU_PAGE_OPTIONS)
             refreshOptionLines()
             selectMenuItem(0, 0)
@@ -688,6 +719,21 @@ menu_start_game:
 return
 
 
+` PLAY THIS SEED. the page of one high score asked for a new game on the seed of that score, and
+` the pages of the high scores have closed. the game is the length and the mode of the table that
+` the score was on. see fish_headers_seed.
+highscore_play_seed:
+    OPTION_GAME_LENGTH = HISCORE_PLAY_TABLE / 2
+    OPTION_GAME_ZEN = HISCORE_PLAY_TABLE mod 2
+    OPTION_GAME_INTRO = 0
+    OPTION_GAME_SEED = HISCORE_PLAY_SEED
+    HISCORE_PLAY_SEED = 0
+    set pref PREF_GAME_LENGTH, OPTION_GAME_LENGTH
+    set pref PREF_GAME_ZEN, OPTION_GAME_ZEN
+    gosub menu_start_game
+return
+
+
 ` a new game has just been reset. make it the kind of game that was picked on the menu.
 ` see THE KIND OF GAME in fish_headers.
 apply_game_options:
@@ -741,6 +787,9 @@ handle_game_end:
     setMenuPage(MENU_PAGE_GAME_OVER)
     selectMenuItem(0, 0)
 
+    ` the end of a game is the best mark that the steam timeline gets. it says the same as the menu does.
+    add steam timeline event "The end", MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$, "steam_crown", 900, 2
+
     hintShow(0)
     set screen shake amount 0
 
@@ -793,6 +842,7 @@ return
 
 ` the pause key was pressed in the game
 menu_open_pause:
+    questTalkStop() `the game stands still under the menu, and the box would too
     ` the game is saved as it is paused, in case the window gets closed from the pause menu
     gosub save_game
 
@@ -1219,7 +1269,7 @@ frame_menu_render:
 
     ` the highlighted line shakes from side to side when it cannot be picked
     menuShake# = sin(menuMs * .045) * 4 * tweenVal(MENU_SHAKE_TWEEN_ID)
-    set text position MENU_ITEMS(MENU_PAGE_ITEMS(MENU_SELECTED)).textId, WORLD_WIDTH / 2 + .5 + menuShake#, MENU_LIST_TOP + MENU_SELECTED * MENU_ROW_HEIGHT
+    positionMenuItemText(MENU_PAGE_ITEMS(MENU_SELECTED), .5 + menuShake#, MENU_LIST_TOP + MENU_SELECTED * MENU_ROW_HEIGHT)
 
     ` the title bobs up and down
     set text position MENU_TITLE_TEXT_ID, WORLD_WIDTH / 2, MENU_TITLE_Y + .5 + sin(menuMs * .002) * 3
@@ -1239,6 +1289,10 @@ return
 
 ` put the game back to how it is at the very start, so that a new one can be played.
 reset_game:
+
+    ` the seed of the new game comes first, because everything that is picked from here on is
+    ` picked from it. see THE SEED OF A GAME in fish_headers_seed.
+    seedNewGame()
 
     ` if the game that is being thrown away was still in its tutorial, the pieces that it had not got to are put back
     gosub tutorial_end
@@ -1285,9 +1339,11 @@ reset_game:
     resizeGrid(GRID_START_COUNT, GRID_START_COUNT)
     scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
 
-    ` a new board of fish. the cells to the left and above are already new by the time a cell gets its turn.
+    ` a new board of fish. see seedDealBoard in fish_routines_seed. the game before may have ended on a
+    ` round that was won, and the new fish of that are dealt by other rules. this one has won nothing.
+    NEW_FISH_ROUND_WON = 0
+    seedDealBoard()
     for resetI = 0 to CELL_COUNT - 1
-        CELLS(resetI).value = getImpossibleRandomValueForCell(resetI)
         CELLS(resetI).comboForce = 0
         CELLS(resetI).comboBlownUp = 0
         clearCellStack(resetI)
@@ -1308,6 +1364,7 @@ reset_game:
     GAME_ENDLESS = 0
     GAME_DEBUG_USED = 0
     fastReset() `the fast, and the modifiers of the game. see fish_headers_fast.
+    ANGLER_CALL_PENDING = 0 `a call of the old angler fish that has not been answered yet. see THE CALL in fish_headers_angler.
     BELLY_UP_ROLL_DUE = 0
 
     ` the score
@@ -1330,6 +1387,7 @@ reset_game:
     resetQuests()
     diverReset()
     tideReset()
+    glowReset() `the glow. see fish_headers_glow.
 
     ` any score that was still floating up off of the fish
     for resetI = 0 to SCORE_TEXT_COUNT - 1
@@ -1454,7 +1512,7 @@ function setMenuPage(page)
             if page = MENU_PAGE_GAME_OVER
                 MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_OVER_CONTINUE
                 MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
-                show text MENU_ITEMS(MENU_ITEM_OVER_CONTINUE).textId
+                showMenuItemText(MENU_ITEM_OVER_CONTINUE)
             endif
         endif
         if i = MENU_ITEM_OVER_CONTINUE
@@ -1465,33 +1523,52 @@ function setMenuPage(page)
         ` each of them only once it is there to be turned off
         if i = MENU_ITEM_SET_REEF
             if page = MENU_PAGE_OPTIONS
-                if SURFACE_REEF = 0 then hide text MENU_ITEMS(i).textId
+                if SURFACE_REEF = 0
+                    hideMenuItemText(i)
+                endif
                 skip
             endif
         endif
         if i = MENU_ITEM_SET_MONSTER
             if page = MENU_PAGE_OPTIONS
-                if SURFACE_ANCIENT = 0 then hide text MENU_ITEMS(i).textId
+                if SURFACE_ANCIENT = 0
+                    hideMenuItemText(i)
+                endif
                 skip
             endif
         endif
         if i = MENU_ITEM_SET_PHOTOS
             if page = MENU_PAGE_OPTIONS
-                if DIVER_SURFACE = 0 then hide text MENU_ITEMS(i).textId
+                if DIVER_SURFACE = 0
+                    hideMenuItemText(i)
+                endif
                 skip
             endif
+        endif
+
+        ` and the page that "New Game" opens has the seed right under "Include intro"
+        if i = MENU_ITEM_GAME_SEED
+            if page = MENU_PAGE_NEW_GAME then skip
         endif
 
         if onPage
             MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = i
             MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
-            show text MENU_ITEMS(i).textId
+            showMenuItemText(i)
+
+            if page = MENU_PAGE_NEW_GAME
+                if i = MENU_ITEM_GAME_INTRO
+                    MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_GAME_SEED
+                    MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+                    showMenuItemText(MENU_ITEM_GAME_SEED)
+                endif
+            endif
 
             if page = MENU_PAGE_PAUSE
                 if i = MENU_ITEM_RESUME
                     MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_MOVES
                     MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
-                    show text MENU_ITEMS(MENU_ITEM_MOVES).textId
+                    showMenuItemText(MENU_ITEM_MOVES)
                 endif
             endif
 
@@ -1500,22 +1577,22 @@ function setMenuPage(page)
                     if SURFACE_REEF
                         MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_REEF
                         MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
-                        show text MENU_ITEMS(MENU_ITEM_SET_REEF).textId
+                        showMenuItemText(MENU_ITEM_SET_REEF)
                     endif
                     if SURFACE_ANCIENT
                         MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_MONSTER
                         MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
-                        show text MENU_ITEMS(MENU_ITEM_SET_MONSTER).textId
+                        showMenuItemText(MENU_ITEM_SET_MONSTER)
                     endif
                     if DIVER_SURFACE
                         MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_PHOTOS
                         MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
-                        show text MENU_ITEMS(MENU_ITEM_SET_PHOTOS).textId
+                        showMenuItemText(MENU_ITEM_SET_PHOTOS)
                     endif
                 endif
             endif
         else
-            hide text MENU_ITEMS(i).textId
+            hideMenuItemText(i)
         endif
     next
 
@@ -1572,8 +1649,9 @@ function selectMenuItem(index, duration)
         if item.ready then itemColor = rgb(150, 190, 255)
         if i = index then itemColor = rgb(255, 255, 255)
         color text item.textId, itemColor
+        color text item.valueTextId, itemColor
 
-        set text position item.textId, WORLD_WIDTH / 2, MENU_LIST_TOP + i * MENU_ROW_HEIGHT
+        positionMenuItemText(MENU_PAGE_ITEMS(i), 0, MENU_LIST_TOP + i * MENU_ROW_HEIGHT)
     next
     create basic tween MENU_SHAKE_TWEEN_ID, 0, 0, 1, 0
 
@@ -1590,54 +1668,99 @@ function getMenuRow(item)
 endfunction row
 
 
+` a line that holds a setting is split in two: the name of the setting on the left edge of the panel,
+` and what it is set to on the right edge. that keeps the names in one column and the settings in another.
+function setMenuItemValue(item, label$, value$)
+    set text MENU_ITEMS(item).textId, label$
+    set text MENU_ITEMS(item).valueTextId, value$
+    set text offset MENU_ITEMS(item).textId, 0, 0
+    MENU_ITEMS(item).hasValue = 1
+endfunction
+
+
+` put a line of the menu at a height. shift moves it from side to side, for the shake.
+function positionMenuItemText(item, shift#, y)
+    if MENU_ITEMS(item).hasValue
+        menuPad = 18
+        set text position MENU_ITEMS(item).textId, (WORLD_WIDTH - MENU_WIDTH) / 2 + menuPad + shift#, y
+        set text position MENU_ITEMS(item).valueTextId, (WORLD_WIDTH + MENU_WIDTH) / 2 - menuPad + shift#, y
+    else
+        set text position MENU_ITEMS(item).textId, WORLD_WIDTH / 2 + shift#, y
+    endif
+endfunction
+
+
+function showMenuItemText(item)
+    show text MENU_ITEMS(item).textId
+    if MENU_ITEMS(item).hasValue
+        show text MENU_ITEMS(item).valueTextId
+    endif
+endfunction
+
+
+function hideMenuItemText(item)
+    hide text MENU_ITEMS(item).textId
+    hide text MENU_ITEMS(item).valueTextId
+endfunction
+
+
 ` write the settings onto the lines of the options page.
 function refreshOptionLines()
-    set text MENU_ITEMS(MENU_ITEM_SET_SOUND).textId, "Sound    " + str$(OPTION_SOUND * 10) + "%"
-    set text MENU_ITEMS(MENU_ITEM_SET_MUSIC).textId, "Music    " + str$(OPTION_MUSIC * 10) + "%"
+    setMenuItemValue(MENU_ITEM_SET_SOUND, "Sound", str$(OPTION_SOUND * 10) + "%")
+    setMenuItemValue(MENU_ITEM_SET_MUSIC, "Music", str$(OPTION_MUSIC * 10) + "%")
 
     if OPTION_FULLSCREEN
-        set text MENU_ITEMS(MENU_ITEM_SET_FULLSCREEN).textId, "Fullscreen    on"
+        setMenuItemValue(MENU_ITEM_SET_FULLSCREEN, "Fullscreen", "on")
     else
-        set text MENU_ITEMS(MENU_ITEM_SET_FULLSCREEN).textId, "Fullscreen    off"
+        setMenuItemValue(MENU_ITEM_SET_FULLSCREEN, "Fullscreen", "off")
     endif
 
     if OPTION_MENU_REEF
-        set text MENU_ITEMS(MENU_ITEM_SET_REEF).textId, "Menu reef    on"
+        setMenuItemValue(MENU_ITEM_SET_REEF, "Menu reef", "on")
     else
-        set text MENU_ITEMS(MENU_ITEM_SET_REEF).textId, "Menu reef    off"
+        setMenuItemValue(MENU_ITEM_SET_REEF, "Menu reef", "off")
     endif
     if OPTION_MENU_MONSTER
-        set text MENU_ITEMS(MENU_ITEM_SET_MONSTER).textId, "Menu monster    on"
+        setMenuItemValue(MENU_ITEM_SET_MONSTER, "Menu monster", "on")
     else
-        set text MENU_ITEMS(MENU_ITEM_SET_MONSTER).textId, "Menu monster    off"
+        setMenuItemValue(MENU_ITEM_SET_MONSTER, "Menu monster", "off")
     endif
     if OPTION_MENU_PHOTOS
-        set text MENU_ITEMS(MENU_ITEM_SET_PHOTOS).textId, "Menu photos    on"
+        setMenuItemValue(MENU_ITEM_SET_PHOTOS, "Menu photos", "on")
     else
-        set text MENU_ITEMS(MENU_ITEM_SET_PHOTOS).textId, "Menu photos    off"
+        setMenuItemValue(MENU_ITEM_SET_PHOTOS, "Menu photos", "off")
     endif
 
     ` and the kind of game onto the lines of the page that "New Game" opens
     lengthName$ = "regular"
     if OPTION_GAME_LENGTH = GAME_LENGTH_SHORT then lengthName$ = "short"
     if OPTION_GAME_LENGTH = GAME_LENGTH_LONG then lengthName$ = "long"
-    set text MENU_ITEMS(MENU_ITEM_GAME_LENGTH).textId, "Length    " + lengthName$
+    setMenuItemValue(MENU_ITEM_GAME_LENGTH, "Length", lengthName$)
     MENU_ITEMS(MENU_ITEM_GAME_LENGTH).desc$ = "The game is over after " + str$(getGameLengthRounds(OPTION_GAME_LENGTH)) + " rounds."
 
     if OPTION_GAME_ZEN
-        set text MENU_ITEMS(MENU_ITEM_GAME_MODE).textId, "Mode    zen"
+        setMenuItemValue(MENU_ITEM_GAME_MODE, "Mode", "zen")
         MENU_ITEMS(MENU_ITEM_GAME_MODE).desc$ = "No upgrades. Fish can move around the edges of the board, and that is all."
     else
-        set text MENU_ITEMS(MENU_ITEM_GAME_MODE).textId, "Mode    normal"
+        setMenuItemValue(MENU_ITEM_GAME_MODE, "Mode", "normal")
         MENU_ITEMS(MENU_ITEM_GAME_MODE).desc$ = "Pick an upgrade after every round."
     endif
 
     if OPTION_GAME_INTRO
-        set text MENU_ITEMS(MENU_ITEM_GAME_INTRO).textId, "Include intro    yes"
+        setMenuItemValue(MENU_ITEM_GAME_INTRO, "Include intro", "yes")
         MENU_ITEMS(MENU_ITEM_GAME_INTRO).desc$ = "Start with the first dive again: a few words, and then the game a piece at a time."
     else
-        set text MENU_ITEMS(MENU_ITEM_GAME_INTRO).textId, "Include intro    no"
+        setMenuItemValue(MENU_ITEM_GAME_INTRO, "Include intro", "no")
         MENU_ITEMS(MENU_ITEM_GAME_INTRO).desc$ = "Straight into the game."
+    endif
+
+    ` and the seed. see THE SEED OF A GAME in fish_headers_seed.
+    if OPTION_GAME_SEED > 0
+        setMenuItemValue(MENU_ITEM_GAME_SEED, "Seed", str$(OPTION_GAME_SEED))
+        MENU_ITEMS(MENU_ITEM_GAME_SEED).desc$ = "The same fish, cards and quests as any other game on this seed."
+    else
+        setMenuItemValue(MENU_ITEM_GAME_SEED, "Seed", "random")
+        MENU_ITEMS(MENU_ITEM_GAME_SEED).desc$ = "A seed is picked for you. Pick one to play the same game as somebody else."
     endif
 endfunction
 
@@ -1704,6 +1827,11 @@ function changeMenuOption(item, change)
         ` this one is not remembered. see OPTION_GAME_INTRO in fish_headers.
         case MENU_ITEM_GAME_INTRO
             OPTION_GAME_INTRO = 1 - OPTION_GAME_INTRO
+        endcase
+
+        ` left takes the seed away again. it is entered on a page of its own, which the confirm button opens.
+        case MENU_ITEM_GAME_SEED
+            if change < 0 then OPTION_GAME_SEED = 0
         endcase
     endselect
 

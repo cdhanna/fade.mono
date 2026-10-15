@@ -201,6 +201,8 @@ frame_surface:
         set effect param float SURFACE_REEF_FX(surfaceReefI), "Time", surfaceTime#
         set effect param float2 SURFACE_REEF_FX(surfaceReefI), "Size", WORLD_WIDTH, WORLD_HEIGHT
         set effect param float SURFACE_REEF_FX(surfaceReefI), "Horizon", surfaceHorizon#
+        ` the reef stands on the sea floor, so it does not bob with the camera. the water goes up and down over it.
+        set effect param float SURFACE_REEF_FX(surfaceReefI), "Bob", surfaceBob#
         set effect param float SURFACE_REEF_FX(surfaceReefI), "Swell", surfaceSwell#
         set effect param float SURFACE_REEF_FX(surfaceReefI), "Day", SURFACE_DAY
         set effect param float4 SURFACE_REEF_FX(surfaceReefI), "Where", SURFACE_REEF_AT_X(surfaceReefI), SURFACE_REEF_AT_DOWN(surfaceReefI), SURFACE_REEF_AT_SCALE(surfaceReefI), SURFACE_REEF_AT_FLIP(surfaceReefI)
@@ -234,14 +236,15 @@ frame_surface:
 
         ` the crab and the worm do not swim, and they do not fade in and out. each one goes slowly back
         ` and forth on the rock of its reef that stands out of the water. see SURFACE_CRAB_X in fish_headers.
+        ` the rock does not bob, so neither do they.
         if surfaceFishI + 1 = TEX_CRAB
             surfaceFishX# = SURFACE_CRAB_X + sin(surfaceTime# * .45) * SURFACE_WALK
-            surfaceFishY# = surfaceHorizon# + SURFACE_CRAB_DOWN
+            surfaceFishY# = (surfaceHorizon# - surfaceBob#) + SURFACE_CRAB_DOWN
             surfaceFishSeen# = 255
         endif
         if surfaceFishI + 1 = TEX_WORM
             surfaceFishX# = SURFACE_WORM_X + sin(surfaceTime# * .33 + 2) * SURFACE_WALK
-            surfaceFishY# = surfaceHorizon# + SURFACE_WORM_DOWN
+            surfaceFishY# = (surfaceHorizon# - surfaceBob#) + SURFACE_WORM_DOWN
             surfaceFishSeen# = 255
         endif
         position sprite SURFACE_FISH_SPRITES(surfaceFishI), surfaceFishX#, surfaceFishY# + surfaceShift

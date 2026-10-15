@@ -424,22 +424,32 @@ public static class RenderSystem
     /// <summary>
     /// Draw the runs of a rich text layout as if they were one string. The position, rotation, and
     /// scale belong to the whole text, so each run is drawn around the text's origin instead of
-    /// its own.
+    /// its own. `reveal` is how many characters to draw, counting an icon as one, or -1 for all of
+    /// them. see TextSprite.revealOn.
     /// </summary>
     private static void DrawRichText(SpriteBatch sb, Microsoft.Xna.Framework.Graphics.Fade.SpriteFont font,
         RichTextLayout layout,
         Vector2 position, Color textColor, Color iconColor, float angle, Vector2 origin, Vector2 scale,
-        SpriteEffects effects, float order)
+        SpriteEffects effects, float order, int reveal = -1)
     {
+        var left = reveal;
         for (var i = 0; i < layout.runs.Count; i++)
         {
             var run = layout.runs[i];
+            if (reveal >= 0 && left <= 0) break;
             if (!run.isIcon)
             {
-                sb.DrawString(font, run.text, position, textColor, angle, origin - run.offset, scale, effects,
+                var runText = run.text;
+                if (reveal >= 0)
+                {
+                    if (runText.Length > left) runText = runText.Substring(0, left);
+                    left -= runText.Length;
+                }
+                sb.DrawString(font, runText, position, textColor, angle, origin - run.offset, scale, effects,
                     order);
                 continue;
             }
+            if (reveal >= 0) left -= 1;
 
             TextureSystem.GetTextureIndex(run.textureId, out _, out var runtimeTex);
             var tex = runtimeTex.texture;
@@ -736,12 +746,16 @@ public static class RenderSystem
     public static bool flip = false;
     public static Matrix shakeMat;
 
+    // where the shake goes next. a recording starts it over from the same seed, so that a shot
+    // shakes the same way every time it is recorded. see RecordSystem.
+    public static Random shakeRandom = new Random();
+
     public static void RenderAll2(SpriteBatch sb)
     {
         var localOutputs = outputs.ToList().OrderBy(x => x.order).ToList();
 
-        screenShakeOffsetTarget.X = (Random.Shared.NextSingle()-.5f) * screenShakeMag;
-        screenShakeOffsetTarget.Y = (Random.Shared.NextSingle()-.5f) * screenShakeMag;
+        screenShakeOffsetTarget.X = (shakeRandom.NextSingle()-.5f) * screenShakeMag;
+        screenShakeOffsetTarget.Y = (shakeRandom.NextSingle()-.5f) * screenShakeMag;
         var screenDelta = screenShakeOffsetTarget - screenShakeOffset;
         screenShakeOffset += screenDelta * screenShakeElastic;
         // The amount is in pixels of the game's own screen (the main buffer), so it is scaled up
@@ -831,6 +845,13 @@ public static class RenderSystem
                     case RenderOutputItem.TYPE_TEXT:
                         text = TextSystem.textSprites[item.index];
                         sprite = text.sprite;
+                        if (sprite.effectId == 0)
+                        {
+                            // Text has no effect of its own, so it takes the one its font was given
+                            // with `set font effect`, if any.
+                            TextureSystem.GetSpriteFontIndex(sprite.imageId, out _, out var fontForEffect);
+                            sprite.effectId = fontForEffect.effectId;
+                        }
                         break;
                 }
                 
@@ -925,7 +946,7 @@ public static class RenderSystem
                             // Icons keep their own colors, but fade along with the text.
                             var iconColor = new Color(255, 255, 255, (int)text.sprite.color.A);
                             DrawRichText(sb, font, layout, position, text.sprite.color, iconColor, angle, origin,
-                                scale, text.sprite.effects, order);
+                                scale, text.sprite.effects, order, text.revealOn ? text.reveal : -1);
                         }
                         else
                         {
@@ -949,7 +970,7 @@ public static class RenderSystem
                             {
                                 // The shadow of an icon is the icon's shape in the shadow color.
                                 DrawRichText(sb, font, layout, position, color, color, angle, origin, scale,
-                                    text.sprite.effects, order);
+                                    text.sprite.effects, order, text.revealOn ? text.reveal : -1);
                             }
                             else
                             {

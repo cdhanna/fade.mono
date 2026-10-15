@@ -1,0 +1,295 @@
+remstart
+    THE TESTS OF THE ANGLER
+    see fish_headers_angler for what the angler is. the top of fish_tests explains how the tests
+    work. the preferences are mocked, so nothing has been heard and no light is kept when a test starts.
+    the scene itself waits for the keys, so these test what it is made of.
+remend
+
+` forget everything that has been heard
+function testAnglerForget()
+    tAngLast = ANGLER_TOPIC_COUNT - 1
+    for tAngN = 0 to tAngLast
+        ANGLER_HEARD(tAngN) = 0
+    next
+    ANGLER_STAMP = 0
+endfunction
+
+` hear every topic of a tier
+function testAnglerHearTier(tAngTier)
+    tAngLast = ANGLER_TOPIC_COUNT - 1
+    for tAngN = 0 to tAngLast
+        if ANGLER_TIER(tAngN) = tAngTier
+            anglerHear(tAngN)
+        endif
+    next
+endfunction
+
+test angler_card_is_a_dealt_instant_after_the_fast from fishBoard
+    assert CARD_LENGTH = 36, "there is one more card"
+    assert ABILITY_INDEX_ANGLER = CARD_LENGTH - 1, "and it is the last one, after the cards of the fast"
+    assert CARDS(ABILITY_INDEX_ANGLER).abilityType = ABILITY_TYPE_INSTANT, "it is an instant"
+    assert CARDS(ABILITY_INDEX_ANGLER).stackable = 1, "and it can be taken again"
+    assert cardCanBeDealt(ABILITY_INDEX_ANGLER) = 0, "it is not in the book"
+    end
+endtest
+
+test angler_keeps_no_more_than_four_lights from fishBoard
+    ANGLER_BANKED = 0
+    tAngGot = 0
+    for tAngN = 1 to 4
+        tAngAdded = anglerBankAdd()
+        if tAngAdded = 1 then tAngGot = tAngGot + 1
+    next
+    assert tAngGot = 4, "four lights can be kept"
+    assert ANGLER_BANKED = 4, "and are"
+    tAngAdded = anglerBankAdd()
+    assert tAngAdded = 0, "a fifth one is not"
+    assert ANGLER_BANKED = 4, "and there are still four"
+
+    anglerBankSpend()
+    assert ANGLER_BANKED = 3, "asking spends one"
+    ANGLER_BANKED = 0
+    anglerBankSpend()
+    assert ANGLER_BANKED = 0, "and with none, there is nothing to spend"
+    end
+endtest
+
+test angler_topics_are_all_there from fishBoard
+    assert ANGLER_TOPIC_COUNT = 42, "every topic was made"
+    assert ANGLER_TOPIC_COUNT <= ANGLER_TOPIC_ROOM, "and they fit"
+    tAngBadPages = 0
+    tAngLast = ANGLER_TOPIC_COUNT - 1
+    for tAngN = 0 to tAngLast
+        if ANGLER_PAGES(tAngN) < 1 then tAngBadPages = tAngBadPages + 1
+        if ANGLER_PAGES(tAngN) > 2 then tAngBadPages = tAngBadPages + 1
+    next
+    assert tAngBadPages = 0, "every answer has one page or two"
+    assert ANGLER_PAGES(ANGLER_T_MULT) = 2, "the multiplier takes two"
+    assert ANGLER_PAGES(ANGLER_T_BELLY) = 1, "a belly up fish takes one"
+    assert ANGLER_TIER(ANGLER_R_STILL) = ANGLER_TIER_RUMOR, "the constants are the order that they are made in"
+    assert ANGLER_TIER(ANGLER_R_LEG) = ANGLER_TIER_DEEP, "all the way to the end of the true ones"
+    end
+endtest
+
+test angler_offers_two_plain_questions_and_a_rumor from fishBoard
+    testAnglerForget()
+    anglerScanBoard()
+    anglerPickTopics(-1)
+    assert ANGLER_PICK_COUNT = 3, "three questions"
+    assert ANGLER_TIER(ANGLER_PICK(0)) = ANGLER_TIER_PLAIN, "the first is plain"
+    assert ANGLER_TIER(ANGLER_PICK(1)) = ANGLER_TIER_PLAIN, "and so is the second"
+    assert ANGLER_TIER(ANGLER_PICK(2)) = ANGLER_TIER_RUMOR, "the third is a rumor, from the first tier"
+    tAngSame = 0
+    if ANGLER_PICK(0) = ANGLER_PICK(1) then tAngSame = 1
+    assert tAngSame = 0, "and no question is offered twice"
+    end
+endtest
+
+test angler_asks_about_what_is_on_the_board_first from fishBoard
+    testAnglerForget()
+    testPut(2, 2, TEX_JELLY)
+    anglerScanBoard()
+    anglerPickTopics(-1)
+    assert ANGLER_PICK(0) = ANGLER_T_JELLY, "the jellyfish on the board comes first"
+    end
+endtest
+
+test angler_asks_about_what_info_mode_highlighted from fishBoard
+    testAnglerForget()
+    anglerTopicForBlob(INFO_INDEX_MULTIPLIER)
+    assert ANGLER_FOUND = ANGLER_T_MULT, "the multiplier is about the multiplier"
+    anglerScanBoard()
+    anglerPickTopics(ANGLER_FOUND)
+    assert ANGLER_PICK(0) = ANGLER_T_MULT, "and it is the first question"
+    assert ANGLER_PICK(1) <> ANGLER_T_MULT, "and only the first"
+    end
+endtest
+
+test angler_leaves_out_what_has_not_been_found from fishBoard
+    testAnglerForget()
+    anglerScanBoard()
+    assert anglerTopicOpen(ANGLER_T_CROOKED) = 0, "the crooked bar is not explained before it has paid"
+    assert anglerTopicOpen(ANGLER_T_MULT) = 1, "the multiplier always can be"
+    end
+endtest
+
+test angler_rumors_go_deeper_and_then_silly from fishBoard
+    testAnglerForget()
+    testAnglerHearTier(ANGLER_TIER_RUMOR)
+    anglerPickRumor()
+    assert ANGLER_TIER(ANGLER_FOUND) = ANGLER_TIER_DEEP, "with the first tier heard, the rumor is a deep one"
+    testAnglerHearTier(ANGLER_TIER_DEEP)
+    anglerPickRumor()
+    assert ANGLER_TIER(ANGLER_FOUND) = ANGLER_TIER_SILLY, "with every true one heard, it is a silly one"
+
+    ` the silly ones go around, the one heard longest ago first
+    tAngFirstSilly = ANGLER_FOUND
+    anglerHear(tAngFirstSilly)
+    anglerPickRumor()
+    assert ANGLER_FOUND <> tAngFirstSilly, "the one that was just heard waits its turn"
+    end
+endtest
+
+test angler_repeats_the_oldest_once_all_are_heard from fishBoard
+    testAnglerForget()
+    anglerScanBoard()
+    ` every plain one is heard, and then every one but the moves is heard again
+    testAnglerHearTier(ANGLER_TIER_PLAIN)
+    tAngLast = ANGLER_TOPIC_COUNT - 1
+    for tAngN = 0 to tAngLast
+        if ANGLER_TIER(tAngN) = ANGLER_TIER_PLAIN
+            if tAngN <> ANGLER_T_MOVES
+                anglerHear(tAngN)
+            endif
+        endif
+    next
+    ANGLER_PICK_COUNT = 0
+    anglerPickPlain(0)
+    assert ANGLER_FOUND = ANGLER_T_MOVES, "the moves were heard longest ago, so they come around again"
+    end
+endtest
+
+test angler_voice_bubbles_on_the_first_vowel_of_a_run from fishBoard
+    anglerSay("Moon tea yes")
+    anglerVowelAt(1)
+    assert ANGLER_FOUND = 4, "the oo of moon is an oo"
+    anglerVowelAt(2)
+    assert ANGLER_FOUND = -1, "and its second o is not a bubble of its own"
+    anglerVowelAt(6)
+    assert ANGLER_FOUND = 2, "ea is an ee"
+    anglerVowelAt(9)
+    assert ANGLER_FOUND = -1, "a y at the start of a word is not a vowel"
+    anglerVowelAt(10)
+    assert ANGLER_FOUND = 1, "and the e of yes is an eh"
+    anglerVowelAt(0)
+    assert ANGLER_FOUND = -1, "a capital M is no vowel"
+    end
+endtest
+
+test angler_voice_knows_how_a_word_ends from fishBoard
+    anglerSay("Why not? Go! Hm...")
+    anglerWordEnds(4)
+    assert ANGLER_WORD_END = 1, "not? goes up"
+    anglerWordEnds(9)
+    assert ANGLER_WORD_END = 2, "Go! is loud"
+    anglerWordEnds(13)
+    assert ANGLER_WORD_END = 3, "Hm... fades away"
+    anglerWordEnds(0)
+    assert ANGLER_WORD_END = 0, "and Why is just a word"
+    assert text reveal length(ANGLER_SAY_TEXT_ID) = 18, "every letter is counted"
+    end
+endtest
+
+test angler_call_words_share_one_codec_entry from fishBoard
+    assert MORSE_WORD_CODEC(MORSE_WORD_HELP) = CODEC_ENTRY_CALL, "HELP unlocks the call"
+    assert MORSE_WORD_CODEC(MORSE_WORD_INFO) = CODEC_ENTRY_CALL, "and so does INFO"
+    assert CODEC_ENTRY_CALL = CODEC_ENTRY_GOODBYE - 1, "right before the usual ending"
+    assert getCodecPref(CODEC_ENTRY_CALL) = CODEC_PREF_CAMEO + 9, "remembered after the nine words"
+    assert getCodecPref(CODEC_ENTRY_GOODBYE) = PREF_ENDING_HOME, "and the usual ending is still remembered where it was"
+    assert ANGLER_TIER(ANGLER_R_CALL) = ANGLER_TIER_DEEP, "a deep rumor tells of it"
+    end
+endtest
+
+test angler_radio_hears_info_and_help from fishBoard
+    global tAngClock = 1000
+    global dim tAngMarks(16)
+    morseQuiet()
+
+    ` INFO is ..  -.  ..-.  ---
+    tAngCount = 0
+    tAngCount = testAnglerAdd(tAngCount, 0)
+    tAngCount = testAnglerAdd(tAngCount, 0)
+    tAngCount = testAnglerAdd(tAngCount, 1)
+    tAngCount = testAnglerAdd(tAngCount, 0)
+    tAngCount = testAnglerAdd(tAngCount, 0)
+    tAngCount = testAnglerAdd(tAngCount, 0)
+    tAngCount = testAnglerAdd(tAngCount, 1)
+    tAngCount = testAnglerAdd(tAngCount, 0)
+    tAngCount = testAnglerAdd(tAngCount, 1)
+    tAngCount = testAnglerAdd(tAngCount, 1)
+    tAngCount = testAnglerAdd(tAngCount, 1)
+    tAngHeard = testAnglerTapWord(tAngCount)
+    assert tAngHeard = MORSE_WORD_INFO, "INFO is heard"
+
+    ` HELP is ....  .  .-..  .--.
+    tAngClock = tAngClock + 4000
+    morseQuiet()
+    tAngCount = 0
+    for tAngN = 1 to 6
+        tAngCount = testAnglerAdd(tAngCount, 0)
+    next
+    tAngCount = testAnglerAdd(tAngCount, 1)
+    tAngCount = testAnglerAdd(tAngCount, 0)
+    tAngCount = testAnglerAdd(tAngCount, 0)
+    tAngCount = testAnglerAdd(tAngCount, 0)
+    tAngCount = testAnglerAdd(tAngCount, 1)
+    tAngCount = testAnglerAdd(tAngCount, 1)
+    tAngCount = testAnglerAdd(tAngCount, 0)
+    tAngHeard = testAnglerTapWord(tAngCount)
+    assert tAngHeard = MORSE_WORD_HELP, "and so is HELP"
+    end
+
+    function testAnglerAdd(tAngAddAt, tAngAddDash)
+        tAngMarks(tAngAddAt) = tAngAddDash
+    endfunction tAngAddAt + 1
+
+    ` wake the radio, and tap out the marks: 0 for a dot, and 1 for a dash. it says the last word
+    ` that was heard, or -1.
+    function testAnglerTapWord(tAngTapCount)
+        tAngGot = -1
+        morseStep(1, tAngClock)
+        tAngClock = tAngClock + MORSE_WAKE_MS
+        morseStep(1, tAngClock)
+        tAngClock = tAngClock + 200
+        morseStep(0, tAngClock)
+        tAngClock = tAngClock + 300
+        tAngTapLast = tAngTapCount - 1
+        for tAngTapN = 0 to tAngTapLast
+            morseStep(1, tAngClock)
+            tAngPush = 100
+            if tAngMarks(tAngTapN) = 1 then tAngPush = 300
+            tAngClock = tAngClock + tAngPush
+            morseStep(0, tAngClock)
+            if MORSE_HEARD >= 0 then tAngGot = MORSE_HEARD
+            tAngClock = tAngClock + 120
+            morseStep(0, tAngClock)
+        next
+    endfunction tAngGot
+endtest
+
+test angler_keeps_the_coral_rumors_until_coral_is_found from fishBoard
+    testAnglerForget()
+    CODEC_SEEN(CODEC_ENTRY_CORAL) = 0
+    assert anglerRumorOpen(ANGLER_R_STILL) = 0, "the still water waits for the coral"
+    assert anglerRumorOpen(ANGLER_R_SING) = 0, "and so does the singing"
+    assert anglerRumorOpen(ANGLER_R_DEAD_SONG) = 0, "and the dark coral"
+    assert anglerRumorOpen(ANGLER_R_FAST) = 1, "the other rumors do not"
+
+    ` with every other rumor of the first tier heard, the rumor comes from the deep ones
+    tAngLast = ANGLER_TOPIC_COUNT - 1
+    for tAngN = 0 to tAngLast
+        if ANGLER_TIER(tAngN) = ANGLER_TIER_RUMOR
+            if anglerRumorOpen(tAngN)
+                anglerHear(tAngN)
+            endif
+        endif
+    next
+    tAngCoralOffered = 0
+    for tAngTry = 1 to 30
+        anglerPickRumor()
+        if ANGLER_FOUND = ANGLER_R_STILL then tAngCoralOffered = 1
+        if ANGLER_FOUND = ANGLER_R_SING then tAngCoralOffered = 1
+        if ANGLER_FOUND = ANGLER_R_DEAD_SONG then tAngCoralOffered = 1
+    next
+    assert tAngCoralOffered = 0, "and it is never about the coral"
+    assert ANGLER_TIER(ANGLER_FOUND) = ANGLER_TIER_DEEP, "the deep ones come next"
+
+    CODEC_SEEN(CODEC_ENTRY_CORAL) = 1
+    assert anglerRumorOpen(ANGLER_R_STILL) = 1, "once coral has grown, the still water can be told"
+    anglerPickRumor()
+    tAngIsCoral = 0
+    if ANGLER_FOUND = ANGLER_R_STILL then tAngIsCoral = 1
+    if ANGLER_FOUND = ANGLER_R_SING then tAngIsCoral = 1
+    assert tAngIsCoral = 1, "and it comes before the deep ones, as a rumor of the first tier"
+    end
+endtest

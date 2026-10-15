@@ -1,0 +1,458 @@
+remstart
+    THE SEED OF A GAME. see fish_headers_seed.
+    a test local here starts with `ts`, so that it is not the name of a local of any other test.
+remend
+
+` the board that a seed deals, as one number. every cell has its say, and so does where it is.
+function testSeedBoardSum()
+    tsSum = 0
+    tsLast = CELL_COUNT - 1
+    for tsCell = 0 to tsLast
+        tsSum = (tsSum * 31 + CELLS(tsCell).value) mod 1000003
+    next
+endfunction tsSum
+
+test seed_stream_gives_the_same_numbers_again from fishBoard
+    seed random stream RNG_BOARD, 4242
+    tsFirst = random stream(RNG_BOARD, 1000)
+    tsSecond = random stream(RNG_BOARD, 1000)
+    tsThird = random stream(RNG_BOARD, 1000)
+
+    seed random stream RNG_BOARD, 4242
+    assert random stream(RNG_BOARD, 1000) = tsFirst, "the first number comes up again"
+    assert random stream(RNG_BOARD, 1000) = tsSecond, "and the second"
+    assert random stream(RNG_BOARD, 1000) = tsThird, "and the third"
+    end
+endtest
+
+test seed_stream_is_not_moved_by_rnd_or_by_another_stream from fishBoard
+    seed random stream RNG_BOARD, 77
+    tsPlain = random stream(RNG_BOARD, 1000) * 1000 + random stream(RNG_BOARD, 1000)
+
+    seed random stream RNG_BOARD, 77
+    tsWaste = rnd(100)
+    tsWaste = random stream(RNG_CARDS, 100)
+    tsMixed = random stream(RNG_BOARD, 1000) * 1000
+    tsWaste = rnd(100) + random stream(RNG_QUESTS, 100)
+    tsMixed = tsMixed + random stream(RNG_BOARD, 1000)
+    assert tsMixed = tsPlain, "the rolls in between took nothing from it"
+    end
+endtest
+
+test seed_streams_with_one_seed_are_not_the_same from fishBoard
+    seedStreams(9)
+    tsSame = 0
+    for tsRoll = 1 to 20
+        tsBoardRoll = random stream(RNG_BOARD, 1000)
+        tsCardRoll = random stream(RNG_CARDS, 1000)
+        if tsBoardRoll = tsCardRoll then tsSame = tsSame + 1
+    next
+    assert tsSame < 5, "twenty rolls of the board and of the cards hardly ever match"
+    end
+endtest
+
+test seed_stream_carries_on_from_where_it_was_saved from fishBoard
+    seed random stream RNG_CARDS, 31337
+    tsWaste = random stream(RNG_CARDS, 10)
+    tsHalf0 = random stream state(RNG_CARDS, 0)
+    tsHalf1 = random stream state(RNG_CARDS, 1)
+    tsNext = random stream(RNG_CARDS, 100000)
+    tsAfter = random stream(RNG_CARDS, 100000)
+
+    seed random stream RNG_CARDS, 5
+    set random stream state RNG_CARDS, tsHalf0, tsHalf1
+    assert random stream(RNG_CARDS, 100000) = tsNext, "the next number is the one that it would have been"
+    assert random stream(RNG_CARDS, 100000) = tsAfter, "and so is the one after it"
+    end
+endtest
+
+test seed_rolls_stay_in_their_range from fishBoard
+    seed random stream RNG_QUESTS, 1
+    tsBad = 0
+    tsSeen = 0
+    for tsRoll = 1 to 400
+        tsGot = random stream(RNG_QUESTS, 7)
+        if tsGot < 0 then tsBad = 1
+        if tsGot > 6 then tsBad = 1
+        if tsGot = 6 then tsSeen = 1
+    next
+    assert tsBad = 0, "every roll out of seven is from 0 to 6"
+    assert tsSeen = 1, "and the biggest of them comes up"
+    assert random stream(RNG_QUESTS, 1) = 0, "a roll out of one is always 0"
+    end
+endtest
+
+test seed_that_was_picked_is_the_seed_of_the_game from fishBoard
+    OPTION_GAME_SEED = 123456
+    seedNewGame()
+    assert GAME_SEED = 123456, "the game has the seed that was picked"
+    assert GAME_SEED_PICKED = 1, "and it says that it was picked"
+    assert GAME_SEED_RULES = GAME_RULES_VERSION, "and which rules it was dealt under"
+
+    OPTION_GAME_SEED = 0
+    seedNewGame()
+    tsGood = 1
+    if GAME_SEED < 1 then tsGood = 0
+    if GAME_SEED > SEED_MAX then tsGood = 0
+    assert tsGood = 1, "with no seed picked, the game gets one all the same"
+    assert GAME_SEED_PICKED = 0, "and it does not say that it was picked"
+
+    OPTION_GAME_SEED = SEED_MAX + 1
+    seedNewGame()
+    assert GAME_SEED_PICKED = 0, "a seed that is too big is not a seed"
+    OPTION_GAME_SEED = 0
+    end
+endtest
+
+test seed_deals_the_same_board_whatever_was_there_before from fishBoard
+    OPTION_GAME_SEED = 2024
+    seedNewGame()
+    seedDealBoard()
+    tsBoardA = testSeedBoardSum()
+
+    ` a board that is nothing like the one that the tests start on
+    tsLast = CELL_COUNT - 1
+    for tsCell = 0 to tsLast
+        CELLS(tsCell).value = 7
+    next
+    seedNewGame()
+    seedDealBoard()
+    assert testSeedBoardSum() = tsBoardA, "the same seed deals the same board"
+
+    OPTION_GAME_SEED = 2025
+    seedNewGame()
+    seedDealBoard()
+    tsDiffers = 1
+    if testSeedBoardSum() = tsBoardA then tsDiffers = 0
+    assert tsDiffers = 1, "and the next seed deals another"
+    OPTION_GAME_SEED = 0
+    end
+endtest
+
+test seed_goes_onto_the_table_with_its_game from fishBoard
+    tsFirstPlace = insertHighscore(0, packInitials(0, 1, 2), 5, 3)
+    setHighscoreSeed(tsFirstPlace, 123456, 7, 1)
+    assert HISCORE_SEEDS(tsFirstPlace) = 123456, "the row has the seed of its game"
+    assert HISCORE_RULES(tsFirstPlace) = 7, "and the rules version"
+    assert HISCORE_PICKED(tsFirstPlace) = 1, "and says that the seed was picked"
+
+    ` a better game pushes it down a row, and its seed goes down with it
+    tsBetterPlace = insertHighscore(0, packInitials(3, 4, 5), 2, 3)
+    assert tsBetterPlace = tsFirstPlace, "the better game takes its row"
+    assert HISCORE_SEEDS(tsBetterPlace) = 0, "and has no seed until it is given one"
+    assert HISCORE_PICKED(tsBetterPlace) = 0, "and was not picked"
+    assert HISCORE_SEEDS(tsFirstPlace + 1) = 123456, "the seed of the first game went down a row with it"
+    assert HISCORE_RULES(tsFirstPlace + 1) = 7, "and so did its rules version"
+    assert HISCORE_PICKED(tsFirstPlace + 1) = 1, "and that it was picked"
+    end
+endtest
+
+test seed_that_is_not_a_seed_is_no_seed from fishBoard
+    setHighscoreSeed(0, SEED_MAX, SEED_RULES_MAX, 5)
+    assert HISCORE_SEEDS(0) = SEED_MAX, "the biggest seed is a seed"
+    assert HISCORE_RULES(0) = SEED_RULES_MAX, "and the biggest rules version is one too"
+    assert HISCORE_PICKED(0) = 1, "picked is only ever 1 or 0"
+
+    setHighscoreSeed(0, SEED_MAX + 1, 1, 1)
+    assert HISCORE_SEEDS(0) = 0, "a seed that is too big is no seed"
+    assert HISCORE_PICKED(0) = 0, "and nothing else is kept for it"
+
+    setHighscoreSeed(0, 5, SEED_RULES_MAX + 1, 1)
+    assert HISCORE_SEEDS(0) = 0, "and neither is one with a rules version that is too big"
+
+    setHighscoreSeed(0, 0, 3, 1)
+    assert HISCORE_RULES(0) = 0, "a game with no seed has no rules version"
+    end
+endtest
+
+test seed_and_its_rules_fit_in_one_number_on_steam from fishBoard
+    tsRoom = 1
+    for tsBit = 1 to SEED_BITS
+        tsRoom = tsRoom * 2
+    next
+    tsFits = 1
+    if SEED_MAX >= tsRoom then tsFits = 0
+    assert tsFits = 1, "the biggest seed fits in its bits"
+
+    tsRoom = 1
+    for tsBit = 1 to SEED_RULES_BITS
+        tsRoom = tsRoom * 2
+    next
+    assert SEED_RULES_MAX = tsRoom - 1, "and the biggest rules version is what its bits hold"
+    assert SEED_BITS + SEED_RULES_BITS = 32, "together they are the one detail"
+    assert STEAM_BIT_SEED_PICKED = STEAM_DETAIL_FLAGS * 32 + 7, "and the flag is the one after the modifiers"
+    assert STEAM_FLAG_SEED_PICKED = STEAM_FLAG_MODS * 16, "by either way of counting"
+    end
+endtest
+
+test seed_is_spelled_by_six_digits from fishBoard
+    SEED_DIGITS(0) = 0
+    SEED_DIGITS(1) = 1
+    SEED_DIGITS(2) = 2
+    SEED_DIGITS(3) = 3
+    SEED_DIGITS(4) = 4
+    SEED_DIGITS(5) = 5
+    assert seedFromDigits() = 12345, "the digits are read from the left"
+
+    SEED_DIGITS(0) = 9
+    assert seedFromDigits() = SEED_MAX, "a number past the biggest seed is the biggest seed"
+
+    for tsDigit = 0 to 5
+        SEED_DIGITS(tsDigit) = 0
+    next
+    assert seedFromDigits() = 0, "and all zeros is no seed"
+    end
+endtest
+
+` THE REMINDER. this fails when what a seed deals has changed: the board of seed 1, and the first
+` rolls of the cards and of the quests. when it does, and the change was meant, GAME_RULES_VERSION
+` in fish_headers_seed goes up by one, and the numbers here are the new ones. it does not notice
+` every change to the rules, only the ones that move these rolls. see A NEW ROLL in fish_headers_seed.
+test seed_deals_the_same_game from fishBoard
+    OPTION_GAME_SEED = 1
+    seedNewGame()
+    seedDealBoard()
+    tsBoard = testSeedBoardSum()
+    tsCards = random stream(RNG_CARDS, 1000) * 1000 + random stream(RNG_CARDS, 1000)
+    tsQuests = random stream(RNG_QUESTS, 1000) * 1000 + random stream(RNG_QUESTS, 1000)
+    OPTION_GAME_SEED = 0
+
+    assert GAME_RULES_VERSION = 3, "the numbers below are the ones for this version of the rules"
+    assert tsBoard = 664453, "the board of seed 1"
+    assert tsCards = 198654, "the first rolls of the cards of seed 1"
+    assert tsQuests = 739299, "the first rolls of the quests of seed 1"
+    end
+endtest
+
+
+remstart
+    THE LONG TESTS. a test whose name starts with `long_` takes a while, so it does not run with the
+    rest: it ends at once unless the FISH_TESTS_LONG environment variable is 1. build/run-long-tests.ps1
+    sets it, and runs only those. a long test that was passed over still counts as passed.
+remend
+
+` everything about the board that a seed has a say in, as one number
+function testSeedStateSum()
+    tsStateSum = 0
+    tsStateLast = CELL_COUNT - 1
+    for tsStateCell = 0 to tsStateLast
+        tsStateOne = CELLS(tsStateCell).value + CELLS(tsStateCell).stack * 20 + CELLS(tsStateCell).bellyUp * 400
+        tsStateSum = (tsStateSum * 31 + tsStateOne) mod 1000003
+    next
+endfunction tsStateSum
+
+` make a group of four that is sure to pop: the lowest four plain fish in a row, that no quest
+` has anything on, are made one kind. this says 1 if there were four like that.
+function testSeedForcePop(tsfKind)
+    tsfMade = 0
+    tsfLastCol = CELL_COLUMN_COUNT - 4
+    tsfRow = CELL_ROW_COUNT - 1
+    while tsfRow >= 0
+        tsfCol = 0
+        while tsfCol <= tsfLastCol
+            if tsfMade = 0
+                tsfFrom = tsfCol + tsfRow * CELL_COLUMN_COUNT
+                tsfOk = 1
+                for tsfN = 0 to 3
+                    tsfCell = tsfFrom + tsfN
+                    if CELLS(tsfCell).value < 1 then tsfOk = 0
+                    if CELLS(tsfCell).value > 7 then tsfOk = 0
+                    if CELLS(tsfCell).stack > 0 then tsfOk = 0
+                    if CELLS(tsfCell).bellyUp > 0 then tsfOk = 0
+                    if QUEST_MARK(tsfCell) > 0 then tsfOk = 0
+                    if QUEST_SPOT(tsfCell) > 0 then tsfOk = 0
+                next
+                if tsfOk
+                    for tsfN = 0 to 3
+                        tsfCell = tsfFrom + tsfN
+                        CELLS(tsfCell).value = tsfKind
+                        updateCell(CELLS(tsfCell))
+                    next
+                    tsfMade = 1
+                endif
+            endif
+            tsfCol = tsfCol + 1
+        endwhile
+        tsfRow = tsfRow - 1
+    endwhile
+endfunction tsfMade
+
+` THE REPLAY. a game is played on a seed for a while, by a script: a swap and a group that is made
+` to pop, over and over, and a card from every upgrade screen. then a game on another seed, so
+` that there is something left lying around. then the first seed again, with the same script.
+` everything that was written down along the way has to come out the same: the board, the score,
+` the round, the quest, and the cards that were offered. the things that are only for show roll
+` as they like the whole time, because `rnd` is not mocked here.
+`
+` after that, the seed is played twice more, only as far as its first upgrade screen, one game
+` straight after the other. that is what a player does who wants to see a seed again, and it is
+` how the cards once came out different: the first card of a screen was held up against the first
+` card of the screen before, which was the very same card.
+`
+` the upgrade screen is the real one. it waits for a key, so the test holds every key down while
+` it is up, and says which card is highlighted each time that the screen draws: the first card
+` that is not a move, because a move opens another page to put it in a slot. when all of them
+` are moves, it takes nothing.
+test long_seed_replays_the_same_game from fishBoard
+    if val(env$("FISH_TESTS_LONG")) = 0 then end
+
+    global tsPress = 0
+    mock new action down
+    endmock tsPress
+
+    global dim tsRec(15000)
+    global dim tsRecCount(5)
+    global dim tsUpgrades(5)
+    global dim tsRounds(5)
+    tsQuestSeen = 0
+    tsStuck = 0
+
+    for tsGame = 0 to 4
+        tsGameSeed = 4321
+        tsSteps = 24
+        if tsGame = 1
+            tsGameSeed = 99
+            tsSteps = 6
+        endif
+        if tsGame >= 3 then tsSteps = 8
+
+        OPTION_GAME_SEED = tsGameSeed
+        OPTION_GAME_LENGTH = GAME_LENGTH_REGULAR
+        OPTION_GAME_ZEN = 0
+        REQUEST_SEED_RESTART = 1
+        runto _loop
+
+        tsWrite = tsGame * 3000
+        tsUpgrades(tsGame) = 0
+        tsRec(tsWrite) = testSeedStateSum()
+        tsWrite = tsWrite + 1
+
+        for tsStep = 1 to tsSteps
+            ` first a swap, somewhere that depends on the step, and then a group that is sure to pop
+            for tsPhase = 0 to 1
+                if tsPhase = 0
+                    tsCol = (tsStep * 3) mod (CELL_COLUMN_COUNT - 1)
+                    tsRow = (tsStep * 5) mod CELL_ROW_COUNT
+                    testCursor(tsCol, tsRow)
+                    testQueueMove(1, 0, 1, -1)
+                else
+                    tsMade = testSeedForcePop(1 + (tsStep mod 7))
+                    REQUEST_COMBO_CHECK = 1
+                endif
+
+                ` let the board settle, and the score be counted. a round that ends brings the upgrade screen.
+                tsFrames = 0
+                tsBusy = 1
+                while tsBusy
+                    runto _loop
+                    tsFrames = tsFrames + 1
+
+                    if REQUEST_ABILITY_SELECTION
+                        tsPress = 1
+                        tsShut = 0
+                        tsOffered = 0
+                        while tsShut = 0
+                            runto frame_ability_selection
+                            tsFade# = tweenVal(INFO_FADE_TWEEN_ID)
+                            if tsFade# < 1
+                                ` a card was taken, and the screen is on its way out
+                                tsShut = 1
+                            else
+                                tsPick = -1
+                                for tsCard = 0 to choiceCount
+                                    tsOffer = ABILITY_CHOICES(tsCard).abilityIndex
+                                    if tsOffered = 0
+                                        tsRec(tsWrite) = 1000 + tsOffer
+                                        tsWrite = tsWrite + 1
+                                    endif
+                                    if tsPick < 0
+                                        if CARDS(tsOffer).abilityType <> ABILITY_TYPE_MOVE then tsPick = tsCard
+                                    endif
+                                next
+                                tsOffered = 1
+                                if tsPick >= 0
+                                    ABILITY_SELECTION_INDEX = tsPick
+                                    UPGRADE_SKIP_SELECTED = 0
+                                else
+                                    UPGRADE_SKIP_SELECTED = 1
+                                    UPGRADE_ROW_PICK = 0
+                                endif
+                            endif
+                        endwhile
+                        tsPress = 0
+                        tsUpgrades(tsGame) = tsUpgrades(tsGame) + 1
+                        runto _loop
+                    endif
+
+                    tsBusy = 0
+                    if REQUEST_COMBO_CHECK then tsBusy = 1
+                    if LIVE_MOVE_ACTIVE then tsBusy = 1
+                    if QUEUED_MOVE_NUM > 0 then tsBusy = 1
+                    if SCORE_TICK_COUNT > 0 then tsBusy = 1
+                    if SCORE_BAR_HOLD = 1 then tsBusy = 1
+                    if REQUEST_ABILITY_SELECTION then tsBusy = 1
+                    if tsFrames > 600
+                        tsBusy = 0
+                        tsStuck = tsStuck + 1
+                    endif
+                endwhile
+            next
+
+            tsRec(tsWrite) = testSeedStateSum()
+            tsRec(tsWrite + 1) = CURRENT_SCORE
+            tsRec(tsWrite + 2) = CURRENT_ROUND
+            tsRec(tsWrite + 3) = QUEST_ID
+            tsRec(tsWrite + 4) = CURRENT_MOVE_COUNT
+            tsRec(tsWrite + 5) = CELL_COUNT
+            tsWrite = tsWrite + 6
+            if tsGame = 0
+                if QUEST_ID > 0 then tsQuestSeen = 1
+            endif
+        next
+
+        tsRecCount(tsGame) = tsWrite - tsGame * 3000
+        tsRounds(tsGame) = CURRENT_ROUND
+    next
+    OPTION_GAME_SEED = 0
+
+    ` the first game and the third are held up against each other, number by number
+    tsBad = 0
+    tsFirstBad = -1
+    tsLastRec = tsRecCount(0) - 1
+    for tsN = 0 to tsLastRec
+        if tsRec(tsN) <> tsRec(6000 + tsN)
+            tsBad = tsBad + 1
+            if tsFirstBad < 0 then tsFirstBad = tsN
+        endif
+    next
+
+    ` and the two short games against each other, and against the start of the first game
+    tsShortBad = 0
+    tsShortFirstBad = -1
+    tsLastRec = tsRecCount(3) - 1
+    for tsN = 0 to tsLastRec
+        tsShortOk = 1
+        if tsRec(12000 + tsN) <> tsRec(9000 + tsN) then tsShortOk = 0
+        if tsRec(9000 + tsN) <> tsRec(tsN) then tsShortOk = 0
+        if tsShortOk = 0
+            tsShortBad = tsShortBad + 1
+            if tsShortFirstBad < 0 then tsShortFirstBad = tsN
+        endif
+    next
+
+    ` what went wrong, and what the script got through, for whoever reads the log of a run
+    for tsN = 1 to 12
+        print "TSREPLAY bad " + str$(tsBad) + " first " + str$(tsFirstBad) + " count " + str$(tsRecCount(0)) + " and " + str$(tsRecCount(2)) + " rounds " + str$(tsRounds(0)) + " upgrades " + str$(tsUpgrades(0)) + " stuck " + str$(tsStuck) + " short bad " + str$(tsShortBad) + " first " + str$(tsShortFirstBad) + " upgrades " + str$(tsUpgrades(3))
+    next
+
+    assert tsStuck = 0, "the board settled after every step"
+    assert tsUpgrades(0) >= 3, "the script got through three upgrade screens at the least"
+    assert tsQuestSeen = 1, "and far enough for a quest to show up"
+    assert tsRecCount(2) = tsRecCount(0), "the second time through, as much was written down as the first"
+    assert tsUpgrades(2) = tsUpgrades(0), "with as many upgrade screens"
+    assert tsBad = 0, "and every number of it was the same"
+    assert tsUpgrades(3) >= 1, "the short games got as far as an upgrade screen"
+    assert tsRecCount(4) = tsRecCount(3), "and as much was written down for the one as for the other"
+    assert tsShortBad = 0, "and they were the same as each other, and as the start of the first game"
+    end
+endtest

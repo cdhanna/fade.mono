@@ -8,8 +8,8 @@ global SCORE_POS as vec = {
 }
 
 
-global dim CARDS(35) as ability
-global CARD_LENGTH = 35
+global dim CARDS(36) as ability
+global CARD_LENGTH = 36
 
 global CURRENT_MOVE_COUNT = 0
 global MOVE_COUNT_TEXT_ID
@@ -210,6 +210,7 @@ global TEX_KEYS `the sheet of keyboard key pictures. the font uses these as icon
 ` read, so this is a picture of its own, 32 by 20. Tools are not needed to make it again: the pixels
 ` are plain, and any paint program will do.
 global TEX_KEY_TAB
+global TEX_KEY_ESC `the escape key, which pauses. the same story as the tab key, and the same size.
 global TEX_PAD `the same thing for the buttons of a controller.
 
 ` INPUT ACTIONS. the game asks about these, and never about a key or a button directly.
@@ -238,6 +239,24 @@ global MOVE_SLOTS_OPEN = 3
 
 ` which device the input icons were last set up for. -1 means that they have not been set up at all.
 global INPUT_ICON_DEVICE = -1
+
+` STEAM'S PICTURES OF THE BUTTONS. the sheet in TEX_PAD is of an xbox controller. steam knows what
+` the controller really is, and has pictures of the buttons of every kind that it knows. so the icons
+` of an xbox controller come from the sheet, and the icons of any other kind, like a playstation or
+` a switch controller, come from steam. without steam, they all come from the sheet. see `steam input glyph`.
+` this is the kind that the icons were last set up for, as steam numbers them. 0 is the sheet.
+global INPUT_ICON_PAD_KIND = 0
+
+` the debug panel can show the icons of a device that is not the one in use. see frame_debug_cards.
+` -1 is off, and the icons are of the device that the player touched last. 0 is the keyboard. any
+` other number is a controller of that kind, as steam numbers them: 3 is an xbox controller, which
+` is the sheet, and 13 is a playstation 5 controller.
+global DEBUG_ICON_FORCE = -1
+
+` and the textures that the pictures go into, one for each button that the game shows:
+` b, x, y, the two bumpers, back, a, the d-pad, and start.
+global STEAM_GLYPH_COUNT = 9
+global dim TEX_STEAM_GLYPH(STEAM_GLYPH_COUNT)
 
 ` small pictures for the kinds of ability. the font uses these as icons too.
 global TEX_TYPE_PASSIVE
@@ -754,6 +773,18 @@ global GAME_HINT$ = " "
 #constant MENU_MODE_PAUSE 2
 global MENU_MODE = 0
 
+` what the steam timeline was last told that the player is doing: 1 for playing, 3 for a menu, and 0
+` for nothing yet. see `set steam timeline mode`. it is only told when this changes.
+global STEAM_TIMELINE_MODE = 0
+
+` the stretches of the steam timeline: one for each round, and one for each upgrade screen. these are
+` the ids that they are started and ended with. see frame_steam_timeline, in fish_routines.
+#constant STEAM_RANGE_ROUND 1
+#constant STEAM_RANGE_UPGRADE 2
+
+` the round that the stretch for a round is open for, or 0 when none is open
+global STEAM_TIMELINE_ROUND = 0
+
 ` a page is the list of things that can be picked right now
 #constant MENU_PAGE_MAIN 0
 #constant MENU_PAGE_PAUSE 1
@@ -794,7 +825,9 @@ global MENU_PAGE = 0
 #constant MENU_ITEM_OVER_CONTINUE 22
 ` and one that turns off the photos of the diver on the boat of the main menu, the same way. see OPTION_MENU_PHOTOS in fish_headers_diver.
 #constant MENU_ITEM_SET_PHOTOS 23
-global MENU_ITEM_COUNT = 24
+` the seed of the new game, on the page that "New Game" opens. setMenuPage puts it under "Include intro". see fish_headers_seed.
+#constant MENU_ITEM_GAME_SEED 24
+global MENU_ITEM_COUNT = 25
 global dim MENU_ITEMS(MENU_ITEM_COUNT) as menuItem
 
 global MENU_PAGE_FIRST = 0 `the first item on the page
@@ -909,6 +942,12 @@ global GOODBYE_MAX_MS = 13000 `how long it lasts, if the player does not move it
 global FISH_AWAY = 0 `1 while the fish have left the board, and have not been put back. see fishComeHome.
 global GOODBYE_HUD_MS = 1400 `how long the things around the board take to fade away
 global HUD_KEEP# = 1 `how much of the things around the board is there, from 1 (all of it, as always) to 0 (none)
+` and how much of each part of them is kept, on top of HUD_KEEP#. the game leaves these at 1; only the
+` trailer (fish_tests_trailer) brings in the parts one at a time. applyHudFade uses them.
+global HUD_KEEP_BAR# = 1 `the bar of the round, and the rounds that are left
+global HUD_KEEP_MULT# = 1 `the bar of the multiplier, and the numbers under it
+global HUD_KEEP_CARDS# = 1 `the passives and the special moves
+global HUD_KEEP_SONGS# = 1 `the songs, and the two bars under them
 
 global OPTION_SOUND = 10 `how loud the sound effects are, from 0 to 10
 global OPTION_MUSIC = 10 `how loud the music is, from 0 to 10
@@ -1230,8 +1269,8 @@ global STEAM_BIT_INITIALS = 4 `15 bits: the initials, packed by packInitials
 global STEAM_BIT_LOG_COUNT = 19 `7 bits: how many upgrades are in the log
 global STEAM_BIT_GAP_WIDTH = 26 `4 bits: how many bits every gap of the log takes
 global STEAM_DETAIL_MULT = 1 `the highest that the multiplier got
-global STEAM_DETAIL_SEED = 2 `the seed of the board. there is no such thing yet, so it is 0.
-global STEAM_DETAIL_FLAGS = 3 `32 flags. the lowest two bits are the ending of the hidden game, and then STEAM_FLAG_DEBUG. the four after that are the modifiers of the game: see STEAM_FLAG_MODS in fish_headers_fast. the rest are 0.
+global STEAM_DETAIL_SEED = 2 `the seed of the game, and the rules version that it was played under. see THE SEED OF A GAME in fish_headers_seed. 0 is a game from before there were seeds.
+global STEAM_DETAIL_FLAGS = 3 `32 flags. the lowest two bits are the ending of the hidden game, and then STEAM_FLAG_DEBUG. the four after that are the modifiers of the game: see STEAM_FLAG_MODS in fish_headers_fast. the one after those is STEAM_FLAG_SEED_PICKED, in fish_headers_seed. the rest are 0.
 global STEAM_FLAG_DEBUG = 4 `the game was played with one of the debug environment variables set. see isDebugEnvSet.
 global GAME_DEBUG_USED = 0 `1 when the game that is being played has had one of them set at any time, or has had debug mode on. it is saved with the game.
 global DEBUG_SPLASH_TEXT_ID = 0 `the words that splash up when TUNA turns debug mode on. they are made the first time that they are needed.
@@ -1299,7 +1338,10 @@ global CODEC_COUNT = 16 `how many entries there are: one for every card, and the
 ` and after those, the ending that a game has when it is won the usual way, and the fish go home. see
 ` THE FISH GO HOME, further up. it is unlocked the first time that they do. it is always the last of
 ` these, whatever comes before it, so it has a preference of its own, and not one that goes by where it is.
-global CODEC_EXTRA_COUNT = 29
+` and right before the usual ending, after the words, the call of the angler: HELP and INFO, which share an
+` entry. see THE CALL in fish_headers_angler. it is remembered in the run of the words, as if it were the
+` tenth of them, so a new word that brings somebody swimming through has to find a run of its own.
+global CODEC_EXTRA_COUNT = 30
 global CODEC_ENTRY_GOODBYE = -1
 global TEX_ENDING_GOODBYE `the picture that it has: a house. Tools/ending_home_gen.py draws it.
 global CODEC_EXTRA_PLAIN = 19 `how many of those come before the words that bring somebody swimming through
@@ -1867,7 +1909,8 @@ global CORAL_DEEP_SCREAM_LOW# = .25 `how much lower one can be played than it is
 ` the FISH_MENU_REEF and FISH_MENU_ANCIENT environment variables put them there, for working on the game.
 #constant PREF_ENDING_REEF 8
 #constant PREF_ENDING_ANCIENT 9
-#constant PREF_ENDING_HOME 15
+` 15 is PREF_MODS_KNOWN, in fish_headers_fast. this one was 15 as well for a while, and the two wrote over each other.
+#constant PREF_ENDING_HOME 16
 ` the player can turn either of them off again, on the options page, once it is there. the lines for
 ` them are not on the page until then. frame_surface, in fish_routines_surface, is what listens.
 #constant PREF_MENU_REEF 10
@@ -2331,6 +2374,8 @@ global TUNA_SHRINK# = 0 `how much smaller the fish of the board are drawn on thi
 `     SING    ...  ..  -.  --.      plays a hint of the hidden game, the bright way that a group of five does. see morseSing.
 `     SONG    ...  ---  -.  --.     the same.
 `     CTHULHU -.-.  -  ....  ..-  .-..  ....  ..-     a tentacle of the ancient one comes up for a moment, with a scream, and goes. see morseCthulhu.
+`     HELP    ....  .  .-..  .--.   brings the old angler fish, to answer questions. see THE CALL in fish_headers_angler.
+`     INFO    ..  -.  ..-.  ---     the same.
 ` and there are words that only bring somebody swimming through, like NEMO. they are secret, the same as TUNA,
 ` but each has an entry in the codec. see CAMEOS in fish_headers_cameo, which has the list of them.
 ` when any of them has been heard, the radio taps back .-. which is R, for "received".

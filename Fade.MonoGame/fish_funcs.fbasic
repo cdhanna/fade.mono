@@ -69,7 +69,7 @@ function getImpossibleRandomValueForCell(cellId)
     ` now and then a new fish may be let through that does pop, but never once the round has been won
     allowCombo = 0
     if NEW_FISH_COMBO_CHANCE > 0
-        if rnd(100) < NEW_FISH_COMBO_CHANCE then allowCombo = 1
+        if random stream(RNG_BOARD, 100) < NEW_FISH_COMBO_CHANCE then allowCombo = 1
     endif
     if NEW_FISH_ROUND_WON then allowCombo = 0
 
@@ -78,7 +78,7 @@ function getImpossibleRandomValueForCell(cellId)
     ` so `tooBig` is how big a group the new fish must not make: 2 for most of them, which is a
     ` pair, and the size that pops for the few that are allowed to make a pair.
     tooBig = 2
-    if rnd(100) < NEW_FISH_PAIR_CHANCE then tooBig = required
+    if random stream(RNG_BOARD, 100) < NEW_FISH_PAIR_CHANCE then tooBig = required
     if NEW_FISH_ROUND_WON then tooBig = 2
     if tooBig > required then tooBig = required
 
@@ -224,10 +224,14 @@ function swapCellStacks(aIndex, bIndex)
 
     ` and a fish that a quest has marked keeps its mark. see QUESTS in fish_headers_quests.
     questSwapMarks(aIndex, bIndex)
+
+    ` and a fish on the path of the glow stays turned around until it has turned back. see WHAT SHOWS in fish_headers_glow.
+    glowTradeTurn(aIndex, bIndex)
 endfunction
 
 ` one fish takes the place of another
 function copyCellStack(fromIndex, toIndex)
+    glowCopyTurn(fromIndex, toIndex) `see WHAT SHOWS in fish_headers_glow
     CELLS(toIndex).stack = CELLS(fromIndex).stack
     CELLS(toIndex).stackShown# = CELLS(fromIndex).stackShown#
     CELLS(toIndex).bellyUp = CELLS(fromIndex).bellyUp
@@ -267,7 +271,7 @@ function tryStackFish(index, chance, delay, abilityIndex)
     lucky = CELLS(index)
     if lucky.value = TEX_DIVER then exitfunction `there is only one diver. see fish_headers_diver.
     if lucky.stack < FISH_STACK_MAX
-        if rnd(100) < chance
+        if random stream(RNG_BOARD, 100) < chance
             CELLS(index).stack = lucky.stack + 1
             showPassiveUsed(abilityIndex)
             spawnBubbles(getCellX(lucky.coord.x), getCellY(lucky.coord.y), CELL_SIZE / 3, 10, delay, FISH_COLORS(getFishColorIndex(lucky.value)))
@@ -287,10 +291,10 @@ function rollBellyUpFish()
     ` horror coral has its own say about the fish that are on it, with or without the card
     rollHorrorCoral()
 
-    if rnd(100) >= getBottomsUpChance() then exitfunction
+    if random stream(RNG_BOARD, 100) >= getBottomsUpChance() then exitfunction
 
     cursorIndex = getCellIndex(SELECTION_POS)
-    startIndex = rnd(CELL_COUNT)
+    startIndex = random stream(RNG_BOARD, CELL_COUNT)
     for n = 0 to CELL_COUNT - 1
         index = (n + startIndex) mod CELL_COUNT
         bellyOk = 1
@@ -425,7 +429,7 @@ function stingFish(index)
     if CELLS(index).bellyUp >= 2 then exitfunction 0
     if CELLS(index).value = TEX_BOTTLE then exitfunction 0
     if CELLS(index).value = TEX_DIVER then exitfunction 0
-    if rnd(100) >= JELLY_STING_CHANCE then exitfunction 0
+    if random stream(RNG_BOARD, 100) >= JELLY_STING_CHANCE then exitfunction 0
 
     CELLS(index).bellyUp = CELLS(index).bellyUp + 1
     showPassiveUsed(ABILITY_INDEX_JELLIES)
@@ -848,6 +852,9 @@ function advanceScoreBar()
     if SCORE_BAR_HOLD
         SCORE_BAR_HOLD = 0
 
+        ` the upgrade screen is over, if there was one. see frame_steam_timeline, in fish_routines.
+        end steam timeline range STEAM_RANGE_UPGRADE
+
         ` the round was counted when its bar filled up, so CURRENT_ROUND is already the round that is starting
         newSpan = getRoundSpan(CURRENT_ROUND)
 
@@ -1125,7 +1132,7 @@ function getRandomValue()
     newJellyChance = getJellyChance()
     newRayChance = getRayChance()
     if newJellyChance + newRayChance > 0
-        newKindRoll = rnd(100)
+        newKindRoll = random stream(RNG_BOARD, 100)
         if newKindRoll < newJellyChance
             exitfunction TEX_JELLY
         endif
@@ -1135,7 +1142,7 @@ function getRandomValue()
     endif
 
     if (isAbility_Crabs())
-        if rnd(10) > 7 `a 20 % chance to spawn a crab.
+        if random stream(RNG_BOARD, 10) > 7 `a 20 % chance to spawn a crab.
             showPassiveUsed(ABILITY_INDEX_CRABS)
             exitfunction TEX_CRAB
         endif
@@ -1143,13 +1150,13 @@ function getRandomValue()
 
     if (isAbility_BirdFeast())
         ` worm is the last texture, so ignoring it is simple.
-        if (rnd(10) > 7) ` a 20% chance to not pick worm.
+        if (random stream(RNG_BOARD, 10) > 7) ` a 20% chance to not pick worm.
             showPassiveUsed(ABILITY_INDEX_BIRD_FEAST)
-            exitfunction rnd(6) + 1
+            exitfunction random stream(RNG_BOARD, 6) + 1
         endif
     endif
 
-endfunction rnd(7)+1
+endfunction random stream(RNG_BOARD, 7)+1
 
 function doBomb(start as vec, dir as vec)
     spawnCursorWake(start.x, start.y)
@@ -1909,6 +1916,9 @@ function stepLiveMove()
 
                     ` and so does a hidden pattern that the cursor has just walked. see CORAL in fish_headers.
                     coralSwapStepped(LIVE_MOVE_FROM_X, LIVE_MOVE_FROM_Y, LIVE_MOVE_DIR_X, LIVE_MOVE_DIR_Y)
+
+                    ` and the glow steps the way that the swap went, if it makes a match. see fish_headers_glow.
+                    glowSwapPending(LIVE_MOVE_DIR_X, LIVE_MOVE_DIR_Y)
                 else
                     coralTrailClear()
                 endif

@@ -19,6 +19,8 @@ public class GameSystem
     
     public static void ResetAll()
     {
+        // a recording that the program left running is finished, while the game it paces is still known
+        RecordSystem.ProgramReset();
         game = null;
         graphicsDeviceManager = null;
         latestTime = null;

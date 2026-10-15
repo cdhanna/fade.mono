@@ -54,6 +54,10 @@ setup_morse:
     morseWord(MORSE_WORD_ARIEL, "ARIEL", 5)
     morseWord(MORSE_WORD_MYLEG, "MYLEG", 5)
 
+    ` the words that call the old angler fish. see THE CALL in fish_headers_angler.
+    morseWord(MORSE_WORD_HELP, "HELP", 4)
+    morseWord(MORSE_WORD_INFO, "INFO", 4)
+
     ` the entry of the codec that each of them unlocks when it is sent. CQ unlocks the radio itself,
     ` and TUNA has none: it is not in the codec. the words that bring somebody swimming through have an entry each, in a row.
     mrsLastSetup = MORSE_WORD_ROOM - 1
@@ -68,6 +72,8 @@ setup_morse:
     for mrsSetup = MORSE_WORD_NEMO to MORSE_WORD_MYLEG
         MORSE_WORD_CODEC(mrsSetup) = CODEC_ENTRY_CAMEO + (mrsSetup - MORSE_WORD_NEMO)
     next
+    MORSE_WORD_CODEC(MORSE_WORD_HELP) = CODEC_ENTRY_CALL
+    MORSE_WORD_CODEC(MORSE_WORD_INFO) = CODEC_ENTRY_CALL
 
     morseAveragesBack()
 
@@ -457,6 +463,13 @@ function morseListen()
     endif
     if MORSE_HEARD = MORSE_WORD_CTHULHU
         morseCthulhu(game ms())
+    endif
+    ` the old angler fish comes. see THE CALL in fish_headers_angler.
+    if MORSE_HEARD = MORSE_WORD_HELP
+        ANGLER_CALL_PENDING = 1
+    endif
+    if MORSE_HEARD = MORSE_WORD_INFO
+        ANGLER_CALL_PENDING = 1
     endif
     morseTentacleStep(game ms())
 

@@ -221,6 +221,7 @@ load_textures:
     ` is the same grid shrunk down to 20 pixel keys.
     texture reserve texture id(TEX_KEYS), "Fish/Textures/Keys"
     texture reserve texture id(TEX_KEY_TAB), "Fish/Textures/KeyTab"
+    texture reserve texture id(TEX_KEY_ESC), "Fish/Textures/KeyEsc"
     set texture frame grid TEX_KEYS, 16 17 `rows, columns
 
     ` and pictures of controller buttons, from the xbox series sheet of the same pack, shrunk the same way.
@@ -273,6 +274,7 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_MOVE_ROTATE).artTexId), "Fish/Textures/Cards/rotate"
     texture reserve texture id(CARDS(ABILITY_INDEX_OPEN_BOOK).artTexId), "Fish/Textures/Cards/see_all"
     texture reserve texture id(CARDS(ABILITY_INDEX_OATH).artTexId), "Fish/Textures/Cards/oceanic_oath"
+    texture reserve texture id(CARDS(ABILITY_INDEX_ANGLER).artTexId), "Fish/Textures/Cards/bright_idea"
 
 return
 
@@ -538,6 +540,13 @@ return
 
 time# = 0
 update_frame:
+    ` a new game on a seed, asked for from outside the menu. see A NEW GAME ON A SEED in fish_headers_seed.
+    if REQUEST_SEED_RESTART
+        REQUEST_SEED_RESTART = 0
+        gosub reset_game
+        gosub apply_game_options
+    endif
+
     ` the `perf lap` between the parts is for the frame timing log. see the names in fish.fbasic.
     perf lap 8
     gosub frame_texts
@@ -559,6 +568,7 @@ update_frame:
     perf lap 17
     stepCoral()
     stepTideSleep()
+    stepGlow() `see fish_headers_glow
     perf lap 18
     stepSkeletonGhosts()
     perf lap 19
@@ -574,6 +584,7 @@ update_frame:
     updateMusic()
     perf lap 24
     stepQuest()
+    questTalkStep(game ms()) `the creature that talks about the quest that was taken. see fish_headers_questtalk.
     gosub frame_dbg
     perf lap 25
 
@@ -804,6 +815,8 @@ frame_fish_fx:
         ` the effect grows the sprite to make room, so it needs to know how big the sprite is on the screen
         fishSize# = sprite width(c.spriteId) * sprite scale x(c.spriteId)
 
+        ` a fish at an end of the trail of the glow is turned around. see WHAT SHOWS in fish_headers_glow.
+        yaw# = yaw# + GLOW_TURN#(i) * 3.14159
         set sprite all texcoord1 c.spriteId, pitch#, yaw#, stackShown#, fishSize#
 
         ` the fish goes to its place in the QR code, and gets smaller. see TUNA in fish_headers.
@@ -868,7 +881,9 @@ frame_dbg:
             gosub frame_debug_cards
             gosub frame_debug_beat
             gosub frame_debug_tide
+            gosub frame_debug_glow
             gosub frame_debug_quests
+            gosub frame_debug_angler
             if INFO_MODE = 0
                 ` the dance. see THE DANCE in fish_headers.
                 if new key down(scancode("M"))
@@ -956,6 +971,31 @@ return
     end debug window
 return
 
+` a stretch of the steam timeline for every round, from when the bar starts on it to when it fills up,
+` so that a round can be found again in a recording of the game. the upgrade screen has a stretch of
+` its own, which handle_ability_selection starts and advanceScoreBar ends, because the main loop does
+` not come here while the upgrade screen is up.
+frame_steam_timeline:
+    timelineRound = 0
+    if MENU_MODE = 0
+        if SCORE_BAR_HOLD = 0 then timelineRound = CURRENT_ROUND + 1
+    else
+        ` a pause leaves the round as it is. back at the title, there is no round.
+        timelineRound = STEAM_TIMELINE_ROUND
+        if MENU_MODE = MENU_MODE_MAIN then timelineRound = 0
+    endif
+    if timelineRound = STEAM_TIMELINE_ROUND then return
+
+    STEAM_TIMELINE_ROUND = timelineRound
+    if timelineRound = 0
+        end steam timeline range STEAM_RANGE_ROUND
+        clear steam timeline tooltip
+        return
+    endif
+    start steam timeline range STEAM_RANGE_ROUND, "Round " + str$(timelineRound), "", "steam_flag", 50
+    set steam timeline tooltip "Round " + str$(timelineRound)
+return
+
 frame_score:
 
     ` the points of the fish that popped on this frame go onto the bar
@@ -967,6 +1007,9 @@ frame_score:
         ` update the rounds left
         CURRENT_ROUND = CURRENT_ROUND + 1
         showRoundsLeft()
+
+        ` a mark on the steam timeline, so that the round can be found again in a recording of the game
+        add steam timeline event "Round " + str$(CURRENT_ROUND) + " cleared", str$(CURRENT_MOVE_COUNT) + " moves so far", "steam_checkmark", 100, 0
 
         ` the quest of the round is over with it. see QUESTS in fish_headers_quests.
         questRoundEnded()
@@ -1360,6 +1403,16 @@ handle_combos:
         comboCount = comboWhole
         if comboForced then comboCount = comboWhole + 99
 
+        ` a group that the last swap put together, of fish that matched, means the swap made a match.
+        ` whether it pops does not matter. see A SWAP THAT MAKES A MATCH in fish_routines_glow.
+        if comboForced = 0
+            if comboSwapped
+                if comboWhole >= requiredComboCount
+                    GLOW_SWAP_VALID = 1
+                endif
+            endif
+        endif
+
         ` a group that the last swap put together, which only the coral kept from popping. the multiplier
         ` does not hold that swap against the player. see CORAL in fish_headers.
         if comboCount < comboNeed
@@ -1418,10 +1471,10 @@ handle_combos:
         ` handle stock market ability
         if groupStock
             ` find a fish that is not part of a group, and add it to this group. 
-            randoChance = rnd(10) >= 7 `30% chance
+            randoChance = random stream(RNG_BOARD, 10) >= 7 `30% chance
             if randoChance
                
-                startIndex = rnd(CELL_COUNT)
+                startIndex = random stream(RNG_BOARD, CELL_COUNT)
                 for i = 0 to CELL_COUNT - 1
                     cellIndex = (i + startIndex) mod CELL_COUNT
                     ` not a fish that a quest has marked, or one of a quest's own. see questKeepsFish in fish_routines_quests.
@@ -1671,6 +1724,9 @@ handle_combos:
     for i = 0 to CELL_COUNT - 1
         CELLS(i).comboForce = 0
     next
+
+    ` the glow steps for the swap that led to this look, if it made a match. see fish_headers_glow.
+    glowJudgeSwap()
 
     ` the swap that led to this look at the board was a push, or a pull, and the water moves for it.
     ` this comes first, because the multiplier forgets the swap. see fish_headers_tide.
@@ -1957,7 +2013,12 @@ handle_combos:
     ` so that it does not pop when it lands, and a cell that is still empty must not look like a
     ` fish while that is being worked out. see NEW FISH in fish_headers.
     for i = 0 to CELL_COUNT - 1
-        if CELLS(i).comboBlownUp > 0 then CELLS(i).value = 0
+        if CELLS(i).comboBlownUp > 0
+            CELLS(i).value = 0
+
+            ` and a new fish comes in facing the usual way. see WHAT SHOWS in fish_headers_glow.
+            GLOW_TURN#(i) = 0
+        endif
     next
 
     ` once the round has been won, no new fish is let through that would pop

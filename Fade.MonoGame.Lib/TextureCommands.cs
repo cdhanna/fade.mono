@@ -73,6 +73,105 @@ public partial class FadeMonoGameCommands
     }
 
     /// <summary>
+    /// <para>Makes a font out of a texture that holds a grid of hand-drawn characters.</para>
+    /// <para>Each cell of the grid is one character, and a line of the font is as tall as a cell.</para>
+    /// </summary>
+    /// <remarks>
+    /// This is for pixel fonts: letters drawn by hand in a paint program, or exported from a baked
+    /// font with <see cref="SaveFontSheet">save font sheet</see> and then touched up. Draw text in
+    /// the font at a scale of 1, or a whole multiple, and every pixel lands where it was drawn.
+    ///
+    /// The texture is cut into <paramref name="columns"/> by <paramref name="rows"/> equal cells.
+    /// The characters run across each row from the top left, in character-code order, starting at
+    /// <paramref name="firstCharacter"/> (the space, by default). So a sheet of 16 columns and 6
+    /// rows holds the space through to <c>~</c>.
+    ///
+    /// A glyph is as wide as its ink, so letters do not need to be lined up sideways inside their
+    /// cells, and narrow letters take less room than wide ones. Up and down they are drawn exactly
+    /// where they sit in the cell, so draw them all on one baseline. A cell with no ink is a
+    /// character the font does not have. Text that uses one draws <c>?</c> in its place.
+    ///
+    /// A pixel counts as ink when its alpha is at least half. Anything fainter is ignored and is
+    /// never drawn, so a sheet can carry faint guides for whoever edits it. The ink keeps its
+    /// color, and text color multiplies it, so white ink takes the color of the text.
+    ///
+    /// The font takes a copy of the pixels. To see a change to the picture, load the texture and
+    /// run this command again. The texture must not be compressed.
+    ///
+    /// Everything that works on a font works on this one: <see cref="Text">text</see>,
+    /// <see cref="SetFontIcon">font icon</see>, <see cref="SetFontEffect">set font effect</see>.
+    /// </remarks>
+    /// <example>
+    /// Load a hand-drawn font and write with it.
+    /// <code>
+    /// ` "letters" is a picture of 16 columns and 6 rows of characters
+    /// texture 1, "letters"
+    /// font sheet 1, 1, 16, 6
+    ///
+    /// text 1, 100, 100, 1, "HELLO"
+    /// do
+    ///   sync
+    /// loop
+    /// </code>
+    /// </example>
+    /// <param name="fontId">The ID to assign to this font.</param>
+    /// <param name="textureId">A loaded texture that holds the grid of characters.</param>
+    /// <param name="columns">How many cells there are across the texture.</param>
+    /// <param name="rows">How many cells there are down the texture.</param>
+    /// <param name="letterSpacing">The gap between one letter and the next, in pixels.</param>
+    /// <param name="spaceWidth">The width of the space, in pixels. <c>0</c> picks a third of a cell.</param>
+    /// <param name="firstCharacter">The character code of the top left cell.</param>
+    /// <seealso cref="SaveFontSheet">save font sheet</seealso>
+    /// <seealso cref="LoadSpriteFont">font</seealso>
+    /// <seealso cref="Text">text</seealso>
+    [FadeBasicCommand("font sheet")]
+    public static void LoadFontSheet(int fontId, int textureId, int columns, int rows, int letterSpacing = 1,
+        int spaceWidth = 0, int firstCharacter = 32)
+    {
+        FontSheetSystem.LoadFontFromSheet(fontId, textureId, columns, rows, letterSpacing, spaceWidth, firstCharacter);
+    }
+
+    /// <summary>
+    /// <para>Saves a loaded font as a picture: a grid of its characters, with hard pixel edges.</para>
+    /// <para>The picture is a starting point for a hand-drawn font, to be loaded back with <c>font sheet</c>.</para>
+    /// </summary>
+    /// <remarks>
+    /// This is a tool for making a game, not something a game does while it is played. Bake a font
+    /// at the size it will be drawn at, save it as a sheet, fix the letters that came out badly in
+    /// a paint program, and load the result with <see cref="LoadFontSheet">font sheet</see>.
+    ///
+    /// The sheet holds the characters from the space to <c>~</c>, 95 of them, so with 16 columns
+    /// it has 6 rows. Each cell is as tall as a line of the font, and wide enough for the widest
+    /// letter. The size of the cells is printed to the log.
+    ///
+    /// The smooth edges of the baked font are snapped: a pixel becomes solid white when the letter
+    /// covers at least <paramref name="cover"/> of it, and stays empty otherwise. A lower cover
+    /// gives bolder letters, and a higher one thinner letters.
+    ///
+    /// Every other cell is tinted faintly, so that the grid can be seen while editing. The tint
+    /// is too faint to count as ink, and <c>font sheet</c> never draws it.
+    /// </remarks>
+    /// <example>
+    /// Save a baked font as a sheet to edit.
+    /// <code>
+    /// font 1, "font"
+    /// save font sheet 1, "font_sheet.png"
+    /// end
+    /// </code>
+    /// </example>
+    /// <param name="fontId">A loaded font.</param>
+    /// <param name="filePath">The path to save the picture to. The <c>.png</c> extension is added if missing.</param>
+    /// <param name="columns">How many cells to put in a row.</param>
+    /// <param name="cover">How much of a pixel a letter has to cover for it to become ink, from <c>0</c> to <c>1</c>.</param>
+    /// <seealso cref="LoadFontSheet">font sheet</seealso>
+    /// <seealso cref="LoadSpriteFont">font</seealso>
+    [FadeBasicCommand("save font sheet")]
+    public static void SaveFontSheet(int fontId, string filePath, int columns = 16, float cover = 0.5f)
+    {
+        FontSheetSystem.SaveFontSheet(fontId, filePath, columns, cover);
+    }
+
+    /// <summary>
     /// <para>Gets the next available texture ID without reserving it.</para>
     /// <para>The returned ID is not claimed, so another call could grab it before you
     /// use it. If you need a guaranteed slot, use

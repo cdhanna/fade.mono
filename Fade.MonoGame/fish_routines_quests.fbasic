@@ -229,6 +229,7 @@ routines_quests_exit:
 
 ` a new game has no quest, none finished, and none that have had their turn
 function resetQuests()
+    questTalkReset() `a new game: nothing has been said. see fish_headers_questtalk.
     QUEST_ID = 0
     QUEST_STATE = QSTATE_NONE
     QUESTS_DONE = 0
@@ -296,7 +297,7 @@ function questNextQuest(qNextNot)
     qNextAny = qNextUsed
     if qNextNot > 0 then qNextAny = 1
     if qNextAny > 0
-        qNextSkip = rnd(qNextLeft)
+        qNextSkip = random stream(RNG_QUESTS, qNextLeft)
         for qNextI = 1 to QUEST_COUNT
             qNextOpen = 1
             if QUEST_USED(qNextI) then qNextOpen = 0
@@ -490,6 +491,7 @@ endfunction
 
 ` the round is over
 function questRoundEnded()
+    questTalkStop()
     ` a quest is not lost with the round. one that is being played, or that is waiting to be picked
     ` up, or that has not even shown up yet, carries on into the next round just as it is. only one
     ` that was finished is done with, so that the next round can bring a new one.
@@ -588,6 +590,7 @@ endfunction
 ` the quest starts over. what it had on the screen is gone at once, and it is set up again the
 ` next time that the board is settled.
 function questRestart()
+    questTalkStop()
     ` whatever it had drawn goes off in bubbles, right now, and not when the board has settled
     if QUEST_STATE = QSTATE_ACTIVE
         questBubbleAway()
@@ -708,7 +711,7 @@ function questOffer()
     ` beside the last cell of a row a little way down the board. the row under that one is where
     ` the check mark shows up, so it is never the bottom row. the pickup of a quest that was
     ` dropped is back in the row that it was swapped up into.
-    qOfferRow = CELL_ROW_COUNT / 3 + rnd(2)
+    qOfferRow = CELL_ROW_COUNT / 3 + random stream(RNG_QUESTS, 2)
     if QUEST_KEEP_ROW >= 0 then qOfferRow = QUEST_KEEP_ROW
     QUEST_KEEP_ROW = -1
     if qOfferRow > CELL_ROW_COUNT - 2 then qOfferRow = CELL_ROW_COUNT - 2
@@ -740,6 +743,7 @@ endfunction
 
 ` a swap has finished, and the two fish are in their new cells. it is not known yet if it popped anything.
 function questSwapDone(qSwapA, qSwapB)
+    questTalkMoved()
     if QUEST_STATE <> QSTATE_ACTIVE then exitfunction
 
     ` the swap of the "free move" card is free for a quest too. it can move the things of a quest
@@ -898,6 +902,10 @@ function questPickToggle()
     if QUEST_PICK_CELL < 0 then exitfunction
     if QUEST_STATE = QSTATE_OFFERED
         questPickUp()
+        ` the one who the quest is about says something about it. see THE QUEST TALK in fish_headers_questtalk.
+        if QUEST_STATE = QSTATE_ACTIVE
+            questTalkStart(QUEST_ID)
+        endif
         exitfunction
     endif
     if QUEST_STATE = QSTATE_ACTIVE
@@ -1187,7 +1195,7 @@ endfunction
 ` says what kind it really is. a quest's own kinds never drop in. see FORECAST in fish_quests.
 function questNewFish(qNewCell, qNewKind)
     qNewPicked = qNewKind
-    if qNewPicked >= TEX_KRILL then qNewPicked = rnd(7) + 1
+    if qNewPicked >= TEX_KRILL then qNewPicked = random stream(RNG_QUESTS, 7) + 1
 
     if QUEST_STATE = QSTATE_ACTIVE
         if QUEST_ID = QUEST_FORECAST
@@ -1249,6 +1257,9 @@ function questSave()
     for qSaveN = 0 to 399
         set pref QUEST_PACK_PREF + qSaveN, QUEST_PACK(qSaveN)
     next
+
+    ` and the fish that are waiting above the columns in FORECAST, which do not fit in there
+    questForeSave()
 endfunction
 
 
@@ -1306,8 +1317,8 @@ endfunction 1
 
 
 ` the few things about a quest that are not numbers, and so were not saved, put back from the
-` numbers that were: the words on the badge, where the things that glide are drawn, and the fish
-` that are waiting above the columns.
+` numbers that were: the words on the badge, and where the things that glide are drawn. and the
+` fish that are waiting above the columns, which are saved in a place of their own.
 function questAfterLoad()
     if QUEST_STATE <> QSTATE_ACTIVE then exitfunction
 
@@ -1340,11 +1351,9 @@ function questAfterLoad()
         endif
     endif
 
+    ` the fish that were waiting above the columns were saved too. see questForeLoad in fish_routines_seed.
     if QUEST_ID = QUEST_FORECAST
-        for qAfterN = 0 to 399
-            QUEST_FORE(qAfterN) = rnd(7) + 1
-            QUEST_STACK(qAfterN) = 0
-        next
+        questForeLoad()
     endif
 endfunction
 
@@ -2429,7 +2438,7 @@ function questPickCell(qPickMinX, qPickMaxX, qPickMinY, qPickMaxY)
     qPickTries = 0
     while qPickTries < 80
         qPickTries = qPickTries + 1
-        qPickAt = (qPickLowX + rnd(qPickWide)) + (qPickLowY + rnd(qPickTall)) * CELL_COLUMN_COUNT
+        qPickAt = (qPickLowX + random stream(RNG_QUESTS, qPickWide)) + (qPickLowY + random stream(RNG_QUESTS, qPickTall)) * CELL_COLUMN_COUNT
         qPickOk = questPlain(CELLS(qPickAt).value)
         if QUEST_MARK(qPickAt) > 0 then qPickOk = 0
         if QUEST_SPOT(qPickAt) <> 0 then qPickOk = 0
@@ -2448,7 +2457,7 @@ endfunction qAnyCell
 
 ` one of the first seven kinds of fish, and not the one given
 function questOtherKind(qNotKind)
-    qOther = rnd(7) + 1
+    qOther = random stream(RNG_QUESTS, 7) + 1
     if qOther = qNotKind then qOther = (qOther mod 7) + 1
 endfunction qOther
 

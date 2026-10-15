@@ -1,0 +1,800 @@
+goto routines_glow_exit
+
+remstart
+    THE GLOW
+    a hidden thing. see fish_headers_glow for the rules. this is a prototype.
+
+    the rest of the game only has to do these things:
+    - call glowSwapMade() for every swap that is counted as a move, with the way that it went.
+      stepLiveMove, in fish_funcs, does.
+    - call stepGlow() on every frame of the game. update_frame does.
+    - call glowReset() for a new game. reset_game does.
+remend
+
+` setup_coral comes here. the sprites that light the cells.
+setup_glow:
+    GLOW_TINT = rgb(255, 196, 70)
+
+    GLOW_RUN_TINT = rgb(215, 235, 255)
+
+    ` the glimmers. each sprite covers the whole screen, and its effect draws a ribbon on it.
+    for glowSetupI = 0 to GLOW_RUN_COUNT - 1
+        glowSetupFx = 0
+        reserve effect id(glowSetupFx)
+        if glowSetupI = 0
+            effect glowSetupFx, "Fish/Shaders/GlowTrailEffect"
+        endif
+        if glowSetupI = 1
+            effect glowSetupFx, "Fish/Shaders/GlowTrailEffect2"
+        endif
+        if glowSetupI = 2
+            effect glowSetupFx, "Fish/Shaders/GlowTrailEffect3"
+        endif
+        GLOW_RUN_FXS(glowSetupI) = glowSetupFx
+        glowSetupSprite = 0
+        reserve sprite id(glowSetupSprite)
+        sprite glowSetupSprite, 0, 0, TEX_PIXEL
+        set sprite offset glowSetupSprite, 0, 0
+        size sprite glowSetupSprite, WORLD_WIDTH, WORLD_HEIGHT
+        set sprite effect glowSetupSprite, glowSetupFx
+        order sprite glowSetupSprite, ORDER_GLOW
+        hide sprite glowSetupSprite
+        GLOW_RUN_SPRITES(glowSetupI) = glowSetupSprite
+        GLOW_RUN_STARTS(glowSetupI) = 0
+    next
+    reserve sprite id(GLOW_HEAD_SPRITE)
+    sprite GLOW_HEAD_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset GLOW_HEAD_SPRITE, .5, .5
+    order sprite GLOW_HEAD_SPRITE, ORDER_GLOW
+    hide sprite GLOW_HEAD_SPRITE
+    for glowSetupI = 0 to GLOW_TRAIL_CAP - 1
+        reserve sprite id(GLOW_TRAIL_SPRITES(glowSetupI))
+        sprite GLOW_TRAIL_SPRITES(glowSetupI), 0, 0, TEX_PIXEL
+        set sprite offset GLOW_TRAIL_SPRITES(glowSetupI), .5, .5
+        order sprite GLOW_TRAIL_SPRITES(glowSetupI), ORDER_GLOW
+        hide sprite GLOW_TRAIL_SPRITES(glowSetupI)
+    next
+return
+
+` a window in the debug panel. frame_dbg, in fish_routines, comes here on every frame, with FISH_DEBUG.
+frame_debug_glow:
+    begin debug window("Glow")
+    debugGlowChanged = debug toggle("on", GLOW_ON)
+    debug text "cell " + str$(GLOW_X) + ", " + str$(GLOW_Y) + "   trail " + str$(GLOW_TRAIL_N) + " of " + str$(glowTrailMax())
+    debug text "multiplier x" + str$(SCORE_MULTIPLIER)
+    debug text "loops " + str$(GLOW_LOOPS) + ", the last had " + str$(GLOW_LAST_RING) + " cells and popped " + str$(GLOW_LAST_INSIDE)
+
+    debug separator
+    debugGlowHand = 0
+    if GLOW_TRAIL_OVERRIDE >= 0 then debugGlowHand = 1
+    debugGlowChanged = debug toggle("set the trail length by hand", debugGlowHand)
+    if debugGlowHand
+        if GLOW_TRAIL_OVERRIDE < 0 then GLOW_TRAIL_OVERRIDE = SCORE_MULTIPLIER
+        debugGlowChanged = debug int slider("trail length", GLOW_TRAIL_OVERRIDE, 0, 40)
+    else
+        GLOW_TRAIL_OVERRIDE = -1
+    endif
+
+    debug separator
+    debug text "what shows"
+    debugGlowChanged = debug toggle("debug visuals: plain squares", GLOW_SHOW_SQUARES)
+    debugGlowChanged = debug toggle("turn the fish on the path around", GLOW_TURN_ON)
+    debugGlowChanged = debug int slider("glimmer ms per cell", GLOW_RUN_CELL_MS, 20, 600)
+    debugGlowChanged = debug int slider("glimmer length (1000 is a cell)", GLOW_RUN_LENGTH, 200, 4000)
+    debugGlowChanged = debug int slider("glimmer brightness", GLOW_RUN_ALPHA, 0, 255)
+    debugGlowChanged = debug int slider("glimmer width (100 is a cell)", GLOW_RUN_WIDE, 5, 80)
+    debugGlowChanged = debug int slider("least ms between glimmers", GLOW_RUN_GAP_MS, 0, 5000)
+    debugGlowChanged = debug int slider("sparkle every ms", GLOW_SPARK_EVERY, 10, 500)
+    debugGlowChanged = debug int slider("sparkle brightness", GLOW_SPARK_ALPHA, 0, 255)
+    debugGlowChanged = debug int slider("ripple size (100 is a cell)", GLOW_WAVE_AMP, 0, 80)
+    debugGlowChanged = debug int slider("ripples per cell x100, lowest note", GLOW_WAVE_BASE, 0, 300)
+    debugGlowChanged = debug int slider("more ripples per note x100", GLOW_WAVE_STEP, 0, 50)
+    if debug button("send a glimmer") = 1
+        glowMusicBeat(1 + rnd(12))
+    endif
+
+    debug separator
+    debug text "step it, as a swap would"
+    if debug button("up") = 1
+        glowSwapMade(0, -1)
+    endif
+    debug same line
+    if debug button("down") = 1
+        glowSwapMade(0, 1)
+    endif
+    debug same line
+    if debug button("left") = 1
+        glowSwapMade(-1, 0)
+    endif
+    debug same line
+    if debug button("right") = 1
+        glowSwapMade(1, 0)
+    endif
+    if debug button("clear the trail") = 1
+        GLOW_TRAIL_N = 0
+    endif
+    debug same line
+    if debug button("back to the start") = 1
+        glowReset()
+        glowPlace()
+    endif
+    end debug window
+return
+
+routines_glow_exit:
+
+
+` a new game: the glow has no trail, and it has not been put anywhere yet. glowPlace puts it where the
+` seed says, the first time that it is needed, which is after the seed of the game has been picked.
+function glowReset()
+    GLOW_X = -1
+    GLOW_Y = 0
+    GLOW_TRAIL_N = 0
+    GLOW_LOOPS = 0
+    GLOW_LAST_RING = 0
+    GLOW_LAST_INSIDE = 0
+endfunction
+
+
+` THE START. the cell that the glow starts on comes from the seed of the game, so a seed always starts
+` it in the same place. it is worked out from the number of the seed, and takes no roll from the
+` streams, so that the rest of what a seed deals stays the same. a game with no seed, saved from
+` before there were seeds, starts it in the middle.
+function glowPlace()
+    GLOW_X = CELL_COLUMN_COUNT / 2
+    GLOW_Y = CELL_ROW_COUNT / 2
+    if GAME_SEED > 0
+        GLOW_X = (GAME_SEED * 37 + 11) mod CELL_COLUMN_COUNT
+        glowPlaceMix = GAME_SEED / 7
+        GLOW_Y = (glowPlaceMix * 53 + 29) mod CELL_ROW_COUNT
+    endif
+endfunction
+
+
+` how long the trail can be: as long as the multiplier is, unless the debug panel says otherwise.
+` see THE TRAIL in fish_headers_glow.
+function glowTrailMax()
+    glowMax = SCORE_MULTIPLIER
+    if GLOW_TRAIL_OVERRIDE >= 0 then glowMax = GLOW_TRAIL_OVERRIDE
+    if glowMax > GLOW_TRAIL_CAP then glowMax = GLOW_TRAIL_CAP
+    if glowMax < 0 then glowMax = 0
+endfunction glowMax
+
+
+` a swap was counted, and it went this way. the glow steps one cell that way, and leaves the cell that
+` it was on at the front of its trail. a step onto the trail closes a loop. see fish_headers_glow.
+function glowSwapMade(glowDirX, glowDirY)
+    if GLOW_ON = 0 then exitfunction
+    if GLOW_X < 0
+        glowPlace()
+    endif
+
+    glowToX = GLOW_X + glowDirX
+    glowToY = GLOW_Y + glowDirY
+
+    ` THE EDGE. it stops there, or with the "seamless" card, it goes around.
+    if isAbility_Wrap()
+        if glowToX < 0 then glowToX = CELL_COLUMN_COUNT - 1
+        if glowToX >= CELL_COLUMN_COUNT then glowToX = 0
+        if glowToY < 0 then glowToY = CELL_ROW_COUNT - 1
+        if glowToY >= CELL_ROW_COUNT then glowToY = 0
+    else
+        if glowToX < 0 then exitfunction
+        if glowToX >= CELL_COLUMN_COUNT then exitfunction
+        if glowToY < 0 then exitfunction
+        if glowToY >= CELL_ROW_COUNT then exitfunction
+    endif
+
+    ` is the cell that it steps onto a cell of the trail?
+    glowHit = -1
+    glowSeek = 0
+    while glowSeek < GLOW_TRAIL_N
+        if GLOW_TRAIL_X(glowSeek) = glowToX
+            if GLOW_TRAIL_Y(glowSeek) = glowToY
+                glowHit = glowSeek
+                glowSeek = GLOW_TRAIL_N
+            endif
+        endif
+        glowSeek = glowSeek + 1
+    endwhile
+
+    if glowHit >= 0
+        glowCloseLoop(glowHit)
+        GLOW_TRAIL_N = 0
+    else
+        ` the cell that it was on goes on the front of the trail, and the oldest falls off the back
+        glowKeep = glowTrailMax()
+        if glowKeep > 0
+            glowShift = GLOW_TRAIL_N
+            glowShiftMost = glowKeep - 1
+            if glowShift > glowShiftMost then glowShift = glowShiftMost
+            while glowShift > 0
+                GLOW_TRAIL_X(glowShift) = GLOW_TRAIL_X(glowShift - 1)
+                GLOW_TRAIL_Y(glowShift) = GLOW_TRAIL_Y(glowShift - 1)
+                glowShift = glowShift - 1
+            endwhile
+            GLOW_TRAIL_X(0) = GLOW_X
+            GLOW_TRAIL_Y(0) = GLOW_Y
+            GLOW_TRAIL_N = GLOW_TRAIL_N + 1
+            if GLOW_TRAIL_N > glowKeep then GLOW_TRAIL_N = glowKeep
+        else
+            GLOW_TRAIL_N = 0
+        endif
+    endif
+
+    GLOW_X = glowToX
+    GLOW_Y = glowToY
+endfunction
+
+
+` A LOOP. the glow is stepping onto the cell of the trail at `glowLoopEnd`. the loop is that cell, the
+` cells of the trail in front of it, and the cell that the glow is on. every fish that it encloses is
+` marked to pop, as one forced group. see fish_headers_glow.
+function glowCloseLoop(glowLoopEnd)
+    glowCells = CELL_COUNT
+    if glowCells > 400 then glowCells = 400
+    glowLastCell = glowCells - 1
+    for glowI = 0 to glowLastCell
+        GLOW_WALL(glowI) = 0
+        GLOW_PIECE(glowI) = 0
+    next
+
+    GLOW_WALL(GLOW_X + GLOW_Y * CELL_COLUMN_COUNT) = 1
+    for glowI = 0 to glowLoopEnd
+        GLOW_WALL(GLOW_TRAIL_X(glowI) + GLOW_TRAIL_Y(glowI) * CELL_COLUMN_COUNT) = 1
+    next
+    GLOW_LAST_RING = glowLoopEnd + 2
+    GLOW_LOOPS = GLOW_LOOPS + 1
+
+    ` cut the rest of the board into pieces, going from cell to cell the four ways, and around the edge
+    ` with the "seamless" card. a piece that gets to the edge is not enclosed.
+    glowWrap = isAbility_Wrap()
+    glowRight = CELL_COLUMN_COUNT - 1
+    glowBottom = CELL_ROW_COUNT - 1
+    glowPieces = 0
+    for glowStart = 0 to glowLastCell
+        if GLOW_WALL(glowStart) = 0
+            if GLOW_PIECE(glowStart) = 0
+                glowPieces = glowPieces + 1
+                GLOW_PIECE_SIZE(glowPieces) = 0
+                GLOW_PIECE_EDGE(glowPieces) = 0
+                GLOW_PIECE(glowStart) = glowPieces
+                GLOW_QUEUE(0) = glowStart
+                glowHead = 0
+                glowTail = 1
+                while glowHead < glowTail
+                    glowAt = GLOW_QUEUE(glowHead)
+                    glowHead = glowHead + 1
+                    GLOW_PIECE_SIZE(glowPieces) = GLOW_PIECE_SIZE(glowPieces) + 1
+                    glowAtX = glowAt mod CELL_COLUMN_COUNT
+                    glowAtY = glowAt / CELL_COLUMN_COUNT
+                    if glowAtX = 0 then GLOW_PIECE_EDGE(glowPieces) = 1
+                    if glowAtY = 0 then GLOW_PIECE_EDGE(glowPieces) = 1
+                    if glowAtX = glowRight then GLOW_PIECE_EDGE(glowPieces) = 1
+                    if glowAtY = glowBottom then GLOW_PIECE_EDGE(glowPieces) = 1
+
+                    for glowWay = 0 to 3
+                        glowNextX = glowAtX
+                        glowNextY = glowAtY
+                        if glowWay = 0 then glowNextY = glowAtY - 1
+                        if glowWay = 1 then glowNextX = glowAtX + 1
+                        if glowWay = 2 then glowNextY = glowAtY + 1
+                        if glowWay = 3 then glowNextX = glowAtX - 1
+                        glowNextOk = 1
+                        if glowWrap
+                            if glowNextX < 0 then glowNextX = glowRight
+                            if glowNextX >= CELL_COLUMN_COUNT then glowNextX = 0
+                            if glowNextY < 0 then glowNextY = glowBottom
+                            if glowNextY >= CELL_ROW_COUNT then glowNextY = 0
+                        else
+                            if glowNextX < 0 then glowNextOk = 0
+                            if glowNextX >= CELL_COLUMN_COUNT then glowNextOk = 0
+                            if glowNextY < 0 then glowNextOk = 0
+                            if glowNextY >= CELL_ROW_COUNT then glowNextOk = 0
+                        endif
+                        if glowNextOk
+                            glowNext = glowNextX + glowNextY * CELL_COLUMN_COUNT
+                            if GLOW_WALL(glowNext) = 0
+                                if GLOW_PIECE(glowNext) = 0
+                                    GLOW_PIECE(glowNext) = glowPieces
+                                    GLOW_QUEUE(glowTail) = glowNext
+                                    glowTail = glowTail + 1
+                                endif
+                            endif
+                        endif
+                    next
+                endwhile
+            endif
+        endif
+    next
+
+    ` with the "seamless" card there is no edge, so the biggest piece is the outside, and the rest is enclosed
+    if glowWrap
+        glowBiggest = 0
+        for glowP = 1 to glowPieces
+            if GLOW_PIECE_SIZE(glowP) > glowBiggest then glowBiggest = GLOW_PIECE_SIZE(glowP)
+        next
+        for glowP = 1 to glowPieces
+            GLOW_PIECE_EDGE(glowP) = 0
+            if GLOW_PIECE_SIZE(glowP) = glowBiggest then GLOW_PIECE_EDGE(glowP) = 1
+        next
+    endif
+
+    ` the fish that are enclosed pop
+    GLOW_LAST_INSIDE = 0
+    for glowI = 0 to glowLastCell
+        glowPiece = GLOW_PIECE(glowI)
+        if glowPiece > 0
+            if GLOW_PIECE_EDGE(glowPiece) = 0
+                glowPops = 1
+                if CELLS(glowI).value <= 0 then glowPops = 0
+                if CELLS(glowI).value = TEX_DIVER then glowPops = 0
+                if CELLS(glowI).comboForce > 0 then glowPops = 0
+                if glowPops
+                    CELLS(glowI).comboForce = FORCE_GLOW
+                    GLOW_LAST_INSIDE = GLOW_LAST_INSIDE + 1
+                    glowPopX = glowI mod CELL_COLUMN_COUNT
+                    glowPopY = glowI / CELL_COLUMN_COUNT
+                    spawnBubbles(getCellX(glowPopX), getCellY(glowPopY), CELL_SIZE / 3, 6, 0, GLOW_TINT)
+                endif
+            endif
+        endif
+    next
+
+    if GLOW_LAST_INSIDE > 0
+        REQUEST_COMBO_CHECK = 1
+        glowRingX# = GLOW_X
+        glowRingY# = GLOW_Y
+        spawnShockwave(glowRingX#, glowRingY#, .6, 0)
+    endif
+endfunction
+
+
+` THE GLIMMER. a note of a tune that is on a beat sets a glimmer of light off from the root of the
+` trail, toward the glow. it takes over from the oldest one, if they are all running. see WHAT SHOWS in
+` fish_headers_glow. stepMusic, in fish_routines_music, calls this, and so does the debug panel.
+function glowMusicBeat(glowBeatNote)
+    if GLOW_ON
+        glowBeatNow = game ms()
+        glowBeatSince = glowBeatNow - GLOW_RUN_LAST
+        if glowBeatSince >= GLOW_RUN_GAP_MS
+            GLOW_RUN_STARTS(GLOW_RUN_NEXT) = glowBeatNow
+            GLOW_RUN_NOTES(GLOW_RUN_NEXT) = glowBeatNote
+            GLOW_RUN_NEXT = (GLOW_RUN_NEXT + 1) mod GLOW_RUN_COUNT
+            GLOW_RUN_LAST = glowBeatNow
+        endif
+    endif
+endfunction
+
+
+` a spot on the path, from the glow back along the trail: `glowAt` is how far along it, in thousandths
+` of a cell. 0 is the cell that glows, 1000 is the newest cell of the trail, and so on to the end of
+` it. the spot is left in GLOW_RUN_X# and GLOW_RUN_Y#, in pixels. where the path jumps around the
+` edge of the board, with "seamless", it does not slide across the board: it is at one side or the
+` other, and GLOW_RUN_OK is 0.
+function glowPathAt(glowAt)
+    if glowAt < 0 then glowAt = 0
+    glowEndPoint = GLOW_TRAIL_N
+    glowK = glowAt / 1000
+    glowPart# = glowAt mod 1000
+    glowWhole# = 1000
+    glowPart# = glowPart# / glowWhole#
+    if glowK >= glowEndPoint
+        glowK = glowEndPoint
+        glowPart# = 0
+    endif
+
+    glowFromX = GLOW_X
+    glowFromY = GLOW_Y
+    if glowK > 0
+        glowFromX = GLOW_TRAIL_X(glowK - 1)
+        glowFromY = GLOW_TRAIL_Y(glowK - 1)
+    endif
+    glowToX = glowFromX
+    glowToY = glowFromY
+    if glowK < glowEndPoint
+        glowToX = GLOW_TRAIL_X(glowK)
+        glowToY = GLOW_TRAIL_Y(glowK)
+    endif
+
+    GLOW_RUN_OK = 1
+    glowApartX = glowToX - glowFromX
+    glowApartY = glowToY - glowFromY
+    if glowApartX < 0 then glowApartX = 0 - glowApartX
+    if glowApartY < 0 then glowApartY = 0 - glowApartY
+    glowApart = glowApartX + glowApartY
+    if glowApart > 1
+        GLOW_RUN_OK = 0
+        if glowPart# >= .5
+            glowFromX = glowToX
+            glowFromY = glowToY
+        endif
+        glowPart# = 0
+    endif
+
+    glowFromPxX# = getCellX(glowFromX)
+    glowFromPxY# = getCellY(glowFromY)
+    glowToPxX# = getCellX(glowToX)
+    glowToPxY# = getCellY(glowToY)
+    GLOW_RUN_X# = glowFromPxX# + (glowToPxX# - glowFromPxX#) * glowPart#
+    GLOW_RUN_Y# = glowFromPxY# + (glowToPxY# - glowFromPxY#) * glowPart#
+endfunction
+
+
+` one soft sparkle, left behind by a glimmer. it is one of the bubbles, drawn as a little star, the
+` same as the wake of the cursor above the water, only smaller and fainter, and it lasts longer.
+function glowSparkle(glowSparkX, glowSparkY)
+    glowSparkI = FLOAT_BUBBLE_NEXT
+    FLOAT_BUBBLE_NEXT = (FLOAT_BUBBLE_NEXT + 1) mod FLOAT_BUBBLE_COUNT
+
+    glowSparkB = FLOAT_BUBBLES(glowSparkI)
+    glowSparkB.active = 1
+    glowSparkB.star = 1
+    glowSparkB.heart = 0
+    glowSparkB.loud = 0
+    glowSparkB.age = 0
+    glowSparkB.alpha = GLOW_SPARK_ALPHA
+    glowSparkB.delay = 1
+    glowSparkB.life = 600 + rnd(500)
+    glowSparkB.phase = rnd(628)
+    glowSparkB.size = 5
+    glowSparkB.x# = glowSparkX
+    glowSparkB.y# = glowSparkY
+    glowSparkB.vx# = 0
+    glowSparkB.vy# = 0
+    glowSparkB.rise = 3
+
+    color sprite glowSparkB.spriteId, GLOW_RUN_TINT
+    order sprite glowSparkB.spriteId, ORDER_FLOAT_BUBBLES
+    reset sprite render target glowSparkB.spriteId
+    hide sprite glowSparkB.spriteId
+
+    FLOAT_BUBBLES(glowSparkI) = glowSparkB
+    FLOAT_BUBBLE_LIVE = FLOAT_BUBBLE_LIVE + 1
+endfunction
+
+
+` THE TURN GOES WITH THE FISH. two fish traded places, by a swap or a fall, so their turns trade too.
+` swapCellStacks, in fish_funcs, calls this. both cells go on the list, so that a fish that has come
+` off of the path turns back, and one that has come onto it turns around.
+function glowTradeTurn(glowTradeA, glowTradeB)
+    glowTradeHeld# = GLOW_TURN#(glowTradeA)
+    GLOW_TURN#(glowTradeA) = GLOW_TURN#(glowTradeB)
+    GLOW_TURN#(glowTradeB) = glowTradeHeld#
+    glowListCell(glowTradeA)
+    glowListCell(glowTradeB)
+endfunction
+
+` one fish takes the place of another, and it is turned the way that the other one was
+function glowCopyTurn(glowCopyFrom, glowCopyTo)
+    GLOW_TURN#(glowCopyTo) = GLOW_TURN#(glowCopyFrom)
+    glowListCell(glowCopyTo)
+endfunction
+
+` put a cell on the list of the ones that are looked at, if it is not on it
+function glowListCell(glowListAdd)
+    if glowListAdd >= 0
+        if glowListAdd < 400
+            if GLOW_LISTED(glowListAdd) = 0
+                GLOW_LISTED(glowListAdd) = 1
+                GLOW_TURNING(GLOW_TURNING_N) = glowListAdd
+                GLOW_TURNING_N = GLOW_TURNING_N + 1
+            endif
+        endif
+    endif
+endfunction
+
+
+` draw one of the glimmers, if it is running. `glowRunI` says which one.
+function glowDrawRun(glowRunI, glowNow)
+    glowRunSprite = GLOW_RUN_SPRITES(glowRunI)
+    glowRunFx = GLOW_RUN_FXS(glowRunI)
+    glowDrawn = 0
+    if GLOW_RUN_STARTS(glowRunI) > 0
+        glowRunAge = glowNow - GLOW_RUN_STARTS(glowRunI)
+        glowFront = (glowRunAge * 1000) / GLOW_RUN_CELL_MS
+        glowEndAt = GLOW_TRAIL_N * 1000
+        glowPast = glowFront - glowEndAt
+        if glowPast > GLOW_RUN_LENGTH
+            GLOW_RUN_STARTS(glowRunI) = 0
+        else
+            ` the spots of the ribbon, from its front back. it runs from the root of the trail to the tip, so
+            ` a spot that is so far along it is that far back from the end of the path. it stops at a jump
+            ` around the edge.
+            glowRibN = 0
+            glowRibStep = GLOW_RUN_LENGTH / 7
+            glowRibDone = 0
+            while glowRibDone = 0
+                glowRibAt = glowFront - glowRibN * glowRibStep
+                if glowRibAt > glowEndAt then glowRibAt = glowEndAt
+                if glowRibAt <= 0
+                    glowRibAt = 0
+                    glowRibDone = 1
+                endif
+                glowPathAt(glowEndAt - glowRibAt)
+                glowRibKeep = 1
+                if glowRibN > 0
+                    if GLOW_RUN_OK = 0
+                        glowRibKeep = 0
+                        glowRibDone = 1
+                    endif
+                endif
+                if glowRibKeep
+                    GLOW_RIB_BASE#(glowRibN * 2) = GLOW_RUN_X#
+                    GLOW_RIB_BASE#(glowRibN * 2 + 1) = GLOW_RUN_Y#
+                    GLOW_RIB_AT(glowRibN) = glowRibAt
+                    glowRibN = glowRibN + 1
+                endif
+                if glowRibN >= 8 then glowRibDone = 1
+            endwhile
+
+            ` THE RIPPLE. every spot moves off to the side of the path, by a wave along it. the side is
+            ` square to the way that the path goes there, which is worked out from the spots on either
+            ` side of it, so that it bends smoothly around a corner.
+            glowWaveAmp# = GLOW_WAVE_AMP
+            glowWaveAmp# = glowWaveAmp# * CELL_SIZE * .01
+            glowWaveRate# = GLOW_WAVE_BASE + GLOW_WAVE_STEP * GLOW_RUN_NOTES(glowRunI)
+            glowWaveRate# = glowWaveRate# * .01 * 6.28318
+            glowWaveSeed# = GLOW_RUN_NOTES(glowRunI) * 1.7
+            glowRibLast = glowRibN - 1
+            for glowW = 0 to glowRibLast
+                glowAheadW = glowW - 1
+                if glowAheadW < 0 then glowAheadW = 0
+                glowBehindW = glowW + 1
+                if glowBehindW > glowRibLast then glowBehindW = glowRibLast
+                glowAlongX# = GLOW_RIB_BASE#(glowAheadW * 2) - GLOW_RIB_BASE#(glowBehindW * 2)
+                glowAlongY# = GLOW_RIB_BASE#(glowAheadW * 2 + 1) - GLOW_RIB_BASE#(glowBehindW * 2 + 1)
+                glowAlongLen# = sqrt(glowAlongX# * glowAlongX# + glowAlongY# * glowAlongY#)
+                glowSideX# = 0
+                glowSideY# = 0
+                if glowAlongLen# > .01
+                    glowSideX# = (0 - glowAlongY#) / glowAlongLen#
+                    glowSideY# = glowAlongX# / glowAlongLen#
+                endif
+                glowWaveCells# = GLOW_RIB_AT(glowW)
+                glowWaveCells# = glowWaveCells# * .001
+                glowWave# = sin(glowWaveCells# * glowWaveRate# + glowWaveSeed#) * glowWaveAmp#
+                GLOW_RIB#(glowW * 2) = GLOW_RIB_BASE#(glowW * 2) + glowSideX# * glowWave#
+                GLOW_RIB#(glowW * 2 + 1) = GLOW_RIB_BASE#(glowW * 2 + 1) + glowSideY# * glowWave#
+            next
+
+            ` the spots that were not given are the last one over again, so the ribbon ends there
+            glowRibLast = glowRibN - 1
+            glowRibFill = glowRibN
+            while glowRibFill < 12
+                GLOW_RIB#(glowRibFill * 2) = GLOW_RIB#(glowRibLast * 2)
+                GLOW_RIB#(glowRibFill * 2 + 1) = GLOW_RIB#(glowRibLast * 2 + 1)
+                glowRibFill = glowRibFill + 1
+            endwhile
+
+            ` it comes up softly, and fades as its front goes past the end of the trail
+            glowRunA = GLOW_RUN_ALPHA
+            if glowRunAge < 200
+                glowRunA = (GLOW_RUN_ALPHA * glowRunAge) / 200
+            endif
+            if glowPast > 0
+                glowRunA = (glowRunA * (GLOW_RUN_LENGTH - glowPast)) / GLOW_RUN_LENGTH
+            endif
+            if glowRunA < 0 then glowRunA = 0
+
+            ` the effect forgets what it is told, so it is told on every frame
+            glowRunWide# = GLOW_RUN_WIDE
+            glowRunWide# = glowRunWide# * CELL_SIZE * .01
+            set effect param float2 glowRunFx, "Size", WORLD_WIDTH, WORLD_HEIGHT
+            set effect param float glowRunFx, "Wide", glowRunWide#
+            set effect param float4 glowRunFx, "Trail0", GLOW_RIB#(0), GLOW_RIB#(1), GLOW_RIB#(2), GLOW_RIB#(3)
+            set effect param float4 glowRunFx, "Trail1", GLOW_RIB#(4), GLOW_RIB#(5), GLOW_RIB#(6), GLOW_RIB#(7)
+            set effect param float4 glowRunFx, "Trail2", GLOW_RIB#(8), GLOW_RIB#(9), GLOW_RIB#(10), GLOW_RIB#(11)
+            set effect param float4 glowRunFx, "Trail3", GLOW_RIB#(12), GLOW_RIB#(13), GLOW_RIB#(14), GLOW_RIB#(15)
+            set effect param float4 glowRunFx, "Trail4", GLOW_RIB#(16), GLOW_RIB#(17), GLOW_RIB#(18), GLOW_RIB#(19)
+            set effect param float4 glowRunFx, "Trail5", GLOW_RIB#(20), GLOW_RIB#(21), GLOW_RIB#(22), GLOW_RIB#(23)
+            color sprite glowRunSprite, GLOW_RUN_TINT
+            set sprite alpha glowRunSprite, glowRunA
+            show sprite glowRunSprite
+            glowDrawn = 1
+
+            ` and it leaves soft sparkles behind it, on the way to the end of the trail
+            if glowPast <= 0
+                if glowNow >= GLOW_SPARK_NEXT
+                    GLOW_SPARK_NEXT = glowNow + GLOW_SPARK_EVERY + rnd(GLOW_SPARK_EVERY)
+                    glowSparkJitter = CELL_SIZE / 3
+                    glowSparkX = GLOW_RIB#(0) + rnd(glowSparkJitter * 2 + 1) - glowSparkJitter
+                    glowSparkY = GLOW_RIB#(1) + rnd(glowSparkJitter * 2 + 1) - glowSparkJitter
+                    glowSparkle(glowSparkX, glowSparkY)
+                endif
+            endif
+        endif
+    endif
+    if glowDrawn = 0
+        hide sprite glowRunSprite
+    endif
+endfunction
+
+
+` the cell that the fish of a cell is drawn in, which is left in GLOW_WHERE. it is the cell itself, but
+` for a fish that is falling: a fish falls through the cells under it before it is in any of them,
+` and a new one drops in from above the board, where there is no cell, and that is -1.
+function glowWhereCell(glowWhereOf)
+    GLOW_WHERE = glowWhereOf
+    glowWhereMoving = 0
+    if COMBO_PHASE = 2
+        if CELLS(glowWhereOf).comboDownShift > 0 then glowWhereMoving = 1
+    endif
+    if COMBO_PHASE = 3
+        if CELLS(glowWhereOf).comboBlownUp = 1 then glowWhereMoving = 1
+    endif
+    if glowWhereMoving
+        glowWhereY = sprite y(CELLS(glowWhereOf).spriteId)
+        glowWhereY = glowWhereY - GRID_POS.y
+        glowWhereY = glowWhereY + CELL_SIZE / 2
+        if glowWhereY < 0
+            GLOW_WHERE = -1
+        else
+            glowWhereRow = glowWhereY / CELL_SIZE
+            if glowWhereRow >= CELL_ROW_COUNT
+                glowWhereRow = CELL_ROW_COUNT - 1
+            endif
+            GLOW_WHERE = (glowWhereOf mod CELL_COLUMN_COUNT) + glowWhereRow * CELL_COLUMN_COUNT
+        endif
+    endif
+endfunction
+
+
+` A SWAP THAT MAKES A MATCH. a swap was counted as a move, and it went this way. the glow does not
+` step yet: handle_combos looks at the board first, and glowJudgeSwap steps it if the swap made a match.
+` stepLiveMove, in fish_funcs, calls this.
+function glowSwapPending(glowPendX, glowPendY)
+    GLOW_PENDING = 1
+    GLOW_PENDING_X = glowPendX
+    GLOW_PENDING_Y = glowPendY
+    GLOW_SWAP_VALID = 0
+endfunction
+
+` handle_combos has been through the groups. if the swap that it is looking at made a match, the glow
+` steps the way that it went. either way, the swap has been judged.
+function glowJudgeSwap()
+    if GLOW_PENDING
+        if GLOW_SWAP_VALID
+            glowSwapMade(GLOW_PENDING_X, GLOW_PENDING_Y)
+        endif
+    endif
+    GLOW_PENDING = 0
+    GLOW_SWAP_VALID = 0
+endfunction
+
+
+` turn the fish on the path around, run the glimmers, and light the plain squares when the debug panel
+` asks for them. update_frame calls this on every frame of the game.
+function stepGlow()
+    if GLOW_X < 0
+        glowPlace()
+    endif
+    glowNow = game ms()
+    glowElapsed# = glowNow - GLOW_LAST_MS
+    GLOW_LAST_MS = glowNow
+    if glowElapsed# > 50 then glowElapsed# = 50
+    if glowElapsed# < 0 then glowElapsed# = 0
+
+    ` the board can change size under it, with "mind expansion"
+    glowRightmost = CELL_COLUMN_COUNT - 1
+    glowLowest = CELL_ROW_COUNT - 1
+    if GLOW_X > glowRightmost then GLOW_X = glowRightmost
+    if GLOW_Y > glowLowest then GLOW_Y = glowLowest
+    glowTrailKeep = glowTrailMax()
+    if GLOW_TRAIL_N > glowTrailKeep then GLOW_TRAIL_N = glowTrailKeep
+
+    glowShow = GLOW_ON
+    if MENU_MODE <> 0 then glowShow = 0
+
+    ` THE FISH THAT ARE TURNED AROUND. every cell of the path is stamped, and goes on the list.
+    GLOW_STAMP = GLOW_STAMP + 1
+    glowTurnPath = glowShow
+    if GLOW_TURN_ON = 0 then glowTurnPath = 0
+    if glowTurnPath
+        glowStampCell = GLOW_X + GLOW_Y * CELL_COLUMN_COUNT
+        GLOW_WANT(glowStampCell) = GLOW_STAMP
+        glowListCell(glowStampCell)
+        glowT = 0
+        while glowT < GLOW_TRAIL_N
+            glowStampCell = GLOW_TRAIL_X(glowT) + GLOW_TRAIL_Y(glowT) * CELL_COLUMN_COUNT
+            GLOW_WANT(glowStampCell) = GLOW_STAMP
+            glowListCell(glowStampCell)
+            glowT = glowT + 1
+        endwhile
+    endif
+
+    ` while fish are falling, every one that is falling goes on the list, so that it turns as it passes
+    ` through the path
+    glowFalling = 0
+    if COMBO_PHASE = 2 then glowFalling = 1
+    if COMBO_PHASE = 3 then glowFalling = 1
+    if glowFalling
+        glowFallLast = CELL_COUNT - 1
+        for glowFallI = 0 to glowFallLast
+            glowFallMoving = 0
+            if COMBO_PHASE = 2
+                if CELLS(glowFallI).comboDownShift > 0 then glowFallMoving = 1
+            else
+                if CELLS(glowFallI).comboBlownUp = 1 then glowFallMoving = 1
+            endif
+            if glowFallMoving
+                glowListCell(glowFallI)
+            endif
+        next
+    endif
+
+    ` every cell on the list turns a little further toward the way that it should face: around, when
+    ` its fish is on the path. one that is all the way back, and is not on the path, comes off of the list.
+    glowTurnStep# = glowElapsed# * GLOW_TURN_EASE#
+    if glowTurnStep# > 1 then glowTurnStep# = 1
+    glowL = 0
+    while glowL < GLOW_TURNING_N
+        glowTurnCell = GLOW_TURNING(glowL)
+        glowTurnWant# = 0
+        glowWhereCell(glowTurnCell)
+        if GLOW_WHERE >= 0
+            if GLOW_WANT(GLOW_WHERE) = GLOW_STAMP then glowTurnWant# = 1
+        endif
+        GLOW_TURN#(glowTurnCell) = GLOW_TURN#(glowTurnCell) + (glowTurnWant# - GLOW_TURN#(glowTurnCell)) * glowTurnStep#
+        glowTurnDone = 0
+        if glowTurnWant# < .5
+            if GLOW_TURN#(glowTurnCell) < .02 then glowTurnDone = 1
+        endif
+        if glowTurnDone
+            GLOW_TURN#(glowTurnCell) = 0
+            GLOW_LISTED(glowTurnCell) = 0
+            GLOW_TURNING_N = GLOW_TURNING_N - 1
+            GLOW_TURNING(glowL) = GLOW_TURNING(GLOW_TURNING_N)
+        else
+            glowL = glowL + 1
+        endif
+    endwhile
+
+    ` THE GLIMMERS
+    glowR = 0
+    while glowR < GLOW_RUN_COUNT
+        if glowShow = 0 then GLOW_RUN_STARTS(glowR) = 0
+        glowDrawRun(glowR, glowNow)
+        glowR = glowR + 1
+    endwhile
+
+    ` THE DEBUG VISUALS. plain squares under the cell that glows and the trail.
+    glowCellSize = CELL_SIZE - 2
+    glowSquares = 0
+    glowSquareHead = 0
+    if glowShow
+        if GLOW_SHOW_SQUARES
+            glowSquares = GLOW_TRAIL_N
+            glowSquareHead = 1
+        endif
+    endif
+    if glowSquareHead
+        position sprite GLOW_HEAD_SPRITE, getCellX(GLOW_X), getCellY(GLOW_Y)
+        size sprite GLOW_HEAD_SPRITE, glowCellSize, glowCellSize
+        color sprite GLOW_HEAD_SPRITE, GLOW_TINT
+        set sprite alpha GLOW_HEAD_SPRITE, GLOW_HEAD_ALPHA
+        show sprite GLOW_HEAD_SPRITE
+    else
+        hide sprite GLOW_HEAD_SPRITE
+    endif
+
+    glowT = 0
+    while glowT < glowSquares
+        glowTrailSprite = GLOW_TRAIL_SPRITES(glowT)
+        ` the newest is GLOW_TRAIL_ALPHA, and the oldest a third of that
+        glowTrailA = GLOW_TRAIL_ALPHA
+        if glowTrailKeep > 1
+            glowTrailA = GLOW_TRAIL_ALPHA - (GLOW_TRAIL_ALPHA * 2 * glowT) / (3 * (glowTrailKeep - 1))
+        endif
+        position sprite glowTrailSprite, getCellX(GLOW_TRAIL_X(glowT)), getCellY(GLOW_TRAIL_Y(glowT))
+        size sprite glowTrailSprite, glowCellSize, glowCellSize
+        color sprite glowTrailSprite, GLOW_TINT
+        set sprite alpha glowTrailSprite, glowTrailA
+        show sprite glowTrailSprite
+        glowT = glowT + 1
+    endwhile
+    while glowT < GLOW_TRAIL_CAP
+        hide sprite GLOW_TRAIL_SPRITES(glowT)
+        glowT = glowT + 1
+    endwhile
+endfunction

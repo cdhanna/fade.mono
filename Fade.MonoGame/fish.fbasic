@@ -102,6 +102,8 @@ gosub setup_tuna
 gosub setup_morse
 gosub setup_cameo `the words that these swim through for are set in setup_morse
 gosub setup_beat `these use the bubble effect too
+gosub setup_angler `on top of the dark of info mode, and after the hints that it puts its lights in
+gosub setup_questtalk `the creatures that talk when a quest is taken. it borrows the voices of the angler.
 
 
 
@@ -158,6 +160,15 @@ do
 
     ` show keys or controller buttons, depending on which one the player touched last
     gosub frame_input_icons
+
+    ` the bar under a steam recording of the game shows the menus in one color, and the game in another
+    timelineMode = 1
+    if MENU_MODE then timelineMode = 3
+    if timelineMode <> STEAM_TIMELINE_MODE
+        STEAM_TIMELINE_MODE = timelineMode
+        set steam timeline mode timelineMode
+    endif
+    gosub frame_steam_timeline
     perf lap 1
 
     if MENU_MODE
@@ -176,13 +187,17 @@ do
 
             gosub handle_ability_selection
             gosub handle_board_expansion
+            gosub handle_angler `the "bright idea" card. see THE ANGLER in fish_headers_angler.
             gosub process_input
             perf lap 2
             gosub handle_combos
             perf lap 3
 
-            ` the pause key brings up the pause menu
-            if new action down(ACT_PAUSE)
+            ` the pause key brings up the pause menu. so does the steam overlay, when the player brings
+            ` it up over the game: the game gets no keys while it is up, and it would run on without them.
+            wantPause = new action down(ACT_PAUSE)
+            if steam overlay open() then wantPause = 1
+            if wantPause
                 tunaHide() `the code is drawn on top of everything, so it goes before the menu comes. see TUNA in fish_headers.
                 gosub menu_open_pause
             endif

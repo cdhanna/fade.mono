@@ -19,9 +19,11 @@ remstart
     everything that a test declares starts with a `t`, because a test shares its names with the game
     once it has run to a label, and a name that the game already uses is an error.
 
-    the dice are mocked where a test depends on them: `mock rnd` with 0 makes every "so many in a
-    hundred" chance come up. a mock of rnd cannot see what it was asked to roll out of, so it cannot
-    roll high for one thing and low for another, except by counting the rolls. see the stock market.
+    the dice are mocked where a test depends on them. the rolls that the rules depend on come from
+    `random stream`, and the ones that are only for show from `rnd`: see THE STREAMS in
+    fish_headers_seed. a mock of either with 0 makes every "so many in a hundred" chance come up.
+    a mock cannot see what it was asked to roll out of, so it cannot roll high for one thing and
+    low for another, except by counting the rolls. see the stock market.
 remend
 
 abstract test fishBoard
@@ -48,6 +50,9 @@ abstract test fishBoard
     endmock 0
 
     runto _loop
+
+    ` the creatures that talk when a quest is taken stay quiet in the tests. see fish_headers_questtalk.
+    QTALK_ENABLED = 0
 
     ` mute the sounds and the music, whatever the options said
     OPTION_SOUND = 0
@@ -409,17 +414,17 @@ endtest
 test stock_market_adds_a_fish from fishBoard
     grantPassive(ABILITY_INDEX_PASSIVE_STOCK_MARKET)
 
-    ` the stock market wants a high roll, and everything else that rolls wants a number that is not
-    ` too big to pick from a list with. handle_combos rolls for the pitch of the pops first, and for
-    ` the stock market second, so the first two rolls are high, and the rest are 0.
-    global tRolls = 0
-    mock rnd
-        tRolls = tRolls + 1
-        tRoll = 0
-        if tRolls <= 2
-            tRoll = 9
+    ` the stock market wants a high roll, and the roll after it, which picks where to start looking
+    ` for a fish, wants a 0. they are the first two rolls of the rules, which come from streams of
+    ` their own. see THE STREAMS in fish_headers_seed.
+    global tStockRolls = 0
+    mock random stream
+        tStockRolls = tStockRolls + 1
+        tStockRoll = 0
+        if tStockRolls = 1
+            tStockRoll = 9
         endif
-    endmock tRoll
+    endmock tStockRoll
     testPut(0, 0, 6)
     testPut(1, 0, 6)
     testPut(2, 0, 6)
@@ -439,6 +444,10 @@ test stock_market_does_nothing_on_a_low_roll from fishBoard
     grantPassive(ABILITY_INDEX_PASSIVE_STOCK_MARKET)
     mock rnd
     endmock 0
+
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
+    endmock 0
     testPut(0, 0, 6)
     testPut(1, 0, 6)
     testPut(2, 0, 6)
@@ -456,6 +465,10 @@ endtest
 test smile_stacks_the_fish_next_to_a_pop from fishBoard
     grantPassive(ABILITY_INDEX_CONTAGIOUS_SMILE)
     mock rnd
+    endmock 0
+
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
     endmock 0
     testPut(1, 1, 6)
     testPut(2, 1, 6)
@@ -477,6 +490,10 @@ test smile_does_not_stack_past_the_most from fishBoard
     grantPassive(ABILITY_INDEX_CONTAGIOUS_SMILE)
     mock rnd
     endmock 0
+
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
+    endmock 0
     testPut(1, 1, 6)
     testPut(2, 1, 6)
     testPut(3, 1, 6)
@@ -494,6 +511,10 @@ endtest
 
 test jelly_stings_the_fish_next_to_it from fishBoard
     mock rnd
+    endmock 0
+
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
     endmock 0
     testPut(1, 1, TEX_JELLY)
     testPut(2, 1, TEX_JELLY)
@@ -1546,6 +1567,10 @@ test horror_coral_turns_fish_belly_up_and_then_to_skeletons from fishBoard
     mock rnd
     endmock 0
 
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
+    endmock 0
+
     CORAL_CELLS(testIndex(3, 3)) = 1
     CORAL_SICK(testIndex(3, 3)) = 1
     CORAL_CELLS(testIndex(5, 5)) = 1
@@ -1694,6 +1719,10 @@ endtest
 test skeleton_stacks_and_never_goes_belly_up from fishBoard
     ` every roll comes up
     mock rnd
+    endmock 0
+
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
     endmock 0
 
     CELLS(testIndex(4, 4)).bellyUp = 2
@@ -2087,6 +2116,10 @@ test coral_patterns_are_all_different from fishBoard
     mock rnd
     endmock 0
 
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
+    endmock 0
+
     ` this is about having more than one pattern out, which the game can still do
     CORAL_LIVE_COUNT = 3
     resetCoral()
@@ -2217,6 +2250,10 @@ test coral_hint_lays_the_pattern_on_the_board from fishBoard
     ` with the dice stuck, the pattern goes as far up and to the left as it fits
     mock rnd
     endmock 0
+
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
+    endmock 0
     CORAL_SEQ_LENGTH(1) = 0
     CORAL_SEQ_LENGTH(2) = 0
     coralSetSequence(0, 76)
@@ -2342,6 +2379,10 @@ test coral_big_group_brings_a_hint from fishBoard
     ` no wave of the current is setting out, so the only hint that can start is the one that is owed
     mock rnd
     endmock 0
+
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
+    endmock 0
     coralClearHint()
     CORAL_HINT_ROLLED = coralWaveNow()
 
@@ -2405,6 +2446,10 @@ endtest
 
 test listen_makes_a_hint_easier_to_see from fishBoard
     mock rnd
+    endmock 0
+
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
     endmock 0
     assert isAbility_Listen() = 0, "the card is not owned to start with"
 
@@ -2591,7 +2636,7 @@ endtest
 ` THE CODEC
 
 test codec_has_entries_for_coral_after_the_cards from fishBoard
-    assert CODEC_COUNT = CARD_LENGTH + 29 + QUEST_COUNT, "the usual ending, the nine words that bring somebody swimming through, the night, and every card, coral, horror coral, the two endings, three special fish, four things that happen to a fish, the QR code, the crooked bar, the diver and its ending, and every quest"
+    assert CODEC_COUNT = CARD_LENGTH + 30 + QUEST_COUNT, "the usual ending, the call of the angler, the nine words that bring somebody swimming through, the night, and every card, coral, horror coral, the two endings, three special fish, four things that happen to a fish, the QR code, the crooked bar, the diver and its ending, and every quest"
     assert CODEC_ENTRY_JELLY = CARD_LENGTH + 4, "the special fish come after the endings"
     assert CODEC_ENTRY_STACK = CARD_LENGTH + 9, "stacked comes after the other things that happen to a fish"
     assert CODEC_ENTRY_HOME = CARD_LENGTH + 10, "and heart home is last"
@@ -2659,6 +2704,10 @@ endtest
 test second_sting_turns_a_belly_up_fish_into_a_skeleton from fishBoard
     mock rnd
     endmock 0
+
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
+    endmock 0
     testPut(1, 1, TEX_JELLY)
     testPut(2, 1, TEX_JELLY)
     testPut(3, 1, TEX_JELLY)
@@ -2677,6 +2726,10 @@ endtest
 test stacked_jelly_stings_a_fish_to_the_bone from fishBoard
     mock rnd
     endmock 0
+
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
+    endmock 0
     testPut(1, 1, TEX_JELLY)
     testPut(2, 1, TEX_JELLY)
     testPut(3, 1, TEX_JELLY)
@@ -2693,6 +2746,10 @@ endtest
 
 test sting_that_lands_sends_a_bolt from fishBoard
     mock rnd
+    endmock 0
+
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
     endmock 0
     testPut(4, 4, TEX_JELLY)
     tZapsBefore = ZAP_LIVE
@@ -2940,6 +2997,10 @@ test listen_lucky_hint_leaves_a_trail from fishBoard
     ` every roll comes up: the wave of the current brings a hint, and the hint is a lucky one
     mock rnd
     endmock 0
+
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
+    endmock 0
     coralClearHint()
     CORAL_HINT_ROLLED = -1
     runto _loop
@@ -2962,6 +3023,10 @@ test listen_unlucky_hint_leaves_no_trail from fishBoard
             tLuckRoll = 50
         endif
     endmock tLuckRoll
+
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
+    endmock 0
     coralClearHint()
     CORAL_HINT_ROLLED = -1
     runto _loop
@@ -2974,6 +3039,10 @@ endtest
 
 test listen_hint_without_the_card_is_never_lucky from fishBoard
     mock rnd
+    endmock 0
+
+    ` and the rolls of the rules, which come from streams of their own. see THE STREAMS in fish_headers_seed.
+    mock random stream
     endmock 0
     coralClearHint()
     CORAL_HINT_ROLLED = -1

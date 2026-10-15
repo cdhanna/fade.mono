@@ -1,0 +1,3083 @@
+remstart
+    THE TRAILER
+    every shot of the trailer is a test here, and each one records itself to a video with `record start`.
+    when the art changes, the shots are recorded again, and come out the same, with the new art.
+
+    a shot does nothing unless FISH_TRAILER is 1, so an ordinary test run passes over them, the way it does the
+    long tests. build/render-trailer.ps1 sets it, and runs the shots with --filter-uid.
+    the videos go to the folder in FISH_TRAILER_OUT, or to a "trailer" folder where the game runs.
+
+    while a recording runs, the clock of the game moves on by one frame of the video per frame, however long
+    the frame took, so a shot looks the same at any speed. see `record start`.
+
+    a shot holds for a number of frames with
+        for tTrFrame = 1 to 90
+            runto update_frame
+        next
+    update_frame runs once on every frame that the board is drawn, even in the middle of a pop. the screens
+    that block (the upgrade screen, the menu) have labels of their own to run to.
+remend
+
+
+abstract test trailerShot
+    if val(env$("FISH_TRAILER")) = 0 then end
+
+    ` the dice that are only for show (bubbles, splashes) roll the same in every take, from the start
+    randomize 7
+
+    ` the same as fishBoard: no menu, nothing remembered, nobody at the keys
+    mock is env set(tEnvName$)
+    endmock tEnvName$ = "FISH_SKIP_MENU"
+    mock get pref
+    endmock 0
+    mock set pref
+    endmock
+    mock begin pref batch
+    endmock
+    mock end pref batch
+    endmock
+    mock action down
+    endmock 0
+    ` a shot that has to press a key (to pick a card) sets TR_PRESS to 1 for a frame: every key is down then
+    global TR_PRESS = 0
+    mock new action down
+    endmock TR_PRESS
+
+    runto _loop
+    QTALK_ENABLED = 0
+
+    OPTION_SOUND = 0
+    OPTION_MUSIC = 0
+    set sfx group volume SFX_GROUP_SFX, 0
+    set sfx group volume SFX_GROUP_MUSIC, 0
+
+    ` a round that looks like one, part of the way into a game: the bar of the round shows in most shots.
+    ` the upgrade screen waits for as long as the shot wants it to. see questHoldsRound.
+    trailerRound(6, 25)
+
+    ` the shake of a pop is only made the first time that something pops, and the combo waits for it to
+    ` be done. a shot whose first look pops nothing (the fish all sing on coral) would wait forever. so
+    ` there is one that is done already.
+    create basic tween SHAKE_TWEEN_ID, 0, 0, 1, 0
+
+    ` the glow is a prototype that is not part of the trailer. see fish_headers_glow.
+    GLOW_ON = 0
+
+    ` the shot is in the trailer, so the board is a real looking one, and the same one every time
+    trailerDeal(7)
+
+    ` the black that a shot fades in from and out to. it is over everything, even the menu.
+    global TR_CURTAIN = 0
+    reserve sprite id(TR_CURTAIN)
+    sprite TR_CURTAIN, 0, 0, TEX_PIXEL
+    set sprite offset TR_CURTAIN, 0, 0
+    size sprite TR_CURTAIN, WORLD_WIDTH, WORLD_HEIGHT
+    color sprite TR_CURTAIN, rgb(0, 0, 0)
+    order sprite TR_CURTAIN, 310
+    set sprite alpha TR_CURTAIN, 0
+
+    ` THE WIPE OF BUBBLES. big bubbles rise up the screen and cover it in the deep blue of the menu, and
+    ` then rise on off of it. a shot that ends with one takes it to the middle, when the screen is all
+    ` covered, and the next shot starts from that middle. so each video can be made on its own, and the
+    ` cut between them is not seen. where every bubble is comes from the frame, not from the dice.
+    global TR_COVER = 0
+    reserve sprite id(TR_COVER)
+    sprite TR_COVER, 0, 0, TEX_PIXEL
+    set sprite offset TR_COVER, 0, 0
+    size sprite TR_COVER, WORLD_WIDTH, WORLD_HEIGHT
+    color sprite TR_COVER, rgb(32, 40, 64)
+    order sprite TR_COVER, 306
+    set sprite alpha TR_COVER, 0
+    global TR_BUB_COUNT = 40
+    global dim TR_BUB(40)
+    for tTrB = 0 to TR_BUB_COUNT - 1
+        tTrBId = 0
+        reserve sprite id(tTrBId)
+        sprite tTrBId, 0, 0, TEX_PIXEL
+        set sprite offset tTrBId, .5, .5
+        set sprite effect tTrBId, BUBBLE_FX_ID
+        color sprite tTrBId, rgb(200, 225, 255)
+        order sprite tTrBId, 308
+        hide sprite tTrBId
+        TR_BUB(tTrB) = tTrBId
+    next
+
+    ` the big words of a title, one text for each word, so that they can pop in one at a time
+    global dim TR_WORD(12)
+    global dim TR_WORD_LINE(12)
+    global dim TR_WORD_SZ(12)
+    global dim TR_WORD_WAIT(12)
+    ` 1 to bring the words of a title in with stars, the way the menu does, in place of bubbles
+    global TR_RISE_STARS = 0
+    ` for finding the swap that pops the most: which cells have been counted, and the ones still to look at
+    global dim TR_SEEN(400)
+    global dim TR_QUEUE(400)
+    global TR_BEST_CELL = 0
+    global TR_BEST_DOWN = 0
+    global TR_BEST_SCORE = 0
+    global dim TR_WORD_X(12)
+    global dim TR_WORD_Y(12)
+    global TR_WORD_COUNT = 0
+    global TR_WORD_SIZE = 56
+
+    ` a song of coral being sung by the shot, one cell at a time. see trailerSongStart.
+    global TR_SONG_X = 0
+    global TR_SONG_Y = 0
+    global TR_SONG_N = 0
+    global TR_SONG_SICK = 0
+
+    ` THE WALK OF THE CURSOR. over the whole trailer the cursor goes around the board: every shot starts
+    ` with it where the shot before left it, and it walks from there to where the shot needs it, a step
+    ` at a time, the way a player moves it. trailerWalkTo says where to; trailerWalkStep, on every frame,
+    ` takes the next step when it is time. TR_WALK_X and TR_WALK_Y are where the cursor is going to be.
+    global TR_WALK_X = 0
+    global TR_WALK_Y = 0
+    global TR_WALK_TO_X = 0
+    global TR_WALK_TO_Y = 0
+    global TR_WALK_CLOCK = 0
+    global TR_WALK_EVERY = 13
+
+    ` how black the shot is, from 0 (not at all) to 1
+    function trailerCurtain(tTrBlack#)
+        if tTrBlack# < 0 then tTrBlack# = 0
+        if tTrBlack# > 1 then tTrBlack# = 1
+        set sprite alpha TR_CURTAIN, 255 * tTrBlack#
+    endfunction
+
+    ` THE HUD COMES IN. the trailer starts with nothing around the board, and has all of it by the end:
+    `   0  nothing at all
+    `   1  the bar of the round, and the rounds that are left
+    `   2  and the count of moves and the multiplier
+    `   3  and the cards, the songs, and the quest
+    `   4  and the key hints: everything, the way that the game is played
+    ` see HUD_KEEP_BAR# and the rest of them in fish_headers.
+    function trailerHudLevel(tTrLevel)
+        HUD_KEEP# = .9999
+        if tTrLevel = 0 then HUD_KEEP# = 0
+        if tTrLevel >= 4 then HUD_KEEP# = 1
+        HUD_KEEP_BAR# = 0
+        HUD_KEEP_MULT# = 0
+        HUD_KEEP_CARDS# = 0
+        HUD_KEEP_SONGS# = 0
+        if tTrLevel >= 1 then HUD_KEEP_BAR# = 1
+        if tTrLevel >= 2 then HUD_KEEP_MULT# = 1
+        if tTrLevel >= 3 then HUD_KEEP_CARDS# = 1
+        if tTrLevel >= 3 then HUD_KEEP_SONGS# = 1
+        if tTrLevel >= 2
+            show text MOVES_LABEL_TEXT_ID
+            show text MOVE_COUNT_TEXT_ID
+            show text MULT_LABEL_TEXT_ID
+            show text MULT_TEXT_ID
+            show text MULT_NUM_TEXT_ID
+        else
+            hide text MOVES_LABEL_TEXT_ID
+            hide text MOVE_COUNT_TEXT_ID
+            hide text MULT_LABEL_TEXT_ID
+            hide text MULT_TEXT_ID
+            hide text MULT_NUM_TEXT_ID
+        endif
+        tTrHints = 0
+        if tTrLevel >= 4 then tTrHints = 1
+        hintShow(tTrHints)
+    endfunction
+
+    ` the round that the game is in, of 30, and how full its bar is, in a hundred. the round never
+    ` ends on its own: the upgrade screen waits until QUEST_LEAVE_UNTIL lets it go.
+    function trailerRound(tTrRound, tTrFull)
+        GAME_ROUND_CAP = 30
+        CURRENT_ROUND = tTrRound
+        showRoundsLeft()
+        SCORE_BAR.startVal = tTrRound * 1000
+        SCORE_BAR.endVal = SCORE_BAR.startVal + getRoundSpan(CURRENT_ROUND)
+        PROGRESS_BARS(0) = SCORE_BAR
+        CURRENT_SCORE = SCORE_BAR.startVal + getRoundSpan(CURRENT_ROUND) * tTrFull / 100
+        syncScoreShown()
+        setProgressTween(SCORE_BAR, CURRENT_SCORE)
+        QUEST_LEAVE_UNTIL = 2000000000
+    endfunction
+
+    ` nothing around the board at all
+    function trailerNoUi()
+        trailerHudLevel(0)
+    endfunction
+
+    ` A SONG OF CORAL. coral grows the way that it does in the game: along the walk of a song, one cell
+    ` after another, in a puff of bubbles, with a ripple at the end. see judgeCoralCast in fish_routines_coral.
+    ` start it on a cell, take a step with trailerSongGo for every cell after that, and end it.
+    function trailerSongStart(tTrX, tTrY, tTrSick)
+        TR_SONG_X = tTrX
+        TR_SONG_Y = tTrY
+        TR_SONG_N = 0
+        TR_SONG_SICK = tTrSick
+        trailerSongCell()
+    endfunction
+
+    function trailerSongGo(tTrDx, tTrDy)
+        TR_SONG_X = TR_SONG_X + tTrDx
+        TR_SONG_Y = TR_SONG_Y + tTrDy
+        trailerSongCell()
+    endfunction
+
+    function trailerSongCell()
+        tTrIndex = TR_SONG_X + TR_SONG_Y * CELL_COLUMN_COUNT
+        CORAL_CELLS(tTrIndex) = 1
+        CORAL_SICK(tTrIndex) = TR_SONG_SICK
+        tTrTint = rgb(255, 150, 140)
+        if TR_SONG_SICK then tTrTint = rgb(150, 190, 90)
+        spawnBubbles(getCellX(TR_SONG_X), getCellY(TR_SONG_Y), CELL_SIZE / 3, 6, TR_SONG_N * 70, tTrTint)
+        TR_SONG_N = TR_SONG_N + 1
+    endfunction
+
+    function trailerSongEnd()
+        spawnShockwave(TR_SONG_X, TR_SONG_Y, .6, 0)
+        coralRecount()
+    endfunction
+
+    ` THE HORROR CORAL of the trailer: three songs, ragged at the edges, in columns 4 to 8 and rows 2 to 7.
+    ` the same in every shot that has it, so that it is the same place.
+    function trailerHorrorCoral()
+        trailerSongStart(4, 3, 1)
+        trailerSongGo(1, 0)
+        trailerSongGo(1, 0)
+        trailerSongGo(1, 0)
+        trailerSongGo(0, 1)
+        trailerSongGo(-1, 0)
+        trailerSongGo(-1, 0)
+        trailerSongGo(-1, 0)
+        trailerSongEnd()
+        trailerSongStart(8, 5, 1)
+        trailerSongGo(-1, 0)
+        trailerSongGo(0, 1)
+        trailerSongGo(0, 1)
+        trailerSongGo(-1, 0)
+        trailerSongGo(-1, 0)
+        trailerSongGo(0, -1)
+        trailerSongEnd()
+        trailerSongStart(6, 2, 1)
+        trailerSongGo(1, 0)
+        trailerSongGo(1, 0)
+        trailerSongGo(0, 1)
+        trailerSongEnd()
+    endfunction
+
+
+    ` an empty sea: the fish are off the side of the screen, and the cursor is gone
+    function trailerFishAway()
+        tTrLast = CELL_COUNT - 1
+        for tTrIndex = 0 to tTrLast
+            position sprite CELLS(tTrIndex).spriteId, WORLD_WIDTH + 200, 0
+        next
+        FISH_AWAY = 1
+        set sprite alpha SELECTION_SPRITE, 0
+        set sprite all texcoord1 SELECTION_SPRITE, 0, 0, 0, 0
+    endfunction
+
+    ` add a word to the title. trailerTitleLayout puts them in a row once they are all there.
+    function trailerWord(tTrText$)
+        trailerWordOn(tTrText$, 0)
+    endfunction
+
+    ` add a word to a line of the title, counting the lines from 0 at the top
+    function trailerWordOn(tTrText$, tTrLine)
+        trailerWordSized(tTrText$, tTrLine, TR_WORD_SIZE)
+    endfunction
+
+    ` a word of the line under a title: smaller, and the paler blue of the smaller words of the game
+    function trailerWordSub(tTrText$, tTrLine, tTrSize)
+        trailerWordSized(tTrText$, tTrLine, tTrSize)
+        color text TR_WORD(TR_WORD_COUNT - 1), rgb(140, 175, 230)
+    endfunction
+
+    ` a word of a line of the title, at a size of its own: smaller, for a line that is under the title
+    function trailerWordSized(tTrText$, tTrLine, tTrSize)
+        TR_WORD_SZ(TR_WORD_COUNT) = tTrSize
+        TR_WORD_WAIT(TR_WORD_COUNT) = 0
+        TR_WORD_LINE(TR_WORD_COUNT) = tTrLine
+        tTrId = 0
+        reserve text id(tTrId)
+        text tTrId, 0, 0, SCORE_FONT, tTrText$
+        size text y tTrId, tTrSize
+        set text offset tTrId, .5, .5
+        color text tTrId, rgb(200, 228, 255)
+        ` the deep navy shadow of the score texts, the richest one that the game has
+        enable text drop shadow tTrId, 2, -4, rgb(0, 0, 40)
+        order text tTrId, 300
+        set text alpha tTrId, 0
+        TR_WORD(TR_WORD_COUNT) = tTrId
+        TR_WORD_COUNT = TR_WORD_COUNT + 1
+    endfunction
+
+    ` put the words of the title in their lines, each line in the middle of the screen across, and all
+    ` of the lines together in the middle of this height
+    function trailerTitleLayout(tTrY)
+        tTrLines = 0
+        for tTrN = 0 to TR_WORD_COUNT - 1
+            if TR_WORD_LINE(tTrN) + 1 > tTrLines then tTrLines = TR_WORD_LINE(tTrN) + 1
+        next
+        ` every line is as tall as its biggest word, and a little more
+        tTrTotal = 0
+        for tTrLine = 0 to tTrLines - 1
+            tTrTall = 0
+            for tTrN = 0 to TR_WORD_COUNT - 1
+                if TR_WORD_LINE(tTrN) = tTrLine
+                    if TR_WORD_SZ(tTrN) > tTrTall then tTrTall = TR_WORD_SZ(tTrN)
+                endif
+            next
+            tTrTotal = tTrTotal + tTrTall * 11 / 10
+        next
+        tTrTop = tTrY - tTrTotal / 2
+        for tTrLine = 0 to tTrLines - 1
+            tTrTall = 0
+            tTrWidth = 0
+            tTrGap = 0
+            for tTrN = 0 to TR_WORD_COUNT - 1
+                if TR_WORD_LINE(tTrN) = tTrLine
+                    if TR_WORD_SZ(tTrN) > tTrTall then tTrTall = TR_WORD_SZ(tTrN)
+                    tTrGap = TR_WORD_SZ(tTrN) / 3
+                    tTrW = get text size x(TR_WORD(tTrN))
+                    tTrWidth = tTrWidth + tTrW + tTrGap
+                endif
+            next
+            tTrWidth = tTrWidth - tTrGap
+            tTrX = (WORLD_WIDTH - tTrWidth) / 2
+            tTrLineTall = tTrTall * 11 / 10
+            tTrLineY = tTrTop + tTrLineTall / 2
+            for tTrN = 0 to TR_WORD_COUNT - 1
+                if TR_WORD_LINE(tTrN) = tTrLine
+                    tTrW = get text size x(TR_WORD(tTrN))
+                    TR_WORD_X(tTrN) = tTrX + tTrW / 2
+                    TR_WORD_Y(tTrN) = tTrLineY
+                    set text position TR_WORD(tTrN), TR_WORD_X(tTrN), tTrLineY
+                    tTrX = tTrX + tTrW + tTrGap
+                endif
+            next
+            tTrTop = tTrTop + tTrLineTall
+        next
+    endfunction
+
+    ` how a word of the title looks this many frames after it popped in. before that it is not there.
+    ` it grows past its size, and settles back.
+    function trailerPopWord(tTrSlot, tTrAge)
+        tTrId = TR_WORD(tTrSlot)
+        if tTrAge < 0
+            set text alpha tTrId, 0
+            exitfunction
+        endif
+        ` a word popping in is a moment that the music can be lined up with
+        if tTrAge = 0
+            record mark "word"
+        endif
+        tTrScale# = 1
+        if tTrAge < 8
+            tTrT# = tTrAge
+            tTrT# = tTrT# / 8.0
+            tTrScale# = 1.25 * (1 - (1 - tTrT#) * (1 - tTrT#))
+        endif
+        if tTrAge >= 8
+            if tTrAge < 16
+                tTrT# = tTrAge - 8
+                tTrT# = tTrT# / 8.0
+                tTrScale# = 1.25 - .25 * tTrT#
+            endif
+        endif
+        size text y tTrId, TR_WORD_SZ(tTrSlot) * tTrScale#
+        set text alpha tTrId, 255
+    endfunction
+
+    ` stars, the sparkles of the menu, recolored a pale blue for the night sky, in this box. they draw
+    ` over the words (which are at 300).
+    function trailerTwinkle(tTrX, tTrY, tTrW, tTrH, tTrCount)
+        spawnWakeSparkles(tTrX, tTrY, tTrW, tTrH, tTrCount, 301)
+        for tTrK = 1 to tTrCount
+            ` the ones just spawned are the ones before FLOAT_BUBBLE_NEXT, going round the end
+            tTrSlot = FLOAT_BUBBLE_NEXT - tTrK
+            if tTrSlot < 0 then tTrSlot = tTrSlot + FLOAT_BUBBLE_COUNT
+            color sprite FLOAT_BUBBLES(tTrSlot).spriteId, rgb(225, 238, 255)
+        next
+    endfunction
+
+    ` stars around a word of the title
+    function trailerTwinkleWord(tTrSlot, tTrCount)
+        tTrId = TR_WORD(tTrSlot)
+        tTrW = get text size x(tTrId)
+        tTrH = get text size y(tTrId)
+        tTrCX = text x(tTrId)
+        tTrCY = text y(tTrId)
+        tTrBoxX = tTrCX - tTrW / 2
+        tTrBoxX = tTrBoxX - 10
+        tTrBoxY = tTrCY - tTrH / 2
+        tTrBoxY = tTrBoxY - 6
+        trailerTwinkle(tTrBoxX - 30, tTrBoxY - 18, tTrW + 80, tTrH + 48, tTrCount)
+    endfunction
+
+    ` put a line of the title at a height of its own, after trailerTitleLayout
+    function trailerLineAt(tTrLine, tTrY)
+        for tTrN = 0 to TR_WORD_COUNT - 1
+            if TR_WORD_LINE(tTrN) = tTrLine
+                TR_WORD_Y(tTrN) = tTrY
+                set text position TR_WORD(tTrN), TR_WORD_X(tTrN), tTrY
+            endif
+        next
+    endfunction
+
+    ` how a word of the title looks this many frames after it started to come in: it fades in as it
+    ` rises a little, and bubbles come up around it as it starts. before that it is not there.
+    function trailerRiseWord(tTrSlot, tTrAge, tTrAlpha#)
+        tTrId = TR_WORD(tTrSlot)
+        if tTrAge < 0
+            set text alpha tTrId, 0
+            exitfunction
+        endif
+        if tTrAge = 0
+            record mark "word"
+            if TR_RISE_STARS
+                trailerTwinkleWord(tTrSlot, 12)
+            else
+                tTrW = get text size x(tTrId)
+                spawnBubblesOnLayer(TR_WORD_X(tTrSlot), TR_WORD_Y(tTrSlot) + TR_WORD_SZ(tTrSlot) / 3, tTrW / 2, 10, 0, rgb(210, 230, 255), 299, 0, 200, 1)
+            endif
+        endif
+        tTrT# = tTrAge
+        tTrT# = tTrT# / 30.0
+        if tTrT# > 1 then tTrT# = 1
+        tTrEase# = 1 - (1 - tTrT#) * (1 - tTrT#)
+        set text position tTrId, TR_WORD_X(tTrSlot), TR_WORD_Y(tTrSlot) + 12 * (1 - tTrEase#)
+        set text alpha tTrId, 255 * tTrT# * tTrAlpha#
+    endfunction
+
+    ` every word of the title rising in, this many frames apart, and all of it faded to tTrAlpha#
+    function trailerRiseTitle(tTrAge, tTrApart, tTrAlpha#)
+        for tTrN = 0 to TR_WORD_COUNT - 1
+            tTrWordAge = tTrAge - tTrN * tTrApart
+            tTrWordAge = tTrWordAge - TR_WORD_WAIT(tTrN)
+            trailerRiseWord(tTrN, tTrWordAge, tTrAlpha#)
+        next
+    endfunction
+
+    ` every word of the title, on this frame, when they pop in this many frames apart from the first
+    function trailerPopTitle(tTrAge, tTrApart)
+        for tTrN = 0 to TR_WORD_COUNT - 1
+            trailerPopWord(tTrN, tTrAge - tTrN * tTrApart)
+        next
+    endfunction
+
+    ` the wipe of bubbles, at tTrT# from 0 (not started) through 1 (the screen all covered) to 2 (gone again)
+    function trailerBubbleWipe(tTrT#)
+        tTrCover# = 0
+        if tTrT# <= 1
+            tTrK# = (tTrT# - .45) / .5
+            if tTrK# < 0 then tTrK# = 0
+            if tTrK# > 1 then tTrK# = 1
+            tTrCover# = tTrK# * tTrK# * (3 - 2 * tTrK#)
+        else
+            tTrK# = (tTrT# - 1.05) / .5
+            if tTrK# < 0 then tTrK# = 0
+            if tTrK# > 1 then tTrK# = 1
+            tTrCover# = 1 - tTrK# * tTrK# * (3 - 2 * tTrK#)
+        endif
+        set sprite alpha TR_COVER, 255 * tTrCover#
+
+        for tTrB = 0 to TR_BUB_COUNT - 1
+            tTrBId = TR_BUB(tTrB)
+            ` spread across the screen by the golden ratio, so that no two are bunched up
+            tTrFracN = (tTrB * 618) mod 1000
+            tTrFrac# = tTrFracN
+            tTrFrac# = tTrFrac# / 1000.0
+            tTrSizeN = (tTrB * 37) mod 60
+            tTrSize# = 46 + tTrSizeN
+            tTrLateN = (tTrB * 13) mod 20
+            tTrLate# = tTrLateN * .025
+            ` each one takes 1.3 of the wipe to go from under the screen to over it
+            tTrRise# = (tTrT# - tTrLate#) / 1.3
+            if tTrRise# <= 0
+                hide sprite tTrBId
+            else
+                if tTrRise# >= 1
+                    hide sprite tTrBId
+                else
+                    tTrTravel# = WORLD_HEIGHT + tTrSize# * 2
+                    tTrBY# = WORLD_HEIGHT + tTrSize# - tTrRise# * tTrTravel#
+                    tTrBX# = tTrFrac# * (WORLD_WIDTH + 40) + sin(tTrRise# * 9 + tTrB) * 10
+                    tTrBX# = tTrBX# - 20
+                    show sprite tTrBId
+                    position sprite tTrBId, tTrBX#, tTrBY#
+                    size sprite tTrBId, tTrSize#, tTrSize#
+                    set sprite all texcoord1 tTrBId, tTrSize#, 0, 0, 0
+                    set sprite alpha tTrBId, 230
+                endif
+            endif
+        next
+    endfunction
+
+
+    ` every word of a line, and every line after it, waits this many frames more before it comes in
+    function trailerLineWait(tTrLine, tTrFrames)
+        for tTrN = 0 to TR_WORD_COUNT - 1
+            if TR_WORD_LINE(tTrN) >= tTrLine
+                TR_WORD_WAIT(tTrN) = TR_WORD_WAIT(tTrN) + tTrFrames
+            endif
+        next
+    endfunction
+
+    ` how many fish are in groups of three or more on the board: what would pop, if it were looked at
+    function trailerGroupTotal()
+        tTrLast = CELL_COUNT - 1
+        for tTrI = 0 to tTrLast
+            TR_SEEN(tTrI) = 0
+        next
+        tTrTotal = 0
+        tTrW = CELL_COLUMN_COUNT
+        for tTrI = 0 to tTrLast
+            tTrK = CELLS(tTrI).value
+            tTrOk = 0
+            if TR_SEEN(tTrI) = 0
+                if tTrK > 0
+                    if tTrK < QUEST_SOLID_FROM then tTrOk = 1
+                endif
+            endif
+            if tTrOk
+                TR_SEEN(tTrI) = 1
+                TR_QUEUE(0) = tTrI
+                tTrHead = 0
+                tTrTail = 1
+                while tTrHead < tTrTail
+                    tTrAt = TR_QUEUE(tTrHead)
+                    tTrHead = tTrHead + 1
+                    tTrCol = tTrAt mod tTrW
+                    for tTrDir = 0 to 3
+                        tTrNext = -1
+                        if tTrDir = 0
+                            if tTrCol > 0 then tTrNext = tTrAt - 1
+                        endif
+                        if tTrDir = 1
+                            if tTrCol < tTrW - 1 then tTrNext = tTrAt + 1
+                        endif
+                        if tTrDir = 2
+                            if tTrAt >= tTrW then tTrNext = tTrAt - tTrW
+                        endif
+                        if tTrDir = 3
+                            if tTrAt + tTrW < tTrLast + 1 then tTrNext = tTrAt + tTrW
+                        endif
+                        if tTrNext >= 0
+                            if TR_SEEN(tTrNext) = 0
+                                if CELLS(tTrNext).value = tTrK
+                                    TR_SEEN(tTrNext) = 1
+                                    TR_QUEUE(tTrTail) = tTrNext
+                                    tTrTail = tTrTail + 1
+                                endif
+                            endif
+                        endif
+                    next
+                endwhile
+                if tTrTail >= 3 then tTrTotal = tTrTotal + tTrTail
+            endif
+        next
+    endfunction tTrTotal
+
+    ` the swap on the board that pops the most fish, away from the edges of the board. TR_BEST_CELL is
+    ` where the cursor makes it from, TR_BEST_DOWN is 1 for a swap down and 0 for one to the right, and
+    ` TR_BEST_SCORE is how many fish pop.
+    function trailerBestSwap()
+        TR_BEST_SCORE = 0
+        tTrW = CELL_COLUMN_COUNT
+        for tTrI = 0 to CELL_COUNT - 1
+            tTrCol = tTrI mod tTrW
+            tTrRow = tTrI / tTrW
+            for tTrDown = 0 to 1
+                tTrJ = -1
+                if tTrDown = 0
+                    if tTrCol < tTrW - 1 then tTrJ = tTrI + 1
+                else
+                    if tTrRow < CELL_ROW_COUNT - 1 then tTrJ = tTrI + tTrW
+                endif
+                if tTrCol < 2 then tTrJ = -1
+                if tTrCol > tTrW - 3 then tTrJ = -1
+                if tTrRow < 2 then tTrJ = -1
+                if tTrRow > CELL_ROW_COUNT - 3 then tTrJ = -1
+                if tTrJ >= 0
+                    tTrA = CELLS(tTrI).value
+                    CELLS(tTrI).value = CELLS(tTrJ).value
+                    CELLS(tTrJ).value = tTrA
+                    tTrScore = trailerGroupTotal()
+                    CELLS(tTrJ).value = CELLS(tTrI).value
+                    CELLS(tTrI).value = tTrA
+                    if tTrScore > TR_BEST_SCORE
+                        TR_BEST_SCORE = tTrScore
+                        TR_BEST_CELL = tTrI
+                        TR_BEST_DOWN = tTrDown
+                    endif
+                endif
+            next
+        next
+    endfunction
+
+    ` make the best swap pop more, a fish at a time: a fish next to what it pops is made the same kind,
+    ` as long as the board still has nothing that pops before the swap. so it grows from a board that was
+    ` dealt, and does not look built. TR_BEST_SCORE is how many it pops after.
+    function trailerGrowCombo(tTrAdds)
+        tTrW = CELL_COLUMN_COUNT
+        tTrI = TR_BEST_CELL
+        tTrJ = tTrI + 1
+        if TR_BEST_DOWN then tTrJ = tTrI + tTrW
+        for tTrAdd = 1 to tTrAdds
+            tTrBestCell = -1
+            tTrBestKind = 0
+            tTrBestTotal = TR_BEST_SCORE
+            for tTrC = 0 to CELL_COUNT - 1
+                tTrSkip = 0
+                if tTrC = tTrI then tTrSkip = 1
+                if tTrC = tTrJ then tTrSkip = 1
+                if CELLS(tTrC).value >= QUEST_SOLID_FROM then tTrSkip = 1
+                if tTrSkip = 0
+                    tTrWas = CELLS(tTrC).value
+                    for tTrSide = 0 to 1
+                        tTrK = CELLS(tTrI).value
+                        if tTrSide = 1 then tTrK = CELLS(tTrJ).value
+                        if tTrK <> tTrWas
+                            CELLS(tTrC).value = tTrK
+                            if trailerFirstMatch() = -1
+                                tTrA = CELLS(tTrI).value
+                                CELLS(tTrI).value = CELLS(tTrJ).value
+                                CELLS(tTrJ).value = tTrA
+                                tTrTotal = trailerGroupTotal()
+                                CELLS(tTrJ).value = CELLS(tTrI).value
+                                CELLS(tTrI).value = tTrA
+                                if tTrTotal > tTrBestTotal
+                                    tTrBestTotal = tTrTotal
+                                    tTrBestCell = tTrC
+                                    tTrBestKind = tTrK
+                                endif
+                            endif
+                            CELLS(tTrC).value = tTrWas
+                        endif
+                    next
+                endif
+            next
+            if tTrBestCell >= 0
+                CELLS(tTrBestCell).value = tTrBestKind
+                updateCell(CELLS(tTrBestCell))
+                TR_BEST_SCORE = tTrBestTotal
+            endif
+        next
+    endfunction
+
+    ` THE CARDS OF A SHOT. the later shots have more and more cards, and a different hand in each, to show
+    ` off the cards that there are. 1 is the fewest. the moves are only put in their slots, never used.
+    function trailerTech(tTrHand)
+        if tTrHand >= 1
+            grantPassive(ABILITY_INDEX_RAYS)
+            grantPassive(ABILITY_INDEX_RAYS)
+            grantMoveToSlot(ABILITY_INDEX_MOVE_BOMB3x3, 0)
+        endif
+        if tTrHand >= 2
+            grantPassive(ABILITY_INDEX_CONTAGIOUS_SMILE)
+            grantPassive(ABILITY_INDEX_BOTTLES)
+            grantMoveToSlot(ABILITY_INDEX_MOVE_LINE_OUT, 1)
+        endif
+        if tTrHand >= 3
+            grantPassive(ABILITY_INDEX_LISTEN)
+            grantMoveToSlot(ABILITY_INDEX_MOVE_ROBOT, 2)
+        endif
+        if tTrHand >= 4
+            grantPassive(ABILITY_INDEX_QUICK_SONG)
+            grantMoveToSlot(ABILITY_INDEX_MOVE_SONG, 0)
+            grantMoveToSlot(ABILITY_INDEX_MOVE_SHIFT, 1)
+        endif
+        if tTrHand >= 5
+            grantPassive(ABILITY_INDEX_JELLIES)
+            grantMoveToSlot(ABILITY_INDEX_MOVE_CLONER, 2)
+        endif
+        if tTrHand >= 6
+            grantMoveToSlot(ABILITY_INDEX_MOVE_WASTE_BUCKET, 0)
+            grantMoveToSlot(ABILITY_INDEX_MOVE_BUNCH_UP, 1)
+            grantMoveToSlot(ABILITY_INDEX_MOVE_KNOWN_FILL, 2)
+        endif
+    endfunction
+
+    function trailerIndex(tTrColumn, tTrRow)
+        tTrIndex = tTrColumn + tTrRow * CELL_COLUMN_COUNT
+    endfunction tTrIndex
+
+    ` hide every fish but up to four cells (-1 for none). a pop puts every fish back where it belongs, so
+    ` a shot that wants an empty sea calls this on every frame, before it runs to update_frame.
+    function trailerHideBut(tTrKeepA, tTrKeepB, tTrKeepC, tTrKeepD)
+        for tTrHideI = 0 to CELL_COUNT - 1
+            tTrHideIt = 1
+            if tTrHideI = tTrKeepA then tTrHideIt = 0
+            if tTrHideI = tTrKeepB then tTrHideIt = 0
+            if tTrHideI = tTrKeepC then tTrHideIt = 0
+            if tTrHideI = tTrKeepD then tTrHideIt = 0
+            if tTrHideIt
+                set sprite alpha CELLS(tTrHideI).spriteId, 0
+            endif
+        next
+    endfunction
+
+    ` coral grows on a cell, the way judgeCoralCast grows it. tTrSick is 1 for horror coral.
+    function trailerGrowCoral(tTrColumn, tTrRow, tTrSick)
+        tTrIndex = tTrColumn + tTrRow * CELL_COLUMN_COUNT
+        CORAL_CELLS(tTrIndex) = 1
+        CORAL_SICK(tTrIndex) = tTrSick
+        tTrTint = rgb(255, 150, 140)
+        if tTrSick then tTrTint = rgb(150, 190, 90)
+        spawnBubbles(getCellX(tTrColumn), getCellY(tTrRow), CELL_SIZE / 3, 6, 0, tTrTint)
+        coralRecount()
+    endfunction
+
+    ` the first cell of a group of three on the board, or -1. a board that a shot planted fish on must have none.
+    function trailerFirstMatch()
+        ` the board pops any group of three or more that touch, in any shape, not only a line. a group
+        ` of three or more always has a fish in it with two of its kind beside it, so that is what this
+        ` looks for. the kinds from QUEST_SOLID_FROM up, such as the diver, never match.
+        tTrFound = -1
+        tTrW = CELL_COLUMN_COUNT
+        for tTrRow = 0 to CELL_ROW_COUNT - 1
+            for tTrCol = 0 to CELL_COLUMN_COUNT - 1
+                tTrI = tTrCol + tTrRow * tTrW
+                tTrK = CELLS(tTrI).value
+                tTrSame = 0
+                if tTrK > 0
+                    if tTrK < QUEST_SOLID_FROM
+                        if tTrCol > 0
+                            if CELLS(tTrI - 1).value = tTrK then tTrSame = tTrSame + 1
+                        endif
+                        if tTrCol < CELL_COLUMN_COUNT - 1
+                            if CELLS(tTrI + 1).value = tTrK then tTrSame = tTrSame + 1
+                        endif
+                        if tTrRow > 0
+                            if CELLS(tTrI - tTrW).value = tTrK then tTrSame = tTrSame + 1
+                        endif
+                        if tTrRow < CELL_ROW_COUNT - 1
+                            if CELLS(tTrI + tTrW).value = tTrK then tTrSame = tTrSame + 1
+                        endif
+                    endif
+                endif
+                if tTrSame >= 2 then tTrFound = tTrI
+            next
+        next
+    endfunction tTrFound
+
+    ` turn a fish belly up
+    function trailerBelly(tTrColumn, tTrRow)
+        tTrIndex = tTrColumn + tTrRow * CELL_COLUMN_COUNT
+        CELLS(tTrIndex).bellyUp = 1
+        CELLS(tTrIndex).bellyShown# = 3.14159
+        updateCell(CELLS(tTrIndex))
+    endfunction
+
+    ` a dance to the first tune that can be danced to, with its ding right now. startBeatDance picks
+    ` the tune with rnd, and this is the same every time. see THE DANCE in fish_headers.
+    function trailerDance()
+        tTrTune = -1
+        for tTrTry = 0 to MELODY_AUTO_COUNT - 1
+            if tTrTune < 0
+                if beatPulseSteps(tTrTry) > 0 then tTrTune = tTrTry
+            endif
+        next
+        playMelody(tTrTune)
+        tTrSteps = beatPulseSteps(tTrTune)
+        BEAT_PULSE_STEPS = tTrSteps
+        BEAT_PULSE = MELODY_BEAT(tTrTune) * tTrSteps
+        tTrLead = BEAT_PULSE * BEAT_LEAD_PULSES
+        tTrNow = game ms()
+        MELODY_NEXT_MS = tTrNow + tTrLead
+        BEAT_DING_MS = tTrNow
+        BEAT_LAST_MS = tTrNow
+        BEAT_HIT_MS = -1
+        BEAT_STREAK = 0
+        BEAT_ON = 1
+        tTrBeats = (MELODY_LENGTH(tTrTune) + tTrSteps - 1) / tTrSteps
+        BEAT_BUBBLE_SLOTS = (BEAT_LEAD_PULSES + tTrBeats) - 1
+        BEAT_BUBBLE_SLOT = 0
+        BEAT_BUBBLE_BEAT_MS = tTrNow - BEAT_PULSE
+    endfunction
+
+    ` the part of the screen that the video shows, from all of it (0) to a close up of this box (1),
+    ` eased in and out
+    function trailerZoom(tTrAmount#, tTrX#, tTrY#, tTrW#, tTrH#)
+        if tTrAmount# < 0 then tTrAmount# = 0
+        if tTrAmount# > 1 then tTrAmount# = 1
+        tTrE# = tTrAmount# * tTrAmount# * (3 - 2 * tTrAmount#)
+        tTrLeft# = tTrX# * tTrE#
+        tTrTop# = tTrY# * tTrE#
+        tTrWide# = WORLD_WIDTH + (tTrW# - WORLD_WIDTH) * tTrE#
+        tTrTall# = WORLD_HEIGHT + (tTrH# - WORLD_HEIGHT) * tTrE#
+        set record view tTrLeft#, tTrTop#, tTrWide#, tTrTall#
+    endfunction
+
+    ` deal a board from a seed. a shot that wants another board deals again with another seed.
+    function trailerDeal(tTrSeed)
+        seedStreams(tTrSeed)
+        seedDealBoard()
+        tTrLast = CELL_COUNT - 1
+        for tTrIndex = 0 to tTrLast
+            CELLS(tTrIndex).comboForce = 0
+            clearCellStack(tTrIndex)
+            updateCell(CELLS(tTrIndex))
+        next
+    endfunction
+
+    ` start recording the shot, into the trailer's folder
+    function trailerRecord(tTrName$)
+        tTrFolder$ = env$("FISH_TRAILER_OUT")
+        if tTrFolder$ = "" then tTrFolder$ = "trailer"
+        record start tTrFolder$ + "/" + tTrName$ + ".mp4"
+    endfunction
+
+    ` the things around the board: 1 is all of them, 0 is none. see HUD_KEEP# in fish_headers.
+    function trailerHud(tTrKeep#)
+        HUD_KEEP# = tTrKeep#
+    endfunction
+
+    function trailerPut(tTrColumn, tTrRow, tTrKind)
+        tTrIndex = tTrColumn + tTrRow * CELL_COLUMN_COUNT
+        CELLS(tTrIndex).value = tTrKind
+        updateCell(CELLS(tTrIndex))
+    endfunction
+
+    function trailerKind(tTrColumn, tTrRow)
+        tTrIndex = tTrColumn + tTrRow * CELL_COLUMN_COUNT
+    endfunction CELLS(tTrIndex).value
+
+    function trailerCursor(tTrColumn, tTrRow)
+        SELECTION_POS.x = tTrColumn
+        SELECTION_POS.y = tTrRow
+        ` the sprite of the cursor is only moved by a move, so it is put there too. without this, a shot
+        ` starts with the cursor wherever it was, and it jumps on the first step.
+        position sprite SELECTION_SPRITE, getCellX(tTrColumn), getCellY(tTrRow)
+        TR_WALK_X = tTrColumn
+        TR_WALK_Y = tTrRow
+        TR_WALK_TO_X = tTrColumn
+        TR_WALK_TO_Y = tTrRow
+        TR_WALK_CLOCK = TR_WALK_EVERY
+    endfunction
+
+    ` where the cursor walks to, across first and then up or down
+    function trailerWalkTo(tTrColumn, tTrRow)
+        TR_WALK_TO_X = tTrColumn
+        TR_WALK_TO_Y = tTrRow
+    endfunction
+
+    ` call on every frame of a walk: a step toward where it is going, every TR_WALK_EVERY frames
+    function trailerWalkStep()
+        TR_WALK_CLOCK = TR_WALK_CLOCK + 1
+        if TR_WALK_CLOCK < TR_WALK_EVERY then exitfunction
+        tTrDx = 0
+        tTrDy = 0
+        if TR_WALK_TO_X > TR_WALK_X then tTrDx = 1
+        if TR_WALK_TO_X < TR_WALK_X then tTrDx = -1
+        if tTrDx = 0
+            if TR_WALK_TO_Y > TR_WALK_Y then tTrDy = 1
+            if TR_WALK_TO_Y < TR_WALK_Y then tTrDy = -1
+        endif
+        if tTrDx = 0
+            if tTrDy = 0 then exitfunction
+        endif
+        TR_WALK_X = TR_WALK_X + tTrDx
+        TR_WALK_Y = TR_WALK_Y + tTrDy
+        TR_WALK_CLOCK = 0
+        trailerMove(tTrDx, tTrDy, 0)
+    endfunction
+
+    ` 1 once the cursor has got to where it is walking
+    function trailerWalked()
+        tTrThere = 0
+        if TR_WALK_X = TR_WALK_TO_X
+            if TR_WALK_Y = TR_WALK_TO_Y then tTrThere = 1
+        endif
+    endfunction tTrThere
+
+    ` a move, the way that the keys ask for one. tTrSwap is 1 for a swap, 0 to only move the cursor.
+    function trailerMove(tTrDirX, tTrDirY, tTrSwap)
+        tTrDir as vec = {
+            x = tTrDirX,
+            y = tTrDirY
+        }
+        QUEUED_MOVES(QUEUED_MOVE_NUM) = {
+            dir = tTrDir
+            swap = tTrSwap,
+            moveBindingIndex = -1
+        }
+        QUEUED_MOVE_NUM = QUEUED_MOVE_NUM + 1
+        ` a swap is a moment that the music can be lined up with. see build/trailer_cut.py.
+        if tTrSwap
+            record mark "swap"
+            TR_WALK_X = TR_WALK_X + tTrDirX
+            TR_WALK_Y = TR_WALK_Y + tTrDirY
+            TR_WALK_TO_X = TR_WALK_X
+            TR_WALK_TO_Y = TR_WALK_Y
+        else
+            record mark "step"
+        endif
+    endfunction
+endtest
+
+
+` SHOT 3. the board, with nothing around it, and a swap that pops.
+test trailer_swap_pop from trailerShot
+    trailerNoUi()
+
+    ` the walk of the cursor starts here, at the top left: two of a kind in a row, and a third under the
+    ` end of them. swapping it up makes three. the cursor ends at (2, 1).
+    tTrSeed = 7
+    tTrOk = 0
+    while tTrOk = 0
+        trailerDeal(tTrSeed)
+        tTrKind = TEX_GOLDFISH
+        trailerPut(0, 1, tTrKind)
+        trailerPut(1, 1, tTrKind)
+        trailerPut(2, 2, tTrKind)
+        if trailerFirstMatch() = -1 then tTrOk = 1
+        tTrSeed = tTrSeed + 1
+        if tTrSeed > 80 then tTrOk = 1
+    endwhile
+    trailerCursor(2, 2)
+
+    trailerRecord("trailer_swap_pop")
+    for tTrFrame = 1 to 100
+        runto update_frame
+    next
+
+    trailerMove(0, -1, 1)
+
+    for tTrFrame = 1 to 190
+        runto update_frame
+    next
+
+    record stop
+    end
+endtest
+
+
+` SHOT 10. the shark quest: the cursor runs off to the right, swap after swap, and the shark gives chase,
+` its red zone with it. it swims a cell toward the cursor for every swap. none of the swaps pops anything,
+` because a pop within its reach is "chomp!", and the quest would start over. so the rows around the
+` path are laid out so that no swap can make a group: the fish that the cursor carries along row 1 is a
+` crab, the rest of row 1 goes puffer, catfish, puffer, catfish, and rows 0 and 2 are goldfish and
+` angelfish, so that no three in a row or a column are ever the same. see questShark in fish_quests.
+test trailer_shark from trailerShot
+    trailerHudLevel(3)
+    trailerTech(5)
+    ` and the rows above and below must not make a group with them, so try boards until one works
+    tTrSeed = 7
+    tTrOk = 0
+    while tTrOk = 0
+        trailerDeal(tTrSeed)
+        for tTrCol = 0 to CELL_COLUMN_COUNT - 1
+            tTrOdd = tTrCol mod 2
+            trailerPut(tTrCol, 0, TEX_GOLDFISH + tTrOdd)
+            trailerPut(tTrCol, 1, TEX_PUFFER + tTrOdd)
+            trailerPut(tTrCol, 2, TEX_ANGELFISH - tTrOdd)
+        next
+        trailerPut(3, 1, TEX_CRAB)
+        if trailerFirstMatch() = -1 then tTrOk = 1
+        tTrSeed = tTrSeed + 1
+        if tTrSeed > 80 then tTrOk = 1
+    endwhile
+    assert trailerFirstMatch() = -1, "nothing matches before the swaps"
+
+    questForce(QUEST_SHARK)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    QUEST_V(0) = 0 + 1 * CELL_COLUMN_COUNT
+    QUEST_GLIDE_X# = getCellX(0)
+    QUEST_GLIDE_Y# = getCellY(1)
+    ` the outline as bold as it is when the cursor is inside it
+    QUEST_ZONE_EDGE# = 4.0
+    ` the cursor comes up from where the coral left it, to the top row, and runs right along it
+    trailerCursor(4, 6)
+    trailerWalkTo(3, 1)
+
+    for tTrFrame = 1 to 60
+        runto update_frame
+    next
+    trailerRecord("trailer_shark")
+    for tTrFrame = 1 to 100
+        trailerWalkStep()
+        runto update_frame
+    next
+
+    for tTrSwapN = 1 to 4
+        tTrWas = QUEST_V(0)
+        trailerMove(1, 0, 1)
+        tTrWait = 0
+        while tTrWait < 400
+            runto update_frame
+            tTrWait = tTrWait + 1
+            if QUEST_V(0) <> tTrWas
+                tTrWait = 400
+            endif
+            if QUEST_STATE <> QSTATE_ACTIVE
+                tTrWait = 400
+            endif
+        endwhile
+        for tTrFrame = 1 to 8
+            runto update_frame
+        next
+    next
+
+    for tTrFrame = 1 to 30
+        runto update_frame
+    next
+    record stop
+    end
+endtest
+
+
+` SHOT 11. the tail quest. the cursor drags its tail along: right, down, left and up, and then it turns
+` back across its own tail, and is tangled. the tail is gone, the quest starts over, and the cursor goes
+` on with a new tail. the board has jellyfish, stingrays and bottles in it, as it would late in a game.
+` see questRemora in fish_quests.
+test trailer_tail from trailerShot
+    trailerHudLevel(3)
+    trailerTech(5)
+    ` the hand has the cards that bring jellyfish, stingrays and bottles, so the deal has them in it
+    trailerDeal(13)
+    questForce(QUEST_REMORA)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    ` it starts at the top right, where the shark left the cursor
+    trailerCursor(7, 1)
+
+    for tTrFrame = 1 to 30
+        runto update_frame
+    next
+    trailerRecord("trailer_tail")
+    for tTrFrame = 1 to 20
+        runto update_frame
+    next
+
+    ` the walk, as a list of steps: 1 right, 2 down, 3 left, 4 up. the thirteenth step goes up onto the
+    ` tail, nine cells back, and tangles it. the three after that start a new tail, back to where it began.
+    global dim TR_TAIL_WALK(16)
+    TR_TAIL_WALK(0) = 3
+    TR_TAIL_WALK(1) = 3
+    TR_TAIL_WALK(2) = 3
+    TR_TAIL_WALK(3) = 3
+    TR_TAIL_WALK(4) = 2
+    TR_TAIL_WALK(5) = 2
+    TR_TAIL_WALK(6) = 2
+    TR_TAIL_WALK(7) = 1
+    TR_TAIL_WALK(8) = 1
+    TR_TAIL_WALK(9) = 4
+    TR_TAIL_WALK(10) = 4
+    TR_TAIL_WALK(11) = 3
+    TR_TAIL_WALK(12) = 4
+    TR_TAIL_WALK(13) = 1
+    TR_TAIL_WALK(14) = 1
+    TR_TAIL_WALK(15) = 1
+    for tTrStep = 0 to 15
+        tTrDx = 0
+        tTrDy = 0
+        tTrWay = TR_TAIL_WALK(tTrStep)
+        if tTrWay = 1 then tTrDx = 1
+        if tTrWay = 2 then tTrDy = 1
+        if tTrWay = 3 then tTrDx = -1
+        if tTrWay = 4 then tTrDy = -1
+        trailerMove(tTrDx, tTrDy, 0)
+        tTrHold = 14
+        ` the tangle gets a moment of its own
+        if tTrStep = 12 then tTrHold = 75
+        for tTrFrame = 1 to tTrHold
+            runto update_frame
+        next
+    next
+
+    for tTrFrame = 1 to 110
+        runto update_frame
+    next
+    record stop
+    end
+endtest
+
+
+` SHOT 1. the empty sea. a puffer, a crab and a puffer rise into a row. the crab sinks away, a puffer
+` comes down into its place, and the three pop. every other fish is there, but hidden: the board is
+` stripes of kinds that never match, and none of them is a puffer or a crab. the slides are done by hand,
+` and the pop is the game's own.
+test trailer_first_pop from trailerShot
+    ` SHOTS 1, 2 AND 3 are one run of the game, so that the sea and the light in it carry on, and nothing
+    ` jumps at a cut: the three fish and their pop, then the title, then the board of a game that is well
+    ` along comes in, and a swap sets off a big combo.
+    trailerNoUi()
+    trailerFishAway()
+    ` the board grows to the board of a game that is well along first, while it is all hidden and before
+    ` anything is recorded, and everything is left to settle, so that nothing of it is seen
+    PENDING_BOARD_EXPANSIONS = 4
+    tS1Guard = 0
+    while PENDING_BOARD_EXPANSIONS > 0
+        trailerHideBut(-1, -1, -1, -1)
+        runto _loop
+        tS1Guard = tS1Guard + 1
+        if tS1Guard > 60 then PENDING_BOARD_EXPANSIONS = 0
+    endwhile
+    for tS1F = 1 to 120
+        trailerHideBut(-1, -1, -1, -1)
+        runto update_frame
+    next
+    ` the round and the cards of a game that is well along. they are hidden until the board comes in.
+    trailerLateHud()
+    trailerHudLevel(0)
+    JELLY_STING_CHANCE = 100
+    trailerBarShort(700)
+
+    ` stripes of kinds that never match, and none of them is a puffer or a crab, all hidden
+    for tS1Y = 0 to CELL_ROW_COUNT - 1
+        for tS1X = 0 to CELL_COLUMN_COUNT - 1
+            tS1K = tS1X + 2 * tS1Y
+            tS1K = tS1K mod 5
+            tS1K = tS1K + 2
+            if tS1K >= TEX_CRAB then tS1K = tS1K + 1
+            trailerPut(tS1X, tS1Y, tS1K)
+        next
+    next
+    ` a puffer, a crab and a puffer in a row, and a fourth puffer over the crab, that comes in after them.
+    ` the cursor swaps the crab up, the puffer comes down into the row, and the three puffers pop.
+    tS1Mid = CELL_COLUMN_COUNT / 2
+    tS1Row = CELL_ROW_COUNT / 2
+    tS1L = trailerIndex(tS1Mid - 1, tS1Row)
+    tS1M = trailerIndex(tS1Mid, tS1Row)
+    tS1R = trailerIndex(tS1Mid + 1, tS1Row)
+    tS1A = trailerIndex(tS1Mid, tS1Row - 1)
+    trailerPut(tS1Mid - 1, tS1Row, TEX_PUFFER)
+    trailerPut(tS1Mid, tS1Row, TEX_CRAB)
+    trailerPut(tS1Mid + 1, tS1Row, TEX_PUFFER)
+    trailerPut(tS1Mid, tS1Row - 1, TEX_PUFFER)
+    tS1Y0 = getCellY(tS1Row)
+    tS1Ya = getCellY(tS1Row - 1)
+    trailerCursor(tS1Mid, tS1Row)
+    ` no numbers come off of these fish when they pop
+    hide sprite SCORE_TEXT_VIEW_SPRITE
+    trailerHideBut(-1, -1, -1, -1)
+    runto update_frame
+
+    ` a close up on the four, held still
+    tS1W# = 200
+    tS1H# = 112.5
+    tS1BoxX# = getCellX(tS1Mid) - tS1W# / 2
+    tS1BoxY# = getCellY(tS1Row) - CELL_SIZE / 2
+    tS1BoxY# = tS1BoxY# - tS1H# / 2
+    set record view tS1BoxX#, tS1BoxY#, tS1W#, tS1H#
+
+    trailerRecord("trailer_first_pop")
+    ` the three rise and fade in, one after another
+    for tS1F = 0 to 80
+        hintShow(0)
+        trailerHideBut(tS1L, tS1M, tS1R, -1)
+        for tS1C = 0 to 2
+            tS1Cell = tS1L + tS1C
+            tS1T# = tS1F - 10 - tS1C * 8
+            tS1T# = tS1T# / 20.0
+            if tS1T# < 0 then tS1T# = 0
+            if tS1T# > 1 then tS1T# = 1
+            tS1Ease# = 1 - (1 - tS1T#) * (1 - tS1T#)
+            position sprite CELLS(tS1Cell).spriteId, getCellX((tS1Mid - 1) + tS1C), tS1Y0 + 24 * (1 - tS1Ease#)
+            set sprite alpha CELLS(tS1Cell).spriteId, 255 * tS1T#
+        next
+        runto update_frame
+    next
+    ` the fourth comes down into its place over the crab, and the cursor comes up on the crab
+    for tS1F = 0 to 40
+        tS1T# = tS1F
+        tS1T# = tS1T# / 30.0
+        if tS1T# > 1 then tS1T# = 1
+        tS1Ease# = 1 - (1 - tS1T#) * (1 - tS1T#)
+        hintShow(0)
+        trailerHideBut(tS1L, tS1M, tS1R, tS1A)
+        position sprite CELLS(tS1A).spriteId, getCellX(tS1Mid), tS1Ya - 20 * (1 - tS1Ease#)
+        set sprite alpha CELLS(tS1A).spriteId, 255 * tS1T#
+        set sprite alpha SELECTION_SPRITE, 90 * tS1T#
+        set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, tS1T#
+        runto update_frame
+    next
+
+    ` the swap, from the middle. the crab goes up, and the row of three puffers pops. once the fish start
+    ` to fall, every fish is hidden, so the sea stays empty.
+    trailerMove(0, -1, 1)
+    tS1Gone = 0
+    for tS1F = 0 to 100
+        hintShow(0)
+        if COMBO_PHASE >= 2 then tS1Gone = 1
+        if tS1Gone
+            trailerHideBut(-1, -1, -1, -1)
+            set sprite alpha SELECTION_SPRITE, 0
+            set sprite all texcoord1 SELECTION_SPRITE, 0, 0, 0, 0
+        else
+            trailerHideBut(tS1L, tS1M, tS1R, tS1A)
+        endif
+        runto update_frame
+    next
+    set sprite all texcoord1 SELECTION_SPRITE, 0, 0, 0, 0
+    record stop
+
+    ` SHOT 2 goes straight on from the frame that shot 1 stopped on. the close up eases back out to the
+    ` whole sea, and the words rise in: the title, and then, a moment later, the smaller line under it.
+    trailerWordOn("Come,", 0)
+    trailerWordOn("friend.", 0)
+    trailerWordSub("The", 1, 28)
+    trailerWordSub("water", 1, 28)
+    trailerWordSub("is", 1, 28)
+    trailerWordSub("great.", 1, 28)
+    trailerTitleLayout(WORLD_HEIGHT / 2)
+    trailerLineWait(1, 40)
+    trailerRecord("trailer_where_do_fish_live")
+    for tS1F = 0 to 320
+        hintShow(0)
+        trailerHideBut(-1, -1, -1, -1)
+        set sprite alpha SELECTION_SPRITE, 0
+        tS1Out# = tS1F
+        tS1Out# = 1 - tS1Out# / 70.0
+        trailerZoom(tS1Out#, tS1BoxX#, tS1BoxY#, tS1W#, tS1H#)
+        trailerRiseTitle(tS1F - 65, 14, 1)
+        runto update_frame
+    next
+    clear record view
+    ` the words fade away
+    for tS1F = 0 to 24
+        tS1A# = tS1F
+        tS1A# = 1 - tS1A# / 24.0
+        hintShow(0)
+        trailerHideBut(-1, -1, -1, -1)
+        trailerRiseTitle(400, 14, tS1A#)
+        runto update_frame
+    next
+    for tS1N = 0 to TR_WORD_COUNT - 1
+        hide text TR_WORD(tS1N)
+    next
+    ` SHOT 3, in the same video. the board of a game that is well along, on the same sea: of the boards
+    ` that a few seeds deal, the one with the swap that pops the most, and that swap.
+    tS1BestSeed = 11
+    tS1BestScore = 0
+    for tS1Seed = 11 to 70
+        trailerDeal(tS1Seed)
+        if trailerFirstMatch() = -1
+            trailerBestSwap()
+            if TR_BEST_SCORE > tS1BestScore
+                tS1BestScore = TR_BEST_SCORE
+                tS1BestSeed = tS1Seed
+            endif
+        endif
+    next
+    trailerDeal(tS1BestSeed)
+    trailerBestSwap()
+    trailerGrowCombo(6)
+    assert trailerFirstMatch() = -1, "nothing pops before the swap"
+    print "trailer: the combo board is seed " + str$(tS1BestSeed) + ", and its swap pops " + str$(TR_BEST_SCORE)
+    tS1SwapCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+    tS1SwapRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+    tS1SwapDown = TR_BEST_DOWN
+
+    ` the fish come in as a wave from the top left corner, the way they do at the start of a game, and
+    ` what is around the board comes in with them
+    for tS1I = 0 to CELL_COUNT - 1
+        tS1Delay = (CELLS(tS1I).coord.x + CELLS(tS1I).coord.y) * TUTORIAL_FISH_STAGGER
+        create basic tween CELLS(tS1I).scaleWaveTweenId, 0, 1, TUTORIAL_FISH_GROW, tS1Delay
+        size sprite CELLS(tS1I).spriteId, 0, 0
+        set sprite alpha CELLS(tS1I).spriteId, 255
+        show sprite CELLS(tS1I).spriteId
+    next
+    FISH_AWAY = 0
+    show sprite SCORE_TEXT_VIEW_SPRITE
+    trailerCursor(1, 1)
+    set sprite alpha SELECTION_SPRITE, 90
+    set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, 1
+    trailerWalkTo(tS1SwapCol, tS1SwapRow)
+    for tS1F = 0 to 50
+        tS1A# = tS1F
+        tS1A# = tS1A# / 50.0
+        HUD_KEEP# = .9999 * tS1A#
+        HUD_KEEP_BAR# = 1
+        hintShow(0)
+        runto update_frame
+    next
+    trailerHudLevel(1)
+    tS1Guard = 0
+    while trailerWalked() = 0
+        trailerWalkStep()
+        runto update_frame
+        tS1Guard = tS1Guard + 1
+        if tS1Guard > 400
+            trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+        endif
+    endwhile
+    for tS1F = 1 to 20
+        runto update_frame
+    next
+    if tS1SwapDown
+        trailerMove(0, 1, 1)
+    else
+        trailerMove(1, 0, 1)
+    endif
+    for tS1F = 1 to 200
+        runto update_frame
+    next
+    record stop
+    end
+endtest
+
+
+` SHOT 6. a stingray chain. a swap finishes a T of stingrays, every one of them shoots up its column,
+` and the belly up stingrays up in those columns shoot back down to the bottom. see shootRay in fish_funcs.
+test trailer_stingray_chain from trailerShot
+    trailerHudLevel(3)
+    trailerTech(1)
+    ` a T of stingrays on the right of the board, that one swap finishes, and belly up stingrays up in
+    ` its columns. the cursor walks down the right side to the swap. none of the belly up ones is on its
+    ` way, because a belly up fish pops when the cursor comes to it.
+    tTrSeed = 7
+    tTrOk = 0
+    while tTrOk = 0
+        trailerDeal(tTrSeed)
+        trailerPut(4, 5, TEX_RAY)
+        trailerPut(5, 5, TEX_RAY)
+        trailerPut(7, 5, TEX_RAY)
+        trailerPut(8, 5, TEX_RAY)
+        trailerPut(6, 3, TEX_RAY)
+        trailerPut(6, 4, TEX_RAY)
+        trailerPut(6, 6, TEX_RAY)
+        trailerPut(4, 1, TEX_RAY)
+        trailerBelly(4, 1)
+        trailerPut(5, 1, TEX_RAY)
+        trailerBelly(5, 1)
+        trailerPut(7, 2, TEX_RAY)
+        trailerBelly(7, 2)
+        trailerPut(8, 1, TEX_RAY)
+        trailerBelly(8, 1)
+        if trailerFirstMatch() = -1 then tTrOk = 1
+        tTrSeed = tTrSeed + 1
+        if tTrSeed > 80 then tTrOk = 1
+    endwhile
+    assert trailerFirstMatch() = -1, "nothing pops before the swap"
+    ` the cursor comes from the top, where the shot before left it
+    trailerCursor(5, 2)
+    trailerWalkTo(6, 6)
+
+    for tTrFrame = 1 to 30
+        runto update_frame
+    next
+    trailerRecord("trailer_stingray_chain")
+    for tTrFrame = 1 to 100
+        trailerWalkStep()
+        runto update_frame
+    next
+    trailerMove(0, -1, 1)
+    for tTrFrame = 1 to 165
+        runto update_frame
+    next
+    record stop
+    end
+endtest
+
+
+` SHOT 7. a close up of the diver, taking a picture of a crab. two crabs are next to the diver, and a
+` swap brings up a third. the video pushes in on them first. see THE DIVER in fish_headers_diver.
+test trailer_diver_photo from trailerShot
+    trailerHudLevel(3)
+    trailerTech(2)
+    ` two crabs next to the diver, along the bottom of the board, and a third under the end of them.
+    ` swapping it up makes three, and the crab next to the diver has its picture taken.
+    tS7Seed = 7
+    tS7Ok = 0
+    while tS7Ok = 0
+        trailerDeal(tS7Seed)
+        trailerPut(2, 7, TEX_CRAB)
+        trailerPut(3, 7, TEX_CRAB)
+        trailerPut(4, 8, TEX_CRAB)
+        if trailerFirstMatch() = -1 then tS7Ok = 1
+        tS7Seed = tS7Seed + 1
+        if tS7Seed > 80 then tS7Ok = 1
+    endwhile
+    assert trailerFirstMatch() = -1, "nothing pops before the swap"
+    tS7Cell = trailerIndex(1, 7)
+    diverArrive(tS7Cell)
+    tS7Slot = diverAlbumSlot(TEX_CRAB)
+    DIVER_PHOTOS(tS7Slot) = 0
+    ` the cursor comes down from the right, where the stingrays left it
+    trailerCursor(6, 5)
+    trailerWalkTo(4, 8)
+
+    for tTrFrame = 1 to 40
+        runto update_frame
+    next
+
+    trailerRecord("trailer_diver_photo")
+    ` it walks all the way to the third crab, and then it is the cursor that makes the swap
+    tS7Guard = 0
+    while trailerWalked() = 0
+        trailerWalkStep()
+        runto update_frame
+        tS7Guard = tS7Guard + 1
+        if tS7Guard > 300
+            trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+        endif
+    endwhile
+    for tS7F = 1 to 22
+        runto update_frame
+    next
+    trailerMove(0, -1, 1)
+    for tS7F = 1 to 190
+        runto update_frame
+    next
+    record stop
+    end
+endtest
+
+
+` SHOT 8. night, with the moon up and the diver's light on. three swaps make three groups, and none of
+` them pops: at night every group that matches is held until day, and its fish flash, and send up bubbles
+` and a ring. see NOTHING POPS AT NIGHT in fish_headers_tide.
+test trailer_night_held from trailerShot
+    trailerHudLevel(3)
+    trailerTech(3)
+
+    ` three groups up the left side of the board, that one swap each will finish: the cursor walks in
+    ` from the bottom, where the diver's shot left it, and goes up the side, a swap at each.
+    tS8A = TEX_GOLDFISH
+    tS8B = TEX_ANGELFISH
+    tS8C = TEX_PUFFER
+    tS8Seed = 7
+    tS8Ok = 0
+    while tS8Ok = 0
+        trailerDeal(tS8Seed)
+        trailerPut(0, 6, tS8A)
+        trailerPut(1, 6, tS8A)
+        trailerPut(2, 7, tS8A)
+        trailerPut(0, 4, tS8B)
+        trailerPut(1, 4, tS8B)
+        trailerPut(2, 5, tS8B)
+        trailerPut(0, 2, tS8C)
+        trailerPut(1, 2, tS8C)
+        trailerPut(2, 3, tS8C)
+        if trailerFirstMatch() = -1 then tS8Ok = 1
+        tS8Seed = tS8Seed + 1
+        if tS8Seed > 80 then tS8Ok = 1
+    endwhile
+    assert trailerFirstMatch() = -1, "nothing matches before the swaps"
+
+    TIDE_NIGHT = 1
+    TIDE_CYCLES = TIDE_CYCLES_TO_TURN
+    TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
+    TIDE_SEEN = 1
+    tideSnap()
+    ` the diver is far off in the top right, away from where the cursor goes: the fish in its light are
+    ` awake, and could pop. it faces left, the other way from how it comes in.
+    tS8Cell = trailerIndex(7, 1)
+    diverArrive(tS8Cell)
+    DIVER_FACE_LEFT = 1
+    trailerCursor(6, 5)
+    trailerWalkTo(2, 7)
+
+    for tTrFrame = 1 to 40
+        TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
+        DIVER_FACE_LEFT = 1
+        runto update_frame
+    next
+    trailerRecord("trailer_night_held")
+    for tTrFrame = 1 to 130
+        TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
+        DIVER_FACE_LEFT = 1
+        trailerWalkStep()
+        runto update_frame
+    next
+
+    ` up, to finish the goldfish. then up a cell, and up to finish the angelfish. then the puffers.
+    for tS8Group = 1 to 3
+        trailerMove(0, -1, 1)
+        for tTrFrame = 1 to 50
+            TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
+            DIVER_FACE_LEFT = 1
+            runto update_frame
+        next
+        if tS8Group < 3
+            trailerWalkTo(TR_WALK_X, TR_WALK_Y - 1)
+            for tTrFrame = 1 to 18
+                TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
+                DIVER_FACE_LEFT = 1
+                trailerWalkStep()
+                runto update_frame
+            next
+        endif
+    next
+
+    for tTrFrame = 1 to 60
+        TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
+        DIVER_FACE_LEFT = 1
+        runto update_frame
+    next
+    record stop
+    end
+endtest
+
+
+` SHOT 9. coral grows over the left of the board. a swap makes a group that is all on coral, and it
+` does not pop: the fish sing, and hearts come up. then a group that is half on coral: the fish on
+` the coral sing, and the rest pop. see THE CORAL in fish_headers.
+test trailer_coral_sings from trailerShot
+    trailerHudLevel(3)
+    trailerTech(4)
+    tS9A = TEX_GOLDFISH
+    tS9B = TEX_ANGELFISH
+    ` the planted fish must not make a group with the fish around them, so try boards until one works
+    tS9Seed = 7
+    tS9Ok = 0
+    while tS9Ok = 0
+        trailerDeal(tS9Seed)
+        trailerPut(0, 3, tS9A)
+        trailerPut(1, 3, tS9A)
+        trailerPut(2, 4, tS9A)
+        trailerPut(2, 6, tS9B)
+        trailerPut(3, 6, tS9B)
+        trailerPut(5, 6, tS9B)
+        trailerPut(4, 7, tS9B)
+        if trailerFirstMatch() = -1 then tS9Ok = 1
+        tS9Seed = tS9Seed + 1
+        if tS9Seed > 60 then tS9Ok = 1
+    endwhile
+    assert trailerFirstMatch() = -1, "nothing pops before the swaps"
+
+    ` most of the coral is already there: four songs, sung before the shot, with gaps between them.
+    ` the goldfish are on the first, two of the angelfish on the second, and two out in the open water.
+    trailerSongStart(0, 3, 0)
+    trailerSongGo(1, 0)
+    trailerSongGo(1, 0)
+    trailerSongGo(0, -1)
+    trailerSongGo(0, -1)
+    trailerSongGo(-1, 0)
+    trailerSongGo(-1, 0)
+    trailerSongEnd()
+    trailerSongStart(0, 5, 0)
+    trailerSongGo(0, 1)
+    trailerSongGo(1, 0)
+    trailerSongGo(1, 0)
+    trailerSongGo(1, 0)
+    trailerSongGo(0, -1)
+    trailerSongGo(-1, 0)
+    trailerSongEnd()
+    trailerSongStart(1, 8, 0)
+    trailerSongGo(0, -1)
+    trailerSongGo(1, 0)
+    trailerSongGo(1, 0)
+    trailerSongGo(0, 1)
+    trailerSongGo(1, 0)
+    trailerSongEnd()
+    trailerSongStart(0, 0, 0)
+    trailerSongGo(1, 0)
+    trailerSongGo(1, 0)
+    trailerSongEnd()
+    for tTrFrame = 1 to 90
+        runto update_frame
+    next
+    ` the cursor comes from the top left, where the night left it, and walks down to the goldfish
+    ` while the last song grows in
+    trailerCursor(2, 2)
+    trailerWalkTo(2, 4)
+    trailerRecord("trailer_coral_sings")
+    ` and one more song grows in, in the shot
+    for tS9F = 0 to 50
+        trailerWalkStep()
+        if tS9F = 8
+            record mark "song"
+            trailerSongStart(3, 0, 0)
+            trailerSongGo(0, 1)
+            trailerSongGo(0, 1)
+            trailerSongGo(0, 1)
+            trailerSongGo(0, 1)
+            trailerSongGo(-1, 0)
+            trailerSongGo(-1, 0)
+            trailerSongEnd()
+        endif
+        runto update_frame
+    next
+    trailerMove(0, -1, 1)
+    for tS9F = 1 to 70
+        runto update_frame
+    next
+    for tS9F = 1 to 90
+        runto update_frame
+    next
+    record stop
+    end
+endtest
+
+
+` SHOT 12. horror coral, and skeletons popping as ghosts. a skeleton swapped onto the end of two
+` puffers is wild, and makes three; three goldfish skeletons in a row pop with them. on horror coral
+` everything pops. see spawnSkeletonGhost in fish_routines_coral.
+test trailer_horror_ghosts from trailerShot
+    ` SHOTS 12 AND 13 are one run: the skeletons pop on the horror coral, and then info mode fades in over
+    ` the very same board, with the very same fish, and lights the horror coral.
+    trailerHudLevel(3)
+    trailerTech(6)
+    ` a patch of coral that is well, on the left, for info mode to tell apart from the horror coral
+    trailerSongStart(1, 2, 0)
+    trailerSongGo(1, 0)
+    trailerSongGo(1, 0)
+    trailerSongGo(0, 1)
+    trailerSongGo(-1, 0)
+    trailerSongGo(-1, 0)
+    trailerSongGo(0, 1)
+    trailerSongGo(1, 0)
+    trailerSongGo(1, 0)
+    trailerSongEnd()
+    trailerSongStart(1, 5, 0)
+    trailerSongGo(1, 0)
+    trailerSongGo(1, 0)
+    trailerSongGo(0, 1)
+    trailerSongGo(-1, 0)
+    trailerSongGo(-1, 0)
+    trailerSongEnd()
+    ` three songs of horror coral, around where the fish are planted, and ragged at the edges
+    trailerHorrorCoral()
+    trailerPut(5, 4, TEX_PUFFER)
+    trailerPut(6, 4, TEX_PUFFER)
+    CELLS(trailerIndex(7, 5)).bellyUp = 2
+    trailerPut(7, 5, TEX_BASS)
+    for tS12X = 5 to 7
+        CELLS(trailerIndex(tS12X, 7)).bellyUp = 2
+        trailerPut(tS12X, 7, TEX_GOLDFISH)
+    next
+    ` the cursor comes down the right side, from where the tail left it
+    trailerCursor(7, 1)
+    trailerWalkTo(7, 5)
+
+    for tS12F = 1 to 60
+        runto update_frame
+    next
+    trailerRecord("trailer_horror_ghosts")
+    for tS12F = 1 to 100
+        trailerWalkStep()
+        runto update_frame
+    next
+    trailerMove(0, -1, 1)
+    for tS12F = 1 to 100
+        runto update_frame
+    next
+    record stop
+
+    ` SHOT 13, from the frame that shot 12 stopped on: info mode fades in, and it is on the horror coral
+    trailerInfoCoral()
+    ` everything of info mode starts out not there: the game only sets how much of it shows when it draws
+    ` the next frame, and until then it would show all of it for a frame, as a flash
+    create basic tween INFO_FADE_TWEEN_ID, 0, 0, 1, 0
+    set effect param float INFO_FX_ID, "Fade", 0
+    colorInfoBorder(INFO_CURSOR, rgb(255, 255, 255, 0))
+    colorInfoBorder(INFO_L_CURSOR, rgb(255, 255, 255, 0))
+    colorInfoBorder(INFO_PANEL_BORDER, rgb(255, 255, 255, 0))
+    set text alpha INFO_TITLE_TEXT_ID, 0
+    set text alpha INFO_DESC_TEXT_ID, 0
+    ` the panel is a white square until the game colors it, on the frame after this one
+    color sprite INFO_PANEL_SPRITE, rgb(10, 14, 30, 0)
+    runto update_frame
+    INFO_MODE = 1
+    show sprite INFO_HOLE_SPRITE
+    show sprite INFO_MASK_SPRITE
+    show sprite INFO_PANEL_SPRITE
+    showInfoBorder(INFO_CURSOR, 1)
+    showInfoBorder(INFO_PANEL_BORDER, 1)
+    show text INFO_TITLE_TEXT_ID
+    show text INFO_DESC_TEXT_ID
+    selectInfo(INFO_INDEX_CORAL_SICK, 0)
+    create basic tween INFO_FADE_TWEEN_ID, 0, 1, 500, 0
+    ` one frame of the game first, so that everything of info mode has been given how much of it shows
+    trailerInfoCoral()
+    runto update_frame
+    trailerRecord("trailer_info_horror")
+    for tS13F = 1 to 100
+        trailerInfoCoral()
+        runto update_frame
+    next
+    record stop
+    end
+endtest
+
+
+` the info spots of shot 13, cut out around the coral that it sang. coralRecount puts them back in
+` thirds of the board, so this is done again on every frame.
+function trailerInfoCoral()
+    trailerInfoAround(INFO_INDEX_GRID, 0, 0, CELL_COLUMN_COUNT - 1, CELL_ROW_COUNT - 1, 0, 0)
+    trailerInfoAround(INFO_INDEX_CORAL, 1, 2, 3, 6, 0, 0)
+    trailerInfoAround(INFO_INDEX_CORAL_SICK, 4, 2, 8, 7, 0, 0)
+endfunction
+
+` an info spot put around the cells that it is about, from one corner cell to the other. with a leg
+` (a width in cells more than 0), it is an upside down L: the leg hangs down from the right end of the
+` bottom edge, this many cells wide and this many tall. see THE ONE THAT IS NOT A RECTANGLE in fish_headers.
+function trailerInfoAround(tTrInfo, tTrX1, tTrY1, tTrX2, tTrY2, tTrLegW, tTrLegH)
+    tTrBlob = INFOS(tTrInfo)
+    tTrBlob.topLeft.x = getCellX(tTrX1) - CELL_SIZE / 2
+    tTrBlob.topLeft.y = getCellY(tTrY1) - CELL_SIZE / 2
+    tTrSpanX = (tTrX2 - tTrX1) + 1
+    tTrSpanY = (tTrY2 - tTrY1) + 1
+    tTrBlob.size.x = tTrSpanX * CELL_SIZE
+    tTrBlob.size.y = tTrSpanY * CELL_SIZE
+    INFOS(tTrInfo) = tTrBlob
+    if tTrLegW > 0
+        INFO_L2_INDEX = tTrInfo
+        INFO_L2_W = tTrLegW * CELL_SIZE
+        INFO_L2_H = tTrLegH * CELL_SIZE
+    endif
+endfunction
+
+
+` LATE IN A GAME. shots 4 and 5 are deep into a run: cards in every slot, round 18 of 30, a multiplier
+` of 7, and a bar that is nearly full. the board is made bigger first, in the test, because that has to
+` run frames. this puts everything else in place.
+function trailerLateHud()
+    grantPassive(ABILITY_INDEX_JELLIES)
+    grantPassive(ABILITY_INDEX_RAYS)
+    grantPassive(ABILITY_INDEX_BOTTLES)
+    grantPassive(ABILITY_INDEX_CONTAGIOUS_SMILE)
+    grantMoveToSlot(ABILITY_INDEX_MOVE_BOMB3x3, 0)
+    grantMoveToSlot(ABILITY_INDEX_MOVE_ROBOT, 1)
+    grantMoveToSlot(ABILITY_INDEX_MOVE_LINE_OUT, 2)
+
+    CURRENT_ROUND = 18
+    GAME_ROUND_CAP = 30
+    showRoundsLeft()
+    SCORE_MULTIPLIER = 7
+    BEST_MULTIPLIER = 7
+    MULT_PROGRESS = 2
+    refreshMultiplier(1)
+    CURRENT_MOVE_COUNT = 212
+    registerMove(0)
+    SCORE_BAR.startVal = 486210
+    SCORE_BAR.endVal = SCORE_BAR.startVal + getRoundSpan(CURRENT_ROUND)
+    PROGRESS_BARS(0) = SCORE_BAR
+    ` the upgrade screen waits until this is let go of. see questHoldsRound.
+    QUEST_LEAVE_UNTIL = 2000000000
+endfunction
+
+` how full the bar is: this many points short of the end of the round
+function trailerBarShort(tTrShort)
+    CURRENT_SCORE = SCORE_BAR.endVal - tTrShort
+    syncScoreShown()
+    setProgressTween(SCORE_BAR, CURRENT_SCORE)
+endfunction
+
+` put a card on the upgrade screen, the way bind_ability_choices does. passive cards only.
+function trailerOffer(tTrSlot, tTrCard)
+    CARD_CHOICE_INDEXES(tTrSlot) = tTrCard
+    ABILITY_CHOICES(tTrSlot).abilityIndex = tTrCard
+    set text ABILITY_CHOICES(tTrSlot).titleTextId, CARDS(tTrCard).name$
+    size text x ABILITY_CHOICES(tTrSlot).titleTextId, CARD_WIDTH - 16, .1, .33
+    tTrDesc$ = CARDS(tTrCard).desc$
+    if CARDS(tTrCard).maxUses > 0
+        tTrDesc$ = tTrDesc$ + " " + str$(CARDS(tTrCard).maxUses - CARDS(tTrCard).uses) + " left."
+    endif
+    set text ABILITY_CHOICES(tTrSlot).descTextId, tTrDesc$
+    set sprite texture ABILITY_CHOICES(tTrSlot).artSpriteId, CARDS(tTrCard).artTexId
+    size sprite ABILITY_CHOICES(tTrSlot).artSpriteId, 96, 96
+    set text ABILITY_CHOICES(tTrSlot).typeTextId, "{passive} passive"
+    set text ABILITY_CHOICES(tTrSlot).slotTextId, " "
+endfunction
+
+` move the highlight of the upgrade screen, the way a left or right press does
+function trailerUpgradeTo(tTrPick, tTrMs, tTrWake)
+    if tTrWake
+        spawnWakeBubbles(tweenVal(ABILITY_SELECTION_INDICATOR_TWEEN_ID) - CARD_WIDTH / 2, CARD_TOP, CARD_WIDTH, CARD_HEIGHT, 10, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
+    endif
+    ABILITY_SELECTION_INDEX = tTrPick
+    UPGRADE_SKIP_SELECTED = 0
+    create basic tween ABILITY_SELECTION_INDICATOR_TWEEN_ID, tweenVal(ABILITY_SELECTION_INDICATOR_TWEEN_ID), get local transform x(ABILITY_CHOICES(tTrPick).transformId), tTrMs, 0
+    tTrLastChoice = getUpgradeChoiceCount() - 1
+    for tTrN = 0 to tTrLastChoice
+        tTrScale# = .95
+        if tTrN = tTrPick
+            tTrScale# = 1.05
+        endif
+        create basic tween ABILITY_CHOICES(tTrN).sizeTweenId, get local transform scale x(ABILITY_CHOICES(tTrN).transformId), tTrScale#, tTrMs, 0
+    next
+endfunction
+
+
+` SHOT 4. late in a run, with everything around the board showing. one swap finishes a T of seven
+` fish and a row of three jellyfish, the jellies sting, and the bar of the round fills up and fizzes.
+test trailer_late_game_combo from trailerShot
+    PENDING_BOARD_EXPANSIONS = 4
+    tS4Guard = 0
+    while PENDING_BOARD_EXPANSIONS > 0
+        runto _loop
+        tS4Guard = tS4Guard + 1
+        if tS4Guard > 40 then PENDING_BOARD_EXPANSIONS = 0
+    endwhile
+    for tTrFrame = 1 to 10
+        runto _loop
+    next
+    trailerLateHud()
+    trailerHudLevel(1)
+    JELLY_STING_CHANCE = 100
+    trailerBarShort(700)
+
+    ` the planted fish must not make a group with the fish around them, so try boards until one works
+    tS4A = TEX_GOLDFISH
+    tS4Seed = 11
+    tS4Ok = 0
+    while tS4Ok = 0
+        trailerDeal(tS4Seed)
+        trailerPut(3, 2, tS4A)
+        trailerPut(4, 2, tS4A)
+        trailerPut(6, 2, tS4A)
+        trailerPut(7, 2, tS4A)
+        trailerPut(5, 0, tS4A)
+        trailerPut(5, 1, tS4A)
+        trailerPut(5, 3, tS4A)
+        trailerPut(5, 2, TEX_JELLY)
+        trailerPut(3, 3, TEX_JELLY)
+        trailerPut(4, 3, TEX_JELLY)
+        trailerPut(6, 3, TEX_JELLY)
+        trailerPut(7, 3, TEX_JELLY)
+        trailerPut(4, 4, TEX_RAY)
+        trailerPut(6, 4, TEX_RAY)
+        if trailerFirstMatch() = -1 then tS4Ok = 1
+        tS4Seed = tS4Seed + 1
+        if tS4Seed > 80 then tS4Ok = 1
+    endwhile
+    assert trailerFirstMatch() = -1, "nothing pops before the swap"
+    ` and the goldfish at the ends of the T have fish stacked on them, which pop one after another
+    for tS4N = 0 to 2
+        tS4Cell = trailerIndex(3, 2)
+        if tS4N = 1 then tS4Cell = trailerIndex(7, 2)
+        if tS4N = 2 then tS4Cell = trailerIndex(5, 0)
+        CELLS(tS4Cell).stack = 2
+        CELLS(tS4Cell).stackShown# = 2
+        updateCell(CELLS(tS4Cell))
+    next
+    ` the cursor comes from where the shot before left it, at the top left, and walks over to the swap
+    trailerCursor(2, 1)
+    trailerWalkTo(5, 3)
+
+    for tTrFrame = 1 to 40
+        runto update_frame
+    next
+    trailerRecord("trailer_late_game_combo")
+    for tTrFrame = 1 to 100
+        trailerWalkStep()
+        runto update_frame
+    next
+    trailerMove(0, -1, 1)
+    for tTrFrame = 1 to 330
+        runto update_frame
+    next
+    record stop
+    end
+endtest
+
+
+` SHOT 5. the round is won, the wave of bubbles brings up the upgrade screen, and the player takes the
+` stingrays. the cards on offer are put there by the shot, over the ones that were dealt.
+test trailer_upgrade_rays from trailerShot
+    PENDING_BOARD_EXPANSIONS = 4
+    tS5Guard = 0
+    while PENDING_BOARD_EXPANSIONS > 0
+        runto _loop
+        tS5Guard = tS5Guard + 1
+        if tS5Guard > 40 then PENDING_BOARD_EXPANSIONS = 0
+    endwhile
+    for tTrFrame = 1 to 10
+        runto _loop
+    next
+    trailerDeal(11)
+    trailerLateHud()
+    trailerHudLevel(1)
+    CARDS(ABILITY_INDEX_DEEP_POCKETS).uses = 1
+    trailerBarShort(300)
+
+    for tTrFrame = 1 to 40
+        runto update_frame
+    next
+    trailerRecord("trailer_upgrade_rays")
+    for tTrFrame = 1 to 20
+        runto update_frame
+    next
+    queueScore(300, 0)
+    for tTrFrame = 1 to 45
+        runto update_frame
+    next
+    ` let the round end. the upgrade screen blocks, and update_frame does not run while it is up, so
+    ` the shot runs straight on to the first frame of it.
+    QUEST_LEAVE_UNTIL = 0
+    runto frame_ability_selection
+    record mark "wave"
+    trailerOffer(0, ABILITY_INDEX_CONTAGIOUS_SMILE)
+    trailerOffer(1, ABILITY_INDEX_RAYS)
+    trailerOffer(2, ABILITY_INDEX_BOTTLES)
+    trailerUpgradeTo(0, 1, 0)
+    for tTrFrame = 1 to 200
+        runto frame_ability_selection
+    next
+    trailerUpgradeTo(1, 200, 1)
+    ` the highlight rests on the stingrays a moment, before they are taken
+    for tTrFrame = 1 to 140
+        runto frame_ability_selection
+    next
+    ` every key is down for one frame, which takes the card. the left and down that come with it are undone.
+    TR_PRESS = 1
+    record mark "pick"
+    runto frame_ability_selection
+    trailerUpgradeTo(1, 1, 0)
+    runto frame_ability_selection
+    TR_PRESS = 0
+    for tTrFrame = 1 to 50
+        runto update_frame
+    next
+    record stop
+    end
+endtest
+
+
+` fade the table of high scores, and the rest of the menu around the surface, to this much (1 is all of
+` it, 0 is none). the sky and the sea stay.
+function trailerMenuFade(tTrA#)
+    setMenuChromeAlpha(tTrA#)
+    for tTrI = 0 to 7
+        set text alpha HISCORE_TAB_TEXTS(tTrI), 255 * tTrA#
+        set sprite alpha HISCORE_TAB_SPRITES(tTrI), 235 * tTrA#
+        set sprite alpha HISCORE_ENDING_TILES(tTrI), 255 * tTrA#
+        set sprite alpha HISCORE_ENDING_ICONS(tTrI), 255 * tTrA#
+        set sprite alpha HISCORE_BADGE_SPRITES(tTrI), 255 * tTrA#
+        set text alpha HISCORE_MYSTERY_TEXTS(tTrI), 255 * tTrA#
+    next
+    for tTrI = 0 to 3
+        set text alpha HISCORE_HEAD_TEXTS(tTrI), 255 * tTrA#
+    next
+    for tTrI = 0 to HISCORE_ROWS * 6 - 1
+        set text alpha HISCORE_CELL_TEXTS(tTrI), 255 * tTrA#
+    next
+    set text alpha HISCORE_TILE_MARK, 255 * tTrA#
+    colorInfoBorder(HISCORE_CURSOR, rgb(255, 255, 255, 255 * tTrA#))
+endfunction
+
+
+` SHOTS 14, 15 AND 16, one after the other, the way the game plays them: three videos from one run.
+` 14. the game goes back up to the title, the way an endless game does, and the table of high scores is
+`     already open there.
+` 15. the table and the menu fade away, and the boat is alone on the sea. "Fish Live Here".
+` 16. the view rises up into the stars, the way the splash screen comes down, run backwards.
+`     "Fish Fish Pop", and when it comes out.
+` the menu does not run update_frame. frame_menu_render runs once on every frame of it.
+test trailer_finale from trailerShot
+    trailerHudLevel(4)
+    trailerTech(6)
+    ` the board of the angler's shot: the same horror coral, and the cursor where it was left
+    trailerHorrorCoral()
+    trailerCursor(7, 4)
+    for tTrFrame = 1 to 60
+        runto update_frame
+    next
+
+    ` SHOT 14. from the horror coral, the game goes up to the title the way it does after the ending with
+    ` the ancient one: the water drains away down the screen, and the wave is eyes in place of bubbles.
+    trailerRecord("trailer_to_highscores")
+    for tTrFrame = 1 to 12
+        runto update_frame
+    next
+    record mark "up"
+    GAME_ENDLESS = 1
+    REQUEST_GAME_END = 1
+    runto menu_transition
+    ` eyes, for this one wave. see THE TWO ENDINGS in fish_headers. reset_game puts it back after it.
+    CORAL_ENDING = CORAL_ENDING_ANCIENT
+    hintShow(0)
+    HISCORE_SCOPE = HISCORE_SCOPE_LOCAL
+    loadKnownEndings()
+    ` a table of players, in place of the rows that the game starts with
+    tTrTable = getHighscoreTable(GAME_LENGTH_REGULAR, 0)
+    tTrFirst = tTrTable * HISCORE_ROWS
+    for tTrRow = 0 to HISCORE_ROWS - 1
+        HISCORE_NAMES(tTrFirst + tTrRow) = 0
+        HISCORE_MOVES(tTrFirst + tTrRow) = HISCORE_EMPTY_MOVES
+        HISCORE_MULTS(tTrFirst + tTrRow) = 0
+    next
+    tTrPlace = insertHighscore(tTrTable, packInitialsText("KAI"), 312, 14)
+    tTrPlace = insertHighscore(tTrTable, packInitialsText("MOE"), 347, 12)
+    tTrPlace = insertHighscore(tTrTable, packInitialsText("ZOE"), 361, 11)
+    tTrPlace = insertHighscore(tTrTable, packInitialsText("RJB"), 398, 11)
+    tTrPlace = insertHighscore(tTrTable, packInitialsText("ACE"), 425, 9)
+    tTrPlace = insertHighscore(tTrTable, packInitialsText("NEO"), 471, 8)
+    tTrPlace = insertHighscore(tTrTable, packInitialsText("PIP"), 502, 8)
+    tTrPlace = insertHighscore(tTrTable, packInitialsText("GUS"), 566, 6)
+    openHighscoreTable(tTrTable, -1, 2)
+    hide text HISCORE_NOTE_TEXT_ID
+    hide text MENU_HINT_TEXT_ID
+    for tTrFrame = 1 to 250
+        runto frame_menu_render
+        ` the menu has come all the way up: the table is all there. the cut can go straight to here.
+        if tTrFrame = 112
+            record mark "table"
+        endif
+    next
+    record stop
+
+    ` SHOT 15
+    trailerRecord("trailer_fish_live_here")
+    for tTrFrame = 0 to 50
+        tTrFade# = tTrFrame
+        tTrFade# = 1 - tTrFade# / 50.0
+        trailerMenuFade(tTrFade#)
+        hide text MENU_HINT_TEXT_ID
+        runto frame_menu_render
+    next
+    closeHighscores()
+    setMenuChromeAlpha(0)
+    hide text MENU_HINT_TEXT_ID
+    for tTrFrame = 1 to 20
+        runto frame_menu_render
+    next
+    ` "The ocean is", then smaller, "waiting for", and after a pause, big again, "you."
+    trailerWordOn("The", 0)
+    trailerWordOn("ocean", 0)
+    trailerWordOn("is", 0)
+    trailerWordSub("waiting", 1, 28)
+    trailerWordSub("for", 1, 28)
+    trailerWordSized("you.", 2, 84)
+    trailerTitleLayout(84)
+    ` the first two lines sit on the sky, over the line of the horizon, and "you." under it, in the sea
+    trailerLineAt(0, SURFACE_HORIZON - 62)
+    trailerLineAt(1, SURFACE_HORIZON - 26)
+    trailerLineAt(2, SURFACE_HORIZON + 52)
+    trailerLineWait(1, 20)
+    trailerLineWait(2, 45)
+    ` the words rise in the same way as the title at the start, with the stars of the menu around them
+    TR_RISE_STARS = 1
+    for tTrFrame = 0 to 265
+        trailerRiseTitle(tTrFrame, 10, 1)
+        runto frame_menu_render
+    next
+    ` then they fade away, and the boat is alone on the sea for a moment
+    for tTrFrame = 0 to 30
+        tTrGone# = tTrFrame
+        tTrGone# = 1 - tTrGone# / 30.0
+        trailerRiseTitle(200, 10, tTrGone#)
+        runto frame_menu_render
+    next
+    for tTrN = 0 to TR_WORD_COUNT - 1
+        hide text TR_WORD(tTrN)
+    next
+    for tTrFrame = 1 to 75
+        runto frame_menu_render
+    next
+
+    ` SHOT 16. the view goes on up into the stars. it is the same video as shot 15, so that nothing cuts
+    ` on the way up.
+    record mark "rise"
+    for tTrFrame = 0 to 191
+        tTrT# = tTrFrame
+        tTrT# = tTrT# / 191.0
+        tTrEase# = tTrT# * tTrT# * tTrT# * (tTrT# * (tTrT# * 6 - 15) + 10)
+        SURFACE_PAN# = SPLASH_PAN * tTrEase#
+        runto frame_menu_render
+    next
+    for tTrN = 0 to TR_WORD_COUNT - 1
+        hide text TR_WORD(tTrN)
+    next
+    TR_WORD_COUNT = 0
+    trailerWord("Fish")
+    trailerWord("Fish")
+    trailerWord("Pop")
+    trailerTitleLayout(WORLD_HEIGHT / 2 - 24)
+
+    ` "Available on Steam", with the Steam logo as an icon in the line when the logo is there: the
+    ` official white mark, put at Assets/Fish/Textures/Logos/steam.png. build/render-trailer.ps1 says
+    ` whether it is with FISH_TRAILER_STEAM_ICON. the date is on a line of its own, under it.
+    tTrSteamWords$ = "Available on Steam"
+    if val(env$("FISH_TRAILER_STEAM_ICON")) = 1
+        tTrSteamTex = 0
+        texture free texture id(tTrSteamTex), "Fish/Textures/Logos/steam"
+        font icon SCORE_FONT, 15, "steam", tTrSteamTex
+        set font icon scale SCORE_FONT, 15, .9, .9
+        tTrSteamWords$ = "Available on {steam} Steam"
+    endif
+    tTrSub = 0
+    reserve text id(tTrSub)
+    text tTrSub, WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + 26, SCORE_FONT, tTrSteamWords$
+    enable rich text tTrSub
+    size text y tTrSub, 20
+    set text offset tTrSub, .5, .5
+    color text tTrSub, rgb(200, 228, 255)
+    enable text drop shadow tTrSub, 1, -3, rgb(0, 0, 40)
+    order text tTrSub, 300
+    set text alpha tTrSub, 0
+
+    tTrDate = 0
+    reserve text id(tTrDate)
+    text tTrDate, WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + 50, SCORE_FONT, "November 5th, 2026"
+    size text y tTrDate, 18
+    set text offset tTrDate, .5, .5
+    color text tTrDate, rgb(150, 190, 255)
+    enable text drop shadow tTrDate, 1, -3, rgb(0, 0, 40)
+    order text tTrDate, 300
+    set text alpha tTrDate, 0
+
+    ` the shooting star crosses the sky and spells CQ, the way it does over the splash screen. the
+    ` first crossing is set up by hand, so the dice never say whether it comes: it always comes, and
+    ` always here. a long rest after it, so that it only comes once. see THE SHOOTING STAR in fish_headers.
+    MORSE_STAR_GOING = 1
+    MORSE_STAR_SEEN = 1
+    MORSE_STAR_CROSSING = 0
+    MORSE_STAR_CLOCK = 0
+    MORSE_STAR_LAST_MS = game ms()
+    MORSE_STAR_REST = 1000
+    MORSE_STAR_UNIT_MS = 95
+    MORSE_STAR_FADE = 64
+    MORSE_STAR_STEP = 5
+    MORSE_STAR_AT = 0 - 4
+    MORSE_STAR_X = 30
+    MORSE_STAR_Y = 22
+    ` a longer streak: every piece of its trail as long as a step, and a bigger star at its head
+    for tTrN = 0 to MORSE_STAR_COUNT - 1
+        size sprite MORSE_STARS(tTrN), 5, 2
+    next
+    size sprite MORSE_STAR_HEAD, 3, 2
+
+    for tTrFrame = 0 to 240
+        SURFACE_PAN# = SPLASH_PAN
+        trailerPopTitle(tTrFrame - 10, 12)
+        ` stars come out around each word as it pops in, the way that they do as the menu moves
+        for tTrN = 0 to TR_WORD_COUNT - 1
+            tTrPopAt = tTrFrame - 10
+            tTrPopAt = tTrPopAt - tTrN * 12
+            if tTrPopAt = 0
+                trailerTwinkleWord(tTrN, 18)
+            endif
+        next
+        tTrSubA# = tTrFrame - 50
+        tTrSubA# = tTrSubA# / 25.0
+        if tTrSubA# < 0 then tTrSubA# = 0
+        if tTrSubA# > 1 then tTrSubA# = 1
+        set text alpha tTrSub, 255 * tTrSubA#
+        tTrDateA# = tTrFrame - 70
+        tTrDateA# = tTrDateA# / 25.0
+        if tTrDateA# < 0 then tTrDateA# = 0
+        if tTrDateA# > 1 then tTrDateA# = 1
+        set text alpha tTrDate, 255 * tTrDateA#
+        morseStarsShow(0)
+        runto frame_menu_render
+    next
+    ` and it fades to black, and stays black for a moment. the music fades out over the black, in the cut.
+    for tTrFrame = 0 to 60
+        tTrBlack# = tTrFrame
+        trailerCurtain(tTrBlack# / 60.0)
+        SURFACE_PAN# = SPLASH_PAN
+        morseStarsShow(0)
+        runto frame_menu_render
+    next
+    record mark "black"
+    for tTrFrame = 1 to 60
+        SURFACE_PAN# = SPLASH_PAN
+        runto frame_menu_render
+    next
+    morseStarsHide()
+    record stop
+    end
+endtest
+
+` THE ANGLER ON HORROR CORAL. the same upside down L of horror coral as in info mode (shot 13) is sung,
+` and the angler comes the way the card brings it. it is asked "What is the dark coral?", and its light
+` goes to the horror coral while it answers. the shot stops part of the way into the answer. the middle
+` of the horror coral is in the lower half of the board, so the angler and its box are up at the top.
+` frame_angler runs once on every frame that the angler is up. see THE ANGLER in fish_headers_angler.
+test trailer_angler_horror from trailerShot
+    trailerHudLevel(3)
+    trailerTech(6)
+    ` the same horror coral as where the skeletons popped (shot 12), and in info mode (shot 13)
+    trailerHorrorCoral()
+    trailerCursor(7, 4)
+    for tSAF = 1 to 50
+        trailerInfoAround(INFO_INDEX_CORAL_SICK, 4, 2, 8, 7, 0, 0)
+        runto update_frame
+    next
+    for tSAF = 1 to 20
+        trailerInfoAround(INFO_INDEX_CORAL_SICK, 4, 2, 8, 7, 0, 0)
+        runto update_frame
+    next
+
+    ` it comes the way the card brings it, talking a little quicker than in the game, to fit the shot
+    ANGLER_LETTER_MS = 30
+    ANGLER_STOP_MS = 200
+    ANGLER_PENDING = 1
+    runto frame_angler
+    ` the first question is the horror coral, and the second the coral that is well
+    ANGLER_PICK(0) = ANGLER_T_HORROR
+    ANGLER_PICK(1) = ANGLER_T_CORAL
+    set text ANGLER_LINE_TEXTS(0), ANGLER_ASK$(ANGLER_T_HORROR)
+    set text ANGLER_LINE_TEXTS(1), ANGLER_ASK$(ANGLER_T_CORAL)
+    ` it swims in, and greets
+    for tSAF = 1 to 75
+        trailerInfoAround(INFO_INDEX_CORAL_SICK, 4, 2, 8, 7, 0, 0)
+        runto frame_angler
+    next
+    ` a press finishes the greeting while it is still being said, and the next one asks. press until it
+    ` has been asked, a press every so often, however long the greeting is.
+    tSAGuard = 0
+    while ANGLER_ASKED <> ANGLER_T_HORROR
+        TR_PRESS = 1
+        trailerInfoAround(INFO_INDEX_CORAL_SICK, 4, 2, 8, 7, 0, 0)
+        runto frame_angler
+        TR_PRESS = 0
+        for tSAF = 1 to 12
+            trailerInfoAround(INFO_INDEX_CORAL_SICK, 4, 2, 8, 7, 0, 0)
+            runto frame_angler
+        next
+        tSAGuard = tSAGuard + 1
+        assert tSAGuard < 20, "the horror coral gets asked"
+    endwhile
+    ` the light goes to the horror coral, and the answer starts. the shot starts in the middle of it,
+    ` with the angler already up at the top, where it goes when the horror coral is in the lower half.
+    for tSAF = 1 to 90
+        trailerInfoAround(INFO_INDEX_CORAL_SICK, 4, 2, 8, 7, 0, 0)
+        runto frame_angler
+    next
+    trailerRecord("trailer_angler_horror")
+    record mark "speech"
+    for tSAF = 1 to 170
+        trailerInfoAround(INFO_INDEX_CORAL_SICK, 4, 2, 8, 7, 0, 0)
+        runto frame_angler
+    next
+    record stop
+    end
+endtest
+
+
+` THE WAVE OF BUBBLES, ON ITS OWN, for putting between two shots. build/trailer_cut.py lays it over the
+` cut between them: where the matte is green, the shot that is going; where it is red, the shot that
+` is coming; and the bubbles of the other video on top. it is the game's own wave (menu_transition), the
+` one that brings the menu up from the game with bubbles going up, rolled the same way in both videos.
+` the game's side of the screen is a green sprite, just under the menu (the composite is at ORDER_MENU),
+` and the menu's side is a red one, inside the menu's render target, over everything in it. with
+` SURFACE_UP at 1 the water of the screen effect leaves the colors alone.
+test trailer_transition_bubbles_matte from trailerShot
+    trailerHudLevel(0)
+    SURFACE_UP = 1
+    tTvGame = 0
+    reserve sprite id(tTvGame)
+    sprite tTvGame, 0, 0, TEX_PIXEL
+    set sprite offset tTvGame, 0, 0
+    size sprite tTvGame, WORLD_WIDTH, WORLD_HEIGHT
+    color sprite tTvGame, rgb(0, 255, 0)
+    order sprite tTvGame, ORDER_MENU - 1
+    tTvMenu = 0
+    reserve sprite id(tTvMenu)
+    sprite tTvMenu, 0, 0, TEX_PIXEL
+    set sprite offset tTvMenu, 0, 0
+    size sprite tTvMenu, WORLD_WIDTH, WORLD_HEIGHT
+    color sprite tTvMenu, rgb(255, 0, 0)
+    order sprite tTvMenu, 300
+    set sprite render target tTvMenu, TARGET_MENU
+    for tTrFrame = 1 to 10
+        runto update_frame
+    next
+    GAME_ENDLESS = 1
+    CORAL_ENDING = 0
+    REQUEST_GAME_END = 1
+    runto menu_transition
+    ` bubbles going up, and not the water line of the main menu
+    MENU_MODE = MENU_MODE_PAUSE
+    randomize 11
+    trailerRecord("trailer_transition_bubbles_matte")
+    for tTrFrame = 1 to 112
+        runto frame_menu_render
+        ` the bubbles are left out of the matte, so that the key is clean
+        for tTvB = 0 to BUBBLE_COUNT - 1
+            hide sprite BUBBLES(tTvB).spriteId
+        next
+    next
+    record stop
+    end
+endtest
+
+` and the bubbles of the same wave, on black
+test trailer_transition_bubbles_fx from trailerShot
+    trailerHudLevel(0)
+    SURFACE_UP = 1
+    tTvGame = 0
+    reserve sprite id(tTvGame)
+    sprite tTvGame, 0, 0, TEX_PIXEL
+    set sprite offset tTvGame, 0, 0
+    size sprite tTvGame, WORLD_WIDTH, WORLD_HEIGHT
+    color sprite tTvGame, rgb(0, 0, 0)
+    order sprite tTvGame, ORDER_MENU - 1
+    tTvMenu = 0
+    reserve sprite id(tTvMenu)
+    sprite tTvMenu, 0, 0, TEX_PIXEL
+    set sprite offset tTvMenu, 0, 0
+    size sprite tTvMenu, WORLD_WIDTH, WORLD_HEIGHT
+    color sprite tTvMenu, rgb(0, 0, 0)
+    order sprite tTvMenu, 300
+    set sprite render target tTvMenu, TARGET_MENU
+    for tTrFrame = 1 to 10
+        runto update_frame
+    next
+    GAME_ENDLESS = 1
+    CORAL_ENDING = 0
+    REQUEST_GAME_END = 1
+    runto menu_transition
+    MENU_MODE = MENU_MODE_PAUSE
+    randomize 11
+    trailerRecord("trailer_transition_bubbles_fx")
+    for tTrFrame = 1 to 112
+        runto frame_menu_render
+    next
+    record stop
+    end
+endtest
+
+
+` THE QUESTS, sixteen of them, for the cut to lay out on one screen (see "grid" in build/trailer_cut.json).
+` each quest is forced on a board of its own, and its creature starts to talk about it as the video starts
+` (see THE QUEST TALK in fish_headers_questtalk). the box is a little higher than in the game, so that the
+` crop of the grid has all of it. then the cursor makes three swaps that pop, walking to the one that pops
+` the most each time, so that the quest has things to do. the first one is shown on its own for a while,
+` so it waits a little longer before its first swap.
+
+test trailer_quest_01 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(31)
+    questForce(QUEST_SHARK)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_01")
+    questTalkStart(QUEST_SHARK)
+    for tTqF = 1 to 150
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest
+
+test trailer_quest_02 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(32)
+    questForce(QUEST_REMORA)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_02")
+    questTalkStart(QUEST_REMORA)
+    for tTqF = 1 to 30
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest
+
+test trailer_quest_03 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(33)
+    questForce(QUEST_SUNBEAM)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_03")
+    questTalkStart(QUEST_SUNBEAM)
+    for tTqF = 1 to 30
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest
+
+test trailer_quest_04 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(34)
+    questForce(QUEST_SEAWEED)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_04")
+    questTalkStart(QUEST_SEAWEED)
+    for tTqF = 1 to 30
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest
+
+test trailer_quest_05 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(35)
+    questForce(QUEST_WAKE)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_05")
+    questTalkStart(QUEST_WAKE)
+    for tTqF = 1 to 30
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest
+
+test trailer_quest_06 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(36)
+    questForce(QUEST_TURTLE)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_06")
+    questTalkStart(QUEST_TURTLE)
+    for tTqF = 1 to 30
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest
+
+test trailer_quest_07 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(37)
+    questForce(QUEST_CUTTLEFISH)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_07")
+    questTalkStart(QUEST_CUTTLEFISH)
+    for tTqF = 1 to 30
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest
+
+test trailer_quest_08 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(38)
+    questForce(QUEST_CONSTELLATION)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_08")
+    questTalkStart(QUEST_CONSTELLATION)
+    for tTqF = 1 to 30
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest
+
+test trailer_quest_09 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(39)
+    questForce(QUEST_ECHO)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_09")
+    questTalkStart(QUEST_ECHO)
+    for tTqF = 1 to 30
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest
+
+test trailer_quest_10 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(40)
+    questForce(QUEST_PULSE)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_10")
+    questTalkStart(QUEST_PULSE)
+    for tTqF = 1 to 30
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest
+
+test trailer_quest_11 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(41)
+    questForce(QUEST_TOTEM)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_11")
+    questTalkStart(QUEST_TOTEM)
+    for tTqF = 1 to 30
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest
+
+test trailer_quest_12 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(42)
+    questForce(QUEST_GLASS_FISH)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_12")
+    questTalkStart(QUEST_GLASS_FISH)
+    for tTqF = 1 to 30
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest
+
+test trailer_quest_13 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(43)
+    questForce(QUEST_TETHER)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_13")
+    questTalkStart(QUEST_TETHER)
+    for tTqF = 1 to 30
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest
+
+test trailer_quest_14 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(44)
+    questForce(QUEST_LANTERN)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_14")
+    questTalkStart(QUEST_LANTERN)
+    for tTqF = 1 to 30
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest
+
+test trailer_quest_15 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(45)
+    questForce(QUEST_PILOT_FISH)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_15")
+    questTalkStart(QUEST_PILOT_FISH)
+    for tTqF = 1 to 30
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest
+
+test trailer_quest_16 from trailerShot
+    trailerHudLevel(0)
+    trailerDeal(46)
+    questForce(QUEST_FERRY)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    trailerCursor(4, 4)
+    for tTqF = 1 to 40
+        runto update_frame
+    next
+    ` the box fades with what is around the board, so that is up, with every part of it off but the quest
+    QTALK_ENABLED = 1
+    QTALK_BOX_Y = 196
+    HUD_KEEP# = .9999
+    trailerRecord("trailer_quest_16")
+    questTalkStart(QUEST_FERRY)
+    for tTqF = 1 to 30
+        runto update_frame
+    next
+    for tTqSwap = 1 to 3
+        trailerBestSwap()
+        tTqCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
+        tTqRow = TR_BEST_CELL / CELL_COLUMN_COUNT
+        trailerWalkTo(tTqCol, tTqRow)
+        tTqGuard = 0
+        while trailerWalked() = 0
+            trailerWalkStep()
+            runto update_frame
+            tTqGuard = tTqGuard + 1
+            if tTqGuard > 200
+                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
+            endif
+        endwhile
+        if TR_BEST_DOWN
+            trailerMove(0, 1, 1)
+        else
+            trailerMove(1, 0, 1)
+        endif
+        for tTqF = 1 to 70
+            runto update_frame
+        next
+    next
+    record stop
+    end
+endtest

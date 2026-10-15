@@ -27,6 +27,9 @@ public sealed class SteamSystem : FadeHostSystem
     /// <summary>Why Steam is not up, in words a person can act on. Empty when it is.</summary>
     public static string InitError { get; private set; } = "Steam was never started. Register a SteamSystem in Program.cs.";
 
+    /// <summary>True while the Steam overlay is up over the game. See <c>steam overlay open()</c>.</summary>
+    public static bool OverlayOpen { get; private set; }
+
     /// <summary>
     /// Put in front of the name of every leaderboard that the game asks for. It is how one
     /// kind of build is kept off of the leaderboards of another: a build from a dev machine
@@ -78,6 +81,8 @@ public sealed class SteamSystem : FadeHostSystem
             SteamClient.Init(appId, asyncCallbacks: false);
             Available = true;
             InitError = "";
+            SteamFriends.OnGameOverlayActivated += OverlayChanged;
+            SteamInputGlyphs.Start();
             Console.WriteLine($"[steam] up. app {SteamClient.AppId}, user {SteamClient.Name}");
         }
         catch (Exception ex)
@@ -94,6 +99,7 @@ public sealed class SteamSystem : FadeHostSystem
     {
         if (!Available) return;
         SteamClient.RunCallbacks();
+        SteamInputGlyphs.Tick();
     }
 
     public override void Shutdown()
@@ -101,9 +107,19 @@ public sealed class SteamSystem : FadeHostSystem
         if (!Available) return;
         Available = false;
         InitError = "Steam has been shut down.";
+        SteamFriends.OnGameOverlayActivated -= OverlayChanged;
+        OverlayOpen = false;
         SteamLeaderboards.Reset();
         SteamAchievements.Reset();
+        SteamInputGlyphs.Stop();
         SteamClient.Shutdown();
+    }
+
+    // Steam says when the overlay comes up and when it goes away. It comes from RunCallbacks,
+    // so it is on the game's own thread.
+    static void OverlayChanged(bool open)
+    {
+        OverlayOpen = open;
     }
 
     static uint FindAppId()

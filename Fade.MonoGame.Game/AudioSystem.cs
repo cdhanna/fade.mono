@@ -9,12 +9,14 @@ public struct RuntimeSfxClip
 {
     public int id;
     public SoundEffect source;
+    public string path; // the content path it was loaded from, which a recording writes down (RecordSystem)
 }
 
 public struct AudioInstance
 {
     public int id;
     public SoundEffectInstance instance;
+    public int clipId; // the clip it was made from
 
     public double playingDelayedUntil;
 }
@@ -73,6 +75,7 @@ public static class AudioSystem
         GetAudioEffectIndex(audioId, out var index, out var runtimeAudio);
 
         runtimeAudio.source = clip;
+        runtimeAudio.path = path;
         sfxClips[index] = runtimeAudio;
     }
 }
@@ -152,6 +155,7 @@ public static class AudioInstanceSystem
                     sfx.instance.Play();
                     perfTicks += System.Diagnostics.Stopwatch.GetTimestamp() - perfStart;
                     perfPlays++;
+                    RecordSystem.LogSound(sfx.id);
                     sfx.playingDelayedUntil = 0;
                     audioEffects[i] = sfx;
                 }

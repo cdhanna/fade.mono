@@ -1,0 +1,136 @@
+remstart
+    THE GLOW
+    another hidden thing, and a prototype. the routines are in fish_routines_glow.
+
+    there is always one cell of the board that glows. nothing says why. every swap that is counted as a
+    move, and makes a match, steps the glow one cell the way that the swap went: the way that the cursor
+    carried its fish. the swap can be anywhere on the board. so every swap is two things at once: the
+    match that it makes, and a step of the glow, somewhere else. a swap makes a match when either of its
+    two fish is in a group that is big enough, whether the group pops, or the night holds it, or it
+    sings on coral. a swap that makes no match does not step the glow at all.
+    a "free move" and the special moves do not step it, the same as they leave the tide alone.
+    the swap says which way it went when it is made, and the glow steps when the board is looked at:
+    glowSwapPending and glowJudgeSwap. so a loop that the step closes pops on the next look.
+
+    THE EDGE. the glow stops at the edge of the board: a step that would take it off does nothing. with
+    the "seamless" card it goes around the edge to the other side, the way that the cursor does.
+
+    THE START. where the glow starts comes from the seed of the game. see glowPlace.
+
+    THE TRAIL. the glow leaves a trail behind it, of the cells that it was on, like a snake. the
+    trail can be as long as the multiplier is: one cell at x1, and four at x4. while it is shorter
+    than that, a step makes it one longer. once it is that long, a step takes its oldest cell away, so
+    it moves along. when the multiplier goes down, the trail loses its oldest cells until it fits.
+    stepGlow does that, on the next frame. GLOW_TRAIL_OVERRIDE sets the length by hand, for the debug
+    panel.
+
+    A LOOP. when the glow steps onto a cell of its own trail, the trail has closed into a loop: the cell
+    that it stepped onto, every cell of the trail since, and the cell that the glow stepped from. every
+    fish that the loop encloses pops, as one forced group, and scores like one. the fish of the loop
+    itself do not pop. then the trail is gone, and the glow starts over from where it is. stepping back
+    onto the cell that it just came from closes a loop that encloses nothing: nothing pops, and the
+    trail is gone all the same.
+    a cell is enclosed when it can not get to the edge of the board without crossing the loop, going
+    from cell to cell the four ways. with the "seamless" card there is no edge to get to: the loop cuts
+    the board into pieces, and every piece but the biggest is enclosed.
+    the pop is a forced pop: see FORCED POPS in fish_headers. the diver is never popped by it.
+
+    WHAT SHOWS. nothing is drawn over the board. every fish on the path, which is the cell that glows
+    and the whole of its trail, faces the other way from the rest. frame_fish_fx adds GLOW_TURN# to
+    its yaw. a fish turns around slowly, and the turn is the fish's own: a fish that is swapped onto
+    the path comes on facing the way that it was, and turns around there, and one that is swapped off
+    turns back. swapCellStacks, in fish_funcs, takes the turn along with the fish, for a swap and for a
+    fall. a new fish that drops in comes in facing the usual way, so one that lands on the path turns.
+    a fish that falls through the path turns as it passes, by where it is drawn: a fish falls through
+    cells before it is in any of them. see glowWhereCell.
+    the trail only shows like that, and when the music plays: on every note of a tune that is on a
+    beat of it, and not a rest, a faint glimmer of light sets off from the root of the trail, its oldest
+    end, and slides along it to the tip, which is the cell that glows, the one that the next move moves.
+    it goes underneath the fish, leaving a few soft sparkles as it goes. its path ripples to either side,
+    and how tightly is up to the note that sent it, so every tune ripples a little differently. up to
+    GLOW_RUN_COUNT of them run at once. a beat of a quick tune is two of its notes, the same as the
+    dance counts them: see BEAT_PULSE_STEPS. the glimmer is the ribbon of a quest, drawn by
+    GlowTrailEffect.fx, and by the copies of it that end in 2 and 3, since one effect can only be
+    loaded once and each glimmer has its own path. melody notes come to glowMusicBeat, in
+    fish_routines_music.
+
+    the "Glow" window of the debug panel (FISH_DEBUG) turns it off and on, steps it by hand, sets
+    the length of the trail, sends a pulse, and can light the cells of the trail in plain squares.
+remend
+
+global GLOW_ON = 1 `0 turns the whole thing off, for the debug panel
+global GLOW_X = -1 `the cell that glows, across and down. -1 until glowPlace has put it where the seed says.
+global GLOW_Y = 0
+global GLOW_TRAIL_CAP = 64 `the most cells that the trail can have, whatever the length is set to
+global dim GLOW_TRAIL_X(64) `the cells of the trail, the newest first
+global dim GLOW_TRAIL_Y(64)
+global GLOW_TRAIL_N = 0 `how many cells the trail has now
+global GLOW_TRAIL_OVERRIDE = -1 `the length of the trail, set by hand, or -1 for the usual length
+
+global FORCE_GLOW = 100 `the forced group of the fish that a loop encloses. see FORCED POPS in fish_headers.
+
+` what the last loop did, for the debug panel
+global GLOW_LOOPS = 0 `how many loops have been closed in this game
+global GLOW_LAST_RING = 0 `how many cells the last loop had
+global GLOW_LAST_INSIDE = 0 `and how many fish it popped
+
+` scratch, for working out what a loop encloses
+global dim GLOW_WALL(400) `1 for every cell of the loop
+global dim GLOW_PIECE(400) `which piece of the board every cell is in, or 0 for none yet
+global dim GLOW_QUEUE(400)
+global dim GLOW_PIECE_SIZE(400)
+global dim GLOW_PIECE_EDGE(400) `1 for a piece that gets to the edge, so it is not enclosed
+
+` what is drawn. the cell that glows is lit under its fish, and so is the trail, fainter the older it is.
+global GLOW_HEAD_SPRITE = 0
+global dim GLOW_TRAIL_SPRITES(64)
+global GLOW_SHOW_SQUARES = 0 `1 lights the cell that glows and the trail in plain squares, for the debug panel
+global GLOW_HEAD_ALPHA = 200
+global GLOW_TRAIL_ALPHA = 70 `how bright the newest cell of the trail is. the oldest is a third of that.
+global GLOW_TINT = 0 `setup_glow picks it
+global ORDER_GLOW = 9 `on top of the coral and the zones of the quests, and underneath the cursor and the fish
+
+` WHAT SHOWS. the fish that are turned around.
+global GLOW_TURN_ON = 1 `1 when the fish on the path are turned around. the debug panel can say no.
+global dim GLOW_TURN#(400) `how far around the fish in every cell is turned, from 0 to 1, which is half of a turn. it goes with the fish.
+global dim GLOW_TURNING(400) `the cells that are turned at all, or are on the path, so that only those are looked at
+global GLOW_TURNING_N = 0
+global dim GLOW_LISTED(400) `1 for a cell that is on that list
+global dim GLOW_WANT(400) `GLOW_STAMP for a cell that is on the path on this frame
+global GLOW_STAMP = 0
+global GLOW_TURN_EASE# = 0.006 `how much of the way it turns in a millisecond
+global GLOW_WHERE = 0 `scratch, for glowWhereCell: the cell that a fish is drawn in, or -1 for none
+global GLOW_LAST_MS = 0
+
+` the glimmers that run along the trail, on the beats of the music
+global GLOW_RUN_COUNT = 3 `how many can be running at once. each one has a sprite, and an effect of its own.
+global dim GLOW_RUN_STARTS(3) `when each one set off, on the clock of the game, or 0 for one that is not running
+global dim GLOW_RUN_SPRITES(3)
+global dim GLOW_RUN_FXS(3)
+global GLOW_RUN_NEXT = 0 `the one that the next note sets off. it takes over from the oldest.
+global GLOW_RUN_LAST = 0 `when the last one set off
+global GLOW_RUN_CELL_MS = 110 `how long it takes to get from one cell of the trail to the next
+global GLOW_RUN_GAP_MS = 0 `a note that comes sooner than this after the last one set off sends none
+global GLOW_RUN_LENGTH = 1600 `how long the glimmer is, in thousandths of a cell
+global GLOW_RUN_ALPHA = 60 `how bright it is, from 0 to 255
+global GLOW_RUN_WIDE = 40 `how wide it is, in hundredths of a cell, from the middle to the edge
+global GLOW_RUN_TINT = 0 `its color. setup_glow picks it: pale, and a little toward the water.
+global GLOW_RUN_X# = 0 `scratch, for glowPathAt: a spot on the path, in pixels
+global GLOW_RUN_Y# = 0
+global dim GLOW_RIB#(24) `scratch, for glowDrawRun: the spots of the ribbon, x and then y of each
+global GLOW_RUN_OK = 0 `and 0 when the path jumps around the edge of the board right there, with "seamless"
+global GLOW_SPARK_NEXT = 0 `when the glimmers leave their next sparkle, on the clock of the game
+global GLOW_SPARK_EVERY = 160 `one is left every this many milliseconds, and up to as long again
+global GLOW_SPARK_ALPHA = 55 `how bright a sparkle is, from 0 to 255
+global dim GLOW_RUN_NOTES(3) `the note that sent each glimmer. it says how tightly its path ripples.
+global GLOW_WAVE_AMP = 30 `how far the path ripples to either side, in hundredths of a cell
+global GLOW_WAVE_BASE = 40 `how many ripples there are to a cell, in hundredths, for the lowest note
+global GLOW_WAVE_STEP = 7 `and how many more for every note higher
+global dim GLOW_RIB_BASE#(24) `scratch, for glowDrawRun: the spots of the ribbon before they ripple
+global dim GLOW_RIB_AT(12) `and how far along the path each one is, in thousandths of a cell
+
+` a swap that has been made, and has not been judged yet. see glowSwapPending.
+global GLOW_PENDING = 0 `1 while there is one
+global GLOW_PENDING_X = 0 `which way it went
+global GLOW_PENDING_Y = 0
+global GLOW_SWAP_VALID = 0 `1 when handle_combos has seen a group that it put together

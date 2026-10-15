@@ -1,0 +1,41 @@
+remstart
+    THE QUEST TALK
+    when the player takes a quest, one of the creatures of the sea says something about it: who it is, and
+    what the quest wants, in a few words. a box at the bottom of the screen, with a picture of the one who
+    is talking, its name, and the line, said a letter at a time in the voice of the angler, at a pitch of its
+    own. it does not stop the game: it goes away by itself a little while after the line is out, or after
+    two more swaps. a swap while the line is being said says the rest of it at once.
+    each quest is talked about once a game. fish_routines_questtalk has the lines and everything else.
+remend
+
+global QTALK_ENABLED = 1 `0 and nothing is ever said. the tests turn it off.
+global QTALK_ON = 0 `1 while the box is up
+global QTALK_ID = 0 `the quest that is being talked about
+global QTALK_DONE_MS = 0 `when the last letter was said, or 0 while it is still being said
+global QTALK_HOLD_MS = 2800 `how long the box stays after the line is out
+global QTALK_SWAPS = 0 `swaps since the line was out
+global QTALK_CLOSING = 0 `1 while it fades away
+global QTALK_SAY_NEXT_MS = 0 `when the next letter is due
+global QTALK_SAID_LETTERS = 0 `how many letters have been said
+global QTALK_WORD_BUBBLES = 0 `how many sounds the word that is being said has made
+global QTALK_FOUND = -1 `the sound of a vowel, see qtVowelAt
+global QTALK_WORD_END = 0 `how the word ends, see qtWordEnds
+global QTALK_LETTER_MS = 34 `how long a letter takes, in milliseconds
+global QTALK_BOX_X = 138
+global QTALK_BOX_Y = 244
+global QTALK_BOX_W = 300
+global QTALK_BOX_H = 60
+global QTALK_BOX_SPRITE = 0
+global QTALK_FACE_SPRITE = 0
+global QTALK_BOX_BORDER as infoBorder
+global QTALK_TEXT_ID = 0
+global QTALK_NAME_TEXT_ID = 0
+global QTALK_FADE_TWEEN_ID = 0
+global dim QTALK_SAY$(33) `the line of every quest
+global dim QTALK_WHO$(33) `and the name of the one who says it
+global dim QTALK_TEX(33) `its picture
+global dim QTALK_PITCH(33) `its voice, in hundredths of an octave above the angler's
+global dim QTALK_SAID(33) `1 once a quest has been talked about, this game
+global dim QTALK_VOICE(33) `which voice it talks in: 0 squeak, 1 bubbly, 2 gruff, 3 bloop, 4 clicky
+global dim QTALK_CLIPS(30) `the sounds of the voices, six for each: voice * 6 + the vowel. Tools/questtalk_voice_gen.py made them.
+global ORDER_QTALK = 30 `on top of the board and the score texts, and under info mode

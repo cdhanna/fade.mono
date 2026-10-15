@@ -312,6 +312,15 @@ setup_abilities:
         stackable = 0
     }
 
+    ` see THE ANGLER in fish_headers_angler. it comes after the cards of the fast, but it is dealt.
+    CARDS(ABILITY_INDEX_ANGLER) = {
+        name$ = "bright idea"
+        desc$ = "An old angler fish answers a question. Or keep its light, and ask in info mode."
+        obtained = 0
+        abilityType = ABILITY_TYPE_INSTANT,
+        stackable = 1
+    }
+
 return
 
 
@@ -571,7 +580,7 @@ assign_ability_selection:
         while found = 0 AND maxIter > 0
             maxIter = maxIter - 1
 
-            candidate = rnd(CARD_LENGTH)
+            candidate = random stream(RNG_CARDS, CARD_LENGTH)
 
             ` leave a little hack to force a card selection for testing. 
             if forceCandidate >= 0
@@ -584,7 +593,15 @@ assign_ability_selection:
                 valid = 1
 
                 ` the cards that only a fast gives out are never dealt. see THE FAST in fish_headers_fast.
-                if candidate >= FAST_CARD_FROM then valid = 0
+                ` the angler comes after them, and it is dealt.
+                if candidate >= FAST_CARD_FROM
+                    if candidate <> ABILITY_INDEX_ANGLER then valid = 0
+                endif
+
+                ` the angler is rare. one more roll of the cards says if it stays. see THE CARD in fish_headers_angler.
+                if candidate = ABILITY_INDEX_ANGLER and valid = 1
+                    if random stream(RNG_CARDS, 100) >= ANGLER_DEAL_CHANCE then valid = 0
+                endif
 
                 ` the second copy of "bottom feeder" only makes sense once the first one is owned
                 if candidate = ABILITY_INDEX_BOTTOM_FEEDER_2 and CARDS(ABILITY_INDEX_BOTTOM_FEEDER).obtained = 0
@@ -605,12 +622,17 @@ assign_ability_selection:
                 if CARDS(candidate).maxUses > 0 and CARDS(candidate).uses >= CARDS(candidate).maxUses
                     valid = 0
                 endif
-                for j = 0 to i - 1
-                    if CARD_CHOICE_INDEXES(j) = candidate
-                        valid = 0
-                        exit
-                    endif
-                next
+                ` the first card has none before it to be the same as. a loop from 0 to -1 still goes
+                ` around once, and would hold the card up against the first card of the screen before,
+                ` which is left over from another round, or from another game with the same seed.
+                if i > 0
+                    for j = 0 to i - 1
+                        if CARD_CHOICE_INDEXES(j) = candidate
+                            valid = 0
+                            exit
+                        endif
+                    next
+                endif
 
                 ` cards that are being dealt again are not the ones that were thrown away. after enough
                 ` tries that is given up on, because there may not be any others. see THE REROLL in fish_headers.
@@ -656,6 +678,10 @@ handle_ability_instant_effect:
         endcase
         case ABILITY_INDEX_SHOW_TIME
             takeShowTime()
+        endcase
+        case ABILITY_INDEX_ANGLER
+            ` it comes once the upgrade screen is out of the way. see handle_angler, in fish_routines_angler.
+            ANGLER_PENDING = 1
         endcase
     endselect
 return
@@ -785,6 +811,13 @@ handle_ability_selection:
     ` let a swap that is playing out finish first, so that it is not left hanging behind the cards
     if LIVE_MOVE_ACTIVE then return
     REQUEST_ABILITY_SELECTION = 0
+
+    ` a stretch of the steam timeline for the upgrade screen, in the color for getting ready to play.
+    ` advanceScoreBar ends it, when a card has been picked. see frame_steam_timeline, in fish_routines.
+    start steam timeline range STEAM_RANGE_UPGRADE, "Upgrade", "Picking a card", "steam_chest", 50
+    set steam timeline tooltip "Upgrade"
+    STEAM_TIMELINE_MODE = 2
+    set steam timeline mode 2
 
 
     remstart

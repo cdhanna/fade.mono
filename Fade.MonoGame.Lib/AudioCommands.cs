@@ -382,6 +382,7 @@ public partial class FadeMonoGameCommands
                 $"[fade] sfx: CreateInstance() threw for clip {clipId}: {ex}");
             return;
         }
+        sfx.clipId = clipId;
         AudioInstanceSystem.audioEffects[index] = sfx;
 #endif
         // The new instance keeps the id's group, and the group is applied to it right away.
@@ -613,6 +614,7 @@ public partial class FadeMonoGameCommands
             instance.Play();
             AudioInstanceSystem.perfTicks += System.Diagnostics.Stopwatch.GetTimestamp() - perfStart;
             AudioInstanceSystem.perfPlays++;
+            RecordSystem.LogSound(sfxId);
         }
         catch (System.Exception ex)
         {

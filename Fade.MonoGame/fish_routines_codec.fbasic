@@ -71,6 +71,9 @@ setup_codec:
     CODEC_ENTRY_GOODBYE = CARD_LENGTH + CODEC_EXTRA_COUNT
     CODEC_ENTRY_GOODBYE = CODEC_ENTRY_GOODBYE - 1
 
+    ` the call of the angler is right before it. see THE CALL in fish_headers_angler.
+    CODEC_ENTRY_CALL = CODEC_ENTRY_GOODBYE - 1
+
     ` and then every quest. see THE QUESTS IN THE CODEC in fish_headers_quests.
     CODEC_ENTRY_QUEST = CARD_LENGTH + CODEC_EXTRA_COUNT
     CODEC_COUNT = CARD_LENGTH + CODEC_EXTRA_COUNT + QUEST_COUNT
@@ -471,6 +474,7 @@ function getCodecEntryTex(entryIndex)
     endif
 
     if entryIndex = CODEC_ENTRY_GOODBYE then entryTex = TEX_ENDING_GOODBYE
+    if entryIndex = CODEC_ENTRY_CALL then entryTex = CARDS(ABILITY_INDEX_ANGLER).artTexId
 
     ` a quest has the picture that is on its badge
     entryQuest = getCodecQuest(entryIndex)
@@ -898,6 +902,11 @@ function refreshCodec()
             endif
         endif
 
+        ` the call of the angler is given away by the angler itself
+        if CODEC_SELECTED = CODEC_ENTRY_CALL
+            set text CODEC_DESC_TEXT_ID, "Not found yet. Somebody down there likes to help."
+        endif
+
         ` the usual ending is there for whoever gets to the end of a game
         if CODEC_SELECTED = CODEC_ENTRY_GOODBYE
             set text CODEC_DESC_TEXT_ID, "Not found yet. Every game ends, if it is played through."
@@ -1017,6 +1026,13 @@ function refreshCodec()
         if CODEC_SELECTED = CODEC_ENTRY_SING
             set text CODEC_NAME_TEXT_ID, "Sing a Song"
             codecTwoSignalText(MORSE_WORD_SING, MORSE_WORD_SONG, "Tap out SING: ", "  or SONG: ", ". A hint of the hidden game plays, with a trail.")
+            set text CODEC_KIND_TEXT_ID, "signal"
+            exitfunction
+        endif
+        ` HELP and INFO do the same thing, so they are one entry, the same as SING and SONG
+        if CODEC_SELECTED = CODEC_ENTRY_CALL
+            set text CODEC_NAME_TEXT_ID, "Call the Angler"
+            codecTwoSignalText(MORSE_WORD_HELP, MORSE_WORD_INFO, "Tap out HELP: ", "  or INFO: ", ". An old fish with a light comes to answer questions.")
             set text CODEC_KIND_TEXT_ID, "signal"
             exitfunction
         endif

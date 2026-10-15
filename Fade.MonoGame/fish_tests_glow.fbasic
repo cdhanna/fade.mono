@@ -1,0 +1,249 @@
+remstart
+    THE TESTS OF THE GLOW
+    see fish_headers_glow for what the glow is. the top of fish_tests explains how the tests work.
+    most of them step the glow with glowSwapMade, the way that a swap does, without making the swap.
+remend
+
+test glow_steps_the_way_that_a_swap_went from fishBoard
+    GLOW_X = 4
+    GLOW_Y = 4
+    tGlowWasY = GLOW_Y
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    tGlowWantY = tGlowWasY - 1
+    assert GLOW_Y = tGlowWantY, "the cursor carried its fish up, so the glow goes up a cell"
+    end
+endtest
+
+test glow_does_not_step_for_a_swap_that_makes_no_match from fishBoard
+    tGlowWasX = GLOW_X
+    tGlowWasY = GLOW_Y
+    testCursor(2, 2)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+
+    assert totalComboCount = 0, "nothing pops"
+    assert GLOW_X = tGlowWasX, "and the glow stays where it is"
+    assert GLOW_Y = tGlowWasY, "all of the way"
+    end
+endtest
+
+test glow_stops_at_the_edge from fishBoard
+    GLOW_X = 0
+    GLOW_Y = 2
+    glowSwapMade(-1, 0)
+    assert GLOW_X = 0, "it does not go off of the board"
+    assert GLOW_Y = 2, "or anywhere else"
+    end
+endtest
+
+test glow_goes_around_the_edge_with_seamless from fishBoard
+    CARDS(ABILITY_INDEX_WRAP).obtained = 1
+    GLOW_X = 0
+    GLOW_Y = 2
+    glowSwapMade(-1, 0)
+    tGlowRight = CELL_COLUMN_COUNT - 1
+    assert GLOW_X = tGlowRight, "it comes out on the other side"
+    end
+endtest
+
+test glow_starts_where_the_seed_says_with_no_trail from fishBoard
+    GAME_SEED = 12345
+    glowReset()
+    glowPlace()
+    tGlowFirstX = GLOW_X
+    tGlowFirstY = GLOW_Y
+    assert GLOW_TRAIL_N = 0, "it has no trail"
+    tGlowIn = 1
+    if GLOW_X < 0 then tGlowIn = 0
+    if GLOW_Y < 0 then tGlowIn = 0
+    if GLOW_X >= CELL_COLUMN_COUNT then tGlowIn = 0
+    if GLOW_Y >= CELL_ROW_COUNT then tGlowIn = 0
+    assert tGlowIn = 1, "it is on the board"
+
+    glowReset()
+    glowPlace()
+    assert GLOW_X = tGlowFirstX, "the same seed starts it in the same place, across"
+    assert GLOW_Y = tGlowFirstY, "and down"
+
+    ` a few other seeds, and they do not all start it in the same place
+    tGlowMoved = 0
+    for tGlowSeed = 1 to 6
+        GAME_SEED = 12345 + tGlowSeed * 1000
+        glowReset()
+        glowPlace()
+        if GLOW_X <> tGlowFirstX then tGlowMoved = 1
+        if GLOW_Y <> tGlowFirstY then tGlowMoved = 1
+    next
+    assert tGlowMoved = 1, "another seed starts it somewhere else"
+    end
+endtest
+
+test glow_trail_grows_to_the_multiplier_like_a_snake from fishBoard
+    SCORE_MULTIPLIER = 4
+    GLOW_X = 1
+    GLOW_Y = 1
+    glowSwapMade(1, 0)
+    glowSwapMade(0, 1)
+    assert GLOW_TRAIL_N = 2, "it is shorter than the multiplier, so every step makes it longer"
+    glowSwapMade(1, 0)
+    glowSwapMade(0, 1)
+    glowSwapMade(1, 0)
+    glowSwapMade(0, 1)
+    assert GLOW_TRAIL_N = 4, "at x4 it stops at four cells, and moves along"
+    assert GLOW_TRAIL_X(0) = 4, "the newest is the cell that it came from"
+    assert GLOW_TRAIL_Y(0) = 3, "over there"
+    assert GLOW_TRAIL_X(3) = 2, "and the oldest is four steps back"
+    assert GLOW_TRAIL_Y(3) = 2, "up there"
+    end
+endtest
+
+test glow_trail_loses_its_oldest_cells_when_the_multiplier_goes_down from fishBoard
+    SCORE_MULTIPLIER = 5
+    GLOW_X = 1
+    GLOW_Y = 1
+    glowSwapMade(1, 0)
+    glowSwapMade(0, 1)
+    glowSwapMade(1, 0)
+    glowSwapMade(0, 1)
+    glowSwapMade(1, 0)
+    assert GLOW_TRAIL_N = 5, "five cells at x5"
+
+    SCORE_MULTIPLIER = 2
+    runto _loop
+    assert GLOW_TRAIL_N = 2, "at x2 it is cut back to two cells"
+    assert GLOW_TRAIL_X(0) = 3, "the newest are the ones that stay"
+    assert GLOW_TRAIL_Y(0) = 3, "the cell that it came from"
+    assert GLOW_TRAIL_X(1) = 3, "and the one before that"
+    assert GLOW_TRAIL_Y(1) = 2, "up one"
+    end
+endtest
+
+test glow_loop_pops_the_fish_that_it_encloses from fishBoard
+    SCORE_BAR.endVal = 100000000
+    GLOW_TRAIL_OVERRIDE = 10
+    GLOW_X = 2
+    GLOW_Y = 2
+    ` around the cell at (3, 3), and back onto the first cell
+    glowSwapMade(1, 0)
+    glowSwapMade(1, 0)
+    glowSwapMade(0, 1)
+    glowSwapMade(0, 1)
+    glowSwapMade(-1, 0)
+    glowSwapMade(-1, 0)
+    glowSwapMade(0, -1)
+    assert GLOW_TRAIL_N = 7, "the trail is all the way around but for the last step"
+    glowSwapMade(0, -1)
+
+    assert GLOW_LOOPS = 1, "the step onto the trail closed a loop"
+    assert GLOW_LAST_RING = 8, "of eight cells"
+    assert GLOW_LAST_INSIDE = 1, "around one fish"
+    assert CELLS(testIndex(3, 3)).comboForce = FORCE_GLOW, "the fish in the middle is marked to pop"
+    assert CELLS(testIndex(2, 3)).comboForce = 0, "the fish of the loop are not"
+    assert CELLS(testIndex(1, 3)).comboForce = 0, "and nor is one outside of it"
+    assert GLOW_TRAIL_N = 0, "the trail is gone"
+    assert GLOW_X = 2, "and the glow is where it stepped"
+    assert GLOW_Y = 2, "which is where it started"
+
+    runto _combos_judged
+    assert testPopCount() = 1, "one fish pops"
+    assert testPops(3, 3), "the one that was enclosed"
+    end
+endtest
+
+test glow_loop_with_seamless_pops_the_smaller_piece from fishBoard
+    SCORE_BAR.endVal = 100000000
+    CARDS(ABILITY_INDEX_WRAP).obtained = 1
+    GLOW_TRAIL_OVERRIDE = 10
+    GLOW_X = 2
+    GLOW_Y = 2
+    glowSwapMade(1, 0)
+    glowSwapMade(1, 0)
+    glowSwapMade(0, 1)
+    glowSwapMade(0, 1)
+    glowSwapMade(-1, 0)
+    glowSwapMade(-1, 0)
+    glowSwapMade(0, -1)
+    glowSwapMade(0, -1)
+
+    assert GLOW_LAST_INSIDE = 1, "there is no edge, but the inside is the smaller piece"
+    assert CELLS(testIndex(3, 3)).comboForce = FORCE_GLOW, "so the fish in the middle is marked to pop"
+    end
+endtest
+
+test glow_stepping_back_closes_a_loop_around_nothing from fishBoard
+    GLOW_TRAIL_OVERRIDE = 5
+    GLOW_X = 2
+    GLOW_Y = 2
+    glowSwapMade(1, 0)
+    glowSwapMade(1, 0)
+    assert GLOW_TRAIL_N = 2, "two cells of trail"
+    glowSwapMade(-1, 0)
+    assert GLOW_LOOPS = 1, "stepping back onto the trail closes a loop"
+    assert GLOW_LAST_INSIDE = 0, "that encloses nothing"
+    assert GLOW_TRAIL_N = 0, "and the trail is gone all the same"
+    end
+endtest
+
+test glow_loop_closed_by_a_real_swap_pops_on_the_next_look from fishBoard
+    SCORE_BAR.endVal = 100000000
+    GLOW_TRAIL_OVERRIDE = 10
+    GLOW_X = 2
+    GLOW_Y = 2
+    ` most of the way around the cell at (3, 3), by hand
+    glowSwapMade(1, 0)
+    glowSwapMade(1, 0)
+    glowSwapMade(0, 1)
+    glowSwapMade(0, 1)
+    glowSwapMade(-1, 0)
+    glowSwapMade(-1, 0)
+    glowSwapMade(0, -1)
+    assert GLOW_TRAIL_N = 7, "seven cells of trail"
+
+    ` the last step is a real swap, up, that makes a row of three
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the row pops"
+    assert GLOW_LOOPS = 1, "the swap made a match, so the glow stepped, and closed the loop"
+    assert GLOW_LAST_INSIDE = 1, "around one fish"
+    assert CELLS(testIndex(3, 3)).comboForce = FORCE_GLOW, "which is marked to pop"
+
+    runto _combos_judged
+    assert testPops(3, 3), "and it pops on the next look"
+    end
+endtest
+
+test glow_turn_goes_with_the_fish_when_it_is_swapped from fishBoard
+    GLOW_TRAIL_OVERRIDE = 0
+    GLOW_X = 2
+    GLOW_Y = 2
+    tTurnUntil = wall ms() + 1500
+    while wall ms() < tTurnUntil
+        runto _loop
+    endwhile
+    tTurned = 0
+    if GLOW_TURN#(testIndex(2, 2)) > .9 then tTurned = 1
+    assert tTurned = 1, "the fish in the cell that glows has turned around"
+
+    ` the cursor carries the fish above it down, and the turned fish is shoved up
+    testCursor(2, 1)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+    tTurned = 0
+    if GLOW_TURN#(testIndex(2, 1)) > .8 then tTurned = 1
+    assert tTurned = 1, "the turned fish is still turned, in the cell that it was shoved to"
+    tTurned = 0
+    if GLOW_TURN#(testIndex(2, 2)) < .2 then tTurned = 1
+    assert tTurned = 1, "and the fish that came onto its cell has not turned yet"
+    end
+endtest

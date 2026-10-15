@@ -1,0 +1,146 @@
+remstart
+    THE SEED OF A GAME. see fish_headers_seed, which explains all of this.
+    these are only functions. the page where a seed is entered, and "play this seed", are in
+    fish_routines_highscores, with the other pages that work the same way.
+remend
+
+
+` a new game is about to be dealt. give it its seed, and start the three streams from it.
+` reset_game calls this before it picks a single fish. the seed is the one that the page that
+` "New Game" opens was set to, and when that is none, one is picked.
+function seedNewGame()
+    GAME_SEED = OPTION_GAME_SEED
+    GAME_SEED_PICKED = 1
+    seedIsGood = 1
+    if GAME_SEED < 1 then seedIsGood = 0
+    if GAME_SEED > SEED_MAX then seedIsGood = 0
+    if seedIsGood = 0
+        GAME_SEED = rnd(SEED_MAX) + 1
+        GAME_SEED_PICKED = 0
+    endif
+    GAME_SEED_RULES = GAME_RULES_VERSION
+    seedStreams(GAME_SEED)
+endfunction
+
+
+` start the three streams from a seed. they all take the same seed, and are still nothing like
+` each other, because a stream mixes its own number in with its seed.
+function seedStreams(seedFrom)
+    seed random stream RNG_BOARD, seedFrom
+    seed random stream RNG_CARDS, seedFrom
+    seed random stream RNG_QUESTS, seedFrom
+endfunction
+
+
+` deal the board of a new game. the board is emptied first: a fish is picked so that it does not
+` pop where it lands, which depends on the fish around it, and the fish of the game before must
+` not have a say in that, or the same seed would not deal the same board twice. after that, the
+` cells to the left and above are already new by the time a cell gets its turn.
+function seedDealBoard()
+    dealLast = CELL_COUNT - 1
+    for dealI = 0 to dealLast
+        CELLS(dealI).value = 0
+    next
+    for dealI = 0 to dealLast
+        CELLS(dealI).value = getImpossibleRandomValueForCell(dealI)
+    next
+endfunction
+
+
+` the seed of the saved game, and where each of its streams had got to. save_game calls this.
+function seedSave()
+    seedPref = SAVE_PREF + SAVE_PREF_SEED
+    set pref seedPref, GAME_SEED
+    set pref seedPref + 1, GAME_SEED_PICKED
+    set pref seedPref + 2, GAME_SEED_RULES
+    for seedStream = 0 to 2
+        set pref seedPref + 3 + seedStream * 2, random stream state(seedStream, 0)
+        set pref seedPref + 4 + seedStream * 2, random stream state(seedStream, 1)
+    next
+endfunction
+
+
+` put the seed of the saved game back, and its streams, so that the game carries on with the
+` fish that it would have had. a game that was saved before there were seeds has none: its seed
+` is 0, and its streams are left wherever reset_game started them.
+function seedLoad()
+    seedPref = SAVE_PREF + SAVE_PREF_SEED
+    GAME_SEED = get pref(seedPref, 0)
+    seedIsGood = 1
+    if GAME_SEED < 1 then seedIsGood = 0
+    if GAME_SEED > SEED_MAX then seedIsGood = 0
+    if seedIsGood = 0
+        GAME_SEED = 0
+        GAME_SEED_PICKED = 0
+        GAME_SEED_RULES = 0
+        exitfunction
+    endif
+
+    GAME_SEED_PICKED = get pref(seedPref + 1, 0)
+    if GAME_SEED_PICKED <> 0 then GAME_SEED_PICKED = 1
+    GAME_SEED_RULES = get pref(seedPref + 2, 0)
+    for seedStream = 0 to 2
+        seedHalf0 = get pref(seedPref + 3 + seedStream * 2, 0)
+        seedHalf1 = get pref(seedPref + 4 + seedStream * 2, 0)
+        set random stream state seedStream, seedHalf0, seedHalf1
+    next
+endfunction
+
+
+` the fish that are waiting above the columns in the quest FORECAST, ten to a number, and then
+` how many each column has had taken, six to a number. questSave calls this.
+function questForeSave()
+    if QUEST_ID <> QUEST_FORECAST then exitfunction
+    for foreSaveN = 0 to 39
+        forePacked = 0
+        foreStep = 1
+        for foreSaveI = 0 to 9
+            forePacked = forePacked + QUEST_FORE(foreSaveN * 10 + foreSaveI) * foreStep
+            foreStep = foreStep * 8
+        next
+        set pref QUEST_FORE_PREF + foreSaveN, forePacked
+    next
+    for foreSaveN = 0 to 4
+        forePacked = 0
+        foreStep = 1
+        for foreSaveI = 0 to 5
+            forePacked = forePacked + QUEST_STACK(foreSaveN * 6 + foreSaveI) * foreStep
+            foreStep = foreStep * 32
+        next
+        set pref QUEST_FORE_PREF + 40 + foreSaveN, forePacked
+    next
+endfunction
+
+
+` put them back. questAfterLoad calls this for a game that was saved in the middle of FORECAST.
+` a game that was saved before they were kept has none, and new ones are picked for it.
+function questForeLoad()
+    for foreLoadN = 0 to 399
+        QUEST_STACK(foreLoadN) = 0
+    next
+
+    foreSaved = get pref(QUEST_FORE_PREF, 0)
+    if foreSaved <= 0
+        for foreLoadN = 0 to 399
+            QUEST_FORE(foreLoadN) = random stream(RNG_QUESTS, 7) + 1
+        next
+        exitfunction
+    endif
+
+    for foreLoadN = 0 to 39
+        forePacked = get pref(QUEST_FORE_PREF + foreLoadN, 0)
+        for foreLoadI = 0 to 9
+            foreKind = forePacked mod 8
+            forePacked = forePacked / 8
+            if foreKind < 1 then foreKind = 1
+            QUEST_FORE(foreLoadN * 10 + foreLoadI) = foreKind
+        next
+    next
+    for foreLoadN = 0 to 4
+        forePacked = get pref(QUEST_FORE_PREF + 40 + foreLoadN, 0)
+        for foreLoadI = 0 to 5
+            QUEST_STACK(foreLoadN * 6 + foreLoadI) = forePacked mod 32
+            forePacked = forePacked / 32
+        next
+    next
+endfunction

@@ -6,6 +6,86 @@ namespace Fade.MonoGame.Lib;
 
 public partial class FadeMonoGameCommands
 {
+    /// <summary>
+    /// <para>Assigns a custom shader effect to a font, so that all text in that font is drawn with it.</para>
+    /// <para>Pass <c>0</c> as the effect to go back to drawing the font the ordinary way.</para>
+    /// </summary>
+    /// <remarks>
+    /// Load the effect first with <see cref="LoadEffect">effect</see>, then pass its ID here. Every
+    /// text sprite that uses the font is drawn through the shader, and so are the font's icons, and
+    /// the drop shadows of both. The shader gets the font's glyph texture as its sprite texture, and
+    /// the color of the text as the vertex color.
+    ///
+    /// The usual reason to want this is a font that is drawn at the size it was baked at. Its glyphs
+    /// have smooth edges, and a shader that snaps their alpha to fully on or fully off gives hard
+    /// pixel edges instead.
+    /// </remarks>
+    /// <example>
+    /// Draw all the text of a font through a shader.
+    /// <code>
+    /// ` (supply your own .fx shader file for the effect)
+    /// font 1, "font"
+    /// effect 1, "crisp.fx"
+    /// set font effect 1, 1
+    ///
+    /// text 1, 400, 200, 1, "hard edges"
+    /// do
+    ///   sync
+    /// loop
+    /// </code>
+    /// </example>
+    /// <param name="fontId">The font to apply the effect to.</param>
+    /// <param name="effectId">The ID of a previously loaded effect, or <c>0</c> for none.</param>
+    /// <seealso cref="LoadEffect">effect</seealso>
+    /// <seealso cref="LoadSpriteFont">font</seealso>
+    /// <seealso cref="SetSpriteEffect">set sprite effect</seealso>
+    [FadeBasicCommand("set font effect")]
+    public static void SetFontEffect(int fontId, int effectId)
+    {
+        TextureSystem.GetSpriteFontIndex(fontId, out var fontIndex, out var runtimeFont);
+        runtimeFont.effectId = effectId;
+        TextureSystem.fonts[fontIndex] = runtimeFont;
+    }
+
+    /// <summary>
+    /// <para>Gives a font the icons of another font, so that both draw the same set.</para>
+    /// <para>The set is shared, not copied: an icon added or changed on either font afterwards shows up in both.</para>
+    /// </summary>
+    /// <remarks>
+    /// This is for a game that bakes one typeface at several sizes, as several fonts. Register the
+    /// icons once, on one of the fonts, and share them with the rest. Icons are sized by the line
+    /// height of the font that draws them, so a shared icon is bigger in a bigger font.
+    ///
+    /// Any icons the second font had of its own are dropped.
+    /// </remarks>
+    /// <example>
+    /// Two sizes of one typeface, with one set of icons.
+    /// <code>
+    /// font 1, "big"
+    /// font 2, "small"
+    /// texture 1, "ghost"
+    /// font icon 1, 1, "ghost", 1
+    /// share font icons 1, 2
+    ///
+    /// text 1, 400, 200, 2, "a small {ghost}"
+    /// enable rich text 1
+    /// do
+    ///   sync
+    /// loop
+    /// </code>
+    /// </example>
+    /// <param name="fromFontId">The font whose icons to share.</param>
+    /// <param name="toFontId">The font that takes them.</param>
+    /// <seealso cref="SetFontIcon">font icon</seealso>
+    [FadeBasicCommand("share font icons")]
+    public static void ShareFontIcons(int fromFontId, int toFontId)
+    {
+        var icons = GetFontIcons(fromFontId);
+        TextureSystem.GetSpriteFontIndex(toFontId, out var fontIndex, out var runtimeFont);
+        runtimeFont.icons = icons;
+        TextureSystem.fonts[fontIndex] = runtimeFont;
+    }
+
     private static FontIconSet GetFontIcons(int fontId)
     {
         TextureSystem.GetSpriteFontIndex(fontId, out var fontIndex, out var runtimeFont);

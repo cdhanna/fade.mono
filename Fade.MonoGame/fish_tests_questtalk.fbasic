@@ -1,0 +1,87 @@
+` THE QUEST TALK. see fish_headers_questtalk.
+
+` taking a quest the way the player does opens the box, with the line of that quest
+test questtalk_taking_a_quest_talks from fishBoard
+    QTALK_ENABLED = 1
+    questForce(QUEST_KRILL)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    QUEST_STATE = QSTATE_OFFERED
+    questPickToggle()
+    assert QUEST_STATE = QSTATE_ACTIVE, "the quest was taken"
+    assert QTALK_ON = 1, "and its creature talks"
+    assert QTALK_ID = QUEST_KRILL, "about that quest"
+    end
+endtest
+
+` a quest that starts over on its own, or one that a saved game brings back, says nothing
+test questtalk_quest_picked_up_by_the_game_says_nothing from fishBoard
+    QTALK_ENABLED = 1
+    questForce(QUEST_KRILL)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    questPickUp()
+    assert QTALK_ON = 0, "nothing is said"
+    end
+endtest
+
+` a quest is talked about once a game
+test questtalk_only_once_a_game from fishBoard
+    QTALK_ENABLED = 1
+    questTalkStart(QUEST_SHARK)
+    assert QTALK_ON = 1, "the first time, it talks"
+    questTalkStop()
+    questTalkStart(QUEST_SHARK)
+    assert QTALK_ON = 0, "the second time, it does not"
+    questTalkReset()
+    questTalkStart(QUEST_SHARK)
+    assert QTALK_ON = 1, "and in a new game, it does again"
+    end
+endtest
+
+` the line comes out a letter at a time, and the box goes away by itself a while after
+test questtalk_says_its_line_and_goes from fishBoard
+    QTALK_ENABLED = 1
+    questTalkStart(QUEST_TURTLE)
+    tQtNow = game ms()
+    questTalkStep(tQtNow + 100)
+    assert QTALK_DONE_MS = 0, "a moment in, it is still talking"
+    ` a frame at a time, as the game does it: a long jump is carried on from, not caught up with
+    for tQtStep = 1 to 300
+        tQtNow = tQtNow + 16
+        questTalkStep(tQtNow)
+    next
+    assert QTALK_DONE_MS > 0, "after a while, the line is out"
+    questTalkStep(tQtNow + QTALK_HOLD_MS + 100)
+    assert QTALK_CLOSING = 1, "and after the hold, it starts to go"
+    end
+endtest
+
+` a swap while it talks says the rest at once, and two more swaps send it away
+test questtalk_swaps_hurry_it_along from fishBoard
+    QTALK_ENABLED = 1
+    questTalkStart(QUEST_TURTLE)
+    questTalkMoved()
+    assert QTALK_DONE_MS > 0, "a swap says the rest of the line"
+    questTalkMoved()
+    questTalkMoved()
+    questTalkStep(game ms())
+    assert QTALK_CLOSING = 1, "two more and it goes"
+    end
+endtest
+
+` the tests keep it quiet
+test questtalk_is_off_in_the_tests from fishBoard
+    assert QTALK_ENABLED = 0, "the tests turn it off"
+    end
+endtest
+
+` every quest has someone to say something
+test questtalk_every_quest_has_a_line from fishBoard
+    tQtMissing = 0
+    for tQtN = 1 to QUEST_COUNT
+        if QTALK_TEX(tQtN) = 0 then tQtMissing = tQtMissing + 1
+    next
+    assert tQtMissing = 0, "every quest has a speaker with a picture"
+    end
+endtest

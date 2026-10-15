@@ -47,6 +47,9 @@ public struct RuntimeFont
 
     // The icons that rich text can draw with this font. Null until the first icon is registered.
     public FontIconSet icons;
+
+    // The effect that text in this font is drawn with, unless the text has one of its own. 0 is none.
+    public int effectId;
 }
 
 

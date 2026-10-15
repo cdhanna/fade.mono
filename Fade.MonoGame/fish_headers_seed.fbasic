@@ -1,0 +1,90 @@
+remstart
+    THE SEED OF A GAME
+    every game has a seed: a number from 1 to SEED_MAX. two games with the same seed, of the same
+    length and mode, start on the same board, are offered the same cards, and get the same quests.
+    the player can pick the seed on the page that "New Game" opens, or play the seed of a game on
+    the high score tables. otherwise one is picked for them.
+
+    THE STREAMS. `rnd` is no good for this: every bubble and every wobble of a sound takes a number
+    from it, and how many of those there are depends on how long the player waited. so the rolls
+    that the rules of the game depend on come from three streams of their own, with
+    `random stream(RNG_..., max)`, and only those rolls move them on:
+
+        RNG_BOARD   which fish drop in, and the chances of the cards: the stock market, the
+                    jellyfish's sting, belly up fish, horror coral, the hidden patterns, the tide
+        RNG_CARDS   which cards are offered on the upgrade screen
+        RNG_QUESTS  which quest comes next, and what each quest makes up for itself
+
+    they are apart so that the cards and the quests of a seed stay the same however the board is
+    played. anything that is only there to be looked at or listened to stays on `rnd`, and so do
+    the hints of the hidden game, which are rolled on the clock.
+
+    A NEW ROLL, or a roll that is taken away, or moved, changes what every seed deals from then
+    on. GAME_RULES_VERSION has to go up by one whenever that happens, and whenever a rule changes
+    what a seed plays like: a new card in the deal, a new quest, a new chance. the test
+    seed_deals_the_same_game, in fish_tests_seed, fails when what a seed deals has changed, as a
+    reminder.
+
+    ON THE TABLES. a score keeps the seed of its game, the rules version that it was played
+    under, and whether the player picked the seed. on this machine those are HISCORE_SEEDS,
+    HISCORE_RULES and HISCORE_PICKED. on Steam the seed and the version share the detail
+    STEAM_DETAIL_SEED: the seed in the low SEED_BITS bits, and the version in the SEED_RULES_BITS
+    above them. STEAM_FLAG_SEED_PICKED says that it was picked. a seed of 0 is a game from before
+    there were seeds.
+remend
+
+#constant RNG_BOARD 0
+#constant RNG_CARDS 1
+#constant RNG_QUESTS 2
+
+global SEED_MAX = 250000 `the biggest seed that there is
+global SEED_BITS = 18 `how many bits of STEAM_DETAIL_SEED the seed takes
+global SEED_RULES_BITS = 14 `and how many the rules version takes, above them
+global SEED_RULES_MAX = 16383
+
+` this goes up by one whenever what a seed deals changes. see A NEW ROLL, above.
+global GAME_RULES_VERSION = 3
+
+global GAME_SEED = 0 `the seed of the game that is being played. 0 is a game that was saved before there were seeds.
+global GAME_SEED_PICKED = 0 `1 when the player picked it
+global GAME_SEED_RULES = 0 `the rules version that the game was started under. it is saved with the game.
+
+` the seed that the page that "New Game" opens is set to, or 0 for one that is picked for the
+` player. it is 0 every time that the page opens, and it is not remembered.
+global OPTION_GAME_SEED = 0
+
+global SAVE_PREF_SEED = 70 `where the seed of the saved game is kept, after SAVE_PREF: the seed, whether it was picked, the rules version, and then two numbers for every stream
+
+` the fish that are waiting above the columns in the quest FORECAST are saved with the game, ten to
+` a number, so that a game that is carried on with gets the same fish. see questForeSave.
+global QUEST_FORE_PREF = 3700 `forty numbers. it must not move.
+
+` THE SEED ON THE TABLES. three numbers for every row of every table, next to HISCORE_NAMES and
+` the others: the seed, the rules version, and whether the seed was picked.
+global dim HISCORE_SEEDS(56)
+global dim HISCORE_RULES(56)
+global dim HISCORE_PICKED(56)
+global HISCORE_SEED_PREF = 30 `where a table keeps them in the preferences, after getHighscorePref: three numbers for every row
+
+` on Steam, the seed and the version are the detail STEAM_DETAIL_SEED, and this flag of STEAM_DETAIL_FLAGS
+` says that the seed was picked. it is the bit after the four of the modifiers.
+global STEAM_FLAG_SEED_PICKED = 128
+global STEAM_BIT_SEED_PICKED = 103 `the same flag, as a bit of the whole score: detail 3 starts at bit 96
+
+` THE PAGE WHERE A SEED IS ENTERED. six digits, changed one at a time, the way that the initials
+` of a high score are. 000000 is no seed: one is picked for the player.
+global dim SEED_DIGITS(6)
+global dim SEED_DIGIT_TEXTS(6)
+global SEED_DIGIT_GAP = 34 `how far apart the digits are, in pixels
+
+` PLAY THIS SEED. the page of one high score can start a new game on the seed of that score. the
+` page sets this to the seed, and the pages under it close, one after the other, and then
+` the game starts. see highscore_play_seed in fish_routines_highscores.
+global HISCORE_PLAY_SEED = 0
+global HISCORE_PLAY_RULES = 0 `the rules version of that score
+global HISCORE_PLAY_TABLE = 0 `the table that the score was on, which says the length and the mode of its game
+
+` A NEW GAME ON A SEED, asked for from outside the menu. update_frame, in fish_routines, starts a
+` game with the seed, length and mode of the options when this is 1, with no menu and no bubbles.
+` the long tests ask, to play one seed twice. see fish_tests_seed.
+global REQUEST_SEED_RESTART = 0

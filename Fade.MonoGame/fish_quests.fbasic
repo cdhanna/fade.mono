@@ -284,9 +284,9 @@ endfunction
 ` ---------------------------------------------------------------------------------------------
 function questSequence(qEv, qA, qB)
     if qEv = QEV_INIT
-        QUEST_V(0) = rnd(7) + 1
+        QUEST_V(0) = random stream(RNG_QUESTS, 7) + 1
         QUEST_V(1) = questOtherKind(QUEST_V(0))
-        QUEST_V(2) = rnd(7) + 1
+        QUEST_V(2) = random stream(RNG_QUESTS, 7) + 1
         while QUEST_V(2) = QUEST_V(0) or QUEST_V(2) = QUEST_V(1)
             QUEST_V(2) = (QUEST_V(2) mod 7) + 1
         endwhile
@@ -553,7 +553,7 @@ endfunction
 ` ---------------------------------------------------------------------------------------------
 function questSunbeam(qEv, qA, qB)
     if qEv = QEV_INIT
-        QUEST_V(0) = rnd(CELL_COLUMN_COUNT)
+        QUEST_V(0) = random stream(RNG_QUESTS, CELL_COLUMN_COUNT)
         QUEST_V(1) = 1
 
         ` eight columns in every ten, rounded up
@@ -897,7 +897,7 @@ endfunction
 ` ---------------------------------------------------------------------------------------------
 function questTurtle(qEv, qA, qB)
     if qEv = QEV_INIT
-        qTurtleRow = 1 + rnd(CELL_ROW_COUNT - 2)
+        qTurtleRow = 1 + random stream(RNG_QUESTS, CELL_ROW_COUNT - 2)
         qTurtleAt = qTurtleRow * CELL_COLUMN_COUNT
         ` when the diver is in that cell, the turtle starts in the one above it
         if CELLS(qTurtleAt).value = TEX_DIVER
@@ -981,7 +981,7 @@ function questCuttlefish(qEv, qA, qB)
         QUEST_MARK(qCuttleAt) = 1
 
         ` four kinds in a row, starting anywhere, so that they are all different
-        qCuttleFirst = rnd(7)
+        qCuttleFirst = random stream(RNG_QUESTS, 7)
         for qCuttleN = 0 to 3
             QUEST_V(qCuttleN) = ((qCuttleFirst + qCuttleN * 2) mod 7) + 1
         next
@@ -1154,7 +1154,7 @@ function questConstellation(qEv, qA, qB)
             questRestart()
             exitfunction
         endif
-        QUEST_V(0) = rnd(3)
+        QUEST_V(0) = random stream(RNG_QUESTS, 3)
         questProgress(0, 0)
         if QUEST_V(0) = 0
             questNote("a line")
@@ -1287,7 +1287,7 @@ endfunction
 ` ---------------------------------------------------------------------------------------------
 function questSleepers(qEv, qA, qB)
     if qEv = QEV_START
-        QUEST_V(0) = rnd(7) + 1
+        QUEST_V(0) = random stream(RNG_QUESTS, 7) + 1
         QUEST_V(1) = 3
         questProgress(0, 3)
         REQUEST_COMBO_CHECK = 1
@@ -1567,7 +1567,7 @@ endfunction
 
 function questTotem(qEv, qA, qB)
     if qEv = QEV_INIT
-        qTotemColumn = rnd(CELL_COLUMN_COUNT)
+        qTotemColumn = random stream(RNG_QUESTS, CELL_COLUMN_COUNT)
         qTotemTop = CELL_ROW_COUNT - 5
         qTotemLast = 0
         QUEST_LIST_N = 0
@@ -1678,7 +1678,7 @@ endfunction
 ` ---------------------------------------------------------------------------------------------
 function questGlassFish(qEv, qA, qB)
     if qEv = QEV_INIT
-        qGlassAt = rnd(CELL_COLUMN_COUNT)
+        qGlassAt = random stream(RNG_QUESTS, CELL_COLUMN_COUNT)
         ` when the diver is in that cell, the glass fish starts in the next one along
         if CELLS(qGlassAt).value = TEX_DIVER then qGlassAt = (qGlassAt + 1) mod CELL_COLUMN_COUNT
         questPlaceKind(qGlassAt, TEX_GLASS_FISH)
@@ -1753,7 +1753,7 @@ function questReflection(qEv, qA, qB)
         qMirrorTries = 0
         while qMirrorTries < 12
             qMirrorTries = qMirrorTries + 1
-            QUEST_V(0) = 1 + rnd(CELL_ROW_COUNT - 2)
+            QUEST_V(0) = 1 + random stream(RNG_QUESTS, CELL_ROW_COUNT - 2)
             qMirrorNow = questReflectPairs()
             if qMirrorNow < 2 then qMirrorTries = 12
         endwhile
@@ -1980,7 +1980,7 @@ function questHatch(qEv, qA, qB)
                 if qEggAt < 0 then qEggAgain = 1
                 if qEggAgain
                     if qEggAt >= 0 then QUEST_MARK(qEggAt) = 0
-                    questHatchLay(qEggN, 3 + rnd(4))
+                    questHatchLay(qEggN, 3 + random stream(RNG_QUESTS, 4))
                 endif
             endif
         next
@@ -2035,7 +2035,7 @@ function questForecastShift()
                 if qShiftN + qShiftBy < 16
                     QUEST_FORE(qShiftColumn * 16 + qShiftN) = QUEST_FORE(qShiftColumn * 16 + qShiftN + qShiftBy)
                 else
-                    QUEST_FORE(qShiftColumn * 16 + qShiftN) = rnd(7) + 1
+                    QUEST_FORE(qShiftColumn * 16 + qShiftN) = random stream(RNG_QUESTS, 7) + 1
                 endif
             next
         endif
@@ -2050,7 +2050,7 @@ endfunction
 function questForecast(qEv, qA, qB)
     if qEv = QEV_INIT
         for qForeI = 0 to 399
-            QUEST_FORE(qForeI) = rnd(7) + 1
+            QUEST_FORE(qForeI) = random stream(RNG_QUESTS, 7) + 1
             QUEST_STACK(qForeI) = 0
         next
         questProgress(0, 4)
@@ -2478,7 +2478,7 @@ endfunction
 ` ---------------------------------------------------------------------------------------------
 function questTreasure(qEv, qA, qB)
     if qEv = QEV_INIT
-        QUEST_V(0) = rnd(CELL_COUNT)
+        QUEST_V(0) = random stream(RNG_QUESTS, CELL_COUNT)
         QUEST_V(1) = -1
         questProgress(0, 0)
         questNote("pop to listen")

@@ -19,6 +19,7 @@
 float Time;      // in seconds
 float2 Size;     // how big the screen is, in pixels
 float Horizon;   // how far down the screen the horizon is, in pixels
+float Bob;       // how much of that is the camera bobbing in the water, in pixels. the reef stands on the sea floor, so it does not bob. the water goes up and down over it instead.
 float Swell;     // how far down the screen the top of the water right in front of the camera is
 float Day;       // which colors to use. 0 is the sun going down, and 1 is the middle of the day.
 float4 Where;    // x is how far across the screen the middle of the reef is, and y is how far down from the horizon its waterline is, in pixels. z is how many pixels one unit of its shape is, which is how close it is. w is -1 to draw it the other way around, and 1 not to.
@@ -103,10 +104,17 @@ float reefTop(float2 xz, float seed)
 	return REEF_BODY.y * sqrt(max(1.0 - dot(q, q), 0.0)) - REEF_SUNK - sin(xz.x * 2.3 + 0.7 + seed) * sin(xz.y * 2.1 + 1.1 + seed * 0.7) * REEF_LUMPS * 0.9;
 }
 
+// how high the water is on a reef, in its units. the reef is put where the horizon would be without
+// the bob, so as the camera bobs, the water goes up and down the reef, and the reef stays put.
+float reefWater(float scale)
+{
+	return -Bob / (cos(REEF_PITCH) * scale);
+}
+
 // where on the screen a place on a reef is, in pixels. `where` is where the reef is, and `scale` is how big.
 float2 reefSeen(float3 p, float2 where, float scale)
 {
-	return float2(where.x + p.x * scale, Horizon + where.y - (p.y * cos(REEF_PITCH) + p.z * sin(REEF_PITCH)) * scale);
+	return float2(where.x + p.x * scale, (Horizon - Bob) + where.y - (p.y * cos(REEF_PITCH) + p.z * sin(REEF_PITCH)) * scale);
 }
 
 // one of the bright colors of coral
@@ -188,7 +196,7 @@ float4 brain(float2 d, float seed)
 // a thing that stands under the water is the color of the water too, and more so the deeper it stands.
 float4 reefGrowth(float4 under, float4 thing, float2 foot, float3 water, float seed)
 {
-	float deep = max(0.0 - reefTop(foot, seed), 0.0);
+	float deep = max(reefWater(Where.z) - reefTop(foot, seed), 0.0);
 	float3 color = lerp(thing.rgb, water, saturate(0.10 + deep * REEF_MURK * 0.9));
 	float out0 = step(deep, 0.001);
 	return float4(lerp(under.rgb, color, thing.a), lerp(under.a, 1.0 + out0, thing.a));
@@ -205,7 +213,7 @@ float4 reef(float2 screen, float3 water, float2 where, float scale, float flip, 
 	float2 px = float2(where.x + (screen.x - where.x) * flip, screen.y);
 
 	// where this pixel is, in the units of the reef, across and up from the middle of its waterline
-	float2 s = float2(px.x - where.x, (Horizon + where.y) - px.y) / scale;
+	float2 s = float2(px.x - where.x, ((Horizon - Bob) + where.y) - px.y) / scale;
 
 	// the line of sight from this pixel. the camera looks at the reef from a little above, and every
 	// line of sight goes the same way, so the reef is the same shape wherever it is on the screen.
@@ -247,12 +255,13 @@ float4 reef(float2 screen, float3 water, float2 where, float scale, float flip, 
 
 	// where the line of sight goes into the water, on its way to the rock. if it gets to the rock
 	// first, then that part of the rock is out of the water.
-	float toWater = from.y / tilt;
+	float water0 = reefWater(scale);
+	float toWater = (from.y - water0) / tilt;
 	float out0 = step(gone, toWater);
 
 	// the rock that is just out of the water is wet, and darker, and there is foam around it
-	color *= 1.0 - 0.28 * out0 * step(at.y, 0.10);
-	float foam = out0 * step(at.y, 0.035) * step(0.2, sin(px.x * 0.9 + Time * 1.7));
+	color *= 1.0 - 0.28 * out0 * step(at.y - water0, 0.10);
+	float foam = out0 * step(at.y - water0, 0.035) * step(0.2, sin(px.x * 0.9 + Time * 1.7));
 	color = lerp(color, FoamColor, foam * 0.85);
 
 	// what is under the water is seen through the water: the more water there is in the way, the more

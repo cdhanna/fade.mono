@@ -70,6 +70,12 @@ setup_input:
         ACT_ABILITY(i) = abilityActionId
     next
 
+    ` somewhere for steam's pictures of the buttons to go. see STEAM'S PICTURES OF THE BUTTONS in fish_headers.
+    for i = 0 to STEAM_GLYPH_COUNT - 1
+        reserve texture id(steamGlyphTex)
+        TEX_STEAM_GLYPH(i) = steamGlyphTex
+    next
+
 return
 
 
@@ -77,8 +83,21 @@ return
 ` so the text that uses them never changes. this points the names at the pictures for whichever
 ` device the player touched last, the keyboard or a controller.
 frame_input_icons:
-    if input device() = INPUT_ICON_DEVICE then return
-    INPUT_ICON_DEVICE = input device()
+    ` a controller may be swapped for one of another kind, and then its pictures change too.
+    ` see STEAM'S PICTURES OF THE BUTTONS in fish_headers.
+    iconDevice = input device()
+
+    ` the debug panel can ask for the icons of another device. see DEBUG_ICON_FORCE in fish_headers.
+    if DEBUG_ICON_FORCE = 0 then iconDevice = 0
+    if DEBUG_ICON_FORCE > 0 then iconDevice = 1
+
+    iconPadKind = 0
+    if iconDevice = 1 then iconPadKind = steam input type()
+    if iconDevice = INPUT_ICON_DEVICE
+        if iconPadKind = INPUT_ICON_PAD_KIND then return
+    endif
+    INPUT_ICON_DEVICE = iconDevice
+    INPUT_ICON_PAD_KIND = iconPadKind
 
     ` the last number is the frame of the picture in its sheet. the sheets are grids, and the
     ` frames count across each row, starting from the top left.
@@ -93,6 +112,28 @@ frame_input_icons:
         font icon SCORE_FONT, 7, "dir", TEX_PAD, 64 `the d-pad
         font icon SCORE_FONT, 11, "pause", TEX_PAD, 70 `the button with three lines, where start used to be
         font icon SCORE_FONT, 12, "confirm", TEX_PAD, 82 `a
+
+        ` the sheet is of an xbox controller, so it is the one to show for an xbox controller (2 and 3,
+        ` as steam numbers them), and for a controller of no known make (4), which is read as one. for
+        ` any other kind, steam's picture of each button takes the place of the one from the sheet,
+        ` when steam has it.
+        iconFromSteam = 0
+        if iconPadKind > 0 then iconFromSteam = 1
+        if iconPadKind >= 2
+            if iconPadKind <= 4 then iconFromSteam = 0
+        endif
+        if iconFromSteam
+            steamIcon(1, "move1", 0, "B")
+            steamIcon(2, "move2", 1, "X")
+            steamIcon(3, "move3", 2, "Y")
+            steamIcon(4, "move4", 3, "LeftShoulder")
+            steamIcon(13, "move5", 4, "RightShoulder")
+            steamIcon(5, "info", 5, "Back")
+            steamIcon(6, "swap", 6, "A")
+            steamIcon(7, "dir", 7, "DPad")
+            steamIcon(11, "pause", 8, "Start")
+            steamIcon(12, "confirm", 6, "A")
+        endif
     else
         font icon SCORE_FONT, 1, "move1", TEX_KEYS, 44 `z
         font icon SCORE_FONT, 2, "move2", TEX_KEYS, 40 `x
@@ -102,7 +143,7 @@ frame_input_icons:
         font icon SCORE_FONT, 5, "info", TEX_KEY_TAB `tab. it is a picture of its own, wider than the keys on the sheet.
         font icon SCORE_FONT, 6, "swap", TEX_KEYS, 51 `space
         font icon SCORE_FONT, 7, "dir", TEX_KEYS, 224 `the arrow keys
-        font icon SCORE_FONT, 11, "pause", TEX_KEYS, 183 `escape
+        font icon SCORE_FONT, 11, "pause", TEX_KEY_ESC `escape. a picture of its own, like tab.
         font icon SCORE_FONT, 12, "confirm", TEX_KEYS, 51 `space
     endif
 return
@@ -399,4 +440,16 @@ return
 
 end
 routines_input_exit:
+
+
+` point an input icon at steam's picture of a button, when steam has one. the icon is left as it was
+` when it does not. see STEAM'S PICTURES OF THE BUTTONS in fish_headers.
+function steamIcon(steamIconId, steamIconAlias$, steamIconSlot, steamIconButton$)
+    ` 20 pixels with 2 clear on every side, the same as a button on the sheet, so that it is drawn
+    ` pixel for pixel, and is the same size as the buttons that it stands in for
+    steamIconGot = steam input glyph(TEX_STEAM_GLYPH(steamIconSlot), steamIconButton$, 20, 2, 0)
+    if steamIconGot
+        font icon SCORE_FONT, steamIconId, steamIconAlias$, TEX_STEAM_GLYPH(steamIconSlot)
+    endif
+endfunction
 

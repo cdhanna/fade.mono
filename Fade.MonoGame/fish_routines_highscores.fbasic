@@ -190,6 +190,11 @@ setup_highscores:
         HISCORE_LETTER_TEXTS(hsI) = createHighscoreText(WORLD_WIDTH / 2 + (hsI - 1) * 56, 130, 48, "A")
     next
 
+    ` the page where a seed is entered. see fish_headers_seed.
+    for hsI = 0 to 5
+        SEED_DIGIT_TEXTS(hsI) = createHighscoreText((WORLD_WIDTH / 2 - 85) + hsI * SEED_DIGIT_GAP, 132, 40, "0")
+    next
+
     ` the page that shows the upgrades of one game. it is wider than the table is.
     hsDetailX = (WORLD_WIDTH - HISCORE_DETAIL_WIDTH) / 2
     HISCORE_DETAIL_HEAD_TEXTS(0) = createHighscoreText(hsDetailX + 100, HISCORE_DETAIL_TOP + 5, 16, "Upgrade")
@@ -247,6 +252,90 @@ setup_highscores:
     ` the direction that is held down on the page of the initials, so that holding it runs through the letters
     hsHeldDir = 0
     hsRepeatMs = 0
+return
+
+
+` "Seed", on the page that "New Game" opens. show the page where a seed is entered, in place of the
+` menu, until the player is done. the confirm button takes the seed, and the pause button leaves
+` the one that there was. see THE PAGE WHERE A SEED IS ENTERED in fish_headers_seed.
+menu_run_seed_entry:
+
+    ` the digits start out as the seed that is set, or as all zeros
+    hsSeedLeft = OPTION_GAME_SEED
+    for hsI = 0 to 5
+        SEED_DIGITS(5 - hsI) = hsSeedLeft mod 10
+        hsSeedLeft = hsSeedLeft / 10
+    next
+    hsSlot = 0
+    hsSeedTaken = 0
+    hsHeldDir = 0
+    openSeedEntry()
+
+    do
+        refreshSeedEntry(hsSlot)
+        gosub frame_highscores
+        sync
+
+        ` these are checked after the frame, so that the press that brought the page up is not used twice
+        if new action down(ACT_PAUSE) then exit
+        if new action down(ACT_CONFIRM)
+            hsSeedTaken = 1
+            exit
+        endif
+
+        hsChanged = 0
+        if new action down(ACT_RIGHT)
+            hsSlot = hsSlot + 1
+            if hsSlot > 5 then hsSlot = 0
+            hsChanged = 1
+        endif
+        if new action down(ACT_LEFT)
+            hsSlot = hsSlot - 1
+            if hsSlot < 0 then hsSlot = 5
+            hsChanged = 1
+        endif
+
+        ` up and down go through the digits. holding one of them down keeps going, after a moment.
+        hsLetterStep = 0
+        hsDirNow = 0
+        if action down(ACT_UP) then hsDirNow = -1
+        if action down(ACT_DOWN) then hsDirNow = 1
+        if hsDirNow <> hsHeldDir
+            hsHeldDir = hsDirNow
+            hsLetterStep = hsDirNow
+            hsRepeatMs = game ms() + 350
+        else
+            if hsDirNow <> 0
+                if game ms() >= hsRepeatMs
+                    hsLetterStep = hsDirNow
+                    hsRepeatMs = game ms() + 80
+                endif
+            endif
+        endif
+
+        if hsLetterStep <> 0
+            hsLetter = SEED_DIGITS(hsSlot) + hsLetterStep
+            if hsLetter > 9 then hsLetter = 0
+            if hsLetter < 0 then hsLetter = 9
+            SEED_DIGITS(hsSlot) = hsLetter
+            hsChanged = 1
+        endif
+
+        if hsChanged
+            create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
+            set tween type SWAP_TWEEN_SFX, 1
+        endif
+    loop
+
+    if hsSeedTaken
+        OPTION_GAME_SEED = seedFromDigits()
+    endif
+
+    ` back to the page that "New Game" opens, with "Seed" highlighted again
+    closeHighscores()
+    setMenuPage(MENU_PAGE_NEW_GAME)
+    refreshOptionLines()
+    selectMenuItem(getMenuRow(MENU_ITEM_GAME_SEED), 0)
 return
 
 
@@ -416,6 +505,10 @@ highscore_table_loop:
                 hsDetailIndex = HISCORE_SHOWN(hsFocus - 2)
                 if hsDetailIndex >= 0
                     gosub highscore_details
+
+                    ` the page asked for a new game on the seed of that score, so the table closes too
+                    if HISCORE_PLAY_SEED > 0 then exit
+
                     gosub highscore_table_open
                     hsLoopChanged = 0
                 endif
@@ -445,12 +538,46 @@ highscore_details:
     openHighscoreDetails(hsDetailIndex, hsFocus - 1)
     refreshHighscoreDetails(hsDetailIndex, hsDetailScroll)
 
+    ` PLAY THIS SEED. a score that has a seed can be played again, from the main menu. not from the
+    ` table that comes up when a game ends, which has the ending of that game still to come.
+    hsPlayOk = 0
+    if hsLoopTabs
+        if HISCORE_SEEDS(hsDetailIndex) > 0 then hsPlayOk = 1
+    endif
+    hsPlayAsked = 0
+    if hsPlayOk
+        set text MENU_HINT_TEXT_ID, "{dir} scroll    {confirm} back    {info} play this seed"
+    endif
+
     do
         gosub frame_highscores
         sync
 
         if new action down(ACT_CONFIRM) then exit
         if new action down(ACT_PAUSE) then exit
+
+        ` a score from another version of the rules is asked about first, because its seed may not
+        ` deal the same game any more. the second press plays it anyway.
+        if hsPlayOk
+            if new action down(ACT_INFO)
+                hsPlayNow = 1
+                if HISCORE_RULES(hsDetailIndex) <> GAME_RULES_VERSION
+                    if hsPlayAsked = 0 then hsPlayNow = 0
+                endif
+                if hsPlayNow
+                    HISCORE_PLAY_SEED = HISCORE_SEEDS(hsDetailIndex)
+                    HISCORE_PLAY_RULES = HISCORE_RULES(hsDetailIndex)
+                    HISCORE_PLAY_TABLE = hsLoopTable
+                    exit
+                endif
+                hsPlayAsked = 1
+                set text HISCORE_NOTE_TEXT_ID, "Your versions are different. The game may not be the same."
+                color text HISCORE_NOTE_TEXT_ID, rgb(255, 220, 96)
+                set text MENU_HINT_TEXT_ID, "{info} play it anyway    {confirm} back"
+                create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
+                set tween type SWAP_TWEEN_SFX, 1
+            endif
+        endif
 
         ` holding up or down keeps the list going, after a moment
         hsScrollStep = 0
@@ -616,6 +743,9 @@ highscore_game_end:
         if hsEndPlace >= 0
             ` the upgrades that were picked go onto the table with it
             takeGameLog(hsEndTable * HISCORE_ROWS + hsEndPlace)
+
+            ` and so does its seed. see THE SEED ON THE TABLES in fish_headers_seed.
+            setHighscoreSeed(hsEndTable * HISCORE_ROWS + hsEndPlace, GAME_SEED, GAME_SEED_RULES, GAME_SEED_PICKED)
             saveHighscoreTable(hsEndTable)
         endif
 
@@ -897,6 +1027,9 @@ function clearOnlineTable()
         HISCORE_NAMES(stmFirst + i) = 0
         HISCORE_MOVES(stmFirst + i) = HISCORE_EMPTY_MOVES
         HISCORE_MULTS(stmFirst + i) = 0
+        HISCORE_SEEDS(stmFirst + i) = 0
+        HISCORE_RULES(stmFirst + i) = 0
+        HISCORE_PICKED(stmFirst + i) = 0
         HISCORE_LOGS((stmFirst + i) * HISCORE_LOG_STRIDE) = 0
         HISCORE_ONLINE_ROWS(i) = -1
     next
@@ -988,6 +1121,13 @@ function unpackSteamScore(boardId, steamRow, scoreIndex)
     HISCORE_NAMES(scoreIndex) = stmInitials + stmBadge * HISCORE_BADGE_STEP + stmHadMods * HISCORE_MOD_STEP
     HISCORE_MOVES(scoreIndex) = steam score(boardId, steamRow) / 1000
     HISCORE_MULTS(scoreIndex) = stmMult
+
+    ` the seed of the game, the rules version above it, and the flag that says that the seed was
+    ` picked. a score from before there were seeds has 0 there. see THE SEED OF A GAME in fish_headers_seed.
+    stmSeed = steam score bits(boardId, steamRow, STEAM_DETAIL_SEED * 32, SEED_BITS)
+    stmRules = steam score bits(boardId, steamRow, STEAM_DETAIL_SEED * 32 + SEED_BITS, SEED_RULES_BITS)
+    stmPicked = steam score bits(boardId, steamRow, STEAM_BIT_SEED_PICKED, 1)
+    setHighscoreSeed(scoreIndex, stmSeed, stmRules, stmPicked)
 
     ` the log. every upgrade is its card, and how many moves it came after the one before it.
     stmLogCount = steam score bits(boardId, steamRow, STEAM_BIT_LOG_COUNT, 7)
@@ -1086,12 +1226,24 @@ function sendGameToSteam(tableIndex, packedName)
     set steam score bits STEAM_BIT_LOG_COUNT, 7, GAME_LOG_COUNT
     set steam score bits STEAM_BIT_GAP_WIDTH, 4, sendGapBits
     set steam score detail STEAM_DETAIL_MULT, BEST_MULTIPLIER
+    ` the seed of the game, and above it the rules version that it was played under. a game that
+    ` was saved before there were seeds has neither. see THE SEED OF A GAME in fish_headers_seed.
     set steam score detail STEAM_DETAIL_SEED, 0
+    sendPicked = 0
+    if GAME_SEED > 0
+        sendRules = GAME_SEED_RULES
+        if sendRules < 0 then sendRules = 0
+        if sendRules > SEED_RULES_MAX then sendRules = SEED_RULES_MAX
+        set steam score bits STEAM_DETAIL_SEED * 32, SEED_BITS, GAME_SEED
+        set steam score bits STEAM_DETAIL_SEED * 32 + SEED_BITS, SEED_RULES_BITS, sendRules
+        sendPicked = GAME_SEED_PICKED
+    endif
     ` the flags: which of the two endings of the hidden game it had, or 0, and whether it was played with
     ` a debug environment variable set, now or before it was saved and carried on with
     if isDebugEnvSet() then GAME_DEBUG_USED = 1
     ` and the modifiers of the game, in the four flags after that. see THE MODIFIERS ON THE TABLES in fish_headers_fast.
-    set steam score detail STEAM_DETAIL_FLAGS, CORAL_ENDING + GAME_DEBUG_USED * STEAM_FLAG_DEBUG + GAME_MODS * STEAM_FLAG_MODS
+    ` and whether the seed was picked by the player, in the flag after those. see fish_headers_seed.
+    set steam score detail STEAM_DETAIL_FLAGS, CORAL_ENDING + GAME_DEBUG_USED * STEAM_FLAG_DEBUG + GAME_MODS * STEAM_FLAG_MODS + sendPicked * STEAM_FLAG_SEED_PICKED
 
     sendBit = STEAM_BIT_LOG
     sendLast = 0
@@ -1257,6 +1409,9 @@ function insertHighscore(tableIndex, packedName, entryMoves, entryMult)
             HISCORE_NAMES(entryTo) = HISCORE_NAMES(entryFrom)
             HISCORE_MOVES(entryTo) = HISCORE_MOVES(entryFrom)
             HISCORE_MULTS(entryTo) = HISCORE_MULTS(entryFrom)
+            HISCORE_SEEDS(entryTo) = HISCORE_SEEDS(entryFrom)
+            HISCORE_RULES(entryTo) = HISCORE_RULES(entryFrom)
+            HISCORE_PICKED(entryTo) = HISCORE_PICKED(entryFrom)
             copyHighscoreLog(entryFrom, entryTo)
             i = i - 1
         endwhile
@@ -1265,8 +1420,34 @@ function insertHighscore(tableIndex, packedName, entryMoves, entryMult)
         HISCORE_NAMES(firstEntry + place) = packedName
         HISCORE_MOVES(firstEntry + place) = entryMoves
         HISCORE_MULTS(firstEntry + place) = entryMult
+
+        ` and no seed. setHighscoreSeed gives it one. see THE SEED ON THE TABLES in fish_headers_seed.
+        HISCORE_SEEDS(firstEntry + place) = 0
+        HISCORE_RULES(firstEntry + place) = 0
+        HISCORE_PICKED(firstEntry + place) = 0
     endif
 endfunction place
+
+
+` say what the seed of an entry was, the rules version that its game was played under, and whether
+` the player picked the seed. a seed that is not a seed is no seed at all.
+function setHighscoreSeed(scoreIndex, entrySeed, entryRules, entryPicked)
+    seedOk = 1
+    if entrySeed < 1 then seedOk = 0
+    if entrySeed > SEED_MAX then seedOk = 0
+    if entryRules < 0 then seedOk = 0
+    if entryRules > SEED_RULES_MAX then seedOk = 0
+    if seedOk
+        HISCORE_SEEDS(scoreIndex) = entrySeed
+        HISCORE_RULES(scoreIndex) = entryRules
+        HISCORE_PICKED(scoreIndex) = 0
+        if entryPicked then HISCORE_PICKED(scoreIndex) = 1
+    else
+        HISCORE_SEEDS(scoreIndex) = 0
+        HISCORE_RULES(scoreIndex) = 0
+        HISCORE_PICKED(scoreIndex) = 0
+    endif
+endfunction
 
 
 ` fill in a table when the game starts: from the preferences if it is there, and from the seed scores if not.
@@ -1276,6 +1457,9 @@ function loadHighscoreTable(tableIndex)
         HISCORE_NAMES(firstEntry + i) = 0
         HISCORE_MOVES(firstEntry + i) = HISCORE_EMPTY_MOVES
         HISCORE_MULTS(firstEntry + i) = 0
+        HISCORE_SEEDS(firstEntry + i) = 0
+        HISCORE_RULES(firstEntry + i) = 0
+        HISCORE_PICKED(firstEntry + i) = 0
         HISCORE_LOGS((firstEntry + i) * HISCORE_LOG_STRIDE) = 0
     next
 
@@ -1289,8 +1473,12 @@ function loadHighscoreTable(tableIndex)
             if savedMoves > 0 and savedMoves < HISCORE_EMPTY_MOVES
                 savedPlace = insertHighscore(tableIndex, savedName, savedMoves, savedMult)
 
-                ` the upgrades of the game go wherever the row ended up
+                ` the upgrades of the game go wherever the row ended up, and so does its seed. a
+                ` table that was saved before there were seeds has none.
                 if savedPlace >= 0
+                    seedPref = prefIndex + HISCORE_SEED_PREF + i * 3
+                    setHighscoreSeed(firstEntry + savedPlace, get pref(seedPref, 0), get pref(seedPref + 1, 0), get pref(seedPref + 2, 0))
+
                     logPref = getHighscoreLogPref(tableIndex, i)
                     logStart = (firstEntry + savedPlace) * HISCORE_LOG_STRIDE
                     logHead = get pref(logPref, 0)
@@ -1332,6 +1520,12 @@ function saveHighscoreTable(tableIndex)
         set pref prefIndex + 1 + i * 3, HISCORE_NAMES(firstEntry + i)
         set pref prefIndex + 2 + i * 3, HISCORE_MOVES(firstEntry + i)
         set pref prefIndex + 3 + i * 3, HISCORE_MULTS(firstEntry + i)
+
+        ` the seed of the game on the row, its rules version, and whether the seed was picked
+        seedPref = prefIndex + HISCORE_SEED_PREF + i * 3
+        set pref seedPref, HISCORE_SEEDS(firstEntry + i)
+        set pref seedPref + 1, HISCORE_RULES(firstEntry + i)
+        set pref seedPref + 2, HISCORE_PICKED(firstEntry + i)
 
         ` the upgrades of the game on the row
         logPref = getHighscoreLogPref(tableIndex, i)
@@ -1436,6 +1630,9 @@ function hideHighscoreTexts()
     for i = 0 to 2
         hide text HISCORE_LETTER_TEXTS(i)
         hide text HISCORE_DETAIL_HEAD_TEXTS(i)
+    next
+    for i = 0 to 5
+        hide text SEED_DIGIT_TEXTS(i)
     next
     for i = 0 to HISCORE_DETAIL_ROWS - 1
         hide text HISCORE_DETAIL_NUM_TEXTS(i)
@@ -1768,6 +1965,58 @@ function openHighscoreInitials(isHighscore)
 endfunction
 
 
+` the seed that the six digits on the page spell. all zeros is 0, which is no seed, and anything
+` past the biggest seed is the biggest seed.
+function seedFromDigits()
+    digitsSeed = 0
+    for i = 0 to 5
+        digitsSeed = digitsSeed * 10 + SEED_DIGITS(i)
+    next
+    if digitsSeed > SEED_MAX then digitsSeed = SEED_MAX
+endfunction digitsSeed
+
+
+` show the page where a seed is entered, in place of the list of the menu.
+function openSeedEntry()
+    openHighscoreChrome((WORLD_WIDTH - 250) / 2, 120, 250, 72)
+
+    set text MENU_TITLE_TEXT_ID, "Seed"
+    size text y MENU_TITLE_TEXT_ID, 36
+
+    show text HISCORE_NOTE_TEXT_ID
+    set text position HISCORE_NOTE_TEXT_ID, WORLD_WIDTH / 2, 94
+    set text HISCORE_NOTE_TEXT_ID, "Enter a seed, from 1 to " + str$(SEED_MAX) + "."
+    color text HISCORE_NOTE_TEXT_ID, rgb(150, 190, 255)
+
+    show text MENU_DESC_TEXT_ID
+    set text position MENU_DESC_TEXT_ID, WORLD_WIDTH / 2, 198
+    set text MENU_DESC_TEXT_ID, "All zeros is no seed, and one is picked for you."
+
+    set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} done    {pause} back"
+    size text y MENU_HINT_TEXT_ID, 16
+
+    for i = 0 to 5
+        show text SEED_DIGIT_TEXTS(i)
+    next
+    showInfoBorder(HISCORE_CURSOR, 1)
+    HISCORE_CURSOR_ON = 1
+endfunction
+
+
+` write the digits that are being entered onto the page. the one at `slot` is the one that the
+` directions change, so it is white and it has the outline around it.
+function refreshSeedEntry(slot)
+    for i = 0 to 5
+        set text SEED_DIGIT_TEXTS(i), str$(SEED_DIGITS(i))
+
+        digitColor = rgb(150, 190, 255)
+        if i = slot then digitColor = rgb(255, 255, 255)
+        color text SEED_DIGIT_TEXTS(i), digitColor
+    next
+    movePageOutline(HISCORE_CURSOR, (WORLD_WIDTH / 2 - 100) + slot * SEED_DIGIT_GAP, 130, 30, 48)
+endfunction
+
+
 ` show the page of one game's upgrades, in place of the table. scoreIndex is the entry of the game, and
 ` place is where it is on its table, counted from 1.
 function openHighscoreDetails(scoreIndex, place)
@@ -1796,6 +2045,15 @@ function openHighscoreDetails(scoreIndex, place)
     show text HISCORE_NOTE_TEXT_ID
     set text position HISCORE_NOTE_TEXT_ID, WORLD_WIDTH / 2 + 30, 50
     set text HISCORE_NOTE_TEXT_ID, "Number " + str$(place) + "    " + str$(HISCORE_MOVES(scoreIndex)) + " moves    multiplier x" + str$(HISCORE_MULTS(scoreIndex))
+
+    ` and its seed, when it has one. a seed that the player picked says so. see fish_headers_seed.
+    if HISCORE_SEEDS(scoreIndex) > 0
+        if HISCORE_PICKED(scoreIndex)
+            set text HISCORE_NOTE_TEXT_ID, str$(HISCORE_MOVES(scoreIndex)) + " moves    multiplier x" + str$(HISCORE_MULTS(scoreIndex)) + "    picked seed " + str$(HISCORE_SEEDS(scoreIndex))
+        else
+            set text HISCORE_NOTE_TEXT_ID, str$(HISCORE_MOVES(scoreIndex)) + " moves    multiplier x" + str$(HISCORE_MULTS(scoreIndex)) + "    seed " + str$(HISCORE_SEEDS(scoreIndex))
+        endif
+    endif
     color text HISCORE_NOTE_TEXT_ID, rgb(150, 190, 255)
 
     ` the line under the list says how far down the list it is. refreshHighscoreDetails writes it.
