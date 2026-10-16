@@ -1587,7 +1587,14 @@ function doShift(start as vec, dir as vec)
     endwhile
 
     ` actually update the map
-    
+
+    ` a fish that a quest has marked keeps its mark, the one that comes around the end too. see QUESTS in fish_headers_quests.
+    if dir.y = 0
+        questRollMarks(ai, 1, shiftSize, dir.x)
+    else
+        questRollMarks(ai, CELL_COLUMN_COUNT, shiftSize, dir.y)
+    endif
+
     ` the stacks move along with the fish. the one that falls off of the end comes back on at the start.
     temp = 0
     tempStack = 0

@@ -355,6 +355,26 @@ setup_ability_selection:
     reserve tween id(ABILITY_SELECTION_INDICATOR_TWEEN_ID)
     create basic tween ABILITY_SELECTION_INDICATOR_TWEEN_ID, 0, 0, 0, 0
 
+    ` THE PIPS. a card says how much of something is left with little squares, not words, the same as
+    ` the air of the diver does. a bright one is one that is left, and a dim one is one that is gone.
+    ` a card that can only be taken so many times has a row along the bottom of it: one for every time
+    ` that it can be taken, and the bright ones are the times that are left. a move card has a row just
+    ` above it: one for every slot that is open, and the bright ones are the empty slots. when none of
+    ` them are empty, the row is orange, because the move has to be traded for one that is in a slot.
+    ` CARD_PIP_MAX is how many there are on a row, at most, and the pips of card i are at
+    ` i * CARD_PIP_MAX in the lists. bind_ability_choices lays them out.
+    global CARD_PIP_MAX = 5
+    global CARD_PIP_SIZE = 8
+    global CARD_PIP_GAP = 12
+    global dim CARD_USE_PIPS(ABILITY_CHOICE_LENGTH * CARD_PIP_MAX)
+    global dim CARD_SLOT_PIPS(ABILITY_CHOICE_LENGTH * CARD_PIP_MAX)
+    global CARD_PIP_LIT = 0
+    global CARD_PIP_DIM = 0
+    global CARD_PIP_FULL = 0
+    CARD_PIP_LIT = rgb(170, 220, 255, 235)
+    CARD_PIP_DIM = rgb(70, 95, 150, 230) `bright enough to see over the board too, above a move card
+    CARD_PIP_FULL = rgb(255, 190, 90, 200)
+
     ` selections
     global dim ABILITY_CHOICES(ABILITY_CHOICE_LENGTH) as abilityChoice
     for i = 0 to ABILITY_CHOICE_LENGTH - 1
@@ -430,6 +450,27 @@ setup_ability_selection:
         size text y a.slotTextId, 16
         set text offset a.slotTextId, .5, 0
         order text a.slotTextId, ORDER_ABILITY_TEXT
+
+        ` the pips. see THE PIPS, above.
+        for cardPipN = 0 to CARD_PIP_MAX - 1
+            reserve sprite id(CARD_USE_PIPS(i * CARD_PIP_MAX + cardPipN))
+            cardPipId = CARD_USE_PIPS(i * CARD_PIP_MAX + cardPipN)
+            sprite cardPipId, 0, 0, TEX_PIXEL
+            size sprite cardPipId, CARD_PIP_SIZE, CARD_PIP_SIZE
+            set sprite offset cardPipId, .5, .5
+            order sprite cardPipId, ORDER_ABILITY_TEXT
+            attach sprite to transform cardPipId, a.transformId
+            hide sprite cardPipId
+
+            reserve sprite id(CARD_SLOT_PIPS(i * CARD_PIP_MAX + cardPipN))
+            cardPipId = CARD_SLOT_PIPS(i * CARD_PIP_MAX + cardPipN)
+            sprite cardPipId, 0, 0, TEX_PIXEL
+            size sprite cardPipId, CARD_PIP_SIZE, CARD_PIP_SIZE
+            set sprite offset cardPipId, .5, .5
+            order sprite cardPipId, ORDER_ABILITY_TEXT
+            attach sprite to transform cardPipId, a.transformId
+            hide sprite cardPipId
+        next
 
         set transform position a.transformId, -1000, -1000
 
@@ -717,12 +758,10 @@ bind_ability_choices:
         set text a.titleTextId, CARDS(a.abilityIndex).name$
         size text x a.titleTextId, CARD_WIDTH - 16, .1, .33
 
-        ` a card that runs out says how many of it are left
-        cardDesc$ = CARDS(a.abilityIndex).desc$
-        if CARDS(a.abilityIndex).maxUses > 0
-            cardDesc$ = cardDesc$ + " " + str$(CARDS(a.abilityIndex).maxUses - CARDS(a.abilityIndex).uses) + " left."
-        endif
-        set text a.descTextId, cardDesc$
+        ` a card that runs out shows how many of it are left, with pips along its bottom. see THE PIPS in setup_ability_selection.
+        set text a.descTextId, CARDS(a.abilityIndex).desc$
+        cardTakesLeft = CARDS(a.abilityIndex).maxUses - CARDS(a.abilityIndex).uses
+        layCardPips(i, 0, CARDS(a.abilityIndex).maxUses, cardTakesLeft, CARD_HEIGHT - 8, CARD_PIP_LIT, CARD_PIP_DIM)
         set transform position a.transformId, startX + i * (CARD_WIDTH + cardPadding), CARD_TOP
 
         ` the size is set again, because it is worked out from the size of the texture
@@ -741,18 +780,16 @@ bind_ability_choices:
             endcase
         endselect
 
-        ` a move card says whether there is room for the move, before it is picked
-        slotLine$ = ""
-        if CARDS(a.abilityIndex).abilityType = ABILITY_TYPE_MOVE
-            slotLine$ = str$(slotsLeft) + " slots left"
-            color text a.slotTextId, rgb(150, 190, 255)
-            if slotsLeft = 1 then slotLine$ = "1 slot left"
-            if slotsLeft = 0
-                slotLine$ = "no slots left"
-                color text a.slotTextId, rgb(255, 190, 90)
-            endif
+        ` a move card shows whether there is room for the move, before it is picked: a pip above it for
+        ` every slot, bright when it is empty. orange when none are. see THE PIPS in setup_ability_selection.
+        cardSlotPips = 0
+        if CARDS(a.abilityIndex).abilityType = ABILITY_TYPE_MOVE then cardSlotPips = MOVE_SLOTS_OPEN
+        if slotsLeft > 0
+            layCardPips(i, 1, cardSlotPips, slotsLeft, -10, CARD_PIP_LIT, CARD_PIP_DIM)
+        else
+            layCardPips(i, 1, cardSlotPips, 0, -10, CARD_PIP_LIT, CARD_PIP_FULL)
         endif
-        set text a.slotTextId, slotLine$
+        set text a.slotTextId, ""
 
         ABILITY_CHOICES(i) = a
     next
@@ -841,8 +878,9 @@ handle_ability_selection:
 
     ` set the ability choices. there is one more of them with the "deep pockets" card. choiceCount is
     ` the number of the last one, counting from 0. see DEEP POCKETS in fish_headers.
+    ` the cursor starts on the card at the left, where the eye starts reading
     choiceCount = getUpgradeChoiceCount() - 1
-    ABILITY_SELECTION_INDEX = rnd(choiceCount) + 1
+    ABILITY_SELECTION_INDEX = 0
 
     ` a fast that is long enough changes what is on offer: a rung of the ladder has cards of its own,
     ` and may have only the one. see THE LADDER in fish_headers_fast.
@@ -1379,6 +1417,34 @@ endfunction CARDS(ABILITY_INDEX_RAYS).obtained > 0
 
 function isAbility_Bottles()
 endfunction CARDS(ABILITY_INDEX_BOTTLES).obtained > 0
+
+` lay out one row of the pips of a card, centered on it, at `pipY` down from its top. the first
+` `pipLit` of the `pipCount` are bright, and the rest are dim. `pipSlots` is 1 for the row above a
+` move card, and 0 for the row at the bottom. a count of 0 hides the row. see THE PIPS in setup_ability_selection.
+function layCardPips(pipCard, pipSlots, pipCount, pipLit, pipY, pipLitColor, pipDimColor)
+    if pipCount > CARD_PIP_MAX then pipCount = CARD_PIP_MAX
+    for pipN = 0 to CARD_PIP_MAX - 1
+        pipId = CARD_USE_PIPS(pipCard * CARD_PIP_MAX + pipN)
+        if pipSlots
+            pipId = CARD_SLOT_PIPS(pipCard * CARD_PIP_MAX + pipN)
+        endif
+        if pipN < pipCount
+            ` the middle of the pip, from the middle of the card
+            pipX = pipN * 2 + 1
+            pipX = pipX - pipCount
+            pipX = pipX * CARD_PIP_GAP / 2
+            position sprite pipId, pipX, pipY
+            if pipN < pipLit
+                color sprite pipId, pipLitColor
+            else
+                color sprite pipId, pipDimColor
+            endif
+            show sprite pipId
+        else
+            hide sprite pipId
+        endif
+    next
+endfunction
 
 ` how many cards the upgrade screen offers. see DEEP POCKETS in fish_headers.
 function getUpgradeChoiceCount()

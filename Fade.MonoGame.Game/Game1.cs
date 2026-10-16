@@ -183,9 +183,12 @@ public class Game1 : Microsoft.Xna.Framework.Game
             var gc0 = GC.CollectionCount(0);
             var gc1 = GC.CollectionCount(1);
             var gc2 = GC.CollectionCount(2);
+            var memory = GC.GetGCMemoryInfo();
             Console.WriteLine(
                 $"[perf] {_perfFrames} frames, worst {_perfFrameMax:F1} ms | program avg {_perfVmSum / _perfFrames:F2} max {_perfVmMax:F1}" +
-                $" | draw avg {_perfDrawSum / _perfFrames:F2} max {_perfDrawMax:F1} | audio avg {_perfAudioSum / _perfFrames:F2} max {_perfAudioMax:F1} | gc {gc0 - _perfGc0}/{gc1 - _perfGc1}/{gc2 - _perfGc2}");
+                $" | draw avg {_perfDrawSum / _perfFrames:F2} max {_perfDrawMax:F1} | audio avg {_perfAudioSum / _perfFrames:F2} max {_perfAudioMax:F1} | gc {gc0 - _perfGc0}/{gc1 - _perfGc1}/{gc2 - _perfGc2}" +
+                $" | heap {GC.GetTotalMemory(false) >> 20} MB, memory load {memory.MemoryLoadBytes * 100 / Math.Max(memory.TotalAvailableMemoryBytes, 1)}%" +
+                $" | sprites {SpriteSystem.spriteCount} texts {TextSystem.textSpriteCount} tweens {TweenSystem.tweenCount}");
             _perfGc0 = gc0;
             _perfGc1 = gc1;
             _perfGc2 = gc2;

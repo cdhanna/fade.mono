@@ -4,10 +4,23 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace Fade.MonoGame.Core;
 
+// The struct must hold no references (no string, no class). The text array is 10 million long,
+// and an array of structs with a reference in them is one the .NET GC reads end to end on every
+// full collection: about 300 ms a time on an M1 Mac. The string and the layout live in
+// TextSystem's lists instead, and the struct only says which entry is its own.
 public struct TextSprite
 {
     public Sprite sprite;
-    public string text;
+
+    // One more than this text's entry in TextSystem.texts and TextSystem.layouts, so that a
+    // default TextSprite (0) has none.
+    public int slot;
+
+    public string text
+    {
+        readonly get => slot == 0 ? null : TextSystem.texts[slot - 1];
+        set => TextSystem.texts[slot - 1] = value;
+    }
 
     public Color dropShadowColor;
     public Vector2 dropShadowOffset;
@@ -25,7 +38,11 @@ public struct TextSprite
 
     // The cached layout, for text that is rich or that wraps. Go through RichTextSystem to read
     // it, because it is only rebuilt on demand.
-    public RichTextLayout layout;
+    public RichTextLayout layout
+    {
+        readonly get => slot == 0 ? null : TextSystem.layouts[slot - 1];
+        set => TextSystem.layouts[slot - 1] = value;
+    }
 
     // A typewriter. When revealOn is set, only the first `reveal` characters of the text are drawn,
     // counting an icon as one. The whole text is still laid out, so nothing moves as more of it
@@ -52,13 +69,19 @@ public static class TextSystem
     private static Dictionary<int, int> _textSpriteMap = new Dictionary<int, int>();
     public static int highestTextId = 0;
 
-    
+    // The string and layout of each text, by its index. See TextSprite.slot.
+    public static readonly List<string> texts = new List<string>();
+    public static readonly List<RichTextLayout> layouts = new List<RichTextLayout>();
+
+
     public static void Reset()
     {
         //textSprites = new TextSprite[MAX_SPRITE_TEXT_COUNT];
         textSpriteCount = 0;
         highestTextId = 0;
         _textSpriteMap.Clear();
+        texts.Clear();
+        layouts.Clear();
     }
     
     public static void GetTextSpriteIndex(int textId, out int index, out TextSprite text)
@@ -68,8 +91,11 @@ public static class TextSystem
             highestTextId = textId > highestTextId ? textId : highestTextId;
 
             index = _textSpriteMap[textId] = textSpriteCount;
+            texts.Add(null);
+            layouts.Add(null);
             text = new TextSprite
             {
+                slot = index + 1,
                 sprite = new Sprite
                 {
                     id = textId,

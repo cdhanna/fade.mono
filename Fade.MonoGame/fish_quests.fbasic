@@ -44,7 +44,7 @@ setup_quest_defs:
     questDefine(QUEST_FORECAST, "Forecast", "The next fish for each column shows above it. Make four groups finished by a fish as it lands.", TEX_Q_DOT, 0)
     questDefine(QUEST_MOORINGS, "Moorings", "Each colored cell wants the fish shown in its color. Fill all four at once.", TEX_Q_RING, 0)
     questDefine(QUEST_TRADE_PLACES, "Trade Places", "Get the two ringed fish into each other's cells. A pop, or a swap that moves one and pops nothing, resets it.", TEX_Q_RING, 0)
-    questDefine(QUEST_PILOT_FISH, "Pilot Fish", "A little fish trails one step behind the cursor. Make a popping swap while it sits on each lit cell.", TEX_Q_PILOT, 0)
+    questDefine(QUEST_PILOT_FISH, "Pilot Fish", "A little fish trails one step behind the cursor. Lead it onto each lit cell, then make any popping swap.", TEX_Q_PILOT, 0)
     questDefine(QUEST_FERRY, "Ferry", "Carry each starfish from the left edge to the right with three popping swaps. A miss, or a slow trip, drops it.", TEX_Q_STARFISH, 0)
     questDefine(QUEST_LASSO, "Lasso", "Walk the cursor in a loop around the ringed fish, making four popping swaps on the way. Popping it resets.", TEX_Q_RING, 0)
     questDefine(QUEST_TREASURE, "Treasure", "Each popping swap says warmer or colder. Pop the fish on the buried cell.", TEX_Q_PEARL, 0)
@@ -1030,13 +1030,14 @@ function questCuttlefish(qEv, qA, qB)
     endif
 
     if qEv = QEV_SETTLE
+        ` a quest that is done is done, wherever its fish has got to
+        if QUEST_V(9) >= 4
+            questComplete()
+            exitfunction
+        endif
         qCuttleAt = questFindMark(1)
         if qCuttleAt < 0
             questFail()
-            exitfunction
-        endif
-        if QUEST_V(9) >= 4
-            questComplete()
             exitfunction
         endif
         if qA > 0
@@ -1306,7 +1307,37 @@ endfunction
 ` it sleeps for, V(2) is how many of its groups were held back the last time the board was looked
 ` at, and V(3) is how many were waiting when the board was last still. questHoldsGroup, in
 ` fish_routines_quests, is where a group is held back, and it counts them into V(2).
+` the groups that are waiting show on the board: a slow lavender glow under their fish, and a "z"
+` that bobs over the first one of each. questHoldsGroup marks their cells in QUEST_SPOT as the
+` board is looked at, 3 for the first cell of a group and 2 for the rest, and once the look is over
+` questSleepersLooked turns those into 4 and 1, which are the ones that are drawn. so what shows is
+` what the last look found, and it does not flicker while a look is half done.
+` the badge has the kind that is asleep, in its own colors, a pip for each move that it sleeps for
+` yet, and the kinds that sleep after it.
 ` ---------------------------------------------------------------------------------------------
+function questSleepersLooked()
+    qSleptLast = CELL_COUNT - 1
+    for qSleptI = 0 to qSleptLast
+        qSleptSpot = QUEST_SPOT(qSleptI)
+        if qSleptSpot = 3
+            QUEST_SPOT(qSleptI) = 4
+        else
+            if qSleptSpot = 2
+                QUEST_SPOT(qSleptI) = 1
+            else
+                QUEST_SPOT(qSleptI) = 0
+            endif
+        endif
+    next
+endfunction
+
+function questSleepersForget()
+    qSleptLast = CELL_COUNT - 1
+    for qSleptI = 0 to qSleptLast
+        QUEST_SPOT(qSleptI) = 0
+    next
+endfunction
+
 function questSleepers(qEv, qA, qB)
     if qEv = QEV_START
         QUEST_V(0) = random stream(RNG_QUESTS, 7) + 1
@@ -1318,16 +1349,19 @@ function questSleepers(qEv, qA, qB)
     if qEv = QEV_JUDGE
         ` the next look at the board counts them again
         QUEST_V(2) = 0
+        questSleepersLooked()
     endif
 
     if qEv = QEV_SETTLE
         QUEST_V(3) = QUEST_V(2)
         QUEST_V(2) = 0
         questProgress(QUEST_V(3), 3)
+        questSleepersLooked()
 
         QUEST_V(1) = QUEST_V(1) - qA
         if QUEST_V(1) <= 0
             ` it wakes. with enough groups waiting, that is the quest done, and they all go off.
+            questSleepersForget()
             if QUEST_V(3) >= 3
                 questComplete()
                 exitfunction
@@ -1339,15 +1373,41 @@ function questSleepers(qEv, qA, qB)
     endif
 
     if qEv = QEV_DRAW
-        ` which kind is asleep, how long for, and the three kinds that sleep after it, each one
-        ` fainter than the one before
-        questIconAt(QUEST_V(0), QUEST_EXTRA_X + 7, QUEST_EXTRA_Y, 13, rgb(170, 170, 220, 255))
-        questWordAt(QUEST_EXTRA_X + 25, QUEST_EXTRA_Y, "z" + str$(QUEST_V(1)), rgb(190, 200, 255))
+        ` the groups that are waiting, breathing slowly, as a sleeper does
+        qSleepBreath# = sin(game ms() * .0035)
+        qSleepGlow = 70 + 30 * qSleepBreath#
+        qSleepLast = CELL_COUNT - 1
+        for qSleepI = 0 to qSleepLast
+            qSleepSpot = QUEST_SPOT(qSleepI)
+            if qSleepSpot = 1 or qSleepSpot = 4
+                if CELLS(qSleepI).value = QUEST_V(0)
+                    questGlowCell(qSleepI, rgb(150, 140, 255, qSleepGlow))
+                    if qSleepSpot = 4
+                        qSleepZX# = sprite x(CELLS(qSleepI).spriteId) + CELL_ART_SIZE / 2
+                        qSleepZY# = sprite y(CELLS(qSleepI).spriteId) + 2 * qSleepBreath#
+                        qSleepZY# = qSleepZY# - (CELL_ART_SIZE / 2 + 2)
+                        questWordAt(qSleepZX#, qSleepZY#, "z", rgb(200, 195, 255))
+                    endif
+                endif
+            endif
+        next
+
+        ` which kind is asleep, in its own colors, and a pip for every move that it sleeps for yet
+        questIconAt(QUEST_V(0), QUEST_EXTRA_X + 7, QUEST_EXTRA_Y, 13, rgb(255, 255, 255, 255))
+        for qSleepN = 0 to 2
+            qSleepPip = rgb(70, 70, 120, 200)
+            if qSleepN < QUEST_V(1)
+                qSleepPip = rgb(200, 195, 255, 255)
+            endif
+            questIconAt(TEX_PIXEL, QUEST_EXTRA_X + 20 + qSleepN * 6, QUEST_EXTRA_Y, 4, qSleepPip)
+        next
+
+        ` and the three kinds that sleep after it, each one fainter than the one before
         qSleepKind = QUEST_V(0)
         qSleepN = 0
         while qSleepN < 3
             qSleepKind = (qSleepKind mod 7) + 1
-            qSleepAlpha = 140 - qSleepN * 35
+            qSleepAlpha = 200 - qSleepN * 45
             questIconAt(qSleepKind, QUEST_EXTRA_X + 44 + qSleepN * 13, QUEST_EXTRA_Y + 1, 10, rgb(255, 255, 255, qSleepAlpha))
             qSleepN = qSleepN + 1
         endwhile
@@ -2214,13 +2274,17 @@ endfunction
 ` ---------------------------------------------------------------------------------------------
 ` 29. PILOT FISH. a little fish is always one step behind the cursor: it sits on the cell that the
 ` cursor last left. five cells of the board have a ring on them, one in each fifth of the board,
-` from left to right. a swap that pops fish while the little fish is sitting in a ring takes that
-` ring, and they can be taken in any order. since the little fish is on the cell that the cursor
-` just left, and a swap moves the cursor, that comes to: make a swap that pops fish, starting from
-` the cell of a ring. there were three rings once, and a ring often has a swap that pops right
-` there, so it was over in three or four swaps.
+` from left to right. the player leads the little fish into a ring, where it lights up, and the
+` next swap that pops fish, from anywhere, takes that ring. they can be taken in any order. it is
+` where the little fish was as the swap was made that counts, and not where the swap leaves it, so
+` that the ring that is lit is the one that the next pop takes. (it used to be where the swap left
+` it, which came to: start a popping swap on the ring. the ring was never lit at that moment, and
+` a playtester could not work it out.)
+` there were three rings once, and a ring often has a swap that pops right there, so it was over
+` in three or four swaps.
 ` V(0) is the cell that the little fish is on. V(1) to V(5) are the cells of the rings, V(11) to
-` V(15) are 1 for the ones that have been taken, and V(9) is how many of those there are.
+` V(15) are 1 for the ones that have been taken, and V(9) is how many of those there are. V(6) is
+` one more than the cell that the little fish was on as the last swap was made, or 0.
 ` ---------------------------------------------------------------------------------------------
 function questPilotFish(qEv, qA, qB)
     if qEv = QEV_INIT
@@ -2242,20 +2306,27 @@ function questPilotFish(qEv, qA, qB)
         questProgress(0, 5)
     endif
 
+    if qEv = QEV_SWAP
+        ` where the little fish is as the swap is made, before the cursor moves on and it follows
+        QUEST_V(6) = QUEST_V(0) + 1
+    endif
+
     if qEv = QEV_STEP
         ` it swims onto the cell that the cursor just left
         if qA >= 0 then QUEST_V(0) = qA
     endif
 
     if qEv = QEV_JUDGE
-        ` a swap that popped fish, with the little fish sitting in a ring
+        ` a swap that popped fish, made with the little fish sitting in a ring
         if qB
+            qPilotAt = QUEST_V(6) - 1
+            QUEST_V(6) = 0
             for qPilotN = 0 to 4
                 if QUEST_V(11 + qPilotN) = 0
-                    if QUEST_V(1 + qPilotN) = QUEST_V(0)
+                    if QUEST_V(1 + qPilotN) = qPilotAt
                         QUEST_V(11 + qPilotN) = 1
                         QUEST_V(9) = QUEST_V(9) + 1
-                        qPilotCell = QUEST_V(0)
+                        qPilotCell = qPilotAt
                         spawnBubbles(getCellX(qPilotCell mod CELL_COLUMN_COUNT), getCellY(qPilotCell / CELL_COLUMN_COUNT), CELL_SIZE / 2, 16, 0, rgb(255, 220, 64))
                         questSayAt(qPilotCell, "got it!", rgb(255, 220, 64))
                     endif
@@ -2266,6 +2337,8 @@ function questPilotFish(qEv, qA, qB)
     endif
 
     if qEv = QEV_SETTLE
+        ` a swap that popped nothing has had its chance
+        QUEST_V(6) = 0
         if QUEST_V(9) >= 5
             questComplete()
         endif
@@ -2308,6 +2381,20 @@ function questFerryDrop()
     endif
 endfunction
 
+` the starfish is at the right edge. it is delivered, if enough swaps on the way popped. V(8) is
+` 1 while a swap that came to the edge waits to be seen to pop.
+function questFerryArrive()
+    if QUEST_V(5) >= QUEST_V(7)
+        QUEST_V(10 + QUEST_V(0)) = 2
+        QUEST_V(0) = 0
+        QUEST_V(6) = QUEST_V(6) + 1
+        questProgress(QUEST_V(6), 3)
+        spawnBubbles(getCellX(SELECTION_POS.x), getCellY(SELECTION_POS.y), CELL_SIZE / 2, 12, 0, rgb(255, 170, 190))
+    else
+        questSay("pop more fish first", rgb(255, 170, 190))
+    endif
+endfunction
+
 function questFerry(qEv, qA, qB)
     if qEv = QEV_INIT
         for qFerryN = 1 to 3
@@ -2335,19 +2422,19 @@ function questFerry(qEv, qA, qB)
             QUEST_V(4) = QUEST_V(4) - 1
             qFerryX = qB mod CELL_COLUMN_COUNT
             if qFerryX = CELL_COLUMN_COUNT - 1
-                if QUEST_V(5) >= QUEST_V(7)
-                    QUEST_V(10 + QUEST_V(0)) = 2
-                    QUEST_V(0) = 0
-                    QUEST_V(6) = QUEST_V(6) + 1
-                    questProgress(QUEST_V(6), 3)
-                    spawnBubbles(getCellX(SELECTION_POS.x), getCellY(SELECTION_POS.y), CELL_SIZE / 2, 12, 0, rgb(255, 170, 190))
+                ` a swap that came to the edge has not been seen to pop yet. it is counted first,
+                ` and the trip is judged then, so that the swap that gets there can be the last pop.
+                if QUEST_PENDING_SWAPS > 0
+                    QUEST_V(8) = 1
                 else
-                    questSay("pop more fish first", rgb(255, 170, 190))
+                    questFerryArrive()
                 endif
             endif
             if QUEST_V(0) > 0
-                if QUEST_V(4) <= 0
-                    questFerryDrop()
+                if QUEST_V(8) = 0
+                    if QUEST_V(4) <= 0
+                        questFerryDrop()
+                    endif
                 endif
             endif
         endif
@@ -2357,9 +2444,21 @@ function questFerry(qEv, qA, qB)
         if qB
             if QUEST_V(0) > 0 then QUEST_V(5) = QUEST_V(5) + 1
         endif
+        if QUEST_V(8)
+            QUEST_V(8) = 0
+            if QUEST_V(0) > 0
+                questFerryArrive()
+                if QUEST_V(0) > 0
+                    if QUEST_V(4) <= 0
+                        questFerryDrop()
+                    endif
+                endif
+            endif
+        endif
     endif
 
     if qEv = QEV_SETTLE
+        QUEST_V(8) = 0 `a swap to the edge that popped nothing is not waited on any more. it missed.
         if QUEST_MISSED
             questFerryDrop()
         endif

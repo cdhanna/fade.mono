@@ -737,45 +737,78 @@ test quest_avoid_puffers_takes_nine_swaps from fishBoard
     end
 endtest
 
-test quest_pilot_fish_takes_a_ring_with_a_swap_from_it from fishBoard
+test quest_pilot_fish_takes_the_ring_it_was_led_into from fishBoard
     testCursor(4, 4)
     questForce(QUEST_PILOT_FISH)
     REQUEST_COMBO_CHECK = 0
     stepQuest()
     tRing = QUEST_V(1)
 
-    ` the cell next to the ring, that the cursor comes from, must not be a ring of its own. the
-    ` second ring is in the next fifth of the board, so it can be.
+    ` the two cells to the right of the ring, that the cursor walks on, must not be rings of their
+    ` own. the second ring is in the next fifth of the board, so it can be.
     for tRingOther = 2 to 5
         if QUEST_V(tRingOther) = tRing + 1 then QUEST_V(tRingOther) = tRing + 3
+        if QUEST_V(tRingOther) = tRing + 2 then QUEST_V(tRingOther) = tRing + 3
     next
 
     ` the cursor walks onto the ring, and the little fish is one step behind
     questCursorStepped(tRing + 1, tRing)
     assert QUEST_V(0) = tRing + 1, "the little fish is on the cell that the cursor just left"
 
-    ` a swap somewhere else that pops fish does not take the ring
-    questSwapDone(tRing + 1, tRing)
-    questJudge(1)
-    questJudge(0)
-    questSettled()
-    assert QUEST_PROG_NOW = 0, "a pop while the little fish is not in a ring takes nothing"
-
-    ` a swap that starts on the ring leaves the little fish in it, and if it pops, that takes the ring
+    ` a swap that starts on the ring pops, but the little fish was still behind, so it takes nothing.
+    ` the swap leaves the little fish in the ring, though, and the ring lights up.
     questSwapDone(tRing, tRing + 1)
     questCursorStepped(tRing, tRing + 1)
     assert QUEST_V(0) = tRing, "a swap away from the ring leaves the little fish in it"
     questJudge(1)
     questJudge(0)
     questSettled()
-    assert QUEST_PROG_NOW = 1, "and a pop then takes the ring"
+    assert QUEST_PROG_NOW = 0, "a pop while the little fish is not in a ring takes nothing"
+
+    ` and the next swap that pops, from anywhere, takes the ring that it is sitting in
+    questSwapDone(tRing + 1, tRing + 2)
+    questCursorStepped(tRing + 1, tRing + 2)
+    assert QUEST_V(0) = tRing + 1, "the little fish follows the swap out of the ring"
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    assert QUEST_PROG_NOW = 1, "a pop made with the little fish in the ring takes it"
 
     ` a ring is only taken once
-    questSwapDone(tRing, tRing + 1)
+    questCursorStepped(tRing, tRing + 1)
+    questSwapDone(tRing + 1, tRing + 2)
+    questCursorStepped(tRing + 1, tRing + 2)
     questJudge(1)
     questJudge(0)
     questSettled()
     assert QUEST_PROG_NOW = 1, "the same ring does not count twice"
+    end
+endtest
+
+test quest_pilot_fish_ring_waits_out_a_miss from fishBoard
+    testCursor(4, 4)
+    questForce(QUEST_PILOT_FISH)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tRing = QUEST_V(1)
+    for tRingOther = 2 to 5
+        if QUEST_V(tRingOther) = tRing + 1 then QUEST_V(tRingOther) = tRing + 3
+        if QUEST_V(tRingOther) = tRing + 2 then QUEST_V(tRingOther) = tRing + 3
+    next
+
+    ` the little fish is led into the ring, and a swap from there pops nothing
+    questCursorStepped(tRing, tRing + 1)
+    questSwapDone(tRing + 1, tRing + 2)
+    questCursorStepped(tRing + 1, tRing + 2)
+    questJudge(0)
+    questSettled()
+    assert QUEST_PROG_NOW = 0, "a swap that pops nothing takes nothing"
+
+    ` and a pop that the falling fish make later, with no swap, does not count either
+    questJudge(1)
+    questJudge(0)
+    questSettled()
+    assert QUEST_PROG_NOW = 0, "the missed swap does not wait for a later pop"
     end
 endtest
 
@@ -959,6 +992,32 @@ test quest_kinds_that_never_match from fishBoard
     runto _combos_judged
     assert totalComboCount = 0, "three of a quest's own kind in a row are not a group"
     assert testPopCount() = 0, "nothing pops"
+    end
+endtest
+
+test quest_turtle_lets_off_a_swap_that_feeds_it from fishBoard
+    questForce(QUEST_TURTLE)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    tTurtle = questFindKind(TEX_TURTLE)
+    tAhead = tTurtle + 1
+    tBelow = tAhead + CELL_COLUMN_COUNT
+    if tTurtle / CELL_COLUMN_COUNT = CELL_ROW_COUNT - 1 then tBelow = tAhead - CELL_COLUMN_COUNT
+
+    ` a swap somewhere else that pops nothing is a miss, as ever
+    testPut(tAhead mod CELL_COLUMN_COUNT, tAhead / CELL_COLUMN_COUNT, questOtherKind(QUEST_V(0)))
+    questSwapDone(testIndex(6, 7), testIndex(7, 7))
+    assert questMissLetOff() = 0, "a swap that does nothing for the turtle is not let off"
+
+    ` a swap that brings the kind that it wants in front of it is let off, even though it pops nothing
+    testPut(tAhead mod CELL_COLUMN_COUNT, tAhead / CELL_COLUMN_COUNT, QUEST_V(0))
+    questSwapDone(tBelow, tAhead)
+    assert questMissLetOff() = 1, "putting the fish that the turtle wants in front of it is a fine move"
+
+    ` but not a swap that takes it away from there
+    testPut(tAhead mod CELL_COLUMN_COUNT, tAhead / CELL_COLUMN_COUNT, questOtherKind(QUEST_V(0)))
+    questSwapDone(tAhead, tBelow)
+    assert questMissLetOff() = 0, "a swap that leaves the wrong fish in front of it is a miss"
     end
 endtest
 
@@ -1186,6 +1245,18 @@ test quest_sleepers_hold_a_group_back from fishBoard
     assert totalComboCount = 0, "a group of the kind that is asleep does not pop"
     assert testPopCount() = 0, "none of its fish do"
     assert QUEST_V(2) = 1, "and it is counted as waiting"
+
+    ` and once the board is still, the group shows as asleep, with its "z" on the first fish
+    questSleepers(QEV_SETTLE, 0, 0)
+    assert QUEST_SPOT(testIndex(0, 0)) = 4, "the first fish of the group gets the z"
+    assert QUEST_SPOT(testIndex(1, 0)) = 1, "the rest of the group glows"
+    assert QUEST_SPOT(testIndex(2, 0)) = 1, "all of it"
+    assert QUEST_SPOT(testIndex(3, 0)) = 0, "and nothing else does"
+
+    ` when it wakes, the glow is gone
+    QUEST_V(1) = 1
+    questSleepers(QEV_SETTLE, 1, 0)
+    assert QUEST_SPOT(testIndex(0, 0)) = 0, "a kind that wakes is not shown asleep any more"
     end
 endtest
 
@@ -1367,5 +1438,89 @@ test highscore_endings_that_are_not_known_are_a_mystery from fishBoard
     assert HISCORE_TILE_COUNT = 1, "with no ending known, there is one tile"
     assert HISCORE_TILE_ENDING(0) = 0, "for all of them"
     showAllEndings()
+    end
+endtest
+
+test quest_marks_go_around_the_board_with_a_shift from fishBoard
+    tShLast = CELL_COLUMN_COUNT - 1
+    tShBottom = CELL_ROW_COUNT - 1
+
+    ` a row slides right. the mark on the last fish comes around to the start, and the other one moves along.
+    QUEST_MARK(testIndex(tShLast, 2)) = 1
+    QUEST_MARK(testIndex(3, 2)) = 2
+    tShAt as vec = { x = 3, y = 2 }
+    tShWay as vec = { x = 1, y = 0 }
+    doShift(tShAt, tShWay)
+    assert QUEST_MARK(testIndex(0, 2)) = 1, "the mark that went off of the end came back on at the start"
+    assert QUEST_MARK(testIndex(4, 2)) = 2, "and the other mark moved one cell along"
+    assert QUEST_MARK(testIndex(tShLast, 2)) = 0, "nothing is left behind at the end"
+    assert QUEST_MARK(testIndex(3, 2)) = 0, "or where the other one was"
+
+    ` and a column slides up. the mark on the top fish comes around to the bottom.
+    QUEST_MARK(testIndex(0, 2)) = 0
+    QUEST_MARK(testIndex(4, 2)) = 0
+    QUEST_MARK(testIndex(5, 0)) = 3
+    tShAt.x = 5
+    tShAt.y = 0
+    tShWay.x = 0
+    tShWay.y = -1
+    doShift(tShAt, tShWay)
+    assert QUEST_MARK(testIndex(5, tShBottom)) = 3, "the mark at the top came around to the bottom"
+    assert QUEST_MARK(testIndex(5, 0)) = 0, "and is gone from the top"
+    end
+endtest
+
+test quest_ferry_lands_on_the_swap_that_makes_its_last_pop from fishBoard
+    questForce(QUEST_FERRY)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_STATE = QSTATE_ACTIVE, "the ferry is being played"
+
+    ` a starfish is on its way, and two swaps on the way have popped
+    QUEST_V(0) = 1
+    QUEST_V(11) = 1
+    QUEST_V(4) = 10
+    QUEST_V(5) = 2
+    tFeEdge = testIndex(CELL_COLUMN_COUNT - 1, 3)
+    tFeNext = testIndex(CELL_COLUMN_COUNT - 2, 3)
+
+    ` the third swap goes to the right edge, and pops
+    questSwapDone(tFeNext, tFeEdge)
+    questCursorStepped(tFeNext, tFeEdge)
+    assert QUEST_V(6) = 0, "it is not judged before its pop is seen"
+    questJudge(1)
+    assert QUEST_V(6) = 1, "the starfish is delivered by the swap that made its last pop"
+    assert QUEST_V(0) = 0, "and it is not being carried any more"
+    end
+endtest
+
+test quest_cuttlefish_that_is_done_finishes_even_without_its_mark from fishBoard
+    questForce(QUEST_CUTTLEFISH)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    QUEST_V(9) = 4
+    for tCtI = 0 to 399
+        QUEST_MARK(tCtI) = 0
+    next
+    questSettled()
+    assert QUEST_STATE = QSTATE_DONE, "four kinds popped is a finished quest, wherever the fish is"
+    end
+endtest
+
+test quest_finished_after_its_round_ended_makes_way_for_the_next from fishBoard
+    questForce(QUEST_LOST_PAIR)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+
+    ` the round ends while the quest is still being played, and it is finished as the board settles
+    questRoundEnded()
+    questComplete()
+    assert QUEST_STATE = QSTATE_DONE, "it finished after its round ended"
+
+    ` the next round does not keep it
+    CURRENT_ROUND = QUEST_FIRST_ROUND + 1
+    questRoundStarted()
+    assert QUEST_STATE = QSTATE_NONE, "the finished quest is let go of"
+    assert QUEST_ARRIVING = 1, "and a new one is on its way"
     end
 endtest

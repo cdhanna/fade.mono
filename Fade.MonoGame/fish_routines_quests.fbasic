@@ -124,6 +124,11 @@ setup_quests:
     hide text QUEST_PROG_TEXT_ID
 
 
+    ` the sound of a quest being finished
+    load sfx clip reserve sfx clip id(SFX_CLIP_QUEST_DONE), "Fish/Audio/quest-complete"
+    sfx reserve sfx id(SFX_QUEST_DONE), SFX_CLIP_QUEST_DONE
+    set sfx volume SFX_QUEST_DONE, QUEST_DONE_VOLUME#
+
     reserve tween id(QUEST_PUNCH_TWEEN_ID)
     create basic tween QUEST_PUNCH_TWEEN_ID, 0, 0, 1, 0
     reserve tween id(QUEST_PICK_PUNCH_TWEEN_ID)
@@ -495,6 +500,12 @@ function questRoundEnded()
     ` a quest is not lost with the round. one that is being played, or that is waiting to be picked
     ` up, or that has not even shown up yet, carries on into the next round just as it is. only one
     ` that was finished is done with, so that the next round can bring a new one.
+    questLetGoOfDone()
+endfunction
+
+
+` a quest that was finished is done with, so that a new one can come
+function questLetGoOfDone()
     if QUEST_ID > 0
         if QUEST_STATE = QSTATE_DONE
             QUEST_ID = 0
@@ -529,6 +540,10 @@ function questRoundStarted()
         ` and once it is there, its dots bounce in a wave
         questDotsWave(1, 900)
     endif
+
+    ` a quest that was finished after the round before had ended, as its last pops settled, is done
+    ` with now. it was still being played when questRoundEnded looked at it.
+    questLetGoOfDone()
 
     ` a quest that came over from the round before carries on. see questRoundEnded.
     if QUEST_ID > 0 then exitfunction
@@ -692,7 +707,8 @@ function questComplete()
     QUEST_PAY_TEXT_N = 0
     QUEST_PAY_GIVEN = 0
 
-    ` the badge fizzes
+    ` the badge fizzes, and the bells ring
+    play sfx SFX_QUEST_DONE
     spawnBubbles(QUEST_BADGE_X + 50, QUEST_BADGE_Y + 8, 30, 20, 0, rgb(255, 220, 64))
     create basic tween QUEST_PUNCH_TWEEN_ID, 1, 0, 700, 0
 
@@ -738,6 +754,32 @@ function questSwapMarks(qMarkA, qMarkB)
     qMarkKeep = QUEST_MARK(qMarkA)
     QUEST_MARK(qMarkA) = QUEST_MARK(qMarkB)
     QUEST_MARK(qMarkB) = qMarkKeep
+endfunction
+
+
+` a whole row or column has slid one cell along, with the "shift" move, and the fish that went off of
+` one end came back on at the other. the marks go with them. the line is `qRollCount` cells, starting
+` at `qRollFirst`, `qRollStride` apart. `qRollWay` is 1 when the fish moved toward the end of the line,
+` and -1 when they moved toward its start. doShift, in fish_funcs, calls this.
+function questRollMarks(qRollFirst, qRollStride, qRollCount, qRollWay)
+    qRollLast = qRollFirst + (qRollCount - 1) * qRollStride
+    if qRollWay > 0
+        qRollKeep = QUEST_MARK(qRollLast)
+        qRollN = qRollCount - 1
+        while qRollN > 0
+            QUEST_MARK(qRollFirst + qRollN * qRollStride) = QUEST_MARK(qRollFirst + (qRollN - 1) * qRollStride)
+            qRollN = qRollN - 1
+        endwhile
+        QUEST_MARK(qRollFirst) = qRollKeep
+    else
+        qRollKeep = QUEST_MARK(qRollFirst)
+        qRollN = 0
+        while qRollN < qRollCount - 1
+            QUEST_MARK(qRollFirst + qRollN * qRollStride) = QUEST_MARK(qRollFirst + (qRollN + 1) * qRollStride)
+            qRollN = qRollN + 1
+        endwhile
+        QUEST_MARK(qRollLast) = qRollKeep
+    endif
 endfunction
 
 
@@ -1154,19 +1196,44 @@ function questHoldsGroup(qHoldGroup)
                 exit
             endif
         next
-        if qHeld then QUEST_V(2) = QUEST_V(2) + 1
+        if qHeld
+            QUEST_V(2) = QUEST_V(2) + 1
+
+            ` its cells are marked, so that the board can show that it is asleep. the first one, at the
+            ` top left, gets the "z". see questSleepersLooked in fish_quests.
+            qHoldHead = 3
+            for qHoldI = 0 to qHoldLast
+                if CELLS(qHoldI).comboFillId = qHoldGroup
+                    QUEST_SPOT(qHoldI) = qHoldHead
+                    qHoldHead = 2
+                endif
+            next
+        endif
     endif
 endfunction qHeld
 
 
 ` is a swap that popped nothing let off by the multiplier? with the krill, every one is. with the
-` sleepers, one that made a group that is being held back is.
+` sleepers, one that made a group that is being held back is. with the turtle, one that put the
+` kind that it wants in front of it is, since that is the move that the quest asks for, and it
+` hardly ever pops.
 function questMissLetOff()
     qLetOff = 0
     if QUEST_STATE = QSTATE_ACTIVE
         if QUEST_ID = QUEST_KRILL then qLetOff = 1
         if QUEST_ID = QUEST_SLEEPERS
             if QUEST_V(2) > 0 then qLetOff = 1
+        endif
+        if QUEST_ID = QUEST_TURTLE
+            qLetTurtle = questFindKind(TEX_TURTLE)
+            if qLetTurtle >= 0
+                if qLetTurtle mod CELL_COLUMN_COUNT < CELL_COLUMN_COUNT - 1
+                    qLetFront = qLetTurtle + 1
+                    if CELLS(qLetFront).value = QUEST_V(0)
+                        if QUEST_SWAP_A = qLetFront or QUEST_SWAP_B = qLetFront then qLetOff = 1
+                    endif
+                endif
+            endif
         endif
     endif
 endfunction qLetOff
