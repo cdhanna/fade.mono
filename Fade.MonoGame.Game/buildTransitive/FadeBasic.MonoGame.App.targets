@@ -1,0 +1,121 @@
+<Project>
+  <!--
+    What a Fade game IS, before any of its Fade code runs: its name, its icon, and the window
+    it opens in. All opt-in; a project that sets none of these is left exactly as it was.
+
+    A game sets them in its .csproj:
+
+      <PropertyGroup>
+        <FadeGameTitle>Fish Fish Pop</FadeGameTitle>   the window title, and the exe's product name
+        <FadeGameIcon>Icon.png</FadeGameIcon>          a square PNG; the exe icon and window icon
+
+        <FadeWindowMode>Windowed</FadeWindowMode>      Windowed (default) or Fullscreen
+        <FadeWindowWidth>1280</FadeWindowWidth>        the size the window opens at
+        <FadeWindowHeight>720</FadeWindowHeight>
+        <FadeWindowResizable>true</FadeWindowResizable>  whether the player can drag its edges
+      </PropertyGroup>
+
+    These are DEFAULTS. Fade code can still change any of them once it runs (`set window title`,
+    `set fullscreen`, `set screen size`, `set window resizable`). The point of setting them here
+    is that the window is already right when it first appears, instead of opening as
+    "MyGame" at 800x480 with the MonoGame logo and then jumping.
+
+    The ordinary .NET properties still work for the rest of what Windows shows in the exe's
+    Properties > Details: <Version>, <Company>, <Copyright>, <Description>.
+
+    Imported by FadeBasic.MonoGame.Game.targets for package consumers. A game that references
+    Fade.MonoGame.Game as a PROJECT (the fish game in this repo) imports this file itself.
+  -->
+
+  <!-- ── Title ──────────────────────────────────────────────────────────────────────────────
+       MonoGame names a new window from the entry assembly's [AssemblyTitle], so that is what
+       the title has to become. Product is what Windows shows as the exe's "Product name".
+
+       Each is replaced only when the project has not set it itself. The SDK fills both in with
+       the assembly name if they are empty, and depending on the import order that may already
+       have happened when this file is read, so the assembly name counts as "not set". -->
+  <PropertyGroup Condition="'$(FadeGameTitle)' != ''">
+    <AssemblyTitle Condition="'$(AssemblyTitle)' == '' OR '$(AssemblyTitle)' == '$(AssemblyName)' OR '$(AssemblyTitle)' == '$(MSBuildProjectName)'">$(FadeGameTitle)</AssemblyTitle>
+    <Product Condition="'$(Product)' == '' OR '$(Product)' == '$(AssemblyName)' OR '$(Product)' == '$(MSBuildProjectName)'">$(FadeGameTitle)</Product>
+  </PropertyGroup>
+
+  <!-- ── Icon ───────────────────────────────────────────────────────────────────────────────
+       One PNG becomes the files a desktop game needs: Icon.ico for the exe (ApplicationIcon),
+       Icon.bmp, embedded under exactly that name, which MonoGame reads to set the icon of
+       the window, and Icon.icns for a macOS .app bundle (below). They are generated into obj/, so there is nothing to keep in sync by hand.
+       See FadeGameIconTask.cs. -->
+  <PropertyGroup Condition="'$(FadeGameIcon)' != '' AND '$(FadeMonoGamePlatform)' != 'Web'">
+    <_FadeGameIconSource>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(FadeGameIcon)'))</_FadeGameIconSource>
+    <_FadeGameIconDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'fade-icon'))</_FadeGameIconDir>
+    <ApplicationIcon>$(_FadeGameIconDir)Icon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(_FadeGameIconSource)' != ''">
+    <EmbeddedResource Include="$(_FadeGameIconDir)Icon.bmp">
+      <LogicalName>Icon.bmp</LogicalName>
+      <Visible>false</Visible>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <!-- A macOS .app shows the icon named by its Info.plist, from Contents/Resources; the
+       window icon above does not reach Finder, and the Dock only shows it while the game is
+       running. So a build for a Mac (-r osx-*) also ships Icon.icns next to the executable,
+       and whatever wraps the publish in a bundle moves it in. For the fish game that is
+       build/make-macos-app.sh. -->
+  <ItemGroup Condition="'$(_FadeGameIconSource)' != '' AND $(RuntimeIdentifier.StartsWith('osx'))">
+    <None Include="$(_FadeGameIconDir)Icon.icns">
+      <Link>Icon.icns</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <Visible>false</Visible>
+    </None>
+  </ItemGroup>
+
+  <UsingTask TaskName="FadeGameIcon"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <Task>
+      <Code Type="Class" Language="cs" Source="$(MSBuildThisFileDirectory)FadeGameIconTask.cs" />
+    </Task>
+  </UsingTask>
+
+  <Target Name="FadeGenerateGameIcon"
+          BeforeTargets="BeforeBuild;PrepareResources;CoreCompile"
+          Condition="'$(_FadeGameIconSource)' != ''"
+          Inputs="$(_FadeGameIconSource);$(MSBuildThisFileDirectory)FadeGameIconTask.cs"
+          Outputs="$(_FadeGameIconDir)Icon.ico;$(_FadeGameIconDir)Icon.bmp;$(_FadeGameIconDir)Icon.icns">
+    <FadeGameIcon Source="$(_FadeGameIconSource)"
+                  IcoFile="$(_FadeGameIconDir)Icon.ico"
+                  BmpFile="$(_FadeGameIconDir)Icon.bmp"
+                  IcnsFile="$(_FadeGameIconDir)Icon.icns" />
+  </Target>
+
+  <!-- ── Window ─────────────────────────────────────────────────────────────────────────────
+       Baked into the assembly as metadata. Game1 reads them in its constructor, before the
+       window exists, which is the only time the size and mode can be set without the window
+       visibly jumping. Only the ones a project sets are written. -->
+  <Target Name="FadeCheckWindowSettings" BeforeTargets="BeforeBuild"
+          Condition="'$(FadeWindowMode)' != ''">
+    <Error Condition="'$(FadeWindowMode)' != 'Windowed' AND '$(FadeWindowMode)' != 'Fullscreen'"
+           Text="FadeWindowMode is '$(FadeWindowMode)'. It must be Windowed or Fullscreen." />
+  </Target>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute" Condition="'$(FadeWindowMode)' != ''">
+      <_Parameter1>FadeWindowMode</_Parameter1>
+      <_Parameter2>$(FadeWindowMode)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute" Condition="'$(FadeWindowWidth)' != ''">
+      <_Parameter1>FadeWindowWidth</_Parameter1>
+      <_Parameter2>$(FadeWindowWidth)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute" Condition="'$(FadeWindowHeight)' != ''">
+      <_Parameter1>FadeWindowHeight</_Parameter1>
+      <_Parameter2>$(FadeWindowHeight)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute" Condition="'$(FadeWindowResizable)' != ''">
+      <_Parameter1>FadeWindowResizable</_Parameter1>
+      <_Parameter2>$(FadeWindowResizable)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

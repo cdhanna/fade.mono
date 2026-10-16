@@ -37,13 +37,12 @@ public struct Tween
 public static class TweenSystem
 {
     public static double currentTime;
-    #if BROWSER
-    public const int MAX_TWEEN_COUNT = 100_000;
-#else
-    public const int MAX_TWEEN_COUNT = 10_000_000;
-#endif
-
-    public static Tween[] tweens = new Tween[MAX_TWEEN_COUNT];
+    // Room for 16,384 up front, which no game so far has needed more of (the fish game peaks near
+    // 4,000 sprites), and the array doubles if it fills. It used to be 10 million: about 6 GB
+    // committed across the systems, which kept a Mac's memory load near 98% and the .NET GC
+    // collecting over and over.
+    public const int INITIAL_TWEEN_COUNT = 16_384;
+    public static Tween[] tweens = new Tween[INITIAL_TWEEN_COUNT];
     public static int tweenCount = 0;
     private static Dictionary<int, int> _tweenMap = new Dictionary<int, int>();
     public static int highestTweenId;
@@ -51,7 +50,7 @@ public static class TweenSystem
     public static void Reset()
     {
         currentTime = 0;
-        //tweens = new Tween[MAX_TWEEN_COUNT];
+        //tweens = new Tween[INITIAL_TWEEN_COUNT];
         tweenCount = 0;
         _tweenMap.Clear();
         highestTweenId = 0;
@@ -62,6 +61,7 @@ public static class TweenSystem
         if (!_tweenMap.TryGetValue(tweenId, out index))
         {
             highestTweenId = tweenId > highestTweenId ? tweenId : highestTweenId;
+            if (tweenCount == tweens.Length) Array.Resize(ref tweens, tweens.Length * 2);
             index = _tweenMap[tweenId] = tweenCount;
             tween = new Tween()
             {

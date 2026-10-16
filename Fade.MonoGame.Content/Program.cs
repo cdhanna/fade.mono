@@ -8,6 +8,15 @@ using System.Linq;
 //
 //   fadecontent --platform <Desktop|DesktopVK|Web> --source <assetsDir>
 //               --output <xnbDir> --intermediate <objDir>
+//               [--ogg-output <oggDir> [--ogg-quality <-1..10>]]
+//               [--compress-output <brDir>]
+//
+// --ogg-output re-encodes every 16-bit PCM SoundEffect XNB the build made as Ogg Vorbis into
+// oggDir, for a release that ships $(FadeMonoEncodeAudioToOgg). See OggAudioEncoder. Quality is
+// Vorbis's -1 (smallest) to 10 (best), default 10.
+//
+// --compress-output Brotli-compresses every other XNB into brDir, for a release that ships
+// $(FadeMonoCompressContent). See XnbCompressor.
 //
 // Platform semantics match FadeContentSystem.Build:
 //   Desktop    DesktopGL pipeline — GLSL via MGFXC (Wine off Windows), SM 3.0
@@ -25,6 +34,10 @@ string intermediate = "";
 // and the game must not reference the pipeline or its publish carries MGCB's tool binaries.
 string? rulesPath = null;
 
+string? oggOutput = null;
+string oggQuality = "10";
+string? compressOutput = null;
+
 for (int i = 0; i < args.Length; i++)
 {
     switch (args[i])
@@ -34,6 +47,9 @@ for (int i = 0; i < args.Length; i++)
         case "--output"       when i + 1 < args.Length: output       = args[++i]; break;
         case "--intermediate" when i + 1 < args.Length: intermediate = args[++i]; break;
         case "--rules"        when i + 1 < args.Length: rulesPath    = args[++i]; break;
+        case "--ogg-output"   when i + 1 < args.Length: oggOutput    = args[++i]; break;
+        case "--ogg-quality"  when i + 1 < args.Length: oggQuality   = args[++i]; break;
+        case "--compress-output" when i + 1 < args.Length: compressOutput = args[++i]; break;
         default:
             Console.Error.WriteLine($"[E] unknown or incomplete argument: {args[i]}");
             return 2;
@@ -54,6 +70,31 @@ if (!(string.Equals(platform, "Desktop", StringComparison.OrdinalIgnoreCase)
    || string.Equals(platform, "Web", StringComparison.OrdinalIgnoreCase)))
 {
     Console.Error.WriteLine($"[E] unknown --platform '{platform}'; expected Desktop, DesktopVK or Web");
+    return 2;
+}
+
+double oggQualityValue = 10;
+if (oggOutput != null)
+{
+    if (!double.TryParse(oggQuality, System.Globalization.NumberStyles.Float,
+                         System.Globalization.CultureInfo.InvariantCulture, out oggQualityValue)
+        || oggQualityValue < -1 || oggQualityValue > 10)
+    {
+        Console.Error.WriteLine($"[E] --ogg-quality '{oggQuality}' must be a number from -1 to 10");
+        return 2;
+    }
+    // KNI's browser runtime loads sounds from XNBs registered by the page; it has no decoder
+    // for these, so a Web build that asked for them would load with no sound at all.
+    if (string.Equals(platform, "Web", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.Error.WriteLine("[E] --ogg-output is for desktop builds; the Web runtime cannot load Ogg sounds");
+        return 2;
+    }
+}
+// Same for the Web runtime, which registers raw XNB bytes and has nothing to inflate them.
+if (compressOutput != null && string.Equals(platform, "Web", StringComparison.OrdinalIgnoreCase))
+{
+    Console.Error.WriteLine("[E] --compress-output is for desktop builds; the Web runtime cannot load compressed XNBs");
     return 2;
 }
 
@@ -90,6 +131,12 @@ try
     }
 
     FadeContentSystem.Build(source, platform, output, intermediate, rules);
+
+    var asOgg = new List<string>();
+    if (oggOutput != null)
+        asOgg = OggAudioEncoder.EncodeAll(Path.Combine(output, "Content"), oggOutput, oggQualityValue);
+    if (compressOutput != null)
+        XnbCompressor.CompressAll(Path.Combine(output, "Content"), compressOutput, new HashSet<string>(asOgg));
     return 0;
 }
 catch (Exception ex)

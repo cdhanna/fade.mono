@@ -21,19 +21,19 @@ public struct Transform
 
 public static class TransformSystem
 {
-    #if BROWSER
-    public const int MAX_TRANSFORM_COUNT = 100_000;
-#else
-    public const int MAX_TRANSFORM_COUNT = 10_000_000;
-#endif
-    public static Transform[] transforms = new Transform[MAX_TRANSFORM_COUNT];
+    // Room for 16,384 up front, which no game so far has needed more of (the fish game peaks near
+    // 4,000 sprites), and the array doubles if it fills. It used to be 10 million: about 6 GB
+    // committed across the systems, which kept a Mac's memory load near 98% and the .NET GC
+    // collecting over and over.
+    public const int INITIAL_TRANSFORM_COUNT = 16_384;
+    public static Transform[] transforms = new Transform[INITIAL_TRANSFORM_COUNT];
     public static int transformCount = 0;
     public static int highestTransformId = 0;
     private static Dictionary<int, int> _transformMap = new Dictionary<int, int>();
     
     public static void Reset()
     {
-       // transforms = new Transform[MAX_TRANSFORM_COUNT];
+       // transforms = new Transform[INITIAL_TRANSFORM_COUNT];
         transformCount = 0;
         highestTransformId = 0;
         _transformMap.Clear();
@@ -46,6 +46,7 @@ public static class TransformSystem
         {
             highestTransformId = transformId > highestTransformId ? transformId : highestTransformId;
             
+            if (transformCount == transforms.Length) Array.Resize(ref transforms, transforms.Length * 2);
             index = _transformMap[transformId] = transformCount;
             transform = new Transform()
             {

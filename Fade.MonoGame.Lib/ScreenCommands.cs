@@ -335,6 +335,36 @@ public partial class FadeMonoGameCommands
     }
 
     /// <summary>
+    /// <para>Returns <c>1</c> if the game is fullscreen, <c>0</c> if it is in a window.</para>
+    /// </summary>
+    /// <remarks>
+    /// A game can start fullscreen before any of its code runs, when its .csproj sets
+    /// <c>&lt;FadeWindowMode&gt;Fullscreen&lt;/FadeWindowMode&gt;</c>. Check this before
+    /// <see cref="SetScreenResolution">set screen size</see> at startup: in fullscreen that
+    /// changes the resolution of the monitor, not the size of a window.
+    /// </remarks>
+    /// <example>
+    /// Pick a window size only when there is a window:
+    /// <code>
+    /// IF is fullscreen() = 0
+    ///   set screen size 1280, 720
+    /// ENDIF
+    /// set sync rate 16
+    /// DO
+    ///   sync
+    /// LOOP
+    /// </code>
+    /// </example>
+    /// <returns><c>1</c> if fullscreen, <c>0</c> otherwise.</returns>
+    /// <seealso cref="SetFullScreen">set fullscreen</seealso>
+    /// <seealso cref="SetScreenResolution">set screen size</seealso>
+    [FadeBasicCommand("is fullscreen")]
+    public static int IsFullScreen()
+    {
+        return GameSystem.graphicsDeviceManager.IsFullScreen ? 1 : 0;
+    }
+
+    /// <summary>
     /// <para>Returns the full width of your physical monitor in pixels.</para>
     /// <para>This is the monitor resolution, not your game window size.</para>
     /// </summary>

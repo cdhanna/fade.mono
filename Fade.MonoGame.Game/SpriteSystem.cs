@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -29,13 +30,12 @@ public struct Sprite
 
 public static class SpriteSystem
 {
-    #if BROWSER
-    public const int MAX_SPRITE_COUNT = 100_000;
-#else
-    public const int MAX_SPRITE_COUNT = 10_000_000;
-#endif
-
-    public static Sprite[] sprites = new Sprite[MAX_SPRITE_COUNT];
+    // Room for 16,384 up front, which no game so far has needed more of (the fish game peaks near
+    // 4,000 sprites), and the array doubles if it fills. It used to be 10 million: about 6 GB
+    // committed across the systems, which kept a Mac's memory load near 98% and the .NET GC
+    // collecting over and over.
+    public const int INITIAL_SPRITE_COUNT = 16_384;
+    public static Sprite[] sprites = new Sprite[INITIAL_SPRITE_COUNT];
     public static int spriteCount = 0;
     public static int highestSpriteId = 0;
     private static Dictionary<int, int> _spriteMap = new Dictionary<int, int>();
@@ -43,7 +43,7 @@ public static class SpriteSystem
 
     public static void Reset()
     {
-        //sprites = new Sprite[MAX_SPRITE_COUNT];
+        //sprites = new Sprite[INITIAL_SPRITE_COUNT];
         spriteCount = 0;
         highestSpriteId = 0;
         _spriteMap.Clear();
@@ -55,6 +55,7 @@ public static class SpriteSystem
         {
             highestSpriteId = spriteId > highestSpriteId ? spriteId : highestSpriteId;
             
+            if (spriteCount == sprites.Length) Array.Resize(ref sprites, sprites.Length * 2);
             index = _spriteMap[spriteId] = spriteCount;
             sprite = new Sprite
             {

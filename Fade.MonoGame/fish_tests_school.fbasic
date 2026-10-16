@@ -1,0 +1,219 @@
+remstart
+    THE TESTS OF THE SCHOOLS
+    see fish_headers_school for what a school is. the top of fish_tests explains how the tests work.
+    the board of the tests only uses the kinds 1 to 5, so these use 6, whose picture faces one way.
+
+    most of them have three fish of kind 6 at (3, 2), (4, 2) and (5, 2), and a fourth one under the
+    cell to the left of them, at (2, 3). trading (2, 2) and (2, 3) makes a row of four. the swap goes up,
+    so it does not turn anything.
+remend
+
+test school_a_swap_across_turns_the_two_fish from fishBoard
+    testCursor(2, 2)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+    assert SCHOOL_FACE(testIndex(3, 2)) = 1, "the fish that was carried right faces right"
+    assert SCHOOL_FACE(testIndex(2, 2)) = -1, "and the one that was shoved left faces left"
+    runto _loop
+
+    testQueueMove(-1, 0, 1, -1)
+    runto _combos_judged
+    assert SCHOOL_FACE(testIndex(2, 2)) = -1, "carried back left, it faces left"
+    assert SCHOOL_FACE(testIndex(3, 2)) = 1, "and the other one, shoved right, faces right"
+    end
+endtest
+
+test school_a_swap_up_or_down_turns_nothing from fishBoard
+    SCHOOL_FACE(testIndex(2, 2)) = 1
+    SCHOOL_FACE(testIndex(2, 3)) = -1
+    testCursor(2, 2)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+    assert SCHOOL_FACE(testIndex(2, 3)) = 1, "the fish that went down still faces right"
+    assert SCHOOL_FACE(testIndex(2, 2)) = -1, "and the one that came up still faces left"
+    end
+endtest
+
+test school_a_row_facing_one_way_sweeps_its_row_with_the_sweep_on from fishBoard
+    SCHOOL_SWEEP = 1
+    assert schoolArtFace(6) <> 0, "the kind that the tests use can be seen to face a way"
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+    testPut(2, 3, 6)
+    SCHOOL_FACE(testIndex(3, 2)) = 1
+    SCHOOL_FACE(testIndex(4, 2)) = 1
+    SCHOOL_FACE(testIndex(5, 2)) = 1
+    SCHOOL_FACE(testIndex(2, 3)) = 1
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert SCHOOL_COUNT = 1, "the row of four that faces right is a school"
+    assert SCHOOL_LAST_SIZE = 4, "of four fish"
+    tSchoolEdge = CELL_COLUMN_COUNT - 1
+    assert testPops(6, 2), "it swims off to the right, and the fish ahead of it pop"
+    assert testPops(tSchoolEdge, 2), "all the way to the edge"
+    tSchoolSwept = CELL_COLUMN_COUNT - 6
+    assert SCHOOL_LAST_SWEPT = tSchoolSwept, "every one of them"
+    assert testPops(1, 2) = 0, "and none behind it"
+    assert testPops(6, 1) = 0, "or in another row"
+    end
+endtest
+
+test school_facing_left_sweeps_to_the_left_with_the_sweep_on from fishBoard
+    SCHOOL_SWEEP = 1
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+    testPut(2, 3, 6)
+    SCHOOL_FACE(testIndex(3, 2)) = -1
+    SCHOOL_FACE(testIndex(4, 2)) = -1
+    SCHOOL_FACE(testIndex(5, 2)) = -1
+    SCHOOL_FACE(testIndex(2, 3)) = -1
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert SCHOOL_COUNT = 1, "the row that faces left is a school"
+    assert testPops(1, 2), "it swims off to the left"
+    assert testPops(0, 2), "to the edge"
+    assert testPops(6, 2) = 0, "and nothing on the other side of it pops"
+    end
+endtest
+
+test school_is_not_one_when_a_fish_faces_the_other_way from fishBoard
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+    testPut(2, 3, 6)
+    SCHOOL_FACE(testIndex(3, 2)) = 1
+    SCHOOL_FACE(testIndex(4, 2)) = -1
+    SCHOOL_FACE(testIndex(5, 2)) = 1
+    SCHOOL_FACE(testIndex(2, 3)) = 1
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the row pops"
+    assert SCHOOL_COUNT = 0, "but one of its fish faces the other way, so it is not a school"
+    assert testPops(6, 2) = 0, "and nothing ahead of it pops"
+    end
+endtest
+
+test school_is_not_one_when_it_is_too_small from fishBoard
+    SCHOOL_MIN = 4
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    SCHOOL_FACE(testIndex(3, 2)) = 1
+    SCHOOL_FACE(testIndex(4, 2)) = 1
+    SCHOOL_FACE(testIndex(2, 3)) = 1
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the row of three pops"
+    assert SCHOOL_COUNT = 0, "but three is too few for a school of four"
+    assert testPops(5, 2) = 0, "and nothing ahead of it pops"
+    end
+endtest
+
+test school_is_not_one_when_no_swap_made_it from fishBoard
+    testPut(2, 2, 6)
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+    SCHOOL_FACE(testIndex(2, 2)) = 1
+    SCHOOL_FACE(testIndex(3, 2)) = 1
+    SCHOOL_FACE(testIndex(4, 2)) = 1
+    SCHOOL_FACE(testIndex(5, 2)) = 1
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the row pops"
+    assert SCHOOL_COUNT = 0, "but no swap put it together, so it is not a school"
+    assert testPops(6, 2) = 0, "and nothing ahead of it pops"
+    end
+endtest
+
+test school_of_any_shape_sweeps_every_row_that_it_is_in_with_the_sweep_on from fishBoard
+    SCHOOL_SWEEP = 1
+    ` a row of three, with a fourth fish under its right end
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(4, 3, 6)
+    testPut(2, 3, 6)
+    SCHOOL_FACE(testIndex(3, 2)) = 1
+    SCHOOL_FACE(testIndex(4, 2)) = 1
+    SCHOOL_FACE(testIndex(4, 3)) = 1
+    SCHOOL_FACE(testIndex(2, 3)) = 1
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert SCHOOL_COUNT = 1, "the four fish that face right are a school, though they are not a straight row"
+    tSchoolEdge = CELL_COLUMN_COUNT - 1
+    assert testPops(5, 2), "it swims off to the right in the top row"
+    assert testPops(tSchoolEdge, 2), "to the edge"
+    assert testPops(5, 3), "and in the row under it, from its fish there"
+    assert testPops(tSchoolEdge, 3), "to the edge too"
+    assert testPops(3, 3) = 0, "and nothing behind its fish in that row"
+    end
+endtest
+
+test school_swims_off_into_the_background_and_pops_nothing_else from fishBoard
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    SCHOOL_FACE(testIndex(3, 2)) = 1
+    SCHOOL_FACE(testIndex(4, 2)) = 1
+    SCHOOL_FACE(testIndex(2, 3)) = 1
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert SCHOOL_COUNT = 1, "three fish that face the same way are a school"
+    assert testPops(2, 2), "its fish leave the board"
+    assert testPops(4, 2), "all of them"
+    assert testPops(5, 2) = 0, "and nothing ahead of it pops"
+    tSchoolOut = 0
+    for tSchoolI = 0 to FLOCK_MAX - 1
+        if FLOCK_ON(tSchoolI)
+            if FLOCK_KIND(tSchoolI) = 6 then tSchoolOut = tSchoolOut + 1
+        endif
+    next
+    assert tSchoolOut = 3, "and three fish of its kind swim off into the background"
+    end
+endtest
+
+test school_a_school_plays_the_next_chord_of_a_fanfare_that_fits_the_music from fishBoard
+    MUSIC_CHORD = MUSIC_CHORD_DM
+    schoolChord(3)
+    assert SCHOOL_CHORD_PLAYING = INSTRUMENT_BELL, "it plays on the bell"
+    assert SCHOOL_CHORD_NOTES(0) = F4, "over D minor, the first chord is F"
+    assert SCHOOL_CHORD_NOTES(1) = A4, "F, A"
+    assert SCHOOL_CHORD_NOTES(2) = C5, "C"
+    assert SCHOOL_CHORD_NOTES(3) = F5, "and F again on top"
+    assert SCHOOL_CHORD_AT(4) = 0, "a school of three adds nothing more"
+    tFanGap = SCHOOL_CHORD_AT(1) - SCHOOL_CHORD_AT(0)
+    assert tFanGap = SCHOOL_NOTE_GAP, "it is rolled from the bottom up"
+
+    schoolChord(5)
+    assert SCHOOL_CHORD_NOTES(0) = D4, "the next school plays the next chord, D minor"
+    tFanBig = 0
+    if SCHOOL_CHORD_AT(4) > 0 then tFanBig = 1
+    assert tFanBig = 1, "and a school of five adds a note on top"
+
+    MUSIC_CHORD = MUSIC_CHORD_BB
+    schoolChord(3)
+    assert SCHOOL_CHORD_NOTES(0) = D4, "over B flat, the third chord of its run is D minor"
+    schoolChord(3)
+    assert SCHOOL_CHORD_NOTES(0) = Bb4, "and the fourth is B flat"
+
+    SCHOOL_SONG_LAST = SCHOOL_SONG_LAST - SCHOOL_SONG_RESET_MS - 1
+    schoolChord(3)
+    assert SCHOOL_CHORD_NOTES(0) = Bb4, "after a long while with no school, the run starts again from the first chord"
+    assert SCHOOL_SONG_AT = 1, "of its eight"
+    end
+endtest

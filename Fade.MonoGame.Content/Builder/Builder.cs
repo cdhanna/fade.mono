@@ -246,7 +246,7 @@ public static class FadeContentSystem
 
     // Parses the XNB header + type-reader manifest, returning the root reader
     // name and the byte offset where the primary object's data begins.
-    private static bool TryReadXnbObjectStart(byte[] bytes, out string rootReader, out int objectDataOffset)
+    internal static bool TryReadXnbObjectStart(byte[] bytes, out string rootReader, out int objectDataOffset)
     {
         rootReader = "";
         objectDataOffset = -1;

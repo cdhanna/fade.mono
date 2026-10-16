@@ -1,13 +1,15 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
 namespace Fade.MonoGame.Core;
 
-// The struct must hold no references (no string, no class). The text array is 10 million long,
-// and an array of structs with a reference in them is one the .NET GC reads end to end on every
-// full collection: about 300 ms a time on an M1 Mac. The string and the layout live in
-// TextSystem's lists instead, and the struct only says which entry is its own.
+// The struct must hold no references (no string, no class). An array of structs with a reference
+// in them is one the .NET GC reads end to end, every slot used or not, on every full collection:
+// when the text array was 10 million long, that was about 300 ms a time on an M1 Mac. The
+// string and the layout live in TextSystem's lists instead, and the struct only says which entry
+// is its own.
 public struct TextSprite
 {
     public Sprite sprite;
@@ -54,17 +56,12 @@ public struct TextSprite
 
 public static class TextSystem
 {
-#if BROWSER
-    // WASM heap is bounded; 10M-element arrays of struct types blow it
-    // past the 2GB cap before user code ever runs. Cap browser builds at
-    // 100k — still vastly more sprites than any real game needs, and
-    // expandable per-project later via a build property.
-    public const int MAX_SPRITE_TEXT_COUNT = 100_000;
-#else
-    public const int MAX_SPRITE_TEXT_COUNT = 10_000_000;
-#endif
-
-    public static TextSprite[] textSprites = new TextSprite[MAX_SPRITE_TEXT_COUNT];
+    // Room for 16,384 up front, which no game so far has needed more of (the fish game peaks near
+    // 4,000 sprites), and the array doubles if it fills. It used to be 10 million: about 6 GB
+    // committed across the systems, which kept a Mac's memory load near 98% and the .NET GC
+    // collecting over and over.
+    public const int INITIAL_SPRITE_TEXT_COUNT = 16_384;
+    public static TextSprite[] textSprites = new TextSprite[INITIAL_SPRITE_TEXT_COUNT];
     public static int textSpriteCount = 0;
     private static Dictionary<int, int> _textSpriteMap = new Dictionary<int, int>();
     public static int highestTextId = 0;
@@ -76,7 +73,7 @@ public static class TextSystem
 
     public static void Reset()
     {
-        //textSprites = new TextSprite[MAX_SPRITE_TEXT_COUNT];
+        //textSprites = new TextSprite[INITIAL_SPRITE_TEXT_COUNT];
         textSpriteCount = 0;
         highestTextId = 0;
         _textSpriteMap.Clear();
@@ -90,6 +87,7 @@ public static class TextSystem
         {
             highestTextId = textId > highestTextId ? textId : highestTextId;
 
+            if (textSpriteCount == textSprites.Length) Array.Resize(ref textSprites, textSprites.Length * 2);
             index = _textSpriteMap[textId] = textSpriteCount;
             texts.Add(null);
             layouts.Add(null);

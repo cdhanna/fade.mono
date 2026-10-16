@@ -38,7 +38,11 @@ public static class RecordSystem
     // to the video, in a .json of the same name, with the marks that the program made. something that
     // puts the videos together (build/trailer_cut.py) mixes the sounds back in from that, and lines the
     // marks up with the music.
-    public class SoundEvent
+    //
+    // written with Fade's own JSON (IJsonable), not System.Text.Json, which finds the properties by
+    // reflection and is switched off in a trimmed release build. it has no long and no float, so those
+    // go through an int and a double on the way; the keys, and so the file, are what they always were.
+    public class SoundEvent : FadeBasic.Json.IJsonable
     {
         public long frame { get; set; }
         public int sfx { get; set; } // the sound slot: playing it again cuts off what it was playing
@@ -48,15 +52,41 @@ public static class RecordSystem
         public float pan { get; set; }
         public int group { get; set; }
         public bool loop { get; set; }
+
+        public void ProcessJson<T>(ref T op) where T : FadeBasic.Json.IJsonOperation
+        {
+            int f = (int)frame, s = sfx, g = group;
+            string a = asset;
+            double v = volume, p = pitch, n = pan;
+            bool l = loop;
+            op.IncludeField(nameof(frame), ref f);
+            op.IncludeField(nameof(sfx), ref s);
+            op.IncludeField(nameof(asset), ref a);
+            op.IncludeField(nameof(volume), ref v);
+            op.IncludeField(nameof(pitch), ref p);
+            op.IncludeField(nameof(pan), ref n);
+            op.IncludeField(nameof(group), ref g);
+            op.IncludeField(nameof(loop), ref l);
+            frame = f; sfx = s; asset = a; volume = (float)v; pitch = (float)p; pan = (float)n; group = g; loop = l;
+        }
     }
 
-    public class MarkEvent
+    public class MarkEvent : FadeBasic.Json.IJsonable
     {
         public long frame { get; set; }
         public string name { get; set; }
+
+        public void ProcessJson<T>(ref T op) where T : FadeBasic.Json.IJsonOperation
+        {
+            int f = (int)frame;
+            string n = name;
+            op.IncludeField(nameof(frame), ref f);
+            op.IncludeField(nameof(name), ref n);
+            frame = f; name = n;
+        }
     }
 
-    public class Sidecar
+    public class Sidecar : FadeBasic.Json.IJsonable
     {
         public string video { get; set; }
         public int fps { get; set; }
@@ -65,6 +95,22 @@ public static class RecordSystem
         public long frames { get; set; }
         public List<MarkEvent> marks { get; set; } = new List<MarkEvent>();
         public List<SoundEvent> sounds { get; set; } = new List<SoundEvent>();
+
+        public void ProcessJson<T>(ref T op) where T : FadeBasic.Json.IJsonOperation
+        {
+            string v = video;
+            int r = fps, w = width, h = height, f = (int)frames;
+            var m = marks;
+            var s = sounds;
+            op.IncludeField(nameof(video), ref v);
+            op.IncludeField(nameof(fps), ref r);
+            op.IncludeField(nameof(width), ref w);
+            op.IncludeField(nameof(height), ref h);
+            op.IncludeField(nameof(frames), ref f);
+            op.IncludeField(nameof(marks), ref m);
+            op.IncludeField(nameof(sounds), ref s);
+            video = v; fps = r; width = w; height = h; frames = f; marks = m; sounds = s;
+        }
     }
 
     static Sidecar _sidecar;
@@ -328,7 +374,7 @@ public static class RecordSystem
                 var sidecarPath = Path.ChangeExtension(path, ".json");
                 try
                 {
-                    File.WriteAllText(sidecarPath, System.Text.Json.JsonSerializer.Serialize(sidecar, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                    File.WriteAllText(sidecarPath, FadeBasic.Json.JsonableExtensions.Jsonify(sidecar));
                 }
                 catch (Exception ex)
                 {

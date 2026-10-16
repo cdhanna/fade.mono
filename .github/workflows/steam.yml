@@ -53,6 +53,13 @@ env:
   # The macOS bundle is "<APP_NAME>.app", which is the macOS launch option in Steamworks.
   APP_NAME: FishFishPop
   DISPLAY_NAME: Fish Fish Pop
+  # Both publishes. They take a build from about 340 MB to under 50 MB (measured on win-x64,
+  # 2026-10-16), and all are explained in Fade.MonoGame.csproj:
+  #   FadeMonoEncodeAudioToOgg   sounds ship as .ogg, not raw PCM .xnb; the game decodes them on
+  #                              its first launch and keeps them in SoundCache/ next to itself
+  #   FadeMonoCompressContent    every other .xnb ships Brotli-compressed, as .xnb.br
+  #   FadeMonoTrim               the .NET runtime and libraries, trimmed to what the game uses
+  SIZE_FLAGS: -p:FadeMonoEncodeAudioToOgg=true -p:FadeMonoCompressContent=true -p:FadeMonoTrim=true
 
   # NOTE: the graphics backend is OpenGL (MonoGame DesktopGL), which is what
   # $(FadeMonoGamePlatform) defaults to and what the game's shaders are written for. OpenGL
@@ -159,6 +166,7 @@ jobs:
           dotnet publish "$GAME_PROJECT" \
             -c Release \
             -p:FadeEngineShaderVariants=Desktop \
+            $SIZE_FLAGS \
             -r win-x64 \
             --self-contained true \
             -o publish/win-x64
@@ -176,6 +184,7 @@ jobs:
           dotnet publish "$GAME_PROJECT" \
             -c Release \
             -p:FadeEngineShaderVariants=Desktop \
+            $SIZE_FLAGS \
             -r osx-arm64 \
             --self-contained true \
             -o publish/osx-arm64
@@ -211,15 +220,16 @@ jobs:
             fail=1
           fi
           for rid in win-x64 osx-arm64; do
-            count=$(find "publish/$rid/Content" -name '*.xnb' 2>/dev/null | wc -l)
+            # .xnb.br: SIZE_FLAGS ships every XNB compressed.
+            count=$(find "publish/$rid/Content" -name '*.xnb.br' 2>/dev/null | wc -l)
             echo "$rid: $count content files"
             if [ "$count" -lt 20 ]; then
-              echo "::error::publish/$rid/Content has $count .xnb files; the content build produced next to nothing"
+              echo "::error::publish/$rid/Content has $count .xnb.br files; the content build produced next to nothing"
               fail=1
             fi
             # One of each kind that comes from the bucket, so a bundle that is missing a
             # whole folder cannot upload.
-            for probe in 'Fish/Textures/Goldfish.xnb' 'Fish/Fonts/ZeroCool.xnb' 'Fish/Audio/bubble-pop-2.xnb' 'Fish/Shaders/FishEffect.xnb'; do
+            for probe in 'Fish/Textures/Goldfish.xnb.br' 'Fish/Fonts/ZeroCool.xnb.br' 'Fish/Audio/bubble-pop-2.ogg' 'sounds.manifest' 'Fish/Shaders/FishEffect.xnb.br'; do
               if [ ! -f "publish/$rid/Content/$probe" ]; then
                 echo "::error::publish/$rid/Content/$probe is missing"
                 fail=1
@@ -250,7 +260,7 @@ jobs:
           test -x "$APP/Contents/MacOS/$EXE_NAME" \
             || { echo "::error::macOS executable lost its +x bit"; exit 1; }
           # A bundled game only sees content in Contents/Resources.
-          test -f "$APP/Contents/Resources/Content/Fish/Textures/Goldfish.xnb" \
+          test -f "$APP/Contents/Resources/Content/Fish/Textures/Goldfish.xnb.br" \
             || { echo "::error::macOS bundle has no content in Contents/Resources/Content"; exit 1; }
           test ! -d "$APP/Contents/MacOS/Content" \
             || { echo "::error::Content staged in Contents/MacOS -- a bundled app cannot see it"; exit 1; }

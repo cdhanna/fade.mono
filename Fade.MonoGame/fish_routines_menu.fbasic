@@ -260,25 +260,43 @@ setup_menu:
         ready = 1
     }
 
+    ` the options are remembered from the last time the game was run. the first time it is ever run,
+    ` there is nothing to remember, and they are what they would be anyway.
+    OPTION_SOUND = get pref(PREF_SOUND, 10)
+    OPTION_MUSIC = get pref(PREF_MUSIC, 10)
+
+    ` a new player gets the screen the game started in: fullscreen in a build from github, a window in any other
+    ` (FadeWindowMode in the csproj). a player who has picked gets what they picked, either way.
+    menuStartedFullscreen = is fullscreen()
+    OPTION_FULLSCREEN = get pref(PREF_FULLSCREEN, menuStartedFullscreen)
+    if OPTION_FULLSCREEN <> 0 then OPTION_FULLSCREEN = 1
+
+    ` started fullscreen, but the player wants a window. it is made the size a window starts at, and then the
+    ` remembered size below takes over, like any other run.
+    if menuStartedFullscreen = 1
+        if OPTION_FULLSCREEN = 0
+            set fullscreen 0
+            set screen size SCREEN_WIDTH, SCREEN_HEIGHT
+        endif
+    endif
+
     ` the size of the window is not an option. the player drags the edges of the window to make it any size they like.
     ` and the window opens at the size they left it the last time the game was run.
     set window resizable 1
     menuWindowRemembered = remember window size(1)
     OPTION_WINDOW_W = screen width()
     OPTION_WINDOW_H = screen height()
-
-    ` the options are remembered from the last time the game was run. the first time it is ever run,
-    ` there is nothing to remember, and they are what they would be anyway.
-    OPTION_SOUND = get pref(PREF_SOUND, 10)
-    OPTION_MUSIC = get pref(PREF_MUSIC, 10)
-    OPTION_FULLSCREEN = get pref(PREF_FULLSCREEN, 0)
+    ` still fullscreen, so those are the monitor's size. leaving fullscreen goes to the size a window starts at.
+    if is fullscreen() = 1
+        OPTION_WINDOW_W = SCREEN_WIDTH
+        OPTION_WINDOW_H = SCREEN_HEIGHT
+    endif
 
     ` the file they are kept in can be changed by hand, so do not trust it to be sensible
     if OPTION_SOUND > 10 then OPTION_SOUND = 10
     if OPTION_SOUND < 0 then OPTION_SOUND = 0
     if OPTION_MUSIC > 10 then OPTION_MUSIC = 10
     if OPTION_MUSIC < 0 then OPTION_MUSIC = 0
-    if OPTION_FULLSCREEN <> 0 then OPTION_FULLSCREEN = 1
 
     ` what the main menu remembers is shown, until the player says otherwise
     OPTION_MENU_REEF = get pref(PREF_MENU_REEF, 1)
@@ -297,8 +315,11 @@ setup_menu:
 
     set sfx group volume SFX_GROUP_SFX, OPTION_SOUND * .1
     applyMusicVolume()
-    if OPTION_FULLSCREEN
-        set fullscreen 1
+    ` a window, but the player picked fullscreen. (started fullscreen and they want it: nothing to do.)
+    if OPTION_FULLSCREEN = 1
+        if is fullscreen() = 0
+            set fullscreen 1
+        endif
     endif
 
     for menuI = 0 to MENU_ITEM_COUNT - 1
@@ -1388,6 +1409,7 @@ reset_game:
     diverReset()
     tideReset()
     glowReset() `the glow. see fish_headers_glow.
+    schoolReset() `which way the fish face. see fish_headers_school.
 
     ` any score that was still floating up off of the fish
     for resetI = 0 to SCORE_TEXT_COUNT - 1

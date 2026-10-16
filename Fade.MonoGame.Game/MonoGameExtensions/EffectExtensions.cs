@@ -21,9 +21,9 @@ public static class ContentManagerExtensions
         if (content == null)
             throw new ArgumentNullException(nameof(content));
 
-        var type = content.GetType();
-
-        var prop = type.GetProperty(
+        // typeof and not content.GetType(): the property is ContentManager's own, and a trimmed
+        // build only keeps it when the trimmer can see which type it is looked up on.
+        var prop = typeof(ContentManager).GetProperty(
             "RootDirectoryFullPath",
             BindingFlags.Instance | BindingFlags.NonPublic);
 

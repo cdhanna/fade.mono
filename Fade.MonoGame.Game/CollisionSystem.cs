@@ -39,21 +39,17 @@ public struct CollisionHit
 
 public static class CollisionSystem
 {
-    #if BROWSER
-    public const int MAX_AABB_COUNT = 100_000;
-#else
-    public const int MAX_AABB_COUNT = 10_000_000;
-#endif
-    public static ColliderBox[] aabbs = new ColliderBox[MAX_AABB_COUNT];
+    // Room for 16,384 up front, which no game so far has needed more of (the fish game peaks near
+    // 4,000 sprites), and the array doubles if it fills. It used to be 10 million: about 6 GB
+    // committed across the systems, which kept a Mac's memory load near 98% and the .NET GC
+    // collecting over and over.
+    public const int INITIAL_AABB_COUNT = 16_384;
+    public static ColliderBox[] aabbs = new ColliderBox[INITIAL_AABB_COUNT];
     private static Dictionary<int, int> _colliderMap = new Dictionary<int, int>();
     public static int AabbsCount;
 
-    #if BROWSER
-    public const int MAX_HIT_COUNT = 100_000;
-#else
-    public const int MAX_HIT_COUNT = 10_000_000;
-#endif
-    public static CollisionHit[] hits = new CollisionHit[MAX_HIT_COUNT];
+    public const int INITIAL_HIT_COUNT = 16_384;
+    public static CollisionHit[] hits = new CollisionHit[INITIAL_HIT_COUNT];
     public static int HitCount;
 
     public static Dictionary<int, List<int>> colliderIdToHitIds = new Dictionary<int, List<int>>();
@@ -61,11 +57,11 @@ public static class CollisionSystem
 
     public static void Reset()
     {
-        //aabbs = new ColliderBox[MAX_AABB_COUNT];
+        //aabbs = new ColliderBox[INITIAL_AABB_COUNT];
         _colliderMap.Clear();
         AabbsCount = 0;
 
-        //hits = new CollisionHit[MAX_HIT_COUNT];
+        //hits = new CollisionHit[INITIAL_HIT_COUNT];
         HitCount = 0;
     }
     
@@ -73,6 +69,7 @@ public static class CollisionSystem
     {
         if (!_colliderMap.TryGetValue(colliderId, out index))
         {
+            if (AabbsCount == aabbs.Length) Array.Resize(ref aabbs, aabbs.Length * 2);
             index = _colliderMap[colliderId] = AabbsCount;
             collider = new ColliderBox()
             {
@@ -134,6 +131,7 @@ public static class CollisionSystem
                 var isHit = CollisionBoxUtil.Intersects(ref a, ref b);
                 if (isHit)
                 {
+                    if (HitCount == hits.Length) Array.Resize(ref hits, hits.Length * 2);
                     hits[HitCount].aId = a.id;
                     hits[HitCount].bId = b.id;
                     HitCount++;

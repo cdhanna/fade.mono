@@ -569,6 +569,7 @@ update_frame:
     stepCoral()
     stepTideSleep()
     stepGlow() `see fish_headers_glow
+    stepSchool() `see fish_headers_school
     perf lap 18
     stepSkeletonGhosts()
     perf lap 19
@@ -817,6 +818,25 @@ frame_fish_fx:
 
         ` a fish at an end of the trail of the glow is turned around. see WHAT SHOWS in fish_headers_glow.
         yaw# = yaw# + GLOW_TURN#(i) * 3.14159
+
+        ` a fish that faces the other way from its picture is drawn turned around, and it turns slowly.
+        ` see FACING in fish_headers_school.
+        schoolFxWant# = 0
+        schoolFxArt = 0
+        if c.value > 0
+            if c.value < 64
+                schoolFxArt = SCHOOL_ART_FACE(c.value)
+            endif
+        endif
+        if schoolFxArt <> 0
+            if SCHOOL_FACE(i) <> schoolFxArt then schoolFxWant# = 1
+        endif
+        if SCHOOL_SNAP
+            SCHOOL_SHOWN#(i) = schoolFxWant#
+        else
+            SCHOOL_SHOWN#(i) = SCHOOL_SHOWN#(i) + (schoolFxWant# - SCHOOL_SHOWN#(i)) * SCHOOL_TURN_STEP#
+        endif
+        yaw# = yaw# + SCHOOL_SHOWN#(i) * 3.14159
         set sprite all texcoord1 c.spriteId, pitch#, yaw#, stackShown#, fishSize#
 
         ` the fish goes to its place in the QR code, and gets smaller. see TUNA in fish_headers.
@@ -892,6 +912,7 @@ frame_dbg:
             gosub frame_debug_beat
             gosub frame_debug_tide
             gosub frame_debug_glow
+            gosub frame_debug_school
             gosub frame_debug_quests
             gosub frame_debug_angler
             if INFO_MODE = 0
@@ -1320,6 +1341,10 @@ handle_combos:
     forceBase = groupId
     rayForceMax = FORCE_RAY_DOWN + CELL_COLUMN_COUNT
     if maxComboForce < rayForceMax then maxComboForce = rayForceMax
+
+    ` and a school that swims off makes one too, so there has to be room for one in every row. see fish_headers_school.
+    schoolForceMax = FORCE_SCHOOL + CELL_ROW_COUNT
+    if maxComboForce < schoolForceMax then maxComboForce = schoolForceMax
     groupId += maxComboForce
 
     ` DEBUG: just color the groups for debug visuals
@@ -1517,6 +1542,12 @@ handle_combos:
             endif
         next
 
+        ` a group of fish that all face the same way is a school, and it swims off. see fish_headers_school.
+        SCHOOL_JUDGED = -1
+        if comboForced = 0
+            schoolJudge(g, forceBase, comboSwapped)
+        endif
+
         totalComboCount += 1
         scoreAdd = 0
 
@@ -1639,28 +1670,43 @@ handle_combos:
                 delay = delay + FISH_STACK_POP_GAP
             endwhile
 
-            ` kaboom sprite
-            create basic tween cell.comboAnimTweenId, smoke.startFrame, smoke.endFrame, 400, delay
-            set tween easing cell.comboAnimTweenId, EASING_LINEAR
-            show sprite cell.fxSpriteId
-            rotate sprite cell.fxSpriteId, rnd(8) * .25
-            color sprite cell.fxSpriteId, SMOKE_COLORS(rnd(SMOKE_COLOR_COUNT))
-            sprite cell.fxSpriteId, getCellX(cell.coord.x), getCellY(cell.coord.y), smoke.texId
+            ` a fish of a school does not pop: there is no puff and no bang. a fish just like it swims off
+            ` into the background, from where it is. see A SCHOOL SWIMS OFF in fish_headers_school.
+            cellSchools = 0
+            if SCHOOL_JUDGED = g then cellSchools = 1
+            if cellSchools
+                create basic tween cell.comboAnimTweenId, 0, 0, 1, 0
+                hide sprite cell.fxSpriteId
+                schoolFishLeaves(i - 1, delay)
+            else
+                ` kaboom sprite
+                create basic tween cell.comboAnimTweenId, smoke.startFrame, smoke.endFrame, 400, delay
+                set tween easing cell.comboAnimTweenId, EASING_LINEAR
+                show sprite cell.fxSpriteId
+                rotate sprite cell.fxSpriteId, rnd(8) * .25
+                color sprite cell.fxSpriteId, SMOKE_COLORS(rnd(SMOKE_COLOR_COUNT))
+                sprite cell.fxSpriteId, getCellX(cell.coord.x), getCellY(cell.coord.y), smoke.texId
 
-            ` sfx
-            sfx cell.explodeSfxId, rnd(EXPLODE_SOUND_COUNT)
-            delay play sfx cell.explodeSfxId, delay
-            set sfx pitch cell.explodeSfxId, explodePitch#
-            explodePitch# -= .02
+                ` sfx
+                sfx cell.explodeSfxId, rnd(EXPLODE_SOUND_COUNT)
+                delay play sfx cell.explodeSfxId, delay
+                set sfx pitch cell.explodeSfxId, explodePitch#
+                explodePitch# -= .02
+            endif
 
             ` a puff of bubbles, in the color of the fish
             spawnBubbles(getCellX(cell.coord.x), getCellY(cell.coord.y), CELL_SIZE / 4, 5, delay, FISH_COLORS(getFishColorIndex(cell.value)))
 
-            ` animate fade out. the bones of a skeleton are gone as soon as its ghost is there.
+            ` animate fade out. the bones of a skeleton are gone as soon as its ghost is there. a fish of a
+            ` school is gone quickly, since the one that swims off takes its place.
             if cellGhost
                 create basic tween cell.comboDownShiftTweenId, 255, 0, 40, delay - SKELETON_GHOST_MS
             else
-                create basic tween cell.comboDownShiftTweenId, 255, 0, 250, delay
+                if cellSchools
+                    create basic tween cell.comboDownShiftTweenId, 255, 0, 60, delay
+                else
+                    create basic tween cell.comboDownShiftTweenId, 255, 0, 250, delay
+                endif
             endif
 
             ` animate screen shake
@@ -2050,6 +2096,9 @@ handle_combos:
 
             ` a quest may have its own idea of what drops in. see FORECAST in fish_quests.
             CELLS(i-1).value = questNewFish(i - 1, CELLS(i-1).value)
+
+            ` and it faces one way or the other. see FACING in fish_headers_school.
+            schoolNewFish(i - 1)
             set sprite texture cell.spriteId, CELLS(i-1).value
             targetY = y - CELL_SIZE * 2
             startAlpha = 0

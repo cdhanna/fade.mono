@@ -1,0 +1,182 @@
+remstart
+    SCHOOLS
+    another hidden thing, and a prototype. the routines are in fish_routines_school, and the tests are
+    in fish_tests_school.
+
+    FACING. every fish faces left or right. a new fish comes in facing one way or the other, picked by
+    the seed and how many fish have come in so far, so a seed plays the same, and no roll is taken from
+    the streams. a swap that goes across turns the two fish that it moves: the fish that the cursor
+    carries faces the way that it was carried, and the fish that it shoves faces the other way. a swap
+    that goes up or down leaves them facing the way that they were. a "free move" turns them the same as
+    any swap does. the special moves do not. a fish takes the way that it faces along with it, when it
+    is swapped or falls: swapCellStacks, in fish_funcs, trades it.
+    the picture of a fish faces one way, and SCHOOL_ART_FACE says which. a fish that faces the other way
+    is drawn turned around, and it turns slowly, so a swap that turns it can be seen. frame_fish_fx adds
+    SCHOOL_SHOWN# to the yaw. a crab, a jellyfish, a stingray and a bottle look the same from either side,
+    so the way that they face cannot be seen, and they are never in a school. crabs walk sideways anyway.
+
+    A SCHOOL. a group of fish that matched is a school when all of these are so:
+        none of its fish is a crab, or one of the others that look the same from either side. it can
+            be any shape.
+        every fish of it faces the same way
+        it has SCHOOL_MIN fish, or more
+        the swap that led to this look at the board put one of its two fish in it. a group that only
+            fell together is never a school. SCHOOL_NEED_SWAP turns that off, for the debug panel.
+    by chance, three fish would face the same way one time in four, and four of them one time in eight.
+    the swap has to have made it so that it does not happen too often without the player meaning it to.
+
+    A SCHOOL SWIMS OFF. a school does not pop. it scores the same as if it had, and it leaves the board
+    the same way, but there is no puff and no bang: each of its fish fades off of the board as a fish
+    just like it lifts off and swims away, slowly, the way that the school faced, out into the water
+    behind the board. it gets smaller as it goes, as if it were going further away, a blue haze comes
+    over it, and the dark line around it fades, the way that it would be lost in the water far off.
+    FlockEffect.fx does the line. the bubbles still come up from where it was, and in place of the
+    bang, a chord rings. schoolFishLeaves does the rest of it, from where handle_combos would have made
+    the puff, and schoolChord the chord.
+
+    THE FANFARE OF THE SCHOOLS. every school, of any kind, plays a short fanfare: a chord, rolled quickly
+    from the bottom note up, with its root again an octave higher on top. a school of
+    SCHOOL_FANFARE_BIG fish or more adds one more note, higher still. every school plays the next chord
+    of a run of SCHOOL_FANFARE_LENGTH of them, and when SCHOOL_SONG_RESET_MS go by with no school, the
+    run starts again from the first. it is played on SCHOOL_CHORD_INSTRUMENT.
+    the music has a chord under it all of the time, D minor or B flat (see MUSIC_CHORD in fish_headers),
+    and its tunes are written over that chord. so there are two runs, one of chords that sit well over
+    D minor, and one of chords that sit well over B flat, and a school plays from whichever one goes
+    with the chord that is up. that way it does not clash with the music, or with a tune that is
+    playing. setup_school writes the two runs, in SCHOOL_FANFARE_ROOT. a chord is its root and every
+    other note of the scale above it, and the notes are the ones in fish_headers. a new game, and a
+    game that is loaded, start the run from the first chord.
+
+    THE SCHOOLS IN THE BACKGROUND. the fish that have swum off stay, out in the water behind the board,
+    and every one of them joins the others of its kind: a school of every kind of fish that has been
+    made into one. they flock, the way that real fish do. every fish keeps a little way from the fish
+    of its kind that are closest, swims the way that they swim, and keeps close to them, and it keeps
+    well away from fish of any other kind, so the schools stay apart. a fish that is a long way from
+    its school is drawn back to it. none of them leave the screen. they would rather not swim over the
+    board: one that is over it is pushed toward the nearer side of it, gently, so one can be seen
+    crossing behind the fish now and then, or be made to by the others, but it does not stay there.
+    this is only to be looked at, for now.
+    there are FLOCK_MAX of them at the most. when another one comes, the one that has been out there
+    the longest goes. a new game starts with none. a fish turns around when it starts to swim the
+    other way: it narrows to nothing and opens out again facing the other way, the way that the fish on
+    the board turn. they are kept with the saved game: see THE SAVED GAME, below.
+    the flock is worked out a few fish at a time, FLOCK_STEER_EACH of them on a frame, since every
+    fish has to look at every other one. that is when a fish changes how fast it goes, and which way:
+    for the rest of the time it just goes. they all move on every frame. this is slow work for the
+    script, so a frame does as little for each fish as it can, and the sprite of a fish that is all
+    the way out is only told where it is, and how far around it is turned while it turns.
+    LATER: cards may change what a school does. one could make it swim off through the fish in its
+    way, popping them, which is what SCHOOL_SWEEP does: in every row that the school has a fish in,
+    every fish ahead of it, from its front in that row to the edge of the board, pops too, as one
+    forced group for that row. it goes past the diver. see FORCED POPS in fish_headers: a school in
+    a row takes FORCE_SCHOOL and the row. schoolJudge does it, where handle_combos shoots the stingrays.
+    SCHOOL_SWEEP is 0, for now.
+
+    THE SAVED GAME. the way that every fish on the board faces, and the fish out in the background, are
+    kept with the saved game, from SCHOOL_PREF on. a game that
+    was saved before any of this deals the fish a way to face, and has nobody out in the background.
+    schoolSave and schoolLoad, which fish_routines_save calls.
+
+    the "Schools" window of the debug panel (FISH_DEBUG) turns it off and on, sets how big a school has
+    to be, and turns every fish one way, the other way, or back to the way that it was dealt.
+remend
+
+global SCHOOL_ON = 1 `0 turns the whole thing off
+global SCHOOL_MIN = 3 `how many fish a school needs, at the least
+global SCHOOL_NEED_SWAP = 1 `1 when only a group that the last swap put together can be a school
+global FORCE_SCHOOL = 120 `the fish ahead of a school that swims off. the row is added to this. see FORCED POPS in fish_headers.
+
+global dim SCHOOL_FACE(400) `which way the fish in every cell faces: 1 is to the right, and -1 to the left
+global dim SCHOOL_SHOWN#(400) `how far around the fish in every cell is drawn, from 0, the way that its picture faces, to 1, turned around
+global dim SCHOOL_ART_FACE(64) `which way the picture of every kind of fish faces: 1 to the right, -1 to the left, and 0 for one that looks the same from either side. setup_school fills it in.
+global SCHOOL_SNAP = 1 `1 when every fish should be drawn facing its way right away, without turning. a new game does that.
+global SCHOOL_TURN_STEP# = 0 `how much of the way a fish turns on this frame. stepSchool works it out.
+global SCHOOL_TURN_EASE# = 0.008 `how much of the way it turns in a millisecond
+global SCHOOL_LAST_MS = 0
+global SCHOOL_SPAWNS = 0 `how many fish have come in this game. it goes into which way the next one faces.
+
+` what has happened, for the debug panel
+global SCHOOL_COUNT = 0 `how many schools have swum off in this game
+global SCHOOL_LAST_SIZE = 0 `how many fish the last one had
+global SCHOOL_LAST_SWEPT = 0 `and how many it popped on its way off
+global dim SCHOOL_ROW_LEFT(64) `scratch, for schoolJudge: the leftmost fish of the group in every row, or -1 for none
+global dim SCHOOL_ROW_RIGHT(64) `and the rightmost
+
+global SCHOOL_SWEEP = 0 `1 when a school swims off through the fish in its way, popping them. see LATER, above.
+global SCHOOL_JUDGED = -1 `the group that schoolJudge last found to be a school, or -1. handle_combos asks about it as it pops the group.
+
+` THE SCHOOLS IN THE BACKGROUND
+global FLOCK_MAX = 48 `how many fish there can be out there at once
+global dim FLOCK_ON(48) `1 for a fish that is out there
+global dim FLOCK_KIND(48) `the kind of fish that it is
+global dim FLOCK_X#(48) `where it is, in pixels
+global dim FLOCK_Y#(48)
+global dim FLOCK_VX#(48) `how fast it is going, in pixels a second
+global dim FLOCK_VY#(48)
+global dim FLOCK_AX#(48) `how it was steering, the last time that it was worked out, in pixels a second, every second
+global dim FLOCK_AY#(48)
+global dim FLOCK_BORN(48) `when it left the board, on the clock of the game. it is not there until then.
+global dim FLOCK_FACE(48) `which way it faces: 1 to the right, and -1 to the left
+global dim FLOCK_SPRITES(48)
+global FLOCK_STEER_NEXT = 0 `the fish that is worked out next
+global FLOCK_STEER_EACH = 3 `how many fish are worked out on a frame. with FLOCK_MAX of them, each one is worked out every FLOCK_MAX / FLOCK_STEER_EACH frames.
+global dim FLOCK_STEERED(48) `when each one was last worked out, on the clock of the game. the steer is used for all of the time since.
+global dim FLOCK_DRAWN(48) `what its sprite has been told: 0 nothing yet, 1 while it is on its way out, and 2 once it is all the way out, after which its size, color and line are left alone
+global dim FLOCK_SHOWING(48) `1 while its sprite is showing, so that it is only shown or hidden when that changes
+global FLOCK_LOOK_SIG = -1 `what the sliders of the debug panel that change how they look were, the last frame
+global FLOCK_LAST_MS = 0
+
+global FLOCK_SIZE = 11 `how big a fish out there is drawn, in pixels. the fish on the board are CELL_ART_SIZE.
+global FLOCK_ALPHA = 165 `how much of it can be seen, out there, from 0 to 255
+global FLOCK_HAZE_R = 165 `the color that it takes on, which is the blue of the water far off
+global FLOCK_HAZE_G = 195
+global FLOCK_HAZE_B = 230
+global FLOCK_SETTLE_MS = 1800 `how long it takes to swim from the board to out there
+global FLOCK_LIFT_SPEED = 26 `how fast a fish swims off of the board, in pixels a second
+global FLOCK_SPEED_MIN = 7 `how slowly a fish out there can swim, and how fast, in pixels a second
+global FLOCK_SPEED_MAX = 22
+global FLOCK_NEAR = 60 `how far away a fish of the same kind can be, and still be swum with, in pixels
+global FLOCK_GAP = 14 `how close a fish lets one of its own kind get, in pixels
+global FLOCK_AVOID = 46 `how close it lets a fish of another kind get, in pixels
+global FLOCK_EDGE = 24 `how far from the edge of the screen it turns back, in pixels
+global FLOCK_PULL_COHERE = 30 `how hard it steers toward the middle of the ones near it, in hundredths
+global FLOCK_PULL_ALIGN = 50 `how hard it steers to swim the way that they do, in hundredths
+global FLOCK_PULL_GAP = 900 `how hard it steers away from one of its own kind that is too close
+global FLOCK_PULL_AVOID = 1400 `how hard it steers away from a fish of another kind that is too close
+global FLOCK_PULL_HOME = 4 `how hard a fish far from its school steers back to it, in hundredths
+global FLOCK_PULL_EDGE = 60 `how hard it steers away from the edge of the screen
+global FLOCK_WANDER = 6 `how much it wanders on its own, in pixels a second, every second
+global ORDER_FLOCK = -5 `on top of the sea floor, and underneath the coral, the specks and the fish
+global FLOCK_FX_ID = 0 `FlockEffect.fx, which fades the line around a fish
+global FLOCK_LINE_KEEP = 25 `how much of the line around a fish is left, all the way out, from 0 to 255
+global FLOCK_PULL_GRID = 50 `how hard a fish over the board is pushed off of it, in pixels a second, every second
+global FLOCK_GRID_MARGIN = 10 `and how far past the edge of the board that starts, in pixels
+global FLOCK_GRID_L = 0 `the board, in pixels, worked out on every frame
+global FLOCK_GRID_R = 0
+global FLOCK_GRID_T = 0
+global FLOCK_GRID_B = 0
+
+` THE FANFARE OF THE SCHOOLS. see above.
+global SCHOOL_FANFARE_LENGTH = 8 `how many chords a run has
+global dim SCHOOL_FANFARE_ROOT(16) `the roots of the chords of the two runs: the one over D minor, and then the one over B flat
+global SCHOOL_FANFARE_BIG = 5 `a school this big adds a note on top
+global SCHOOL_SONG_AT = 0 `which chord of the run the next school plays
+global SCHOOL_SONG_LAST = 0 `when the last school played, on the clock of the game
+global SCHOOL_SONG_HEARD = 0 `1 once a school has played in this game
+global SCHOOL_SONG_RESET_MS = 60000 `how long it takes with no school for the song to start again from the top
+global SCHOOL_CHORD_INSTRUMENT = 0 `INSTRUMENT_BELL. see the instruments in fish_headers.
+global SCHOOL_CHORD_VOLUME = 15 `how loud, in hundredths
+global SCHOOL_NOTE_GAP = 125 `how far apart the notes of a fanfare are, in milliseconds, from the bottom up
+global SCHOOL_NOTE_MAX = 16 `the most notes that a school plays
+global dim SCHOOL_CHORD_NOTES(16) `the notes that a school is playing
+global dim SCHOOL_CHORD_AT(16) `and when each of them is due, on the clock of the game, or 0 for one that has rung
+global SCHOOL_CHORD_PLAYING = 0 `the instrument that they are on
+
+` the fish out in the background turn around, too
+global dim FLOCK_SHOWN#(48) `how far around a fish out there is drawn, from 0, the way that its picture faces, to 1, turned around
+global FLOCK_TURN_EASE# = 0.005 `how much of the way it turns in a millisecond
+
+` THE SAVED GAME. see above. these are the numbers from SCHOOL_PREF on.
+global SCHOOL_PREF = 5000 `1 when the saved game has these
+global SCHOOL_PREF_FLOCK = 5001 `how many fish are out in the background, and then one number for each of them
+global SCHOOL_PREF_FACES = 5060 `the way that every fish on the board faces, 30 cells to a number

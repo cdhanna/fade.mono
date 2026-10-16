@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
+using FadeBasic.Json;
 using ImGuiNET;
 using Microsoft.Xna.Framework;
 using FadeBasic;
@@ -2580,12 +2580,36 @@ public static class DebugUISystem
 
     // ── style persistence ───────────────────────────────────
 
-    struct SavedStyle
+    // Written with Fade's own JSON (IJsonable), not System.Text.Json: that one finds the fields by
+    // reflection, which a trimmed release build switches off, and the style would then never save.
+    // Fade's JSON has no float or nested array, hence the doubles and the list of colors.
+    class SavedStyle : IJsonable
     {
-        public float FontGlobalScale { get; set; }
-        public float WindowRounding { get; set; }
-        public float FrameRounding { get; set; }
-        public float[][] Colors { get; set; }
+        public double FontGlobalScale;
+        public double WindowRounding;
+        public double FrameRounding;
+        public List<SavedColor> ColorList = new List<SavedColor>();
+
+        public void ProcessJson<T>(ref T op) where T : IJsonOperation
+        {
+            op.IncludeField(nameof(FontGlobalScale), ref FontGlobalScale);
+            op.IncludeField(nameof(WindowRounding), ref WindowRounding);
+            op.IncludeField(nameof(FrameRounding), ref FrameRounding);
+            op.IncludeField(nameof(ColorList), ref ColorList);
+        }
+    }
+
+    class SavedColor : IJsonable
+    {
+        public double r, g, b, a;
+
+        public void ProcessJson<T>(ref T op) where T : IJsonOperation
+        {
+            op.IncludeField(nameof(r), ref r);
+            op.IncludeField(nameof(g), ref g);
+            op.IncludeField(nameof(b), ref b);
+            op.IncludeField(nameof(a), ref a);
+        }
     }
 
     static void SaveStyle()
@@ -2594,24 +2618,19 @@ public static class DebugUISystem
         {
             var style = ImGui.GetStyle();
             var io = ImGui.GetIO();
-            var colorCount = (int)ImGuiCol.COUNT;
-            var colors = new float[colorCount][];
-            for (var i = 0; i < colorCount; i++)
-            {
-                var c = style.Colors[i];
-                colors[i] = new[] { c.X, c.Y, c.Z, c.W };
-            }
-
             var saved = new SavedStyle
             {
                 FontGlobalScale = io.FontGlobalScale,
                 WindowRounding = style.WindowRounding,
                 FrameRounding = style.FrameRounding,
-                Colors = colors
             };
+            for (var i = 0; i < (int)ImGuiCol.COUNT; i++)
+            {
+                var c = style.Colors[i];
+                saved.ColorList.Add(new SavedColor { r = c.X, g = c.Y, b = c.Z, a = c.W });
+            }
 
-            var json = JsonSerializer.Serialize(saved, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(STYLE_FILE, json);
+            File.WriteAllText(STYLE_FILE, saved.Jsonify());
         }
         catch (Exception e)
         {
@@ -2625,22 +2644,22 @@ public static class DebugUISystem
         {
             if (!File.Exists(STYLE_FILE)) return;
             var json = File.ReadAllText(STYLE_FILE);
-            var saved = JsonSerializer.Deserialize<SavedStyle>(json);
+            var saved = JsonableExtensions.FromJson<SavedStyle>(json);
 
             var style = ImGui.GetStyle();
             var io = ImGui.GetIO();
-            io.FontGlobalScale = saved.FontGlobalScale;
-            style.WindowRounding = saved.WindowRounding;
-            style.FrameRounding = saved.FrameRounding;
+            io.FontGlobalScale = (float)saved.FontGlobalScale;
+            style.WindowRounding = (float)saved.WindowRounding;
+            style.FrameRounding = (float)saved.FrameRounding;
 
-            if (saved.Colors != null)
+            if (saved.ColorList != null)
             {
-                var colorCount = Math.Min(saved.Colors.Length, (int)ImGuiCol.COUNT);
+                var colorCount = Math.Min(saved.ColorList.Count, (int)ImGuiCol.COUNT);
                 for (var i = 0; i < colorCount; i++)
                 {
-                    var c = saved.Colors[i];
-                    if (c is { Length: 4 })
-                        style.Colors[i] = new Vector4(c[0], c[1], c[2], c[3]);
+                    var c = saved.ColorList[i];
+                    if (c != null)
+                        style.Colors[i] = new Vector4((float)c.r, (float)c.g, (float)c.b, (float)c.a);
                 }
             }
         }

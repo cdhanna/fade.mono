@@ -7,8 +7,12 @@ if is os mac()
     SCREEN_HEIGHT = display height() * .5 - 75
 endif
 
-set screen size SCREEN_WIDTH, SCREEN_HEIGHT
-`set fullscreen 1
+` a build from github starts fullscreen (FadeWindowMode in the csproj). then there is no window to size,
+` and this would change the resolution of the monitor instead. SCREEN_WIDTH and SCREEN_HEIGHT are still the
+` window's size the first time the player leaves fullscreen.
+if is fullscreen() = 0
+    set screen size SCREEN_WIDTH, SCREEN_HEIGHT
+endif
 ` sprite 100, 0, 0, 0
 ` sprite 5, 0, 0, 0
 

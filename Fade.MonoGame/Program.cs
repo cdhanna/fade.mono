@@ -120,6 +120,12 @@ public class Program
         // sweep or two on every frame; this is a sweep every few frames, for about a tenth less
         // time in the program, and a little more memory in between.
         shipped.SetGcSettings(4096, paranoid: false);
+
+        // A build with $(FadeMonoEncodeAudioToOgg) caches its decoded sounds next to the game, or,
+        // where that cannot be written, in the player's cache folder under this name -- the same
+        // name the save directory uses. See FadeContentManager.
+        if (shipped.Content is FadeContentManager oggContent) oggContent.CacheName = "FishFishPop";
+
         shipped.Services.AddService(typeof(IFadeHostSystem), NewSteamSystem());
         shipped.Run();
         return 0;

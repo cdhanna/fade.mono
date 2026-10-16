@@ -35,6 +35,11 @@
         <PackageReference Include="ImGui.NET" Version="$(ImGuiVersion)" PrivateAssets="all" />
         <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)"
                           PrivateAssets="all" IncludeAssets="compile" />
+        <!-- The Ogg decoder for FadeContentManager (a release built with
+             $(FadeMonoEncodeAudioToOgg) ships its sounds as .ogg). NOT private: the
+             DesktopGL package brings it to the app anyway, but MonoGame.Framework.Native
+             (DesktopVK) does not. Same version DesktopGL $(MonogameVersion) depends on. -->
+        <PackageReference Include="NVorbis" Version="0.10.4" />
     </ItemGroup>
 
     <!-- Browser deps: KNI BlazorGL. No ImGui (cimgui has no WASM build);
@@ -73,6 +78,16 @@
         <None Include="buildTransitive\FadeBasic.MonoGame.Game.targets"
               Pack="true"
               PackagePath="buildTransitive\FadeBasic.MonoGame.Game.targets" />
+        <!-- The game's title, icon and window defaults (FadeGameTitle, FadeGameIcon,
+             FadeWindow*). The .cs is the source of an inline MSBuild task that runs in the
+             consumer's build, so it ships as a file and is NOT compiled into this assembly. -->
+        <Compile Remove="buildTransitive\**" />
+        <None Include="buildTransitive\FadeBasic.MonoGame.App.targets"
+              Pack="true"
+              PackagePath="buildTransitive\FadeBasic.MonoGame.App.targets" />
+        <None Include="buildTransitive\FadeGameIconTask.cs"
+              Pack="true"
+              PackagePath="buildTransitive\FadeGameIconTask.cs" />
     </ItemGroup>
 
     <!-- Copy FadeBasic.Build's build/ + tasks/ verbatim into the package under

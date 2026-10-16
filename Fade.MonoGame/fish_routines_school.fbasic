@@ -1,0 +1,849 @@
+goto routines_school_exit
+
+remstart
+    SCHOOLS
+    a hidden thing. see fish_headers_school for the rules. this is a prototype.
+
+    the rest of the game only has to do these things:
+    - call schoolSwapTurns() for a swap that the player makes. stepLiveMove, in fish_funcs, does.
+    - trade SCHOOL_FACE and SCHOOL_SHOWN# when two fish trade places. swapCellStacks does.
+    - call schoolNewFish() for every new fish that drops in. handle_combos does.
+    - call schoolJudge() for every group that pops, where the stingrays are shot. handle_combos does.
+    - leave room for the forced groups of a school, one for every row. handle_combos does.
+    - turn the fish in frame_fish_fx, by SCHOOL_SHOWN#, and call stepSchool() on every frame. update_frame does.
+    - call schoolReset() for a new game. reset_game does.
+remend
+
+` setup_coral comes here. which way the picture of every kind of fish faces.
+setup_school:
+    ` the fish out in the water behind the board. see THE SCHOOLS IN THE BACKGROUND in fish_headers_school.
+    reserve effect id(FLOCK_FX_ID)
+    effect FLOCK_FX_ID, "Fish/Shaders/FlockEffect"
+    for schoolSetupI = 0 to FLOCK_MAX - 1
+        schoolSetupSprite = 0
+        reserve sprite id(schoolSetupSprite)
+        sprite schoolSetupSprite, 0, 0, TEX_PIXEL
+        set sprite offset schoolSetupSprite, .5, .5
+        order sprite schoolSetupSprite, ORDER_FLOCK
+        set sprite effect schoolSetupSprite, FLOCK_FX_ID
+        hide sprite schoolSetupSprite
+        FLOCK_SPRITES(schoolSetupI) = schoolSetupSprite
+        FLOCK_ON(schoolSetupI) = 0
+    next
+
+    for schoolSetupI = 0 to 63
+        SCHOOL_ART_FACE(schoolSetupI) = 0
+    next
+    SCHOOL_ART_FACE(TEX_PUFFER) = -1
+    SCHOOL_ART_FACE(TEX_CATFISH) = 1
+    SCHOOL_ART_FACE(TEX_GOLDFISH) = 1
+    SCHOOL_ART_FACE(TEX_ANGELFISH) = 1
+    SCHOOL_ART_FACE(TEX_BASS) = 1
+    SCHOOL_ART_FACE(TEX_WORM) = 1
+
+    ` THE FANFARE OF THE SCHOOLS. see fish_headers_school. the roots are 1 for Dm, 3 for F, 4 for Gm,
+    ` and 6 for Bb. over D minor: F Dm Bb F Dm Bb F F
+    schoolFanfare(0, 3, 1, 6, 3, 1, 6, 3, 3)
+    ` and over B flat: Bb Gm Dm Bb F Gm Bb Bb
+    schoolFanfare(1, 6, 4, 1, 6, 3, 4, 6, 6)
+
+    schoolReset()
+return
+
+` a window in the debug panel. frame_dbg, in fish_routines, comes here on every frame, with FISH_DEBUG.
+frame_debug_school:
+    begin debug window("Schools")
+    debugSchoolChanged = debug toggle("on", SCHOOL_ON)
+    debugSchoolChanged = debug int slider("fish in a school, at the least", SCHOOL_MIN, 2, 8)
+    debugSchoolChanged = debug toggle("only a group that the swap made", SCHOOL_NEED_SWAP)
+    debugSchoolChanged = debug toggle("a school sweeps its rows (for a card, later)", SCHOOL_SWEEP)
+    debug text "schools " + str$(SCHOOL_COUNT) + ", the last had " + str$(SCHOOL_LAST_SIZE) + " fish and swept " + str$(SCHOOL_LAST_SWEPT)
+    debug separator
+    if debug button("every fish faces left") = 1
+        schoolFaceAll(-1)
+    endif
+    debug same line
+    if debug button("every fish faces right") = 1
+        schoolFaceAll(1)
+    endif
+    if debug button("deal them again") = 1
+        schoolFaceAll(0)
+    endif
+
+    debug separator
+    debugSchoolOut = 0
+    for debugSchoolI = 0 to FLOCK_MAX - 1
+        if FLOCK_ON(debugSchoolI) then debugSchoolOut = debugSchoolOut + 1
+    next
+    debug text "fish out in the background " + str$(debugSchoolOut) + " of " + str$(FLOCK_MAX)
+    debugSchoolChanged = debug int slider("size out there (board fish are 16)", FLOCK_SIZE, 4, 16)
+    debugSchoolChanged = debug int slider("how much shows", FLOCK_ALPHA, 0, 255)
+    debugSchoolChanged = debug int slider("haze red", FLOCK_HAZE_R, 0, 255)
+    debugSchoolChanged = debug int slider("haze green", FLOCK_HAZE_G, 0, 255)
+    debugSchoolChanged = debug int slider("haze blue", FLOCK_HAZE_B, 0, 255)
+    debugSchoolChanged = debug int slider("slowest", FLOCK_SPEED_MIN, 0, 60)
+    debugSchoolChanged = debug int slider("fastest", FLOCK_SPEED_MAX, 1, 120)
+    debugSchoolChanged = debug int slider("swim with ones this near", FLOCK_NEAR, 10, 200)
+    debugSchoolChanged = debug int slider("keep this far from its own", FLOCK_GAP, 2, 60)
+    debugSchoolChanged = debug int slider("keep this far from others", FLOCK_AVOID, 5, 150)
+    debugSchoolChanged = debug int slider("pull: together", FLOCK_PULL_COHERE, 0, 200)
+    debugSchoolChanged = debug int slider("pull: swim alike", FLOCK_PULL_ALIGN, 0, 200)
+    debugSchoolChanged = debug int slider("pull: apart from its own", FLOCK_PULL_GAP, 0, 4000)
+    debugSchoolChanged = debug int slider("pull: away from others", FLOCK_PULL_AVOID, 0, 6000)
+    debugSchoolChanged = debug int slider("pull: back to its school", FLOCK_PULL_HOME, 0, 50)
+    debugSchoolChanged = debug int slider("wander", FLOCK_WANDER, 0, 100)
+    debugSchoolChanged = debug int slider("line left, out there", FLOCK_LINE_KEEP, 0, 255)
+    debugSchoolChanged = debug int slider("push off of the board", FLOCK_PULL_GRID, 0, 400)
+    debugSchoolChanged = debug int slider("fanfare: 0 bell 1 pluck 2 swell 3 choir", SCHOOL_CHORD_INSTRUMENT, 0, 3)
+    debugSchoolSongSeconds = SCHOOL_SONG_RESET_MS / 1000
+    debugSchoolChanged = debug int slider("fanfare starts over after this many seconds", debugSchoolSongSeconds, 1, 300)
+    SCHOOL_SONG_RESET_MS = debugSchoolSongSeconds * 1000
+    debug text "the next school plays chord " + str$(SCHOOL_SONG_AT + 1) + " of " + str$(SCHOOL_FANFARE_LENGTH)
+    debugSchoolChanged = debug int slider("fanfare: ms between its notes", SCHOOL_NOTE_GAP, 0, 300)
+    debugSchoolChanged = debug int slider("fanfare: a school this big adds a note", SCHOOL_FANFARE_BIG, 3, 10)
+    debugSchoolChanged = debug int slider("fanfare: loudness", SCHOOL_CHORD_VOLUME, 0, 100)
+    if debug button("play a school of three") = 1
+        schoolChord(3)
+    endif
+    debug same line
+    if debug button("of five") = 1
+        schoolChord(5)
+    endif
+    debug same line
+    if debug button("start the run over") = 1
+        SCHOOL_SONG_AT = 0
+    endif
+    if debug button("send three of the fish under the cursor out") = 1
+        debugSchoolCell = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+        schoolFishLeaves(debugSchoolCell, 0)
+        schoolFishLeaves(debugSchoolCell, 150)
+        schoolFishLeaves(debugSchoolCell, 300)
+    endif
+    debug same line
+    if debug button("clear them") = 1
+        flockReset()
+    endif
+    end debug window
+return
+
+routines_school_exit:
+
+
+` a new game. every fish is dealt a way to face, and they are drawn that way right away.
+function schoolReset()
+    SCHOOL_SPAWNS = 0
+    SCHOOL_COUNT = 0
+    SCHOOL_LAST_SIZE = 0
+    SCHOOL_LAST_SWEPT = 0
+    SCHOOL_JUDGED = -1
+    flockReset()
+    SCHOOL_SONG_AT = 0
+    SCHOOL_SONG_LAST = 0
+    SCHOOL_SONG_HEARD = 0
+    for schoolResetI = 0 to 399
+        SCHOOL_FACE(schoolResetI) = schoolDealFace(schoolResetI)
+        SCHOOL_SHOWN#(schoolResetI) = 0
+    next
+    SCHOOL_SNAP = 1
+endfunction
+
+
+` FACING. which way a new fish in this cell faces: 1 or -1. it is worked out from the seed, how many
+` fish have come in so far, and the cell, so a seed plays the same, and no roll is taken from the streams.
+function schoolDealFace(schoolDealCell)
+    SCHOOL_SPAWNS = SCHOOL_SPAWNS + 1
+    schoolDealMix = (GAME_SEED mod 9973) * 31 + (SCHOOL_SPAWNS mod 10007) * 79 + schoolDealCell * 613
+    schoolDealMix = (schoolDealMix mod 65521) * 1103 + 12345
+    schoolDealMix = schoolDealMix mod 65536
+    schoolDealBit = (schoolDealMix / 256) mod 2
+    schoolDealWay = 1
+    if schoolDealBit = 0 then schoolDealWay = -1
+endfunction schoolDealWay
+
+
+` a new fish has dropped into this cell. it faces whichever way it was dealt, and it is drawn that
+` way, without turning.
+function schoolNewFish(schoolNewCell)
+    SCHOOL_FACE(schoolNewCell) = schoolDealFace(schoolNewCell)
+    schoolNewArt = schoolArtFace(CELLS(schoolNewCell).value)
+    SCHOOL_SHOWN#(schoolNewCell) = 0
+    if schoolNewArt <> 0
+        if SCHOOL_FACE(schoolNewCell) <> schoolNewArt then SCHOOL_SHOWN#(schoolNewCell) = 1
+    endif
+endfunction
+
+
+` which way the picture of a kind of fish faces, or 0 when it looks the same from either side
+function schoolArtFace(schoolArtKind)
+    schoolArtWay = 0
+    if schoolArtKind > 0
+        if schoolArtKind < 64
+            schoolArtWay = SCHOOL_ART_FACE(schoolArtKind)
+        endif
+    endif
+endfunction schoolArtWay
+
+
+` the player is swapping the fish in these two cells. the fish that the cursor carries is in
+` `schoolToCell`, and the one that it shoves is in `schoolFromCell`. a swap that goes across turns
+` them: the carried one faces the way that it goes, and the other one faces back. startLiveMove, in
+` fish_funcs, calls this as the swap starts, so they turn while they move. the two cells have not
+` traded yet, so the carried fish is still in the cell that the cursor is on.
+function schoolSwapTurns(schoolFromCell, schoolToCell, schoolDirX)
+    if schoolDirX <> 0
+        SCHOOL_FACE(schoolToCell) = schoolDirX
+        SCHOOL_FACE(schoolFromCell) = 0 - schoolDirX
+    endif
+endfunction
+
+
+` two fish traded places, by a swap or a fall, and each takes the way that it faces along with it.
+` swapCellStacks, in fish_funcs, calls this.
+function schoolTradeFace(schoolTradeA, schoolTradeB)
+    schoolTradeWay = SCHOOL_FACE(schoolTradeA)
+    SCHOOL_FACE(schoolTradeA) = SCHOOL_FACE(schoolTradeB)
+    SCHOOL_FACE(schoolTradeB) = schoolTradeWay
+    schoolTradeShown# = SCHOOL_SHOWN#(schoolTradeA)
+    SCHOOL_SHOWN#(schoolTradeA) = SCHOOL_SHOWN#(schoolTradeB)
+    SCHOOL_SHOWN#(schoolTradeB) = schoolTradeShown#
+endfunction
+
+` one fish takes the place of another, facing the way that the other one did
+function schoolCopyFace(schoolCopyFrom, schoolCopyTo)
+    SCHOOL_FACE(schoolCopyTo) = SCHOOL_FACE(schoolCopyFrom)
+    SCHOOL_SHOWN#(schoolCopyTo) = SCHOOL_SHOWN#(schoolCopyFrom)
+endfunction
+
+
+` every fish faces this way, for the debug panel: 1, -1, or 0 to deal them all again
+function schoolFaceAll(schoolAllWay)
+    for schoolAllI = 0 to 399
+        if schoolAllWay = 0
+            SCHOOL_FACE(schoolAllI) = schoolDealFace(schoolAllI)
+        else
+            SCHOOL_FACE(schoolAllI) = schoolAllWay
+        endif
+    next
+endfunction
+
+
+` THE FANFARE OF THE SCHOOLS. setup_school writes a run of chords: 0 for the one over D minor, and 1
+` for the one over B flat, and then the root of every chord. see fish_headers_school.
+function schoolFanfare(fanfareRun, fanOne, fanTwo, fanThree, fanFour, fanFive, fanSix, fanSeven, fanEight)
+    fanfareBase = fanfareRun * 8
+    SCHOOL_FANFARE_ROOT(fanfareBase) = fanOne
+    SCHOOL_FANFARE_ROOT(fanfareBase + 1) = fanTwo
+    SCHOOL_FANFARE_ROOT(fanfareBase + 2) = fanThree
+    SCHOOL_FANFARE_ROOT(fanfareBase + 3) = fanFour
+    SCHOOL_FANFARE_ROOT(fanfareBase + 4) = fanFive
+    SCHOOL_FANFARE_ROOT(fanfareBase + 5) = fanSix
+    SCHOOL_FANFARE_ROOT(fanfareBase + 6) = fanSeven
+    SCHOOL_FANFARE_ROOT(fanfareBase + 7) = fanEight
+endfunction
+
+
+` a school of this many fish plays the next chord of the run that goes with the chord of the music:
+` the chord, rolled quickly from the bottom up, with its root an octave higher on top, and for a big
+` school, the third an octave higher on top of that. a school that comes long after the last one
+` starts the run again. see THE FANFARE OF THE SCHOOLS in fish_headers_school.
+function schoolChord(schoolChordFish)
+    schoolChordNow = game ms()
+    if SCHOOL_SONG_HEARD
+        schoolChordSince = schoolChordNow - SCHOOL_SONG_LAST
+        if schoolChordSince > SCHOOL_SONG_RESET_MS then SCHOOL_SONG_AT = 0
+    endif
+    SCHOOL_SONG_LAST = schoolChordNow
+    SCHOOL_SONG_HEARD = 1
+    SCHOOL_CHORD_PLAYING = SCHOOL_CHORD_INSTRUMENT
+    if SCHOOL_SONG_AT < 0 then SCHOOL_SONG_AT = 0
+    if SCHOOL_SONG_AT >= SCHOOL_FANFARE_LENGTH then SCHOOL_SONG_AT = 0
+
+    ` the run that goes with the chord that the music is on
+    schoolChordRun = 0
+    if MUSIC_CHORD = MUSIC_CHORD_BB then schoolChordRun = 1
+    schoolChordRoot = SCHOOL_FANFARE_ROOT(schoolChordRun * 8 + SCHOOL_SONG_AT)
+    SCHOOL_SONG_AT = (SCHOOL_SONG_AT + 1) mod SCHOOL_FANFARE_LENGTH
+
+    for schoolChordI = 0 to SCHOOL_NOTE_MAX - 1
+        SCHOOL_CHORD_AT(schoolChordI) = 0
+    next
+    SCHOOL_CHORD_NOTES(0) = schoolChordRoot
+    SCHOOL_CHORD_NOTES(1) = schoolChordRoot + 2
+    SCHOOL_CHORD_NOTES(2) = schoolChordRoot + 4
+    SCHOOL_CHORD_NOTES(3) = schoolChordRoot + 7
+    SCHOOL_CHORD_NOTES(4) = schoolChordRoot + 9
+    schoolChordCount = 4
+    if schoolChordFish >= SCHOOL_FANFARE_BIG then schoolChordCount = 5
+    schoolChordI = 0
+    while schoolChordI < schoolChordCount
+        ` a note above the top of the scale is left out
+        if SCHOOL_CHORD_NOTES(schoolChordI) <= C6
+            SCHOOL_CHORD_AT(schoolChordI) = schoolChordNow + 1 + schoolChordI * SCHOOL_NOTE_GAP
+        endif
+        schoolChordI = schoolChordI + 1
+    endwhile
+endfunction
+
+
+` THE SAVED GAME. see fish_headers_school. fish_routines_save calls these.
+function schoolSave()
+    set pref SCHOOL_PREF, 1
+
+    ` the fish out in the background: the kind, which way it faces, and where it is, in one number
+    schoolSaveN = 0
+    for schoolSaveI = 0 to FLOCK_MAX - 1
+        if FLOCK_ON(schoolSaveI)
+            schoolSaveX = FLOCK_X#(schoolSaveI)
+            schoolSaveY = FLOCK_Y#(schoolSaveI)
+            if schoolSaveX < 0 then schoolSaveX = 0
+            if schoolSaveX > 1023 then schoolSaveX = 1023
+            if schoolSaveY < 0 then schoolSaveY = 0
+            if schoolSaveY > 511 then schoolSaveY = 511
+            schoolSaveFace = 0
+            if FLOCK_FACE(schoolSaveI) > 0 then schoolSaveFace = 1
+            schoolSaveKind = FLOCK_KIND(schoolSaveI) mod 32
+            schoolSaveOne = schoolSaveKind + schoolSaveFace * 32 + schoolSaveX * 64 + schoolSaveY * 65536
+            set pref SCHOOL_PREF_FLOCK + 1 + schoolSaveN, schoolSaveOne
+            schoolSaveN = schoolSaveN + 1
+        endif
+    next
+    set pref SCHOOL_PREF_FLOCK, schoolSaveN
+
+    ` the way that every fish on the board faces, 30 to a number, a bit for each that faces right
+    for schoolSaveP = 0 to 13
+        schoolSaveBits = 0
+        schoolSaveBit = 1
+        for schoolSaveB = 0 to 29
+            schoolSaveCell = schoolSaveP * 30 + schoolSaveB
+            if schoolSaveCell < 400
+                if SCHOOL_FACE(schoolSaveCell) > 0 then schoolSaveBits = schoolSaveBits + schoolSaveBit
+            endif
+            schoolSaveBit = schoolSaveBit * 2
+        next
+        set pref SCHOOL_PREF_FACES + schoolSaveP, schoolSaveBits
+    next
+endfunction
+
+` a game that was saved before there was any of this keeps the way that the fish were dealt, and has
+` nobody out in the background
+function schoolLoad()
+    if get pref(SCHOOL_PREF, 0) = 1
+        flockReset()
+        schoolLoadNow = game ms()
+        schoolLoadN = get pref(SCHOOL_PREF_FLOCK, 0)
+        if schoolLoadN > FLOCK_MAX then schoolLoadN = FLOCK_MAX
+        if schoolLoadN > 0
+            for schoolLoadI = 0 to schoolLoadN - 1
+                schoolLoadOne = get pref(SCHOOL_PREF_FLOCK + 1 + schoolLoadI, 0)
+                schoolLoadKind = schoolLoadOne mod 32
+                schoolLoadFace = (schoolLoadOne / 32) mod 2
+                schoolLoadX = (schoolLoadOne / 64) mod 1024
+                schoolLoadY = schoolLoadOne / 65536
+                if schoolLoadKind > 0
+                    FLOCK_ON(schoolLoadI) = 1
+                    FLOCK_KIND(schoolLoadI) = schoolLoadKind
+                    FLOCK_X#(schoolLoadI) = schoolLoadX
+                    FLOCK_Y#(schoolLoadI) = schoolLoadY
+                    FLOCK_FACE(schoolLoadI) = -1
+                    if schoolLoadFace = 1 then FLOCK_FACE(schoolLoadI) = 1
+                    FLOCK_VX#(schoolLoadI) = FLOCK_FACE(schoolLoadI) * FLOCK_SPEED_MIN
+                    FLOCK_VY#(schoolLoadI) = 0
+                    FLOCK_AX#(schoolLoadI) = 0
+                    FLOCK_AY#(schoolLoadI) = 0
+                    ` it is all the way out there already
+                    FLOCK_BORN(schoolLoadI) = schoolLoadNow - FLOCK_SETTLE_MS - schoolLoadI
+                    FLOCK_SHOWN#(schoolLoadI) = 0
+                    schoolLoadArt = schoolArtFace(schoolLoadKind)
+                    if schoolLoadArt <> 0
+                        if FLOCK_FACE(schoolLoadI) <> schoolLoadArt then FLOCK_SHOWN#(schoolLoadI) = 1
+                    endif
+                    set sprite texture FLOCK_SPRITES(schoolLoadI), schoolLoadKind
+                    FLOCK_DRAWN(schoolLoadI) = 0
+                    FLOCK_STEERED(schoolLoadI) = schoolLoadNow
+                endif
+            next
+        endif
+
+        for schoolLoadP = 0 to 13
+            schoolLoadBits = get pref(SCHOOL_PREF_FACES + schoolLoadP, 0)
+            for schoolLoadB = 0 to 29
+                schoolLoadCell = schoolLoadP * 30 + schoolLoadB
+                if schoolLoadCell < 400
+                    SCHOOL_FACE(schoolLoadCell) = -1
+                    schoolLoadRight = schoolLoadBits mod 2
+                    if schoolLoadRight = 1 then SCHOOL_FACE(schoolLoadCell) = 1
+                endif
+                schoolLoadBits = schoolLoadBits / 2
+            next
+        next
+        SCHOOL_SNAP = 1
+    endif
+endfunction
+
+
+` how far a fish turns on this frame. update_frame calls this on every frame, and frame_fish_fx uses it
+` on the next one.
+function stepSchool()
+    schoolNow = game ms()
+    schoolElapsed# = schoolNow - SCHOOL_LAST_MS
+    SCHOOL_LAST_MS = schoolNow
+    if schoolElapsed# > 50 then schoolElapsed# = 50
+    if schoolElapsed# < 0 then schoolElapsed# = 0
+    SCHOOL_TURN_STEP# = schoolElapsed# * SCHOOL_TURN_EASE#
+    if SCHOOL_TURN_STEP# > 1 then SCHOOL_TURN_STEP# = 1
+
+    ` the schools out in the water behind the board
+    stepFlock(schoolElapsed#)
+
+    ` the notes of the tune that a school is playing, that are due
+    for schoolNoteI = 0 to SCHOOL_NOTE_MAX - 1
+        if SCHOOL_CHORD_AT(schoolNoteI) > 0
+            if schoolNow >= SCHOOL_CHORD_AT(schoolNoteI)
+                SCHOOL_CHORD_AT(schoolNoteI) = 0
+                schoolNoteLoud# = SCHOOL_CHORD_VOLUME
+                schoolNoteLoud# = schoolNoteLoud# * .01
+                playMusicNote(SCHOOL_CHORD_PLAYING, SCHOOL_CHORD_NOTES(schoolNoteI), schoolNoteLoud#)
+            endif
+        endif
+    next
+
+    ` frame_fish_fx has drawn every fish facing its way right away, once, after a new game
+    SCHOOL_SNAP = 0
+endfunction
+
+
+` A SCHOOL. handle_combos has a group that is popping, and this says if it is a school. a school swims
+` off: in every row that it has a fish in, every fish ahead of it, to the edge of the board, pops as
+` one forced group of that row. `schoolSwapped` is 1 when the last swap put one of its two fish in
+` the group. see fish_headers_school.
+function schoolJudge(schoolGroup, schoolBase, schoolSwapped)
+    if SCHOOL_ON = 0 then exitfunction
+    if SCHOOL_NEED_SWAP
+        if schoolSwapped = 0 then exitfunction
+    endif
+
+    schoolLastRow = CELL_ROW_COUNT - 1
+    for schoolY = 0 to schoolLastRow
+        SCHOOL_ROW_LEFT(schoolY) = -1
+        SCHOOL_ROW_RIGHT(schoolY) = -1
+    next
+
+    schoolSize = 0
+    schoolWay = 0
+    schoolIs = 1
+    schoolKind = 0
+    schoolLast = CELL_COUNT - 1
+    for schoolI = 0 to schoolLast
+        if CELLS(schoolI).comboFillId = schoolGroup
+            schoolSize = schoolSize + 1
+            if CELLS(schoolI).comboForce > 0 then schoolIs = 0
+            if schoolArtFace(CELLS(schoolI).value) = 0 then schoolIs = 0
+            if schoolWay = 0 then schoolWay = SCHOOL_FACE(schoolI)
+            if SCHOOL_FACE(schoolI) <> schoolWay then schoolIs = 0
+            if schoolKind = 0 then schoolKind = CELLS(schoolI).value
+
+            ` the ends of the group in every row that it is in
+            schoolX = schoolI mod CELL_COLUMN_COUNT
+            schoolY = schoolI / CELL_COLUMN_COUNT
+            if SCHOOL_ROW_LEFT(schoolY) < 0 then SCHOOL_ROW_LEFT(schoolY) = schoolX
+            if schoolX < SCHOOL_ROW_LEFT(schoolY) then SCHOOL_ROW_LEFT(schoolY) = schoolX
+            if schoolX > SCHOOL_ROW_RIGHT(schoolY) then SCHOOL_ROW_RIGHT(schoolY) = schoolX
+        endif
+    next
+    if schoolSize < SCHOOL_MIN then schoolIs = 0
+    if schoolIs = 0 then exitfunction
+
+    ` it is a school. its fish swim off into the background, as handle_combos pops them, and it plays its fanfare.
+    SCHOOL_JUDGED = schoolGroup
+    schoolChord(schoolSize)
+    SCHOOL_COUNT = SCHOOL_COUNT + 1
+    SCHOOL_LAST_SIZE = schoolSize
+    SCHOOL_LAST_SWEPT = 0
+
+    ` LATER, a card may make it sweep the fish ahead of it, in every row, from its front to the edge
+    if SCHOOL_SWEEP = 0 then exitfunction
+    schoolTint = FISH_COLORS(getFishColorIndex(schoolKind))
+    for schoolRow = 0 to schoolLastRow
+        if SCHOOL_ROW_LEFT(schoolRow) >= 0
+            schoolForce = FORCE_SCHOOL + schoolRow
+            schoolFrom = SCHOOL_ROW_RIGHT(schoolRow) + 1
+            schoolTo = CELL_COLUMN_COUNT - 1
+            schoolFront = SCHOOL_ROW_RIGHT(schoolRow)
+            if schoolWay < 0
+                schoolFrom = 0
+                schoolTo = SCHOOL_ROW_LEFT(schoolRow) - 1
+                schoolFront = SCHOOL_ROW_LEFT(schoolRow)
+            endif
+            if schoolTo >= schoolFrom
+                for schoolX = schoolFrom to schoolTo
+                    schoolCell = schoolX + schoolRow * CELL_COLUMN_COUNT
+                    schoolOk = 1
+                    if CELLS(schoolCell).comboBlownUp then schoolOk = 0
+                    if CELLS(schoolCell).comboForce > 0 then schoolOk = 0
+                    if CELLS(schoolCell).comboFillId = schoolGroup then schoolOk = 0
+                    if CELLS(schoolCell).value = TEX_DIVER then schoolOk = 0 `the school swims past the diver
+                    if schoolOk
+                        CELLS(schoolCell).comboForce = schoolForce
+                        CELLS(schoolCell).comboFillId = schoolBase + schoolForce
+                        CELLS(schoolCell).comboFillMask = 1
+                        SCHOOL_LAST_SWEPT = SCHOOL_LAST_SWEPT + 1
+
+                        ` a trail of bubbles goes along the row ahead of the school, the way that it swims
+                        schoolGap = schoolX - schoolFront
+                        if schoolGap < 0 then schoolGap = 0 - schoolGap
+                        spawnBubbles(getCellX(schoolX), getCellY(schoolRow), CELL_SIZE / 4, 3, schoolGap * 40, schoolTint)
+                    endif
+                next
+            endif
+
+            ` and a wave goes out from its front in the row, the way that it swims
+            spawnShockwaveToward(schoolFront, schoolRow, schoolWay, 0, SHOCK_SWAP_STRENGTH#, 0, SHOCK_LIFE)
+        endif
+    next
+endfunction
+
+
+` THE SCHOOLS IN THE BACKGROUND. see fish_headers_school.
+
+` a new game starts with none out there
+function flockReset()
+    for flockResetI = 0 to FLOCK_MAX - 1
+        FLOCK_ON(flockResetI) = 0
+        FLOCK_DRAWN(flockResetI) = 0
+        FLOCK_SHOWING(flockResetI) = 0
+        hide sprite FLOCK_SPRITES(flockResetI)
+    next
+endfunction
+
+
+` A SCHOOL SWIMS OFF. the fish in this cell is in a school, and it would have popped `schoolLeaveWait`
+` milliseconds from now. it fades off of the board then, and a fish just like it lifts off from there
+` and swims away, the way that it faced, to join the others of its kind. handle_combos calls this.
+function schoolFishLeaves(schoolLeaveCell, schoolLeaveWait)
+    ` a place out there: one that is free, or else the one that has been out there the longest
+    schoolLeaveSlot = -1
+    schoolLeaveOldest = 0
+    for schoolLeaveI = 0 to FLOCK_MAX - 1
+        if schoolLeaveSlot < 0
+            if FLOCK_ON(schoolLeaveI) = 0 then schoolLeaveSlot = schoolLeaveI
+        endif
+    next
+    if schoolLeaveSlot < 0
+        schoolLeaveSlot = 0
+        schoolLeaveOldest = FLOCK_BORN(0)
+        for schoolLeaveI = 1 to FLOCK_MAX - 1
+            if FLOCK_BORN(schoolLeaveI) < schoolLeaveOldest
+                schoolLeaveOldest = FLOCK_BORN(schoolLeaveI)
+                schoolLeaveSlot = schoolLeaveI
+            endif
+        next
+    endif
+
+    schoolLeaveKind = CELLS(schoolLeaveCell).value
+    schoolLeaveWay = SCHOOL_FACE(schoolLeaveCell)
+    if schoolLeaveWay = 0 then schoolLeaveWay = 1
+    FLOCK_ON(schoolLeaveSlot) = 1
+    FLOCK_KIND(schoolLeaveSlot) = schoolLeaveKind
+    FLOCK_X#(schoolLeaveSlot) = getCellX(schoolLeaveCell mod CELL_COLUMN_COUNT)
+    FLOCK_Y#(schoolLeaveSlot) = getCellY(schoolLeaveCell / CELL_COLUMN_COUNT)
+    FLOCK_VX#(schoolLeaveSlot) = schoolLeaveWay * FLOCK_LIFT_SPEED
+    FLOCK_VY#(schoolLeaveSlot) = 0 - (3 + rnd(6))
+    FLOCK_AX#(schoolLeaveSlot) = 0
+    FLOCK_AY#(schoolLeaveSlot) = 0
+    FLOCK_BORN(schoolLeaveSlot) = game ms() + schoolLeaveWait
+    FLOCK_FACE(schoolLeaveSlot) = schoolLeaveWay
+    FLOCK_SHOWN#(schoolLeaveSlot) = 0
+    schoolLeaveArt = schoolArtFace(schoolLeaveKind)
+    if schoolLeaveArt <> 0
+        if schoolLeaveWay <> schoolLeaveArt then FLOCK_SHOWN#(schoolLeaveSlot) = 1
+    endif
+    set sprite texture FLOCK_SPRITES(schoolLeaveSlot), schoolLeaveKind
+    hide sprite FLOCK_SPRITES(schoolLeaveSlot)
+    FLOCK_SHOWING(schoolLeaveSlot) = 0
+    FLOCK_DRAWN(schoolLeaveSlot) = 0
+    FLOCK_STEERED(schoolLeaveSlot) = FLOCK_BORN(schoolLeaveSlot)
+endfunction
+
+
+` how one fish out there steers: away from the ones of its kind that are too close, the way that the
+` ones near it swim, toward the middle of them, well away from fish of other kinds, back toward its
+` school if it is far from it, and away from the edge of the screen. the steer is kept, and used on
+` every frame until the fish is worked out again.
+function flockSteer(flockI, flockNow)
+    flockX# = FLOCK_X#(flockI)
+    flockY# = FLOCK_Y#(flockI)
+    flockKind = FLOCK_KIND(flockI)
+    flockCoX# = 0
+    flockCoY# = 0
+    flockAlX# = 0
+    flockAlY# = 0
+    flockN = 0
+    flockSepX# = 0
+    flockSepY# = 0
+    flockAvX# = 0
+    flockAvY# = 0
+    flockNear# = FLOCK_NEAR * FLOCK_NEAR
+    flockGap# = FLOCK_GAP * FLOCK_GAP
+    flockAvoid# = FLOCK_AVOID * FLOCK_AVOID
+    flockHomeX# = 0
+    flockHomeY# = 0
+    flockHomeN = 0
+
+    for flockJ = 0 to FLOCK_MAX - 1
+        flockLook = FLOCK_ON(flockJ)
+        if flockJ = flockI then flockLook = 0
+        if FLOCK_BORN(flockJ) > flockNow then flockLook = 0
+        if flockLook
+            flockDX# = FLOCK_X#(flockJ) - flockX#
+            flockDY# = FLOCK_Y#(flockJ) - flockY#
+            flockD2# = flockDX# * flockDX# + flockDY# * flockDY#
+            if flockD2# < 1 then flockD2# = 1
+            if FLOCK_KIND(flockJ) = flockKind
+                ` every fish of its kind, near or far, is part of its school
+                flockHomeX# = flockHomeX# + FLOCK_X#(flockJ)
+                flockHomeY# = flockHomeY# + FLOCK_Y#(flockJ)
+                flockHomeN = flockHomeN + 1
+                if flockD2# < flockNear#
+                    flockCoX# = flockCoX# + FLOCK_X#(flockJ)
+                    flockCoY# = flockCoY# + FLOCK_Y#(flockJ)
+                    flockAlX# = flockAlX# + FLOCK_VX#(flockJ)
+                    flockAlY# = flockAlY# + FLOCK_VY#(flockJ)
+                    flockN = flockN + 1
+                endif
+                if flockD2# < flockGap#
+                    flockSepX# = flockSepX# - flockDX# / flockD2#
+                    flockSepY# = flockSepY# - flockDY# / flockD2#
+                endif
+            else
+                if flockD2# < flockAvoid#
+                    flockAvX# = flockAvX# - flockDX# / flockD2#
+                    flockAvY# = flockAvY# - flockDY# / flockD2#
+                endif
+            endif
+        endif
+    next
+
+    flockAX# = 0
+    flockAY# = 0
+    if flockN > 0
+        flockCount# = flockN
+        flockAX# = flockAX# + (flockCoX# / flockCount# - flockX#) * FLOCK_PULL_COHERE * .01
+        flockAY# = flockAY# + (flockCoY# / flockCount# - flockY#) * FLOCK_PULL_COHERE * .01
+        flockAX# = flockAX# + (flockAlX# / flockCount# - FLOCK_VX#(flockI)) * FLOCK_PULL_ALIGN * .01
+        flockAY# = flockAY# + (flockAlY# / flockCount# - FLOCK_VY#(flockI)) * FLOCK_PULL_ALIGN * .01
+    endif
+    flockAX# = flockAX# + flockSepX# * FLOCK_PULL_GAP
+    flockAY# = flockAY# + flockSepY# * FLOCK_PULL_GAP
+    flockAX# = flockAX# + flockAvX# * FLOCK_PULL_AVOID
+    flockAY# = flockAY# + flockAvY# * FLOCK_PULL_AVOID
+
+    ` back toward the middle of the school of its kind, a little, wherever it is
+    if flockHomeN > 0
+        flockHomeCount# = flockHomeN
+        flockAX# = flockAX# + (flockHomeX# / flockHomeCount# - flockX#) * FLOCK_PULL_HOME * .01
+        flockAY# = flockAY# + (flockHomeY# / flockHomeCount# - flockY#) * FLOCK_PULL_HOME * .01
+    endif
+
+    ` away from the edge of the screen
+    flockRight = WORLD_WIDTH - FLOCK_EDGE
+    flockBottom = WORLD_HEIGHT - FLOCK_EDGE
+    if flockX# < FLOCK_EDGE then flockAX# = flockAX# + (FLOCK_EDGE - flockX#) * FLOCK_PULL_EDGE * .1
+    if flockX# > flockRight then flockAX# = flockAX# - (flockX# - flockRight) * FLOCK_PULL_EDGE * .1
+    if flockY# < FLOCK_EDGE then flockAY# = flockAY# + (FLOCK_EDGE - flockY#) * FLOCK_PULL_EDGE * .1
+    if flockY# > flockBottom then flockAY# = flockAY# - (flockY# - flockBottom) * FLOCK_PULL_EDGE * .1
+
+    ` off of the board, toward whichever side of it is nearer. it can still be pushed across.
+    flockGridL = FLOCK_GRID_L - FLOCK_GRID_MARGIN
+    flockGridR = FLOCK_GRID_R + FLOCK_GRID_MARGIN
+    flockGridT = FLOCK_GRID_T - FLOCK_GRID_MARGIN
+    flockGridB = FLOCK_GRID_B + FLOCK_GRID_MARGIN
+    flockOnGrid = 1
+    if flockX# < flockGridL then flockOnGrid = 0
+    if flockX# > flockGridR then flockOnGrid = 0
+    if flockY# < flockGridT then flockOnGrid = 0
+    if flockY# > flockGridB then flockOnGrid = 0
+    if flockOnGrid
+        flockToLeft# = flockX# - flockGridL
+        flockToRight# = flockGridR - flockX#
+        if flockToLeft# < flockToRight#
+            flockAX# = flockAX# - FLOCK_PULL_GRID
+        else
+            flockAX# = flockAX# + FLOCK_PULL_GRID
+        endif
+    endif
+
+    ` and a little wandering of its own
+    flockAX# = flockAX# + rnd(FLOCK_WANDER * 2 + 1) - FLOCK_WANDER
+    flockAY# = flockAY# + rnd(FLOCK_WANDER * 2 + 1) - FLOCK_WANDER
+
+    FLOCK_AX#(flockI) = flockAX#
+    FLOCK_AY#(flockI) = flockAY#
+
+    ` the steer changes how fast it goes, for all of the time since it was last worked out, and it is
+    ` kept between the slowest and the fastest that a fish swims. it only starts to swim with the others
+    ` once it is on its way, so it lifts off the way that it faced. between now and the next time, the
+    ` fish just goes, the way that this leaves it going.
+    flockSince# = flockNow - FLOCK_STEERED(flockI)
+    FLOCK_STEERED(flockI) = flockNow
+    if flockSince# > 400 then flockSince# = 400
+    if flockSince# < 0 then flockSince# = 0
+    flockSince# = flockSince# * .001
+    flockAge# = flockNow - FLOCK_BORN(flockI)
+    flockSettle# = FLOCK_SETTLE_MS
+    flockOut# = flockAge# / flockSettle#
+    if flockOut# > 1 then flockOut# = 1
+    FLOCK_VX#(flockI) = FLOCK_VX#(flockI) + flockAX# * flockOut# * flockSince#
+    FLOCK_VY#(flockI) = FLOCK_VY#(flockI) + flockAY# * flockOut# * flockSince#
+    flockSpeed# = sqrt(FLOCK_VX#(flockI) * FLOCK_VX#(flockI) + FLOCK_VY#(flockI) * FLOCK_VY#(flockI))
+    flockFix# = 1
+    if flockSpeed# > FLOCK_SPEED_MAX
+        if flockOut# >= 1 then flockFix# = FLOCK_SPEED_MAX / flockSpeed#
+    endif
+    if flockSpeed# < FLOCK_SPEED_MIN
+        if flockSpeed# > .01 then flockFix# = FLOCK_SPEED_MIN / flockSpeed#
+    endif
+    FLOCK_VX#(flockI) = FLOCK_VX#(flockI) * flockFix#
+    FLOCK_VY#(flockI) = FLOCK_VY#(flockI) * flockFix#
+endfunction
+
+
+` move the fish out there along, and draw them. stepSchool calls this on every frame.
+function stepFlock(flockElapsed#)
+    flockNow = game ms()
+    flockShow = 1
+    if MENU_MODE <> 0 then flockShow = 0
+    flockDt# = flockElapsed# * .001
+
+    ` where the board is, which the fish would rather not swim over
+    flockHalf = CELL_SIZE / 2
+    FLOCK_GRID_L = getCellX(0) - flockHalf
+    FLOCK_GRID_R = getCellX(CELL_COLUMN_COUNT - 1) + flockHalf
+    FLOCK_GRID_T = getCellY(0) - flockHalf
+    FLOCK_GRID_B = getCellY(CELL_ROW_COUNT - 1) + flockHalf
+
+    ` a slider of the debug panel that changes how they look has every one of them looked at again
+    flockSig = FLOCK_ALPHA + FLOCK_HAZE_R * 7 + FLOCK_HAZE_G * 13 + FLOCK_HAZE_B * 17 + FLOCK_LINE_KEEP * 19 + FLOCK_SIZE * 23
+    flockLast = FLOCK_MAX - 1
+    if flockSig <> FLOCK_LOOK_SIG
+        FLOCK_LOOK_SIG = flockSig
+        for flockI = 0 to flockLast
+            FLOCK_DRAWN(flockI) = 0
+        next
+    endif
+
+    ` a few of them work out how to steer
+    flockSteered = 0
+    while flockSteered < FLOCK_STEER_EACH
+        flockSteered = flockSteered + 1
+        if FLOCK_ON(FLOCK_STEER_NEXT)
+            if FLOCK_BORN(FLOCK_STEER_NEXT) <= flockNow
+                flockSteer(FLOCK_STEER_NEXT, flockNow)
+            endif
+        endif
+        FLOCK_STEER_NEXT = (FLOCK_STEER_NEXT + 1) mod FLOCK_MAX
+    endwhile
+
+    ` and they all move. a sprite is only told what has changed: once a fish is all the way out, its
+    ` size, color and line stay the same, and only where it is, and its turn, are told again.
+    flockSettle# = FLOCK_SETTLE_MS
+    flockTurnStep# = flockElapsed# * FLOCK_TURN_EASE#
+    if flockTurnStep# > 1 then flockTurnStep# = 1
+    flockLeftward# = 0 - 1.5
+    for flockI = 0 to flockLast
+        flockSprite = FLOCK_SPRITES(flockI)
+        flockDrawn = 0
+        if FLOCK_ON(flockI)
+            if FLOCK_BORN(flockI) <= flockNow
+                flockT# = 1
+                if FLOCK_DRAWN(flockI) < 2
+                    flockAge# = flockNow - FLOCK_BORN(flockI)
+                    flockT# = flockAge# / flockSettle#
+                    if flockT# > 1 then flockT# = 1
+                endif
+
+                ` it goes the way that its last steer left it going. see flockSteer.
+                FLOCK_X#(flockI) = FLOCK_X#(flockI) + FLOCK_VX#(flockI) * flockDt#
+                FLOCK_Y#(flockI) = FLOCK_Y#(flockI) + FLOCK_VY#(flockI) * flockDt#
+
+                ` it faces the way that it swims, once it is clearly swimming that way
+                if FLOCK_VX#(flockI) > 1.5 then FLOCK_FACE(flockI) = 1
+                if FLOCK_VX#(flockI) < flockLeftward# then FLOCK_FACE(flockI) = -1
+
+                if flockShow
+                    flockDrawn = 1
+                    flockKind = FLOCK_KIND(flockI)
+                    flockArt = 0
+                    if flockKind > 0
+                        if flockKind < 64
+                            flockArt = SCHOOL_ART_FACE(flockKind)
+                        endif
+                    endif
+
+                    ` it turns around slowly: it narrows to nothing, and opens out again the other way
+                    flockTurnWant# = 0
+                    if flockArt <> 0
+                        if FLOCK_FACE(flockI) <> flockArt then flockTurnWant# = 1
+                    endif
+                    flockTurnGap# = flockTurnWant# - FLOCK_SHOWN#(flockI)
+                    flockTurning = 1
+                    if flockTurnGap# < .002
+                        flockTurnBack# = 0 - .002
+                        if flockTurnGap# > flockTurnBack# then flockTurning = 0
+                    endif
+                    if flockTurning
+                        FLOCK_SHOWN#(flockI) = FLOCK_SHOWN#(flockI) + flockTurnGap# * flockTurnStep#
+                    else
+                        FLOCK_SHOWN#(flockI) = flockTurnWant#
+                    endif
+
+                    ` while it is still on its way out, it gets smaller, and the haze and the fading of
+                    ` its line come over it. after that, none of that changes.
+                    flockSize = FLOCK_SIZE
+                    if flockT# < 1
+                        flockSize = CELL_ART_SIZE + (FLOCK_SIZE - CELL_ART_SIZE) * flockT#
+                    endif
+                    flockLook = 0
+                    if flockT# < 1 then flockLook = 1
+                    if FLOCK_DRAWN(flockI) < 2 then flockLook = 1
+                    if flockLook
+                        flockAlpha = 255 + (FLOCK_ALPHA - 255) * flockT#
+                        flockR = 255 + (FLOCK_HAZE_R - 255) * flockT#
+                        flockG = 255 + (FLOCK_HAZE_G - 255) * flockT#
+                        flockB = 255 + (FLOCK_HAZE_B - 255) * flockT#
+                        color sprite flockSprite, rgb(flockR, flockG, flockB)
+                        set sprite alpha flockSprite, flockAlpha
+                        flockLineKeep# = FLOCK_LINE_KEEP
+                        flockLineKeep# = flockLineKeep# / 255.0
+                        set sprite all texcoord1 flockSprite, flockT#, flockLineKeep#, 0, 0
+                        FLOCK_DRAWN(flockI) = 1
+                        if flockT# >= 1 then FLOCK_DRAWN(flockI) = 2
+                    endif
+
+                    ` its size, which is narrower while it turns
+                    flockResize = flockTurning + flockLook
+                    if flockResize > 0
+                        flockFlip = 0
+                        if FLOCK_SHOWN#(flockI) > .5 then flockFlip = 1
+                        flockWide# = flockSize
+                        flockWide# = flockWide# * abs(cos(FLOCK_SHOWN#(flockI) * 3.14159))
+                        if flockWide# < 1 then flockWide# = 1
+                        size sprite flockSprite, flockWide#, flockSize
+                        set sprite flip flockSprite, flockFlip, 0
+                    endif
+
+                    position sprite flockSprite, FLOCK_X#(flockI), FLOCK_Y#(flockI)
+                    if FLOCK_SHOWING(flockI) = 0
+                        show sprite flockSprite
+                        FLOCK_SHOWING(flockI) = 1
+                    endif
+                endif
+            endif
+        endif
+        if flockDrawn = 0
+            if FLOCK_SHOWING(flockI)
+                hide sprite flockSprite
+                FLOCK_SHOWING(flockI) = 0
+            endif
+        endif
+    next
+endfunction

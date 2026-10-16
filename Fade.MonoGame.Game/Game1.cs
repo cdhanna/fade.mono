@@ -242,7 +242,18 @@ public class Game1 : Microsoft.Xna.Framework.Game
             _graphics.PreferredBackBufferWidth = windowWidth;
             _graphics.PreferredBackBufferHeight = windowHeight;
         }
+#if !BROWSER
+        else
+        {
+            ApplyBakedWindowSettings();
+        }
+#endif
         Content.RootDirectory = "Content";
+#if !BROWSER
+        // Stock behaviour for every .xnb; also loads the .ogg sounds of a release built with
+        // $(FadeMonoEncodeAudioToOgg). See FadeContentManager.
+        Content = new FadeContentManager(Services, "Content");
+#endif
 #if BROWSER
         // Browser has no filesystem to serve XNBs from. Swap the default
         // ContentManager for one backed by a dict the page fills via
@@ -273,6 +284,53 @@ public class Game1 : Microsoft.Xna.Framework.Game
 #endif
 
 #if !BROWSER
+    /// <summary>
+    /// The window the game's .csproj asked for: $(FadeWindowMode), $(FadeWindowWidth),
+    /// $(FadeWindowHeight) and $(FadeWindowResizable), baked into the entry assembly as
+    /// [AssemblyMetadata] by FadeBasic.MonoGame.App.targets. Applied here, before the window
+    /// exists, for the same reason as the size above. Fade code can change all of it later.
+    ///
+    /// Fullscreen is the same as `set fullscreen 1`: the back buffer is the size of the
+    /// monitor. A test run never goes fullscreen; it would cover the screen of whoever ran it.
+    /// </summary>
+    private void ApplyBakedWindowSettings()
+    {
+        var entry = System.Reflection.Assembly.GetEntryAssembly();
+        if (entry == null) return;
+
+        string mode = null, width = null, height = null, resizable = null;
+        foreach (var attribute in System.Reflection.CustomAttributeExtensions
+                     .GetCustomAttributes<System.Reflection.AssemblyMetadataAttribute>(entry))
+        {
+            switch (attribute.Key)
+            {
+                case "FadeWindowMode": mode = attribute.Value; break;
+                case "FadeWindowWidth": width = attribute.Value; break;
+                case "FadeWindowHeight": height = attribute.Value; break;
+                case "FadeWindowResizable": resizable = attribute.Value; break;
+            }
+        }
+
+        if (int.TryParse(width, out var w) && int.TryParse(height, out var h) && w > 0 && h > 0)
+        {
+            _graphics.PreferredBackBufferWidth = w;
+            _graphics.PreferredBackBufferHeight = h;
+        }
+
+        if (bool.TryParse(resizable, out var canResize))
+        {
+            Window.AllowUserResizing = canResize;
+        }
+
+        if (!_testMode && string.Equals(mode, "Fullscreen", StringComparison.OrdinalIgnoreCase))
+        {
+            var display = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode;
+            _graphics.IsFullScreen = true;
+            _graphics.PreferredBackBufferWidth = display.Width;
+            _graphics.PreferredBackBufferHeight = display.Height;
+        }
+    }
+
     /// <summary>
     /// The window's client area changed size, usually because the player dragged an edge.
     ///
@@ -373,6 +431,12 @@ public class Game1 : Microsoft.Xna.Framework.Game
         // Optional host-supplied systems (netcode, custom overlays), same
         // Game.Services seam as the content builder above. See IFadeHostSystem.
         HostSystemRegistry.Resolve(this);
+
+#if !BROWSER
+        // A release that ships its sounds as .ogg decodes them all here, before the VM exists, so
+        // the program never waits on a decode. Nothing to do (and nothing found) in a dev build.
+        (Content as FadeContentManager)?.PreloadOggSounds();
+#endif
 
         ResetFade();
 
@@ -741,8 +805,11 @@ public class Game1 : Microsoft.Xna.Framework.Game
     // A project-local Content/<name>.xnb (built from a local shader of the same
     // name) overrides the baked engine copy and is hot-reloaded. ContentWatcher
     // resolves against the title content root (AppContext.BaseDirectory/Content).
+    // An .xnb.br is the same asset in a release built with $(FadeMonoCompressContent); the content
+    // manager inflates it when it is loaded.
     private static bool HasLocalContent(string assetName) =>
-        File.Exists(Path.Combine(AppContext.BaseDirectory, "Content", assetName + ".xnb"));
+        File.Exists(Path.Combine(AppContext.BaseDirectory, "Content", assetName + ".xnb")) ||
+        File.Exists(Path.Combine(AppContext.BaseDirectory, "Content", assetName + Fade.MonoGame.Content.CompressedContent.Suffix));
 #endif
 
     // Loads an Effect from an XNB baked into this assembly as an embedded

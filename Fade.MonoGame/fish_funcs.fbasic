@@ -227,11 +227,15 @@ function swapCellStacks(aIndex, bIndex)
 
     ` and a fish on the path of the glow stays turned around until it has turned back. see WHAT SHOWS in fish_headers_glow.
     glowTradeTurn(aIndex, bIndex)
+
+    ` and a fish faces the way that it did. see FACING in fish_headers_school.
+    schoolTradeFace(aIndex, bIndex)
 endfunction
 
 ` one fish takes the place of another
 function copyCellStack(fromIndex, toIndex)
     glowCopyTurn(fromIndex, toIndex) `see WHAT SHOWS in fish_headers_glow
+    schoolCopyFace(fromIndex, toIndex) `see FACING in fish_headers_school
     CELLS(toIndex).stack = CELLS(fromIndex).stack
     CELLS(toIndex).stackShown# = CELLS(fromIndex).stackShown#
     CELLS(toIndex).bellyUp = CELLS(fromIndex).bellyUp
@@ -1836,6 +1840,12 @@ function startLiveMove(dirX, dirY, wantSwap)
         LIVE_MOVE_DIR_X = dirX
         LIVE_MOVE_DIR_Y = dirY
         started = 1
+
+        ` a swap that goes across turns the two fish, and they turn while they move. the fish that the
+        ` cursor carries is still in its own cell, so that is where it is turned. see FACING in fish_headers_school.
+        if wantSwap
+            schoolSwapTurns(bIndex, aIndex, dirX)
+        endif
 
         ` a shake that was still going is over. the cursor is on its way somewhere now.
         CURSOR_SHAKING = 0
