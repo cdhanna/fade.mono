@@ -50,6 +50,19 @@ fi
 # Debug symbols and the run log of whoever built this have no business in the bundle.
 find "$APP/Contents/MacOS" -maxdepth 1 \( -name '*.pdb' -o -name '_lastRun.log' \) -delete
 
+# The icon of the bundle, in Finder and the Dock. The build makes Icon.icns from the game's
+# $(FadeGameIcon) and puts it next to the executable in an osx publish (see
+# Fade.MonoGame.Game/buildTransitive/FadeBasic.MonoGame.App.targets); Info.plist below names it.
+# Without it the bundle still works and shows the generic app icon.
+ICON_PLIST=""
+if [ -f "$APP/Contents/MacOS/Icon.icns" ]; then
+	mv "$APP/Contents/MacOS/Icon.icns" "$APP/Contents/Resources/Icon.icns"
+	ICON_PLIST="<key>CFBundleIconFile</key>
+	<string>Icon</string>"
+else
+	echo "make-macos-app.sh: no Icon.icns in $PUBLISH_DIR -- the bundle gets the generic icon. Set <FadeGameIcon> in the game's .csproj." >&2
+fi
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -63,6 +76,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<string>$BUNDLE_ID</string>
 	<key>CFBundleExecutable</key>
 	<string>$EXE_NAME</string>
+	$ICON_PLIST
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleInfoDictionaryVersion</key>

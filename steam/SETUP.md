@@ -397,7 +397,6 @@ How a game is packed into a score is written up at the top of
   `WinAppDataRoaming`, macOS root `MacAppSupport`, subdirectory `FishFishPop` for both.
 - **Intel Macs**: only Apple Silicon is built. Intel needs a second publish with
   `-r osx-x64` and its own bundle.
-- **macOS icon**: the bundle has no `.icns`, so it shows the generic app icon in the Dock.
 - **Size**: each build is about 200 MB. Roughly 70 MB is the .NET runtime and 120 MB is audio,
   which the content pipeline stores uncompressed. The publish also carries the test-runner
   DLLs (`FadeBasic.Testing`, `testhost`), which are harmless but could be made Debug only.
