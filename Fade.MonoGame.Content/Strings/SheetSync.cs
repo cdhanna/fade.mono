@@ -617,6 +617,26 @@ public static class SheetSync
                 }
             }
         }
+        // Rows somebody added to a snapshot CSV by hand, which the sheet does not have yet. They go up
+        // with their text, rather than being lost when the snapshot is written from the sheet below.
+        foreach (var file in LocalCsvs(o.stringsDir).Where(f => !IsInbox(f)))
+        {
+            var rows = StringCsv.Parse(File.ReadAllText(file));
+            if (rows.Count < 2) continue;
+            var head = rows[0].fields.Select(h => h.Trim()).ToList();
+            var keyCol = head.FindIndex(h => string.Equals(h, StringTable.KEY_COLUMN, StringComparison.OrdinalIgnoreCase));
+            if (keyCol < 0) continue;
+            foreach (var (_, fields) in rows.Skip(1))
+            {
+                string Get(string name) { var c = head.FindIndex(h => string.Equals(h, name, StringComparison.OrdinalIgnoreCase)); return c >= 0 && c < fields.Length ? fields[c] : ""; }
+                var key = Get(StringTable.KEY_COLUMN).Trim();
+                if (key.Length == 0 || sheetKeys.Contains(key) || newRows.Any(r => r.key == key)) continue;
+                var extra = head.Where(h => StringTable.IsLanguageColumn(h) || h == "notes").ToDictionary(h => h, Get);
+                newRows.Add((key, Get(StringTable.DEFAULT_LANGUAGE), extra));
+                Console.WriteLine($"  '{key}' is in {Path.GetFileName(file)} but not in the sheet: adding it, with its text");
+            }
+        }
+
         foreach (var key in wheres.Keys)
             if (!InSheet(key) && !newRows.Any(r => r.key == key)) newRows.Add((key, "", new Dictionary<string, string>()));
 
