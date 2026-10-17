@@ -41,6 +41,37 @@ setup_school:
     SCHOOL_ART_FACE(TEX_BASS) = 1
     SCHOOL_ART_FACE(TEX_WORM) = 1
 
+    ` the puffs of smoke of the fish that pop out in the background, the same as the ones of the board
+    for schoolSetupI = 0 to SCHOOL_PUFF_MAX - 1
+        schoolSetupSprite = 0
+        reserve sprite id(schoolSetupSprite)
+        sprite schoolSetupSprite, 0, 0, TEX_SMOKE_1
+        order sprite schoolSetupSprite, ORDER_FLOCK + 1
+        hide sprite schoolSetupSprite
+        SCHOOL_PUFF_SPRITES(schoolSetupI) = schoolSetupSprite
+        SCHOOL_PUFF_START(schoolSetupI) = 0
+    next
+
+    ` the pop of a fish out in the background: the pop of the board, heard far off through the water,
+    ` made by Tools/school_pop_gen.py. a few of each, so that pops that come close together do not
+    ` cut each other off. see THE TIDE FLUSHES THE SCHOOLS in fish_headers_school.
+    for schoolSetupI = 0 to 1
+        schoolSetupClip = 0
+        reserve sfx clip id(schoolSetupClip)
+        if schoolSetupI = 0
+            load sfx clip schoolSetupClip, "Fish/Audio/school-pop-far-1"
+        else
+            load sfx clip schoolSetupClip, "Fish/Audio/school-pop-far-2"
+        endif
+        for schoolSetupVoice = 0 to SCHOOL_FAR_VOICES - 1
+            schoolSetupSfx = 0
+            reserve sfx id(schoolSetupSfx)
+            sfx schoolSetupSfx, schoolSetupClip
+            set sfx group schoolSetupSfx, SFX_GROUP_SFX
+            SCHOOL_FAR_SFX(schoolSetupI * SCHOOL_FAR_VOICES + schoolSetupVoice) = schoolSetupSfx
+        next
+    next
+
     ` THE FANFARE OF THE SCHOOLS. see fish_headers_school. the roots are 1 for Dm, 3 for F, 4 for Gm,
     ` and 6 for Bb. over D minor: F Dm Bb F Dm Bb F F
     schoolFanfare(0, 3, 1, 6, 3, 1, 6, 3, 3)
@@ -94,6 +125,60 @@ frame_debug_school:
     debugSchoolChanged = debug int slider("wander", FLOCK_WANDER, 0, 100)
     debugSchoolChanged = debug int slider("line left, out there", FLOCK_LINE_KEEP, 0, 255)
     debugSchoolChanged = debug int slider("push off of the board", FLOCK_PULL_GRID, 0, 400)
+    debug text "new fish come from: " + str$(SCHOOL_DRAW) + " (1 the schools, after a swap down; 0 at random)   came home " + str$(SCHOOL_DRAW_COUNT)
+    debug separator
+    debug text "the cursor calls on them: fish that have left " + str$(SCHOOL_DEPART_COUNT) + ", this visit has had a match " + str$(SCHOOL_VISIT_VALID)
+    debugSchoolChanged = debug toggle("the cursor pops them, or sends them away", SCHOOL_CURSOR_ON)
+    debugSchoolChanged = debug int slider("leaving: speed", SCHOOL_LEAVE_SPEED, 5, 200)
+    debugSchoolChanged = debug int slider("leaving: smaller by (of 100)", SCHOOL_LEAVE_SHRINK, 0, 90)
+    debugSchoolChanged = debug int slider("leaving: fainter by (of 100)", SCHOOL_LEAVE_FADE, 0, 100)
+    debugSchoolChanged = debug int slider("leaving: ms to fade", SCHOOL_LEAVE_FADE_MS, 50, 3000)
+    debugSchoolChanged = debug int slider("cursor on its kind: bigger by (of 100)", SCHOOL_FOCUS_GROW, 0, 100)
+    debugSchoolChanged = debug int slider("cursor on its kind: clearer by (of 100)", SCHOOL_FOCUS_CLEAR, 0, 100)
+    debugSchoolChanged = debug int slider("cursor on its kind: shimmer (of 100)", SCHOOL_SHIMMER, 0, 100)
+    debugSchoolChanged = debug int slider("cursor on its kind: shimmer speed", SCHOOL_SHIMMER_SPEED, 0, 2000)
+    if debug button("send away the fish under the cursor") = 1
+        schoolDepart(CELLS(SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT).value)
+    endif
+    debug same line
+    if debug button("pop the fish under the cursor") = 1
+        schoolPopKind(CELLS(SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT).value)
+    endif
+    debug separator
+    debug text "the tide flushes the schools (off for now): flushes " + str$(SCHOOL_FLUSH_COUNT)
+    debugSchoolChanged = debug toggle("a swap that the tide wants flushes them", SCHOOL_FLUSH_ON)
+    debugSchoolChanged = debug int slider("flush: top speed", SCHOOL_FLUSH_SPEED, 20, 600)
+    debugSchoolChanged = debug int slider("flush: how quickly they speed up", SCHOOL_FLUSH_PUSH, 20, 2000)
+    debugSchoolChanged = debug int slider("flush: loudness of a pop", SCHOOL_FLUSH_VOLUME, 0, 100)
+    debugSchoolChanged = debug int slider("flush: punch, ms", SCHOOL_PUNCH_MS, 20, 500)
+    debugSchoolChanged = debug int slider("flush: punch, size (100 is its own)", SCHOOL_PUNCH_SCALE, 100, 400)
+    debugSchoolChanged = debug int slider("flush: puff, how much shows", SCHOOL_PUFF_ALPHA, 0, 255)
+    debugSchoolChanged = debug int slider("flush: ms before the first pop", SCHOOL_FLUSH_FIRST, 0, 1000)
+    debugSchoolChanged = debug int slider("flush: ms between pops", SCHOOL_FLUSH_GAP, 20, 500)
+    debugSchoolChanged = debug int slider("flush: longest it takes, ms", SCHOOL_FLUSH_SPAN, 200, 5000)
+    if debug button("flush them up") = 1
+        schoolFlush(-1)
+    endif
+    debug same line
+    if debug button("flush them down") = 1
+        schoolFlush(1)
+    endif
+    debug separator
+    debugSchoolChanged = debug toggle("a swap down calls on the schools (off for now)", SCHOOL_DRAW_ON)
+    debugSchoolChanged = debug toggle("new fish come from the schools", SCHOOL_DRAW)
+    debugSchoolChanged = debug int slider("home: ms that a fish from a school takes to swim over", SCHOOL_DRAW_FLY, 100, 1500)
+    debugSchoolChanged = debug int slider("home: ms that it hops in for", SCHOOL_DRAW_HOP, 20, 400)
+    debugSchoolChanged = debug int slider("home: stack above the board (100 is a cell)", SCHOOL_STACK_LIFT, 0, 300)
+    debugSchoolChanged = debug int slider("home: gap in the stack (100 is a cell)", SCHOOL_STACK_SPACE, 20, 200)
+    debugSchoolChanged = debug int slider("home: ms between drops in a stack", SCHOOL_STACK_GAP, 0, 500)
+    debugSchoolChanged = debug int slider("home: favor the high ones (0 no, 1 some, 2 a lot)", SCHOOL_PICK_TOP, 0, 2)
+    debugSchoolChanged = debug int slider("wave: push", FLOCK_WAVE_PUSH, 0, 4000)
+    debugSchoolChanged = debug int slider("wave: speed", FLOCK_WAVE_SPEED, 40, 1000)
+    debugSchoolChanged = debug int slider("wave: reach", FLOCK_WAVE_REACH, 40, 800)
+    debugSchoolChanged = debug int slider("wave: thickness", FLOCK_WAVE_BAND, 4, 100)
+    if debug button("send a wave from the cursor") = 1
+        flockWave(getCellX(SELECTION_POS.x), getCellY(SELECTION_POS.y), 5, 0)
+    endif
     debugSchoolChanged = debug int slider("fanfare: 0 bell 1 pluck 2 swell 3 choir", SCHOOL_CHORD_INSTRUMENT, 0, 3)
     debugSchoolSongSeconds = SCHOOL_SONG_RESET_MS / 1000
     debugSchoolChanged = debug int slider("fanfare starts over after this many seconds", debugSchoolSongSeconds, 1, 300)
@@ -136,6 +221,14 @@ function schoolReset()
     SCHOOL_LAST_SIZE = 0
     SCHOOL_LAST_SWEPT = 0
     SCHOOL_JUDGED = -1
+    SCHOOL_DRAW = 0
+    SCHOOL_DRAW_NEXT = 0
+    SCHOOL_DRAW_COUNT = 0
+    SCHOOL_FLUSH_COUNT = 0
+    SCHOOL_FLUSH_SCORE = 0
+    SCHOOL_PENDING = 0
+    SCHOOL_VISIT_VALID = 0
+    SCHOOL_DEPART_COUNT = 0
     flockReset()
     SCHOOL_SONG_AT = 0
     SCHOOL_SONG_LAST = 0
@@ -292,7 +385,11 @@ function schoolSave()
     ` the fish out in the background: the kind, which way it faces, and where it is, in one number
     schoolSaveN = 0
     for schoolSaveI = 0 to FLOCK_MAX - 1
-        if FLOCK_ON(schoolSaveI)
+        schoolSaveKeep = FLOCK_ON(schoolSaveI)
+        if FLOCK_FLY(schoolSaveI) then schoolSaveKeep = 0
+        if FLOCK_FLUSH(schoolSaveI) <> 0 then schoolSaveKeep = 0
+        if FLOCK_LEAVE(schoolSaveI) <> 0 then schoolSaveKeep = 0
+        if schoolSaveKeep
             schoolSaveX = FLOCK_X#(schoolSaveI)
             schoolSaveY = FLOCK_Y#(schoolSaveI)
             if schoolSaveX < 0 then schoolSaveX = 0
@@ -392,8 +489,9 @@ function stepSchool()
     SCHOOL_TURN_STEP# = schoolElapsed# * SCHOOL_TURN_EASE#
     if SCHOOL_TURN_STEP# > 1 then SCHOOL_TURN_STEP# = 1
 
-    ` the schools out in the water behind the board
+    ` the schools out in the water behind the board, and the puffs of the ones that pop
     stepFlock(schoolElapsed#)
+    stepSchoolPuffs()
 
     ` the notes of the tune that a school is playing, that are due
     for schoolNoteI = 0 to SCHOOL_NOTE_MAX - 1
@@ -418,8 +516,17 @@ endfunction
 ` the group. see fish_headers_school.
 function schoolJudge(schoolGroup, schoolBase, schoolSwapped)
     if SCHOOL_ON = 0 then exitfunction
+    ` at daybreak, every group that the night held can be a school, whatever made it: the night is for
+    ` setting the board up. see THE DAWN in fish_headers_school.
+    ` and with the "fall in line" card, a group that fell together can be one too. see THE CARD.
+    schoolByFall = 0
     if SCHOOL_NEED_SWAP
-        if schoolSwapped = 0 then exitfunction
+        if SCHOOL_DAWN = 0
+            if schoolSwapped = 0
+                if CARDS(ABILITY_INDEX_FALL_IN_LINE).obtained = 0 then exitfunction
+                schoolByFall = 1
+            endif
+        endif
     endif
 
     schoolLastRow = CELL_ROW_COUNT - 1
@@ -455,6 +562,12 @@ function schoolJudge(schoolGroup, schoolBase, schoolSwapped)
 
     ` it is a school. its fish swim off into the background, as handle_combos pops them, and it plays its fanfare.
     SCHOOL_JUDGED = schoolGroup
+    if schoolByFall
+        showPassiveUsed(ABILITY_INDEX_FALL_IN_LINE)
+    endif
+    if schoolKind > 0
+        if schoolKind < 64 then SCHOOL_MADE(schoolKind) = 1
+    endif
     schoolChord(schoolSize)
     SCHOOL_COUNT = SCHOOL_COUNT + 1
     SCHOOL_LAST_SIZE = schoolSize
@@ -507,8 +620,16 @@ endfunction
 
 ` a new game starts with none out there
 function flockReset()
+    for flockResetI = 0 to FLOCK_WAVE_MAX - 1
+        FLOCK_WAVE_START(flockResetI) = 0
+    next
     for flockResetI = 0 to FLOCK_MAX - 1
         FLOCK_ON(flockResetI) = 0
+        FLOCK_FLY(flockResetI) = 0
+        FLOCK_FLUSH(flockResetI) = 0
+        FLOCK_LEAVE(flockResetI) = 0
+        FLOCK_FOCUS#(flockResetI) = 0
+        FLOCK_PUNCH_AT(flockResetI) = 0
         FLOCK_DRAWN(flockResetI) = 0
         FLOCK_SHOWING(flockResetI) = 0
         hide sprite FLOCK_SPRITES(flockResetI)
@@ -519,7 +640,25 @@ endfunction
 ` A SCHOOL SWIMS OFF. the fish in this cell is in a school, and it would have popped `schoolLeaveWait`
 ` milliseconds from now. it fades off of the board then, and a fish just like it lifts off from there
 ` and swims away, the way that it faced, to join the others of its kind. handle_combos calls this.
-function schoolFishLeaves(schoolLeaveCell, schoolLeaveWait)
+` a stacked fish sends one out for every fish of its stack: the ones behind it go first, one at a
+` time, FISH_STACK_POP_GAP apart, when each of them would have popped, the way that a stack pops.
+function schoolFishLeaves(schoolStackCell, schoolStackWait)
+    schoolStackLeft = CELLS(schoolStackCell).stack
+    if schoolStackLeft > BUNCH_STACK_MAX then schoolStackLeft = BUNCH_STACK_MAX
+    while schoolStackLeft > 0
+        schoolStackOneWait = schoolStackWait - schoolStackLeft * FISH_STACK_POP_GAP
+        if schoolStackOneWait < 0 then schoolStackOneWait = 0
+        schoolFishLeavesOne(schoolStackCell, schoolStackOneWait, schoolStackLeft)
+        schoolStackLeft = schoolStackLeft - 1
+    endwhile
+    schoolFishLeavesOne(schoolStackCell, schoolStackWait, 0)
+endfunction
+
+
+` one fish leaves the board, from this cell, this many milliseconds from now. `schoolLeaveBehind` is
+` how far back in its stack it was, 0 for the fish in front, and it starts a little up and over for
+` each, the way that a stack is drawn.
+function schoolFishLeavesOne(schoolLeaveCell, schoolLeaveWait, schoolLeaveBehind)
     ` a place out there: one that is free, or else the one that has been out there the longest
     schoolLeaveSlot = -1
     schoolLeaveOldest = 0
@@ -544,8 +683,8 @@ function schoolFishLeaves(schoolLeaveCell, schoolLeaveWait)
     if schoolLeaveWay = 0 then schoolLeaveWay = 1
     FLOCK_ON(schoolLeaveSlot) = 1
     FLOCK_KIND(schoolLeaveSlot) = schoolLeaveKind
-    FLOCK_X#(schoolLeaveSlot) = getCellX(schoolLeaveCell mod CELL_COLUMN_COUNT)
-    FLOCK_Y#(schoolLeaveSlot) = getCellY(schoolLeaveCell / CELL_COLUMN_COUNT)
+    FLOCK_X#(schoolLeaveSlot) = getCellX(schoolLeaveCell mod CELL_COLUMN_COUNT) + schoolLeaveBehind * 3
+    FLOCK_Y#(schoolLeaveSlot) = getCellY(schoolLeaveCell / CELL_COLUMN_COUNT) - schoolLeaveBehind * 3
     FLOCK_VX#(schoolLeaveSlot) = schoolLeaveWay * FLOCK_LIFT_SPEED
     FLOCK_VY#(schoolLeaveSlot) = 0 - (3 + rnd(6))
     FLOCK_AX#(schoolLeaveSlot) = 0
@@ -562,6 +701,607 @@ function schoolFishLeaves(schoolLeaveCell, schoolLeaveWait)
     FLOCK_SHOWING(schoolLeaveSlot) = 0
     FLOCK_DRAWN(schoolLeaveSlot) = 0
     FLOCK_STEERED(schoolLeaveSlot) = FLOCK_BORN(schoolLeaveSlot)
+
+    ` a place that is taken over from the oldest fish out there forgets whatever that fish was doing
+    FLOCK_FLY(schoolLeaveSlot) = 0
+    FLOCK_FLUSH(schoolLeaveSlot) = 0
+    FLOCK_PUNCH_AT(schoolLeaveSlot) = 0
+    FLOCK_LEAVE(schoolLeaveSlot) = 0
+    FLOCK_FOCUS#(schoolLeaveSlot) = 0
+endfunction
+
+
+` A POP SENDS A WAVE. a group of this many fish pops at this spot, in pixels, this many milliseconds
+` from now, and a ring goes out from it through the fish in the background. see fish_headers_school.
+function flockWave(flockWaveX#, flockWaveY#, flockWaveFish#, flockWaveWait)
+    flockWaveSlot = FLOCK_WAVE_NEXT
+    FLOCK_WAVE_NEXT = (FLOCK_WAVE_NEXT + 1) mod FLOCK_WAVE_MAX
+    FLOCK_WAVE_X#(flockWaveSlot) = flockWaveX#
+    FLOCK_WAVE_Y#(flockWaveSlot) = flockWaveY#
+    FLOCK_WAVE_START(flockWaveSlot) = game ms() + flockWaveWait + 1
+    flockWaveMore# = flockWaveFish# - 3
+    if flockWaveMore# < 0 then flockWaveMore# = 0
+    FLOCK_WAVE_POWER#(flockWaveSlot) = 1 + flockWaveMore# * FLOCK_WAVE_GROW * .01
+endfunction
+
+
+` THE FISH COME HOME. a swap went this way, up or down. see fish_headers_school.
+function schoolDrawWay(schoolWayY)
+    if schoolWayY > 0 then SCHOOL_DRAW = 1
+    if schoolWayY < 0 then SCHOOL_DRAW = 0
+    if SCHOOL_DRAW_ON = 0 then SCHOOL_DRAW = 0
+endfunction
+
+
+` THE FISH COME HOME, picked early. handle_combos has worked out how far every fish that is left will
+` fall, and nothing has moved yet. so it is known which cells will be empty once they have fallen: the
+` top cells of every column, as many as popped in it. when the schools are being called on, a fish
+` from the schools is picked for each of them now, and sets off at once, so it has all of the time
+` that the fish take to fall to get there. see THE FISH COME HOME in fish_headers_school.
+function schoolEarlyPicks()
+    schoolEarlyLast = CELL_COUNT - 1
+    for schoolEarlyI = 0 to schoolEarlyLast
+        SCHOOL_EARLY(schoolEarlyI) = -1
+    next
+    if SCHOOL_DRAW = 0 then exitfunction
+    if KNOWN_FILL_VALUE > 0 then exitfunction
+
+    ` the board as it will be once the fish have fallen. a cell that will be empty is 0.
+    for schoolEarlyI = 0 to schoolEarlyLast
+        SCHOOL_FUTURE(schoolEarlyI) = 0
+    next
+    for schoolEarlyI = 0 to schoolEarlyLast
+        if CELLS(schoolEarlyI).comboBlownUp = 0
+            schoolEarlyTo = schoolEarlyI + CELLS(schoolEarlyI).comboDownShift * CELL_COLUMN_COUNT
+            if schoolEarlyTo <= schoolEarlyLast
+                SCHOOL_FUTURE(schoolEarlyTo) = CELLS(schoolEarlyI).value
+            endif
+        endif
+    next
+
+    ` how many cells will be empty in every column. they are the top cells of it.
+    schoolEarlyRight = CELL_COLUMN_COUNT - 1
+    for schoolEarlyX = 0 to schoolEarlyRight
+        SCHOOL_COLUMN_EMPTY(schoolEarlyX) = 0
+    next
+    for schoolEarlyI = 0 to schoolEarlyLast
+        if SCHOOL_FUTURE(schoolEarlyI) = 0
+            schoolEarlyX = schoolEarlyI mod CELL_COLUMN_COUNT
+            SCHOOL_COLUMN_EMPTY(schoolEarlyX) = SCHOOL_COLUMN_EMPTY(schoolEarlyX) + 1
+        endif
+    next
+
+    ` a fish for every cell that will be empty, from the top of each column down. they stack up above
+    ` the column: the one for the lowest cell waits at the bottom of the stack, nearest the board.
+    schoolEarlyNeed = getRequiredComboCount()
+    for schoolEarlyI = 0 to schoolEarlyLast
+        if SCHOOL_FUTURE(schoolEarlyI) = 0
+            schoolEarlyFish = schoolPickFor(schoolEarlyI, schoolEarlyNeed)
+            if schoolEarlyFish >= 0
+                SCHOOL_EARLY(schoolEarlyI) = schoolEarlyFish
+                SCHOOL_FUTURE(schoolEarlyI) = FLOCK_KIND(schoolEarlyFish)
+                schoolEarlyX = schoolEarlyI mod CELL_COLUMN_COUNT
+                schoolEarlyRow = schoolEarlyI / CELL_COLUMN_COUNT
+                schoolEarlyPlace = SCHOOL_COLUMN_EMPTY(schoolEarlyX) - 1 - schoolEarlyRow
+                if schoolEarlyPlace < 0 then schoolEarlyPlace = 0
+                schoolEarlySend(schoolEarlyFish, schoolEarlyI, schoolEarlyPlace)
+            endif
+        endif
+    next
+endfunction
+
+
+` pick a fish out there for this cell of the board as it will be: one of a kind that does not make a
+` whole group there, and that is not already on its way somewhere. a fish nearer the top of the screen
+` is picked more often. this says which fish, or -1 for none.
+function schoolPickFor(schoolPickCell, schoolPickNeed)
+    schoolPicked = -1
+    schoolPickNow = game ms()
+    SCHOOL_PICK_STAMP = SCHOOL_PICK_STAMP + 1
+    schoolPickTotal = 0
+    for schoolPickI = 0 to FLOCK_MAX - 1
+        SCHOOL_PICK_WEIGHT(schoolPickI) = 0
+        schoolPickOk = FLOCK_ON(schoolPickI)
+        if FLOCK_FLY(schoolPickI) then schoolPickOk = 0
+        if FLOCK_LEAVE(schoolPickI) <> 0 then schoolPickOk = 0
+        if FLOCK_FLUSH(schoolPickI) <> 0 then schoolPickOk = 0
+        ` a fish that is still on its way out to its school is not called on
+        schoolPickOut = schoolPickNow - FLOCK_BORN(schoolPickI)
+        if schoolPickOut < FLOCK_SETTLE_MS then schoolPickOk = 0
+        if schoolPickOk
+            schoolPickKind = FLOCK_KIND(schoolPickI)
+            if SCHOOL_PICK_ASKED(schoolPickKind) <> SCHOOL_PICK_STAMP
+                SCHOOL_PICK_ASKED(schoolPickKind) = SCHOOL_PICK_STAMP
+                schoolPickGroup = schoolFutureGroup(schoolPickCell, schoolPickKind, schoolPickNeed)
+                SCHOOL_PICK_FITS(schoolPickKind) = 0
+                if schoolPickGroup < schoolPickNeed then SCHOOL_PICK_FITS(schoolPickKind) = 1
+            endif
+            if SCHOOL_PICK_FITS(schoolPickKind)
+                ` how high up it is: 1 at the bottom of the screen, and up from there, squared
+                schoolPickHigh = WORLD_HEIGHT - FLOCK_Y#(schoolPickI)
+                if schoolPickHigh < 1 then schoolPickHigh = 1
+                schoolPickHigh = schoolPickHigh / 10 + 1
+                schoolPickWeight = schoolPickHigh
+                if SCHOOL_PICK_TOP > 1 then schoolPickWeight = schoolPickHigh * schoolPickHigh
+                if SCHOOL_PICK_TOP < 1 then schoolPickWeight = 1
+                SCHOOL_PICK_WEIGHT(schoolPickI) = schoolPickWeight
+                schoolPickTotal = schoolPickTotal + schoolPickWeight
+            endif
+        endif
+    next
+
+    if schoolPickTotal > 0
+        schoolPickRoll = rnd(schoolPickTotal)
+        schoolPickI = 0
+        while schoolPickI < FLOCK_MAX
+            if schoolPickRoll < SCHOOL_PICK_WEIGHT(schoolPickI)
+                if SCHOOL_PICK_WEIGHT(schoolPickI) > 0
+                    schoolPicked = schoolPickI
+                    schoolPickI = FLOCK_MAX
+                endif
+            else
+                schoolPickRoll = schoolPickRoll - SCHOOL_PICK_WEIGHT(schoolPickI)
+            endif
+            schoolPickI = schoolPickI + 1
+        endwhile
+    endif
+endfunction schoolPicked
+
+
+` how big a group a fish of this kind would make in this cell, on the board as it will be once the
+` fish have fallen, SCHOOL_FUTURE. it stops counting at `schoolFutureEnough`. it is countFishGroup, in
+` fish_funcs, on that board in place of the real one.
+function schoolFutureGroup(schoolFutureCell, schoolFutureKind, schoolFutureEnough)
+    SCHOOL_FUTURE_STAMP = SCHOOL_FUTURE_STAMP + 1
+    SCHOOL_FUTURE_MARKS(schoolFutureCell) = SCHOOL_FUTURE_STAMP
+    SCHOOL_FUTURE_STACK(0) = schoolFutureCell
+    schoolFutureSize = 1
+    schoolFutureFound = 0
+    schoolFutureRight = CELL_COLUMN_COUNT - 1
+    schoolFutureBottom = CELL_ROW_COUNT - 1
+    while schoolFutureSize > 0
+        schoolFutureSize = schoolFutureSize - 1
+        schoolFutureSpot = SCHOOL_FUTURE_STACK(schoolFutureSize)
+        schoolFutureFound = schoolFutureFound + 1
+        if schoolFutureFound >= schoolFutureEnough
+            schoolFutureSize = 0
+        else
+            schoolFutureX = schoolFutureSpot mod CELL_COLUMN_COUNT
+            schoolFutureY = schoolFutureSpot / CELL_COLUMN_COUNT
+            for schoolFutureSide = 0 to 3
+                schoolFutureNext = -1
+                if schoolFutureSide = 0
+                    if schoolFutureX > 0 then schoolFutureNext = schoolFutureSpot - 1
+                endif
+                if schoolFutureSide = 1
+                    if schoolFutureX < schoolFutureRight then schoolFutureNext = schoolFutureSpot + 1
+                endif
+                if schoolFutureSide = 2
+                    if schoolFutureY > 0 then schoolFutureNext = schoolFutureSpot - CELL_COLUMN_COUNT
+                endif
+                if schoolFutureSide = 3
+                    if schoolFutureY < schoolFutureBottom then schoolFutureNext = schoolFutureSpot + CELL_COLUMN_COUNT
+                endif
+                if schoolFutureNext >= 0
+                    if SCHOOL_FUTURE_MARKS(schoolFutureNext) <> SCHOOL_FUTURE_STAMP
+                        if SCHOOL_FUTURE(schoolFutureNext) = schoolFutureKind
+                            SCHOOL_FUTURE_MARKS(schoolFutureNext) = SCHOOL_FUTURE_STAMP
+                            SCHOOL_FUTURE_STACK(schoolFutureSize) = schoolFutureNext
+                            schoolFutureSize = schoolFutureSize + 1
+                        endif
+                    endif
+                endif
+            next
+        endif
+    endwhile
+endfunction schoolFutureFound
+
+
+` the fish out there sets off for its place in the stack above the column of this cell, as small and
+` hazy as it is out there. `schoolSendPlace` is its place: 0 at the bottom of the stack, just above the
+` board, and up from there. it takes SCHOOL_DRAW_FLY milliseconds to get there, and waits there until
+` its new fish starts to fall, which it does from there.
+function schoolEarlySend(schoolSendFish, schoolSendCell, schoolSendPlace)
+    FLOCK_FLY(schoolSendFish) = 1
+    FLOCK_FLY_X#(schoolSendFish) = FLOCK_X#(schoolSendFish)
+    FLOCK_FLY_Y#(schoolSendFish) = FLOCK_Y#(schoolSendFish)
+    FLOCK_FLY_TO_X#(schoolSendFish) = getCellX(schoolSendCell mod CELL_COLUMN_COUNT)
+    schoolSendLift# = SCHOOL_STACK_LIFT + schoolSendPlace * SCHOOL_STACK_SPACE
+    schoolSendLift# = schoolSendLift# * CELL_SIZE * .01
+    FLOCK_FLY_TO_Y#(schoolSendFish) = getCellY(0) - schoolSendLift#
+    FLOCK_STACK(schoolSendFish) = schoolSendPlace
+    FLOCK_FLY_START(schoolSendFish) = game ms()
+    FLOCK_FLY_MS(schoolSendFish) = SCHOOL_DRAW_FLY
+    FLOCK_HOP_AT(schoolSendFish) = 0
+
+    ` it faces the way that it swims
+    schoolSendGoX# = FLOCK_FLY_TO_X#(schoolSendFish) - FLOCK_FLY_X#(schoolSendFish)
+    if schoolSendGoX# > 0 then FLOCK_FACE(schoolSendFish) = 1
+    if schoolSendGoX# < 0 then FLOCK_FACE(schoolSendFish) = -1
+endfunction
+
+
+` a fish out there that set off for the board is not wanted after all, and goes back to its school,
+` from wherever it is
+function schoolDrawCancel(schoolCancelFish)
+    if schoolCancelFish >= 0
+        FLOCK_FLY(schoolCancelFish) = 0
+        FLOCK_DRAWN(schoolCancelFish) = 0
+        FLOCK_STEERED(schoolCancelFish) = game ms()
+        FLOCK_VX#(schoolCancelFish) = 0
+        FLOCK_VY#(schoolCancelFish) = 0 - FLOCK_SPEED_MIN
+    endif
+endfunction
+
+
+` the board is filling back in, and a new fish is about to drop into this cell, already picked to be
+` some kind. if a fish from the schools was sent for this cell, and it can still drop in, it takes the
+` place of the one that was picked: the one that was picked has to be a plain fish, and the one from the
+` school must not make a whole group with the fish that are really there. this says which fish out
+` there it is, or -1, and the cell has its kind. one that cannot drop in after all goes back to its school.
+function schoolDrawTake(schoolTakeCell)
+    schoolTaken = -1
+    schoolTakeFish = SCHOOL_EARLY(schoolTakeCell)
+    SCHOOL_EARLY(schoolTakeCell) = -1
+    if schoolTakeFish >= 0
+        schoolTakeOk = FLOCK_FLY(schoolTakeFish)
+        if KNOWN_FILL_VALUE > 0 then schoolTakeOk = 0
+        schoolTakeWas = CELLS(schoolTakeCell).value
+        if schoolTakeWas <= 0 then schoolTakeOk = 0
+        if schoolTakeWas >= TEX_JELLY then schoolTakeOk = 0
+        if schoolTakeOk
+            schoolTakeKind = FLOCK_KIND(schoolTakeFish)
+            schoolTakeNeed = getRequiredComboCount()
+            schoolTakeGroup = countFishGroup(schoolTakeCell, schoolTakeKind, schoolTakeNeed)
+            if schoolTakeGroup >= schoolTakeNeed then schoolTakeOk = 0
+        endif
+        if schoolTakeOk
+            schoolTaken = schoolTakeFish
+            CELLS(schoolTakeCell).value = FLOCK_KIND(schoolTakeFish)
+        else
+            schoolDrawCancel(schoolTakeFish)
+        endif
+    endif
+endfunction schoolTaken
+
+
+` the new fish in this cell is the one from the school, which is on its way, or waiting above the
+` column already. the new fish starts to fall `schoolLandWait` from now, as it would have, or once the
+` one from the school is there, if that is later. then the one from the school hops in: for
+` SCHOOL_DRAW_HOP milliseconds it drops along with it, growing to its size and fading away, while the new
+` fish fades in. the new fish faces the way that it did. `schoolLandY` is the row of the cell, in
+` pixels. the new fish falls from the place of the fish from the school in its stack, in place of
+` `schoolLandFrom`, which is where it would have fallen from. a stack drops in one after the other, from
+` the bottom up, SCHOOL_STACK_GAP apart.
+function schoolDrawLand(schoolLandFish, schoolLandCell, schoolLandY, schoolLandFrom, schoolLandWait)
+    schoolLandNow = game ms()
+    schoolLandThere = FLOCK_FLY_START(schoolLandFish) + FLOCK_FLY_MS(schoolLandFish) - schoolLandNow
+    schoolLandFall = schoolLandWait
+    if schoolLandThere > schoolLandFall then schoolLandFall = schoolLandThere
+
+    ` the stack drops in one after the other, from the bottom up
+    schoolLandFall = schoolLandFall + FLOCK_STACK(schoolLandFish) * SCHOOL_STACK_GAP
+    FLOCK_HOP_AT(schoolLandFish) = schoolLandNow + schoolLandFall
+
+    ` and the new fish falls from its place in the stack, where the fish from the school is
+    schoolLandFrom = FLOCK_FLY_TO_Y#(schoolLandFish)
+    SCHOOL_DRAW_COUNT = SCHOOL_DRAW_COUNT + 1
+
+    ` the new fish faces the way that the one from the school does, and turns no more than it has to
+    SCHOOL_FACE(schoolLandCell) = FLOCK_FACE(schoolLandFish)
+    SCHOOL_SHOWN#(schoolLandCell) = 0
+    schoolLandArt = schoolArtFace(CELLS(schoolLandCell).value)
+    if schoolLandArt <> 0
+        if SCHOOL_FACE(schoolLandCell) <> schoolLandArt then SCHOOL_SHOWN#(schoolLandCell) = 1
+    endif
+
+    ` it falls the way that it always does, once the one from the school is there, and fades in as it hops in
+    create basic tween CELLS(schoolLandCell).comboDownShiftTweenId, schoolLandFrom, schoolLandY, 300, schoolLandFall
+    set tween easing CELLS(schoolLandCell).comboDownShiftTweenId, EASING_BOUNCE
+    create basic tween CELLS(schoolLandCell).comboAlphaTweenId, 0, 255, SCHOOL_DRAW_HOP, schoolLandFall
+endfunction
+
+
+` THE CURSOR CALLS ON THE SCHOOLS. the player swapped the fish in these two cells, and the cursor
+` carried the one that is in `schoolSwapTo` now. the cursor has come to that fish, which is a new
+` visit. if the swap makes a match, the school of its kind pops, when the board is looked at:
+` schoolJudgeSwap. stepLiveMove, in fish_funcs, calls this for every swap that the player makes.
+function schoolSwapMade(schoolSwapTo)
+    SCHOOL_PENDING = 1
+    SCHOOL_PENDING_KIND = CELLS(schoolSwapTo).value
+    SCHOOL_SWAP_VALID = 0
+    SCHOOL_CARRIED_MATCHED = 0
+    SCHOOL_VISIT_VALID = 0
+endfunction
+
+
+` handle_combos has been through the groups. if the swap that it is looking at made a match, every
+` fish of the kind that the cursor carried, out in the background, pops, and the visit is a good one:
+` stepping off of it lets nothing go.
+function schoolJudgeSwap()
+    ` the look at the board that day broke for is over, and the next one is an ordinary one
+    SCHOOL_DAWN = 0
+    if SCHOOL_PENDING
+        if SCHOOL_SWAP_VALID
+            SCHOOL_VISIT_VALID = 1
+            if SCHOOL_CURSOR_ON
+                ` a swap that made a new school of this kind adds to its school, out there, and does not
+                ` pop it: that is how a school grows. see THE CURSOR CALLS ON THE SCHOOLS in fish_headers_school.
+                schoolJudgeGrows = 0
+                if SCHOOL_PENDING_KIND > 0
+                    if SCHOOL_PENDING_KIND < 64
+                        if SCHOOL_MADE(SCHOOL_PENDING_KIND) then schoolJudgeGrows = 1
+                    endif
+                endif
+                ` and only a match that the carried fish is part of pops them. a swap whose match is all of the
+                ` fish that it shoved leaves them alone.
+                if SCHOOL_CARRIED_MATCHED = 0 then schoolJudgeGrows = 1
+                if schoolJudgeGrows = 0
+                    schoolPopKind(SCHOOL_PENDING_KIND)
+                endif
+            endif
+        endif
+    endif
+    SCHOOL_PENDING = 0
+    SCHOOL_SWAP_VALID = 0
+    SCHOOL_CARRIED_MATCHED = 0
+    for schoolJudgeK = 0 to 63
+        SCHOOL_MADE(schoolJudgeK) = 0
+    next
+endfunction
+
+
+` the cursor stepped off of this cell, on its own, without a swap, to that one. if no swap made a
+` match while it was there, every fish out in the background of the kind of fish in the cell swims
+` away, quietly, and does not come back. then the cursor is on a new cell, which is a new visit. but
+` a step to a fish of the same kind is not leaving that kind, and the visit goes on.
+` stepLiveMove, in fish_funcs, calls this.
+function schoolCursorStepped(schoolStepFrom, schoolStepTo)
+    ` a step to a fish of the same kind is not leaving it: the visit goes on
+    schoolStepSame = 0
+    if schoolStepFrom >= 0
+        if schoolStepTo >= 0
+            if schoolStepFrom < CELL_COUNT
+                if schoolStepTo < CELL_COUNT
+                    if CELLS(schoolStepFrom).value = CELLS(schoolStepTo).value then schoolStepSame = 1
+                endif
+            endif
+        endif
+    endif
+    ` and a dead fish, belly up or bones, is not a mistake to step off of: there is nothing at stake on it
+    if schoolStepFrom >= 0
+        if schoolStepFrom < CELL_COUNT
+            if CELLS(schoolStepFrom).bellyUp > 0 then schoolStepSame = 1
+        endif
+    endif
+    if schoolStepSame = 0
+        if SCHOOL_CURSOR_ON
+            if SCHOOL_VISIT_VALID = 0
+                if schoolStepFrom >= 0
+                    if schoolStepFrom < CELL_COUNT
+                        schoolDepart(CELLS(schoolStepFrom).value)
+                    endif
+                endif
+            endif
+        endif
+        SCHOOL_VISIT_VALID = 0
+    endif
+endfunction
+
+
+` every fish out in the background of this kind swims away, off the side of the screen that is
+` nearer, at an easy pace, and is gone. there is no score, and nothing is made of it.
+function schoolDepart(schoolDepartKind)
+    if schoolDepartKind > 0
+        schoolDepartNow = game ms()
+        schoolDepartMiddle = WORLD_WIDTH / 2
+        for schoolDepartI = 0 to FLOCK_MAX - 1
+            schoolDepartGo = FLOCK_ON(schoolDepartI)
+            if FLOCK_KIND(schoolDepartI) <> schoolDepartKind then schoolDepartGo = 0
+            if FLOCK_FLY(schoolDepartI) then schoolDepartGo = 0
+            if FLOCK_FLUSH(schoolDepartI) <> 0 then schoolDepartGo = 0
+            if FLOCK_LEAVE(schoolDepartI) <> 0 then schoolDepartGo = 0
+            if FLOCK_BORN(schoolDepartI) > schoolDepartNow then schoolDepartGo = 0
+            if schoolDepartGo
+                FLOCK_LEAVE_AT(schoolDepartI) = schoolDepartNow
+                FLOCK_LEAVE(schoolDepartI) = 1
+                if FLOCK_X#(schoolDepartI) < schoolDepartMiddle then FLOCK_LEAVE(schoolDepartI) = -1
+                SCHOOL_DEPART_COUNT = SCHOOL_DEPART_COUNT + 1
+            endif
+        next
+    endif
+endfunction
+
+
+` every fish out in the background of this kind pops where it is, one by one: the same punch and pop,
+` and the same points, as a flush. see schoolFlush.
+function schoolPopKind(schoolPopKindOf)
+    if schoolPopKindOf > 0
+        SCHOOL_FLUSH_ONLY_KIND = schoolPopKindOf
+        schoolFlush(2)
+        SCHOOL_FLUSH_ONLY_KIND = 0
+    endif
+endfunction
+
+
+` THE TIDE FLUSHES THE SCHOOLS. the last swap was a push, or a pull, or neither. the tide judges it,
+` and calls this before it moves the water, while TIDE_FLOW still says what the tide wants next. a
+` swap that is what the tide wants flushes every fish out in the background: up, for a push, and down,
+` for a pull. see fish_headers_school.
+function schoolTideSwap(schoolTideWas)
+    if SCHOOL_FLUSH_ON
+        if schoolTideWas = TIDE_SWAP_PUSH
+            if TIDE_FLOW > 0
+                schoolFlush(-1)
+            endif
+        endif
+        if schoolTideWas = TIDE_SWAP_PULL
+            if TIDE_FLOW < 0
+                schoolFlush(1)
+            endif
+        endif
+    endif
+endfunction
+
+
+` every fish out in the background that is there, and not on its way somewhere already, is flushed:
+` it stops swimming with its school, and swims off the way that it is told, -1 for up and 1 for
+` down, faster and faster, or, for 2, stays where it is. with SCHOOL_FLUSH_ONLY_KIND, only the fish
+` of that kind are. each one pops as it gets to the edge of the screen, and scores.
+function schoolFlush(schoolFlushWay)
+    schoolFlushNow = game ms()
+    schoolFlushN = 0
+    for schoolFlushI = 0 to FLOCK_MAX - 1
+        schoolFlushGo = FLOCK_ON(schoolFlushI)
+        if FLOCK_FLY(schoolFlushI) then schoolFlushGo = 0
+        if FLOCK_FLUSH(schoolFlushI) <> 0 then schoolFlushGo = 0
+        if FLOCK_LEAVE(schoolFlushI) <> 0 then schoolFlushGo = 0
+        if FLOCK_BORN(schoolFlushI) > schoolFlushNow then schoolFlushGo = 0
+        if SCHOOL_FLUSH_ONLY_KIND > 0
+            if FLOCK_KIND(schoolFlushI) <> SCHOOL_FLUSH_ONLY_KIND then schoolFlushGo = 0
+        endif
+        if schoolFlushGo
+            FLOCK_FLUSH(schoolFlushI) = schoolFlushWay
+            FLOCK_PUNCH_AT(schoolFlushI) = 0
+            SCHOOL_FLUSH_ORDER(schoolFlushN) = schoolFlushI
+            schoolFlushN = schoolFlushN + 1
+        endif
+    next
+    if schoolFlushN > 0
+        ` a flush scores from 10 up, the way that the fish of a group do
+        SCHOOL_FLUSH_SCORE = 0
+        SCHOOL_FLUSH_COUNT = SCHOOL_FLUSH_COUNT + 1
+
+        ` they pop one by one, in an order picked at random, and all of them within SCHOOL_FLUSH_SPAN
+        schoolFlushShuffle = schoolFlushN - 1
+        while schoolFlushShuffle > 0
+            schoolFlushSwap = rnd(schoolFlushShuffle + 1)
+            schoolFlushHeld = SCHOOL_FLUSH_ORDER(schoolFlushShuffle)
+            SCHOOL_FLUSH_ORDER(schoolFlushShuffle) = SCHOOL_FLUSH_ORDER(schoolFlushSwap)
+            SCHOOL_FLUSH_ORDER(schoolFlushSwap) = schoolFlushHeld
+            schoolFlushShuffle = schoolFlushShuffle - 1
+        endwhile
+        schoolFlushGap = SCHOOL_FLUSH_GAP
+        schoolFlushLongest = schoolFlushGap * schoolFlushN
+        if schoolFlushLongest > SCHOOL_FLUSH_SPAN then schoolFlushGap = SCHOOL_FLUSH_SPAN / schoolFlushN
+        schoolFlushK = 0
+        while schoolFlushK < schoolFlushN
+            schoolFlushFish = SCHOOL_FLUSH_ORDER(schoolFlushK)
+            FLOCK_FLUSH_AT(schoolFlushFish) = schoolFlushNow + SCHOOL_FLUSH_FIRST + schoolFlushK * schoolFlushGap
+            schoolFlushK = schoolFlushK + 1
+        endwhile
+    endif
+endfunction
+
+
+` a color, under the haze of the fish out in the background: each of its parts times the haze, the
+` same as the color that a fish out there is drawn with. a color keeps red in its lowest byte, then
+` green, then blue, and how much shows on top, which makes a color that shows all the way a number
+` under 0. that last part is taken away first, and the haze is all the way over it.
+function schoolHazeColor(schoolHazeFrom)
+    schoolHazeBits = schoolHazeFrom
+    if schoolHazeBits < 0 then schoolHazeBits = schoolHazeBits + 16777216
+    schoolHazeBits = schoolHazeBits mod 16777216
+    schoolHazeR = schoolHazeBits mod 256
+    schoolHazeG = (schoolHazeBits / 256) mod 256
+    schoolHazeB = schoolHazeBits / 65536
+    schoolHazeR = (schoolHazeR * FLOCK_HAZE_R) / 255
+    schoolHazeG = (schoolHazeG * FLOCK_HAZE_G) / 255
+    schoolHazeB = (schoolHazeB * FLOCK_HAZE_B) / 255
+endfunction rgb(schoolHazeR, schoolHazeG, schoolHazeB)
+
+
+` a puff of smoke at this spot, out in the water behind the board: one of the puffs of the board,
+` picked at random, in one of their colors, played through once. stepSchoolPuffs plays it.
+function schoolPuff(schoolPuffX#, schoolPuffY#)
+    schoolPuffI = SCHOOL_PUFF_NEXT
+    SCHOOL_PUFF_NEXT = (SCHOOL_PUFF_NEXT + 1) mod SCHOOL_PUFF_MAX
+    schoolPuffSmoke = SMOKE_ANIMS(rnd(SMOKE_ANIM_COUNT))
+    schoolPuffSprite = SCHOOL_PUFF_SPRITES(schoolPuffI)
+    sprite schoolPuffSprite, schoolPuffX#, schoolPuffY#, schoolPuffSmoke.texId
+    rotate sprite schoolPuffSprite, rnd(8) * .25
+    color sprite schoolPuffSprite, SMOKE_COLORS(rnd(SMOKE_COLOR_COUNT))
+    set sprite alpha schoolPuffSprite, SCHOOL_PUFF_ALPHA
+    SCHOOL_PUFF_FROM(schoolPuffI) = schoolPuffSmoke.startFrame
+    SCHOOL_PUFF_TO(schoolPuffI) = schoolPuffSmoke.endFrame
+    SCHOOL_PUFF_START(schoolPuffI) = game ms()
+    set sprite frame schoolPuffSprite, schoolPuffSmoke.startFrame
+    show sprite schoolPuffSprite
+endfunction
+
+
+` play the puffs of smoke along, and hide the ones that are over. stepSchool calls this on every frame.
+function stepSchoolPuffs()
+    schoolPuffNow = game ms()
+    schoolPuffLife# = SCHOOL_PUFF_MS
+    for schoolPuffI = 0 to SCHOOL_PUFF_MAX - 1
+        if SCHOOL_PUFF_START(schoolPuffI) > 0
+            schoolPuffAge# = schoolPuffNow - SCHOOL_PUFF_START(schoolPuffI)
+            schoolPuffT# = schoolPuffAge# / schoolPuffLife#
+            if schoolPuffT# >= 1
+                SCHOOL_PUFF_START(schoolPuffI) = 0
+                hide sprite SCHOOL_PUFF_SPRITES(schoolPuffI)
+            else
+                if schoolPuffT# < 0 then schoolPuffT# = 0
+                schoolPuffFrame = SCHOOL_PUFF_FROM(schoolPuffI) + (SCHOOL_PUFF_TO(schoolPuffI) - SCHOOL_PUFF_FROM(schoolPuffI)) * schoolPuffT#
+                set sprite frame SCHOOL_PUFF_SPRITES(schoolPuffI), schoolPuffFrame
+            endif
+        endif
+    next
+endfunction
+
+
+` a flushed fish pops, when its turn comes or as it gets to the edge of the screen, if that is first:
+` a pop, far off, small bubbles where it was, out in the water, and points, which go on the bar the
+` way that the points of a group do. each one is worth 10 more than the one before it, times the multiplier.
+function schoolFlushPop(schoolPopFish)
+    SCHOOL_FLUSH_SCORE = SCHOOL_FLUSH_SCORE + 10
+    schoolPopPoints = SCHOOL_FLUSH_SCORE * SCORE_MULTIPLIER
+    schoolPopKind = FLOCK_KIND(schoolPopFish)
+    schoolPopTint = FISH_COLORS(getFishColorIndex(schoolPopKind))
+    schoolPopX = FLOCK_X#(schoolPopFish)
+    schoolPopY = FLOCK_Y#(schoolPopFish)
+    if schoolPopY < SCHOOL_FLUSH_EDGE then schoolPopY = SCHOOL_FLUSH_EDGE
+    schoolPopBottom = WORLD_HEIGHT - SCHOOL_FLUSH_EDGE
+    if schoolPopY > schoolPopBottom then schoolPopY = schoolPopBottom
+
+    schoolFlushAt as vec = {
+        x = schoolPopX,
+        y = schoolPopY
+    }
+    schoolPopText = spawnBoardScoreText(schoolFlushAt, "+" + str$(schoolPopPoints), 0, 700)
+
+    ` the score is as far off as the fish was: the same haze over its color, and no more of it shows
+    ` than shows of the fish. spawnScoreTextScaled fades it in to all of it, so that is done again.
+    color text schoolPopText, schoolHazeColor(schoolPopTint)
+    schoolPopIndex = (SCORE_TEXT_NUM + SCORE_TEXT_COUNT - 1) mod SCORE_TEXT_COUNT
+    if SCORE_TEXTS(schoolPopIndex).textId = schoolPopText
+        create basic tween SCORE_TEXTS(schoolPopIndex).fadeInTweenId, 0, FLOCK_ALPHA, 100, 0
+        create basic tween SCORE_TEXTS(schoolPopIndex).fadeTweenId, FLOCK_ALPHA, 0, 200, 500
+    endif
+    queueScore(schoolPopPoints, 0)
+
+    ` a puff of smoke, the same as the board's, and small bubbles, out in the water behind the board
+    schoolPuff(FLOCK_X#(schoolPopFish), FLOCK_Y#(schoolPopFish))
+    spawnBubblesOnLayer(schoolPopX, schoolPopY, 4, 5, 0, schoolPopTint, ORDER_FLOCK, 1000000, 160, .6)
+
+    ` and the pop, far off: one of the two, a little higher or lower, on a voice of its own
+    schoolPopVoice = SCHOOL_FAR_NEXT
+    SCHOOL_FAR_NEXT = (SCHOOL_FAR_NEXT + 1) mod (SCHOOL_FAR_VOICES * 2)
+    schoolPopSfx = SCHOOL_FAR_SFX(schoolPopVoice)
+    if schoolPopSfx > 0
+        schoolPopLoud# = SCHOOL_FLUSH_VOLUME
+        schoolPopLoud# = schoolPopLoud# * .01
+        schoolPopPitch# = rnd(13) - 6
+        schoolPopPitch# = schoolPopPitch# * .01
+        set sfx volume schoolPopSfx, schoolPopLoud#
+        set sfx pitch schoolPopSfx, schoolPopPitch#
+        set sfx pan schoolPopSfx, 0
+        play sfx schoolPopSfx
+    endif
+
+    FLOCK_ON(schoolPopFish) = 0
+    FLOCK_FLUSH(schoolPopFish) = 0
 endfunction
 
 
@@ -592,6 +1332,9 @@ function flockSteer(flockI, flockNow)
     for flockJ = 0 to FLOCK_MAX - 1
         flockLook = FLOCK_ON(flockJ)
         if flockJ = flockI then flockLook = 0
+        if FLOCK_FLY(flockJ) then flockLook = 0
+        if FLOCK_FLUSH(flockJ) <> 0 then flockLook = 0
+        if FLOCK_LEAVE(flockJ) <> 0 then flockLook = 0
         if FLOCK_BORN(flockJ) > flockNow then flockLook = 0
         if flockLook
             flockDX# = FLOCK_X#(flockJ) - flockX#
@@ -731,17 +1474,97 @@ function stepFlock(flockElapsed#)
         next
     endif
 
-    ` a few of them work out how to steer
+    ` the kind of fish that the cursor is on. the fish of its school come forward a little.
+    SCHOOL_FOCUS_KIND = 0
+    if SCHOOL_CURSOR_ON
+        if MENU_MODE = 0
+            flockFocusCell = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+            if flockFocusCell >= 0
+                if flockFocusCell < CELL_COUNT
+                    SCHOOL_FOCUS_KIND = CELLS(flockFocusCell).value
+                    ` nothing is at stake on a dead fish, so nothing comes forward for one
+                    if CELLS(flockFocusCell).bellyUp > 0 then SCHOOL_FOCUS_KIND = 0
+                endif
+            endif
+        endif
+    endif
+    flockFocusStep# = flockElapsed# * SCHOOL_FOCUS_EASE#
+    if flockFocusStep# > 1 then flockFocusStep# = 1
+
+    ` a few of them work out how to steer. not while they are all asleep, at night.
+    flockNight# = TIDE_NIGHT_SHOWN#
+    if flockNight# < 0 then flockNight# = 0
+    if flockNight# > 1 then flockNight# = 1
+    flockAwake# = 1 - flockNight#
+    flockSteerNow = FLOCK_STEER_EACH
+    if flockNight# > .99 then flockSteerNow = 0
+    flockSleepTime# = flockNow * .001 * FLOCK_SLEEP_SLOW * .01 * 6.28318
+    flockSleepDrift# = FLOCK_SLEEP_DRIFT * .1
     flockSteered = 0
-    while flockSteered < FLOCK_STEER_EACH
+    while flockSteered < flockSteerNow
         flockSteered = flockSteered + 1
         if FLOCK_ON(FLOCK_STEER_NEXT)
             if FLOCK_BORN(FLOCK_STEER_NEXT) <= flockNow
-                flockSteer(FLOCK_STEER_NEXT, flockNow)
+                if FLOCK_FLY(FLOCK_STEER_NEXT) = 0
+                    if FLOCK_FLUSH(FLOCK_STEER_NEXT) = 0
+                        if FLOCK_LEAVE(FLOCK_STEER_NEXT) = 0
+                            flockSteer(FLOCK_STEER_NEXT, flockNow)
+                        endif
+                    endif
+                endif
             endif
         endif
         FLOCK_STEER_NEXT = (FLOCK_STEER_NEXT + 1) mod FLOCK_MAX
     endwhile
+
+    ` A POP SENDS A WAVE. every fish that a ring is passing is pushed away from where it started.
+    flockWaveLife# = FLOCK_WAVE_REACH * 1000
+    flockWaveLife# = flockWaveLife# / FLOCK_WAVE_SPEED
+    for flockW = 0 to FLOCK_WAVE_MAX - 1
+        if FLOCK_WAVE_START(flockW) > 0
+            flockWaveAge# = flockNow - FLOCK_WAVE_START(flockW)
+            if flockWaveAge# > flockWaveLife#
+                FLOCK_WAVE_START(flockW) = 0
+            else
+                if flockWaveAge# >= 0
+                    flockRing# = flockWaveAge# * FLOCK_WAVE_SPEED * .001
+                    flockRingIn# = flockRing# - FLOCK_WAVE_BAND
+                    flockRingOut# = flockRing# + FLOCK_WAVE_BAND
+                    flockRingIn2# = flockRingIn# * flockRingIn#
+                    if flockRingIn# < 0 then flockRingIn2# = 0
+                    flockRingOut2# = flockRingOut# * flockRingOut#
+                    for flockI = 0 to flockLast
+                        ` a fish that is still on its way out, like the fish of a school that has just
+                        ` swum off, goes calmly, and is not pushed
+                        flockWaveFelt = FLOCK_ON(flockI)
+                        if FLOCK_FLY(flockI) then flockWaveFelt = 0
+                        if FLOCK_FLUSH(flockI) <> 0 then flockWaveFelt = 0
+                        if FLOCK_LEAVE(flockI) <> 0 then flockWaveFelt = 0
+                        flockWaveOut = flockNow - FLOCK_BORN(flockI)
+                        if flockWaveOut < FLOCK_SETTLE_MS then flockWaveFelt = 0
+                        if flockWaveFelt
+                            flockPX# = FLOCK_X#(flockI) - FLOCK_WAVE_X#(flockW)
+                            flockPY# = FLOCK_Y#(flockI) - FLOCK_WAVE_Y#(flockW)
+                            flockP2# = flockPX# * flockPX# + flockPY# * flockPY#
+                            if flockP2# >= flockRingIn2#
+                                if flockP2# <= flockRingOut2#
+                                    flockP# = sqrt(flockP2#)
+                                    if flockP# > .5
+                                        flockNearness# = 1 - flockP# / FLOCK_WAVE_REACH
+                                        if flockNearness# > 0
+                                            flockShove# = FLOCK_WAVE_PUSH * FLOCK_WAVE_POWER#(flockW) * flockNearness# * flockDt# / flockP#
+                                            FLOCK_VX#(flockI) = FLOCK_VX#(flockI) + flockPX# * flockShove#
+                                            FLOCK_VY#(flockI) = FLOCK_VY#(flockI) + flockPY# * flockShove#
+                                        endif
+                                    endif
+                                endif
+                            endif
+                        endif
+                    next
+                endif
+            endif
+        endif
+    next
 
     ` and they all move. a sprite is only told what has changed: once a fish is all the way out, its
     ` size, color and line stay the same, and only where it is, and its turn, are told again.
@@ -752,7 +1575,91 @@ function stepFlock(flockElapsed#)
     for flockI = 0 to flockLast
         flockSprite = FLOCK_SPRITES(flockI)
         flockDrawn = 0
+        if FLOCK_FLY(flockI)
+            ` THE FISH COME HOME. it swims over to the spot above its column, easing in and out, as small
+            ` and hazy as it was, and waits there, bobbing a little, until its new fish starts to fall.
+            ` then it hops in: it drops a little, grows to the size of the fish on the board, and fades
+            ` away, while the new fish fades in where it is. then it is gone. if nothing calls it in for
+            ` a long while, it goes back to its school.
+            flockFlyAge# = flockNow - FLOCK_FLY_START(flockI)
+            flockFlyMs# = FLOCK_FLY_MS(flockI)
+            if flockFlyMs# < 1 then flockFlyMs# = 1
+            flockHopMs# = SCHOOL_DRAW_HOP
+            if flockHopMs# < 1 then flockHopMs# = 1
+            flockFlyT# = flockFlyAge# / flockFlyMs#
+            flockHopT# = -1
+            if FLOCK_HOP_AT(flockI) > 0
+                flockHopT# = flockNow - FLOCK_HOP_AT(flockI)
+                flockHopT# = flockHopT# / flockHopMs#
+            endif
+            flockFlyGone = 0
+            if flockHopT# >= 1 then flockFlyGone = 1
+            flockFlyStale = 0
+            if FLOCK_HOP_AT(flockI) = 0
+                flockFlyWaited# = flockFlyAge# - flockFlyMs#
+                if flockFlyWaited# > 4000 then flockFlyStale = 1
+            endif
+            if flockFlyGone
+                FLOCK_FLY(flockI) = 0
+                FLOCK_ON(flockI) = 0
+            else
+                if flockFlyStale
+                    schoolDrawCancel(flockI)
+                else
+                    flockFlySize = FLOCK_SIZE
+                    flockFlyAlpha = FLOCK_ALPHA
+                    flockFlyR = FLOCK_HAZE_R
+                    flockFlyG = FLOCK_HAZE_G
+                    flockFlyB = FLOCK_HAZE_B
+                    flockFlyOut# = 1
+                    if flockFlyT# < 1
+                        ` swimming over
+                        if flockFlyT# < 0 then flockFlyT# = 0
+                        flockFlyE# = flockFlyT# * flockFlyT# * (3 - 2 * flockFlyT#)
+                        FLOCK_X#(flockI) = FLOCK_FLY_X#(flockI) + (FLOCK_FLY_TO_X#(flockI) - FLOCK_FLY_X#(flockI)) * flockFlyE#
+                        FLOCK_Y#(flockI) = FLOCK_FLY_Y#(flockI) + (FLOCK_FLY_TO_Y#(flockI) - FLOCK_FLY_Y#(flockI)) * flockFlyE#
+                    else
+                        if flockHopT# < 0
+                            ` waiting above the column, bobbing a little
+                            FLOCK_X#(flockI) = FLOCK_FLY_TO_X#(flockI)
+                            FLOCK_Y#(flockI) = FLOCK_FLY_TO_Y#(flockI) + sin(flockNow * .006 + flockI) * 1.5
+                        else
+                            ` hopping in, along with the new fish as it starts to fall
+                            FLOCK_X#(flockI) = FLOCK_FLY_TO_X#(flockI)
+                            FLOCK_Y#(flockI) = FLOCK_FLY_TO_Y#(flockI) + CELL_SIZE * .5 * flockHopT#
+                            flockFlySize = FLOCK_SIZE + (CELL_ART_SIZE - FLOCK_SIZE) * flockHopT#
+                            flockFlyAlpha = FLOCK_ALPHA - FLOCK_ALPHA * flockHopT#
+                            flockFlyR = FLOCK_HAZE_R + (255 - FLOCK_HAZE_R) * flockHopT#
+                            flockFlyG = FLOCK_HAZE_G + (255 - FLOCK_HAZE_G) * flockHopT#
+                            flockFlyB = FLOCK_HAZE_B + (255 - FLOCK_HAZE_B) * flockHopT#
+                            flockFlyOut# = 1 - flockHopT#
+                        endif
+                    endif
+                    if flockShow
+                        flockFlyLine# = FLOCK_LINE_KEEP
+                        flockFlyLine# = flockFlyLine# / 255.0
+                        flockFlyArt = schoolArtFace(FLOCK_KIND(flockI))
+                        flockFlyFlip = 0
+                        if flockFlyArt <> 0
+                            if FLOCK_FACE(flockI) <> flockFlyArt then flockFlyFlip = 1
+                        endif
+                        position sprite flockSprite, FLOCK_X#(flockI), FLOCK_Y#(flockI)
+                        size sprite flockSprite, flockFlySize, flockFlySize
+                        color sprite flockSprite, rgb(flockFlyR, flockFlyG, flockFlyB)
+                        set sprite alpha flockSprite, flockFlyAlpha
+                        set sprite all texcoord1 flockSprite, flockFlyOut#, flockFlyLine#, 0, 0
+                        set sprite flip flockSprite, flockFlyFlip, 0
+                        if FLOCK_SHOWING(flockI) = 0
+                            show sprite flockSprite
+                            FLOCK_SHOWING(flockI) = 1
+                        endif
+                        flockDrawn = 1
+                    endif
+                endif
+            endif
+        endif
         if FLOCK_ON(flockI)
+            if FLOCK_FLY(flockI) = 0
             if FLOCK_BORN(flockI) <= flockNow
                 flockT# = 1
                 if FLOCK_DRAWN(flockI) < 2
@@ -761,9 +1668,72 @@ function stepFlock(flockElapsed#)
                     if flockT# > 1 then flockT# = 1
                 endif
 
-                ` it goes the way that its last steer left it going. see flockSteer.
-                FLOCK_X#(flockI) = FLOCK_X#(flockI) + FLOCK_VX#(flockI) * flockDt#
-                FLOCK_Y#(flockI) = FLOCK_Y#(flockI) + FLOCK_VY#(flockI) * flockDt#
+                ` it goes the way that its last steer left it going. see flockSteer. at night it sleeps, and
+                ` only drifts in place, each fish in a time of its own. see THE SCHOOLS SLEEP AT NIGHT.
+                ` THE TIDE FLUSHES THE SCHOOLS. a flushed fish swims off, faster and faster, straight up
+                ` or down, and pops as it gets to the edge of the screen.
+                flockFlushWay = FLOCK_FLUSH(flockI)
+                if flockFlushWay > 1 then flockFlushWay = 0
+                if flockFlushWay <> 0
+                    FLOCK_VX#(flockI) = FLOCK_VX#(flockI) * .97
+                    FLOCK_VY#(flockI) = FLOCK_VY#(flockI) + flockFlushWay * SCHOOL_FLUSH_PUSH * flockDt#
+                    flockFlushMost# = SCHOOL_FLUSH_SPEED
+                    if FLOCK_VY#(flockI) > flockFlushMost# then FLOCK_VY#(flockI) = flockFlushMost#
+                    flockFlushLeast# = 0 - flockFlushMost#
+                    if FLOCK_VY#(flockI) < flockFlushLeast# then FLOCK_VY#(flockI) = flockFlushLeast#
+                endif
+                ` THE CURSOR CALLS ON THE SCHOOLS. a fish that is leaving eases into swimming off the side of
+                ` the screen that it is going to, at an easy pace, and is gone once it is off of it
+                if FLOCK_LEAVE(flockI) <> 0
+                    flockLeaveWant# = FLOCK_LEAVE(flockI) * SCHOOL_LEAVE_SPEED
+                    flockLeaveStep# = flockDt# * 2
+                    if flockLeaveStep# > 1 then flockLeaveStep# = 1
+                    FLOCK_VX#(flockI) = FLOCK_VX#(flockI) + (flockLeaveWant# - FLOCK_VX#(flockI)) * flockLeaveStep#
+                    FLOCK_VY#(flockI) = FLOCK_VY#(flockI) - FLOCK_VY#(flockI) * flockLeaveStep#
+                    flockLeaveOff = 0
+                    flockLeaveLeft = 0 - FLOCK_SIZE * 2
+                    flockLeaveRight = WORLD_WIDTH + FLOCK_SIZE * 2
+                    if FLOCK_X#(flockI) < flockLeaveLeft then flockLeaveOff = 1
+                    if FLOCK_X#(flockI) > flockLeaveRight then flockLeaveOff = 1
+                    if flockLeaveOff
+                        FLOCK_ON(flockI) = 0
+                        FLOCK_LEAVE(flockI) = 0
+                    endif
+                endif
+                flockGoX# = FLOCK_VX#(flockI)
+                flockGoY# = FLOCK_VY#(flockI)
+                if flockNight# > 0
+                    flockDriftX# = sin(flockSleepTime# + flockI * 1.3) * flockSleepDrift#
+                    flockDriftY# = sin(flockSleepTime# * .8 + flockI * 2.1) * flockSleepDrift# * .6
+                    flockGoX# = flockGoX# * flockAwake# + flockDriftX# * flockNight#
+                    flockGoY# = flockGoY# * flockAwake# + flockDriftY# * flockNight#
+                endif
+                FLOCK_X#(flockI) = FLOCK_X#(flockI) + flockGoX# * flockDt#
+                FLOCK_Y#(flockI) = FLOCK_Y#(flockI) + flockGoY# * flockDt#
+
+                ` a flushed fish pops when its turn comes, or when it gets to the edge of the screen, if that is first
+                if FLOCK_FLUSH(flockI) <> 0
+                    flockFlushPops = 0
+                    if flockNow >= FLOCK_FLUSH_AT(flockI) then flockFlushPops = 1
+                    if FLOCK_FLUSH(flockI) < 0
+                        if FLOCK_Y#(flockI) < SCHOOL_FLUSH_EDGE then flockFlushPops = 1
+                    endif
+                    if FLOCK_FLUSH(flockI) = 1
+                        flockFlushBottom = WORLD_HEIGHT - SCHOOL_FLUSH_EDGE
+                        if FLOCK_Y#(flockI) > flockFlushBottom then flockFlushPops = 1
+                    endif
+                    if flockFlushPops
+                        if FLOCK_PUNCH_AT(flockI) = 0 then FLOCK_PUNCH_AT(flockI) = flockNow + 1
+                    endif
+                    flockPunching = 0
+                    if FLOCK_PUNCH_AT(flockI) > 0 then flockPunching = 1
+                    if flockPunching
+                        flockPunchAge = flockNow - FLOCK_PUNCH_AT(flockI)
+                        if flockPunchAge >= SCHOOL_PUNCH_MS
+                            schoolFlushPop(flockI)
+                        endif
+                    endif
+                endif
 
                 ` it faces the way that it swims, once it is clearly swimming that way
                 if FLOCK_VX#(flockI) > 1.5 then FLOCK_FACE(flockI) = 1
@@ -796,25 +1766,84 @@ function stepFlock(flockElapsed#)
                         FLOCK_SHOWN#(flockI) = flockTurnWant#
                     endif
 
-                    ` while it is still on its way out, it gets smaller, and the haze and the fading of
-                    ` its line come over it. after that, none of that changes.
-                    flockSize = FLOCK_SIZE
-                    if flockT# < 1
-                        flockSize = CELL_ART_SIZE + (FLOCK_SIZE - CELL_ART_SIZE) * flockT#
+                    ` how far it has come forward, out of the haze: it does while the cursor is on a fish of its
+                    ` kind, and goes back once it is not. see THE CURSOR CALLS ON THE SCHOOLS in fish_headers_school.
+                    flockFocusWant# = 0
+                    if flockKind = SCHOOL_FOCUS_KIND then flockFocusWant# = 1
+                    if FLOCK_LEAVE(flockI) <> 0 then flockFocusWant# = 0
+                    flockFocusGap# = flockFocusWant# - FLOCK_FOCUS#(flockI)
+                    flockFocusing = 1
+                    if flockFocusGap# < .003
+                        flockFocusBack# = 0 - .003
+                        if flockFocusGap# > flockFocusBack# then flockFocusing = 0
                     endif
-                    flockLook = 0
+                    if flockFocusing
+                        FLOCK_FOCUS#(flockI) = FLOCK_FOCUS#(flockI) + flockFocusGap# * flockFocusStep#
+                    else
+                        FLOCK_FOCUS#(flockI) = flockFocusWant#
+                    endif
+                    flockFocus# = FLOCK_FOCUS#(flockI)
+
+                    ` how far into leaving it is: it gets smaller and hazier over the first SCHOOL_LEAVE_FADE_MS
+                    ` of it, so that it can be seen that it is gone
+                    flockLeaveT# = 0
+                    flockLeaving = 0
+                    if FLOCK_LEAVE(flockI) <> 0
+                        flockLeaving = 1
+                        flockLeaveT# = flockNow - FLOCK_LEAVE_AT(flockI)
+                        flockLeaveMs# = SCHOOL_LEAVE_FADE_MS
+                        if flockLeaveMs# < 1 then flockLeaveMs# = 1
+                        flockLeaveT# = flockLeaveT# / flockLeaveMs#
+                        if flockLeaveT# > 1 then flockLeaveT# = 1
+                        if flockLeaveT# < 0 then flockLeaveT# = 0
+                    endif
+
+                    ` while it is still on its way out, it gets smaller, and the haze and the fading of its
+                    ` line come over it. after that, only coming forward and leaving change how it looks.
+                    flockSize# = FLOCK_SIZE
+                    if flockT# < 1
+                        flockSize# = CELL_ART_SIZE + (FLOCK_SIZE - CELL_ART_SIZE) * flockT#
+                    endif
+                    flockSize# = flockSize# * (1 + SCHOOL_FOCUS_GROW * .01 * flockFocus#)
+                    flockSize# = flockSize# * (1 - SCHOOL_LEAVE_SHRINK * .01 * flockLeaveT#)
+                    flockLook = flockFocusing + flockLeaving
+                    if flockFocus# > .01 then flockLook = 1
                     if flockT# < 1 then flockLook = 1
                     if FLOCK_DRAWN(flockI) < 2 then flockLook = 1
-                    if flockLook
-                        flockAlpha = 255 + (FLOCK_ALPHA - 255) * flockT#
-                        flockR = 255 + (FLOCK_HAZE_R - 255) * flockT#
-                        flockG = 255 + (FLOCK_HAZE_G - 255) * flockT#
-                        flockB = 255 + (FLOCK_HAZE_B - 255) * flockT#
+                    if flockLook > 0
+                        flockClear# = SCHOOL_FOCUS_CLEAR * .01 * flockFocus#
+
+                        ` and while it is forward, it shimmers a little: its haze comes and goes, in a time of its own
+                        if flockFocus# > .01
+                            flockShimmer# = .5 + .5 * sin(flockNow * SCHOOL_SHIMMER_SPEED * .00001 + flockI * 1.7)
+                            flockClear# = flockClear# + SCHOOL_SHIMMER * .01 * flockFocus# * flockShimmer#
+                            if flockClear# > 1 then flockClear# = 1
+                        endif
+                        flockFar# = flockLeaveT#
+                        flockAlpha# = 255 + (FLOCK_ALPHA - 255) * flockT#
+                        flockAlpha# = flockAlpha# + (255 - flockAlpha#) * flockClear#
+                        flockAlpha# = flockAlpha# * (1 - SCHOOL_LEAVE_FADE * .01 * flockFar#)
+                        flockR# = 255 + (FLOCK_HAZE_R - 255) * flockT#
+                        flockG# = 255 + (FLOCK_HAZE_G - 255) * flockT#
+                        flockB# = 255 + (FLOCK_HAZE_B - 255) * flockT#
+                        flockR# = flockR# + (255 - flockR#) * flockClear#
+                        flockG# = flockG# + (255 - flockG#) * flockClear#
+                        flockB# = flockB# + (255 - flockB#) * flockClear#
+                        ` further off, it is bluer and darker
+                        flockR# = flockR# * (1 - .3 * flockFar#)
+                        flockG# = flockG# * (1 - .18 * flockFar#)
+                        flockB# = flockB# * (1 - .05 * flockFar#)
+                        flockR = flockR#
+                        flockG = flockG#
+                        flockB = flockB#
+                        flockAlpha = flockAlpha#
                         color sprite flockSprite, rgb(flockR, flockG, flockB)
                         set sprite alpha flockSprite, flockAlpha
                         flockLineKeep# = FLOCK_LINE_KEEP
                         flockLineKeep# = flockLineKeep# / 255.0
-                        set sprite all texcoord1 flockSprite, flockT#, flockLineKeep#, 0, 0
+                        flockLineOut# = flockT# * (1 - flockClear#)
+                        if flockFar# > 0 then flockLineOut# = 1
+                        set sprite all texcoord1 flockSprite, flockLineOut#, flockLineKeep#, 0, 0
                         FLOCK_DRAWN(flockI) = 1
                         if flockT# >= 1 then FLOCK_DRAWN(flockI) = 2
                     endif
@@ -824,19 +1853,42 @@ function stepFlock(flockElapsed#)
                     if flockResize > 0
                         flockFlip = 0
                         if FLOCK_SHOWN#(flockI) > .5 then flockFlip = 1
-                        flockWide# = flockSize
+                        flockWide# = flockSize#
                         flockWide# = flockWide# * abs(cos(FLOCK_SHOWN#(flockI) * 3.14159))
                         if flockWide# < 1 then flockWide# = 1
-                        size sprite flockSprite, flockWide#, flockSize
+                        size sprite flockSprite, flockWide#, flockSize#
                         set sprite flip flockSprite, flockFlip, 0
                     endif
 
+                    ` A PUNCH. a flushed fish swells, quickly, to SCHOOL_PUNCH_SCALE times its size, and comes
+                    ` clear of the haze, and then it pops
+                    if FLOCK_FLUSH(flockI) <> 0
+                        if FLOCK_PUNCH_AT(flockI) > 0
+                            flockPunchT# = flockNow - FLOCK_PUNCH_AT(flockI)
+                            flockPunchMs# = SCHOOL_PUNCH_MS
+                            if flockPunchMs# < 1 then flockPunchMs# = 1
+                            flockPunchT# = flockPunchT# / flockPunchMs#
+                            if flockPunchT# > 1 then flockPunchT# = 1
+                            flockPunchE# = 1 - (1 - flockPunchT#) * (1 - flockPunchT#)
+                            flockPunchGrow# = SCHOOL_PUNCH_SCALE
+                            flockPunchGrow# = 1 + (flockPunchGrow# * .01 - 1) * flockPunchE#
+                            flockPunchSize# = FLOCK_SIZE * flockPunchGrow#
+                            size sprite flockSprite, flockPunchSize#, flockPunchSize#
+                            flockPunchR = FLOCK_HAZE_R + (255 - FLOCK_HAZE_R) * flockPunchE#
+                            flockPunchG = FLOCK_HAZE_G + (255 - FLOCK_HAZE_G) * flockPunchE#
+                            flockPunchB = FLOCK_HAZE_B + (255 - FLOCK_HAZE_B) * flockPunchE#
+                            color sprite flockSprite, rgb(flockPunchR, flockPunchG, flockPunchB)
+                            set sprite alpha flockSprite, 255
+                            FLOCK_DRAWN(flockI) = 0
+                        endif
+                    endif
                     position sprite flockSprite, FLOCK_X#(flockI), FLOCK_Y#(flockI)
                     if FLOCK_SHOWING(flockI) = 0
                         show sprite flockSprite
                         FLOCK_SHOWING(flockI) = 1
                     endif
                 endif
+            endif
             endif
         endif
         if flockDrawn = 0

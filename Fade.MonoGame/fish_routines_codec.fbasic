@@ -84,23 +84,23 @@ setup_codec:
     ` the categories, in the order of the list, and what is in each. every entry is in one of them.
     CODEC_CAT_COUNT = 0
     CODEC_ORDER_COUNT = 0
-    codecStartCategory("Upgrades")
+    codecStartCategory(lockey$("codec.cat.upgrades"))
     codecFile(0, CARD_LENGTH)
-    codecStartCategory("Fish")
+    codecStartCategory(lockey$("codec.cat.fish"))
     codecFile(CODEC_ENTRY_JELLY, 7)
-    codecStartCategory("Secrets")
+    codecStartCategory(lockey$("codec.cat.secrets"))
     codecFile(CODEC_ENTRY_CORAL, 2)
     codecFile(CODEC_ENTRY_TUNA, 3)
     codecFile(CODEC_ENTRY_RADIO, 1)
     codecFile(CODEC_ENTRY_NIGHT, 1)
-    codecStartCategory("Signals")
+    codecStartCategory(lockey$("codec.cat.signals"))
     codecFile(CODEC_ENTRY_SING, 2)
     codecFile(CODEC_ENTRY_CAMEO, CODEC_ENTRY_GOODBYE - CODEC_ENTRY_CAMEO)
-    codecStartCategory("Endings")
+    codecStartCategory(lockey$("codec.cat.endings"))
     codecFile(CODEC_ENTRY_GOODBYE, 1)
     codecFile(CODEC_ENTRY_REEF, 2)
     codecFile(CODEC_ENTRY_ALBUM, 1)
-    codecStartCategory("Quests")
+    codecStartCategory(lockey$("codec.cat.quests"))
     codecFile(CODEC_ENTRY_QUEST, QUEST_COUNT)
 
     ` what has been seen, in every game that has ever been played
@@ -225,7 +225,7 @@ setup_codec:
     ` the list of the categories, down the left of the panel, with a bar behind the one that the
     ` highlighted entry is in, and a line between the list and the grid
     for codecI = 0 to CODEC_CAT_COUNT - 1
-        CODEC_CAT_TEXTS(codecI) = createHighscoreText(CODEC_X + 12, CODEC_TOP + 5 + codecI * 14, 16, CODEC_CAT_NAME$(codecI))
+        CODEC_CAT_TEXTS(codecI) = createHighscoreText(CODEC_X + 12, CODEC_TOP + 5 + codecI * 14, 16, loc$(CODEC_CAT_NAME$(codecI)))
         set text offset CODEC_CAT_TEXTS(codecI), 0, 0
     next
 
@@ -484,6 +484,7 @@ endfunction entryTex
 
 
 ` a category starts here, in the list of the categories. the entries that are filed next are in it.
+` its name is a key of the string table (codec.cat.*), which is looked up where the name is shown.
 function codecStartCategory(cdcCatName$)
     CODEC_CAT_NAME$(CODEC_CAT_COUNT) = cdcCatName$
     CODEC_CAT_FIRST(CODEC_CAT_COUNT) = CODEC_ORDER_COUNT
@@ -627,10 +628,10 @@ function openCodec()
 
     ` the codec is tall, so the title moves up to make room for it. closeCodec puts it back.
     MENU_TITLE_Y = CODEC_TOP - 40
-    set text MENU_TITLE_TEXT_ID, "Codec"
+    set text MENU_TITLE_TEXT_ID, loc$("codec.title")
     size text y MENU_TITLE_TEXT_ID, 36
 
-    set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} back"
+    set text MENU_HINT_TEXT_ID, loc$("codec.hint")
     size text y MENU_HINT_TEXT_ID, 16
 
     ` refreshCodec shows the tiles, because how many there are depends on the page
@@ -696,7 +697,7 @@ function refreshCodec()
     for i = 0 to CODEC_COUNT - 1
         if CODEC_SEEN(i) then foundCount = foundCount + 1
     next
-    set text CODEC_COUNT_TEXT_ID, str$(foundCount) + " of " + str$(CODEC_COUNT) + " found"
+    set text CODEC_COUNT_TEXT_ID, loc$("codec.found", "found", foundCount, "total", CODEC_COUNT)
 
     ` the grid has the category that the highlighted entry is in, and the list says which one that is
     codecFindSelected()
@@ -704,7 +705,7 @@ function refreshCodec()
     for i = 0 to CODEC_CAT_COUNT - 1
         catColor = rgb(150, 190, 255)
         if codecCatSeen(i)
-            set text CODEC_CAT_TEXTS(i), CODEC_CAT_NAME$(i)
+            set text CODEC_CAT_TEXTS(i), loc$(CODEC_CAT_NAME$(i))
         else
             set text CODEC_CAT_TEXTS(i), "???"
             catColor = rgb(120, 140, 185)
@@ -716,7 +717,7 @@ function refreshCodec()
 
     pageNow = CODEC_CAT_AT / CODEC_PAGE_SIZE
     pageCount = getCodecPageCount(CODEC_CAT)
-    set text CODEC_PAGE_TEXT_ID, "page " + str$(pageNow + 1) + " of " + str$(pageCount)
+    set text CODEC_PAGE_TEXT_ID, loc$("codec.page", "page", pageNow + 1, "pages", pageCount)
 
     ` what the page number is written on sits on the corner of the panel, and is as wide as the words
     pageBackWide = get text size x(CODEC_PAGE_TEXT_ID) + 16
@@ -848,68 +849,68 @@ function refreshCodec()
 
         set text CODEC_NAME_TEXT_ID, "? ? ?"
         color text CODEC_NAME_TEXT_ID, rgb(120, 140, 185)
-        set text CODEC_KIND_TEXT_ID, "locked"
-        set text CODEC_DESC_TEXT_ID, "Not found yet. It turns up on the upgrade screen."
+        set text CODEC_KIND_TEXT_ID, loc$("codec.kind.locked")
+        set text CODEC_DESC_TEXT_ID, loc$("codec.locked.upgrade")
 
         ` the ones that are not cards do not turn up there, and nothing says where they do
         if CODEC_SELECTED >= CARD_LENGTH
-            set text CODEC_DESC_TEXT_ID, "Not found yet. No upgrade will bring it."
+            set text CODEC_DESC_TEXT_ID, loc$("codec.locked.none")
         endif
 
         ` the special fish, and what can happen to a fish, are found on the board
         if CODEC_SELECTED >= CODEC_ENTRY_JELLY
-            set text CODEC_DESC_TEXT_ID, "Not found yet. It turns up on the board."
+            set text CODEC_DESC_TEXT_ID, loc$("codec.locked.board")
         endif
 
         ` the diver, and its ending, are secrets, like the two endings of the coral, and nothing says where they are
         if CODEC_SELECTED = CODEC_ENTRY_DIVER
-            set text CODEC_DESC_TEXT_ID, "Not found yet. No upgrade will bring it."
+            set text CODEC_DESC_TEXT_ID, loc$("codec.locked.none")
         endif
         if CODEC_SELECTED = CODEC_ENTRY_ALBUM
-            set text CODEC_DESC_TEXT_ID, "Not found yet. No upgrade will bring it."
+            set text CODEC_DESC_TEXT_ID, loc$("codec.locked.none")
         endif
 
         ` a quest turns up with a round
         if getCodecQuest(CODEC_SELECTED) > 0
-            set text CODEC_DESC_TEXT_ID, "Not found yet. It turns up as the quest of a round."
+            set text CODEC_DESC_TEXT_ID, loc$("codec.locked.quest")
         endif
 
         ` and the QR code is not on the board, or anywhere, until it is asked for
         if CODEC_SELECTED = CODEC_ENTRY_TUNA
-            set text CODEC_DESC_TEXT_ID, "Not found yet. It has to be signaled. Save Our Seas."
+            set text CODEC_DESC_TEXT_ID, loc$("codec.locked.tuna")
         endif
 
         ` the radio is there for whoever holds on, and it knows the signals
         if CODEC_SELECTED = CODEC_ENTRY_RADIO
-            set text CODEC_DESC_TEXT_ID, "Not found yet. Hold on, and somebody may be listening."
+            set text CODEC_DESC_TEXT_ID, loc$("codec.locked.radio")
         endif
         if CODEC_SELECTED > CODEC_ENTRY_RADIO
             if CODEC_SELECTED <= CODEC_ENTRY_CTHULHU
-                set text CODEC_DESC_TEXT_ID, "Not found yet. The radio knows it."
+                set text CODEC_DESC_TEXT_ID, loc$("codec.locked.signal")
             endif
         endif
 
         ` the night is found by whoever watches which way the water is going. see fish_headers_tide.
         if CODEC_SELECTED = CODEC_ENTRY_NIGHT
-            set text CODEC_DESC_TEXT_ID, "Not found yet. The water comes in, and it goes out."
+            set text CODEC_DESC_TEXT_ID, loc$("codec.locked.night")
         endif
 
         ` the words that bring somebody swimming through are signals too, and the radio gives one away at a time
         lockedCameo = CODEC_SELECTED - CODEC_ENTRY_CAMEO
         if lockedCameo >= 0
             if lockedCameo < CAMEO_WORD_COUNT
-                set text CODEC_DESC_TEXT_ID, "Not found yet. The radio knows it."
+                set text CODEC_DESC_TEXT_ID, loc$("codec.locked.signal")
             endif
         endif
 
         ` the call of the angler is given away by the angler itself
         if CODEC_SELECTED = CODEC_ENTRY_CALL
-            set text CODEC_DESC_TEXT_ID, "Not found yet. Somebody down there likes to help."
+            set text CODEC_DESC_TEXT_ID, loc$("codec.locked.call")
         endif
 
         ` the usual ending is there for whoever gets to the end of a game
         if CODEC_SELECTED = CODEC_ENTRY_GOODBYE
-            set text CODEC_DESC_TEXT_ID, "Not found yet. Every game ends, if it is played through."
+            set text CODEC_DESC_TEXT_ID, loc$("codec.locked.goodbye")
         endif
     else
         ` the size is set again, because it is worked out from the size of the texture
@@ -920,69 +921,69 @@ function refreshCodec()
 
         ` coral and horror coral say what info mode says about them in a game
         if CODEC_SELECTED = CODEC_ENTRY_REEF
-            set text CODEC_NAME_TEXT_ID, "The Reef, Saved"
-            set text CODEC_DESC_TEXT_ID, "You listened."
-            set text CODEC_KIND_TEXT_ID, "ending"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.reef.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.reef.desc")
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.ending")
             exitfunction
         endif
         ` the usual ending says what it says when it plays. see finale_goodbye, in fish_routines_coral.
         if CODEC_SELECTED = CODEC_ENTRY_GOODBYE
-            set text CODEC_NAME_TEXT_ID, "The Fish Go Home"
-            set text CODEC_DESC_TEXT_ID, "If they had a home..."
-            set text CODEC_KIND_TEXT_ID, "ending"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.goodbye.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.goodbye.desc")
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.ending")
             exitfunction
         endif
         if CODEC_SELECTED = CODEC_ENTRY_ANCIENT
-            set text CODEC_NAME_TEXT_ID, "The Ancient One"
-            set text CODEC_DESC_TEXT_ID, "You listened to something dark."
-            set text CODEC_KIND_TEXT_ID, "ending"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.ancient.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.ancient.desc")
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.ending")
             exitfunction
         endif
         ` the diver says what info mode says about it in a game, and its ending has words of its own. see fish_headers_diver.
         if CODEC_SELECTED = CODEC_ENTRY_DIVER
             set text CODEC_NAME_TEXT_ID, INFOS(INFO_INDEX_DIVER).title$
             set text CODEC_DESC_TEXT_ID, INFOS(INFO_INDEX_DIVER).desc$
-            set text CODEC_KIND_TEXT_ID, "secret"
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.secret")
             exitfunction
         endif
         if CODEC_SELECTED = CODEC_ENTRY_ALBUM
-            set text CODEC_NAME_TEXT_ID, "The Album, Filled"
-            set text CODEC_DESC_TEXT_ID, "The ocean is wonderful, and it is always nice to visit"
-            set text CODEC_KIND_TEXT_ID, "ending"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.album.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.album.desc")
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.ending")
             exitfunction
         endif
         ` the special fish
         if CODEC_SELECTED = CODEC_ENTRY_JELLY
-            set text CODEC_NAME_TEXT_ID, "Jellyfish"
-            set text CODEC_DESC_TEXT_ID, "Comes with the jellies card. When it pops, each fish next to it has a " + str$(JELLY_STING_CHANCE) + "% chance to go belly up, then skeletal."
-            set text CODEC_KIND_TEXT_ID, "special fish"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.jelly.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.jelly.desc", "percent", JELLY_STING_CHANCE)
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.special")
             exitfunction
         endif
         if CODEC_SELECTED = CODEC_ENTRY_RAY
-            set text CODEC_NAME_TEXT_ID, "Stingray"
-            set text CODEC_DESC_TEXT_ID, "Comes with the rays card. When it pops, it clears its column the way it faces: up, or down if it is belly up."
-            set text CODEC_KIND_TEXT_ID, "special fish"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.ray.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.ray.desc")
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.special")
             exitfunction
         endif
         if CODEC_SELECTED = CODEC_ENTRY_BOTTLE
-            set text CODEC_NAME_TEXT_ID, "Bottle"
-            set text CODEC_DESC_TEXT_ID, "With the bottles card, a group of " + str$(BOTTLE_GROUP_SIZE) + " or more leaves one behind. On the bottom row, it adds " + str$(BOTTLE_MULT_GAIN) + " to the multiplier."
-            set text CODEC_KIND_TEXT_ID, "special fish"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.bottle.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.bottle.desc", "size", BOTTLE_GROUP_SIZE, "gain", BOTTLE_MULT_GAIN)
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.special")
             exitfunction
         endif
 
         ` and what can happen to a fish
         if CODEC_SELECTED = CODEC_ENTRY_BELLY
             rotate sprite CODEC_BIG_SPRITE, 3.14159
-            set text CODEC_NAME_TEXT_ID, "Belly Up"
-            set text CODEC_DESC_TEXT_ID, "A fish that floats upside down. It pops when the cursor comes to it, and so does every belly up fish next to it."
-            set text CODEC_KIND_TEXT_ID, "status"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.belly.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.belly.desc")
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.status")
             exitfunction
         endif
         if CODEC_SELECTED = CODEC_ENTRY_SKELETON
-            set text CODEC_NAME_TEXT_ID, "Skeletal"
-            set text CODEC_DESC_TEXT_ID, "The bones of a fish. A fish that is swapped can make its group through skeletons of any kind. Death is the great equalizer."
-            set text CODEC_KIND_TEXT_ID, "status"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.skeleton.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.skeleton.desc")
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.status")
             exitfunction
         endif
         if CODEC_SELECTED = CODEC_ENTRY_STACK
@@ -991,9 +992,9 @@ function refreshCodec()
             position sprite CODEC_STACK_SPRITES(1), CODEC_X + 36, CODEC_DETAIL_TOP + 32
             color sprite CODEC_STACK_SPRITES(1), rgb(90, 115, 165)
             show sprite CODEC_STACK_SPRITES(1)
-            set text CODEC_NAME_TEXT_ID, "Stacked"
-            set text CODEC_DESC_TEXT_ID, "More fish, stacked up behind one. When it pops, each fish in the stack pops first, and scores, and does what that fish does."
-            set text CODEC_KIND_TEXT_ID, "status"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.stack.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.stack.desc")
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.status")
             exitfunction
         endif
 
@@ -1001,61 +1002,69 @@ function refreshCodec()
             size sprite CODEC_HEART_SPRITES(1), 20, 20
             position sprite CODEC_HEART_SPRITES(1), CODEC_X + 60, CODEC_DETAIL_TOP + 18
             show sprite CODEC_HEART_SPRITES(1)
-            set text CODEC_NAME_TEXT_ID, "Coral Home"
-            set text CODEC_DESC_TEXT_ID, "Happy fish come from happy coral homes. They don't leave, they just score " + str$(CORAL_SCORE_BONUS) + " times as much."
-            set text CODEC_KIND_TEXT_ID, "status"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.home.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.home.desc", "times", CORAL_SCORE_BONUS)
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.status")
             exitfunction
         endif
 
         if CODEC_SELECTED = CODEC_ENTRY_TUNA
-            set text CODEC_NAME_TEXT_ID, "Donate"
-            codecSignalText(MORSE_WORD_SOS, "Type SOS, or tap it out: ", ". The fish make a QR code. Read it with a phone, and help a coral reef.")
-            set text CODEC_KIND_TEXT_ID, "secret"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.tuna.name")
+            cdcMorse$ = codecMorse(MORSE_WORD_SOS)
+            set text CODEC_DESC_TEXT_ID, loc$("codec.tuna.desc", "morse", cdcMorse$)
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.secret")
             exitfunction
         endif
 
         ` the radio, which only gives one signal away, and the signals that have an entry of their
         ` own. SOS has the entry of the QR code, above, and TUNA has none. see MORSE in fish_headers.
         if CODEC_SELECTED = CODEC_ENTRY_RADIO
-            set text CODEC_NAME_TEXT_ID, "Radio"
-            codecSignalText(MORSE_WORD_CQ, "Hold one button for " + str$(MORSE_WAKE_MS / 1000) + " seconds to turn it on, then tap in Morse code. To call anyone, CQ: ", ". Something may answer.")
-            set text CODEC_KIND_TEXT_ID, "secret"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.radio.name")
+            cdcMorse$ = codecMorse(MORSE_WORD_CQ)
+            cdcSeconds = MORSE_WAKE_MS / 1000
+            set text CODEC_DESC_TEXT_ID, loc$("codec.radio.desc", "seconds", cdcSeconds, "morse", cdcMorse$)
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.secret")
             exitfunction
         endif
         ` SING and SONG do the same thing, so they are one entry, which either of them unlocks
         if CODEC_SELECTED = CODEC_ENTRY_SING
-            set text CODEC_NAME_TEXT_ID, "Sing a Song"
-            codecTwoSignalText(MORSE_WORD_SING, MORSE_WORD_SONG, "Tap out SING: ", "  or SONG: ", ". A hint of the hidden game plays, with a trail.")
-            set text CODEC_KIND_TEXT_ID, "signal"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.sing.name")
+            cdcMorse$ = codecMorse(MORSE_WORD_SING)
+            cdcMorse2$ = codecMorse(MORSE_WORD_SONG)
+            set text CODEC_DESC_TEXT_ID, loc$("codec.sing.desc", "morse", cdcMorse$, "morse2", cdcMorse2$)
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.signal")
             exitfunction
         endif
         ` HELP and INFO do the same thing, so they are one entry, the same as SING and SONG
         if CODEC_SELECTED = CODEC_ENTRY_CALL
-            set text CODEC_NAME_TEXT_ID, "Call the Angler"
-            codecTwoSignalText(MORSE_WORD_HELP, MORSE_WORD_INFO, "Tap out HELP: ", "  or INFO: ", ". An old fish with a light comes to answer questions.")
-            set text CODEC_KIND_TEXT_ID, "signal"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.call.name")
+            cdcMorse$ = codecMorse(MORSE_WORD_HELP)
+            cdcMorse2$ = codecMorse(MORSE_WORD_INFO)
+            set text CODEC_DESC_TEXT_ID, loc$("codec.call.desc", "morse", cdcMorse$, "morse2", cdcMorse2$)
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.signal")
             exitfunction
         endif
         if CODEC_SELECTED = CODEC_ENTRY_CTHULHU
-            set text CODEC_NAME_TEXT_ID, "Cthulhu"
-            codecSignalText(MORSE_WORD_CTHULHU, "Tap out CTHULHU on the radio: ", ". Something comes up to see who called.")
-            set text CODEC_KIND_TEXT_ID, "signal"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.cthulhu.name")
+            cdcMorse$ = codecMorse(MORSE_WORD_CTHULHU)
+            set text CODEC_DESC_TEXT_ID, loc$("codec.cthulhu.desc", "morse", cdcMorse$)
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.signal")
             exitfunction
         endif
 
         ` see THE NIGHT IN THE CODEC in fish_headers_tide
         if CODEC_SELECTED = CODEC_ENTRY_NIGHT
-            set text CODEC_NAME_TEXT_ID, "Night Dive"
-            set text CODEC_DESC_TEXT_ID, "Pop with the fish you shove aside to pull the tide out, then the one you carry to push it in. " + str$(TIDE_CYCLES_TO_TURN) + " tides bring the night."
-            set text CODEC_KIND_TEXT_ID, "secret"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.night.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.night.desc", "tides", TIDE_CYCLES_TO_TURN)
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.secret")
             exitfunction
         endif
 
         ` see DIAGONALS in fish_headers
         if CODEC_SELECTED = CODEC_ENTRY_CROOKED
-            set text CODEC_NAME_TEXT_ID, "The Crooked Bar"
-            set text CODEC_DESC_TEXT_ID, "Swap a fish into a line of " + str$(DIAGONAL_LENGTH) + " of its kind, corner to corner. Each stacks up. The multiplier grows by 1, plus 1 per fish past " + str$(DIAGONAL_LENGTH) + "."
-            set text CODEC_KIND_TEXT_ID, "secret"
+            set text CODEC_NAME_TEXT_ID, loc$("codec.crooked.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.crooked.desc", "length", DIAGONAL_LENGTH)
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.secret")
             exitfunction
         endif
 
@@ -1065,9 +1074,10 @@ function refreshCodec()
             if selectedCameo < CAMEO_WORD_COUNT
                 selectedWord = MORSE_WORD_NEMO + selectedCameo
                 cameoIconSize(CODEC_BIG_SPRITE, CODEC_SELECTED, 48)
-                set text CODEC_NAME_TEXT_ID, CAMEO_NAME$(selectedCameo)
-                codecSignalText(selectedWord, "Tap out " + MORSE_WORD_NAME$(selectedWord) + " on the radio: ", CAMEO_SAYS$(selectedCameo))
-                set text CODEC_KIND_TEXT_ID, "signal"
+                set text CODEC_NAME_TEXT_ID, loc$(CAMEO_NAME$(selectedCameo))
+                cdcMorse$ = codecMorse(selectedWord)
+                set text CODEC_DESC_TEXT_ID, loc$("codec.cameo.desc", "word", MORSE_WORD_NAME$(selectedWord), "morse", cdcMorse$, "says", loc$(CAMEO_SAYS$(selectedCameo)))
+                set text CODEC_KIND_TEXT_ID, loc$("codec.kind.signal")
                 exitfunction
             endif
         endif
@@ -1075,13 +1085,13 @@ function refreshCodec()
         ` a quest says what info mode says about it in a game, and whether it has ever been finished
         selectedQuest = getCodecQuest(CODEC_SELECTED)
         if selectedQuest > 0
-            set text CODEC_NAME_TEXT_ID, QUEST_DEFS(selectedQuest).name$
-            set text CODEC_DESC_TEXT_ID, QUEST_DEFS(selectedQuest).desc$
+            set text CODEC_NAME_TEXT_ID, loc$(QUEST_DEFS(selectedQuest).name$)
+            set text CODEC_DESC_TEXT_ID, loc$(QUEST_DEFS(selectedQuest).desc$)
             if QUEST_EVER_DONE(selectedQuest)
-                set text CODEC_KIND_TEXT_ID, "quest, completed"
+                set text CODEC_KIND_TEXT_ID, loc$("codec.kind.quest.done")
                 show sprite CODEC_CHECK_SPRITES(CODEC_PAGE_SIZE)
             else
-                set text CODEC_KIND_TEXT_ID, "quest, not completed yet"
+                set text CODEC_KIND_TEXT_ID, loc$("codec.kind.quest.todo")
             endif
             exitfunction
         endif
@@ -1091,7 +1101,7 @@ function refreshCodec()
             if CODEC_SELECTED = CODEC_ENTRY_HORROR then extraInfo = INFO_INDEX_CORAL_SICK
             set text CODEC_NAME_TEXT_ID, INFOS(extraInfo).title$
             set text CODEC_DESC_TEXT_ID, INFOS(extraInfo).desc$
-            set text CODEC_KIND_TEXT_ID, "secret"
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.secret")
             exitfunction
         endif
 
@@ -1099,24 +1109,25 @@ function refreshCodec()
         set text CODEC_DESC_TEXT_ID, CARDS(CODEC_SELECTED).desc$
         select CARDS(CODEC_SELECTED).abilityType
             case ABILITY_TYPE_PASSIVE
-                set text CODEC_KIND_TEXT_ID, "{passive} passive"
+                set text CODEC_KIND_TEXT_ID, loc$("codec.kind.passive")
             endcase
             case ABILITY_TYPE_MOVE
-                set text CODEC_KIND_TEXT_ID, "{move} move"
+                set text CODEC_KIND_TEXT_ID, loc$("codec.kind.move")
             endcase
             case ABILITY_TYPE_INSTANT
-                set text CODEC_KIND_TEXT_ID, "{instant} instant"
+                set text CODEC_KIND_TEXT_ID, loc$("codec.kind.instant")
             endcase
         endselect
     endif
 endfunction
 
 
-` what the codec says about a signal: some words, then the dots and dashes of the signal, with
-` a gap after every letter, and then some more words. the dots and dashes are worked out from the
-` word itself, so they are never wrong. see morseWord, in fish_routines_morse.
-function codecTwoSignalText(signalWord, signalOther, signalLead$, signalMiddle$, signalTail$)
-    signalSays$ = signalLead$
+` the dots and dashes of a signal, with a gap after every letter, for what the codec says about it.
+` they are worked out from the word itself, so they are never wrong. see morseWord, in
+` fish_routines_morse. the words around them are in the string table (codec.*.desc), with {$morse}
+` where the dots and dashes go.
+function codecMorse(signalWord)
+    signalSays$ = ""
     signalFirst = signalWord * MORSE_SPELL_ROOM
     signalLastSpelt = MORSE_WORD_SPELL_LENGTH(signalWord) - 2
     for signalSpelt = 0 to signalLastSpelt
@@ -1125,29 +1136,4 @@ function codecTwoSignalText(signalWord, signalOther, signalLead$, signalMiddle$,
         if signalMark = 1 then signalSays$ = signalSays$ + "-"
         if signalMark = 2 then signalSays$ = signalSays$ + "  "
     next
-    signalSays$ = signalSays$ + signalMiddle$
-    signalFirst = signalOther * MORSE_SPELL_ROOM
-    signalLastSpelt = MORSE_WORD_SPELL_LENGTH(signalOther) - 2
-    for signalSpelt = 0 to signalLastSpelt
-        signalMark = MORSE_WORD_SPELL(signalFirst + signalSpelt)
-        if signalMark = 0 then signalSays$ = signalSays$ + "."
-        if signalMark = 1 then signalSays$ = signalSays$ + "-"
-        if signalMark = 2 then signalSays$ = signalSays$ + "  "
-    next
-    set text CODEC_DESC_TEXT_ID, signalSays$ + signalTail$
-endfunction
-
-
-` the same, for an entry that only has the one signal
-function codecSignalText(signalWord, signalLead$, signalTail$)
-    signalSays$ = signalLead$
-    signalFirst = signalWord * MORSE_SPELL_ROOM
-    signalLastSpelt = MORSE_WORD_SPELL_LENGTH(signalWord) - 2
-    for signalSpelt = 0 to signalLastSpelt
-        signalMark = MORSE_WORD_SPELL(signalFirst + signalSpelt)
-        if signalMark = 0 then signalSays$ = signalSays$ + "."
-        if signalMark = 1 then signalSays$ = signalSays$ + "-"
-        if signalMark = 2 then signalSays$ = signalSays$ + "  "
-    next
-    set text CODEC_DESC_TEXT_ID, signalSays$ + signalTail$
-endfunction
+endfunction signalSays$

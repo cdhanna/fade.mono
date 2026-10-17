@@ -8,8 +8,8 @@ global SCORE_POS as vec = {
 }
 
 
-global dim CARDS(36) as ability
-global CARD_LENGTH = 36
+global dim CARDS(37) as ability
+global CARD_LENGTH = 37
 
 global CURRENT_MOVE_COUNT = 0
 global MOVE_COUNT_TEXT_ID
@@ -836,7 +836,9 @@ global MENU_PAGE = 0
 #constant MENU_ITEM_SET_PHOTOS 23
 ` the seed of the new game, on the page that "New Game" opens. setMenuPage puts it under "Include intro". see fish_headers_seed.
 #constant MENU_ITEM_GAME_SEED 24
-global MENU_ITEM_COUNT = 25
+` the language of the game, on the options page right under "Fullscreen". see OPTION_LANGUAGE.
+#constant MENU_ITEM_SET_LANGUAGE 25
+global MENU_ITEM_COUNT = 26
 global dim MENU_ITEMS(MENU_ITEM_COUNT) as menuItem
 
 global MENU_PAGE_FIRST = 0 `the first item on the page
@@ -961,6 +963,13 @@ global HUD_KEEP_SONGS# = 1 `the songs, and the two bars under them
 global OPTION_SOUND = 10 `how loud the sound effects are, from 0 to 10
 global OPTION_MUSIC = 10 `how loud the music is, from 0 to 10
 global OPTION_FULLSCREEN = 0
+
+` THE LANGUAGE. the strings of the game are in Assets/Fish/Lang (one CSV per tab of the strings sheet; see
+` localization-plan.md). 0 is "not picked": the game goes by Steam's language for the game, or else the
+` computer's. any other number is the language the player picked on the options page, counted from 1 in the
+` order of the columns of the tables. applyLanguage in fish_routines_menu works it out.
+#constant PREF_LANGUAGE 17
+global OPTION_LANGUAGE = 0
 
 ` how big the window was before the game filled the screen, so that it can go back to that size afterwards.
 ` the player sets the size of the window by dragging its edges.

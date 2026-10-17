@@ -81,7 +81,7 @@ setup_passive_drop:
 
     ` and the two answers go side by side underneath the rows, with "no" on the left
     reserve text id(DROP_NO_TEXT_ID)
-    text DROP_NO_TEXT_ID, getDropAnswerX(0), getDropAnswerY(), SCORE_FONT, "No"
+    text loc DROP_NO_TEXT_ID, getDropAnswerX(0), getDropAnswerY(), SCORE_FONT, "drop.no"
     size text y DROP_NO_TEXT_ID, 20
     set text offset DROP_NO_TEXT_ID, .5, 0
     order text DROP_NO_TEXT_ID, ORDER_ABILITY_TEXT
@@ -89,7 +89,7 @@ setup_passive_drop:
     hide text DROP_NO_TEXT_ID
 
     reserve text id(DROP_YES_TEXT_ID)
-    text DROP_YES_TEXT_ID, getDropAnswerX(1), getDropAnswerY(), SCORE_FONT, "Yes"
+    text loc DROP_YES_TEXT_ID, getDropAnswerX(1), getDropAnswerY(), SCORE_FONT, "drop.yes"
     size text y DROP_YES_TEXT_ID, 20
     set text offset DROP_YES_TEXT_ID, .5, 0
     order text DROP_YES_TEXT_ID, ORDER_ABILITY_TEXT
@@ -126,7 +126,7 @@ handle_passive_drop:
         sync
     endwhile
 
-    set text ABILITY_SELECT_LABEL_TEXT_ID, "Drop a Passive"
+    set text ABILITY_SELECT_LABEL_TEXT_ID, loc$("drop.title")
     size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
 
     DROP_SELECTED = 0
@@ -155,7 +155,7 @@ handle_passive_drop:
     ` the player went back, so the cards come back, just as they were, with the outline on the line
     ` that it was on
     if DROP_DONE = 0
-        set text ABILITY_SELECT_LABEL_TEXT_ID, "Select Upgrade"
+        set text ABILITY_SELECT_LABEL_TEXT_ID, loc$("drop.title.upgrade")
         size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
         create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 0, 1, 200, 0
         for dropN = 0 to choiceCount
@@ -164,7 +164,7 @@ handle_passive_drop:
         show text UPGRADE_SKIP_TEXT_ID
         show text UPGRADE_REROLL_TEXT_ID
         show text UPGRADE_DROP_TEXT_ID
-        set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} take it"
+        set text INFO_HINT_TEXT_ID, loc$("drop.hint.upgrade")
         showInfoBorder(ABILITY_CURSOR, 1)
     endif
 
@@ -184,7 +184,7 @@ drop_build_rows:
         dropPlaceCard = DROP_ROW_CARD(dropN)
 
         ` a passive that has been taken more than once says how many times, the same as in the list
-        dropPlaceName$ = "go back"
+        dropPlaceName$ = loc$("drop.back")
         if dropPlaceCard >= 0
             dropPlaceName$ = CARDS(dropPlaceCard).name$
             if CARDS(dropPlaceCard).uses > 1
@@ -214,13 +214,13 @@ return
 drop_refresh:
 
     dropAboutCard = DROP_ROW_CARD(DROP_SELECTED)
-    dropAbout$ = "Back to the cards."
+    dropAbout$ = loc$("drop.back.desc")
     if dropAboutCard >= 0
-        dropAbout$ = CARDS(dropAboutCard).name$ + ": " + CARDS(dropAboutCard).desc$
+        dropAbout$ = loc$("drop.about", "name", CARDS(dropAboutCard).name$, "desc", CARDS(dropAboutCard).desc$)
     endif
     set text DROP_DESC_TEXT_ID, dropAbout$
 
-    set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} drop it    {pause} go back"
+    set text INFO_HINT_TEXT_ID, loc$("drop.hint")
 
 return
 
@@ -315,7 +315,7 @@ drop_run:
                     DROP_CONFIRMING = 1
                     DROP_CONFIRM_YES = 0 `start on "no", so that leaning on the button does not lose a passive
 
-                    set text DROP_PROMPT_TEXT_ID, "Drop " + CARDS(dropPickCard).name$ + "? You lose it until an upgrade offers it again, and you take no card this time."
+                    set text DROP_PROMPT_TEXT_ID, loc$("drop.confirm", "name", CARDS(dropPickCard).name$)
                     hide text DROP_DESC_TEXT_ID
                     show text DROP_PROMPT_TEXT_ID
                     show text DROP_NO_TEXT_ID
@@ -326,7 +326,7 @@ drop_run:
                     hide sprite DROP_ROW_PANEL(dropBackRow)
                     hide text DROP_ROW_NAME(dropBackRow)
                     showInfoBorder(DROP_ROW_BORDER(dropBackRow), 0)
-                    set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} answer    {pause} go back"
+                    set text INFO_HINT_TEXT_ID, loc$("drop.hint.confirm")
                 endif
             endif
         endif

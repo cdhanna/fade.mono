@@ -185,7 +185,9 @@ frame_debug_quests:
     begin debug window("Quests")
 
     debugQuestLine$ = "none"
-    if QUEST_ID > 0 then debugQuestLine$ = QUEST_DEFS(QUEST_ID).name$
+    if QUEST_ID > 0
+        debugQuestLine$ = loc$(QUEST_DEFS(QUEST_ID).name$)
+    endif
     debugQuestLine$ = "now: " + debugQuestLine$
     debug text debugQuestLine$
     debugQuestLine$ = "state " + str$(QUEST_STATE) + "   count " + str$(QUEST_PROG_NOW) + "/" + str$(QUEST_PROG_NEED)
@@ -215,7 +217,7 @@ frame_debug_quests:
     debug separator
     debug text "start a quest"
     for debugQuestI = 1 to QUEST_COUNT
-        debugQuestLine$ = str$(debugQuestI) + "  " + QUEST_DEFS(debugQuestI).name$
+        debugQuestLine$ = str$(debugQuestI) + "  " + loc$(QUEST_DEFS(debugQuestI).name$)
         if debug button(debugQuestLine$) = 1
             questForce(debugQuestI)
         endif
@@ -631,7 +633,7 @@ endfunction
 ` the quest failed, so it starts over
 function questFail()
     if QUEST_STATE = QSTATE_DONE then exitfunction
-    questSay("quest reset", rgb(170, 180, 200))
+    questSay(loc$("quest.say.reset"), rgb(170, 180, 200))
     questRestart()
 endfunction
 
@@ -951,7 +953,7 @@ function questPickToggle()
         exitfunction
     endif
     if QUEST_STATE = QSTATE_ACTIVE
-        questSay("dropped", rgb(170, 180, 200))
+        questSay(loc$("quest.say.dropped"), rgb(170, 180, 200))
         questDrop()
     endif
 endfunction
@@ -1391,17 +1393,17 @@ function questAfterLoad()
 
     if QUEST_ID = QUEST_CONSTELLATION
         if QUEST_V(0) = 0
-            questNote("a line")
+            questNote(loc$("quest.note.line"))
         endif
         if QUEST_V(0) = 1
-            questNote("a square")
+            questNote(loc$("quest.note.square"))
         endif
         if QUEST_V(0) = 2
-            questNote("an L")
+            questNote(loc$("quest.note.l"))
         endif
     endif
     if QUEST_ID = QUEST_TREASURE
-        questNote("pop to listen")
+        questNote(loc$("quest.note.listen"))
     endif
     if QUEST_NOTE_ON
         if QUEST_ID <> QUEST_CONSTELLATION
@@ -1772,6 +1774,13 @@ function questDrawPickup()
 endfunction
 
 
+` after the language changed: a badge that is up is written again, in the new language. a note
+` on it that was written already stays as it was, until the quest writes the next one.
+function questLanguageChanged()
+    if QUEST_SHOWN_KEY = 1 then QUEST_SHOWN_KEY = -1
+endfunction
+
+
 ` write the badge. the words are only written again when they change.
 function questDrawBadge()
     qBadgeKeep# = HUD_KEEP#
@@ -1793,9 +1802,9 @@ function questDrawBadge()
         QUEST_SHOWN_NOTE = QUEST_NOTE_ON * 100 + QUEST_NOTE_KEY
         ` a quest that is only being looked at has a question mark after its name
         if QUEST_STATE = QSTATE_OFFERED
-            set text QUEST_TITLE_TEXT_ID, QUEST_DEFS(QUEST_ID).name$ + " ?"
+            set text QUEST_TITLE_TEXT_ID, loc$("quest.badge.looking", "name", loc$(QUEST_DEFS(QUEST_ID).name$))
         else
-            set text QUEST_TITLE_TEXT_ID, QUEST_DEFS(QUEST_ID).name$
+            set text QUEST_TITLE_TEXT_ID, loc$(QUEST_DEFS(QUEST_ID).name$)
         endif
 
         ` a quest that is done has a box with a check mark in it, in place of its picture
@@ -1989,8 +1998,8 @@ function questShowInfo()
     endif
     if qInfoLook then qInfoOn = 1
     if qInfoOn
-        INFOS(INFO_INDEX_QUEST).title$ = "Quest: " + QUEST_DEFS(QUEST_ID).name$
-        INFOS(INFO_INDEX_QUEST).desc$ = QUEST_DEFS(QUEST_ID).desc$
+        INFOS(INFO_INDEX_QUEST).title$ = loc$("quest.info.title", "name", loc$(QUEST_DEFS(QUEST_ID).name$))
+        INFOS(INFO_INDEX_QUEST).desc$ = loc$(QUEST_DEFS(QUEST_ID).desc$)
         setInfoBlobEnabled(INFO_INDEX_QUEST, 1)
     else
         setInfoBlobEnabled(INFO_INDEX_QUEST, 0)
@@ -2013,11 +2022,11 @@ function questShowInfo()
         questPickBlob.size.x = CELL_SIZE + 4
         questPickBlob.size.y = CELL_SIZE * 2 + 4
         if qInfoPick = 1
-            questPickBlob.title$ = "A Quest"
-            questPickBlob.desc$ = "A quest may be accepted here, to earn points. Step the cursor out onto it to see what it is, and swap it down onto the check mark to accept it."
+            questPickBlob.title$ = loc$("quest.pick.title")
+            questPickBlob.desc$ = loc$("quest.pick.desc")
         else
-            questPickBlob.title$ = "Your Quest"
-            questPickBlob.desc$ = "The quest that you accepted. Step the cursor out onto it to have everything that it is about pointed out, and swap it up onto the X to drop it."
+            questPickBlob.title$ = loc$("quest.pick.yours")
+            questPickBlob.desc$ = loc$("quest.pick.yours.desc")
         endif
         questPickBlob.enabled = 1
         INFOS(INFO_INDEX_QUEST_PICK) = questPickBlob

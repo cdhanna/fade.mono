@@ -883,6 +883,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
     {
         // a recording steps the clock by one frame of the video per frame. see RecordSystem.
         gameTime = RecordSystem.Clock(gameTime, advance: true);
+
+        // a string table edited on disk (Debug) is reloaded here, on the game's thread
+        LocalizationSystem.Poll();
 #if !BROWSER
         // Escape to quit only makes sense on desktop. Browser closes the tab.
         // A game can turn it off with `disable escape quit`, to use the key for something else.

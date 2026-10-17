@@ -41,6 +41,7 @@ public class GameSystem
         RasterizerSystem.Reset();
         SpriteSystem.Reset();
         TextSystem.Reset();
+        LocalizationSystem.Reset();
         TextureSystem.Reset();
         TransformSystem.Reset();
         TweenSystem.Reset();

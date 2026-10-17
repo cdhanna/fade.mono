@@ -170,15 +170,8 @@ setup_diver:
 
     ` and the words of that scene, which are made the same way as the words of the splash screen
     reserve text id(DIVER_CARD_TEXT_ID)
-    text DIVER_CARD_TEXT_ID, WORLD_WIDTH / 2, 34, SCORE_FONT, "Remember, the ocean is always waiting to welcome you back."
-    size text y DIVER_CARD_TEXT_ID, 22
-    dvSetupRoom = WORLD_WIDTH - 30
-    if get text size x(DIVER_CARD_TEXT_ID) > dvSetupRoom
-        size text y DIVER_CARD_TEXT_ID, 18
-    endif
-    if get text size x(DIVER_CARD_TEXT_ID) > dvSetupRoom
-        size text y DIVER_CARD_TEXT_ID, 15
-    endif
+    text loc DIVER_CARD_TEXT_ID, WORLD_WIDTH / 2, 34, SCORE_FONT, "diver.card"
+    diverFitCard()
     set text offset DIVER_CARD_TEXT_ID, .5, 0
     color text DIVER_CARD_TEXT_ID, rgb(255, 244, 214)
     enable text drop shadow DIVER_CARD_TEXT_ID, 2, -2, rgb(0,0,0)
@@ -187,7 +180,7 @@ setup_diver:
     hide text DIVER_CARD_TEXT_ID
 
     reserve text id(DIVER_CARD_SUB_TEXT_ID)
-    text DIVER_CARD_SUB_TEXT_ID, WORLD_WIDTH / 2, 62, SCORE_FONT, "Have a good day, friend."
+    text loc DIVER_CARD_SUB_TEXT_ID, WORLD_WIDTH / 2, 62, SCORE_FONT, "diver.card.sub"
     size text y DIVER_CARD_SUB_TEXT_ID, 20
     set text offset DIVER_CARD_SUB_TEXT_ID, .5, 0
     color text DIVER_CARD_SUB_TEXT_ID, rgb(255, 196, 150)
@@ -197,7 +190,7 @@ setup_diver:
     hide text DIVER_CARD_SUB_TEXT_ID
 
     ` the spot that info mode has for the album. it is not there until the diver has come down.
-    INFO_INDEX_DIVER = allocateInfoBlob(CORAL_BAR_X - 4, 0, DIVER_BOX_STEP * DIVER_ALBUM_COUNT + 7, 22, "The diver", "Looking for all the types of sea life")
+    INFO_INDEX_DIVER = allocateInfoBlob(CORAL_BAR_X - 4, 0, DIVER_BOX_STEP * DIVER_ALBUM_COUNT + 7, 22, loc$("diver.info"), loc$("diver.info.desc"))
     setInfoBlobEnabled(INFO_INDEX_DIVER, 0)
 
     ` what the main menu remembers. see THE ENDING in fish_headers_diver.
@@ -280,9 +273,9 @@ return
 ` here. like the other endings, it draws frames of its own, with update_frame, so everything in it has
 ` a name of its own, which starts with "dvFin".
 diver_finale:
-    set text CORAL_END_TEXT_ID, "The album is full"
+    set text loc CORAL_END_TEXT_ID, "diver.end"
     color text CORAL_END_TEXT_ID, rgb(255, 244, 214)
-    set text CORAL_END_SUB_TEXT_ID, "in " + str$(CURRENT_MOVE_COUNT) + " moves"
+    set text loc CORAL_END_SUB_TEXT_ID, "coral.end.moves", "moves", CURRENT_MOVE_COUNT
     color text CORAL_END_SUB_TEXT_ID, rgb(255, 196, 150)
 
     ` the key hints go, and the full bar stops fizzing
@@ -362,6 +355,7 @@ diver_boat_scene:
     DIVER_SCENE_MS = game ms()
     DIVER_SCENE_KEEP# = 1
     DIVER_HEART_MS = DIVER_SCENE_MS + 1200
+    diverFitCard() `the language may have changed since the words were made
     set text alpha DIVER_CARD_TEXT_ID, 0
     set text alpha DIVER_CARD_SUB_TEXT_ID, 0
     show text DIVER_CARD_TEXT_ID
@@ -403,6 +397,19 @@ return
 
 
 routines_diver_exit:
+
+
+` the words of the scene at the boat are made as big as they can be, and still fit across the screen
+function diverFitCard()
+    dvFitRoom = WORLD_WIDTH - 30
+    size text y DIVER_CARD_TEXT_ID, 22
+    if get text size x(DIVER_CARD_TEXT_ID) > dvFitRoom
+        size text y DIVER_CARD_TEXT_ID, 18
+    endif
+    if get text size x(DIVER_CARD_TEXT_ID) > dvFitRoom
+        size text y DIVER_CARD_TEXT_ID, 15
+    endif
+endfunction
 
 
 ` a new game. the diver is back on the boat, and the album is empty.
@@ -881,6 +888,8 @@ function diverStep()
         if dvInfoTop <> DIVER_INFO_TOP
             DIVER_INFO_TOP = dvInfoTop
             dvInfoBlob = INFOS(INFO_INDEX_DIVER)
+            dvInfoBlob.title$ = loc$("diver.info")
+            dvInfoBlob.desc$ = loc$("diver.info.desc")
             dvInfoBlob.topLeft.y = dvInfoTop - 4
             dvInfoBlob.enabled = 1
             INFOS(INFO_INDEX_DIVER) = dvInfoBlob

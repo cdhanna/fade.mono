@@ -413,9 +413,11 @@ function grantMoveToSlot(abilityIndex, slot)
 
     ` the move explains itself in info mode. a slot only ever gets one info blob, and whichever move
     ` is in the slot uses it. layoutMoveInfos switches it off while the slot is empty.
-    moveCool$ = "It recharges after " + str$(moveBinding.resetTimer) + " moves."
-    if moveBinding.resetTimer <= 0 then moveCool$ = "It never has to recharge."
-    moveInfo$ = CARDS(abilityIndex).desc$ + ". Hold {" + moveBinding.icon$ + "} and press {dir} to use it. " + moveCool$ + " Press {confirm} here to move it to another button."
+    moveCool$ = loc$("hud.move.recharge", "moves", moveBinding.resetTimer)
+    if moveBinding.resetTimer <= 0
+        moveCool$ = loc$("hud.move.recharge.never")
+    endif
+    moveInfo$ = loc$("hud.move.info", "desc", CARDS(abilityIndex).desc$, "button", "{" + moveBinding.icon$ + "}", "recharge", moveCool$)
     if moveBinding.hasInfo
         INFOS(moveBinding.infoIndex).title$ = CARDS(abilityIndex).name$
         INFOS(moveBinding.infoIndex).desc$ = moveInfo$

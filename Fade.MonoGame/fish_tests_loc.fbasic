@@ -1,0 +1,105 @@
+` LOCALIZED STRINGS. the engine's string tables (load strings, loc$, text loc). these use
+` their own table, Assets/Fish/LangTests/tests.csv, so they do not depend on the game's strings.
+
+test loc_strings_and_args from fishBoard
+    load strings "Fish/LangTests"
+    set language "en"
+    assert loc$("t.plain") = "Plain", "a plain string"
+    assert loc$("t.fishleft", "count", 3) = "3 fish left", "an arg, with no str$"
+    assert loc$("t.moves", "count", 1) = "1 move", "one, in english"
+    assert loc$("t.moves", "count", 0) = "0 moves", "zero is many, in english"
+    assert loc$("t.catch", "count", 2) = "Catch 2 tuna", "another key, by reference"
+    assert loc$("t.fish", "fish", "@t.tuna") = "A tuna here", "an arg that is a key"
+    assert loc$("t.hint") = "Hold {swap} to swap", "icons are left for rich text"
+    assert loc$("t.nope") = "[t.nope]", "an unknown key shows itself"
+    assert loc$("t.fishleft") = "{$count} fish left", "a missing arg shows itself"
+    end
+endtest
+
+test loc_portuguese from fishBoard
+    load strings "Fish/LangTests"
+    set language "pt-BR"
+    assert language$() = "pt-BR", "the language changed"
+    assert loc$("t.plain") = "Simples", "a plain string"
+    assert loc$("t.fishleft", "count", 3) = "Faltam 3 peixes", "the arg moves with the words"
+    assert loc$("t.moves", "count", 0) = "0 jogada", "zero is singular in portuguese"
+    assert loc$("t.moves", "count", 2) = "2 jogadas", "two is plural"
+    assert loc$("t.catch", "count", 2) = "Pegue 2 atum", "a reference is in the language too"
+    assert loc$("t.only.en") = "English only", "an untranslated string falls back to english"
+    set language "zz"
+    assert language$() = "pt-BR", "an unknown language changes nothing"
+    end
+endtest
+
+test loc_languages_are_listed from fishBoard
+    load strings "Fish/LangTests"
+    assert language count() = 2, "english and portuguese"
+    assert language code$(0) = "en", "in the order of the columns"
+    assert language code$(1) = "pt-BR", "the second column"
+    assert language name$(1) = "Português", "named in itself"
+    assert language code$(2) = "", "past the end"
+    end
+endtest
+
+test loc_text_follows_its_args_and_the_language from fishBoard
+    load strings "Fish/LangTests"
+    set language "en"
+    tLocText = 0
+    reserve text id(tLocText)
+    text loc tLocText, 10, 10, SCORE_FONT, "t.fishleft", "count", 3
+    assert get text$(tLocText) = "3 fish left", "the key is drawn as its text"
+    set text arg tLocText, "count", 2
+    assert get text$(tLocText) = "2 fish left", "an arg changed"
+    set language "pt-BR"
+    assert get text$(tLocText) = "Faltam 2 peixes", "the text followed the language"
+    set text loc tLocText, "t.plain"
+    assert get text$(tLocText) = "Simples", "another key"
+    set text tLocText, "t.plain"
+    assert get text$(tLocText) = "t.plain", "plain set text draws its string as it is"
+    set language "en"
+    assert get text$(tLocText) = "t.plain", "and a plain text no longer follows the language"
+    end
+endtest
+
+` size text max is done again when the language changes: the long translation shrinks to the width,
+` and the short english gets the whole height back
+test loc_size_text_max_follows_the_language from fishBoard
+    load strings "Fish/LangTests"
+    set language "en"
+    tFit = 0
+    reserve text id(tFit)
+    text loc tFit, 10, 10, SCORE_FONT, "t.long"
+    size text max tFit, 80, 20
+    tTall = 0
+    if get text size y(tFit) > 19.5
+        tTall = 1
+    endif
+    assert tTall = 1, "a short string gets the whole height"
+
+    set language "pt-BR"
+    tNarrow = 0
+    if get text size x(tFit) < 80.5
+        tNarrow = 1
+    endif
+    assert tNarrow = 1, "the long translation shrank to fit the width"
+    tShorter = 0
+    if get text size y(tFit) < 19.5
+        tShorter = 1
+    endif
+    assert tShorter = 1, "so it is not as high"
+
+    set language "en"
+    tTallAgain = 0
+    if get text size y(tFit) > 19.5
+        tTallAgain = 1
+    endif
+    assert tTallAgain = 1, "and back in english it is full height again"
+    end
+endtest
+
+test loc_pseudo_language from fishBoard
+    load strings "Fish/LangTests"
+    set language "xx"
+    assert loc$("t.hint") = "[Höld {swap} tö swáp~~~~~~~]", "accented, longer, icons kept"
+    end
+endtest

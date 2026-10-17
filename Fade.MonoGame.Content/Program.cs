@@ -23,6 +23,11 @@ using System.Linq;
 //   DesktopVK  DesktopVK pipeline — SPIR-V via DXC (no Wine), SM 6.0
 //   Web        DesktopGL pipeline, then patched in place for KNI BlazorGL
 //              (MGFX v11->v10, SoundEffect loopLength)
+//
+//   fadecontent strings check ...   the localization build check; see Strings/StringsCli.cs
+
+if (args.Length > 0 && args[0] == "strings")
+    return Fade.MonoGame.Content.Strings.StringsCli.Run(args.Skip(1).ToArray());
 
 string platform = "Desktop";
 string source = "";

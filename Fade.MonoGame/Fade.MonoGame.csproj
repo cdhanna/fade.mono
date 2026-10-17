@@ -300,6 +300,63 @@
                Text="Content build produced nothing from $(_GameAssetsDir). A Release build with no XNBs ships a game with no art and no sound." />
     </Target>
 
+    <!-- LOCALIZATION AS BUILD ERRORS. After the Fade program is compiled, the content CLI's
+         `strings check` parses it the same way, finds every string table key it uses, and checks
+         them and the tables in Assets/$(FadeStringsFolder). Problems come out as errors and
+         warnings with a file and line (codes FLOC001 and up; see localization-plan.md).
+
+         Debug: a key the tables do not have yet is added to inbox.csv there and is only a
+         warning, so writing new code is never blocked. Release: it, and any missing English or
+         missing translation, is an error.
+
+         -p:FadeLocStrict=false turns the errors for keys built with + and unknown keys into
+         warnings, for while the game is half converted. No network is read. -->
+    <PropertyGroup>
+        <FadeStringsFolder Condition="'$(FadeStringsFolder)' == ''">Fish/Lang</FadeStringsFolder>
+        <FadeLocStrict Condition="'$(FadeLocStrict)' == ''">true</FadeLocStrict>
+        <_FadeStringsDir>$(MSBuildProjectDirectory)/Assets/$(FadeStringsFolder)</_FadeStringsDir>
+        <_FadeStringsArgs Condition="'$(Configuration)' != 'Debug'">--release</_FadeStringsArgs>
+        <_FadeStringsArgs Condition="'$(FadeLocStrict)' == 'false'">$(_FadeStringsArgs) --no-strict</_FadeStringsArgs>
+    </PropertyGroup>
+    <Target Name="FadeStringsCheck"
+            AfterTargets="FadeMonoGameGenerateLaunch"
+            BeforeTargets="CoreCompile"
+            Condition="'$(FadeMonoGamePlatform)' != 'Web' AND Exists('$(_FadeStringsDir)')">
+        <PropertyGroup>
+            <!-- In the target: IntermediateOutputPath is not set yet where the project's own properties are. -->
+            <_FadeStringsInputs>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)fade-strings.inputs</_FadeStringsInputs>
+        </PropertyGroup>
+        <ItemGroup>
+            <!-- Debug references the content project, so its CLI is already built. Release
+                 builds it in BuildGameContent above. -->
+            <_FadeStringsCli Include="@(ReferencePath)" Condition="'%(Filename)' == 'Fade.MonoGame.Content'" />
+            <_FadeStringsCli Include="@(_GameContentCli)" Condition="'@(_FadeStringsCli)' == ''" />
+            <_FadeStringsInput Include="@(FadeSource->'source|%(FullPath)')" />
+            <_FadeStringsInput Include="@(ReferencePath->'ref|%(FullPath)')" />
+            <_FadeStringsInput Include="@(FadeCommand->'command|%(Identity)|%(FullName)')" />
+            <_FadeStringsInput Include="probe|$(TargetDir)" />
+        </ItemGroup>
+        <Warning Condition="'@(_FadeStringsCli)' == ''" Text="No content CLI to run the localization check with; strings were not checked." />
+        <WriteLinesToFile Condition="'@(_FadeStringsCli)' != ''" File="$(_FadeStringsInputs)" Lines="@(_FadeStringsInput)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+        <Exec Condition="'@(_FadeStringsCli)' != ''"
+              Command="dotnet &quot;@(_FadeStringsCli)&quot; strings check --strings &quot;$(_FadeStringsDir)&quot; --inputs &quot;$(_FadeStringsInputs)&quot; --fonts &quot;$(MSBuildProjectDirectory)/Assets&quot; $(_FadeStringsArgs)"
+              IgnoreExitCode="true"
+              StandardOutputImportance="normal" />
+    </Target>
+
+    <!-- The strings sheet, from the game project:
+           dotnet build -t:FadeStringsSync   new keys into the sheet, status/where back, snapshot CSVs updated
+           dotnet build -t:FadeStringsPull   the sheet into the snapshot CSVs, nothing written to the sheet
+         Both build first, so the check has just run and its inputs file is fresh. Pass the CLI's
+         dry-run flag through FadeStringsArgs to see what sync would do. Credentials: see
+         Fade.MonoGame.Content/Strings/SheetsClient.cs (.secrets/google-sheets-sa.json in the repo). -->
+    <Target Name="FadeStringsSync" DependsOnTargets="Build">
+        <Exec Command="dotnet &quot;@(_FadeStringsCli)&quot; strings sync --strings &quot;$(_FadeStringsDir)&quot; --inputs &quot;$(_FadeStringsInputs)&quot; $(FadeStringsArgs)" />
+    </Target>
+    <Target Name="FadeStringsPull" DependsOnTargets="Build">
+        <Exec Command="dotnet &quot;@(_FadeStringsCli)&quot; strings pull --strings &quot;$(_FadeStringsDir)&quot; $(FadeStringsArgs)" />
+    </Target>
+
     <ItemGroup>
         <FadeSource Include="fish_macros.fbasic" />
         <FadeSource Include="fish_headers.fbasic" />
@@ -383,6 +440,7 @@
         <FadeSource Include="fish_tests_angler.fbasic" />
         <FadeSource Include="fish_tests_questtalk.fbasic" />
         <FadeSource Include="fish_tests_trailer.fbasic" />
+        <FadeSource Include="fish_tests_loc.fbasic" />
         <!-- <FadeSource Include="game.fbasic" /> -->
     </ItemGroup>
     <!-- A shipped game has no tests in it. FadeBasic 0.2.6.1 compiles `test` blocks into the

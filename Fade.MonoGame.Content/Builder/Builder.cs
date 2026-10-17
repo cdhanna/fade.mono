@@ -448,7 +448,14 @@ public class FadeContentBuilder : ContentBuilder
 
         contentCollection.Include<WildcardRule>("*");
         contentCollection.Include<WildcardRule>("*.mp3", contentProcessor: new SoundEffectProcessor());
+        // Fonts draw the accented letters their font file lacks (Polish ą ć ę...). See ComposedGlyphFontProcessor.
+        contentCollection.Include<WildcardRule>("*.spritefont", contentProcessor: new ComposedGlyphFontProcessor());
         contentCollection.Exclude<WildcardRule>("*.ttf");
+
+        // Localization string tables (LocalizationSystem) ship as the CSV snapshots themselves.
+        // The sheet config is only for the strings tool.
+        contentCollection.IncludeCopy<WildcardRule>("*.csv");
+        contentCollection.Exclude<WildcardRule>("*.sheet.json");
 
 
         // Per-entry overrides supplied by the caller (e.g. live-reload from Game).
@@ -470,7 +477,7 @@ public class FadeContentBuilder : ContentBuilder
 
     public static FontDescriptionProcessor GetFontProcessor(ref ContentEntry entry)
     {
-        var p = new FontDescriptionProcessor();
+        var p = new ComposedGlyphFontProcessor();
         if (entry.parameters.TryGetValue(nameof(p.TextureFormat), out var x) &&
             Enum.TryParse(typeof(TextureProcessorOutputFormat), x, true, out var format))
             p.TextureFormat = (TextureProcessorOutputFormat)format;

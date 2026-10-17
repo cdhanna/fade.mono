@@ -15,39 +15,41 @@ remstart
         QEV_SETTLE  how many swaps have been made since the board was last still
 remend
 
+` the name and the description of a quest are keys into Assets/Fish/Lang/quest.csv. they are
+` resolved with loc$ where they are drawn, so that they follow the language of the game.
 setup_quest_defs:
-    questDefine(QUEST_LEFT_RIGHT, "Left to Right", "Swap the sand dollar to the right edge. It breaks if a swap moves it and pops nothing, or on the bottom row.", TEX_SAND_DOLLAR, 0)
-    questDefine(QUEST_KRILL, "Whale Krill", "Swaps that pop nothing cost nothing, and make krill. Fill a third of the board with krill for the whale.", TEX_KRILL, TEX_Q_SHELL)
-    questDefine(QUEST_LOST_PAIR, "Lost Pair", "Bring the two ringed fish side by side. A swap that moves one and pops nothing picks a new pair.", TEX_Q_RING, 0)
-    questDefine(QUEST_SEQUENCE, "Sequence", "Pop the four kinds shown, in order. Popping one out of turn starts over.", TEX_Q_RING, 0)
-    questDefine(QUEST_SHARK, "Shark", "It hunts the cursor and eats pops within two cells. Make 10 popping swaps without feeding it.", TEX_Q_SHARK, TEX_Q_BAIT)
-    questDefine(QUEST_PUFFERS, "Avoid Puffers", "Make popping swaps in a row. A popped pufferfish, or a swap that pops nothing, resets the count.", QUEST_PUFFER_KIND, 0)
-    questDefine(QUEST_PROTECTED, "Protected", "Score half of the round without swapping or popping a ringed fish.", TEX_Q_RING, 0)
-    questDefine(QUEST_SUNBEAM, "Sunbeam", "The beam moves one column each swap. Pop fish in the lit column, for eight columns in ten.", TEX_Q_DOT, 0)
-    questDefine(QUEST_CONTINUOUS, "Continuous Swap", "Make popping swaps in a row. A swap that pops nothing resets the count.", TEX_Q_RING, 0)
-    questDefine(QUEST_SEAWEED, "Seaweed", "Bottom row pops plant seaweed, and pops on top grow it. Grow two to the top. Swapping a piece breaks the rest.", TEX_SEAWEED, 0)
-    questDefine(QUEST_WAKE, "Wake", "Popped cells glow for five moves. Join the left and right edges with one glowing path.", TEX_Q_DOT, 0)
-    questDefine(QUEST_TURTLE, "Turtle", "After each swap it steps right, onto the kind of fish shown. It cannot be swapped. Reach the right edge.", TEX_TURTLE, 0)
-    questDefine(QUEST_CUTTLEFISH, "Cuttlefish", "The ringed fish changes kind each swap, in the order shown, and survives pops. Pop it as each kind.", TEX_Q_RING, 0)
-    questDefine(QUEST_CONSTELLATION, "Constellation", "Arrange the four ringed fish in the shape shown. A pop, or a swap that moves one and pops nothing, resets it.", TEX_Q_RING, 0)
-    questDefine(QUEST_REMORA, "Tail", "The cursor drags a long tail. Make 10 popping swaps without crossing it.", TEX_Q_EEL, TEX_Q_EEL)
-    questDefine(QUEST_SLEEPERS, "Sleepers", "One kind sleeps for three moves, and its groups wait. Have three groups waiting when it wakes.", TEX_Q_SHELL, TEX_Q_SHELL)
-    questDefine(QUEST_ECHO, "Echo", "A ghost repeats each swap four moves later, in the same place. Get three of its swaps to pop fish.", TEX_Q_RING, 0)
-    questDefine(QUEST_PULSE, "Pulse", "Every fourth move, the lit cell turns its four corner fish into its own kind. Get three pops from that.", TEX_Q_DOT, 0)
-    questDefine(QUEST_TOTEM, "Totem", "Stack the four kinds shown, top to bottom, in the marked column.", TEX_Q_RING, 0)
-    questDefine(QUEST_ROLL_CALL, "Roll Call", "Pop the four ringed fish in the order of the colors shown. One out of turn resets it.", TEX_Q_RING, 0)
-    questDefine(QUEST_GLASS_FISH, "Glass Fish", "Pop fish under it to lower it to the bottom row. It cannot be swapped, and shatters if it falls two cells.", TEX_GLASS_FISH, 0)
-    questDefine(QUEST_REFLECTION, "Reflection", "Make the marked row read the same from both ends.", TEX_Q_RING, 0)
-    questDefine(QUEST_TETHER, "Tether", "The cursor can stray three cells from the buoy. Popping swaps tug it a cell closer. Take it to the far corner.", TEX_Q_BUOY, TEX_Q_BUOY)
-    questDefine(QUEST_LANTERN, "Lantern", "Each step burns light, and a popping swap refills it. Light all three pearls before it goes out.", TEX_Q_ANGLER, TEX_Q_ANGLER)
-    questDefine(QUEST_HATCH, "Hatch", "Each ringed fish counts down every swap. Pop it on the move it hits zero. Do that three times.", TEX_Q_PEARL, 0)
-    questDefine(QUEST_FORECAST, "Forecast", "The next fish for each column shows above it. Make four groups finished by a fish as it lands.", TEX_Q_DOT, 0)
-    questDefine(QUEST_MOORINGS, "Moorings", "Each colored cell wants the fish shown in its color. Fill all four at once.", TEX_Q_RING, 0)
-    questDefine(QUEST_TRADE_PLACES, "Trade Places", "Get the two ringed fish into each other's cells. A pop, or a swap that moves one and pops nothing, resets it.", TEX_Q_RING, 0)
-    questDefine(QUEST_PILOT_FISH, "Pilot Fish", "A little fish trails one step behind the cursor. Lead it onto each lit cell, then make any popping swap.", TEX_Q_PILOT, 0)
-    questDefine(QUEST_FERRY, "Ferry", "Carry each starfish from the left edge to the right with three popping swaps. A miss, or a slow trip, drops it.", TEX_Q_STARFISH, 0)
-    questDefine(QUEST_LASSO, "Lasso", "Walk the cursor in a loop around the ringed fish, making four popping swaps on the way. Popping it resets.", TEX_Q_RING, 0)
-    questDefine(QUEST_TREASURE, "Treasure", "Each popping swap says warmer or colder. Pop the fish on the buried cell.", TEX_Q_PEARL, 0)
+    questDefine(QUEST_LEFT_RIGHT, lockey$("quest.leftright.name"), lockey$("quest.leftright.desc"), TEX_SAND_DOLLAR, 0)
+    questDefine(QUEST_KRILL, lockey$("quest.krill.name"), lockey$("quest.krill.desc"), TEX_KRILL, TEX_Q_SHELL)
+    questDefine(QUEST_LOST_PAIR, lockey$("quest.lostpair.name"), lockey$("quest.lostpair.desc"), TEX_Q_RING, 0)
+    questDefine(QUEST_SEQUENCE, lockey$("quest.sequence.name"), lockey$("quest.sequence.desc"), TEX_Q_RING, 0)
+    questDefine(QUEST_SHARK, lockey$("quest.shark.name"), lockey$("quest.shark.desc"), TEX_Q_SHARK, TEX_Q_BAIT)
+    questDefine(QUEST_PUFFERS, lockey$("quest.puffers.name"), lockey$("quest.puffers.desc"), QUEST_PUFFER_KIND, 0)
+    questDefine(QUEST_PROTECTED, lockey$("quest.protected.name"), lockey$("quest.protected.desc"), TEX_Q_RING, 0)
+    questDefine(QUEST_SUNBEAM, lockey$("quest.sunbeam.name"), lockey$("quest.sunbeam.desc"), TEX_Q_DOT, 0)
+    questDefine(QUEST_CONTINUOUS, lockey$("quest.continuous.name"), lockey$("quest.continuous.desc"), TEX_Q_RING, 0)
+    questDefine(QUEST_SEAWEED, lockey$("quest.seaweed.name"), lockey$("quest.seaweed.desc"), TEX_SEAWEED, 0)
+    questDefine(QUEST_WAKE, lockey$("quest.wake.name"), lockey$("quest.wake.desc"), TEX_Q_DOT, 0)
+    questDefine(QUEST_TURTLE, lockey$("quest.turtle.name"), lockey$("quest.turtle.desc"), TEX_TURTLE, 0)
+    questDefine(QUEST_CUTTLEFISH, lockey$("quest.cuttlefish.name"), lockey$("quest.cuttlefish.desc"), TEX_Q_RING, 0)
+    questDefine(QUEST_CONSTELLATION, lockey$("quest.constellation.name"), lockey$("quest.constellation.desc"), TEX_Q_RING, 0)
+    questDefine(QUEST_REMORA, lockey$("quest.tail.name"), lockey$("quest.tail.desc"), TEX_Q_EEL, TEX_Q_EEL)
+    questDefine(QUEST_SLEEPERS, lockey$("quest.sleepers.name"), lockey$("quest.sleepers.desc"), TEX_Q_SHELL, TEX_Q_SHELL)
+    questDefine(QUEST_ECHO, lockey$("quest.echo.name"), lockey$("quest.echo.desc"), TEX_Q_RING, 0)
+    questDefine(QUEST_PULSE, lockey$("quest.pulse.name"), lockey$("quest.pulse.desc"), TEX_Q_DOT, 0)
+    questDefine(QUEST_TOTEM, lockey$("quest.totem.name"), lockey$("quest.totem.desc"), TEX_Q_RING, 0)
+    questDefine(QUEST_ROLL_CALL, lockey$("quest.rollcall.name"), lockey$("quest.rollcall.desc"), TEX_Q_RING, 0)
+    questDefine(QUEST_GLASS_FISH, lockey$("quest.glassfish.name"), lockey$("quest.glassfish.desc"), TEX_GLASS_FISH, 0)
+    questDefine(QUEST_REFLECTION, lockey$("quest.reflection.name"), lockey$("quest.reflection.desc"), TEX_Q_RING, 0)
+    questDefine(QUEST_TETHER, lockey$("quest.tether.name"), lockey$("quest.tether.desc"), TEX_Q_BUOY, TEX_Q_BUOY)
+    questDefine(QUEST_LANTERN, lockey$("quest.lantern.name"), lockey$("quest.lantern.desc"), TEX_Q_ANGLER, TEX_Q_ANGLER)
+    questDefine(QUEST_HATCH, lockey$("quest.hatch.name"), lockey$("quest.hatch.desc"), TEX_Q_PEARL, 0)
+    questDefine(QUEST_FORECAST, lockey$("quest.forecast.name"), lockey$("quest.forecast.desc"), TEX_Q_DOT, 0)
+    questDefine(QUEST_MOORINGS, lockey$("quest.moorings.name"), lockey$("quest.moorings.desc"), TEX_Q_RING, 0)
+    questDefine(QUEST_TRADE_PLACES, lockey$("quest.tradeplaces.name"), lockey$("quest.tradeplaces.desc"), TEX_Q_RING, 0)
+    questDefine(QUEST_PILOT_FISH, lockey$("quest.pilotfish.name"), lockey$("quest.pilotfish.desc"), TEX_Q_PILOT, 0)
+    questDefine(QUEST_FERRY, lockey$("quest.ferry.name"), lockey$("quest.ferry.desc"), TEX_Q_STARFISH, 0)
+    questDefine(QUEST_LASSO, lockey$("quest.lasso.name"), lockey$("quest.lasso.desc"), TEX_Q_RING, 0)
+    questDefine(QUEST_TREASURE, lockey$("quest.treasure.name"), lockey$("quest.treasure.desc"), TEX_Q_PEARL, 0)
 return
 
 quests_list_exit:
@@ -130,7 +132,7 @@ function questLeftRight(qEv, qA, qB)
         ` only a swap that moved it, and popped nothing, breaks it. any other miss is none of its business.
         if QUEST_MISSED
             if qDollarMoved
-                questSayAt(qDollar, "broken!", rgb(240, 225, 170))
+                questSayAt(qDollar, loc$("quest.say.broken"), rgb(240, 225, 170))
                 questRestart()
                 exitfunction
             endif
@@ -378,7 +380,7 @@ function questShark(qEv, qA, qB)
             if qB then QUEST_V(1) = QUEST_V(1) + 1
         else
             ` it has eaten, and that is that, right away
-            questSayAt(QUEST_V(0), "chomp!", rgb(255, 110, 110))
+            questSayAt(QUEST_V(0), loc$("quest.say.chomp"), rgb(255, 110, 110))
             questRestart()
             exitfunction
         endif
@@ -386,7 +388,7 @@ function questShark(qEv, qA, qB)
 
     if qEv = QEV_SETTLE
         if QUEST_V(2)
-            questSayAt(QUEST_V(0), "chomp!", rgb(255, 110, 110))
+            questSayAt(QUEST_V(0), loc$("quest.say.chomp"), rgb(255, 110, 110))
             questRestart()
             exitfunction
         endif
@@ -478,7 +480,7 @@ function questPuffers(qEv, qA, qB)
         ` the count goes back to nothing the moment that one pops, and stays there until the board has settled
         if qPuffPopped
             if QUEST_V(2) = 0
-                questSay("puff!", rgb(250, 190, 54))
+                questSay(loc$("quest.say.puff"), rgb(250, 190, 54))
             endif
             QUEST_V(2) = 1
         endif
@@ -1180,13 +1182,13 @@ function questConstellation(qEv, qA, qB)
         QUEST_V(0) = random stream(RNG_QUESTS, 3)
         questProgress(0, 0)
         if QUEST_V(0) = 0
-            questNote("a line")
+            questNote(loc$("quest.note.line"))
         endif
         if QUEST_V(0) = 1
-            questNote("a square")
+            questNote(loc$("quest.note.square"))
         endif
         if QUEST_V(0) = 2
-            questNote("an L")
+            questNote(loc$("quest.note.l"))
         endif
     endif
 
@@ -1254,7 +1256,7 @@ function questRemora(qEv, qA, qB)
         qTailN = 0
         while qTailN < QUEST_LIST_N
             if QUEST_LIST(qTailN) = qB
-                questSay("tangled!", rgb(255, 150, 110))
+                questSay(loc$("quest.say.tangled"), rgb(255, 150, 110))
                 questRestart()
                 exitfunction
             endif
@@ -1465,7 +1467,7 @@ function questEcho(qEv, qA, qB)
                         create basic tween CELLS(qEchoOne).scaleWaveTweenId, 1.5, 1, 220, 0
                         create basic tween CELLS(qEchoTwo).scaleWaveTweenId, 1.5, 1, 220, 0
                         if qEchoPops
-                            questSayAt(qEchoOne, "echo!", rgb(200, 150, 255))
+                            questSayAt(qEchoOne, loc$("quest.say.echo"), rgb(200, 150, 255))
                             QUEST_V(0) = QUEST_V(0) + 1
                             REQUEST_COMBO_CHECK = 1
                         endif
@@ -1805,7 +1807,7 @@ function questGlassFish(qEv, qA, qB)
         endif
         if qGlassBroke
             if qGlassAt >= 0
-                questSayAt(qGlassAt, "shattered!", rgb(200, 230, 255))
+                questSayAt(qGlassAt, loc$("quest.say.shattered"), rgb(200, 230, 255))
             endif
             questRestart()
             exitfunction
@@ -1897,7 +1899,7 @@ function questTether(qEv, qA, qB)
     if qEv = QEV_STEP
         qRopeLong = questChebyshev(qB, QUEST_V(0))
         if qRopeLong > 3
-            questSay("snap!", rgb(255, 150, 110))
+            questSay(loc$("quest.say.snap"), rgb(255, 150, 110))
             questRestart()
             exitfunction
         endif
@@ -1991,7 +1993,7 @@ function questLantern(qEv, qA, qB)
             exitfunction
         endif
         if QUEST_V(0) <= 0
-            questSay("dark!", rgb(150, 160, 200))
+            questSay(loc$("quest.say.dark"), rgb(150, 160, 200))
             questRestart()
             exitfunction
         endif
@@ -2061,7 +2063,7 @@ function questHatch(qEv, qA, qB)
                     if QUEST_V(qEggN) = 0
                         QUEST_V(20 + qEggN) = 1
                         QUEST_V(4) = QUEST_V(4) + 1
-                        questSayAt(qEggAt, "hatched!", rgb(255, 240, 150))
+                        questSayAt(qEggAt, loc$("quest.say.hatched"), rgb(255, 240, 150))
                     else
                         QUEST_V(30 + qEggN) = 1
                     endif
@@ -2328,7 +2330,7 @@ function questPilotFish(qEv, qA, qB)
                         QUEST_V(9) = QUEST_V(9) + 1
                         qPilotCell = qPilotAt
                         spawnBubbles(getCellX(qPilotCell mod CELL_COLUMN_COUNT), getCellY(qPilotCell / CELL_COLUMN_COUNT), CELL_SIZE / 2, 16, 0, rgb(255, 220, 64))
-                        questSayAt(qPilotCell, "got it!", rgb(255, 220, 64))
+                        questSayAt(qPilotCell, loc$("quest.say.gotit"), rgb(255, 220, 64))
                     endif
                 endif
             next
@@ -2377,7 +2379,7 @@ function questFerryDrop()
     if QUEST_V(0) > 0
         QUEST_V(10 + QUEST_V(0)) = 0
         QUEST_V(0) = 0
-        questSay("slipped away", rgb(255, 170, 190))
+        questSay(loc$("quest.say.slipped"), rgb(255, 170, 190))
     endif
 endfunction
 
@@ -2391,7 +2393,7 @@ function questFerryArrive()
         questProgress(QUEST_V(6), 3)
         spawnBubbles(getCellX(SELECTION_POS.x), getCellY(SELECTION_POS.y), CELL_SIZE / 2, 12, 0, rgb(255, 170, 190))
     else
-        questSay("pop more fish first", rgb(255, 170, 190))
+        questSay(loc$("quest.say.popmore"), rgb(255, 170, 190))
     endif
 endfunction
 
@@ -2621,7 +2623,7 @@ function questLasso(qEv, qA, qB)
                     if qLassoClosing
                         QUEST_V(3) = 1
                     else
-                        questSay(str$(QUEST_V(2)) + " pops on the way", rgb(255, 220, 64))
+                        questSay(loc$("quest.say.lassopops", "pops", QUEST_V(2)), rgb(255, 220, 64))
                     endif
                 endif
             endif
@@ -2654,7 +2656,7 @@ function questLasso(qEv, qA, qB)
         ` the swap that closed the loop popped nothing, so the loop was one knot short
         if QUEST_V(3)
             QUEST_V(3) = 0
-            questSay(str$(QUEST_V(2)) + " pops on the way", rgb(255, 220, 64))
+            questSay(loc$("quest.say.lassopops", "pops", QUEST_V(2)), rgb(255, 220, 64))
         endif
         qLassoAt = questFindMark(1)
         if qLassoAt < 0 then QUEST_V(1) = 1
@@ -2688,7 +2690,7 @@ function questTreasure(qEv, qA, qB)
         QUEST_V(0) = random stream(RNG_QUESTS, CELL_COUNT)
         QUEST_V(1) = -1
         questProgress(0, 0)
-        questNote("pop to listen")
+        questNote(loc$("quest.note.listen"))
     endif
 
     if qEv = QEV_JUDGE
@@ -2707,23 +2709,23 @@ function questTreasure(qEv, qA, qB)
         if qDigAt >= 0
             if qDigBest = 0
                 QUEST_V(2) = 1
-                questSayAt(qDigAt, "treasure!", rgb(255, 220, 64))
+                questSayAt(qDigAt, loc$("quest.say.treasure"), rgb(255, 220, 64))
             else
                 if QUEST_CHAIN = 1
                     if QUEST_V(1) < 0
-                        questNote("listening")
+                        questNote(loc$("quest.note.listening"))
                     else
                         if qDigBest < QUEST_V(1)
-                            questSayAt(qDigAt, "warmer", rgb(255, 130, 90))
-                            questNote("warmer")
+                            questSayAt(qDigAt, loc$("quest.say.warmer"), rgb(255, 130, 90))
+                            questNote(loc$("quest.say.warmer"))
                         endif
                         if qDigBest > QUEST_V(1)
-                            questSayAt(qDigAt, "colder", rgb(120, 190, 255))
-                            questNote("colder")
+                            questSayAt(qDigAt, loc$("quest.say.colder"), rgb(120, 190, 255))
+                            questNote(loc$("quest.say.colder"))
                         endif
                         if qDigBest = QUEST_V(1)
-                            questSayAt(qDigAt, "the same", rgb(220, 220, 220))
-                            questNote("the same")
+                            questSayAt(qDigAt, loc$("quest.say.same"), rgb(220, 220, 220))
+                            questNote(loc$("quest.say.same"))
                         endif
                     endif
                     QUEST_V(1) = qDigBest

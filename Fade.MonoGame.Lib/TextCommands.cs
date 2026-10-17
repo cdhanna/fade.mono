@@ -136,6 +136,8 @@ public partial class FadeMonoGameCommands
         textSprite.sprite.imageId = spriteFontId;
         textSprite.text = text;
         TextSystem.textSprites[index] = textSprite;
+        // a plain text draws its string as it is, so a loc text given one is a loc text no more
+        LocalizationSystem.Unbind(index);
     }
 
     /// <summary>
@@ -149,6 +151,11 @@ public partial class FadeMonoGameCommands
     /// to fit the new string, follow up with <see cref="SizeText">size text</see> or
     /// <see cref="SizeSpriteTextAspectX(int, float)">size text x</see> since the scale won't
     /// automatically adjust to the new content.
+    ///
+    /// The string is always drawn exactly as given. On a text made with
+    /// <see cref="TextLoc">text loc</see>, this turns it back into a plain text that no longer
+    /// follows the language. To show another string from the tables, use
+    /// <see cref="SetTextLoc">set text loc</see> instead.
     /// </remarks>
     /// <example>
     /// Update a score display every frame.
@@ -174,6 +181,8 @@ public partial class FadeMonoGameCommands
         TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
         textSprite.text = text;
         TextSystem.textSprites[index] = textSprite;
+        LocalizationSystem.Unbind(index);
+        LocalizationSystem.CheckPlainText(textId, text);
     }
 
     /// <summary>
@@ -463,6 +472,8 @@ public partial class FadeMonoGameCommands
     {
         TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
         textSprite.sprite.scale = new Vector2(x, y);
+        // a scale set by hand is not done again when a loc text's string changes
+        textSprite.sizeMode = TextSizeMode.None;
         TextSystem.textSprites[index] = textSprite;
     }
 
@@ -742,6 +753,7 @@ public partial class FadeMonoGameCommands
         var yRatio = yPixels / size.Y;
 
         textSprite.sprite.scale = new Vector2(xRatio, yRatio);
+        RememberSize(ref textSprite, TextSizeMode.Stretch, xPixels, yPixels);
         TextSystem.textSprites[index] = textSprite;
     }
 
@@ -791,6 +803,7 @@ public partial class FadeMonoGameCommands
         var size = RichTextSystem.Measure(ref textSprite, ref runtimeFont);
         var xRatio = xPixels / size.X;
         textSprite.sprite.scale = new Vector2(xRatio, xRatio);
+        RememberSize(ref textSprite, TextSizeMode.AspectX, xPixels, 0);
         TextSystem.textSprites[index] = textSprite;
 
     }
@@ -843,6 +856,7 @@ public partial class FadeMonoGameCommands
         xRatio = Math.Clamp(xRatio, min, max);
 
         textSprite.sprite.scale = new Vector2(xRatio, xRatio);
+        RememberSize(ref textSprite, TextSizeMode.AspectXClamped, xPixels, 0, min, max);
         TextSystem.textSprites[index] = textSprite;
 
     }
@@ -890,6 +904,7 @@ public partial class FadeMonoGameCommands
         var size = RichTextSystem.Measure(ref textSprite, ref runtimeFont);
         var yRatio = yPixels / size.Y;
         textSprite.sprite.scale = new Vector2(yRatio, yRatio);
+        RememberSize(ref textSprite, TextSizeMode.AspectY, 0, yPixels);
         TextSystem.textSprites[index] = textSprite;
     }
 

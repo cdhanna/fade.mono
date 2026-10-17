@@ -23,7 +23,7 @@ remend
 ` info mode, and it is not there until the first cycle of a game is done. see THE MOON IN INFO MODE
 ` in fish_headers_tide.
 setup_tide:
-    INFO_INDEX_TIDE = allocateInfoBlob(TIDE_MOON_X - TIDE_INFO_LEFT, TIDE_MOON_Y - TIDE_INFO_UP, TIDE_INFO_LEFT * 2, TIDE_INFO_TALL, "The moon", "The moon comes after several tides. Tides ebb with pull and pushes.")
+    INFO_INDEX_TIDE = allocateInfoBlob(TIDE_MOON_X - TIDE_INFO_LEFT, TIDE_MOON_Y - TIDE_INFO_UP, TIDE_INFO_LEFT * 2, TIDE_INFO_TALL, loc$("tide.moon"), loc$("tide.moon.desc"))
     setInfoBlobEnabled(INFO_INDEX_TIDE, 0)
     TIDE_INFO_STATE = 0
     TIDE_ROUNDS_TALL = INFOS(INFO_INDEX_ROUNDS).size.y
@@ -317,6 +317,10 @@ function judgeTide()
 
     if MULT_PENDING_SWAPS > 0
         TIDE_LAST_SWAP = tideWas
+
+        ` a swap that is what the tide wants flushes the schools out in the background. this comes
+        ` before the water moves, which may change what the tide wants. see fish_headers_school.
+        schoolTideSwap(tideWas)
         if tideWas = TIDE_SWAP_PUSH
             tideMove(1)
         endif
@@ -416,6 +420,9 @@ function tideDayBreaks()
     tideClearBank()
     REQUEST_COMBO_CHECK = 1
     TIDE_DAWN_RING = 1
+
+    ` and every group that it pops can be a school, not only one that a swap made. see THE DAWN in fish_headers_school.
+    SCHOOL_DAWN = 1
 
     ` the rush that builds while the light comes back, and the music comes back up
     tidePlaySound(TIDE_SFX_DAWN, TIDE_VOL_DAWN#, 0)
@@ -520,8 +527,11 @@ function tideInfoRefresh()
         if tideInfoWant <> TIDE_INFO_STATE
             TIDE_INFO_STATE = tideInfoWant
             tideInfoBlob = INFOS(INFO_INDEX_TIDE)
-            tideInfoBlob.desc$ = "The moon comes after several tides. Tides ebb with pull and pushes."
-            if tideInfoWant = 2 then tideInfoBlob.desc$ = "Day returns soon"
+            tideInfoBlob.title$ = loc$("tide.moon")
+            tideInfoBlob.desc$ = loc$("tide.moon.desc")
+            if tideInfoWant = 2
+                tideInfoBlob.desc$ = loc$("tide.moon.night")
+            endif
             INFOS(INFO_INDEX_TIDE) = tideInfoBlob
 
             ` the spot of the count of the rounds makes room for it. it is cut back to what is over the

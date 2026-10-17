@@ -100,14 +100,14 @@ setup_move_equip:
     ` and the two answers go to the right of the highlighted row, with "no" the nearer one.
     ` they are put on that row when the question is asked.
     reserve text id(EQUIP_NO_TEXT_ID)
-    text EQUIP_NO_TEXT_ID, EQUIP_NO_X, 0, SCORE_FONT, "No"
+    text loc EQUIP_NO_TEXT_ID, EQUIP_NO_X, 0, SCORE_FONT, "equip.no"
     size text y EQUIP_NO_TEXT_ID, 20
     set text offset EQUIP_NO_TEXT_ID, .5, 0
     order text EQUIP_NO_TEXT_ID, ORDER_ABILITY_TEXT
     hide text EQUIP_NO_TEXT_ID
 
     reserve text id(EQUIP_YES_TEXT_ID)
-    text EQUIP_YES_TEXT_ID, EQUIP_YES_X, 0, SCORE_FONT, "Yes"
+    text loc EQUIP_YES_TEXT_ID, EQUIP_YES_X, 0, SCORE_FONT, "equip.yes"
     size text y EQUIP_YES_TEXT_ID, 20
     set text offset EQUIP_YES_TEXT_ID, .5, 0
     order text EQUIP_YES_TEXT_ID, ORDER_ABILITY_TEXT
@@ -116,7 +116,7 @@ setup_move_equip:
     ` the labels sit to the left of the rows that they are about, and end at the edge of the rows.
     ` equip_build_rows puts them next to the right rows.
     reserve text id(EQUIP_INVENTORY_TEXT_ID)
-    text EQUIP_INVENTORY_TEXT_ID, EQUIP_ROW_X - 8, 0, SCORE_FONT, "inventory"
+    text loc EQUIP_INVENTORY_TEXT_ID, EQUIP_ROW_X - 8, 0, SCORE_FONT, "equip.label.inventory"
     size text y EQUIP_INVENTORY_TEXT_ID, 16
     set text offset EQUIP_INVENTORY_TEXT_ID, 1, 0
     color text EQUIP_INVENTORY_TEXT_ID, rgb(150, 190, 255)
@@ -124,7 +124,7 @@ setup_move_equip:
     hide text EQUIP_INVENTORY_TEXT_ID
 
     reserve text id(EQUIP_AVAILABLE_TEXT_ID)
-    text EQUIP_AVAILABLE_TEXT_ID, EQUIP_ROW_X - 8, 0, SCORE_FONT, "available"
+    text loc EQUIP_AVAILABLE_TEXT_ID, EQUIP_ROW_X - 8, 0, SCORE_FONT, "equip.label.available"
     size text y EQUIP_AVAILABLE_TEXT_ID, 16
     set text offset EQUIP_AVAILABLE_TEXT_ID, 1, 0
     color text EQUIP_AVAILABLE_TEXT_ID, rgb(150, 190, 255)
@@ -161,7 +161,7 @@ handle_move_equip:
         sync
     endwhile
 
-    set text ABILITY_SELECT_LABEL_TEXT_ID, "Choose a Button"
+    set text loc ABILITY_SELECT_LABEL_TEXT_ID, "equip.title.choose"
     size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
 
     EQUIP_MODE = EQUIP_MODE_UPGRADE
@@ -210,7 +210,7 @@ handle_move_rearrange:
     ` the moves that are waiting in the queue were aimed at the buttons as they are now
     gosub clear_queued_moves
 
-    set text ABILITY_SELECT_LABEL_TEXT_ID, "Rearrange Moves"
+    set text loc ABILITY_SELECT_LABEL_TEXT_ID, "equip.title.rearrange"
     size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
 
     EQUIP_MODE = EQUIP_MODE_REARRANGE
@@ -343,12 +343,14 @@ equip_refresh:
         equipFill = EQUIP_ROWS(equipN)
         equipFillMove = getEquipRowMove(equipN)
 
-        equipFillName$ = "empty"
+        equipFillName$ = loc$("equip.row.empty")
         equipFillNote$ = " "
         if equipFillMove >= 0
             equipFillName$ = CARDS(equipFillMove).name$
-            equipFillNote$ = str$(CARDS(equipFillMove).moveClock) + " move recharge"
-            if CARDS(equipFillMove).moveClock <= 0 then equipFillNote$ = "no recharge"
+            equipFillNote$ = loc$("equip.row.recharge", "count", CARDS(equipFillMove).moveClock)
+            if CARDS(equipFillMove).moveClock <= 0
+                equipFillNote$ = loc$("equip.row.norecharge")
+            endif
         endif
 
         select equipFill.kind
@@ -359,14 +361,14 @@ equip_refresh:
                 ` it has no button, so it shows the picture that stands for a move instead
                 set text equipFill.keyTextId, "{move}"
                 if equipFillMove >= 0
-                    equipFillNote$ = "no button"
+                    equipFillNote$ = loc$("equip.row.nobutton")
                 else
-                    equipFillName$ = "nothing"
+                    equipFillName$ = loc$("equip.row.nothing")
                 endif
             endcase
             case EQUIP_ROW_DONE
                 set text equipFill.keyTextId, " "
-                equipFillName$ = "done"
+                equipFillName$ = loc$("equip.row.done")
             endcase
         endselect
 
@@ -377,29 +379,29 @@ equip_refresh:
 
     ` the line above the rows is about the highlighted row
     equipAboutMove = getEquipRowMove(EQUIP_SELECTED)
-    equipAbout$ = "An empty button."
+    equipAbout$ = loc$("equip.about.empty")
     if equipAboutMove >= 0
-        equipAbout$ = CARDS(equipAboutMove).name$ + ": " + CARDS(equipAboutMove).desc$
+        equipAbout$ = loc$("equip.about.move", "name", CARDS(equipAboutMove).name$, "desc", CARDS(equipAboutMove).desc$)
     endif
     if EQUIP_ROWS(EQUIP_SELECTED).kind = EQUIP_ROW_SPARE
         if equipAboutMove >= 0
-            equipAbout$ = equipAbout$ + ". It is not on a button."
+            equipAbout$ = loc$("equip.about.spare", "name", CARDS(equipAboutMove).name$, "desc", CARDS(equipAboutMove).desc$)
         else
-            equipAbout$ = "Nothing is waiting for a button."
+            equipAbout$ = loc$("equip.about.nospare")
         endif
     endif
     if EQUIP_ROWS(EQUIP_SELECTED).kind = EQUIP_ROW_DONE
-        equipAbout$ = "Back to the game."
+        equipAbout$ = loc$("equip.about.done")
         if EQUIP_SPARE >= 0
-            equipAbout$ = "Back to the game, without " + CARDS(EQUIP_SPARE).name$ + "."
+            equipAbout$ = loc$("equip.about.done.without", "name", CARDS(EQUIP_SPARE).name$)
         endif
     endif
     set text EQUIP_DESC_TEXT_ID, equipAbout$
 
     if EQUIP_HELD >= 0
-        set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} swap with this    {pause} put down"
+        set text INFO_HINT_TEXT_ID, loc$("equip.hint.held")
     else
-        set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} pick up    {pause} done"
+        set text INFO_HINT_TEXT_ID, loc$("equip.hint.pick")
     endif
 
 return
@@ -508,7 +510,7 @@ equip_run:
                     EQUIP_CONFIRMING = 1
                     EQUIP_CONFIRM_YES = 0 `start on "no", so that leaning on the button does not lose a move
 
-                    set text EQUIP_PROMPT_TEXT_ID, "Leave " + CARDS(EQUIP_SPARE).name$ + " behind? You lose it until an upgrade offers it again."
+                    set text EQUIP_PROMPT_TEXT_ID, loc$("equip.prompt.leave", "name", CARDS(EQUIP_SPARE).name$)
                     equipAnswerY = getEquipRowY(EQUIP_SELECTED) + 1
                     set text position EQUIP_NO_TEXT_ID, EQUIP_NO_X, equipAnswerY
                     set text position EQUIP_YES_TEXT_ID, EQUIP_YES_X, equipAnswerY
@@ -517,7 +519,7 @@ equip_run:
                     show text EQUIP_PROMPT_TEXT_ID
                     show text EQUIP_NO_TEXT_ID
                     show text EQUIP_YES_TEXT_ID
-                    set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} answer    {pause} go back"
+                    set text INFO_HINT_TEXT_ID, loc$("equip.hint.confirm")
                 else
                     equipDone = 1
                 endif

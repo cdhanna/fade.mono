@@ -48,49 +48,50 @@ setup_credits:
     hide sprite creditViewSprite
 
     ` the lines of the credits. the first number is how far down the roll the line is.
-    addCreditText(0, 18, "Created by", 0)
+    addCreditLocText(0, 18, lockey$("credits.createdby"), 0)
     addCreditText(24, 40, "Chris Hanna", 1)
     addCreditSprite(WORLD_WIDTH / 2 + 170, 40, TEX_CREDIT_CHRIS, 96, 96)
 
-    addCreditText(120, 18, "Dedicated to my wife,", 0)
+    addCreditLocText(120, 18, lockey$("credits.dedicated"), 0)
     addCreditText(144, 40, "Ana", 1)
 
     ` the two logos go by side by side, with what they are for underneath
     addCreditSprite(WORLD_WIDTH / 2 - 50, 262, TEX_LOGO_FADE, 64, 64)
     addCreditSprite(WORLD_WIDTH / 2 + 50, 262, TEX_LOGO_MONOGAME, 64, 64)
-    addCreditText(306, 22, "Made with Fade Basic, and MonoGame", 1)
+    addCreditLocText(306, 22, lockey$("credits.madewith"), 1)
 
     ` the melodies in the music are adapted from these. they are written in setup_melodies, in fish_routines_music.
-    addCreditText(400, 18, "Music adapted from the works of", 0)
+    addCreditLocText(400, 18, lockey$("credits.music"), 0)
     addCreditText(424, 40, "Claude Debussy", 1)
     addCreditText(470, 16, "Clair de Lune, Arabesque No. 1,", 0)
     addCreditText(490, 16, "La fille aux cheveux de lin, Reverie", 0)
     addCreditText(526, 28, "Erik Satie", 1)
     addCreditText(558, 16, "Gymnopedie No. 1", 0)
     addCreditText(594, 28, "Frederic Chopin", 1)
-    addCreditText(626, 16, "Nocturne Op. 9 No. 2, Funeral March,", 0)
-    addCreditText(646, 16, "Preludes Op. 28, No. 4 and No. 15", 0)
+    addCreditLocText(626, 16, lockey$("credits.music.chopin1"), 0)
+    addCreditLocText(646, 16, lockey$("credits.music.chopin2"), 0)
     addCreditText(682, 28, "Ludwig van Beethoven", 1)
-    addCreditText(714, 16, "Moonlight Sonata", 0)
+    addCreditLocText(714, 16, lockey$("credits.music.moonlight"), 0)
     addCreditText(750, 28, "Pyotr Ilyich Tchaikovsky", 1)
-    addCreditText(782, 16, "Swan Lake", 0)
+    addCreditLocText(782, 16, lockey$("credits.music.swanlake"), 0)
     addCreditText(818, 28, "Sergei Rachmaninoff", 1)
-    addCreditText(850, 16, "Prelude in C-sharp Minor", 0)
-    addCreditText(886, 28, "and Gustav Holst", 1)
-    addCreditText(918, 16, "In the Bleak Midwinter", 0)
+    addCreditLocText(850, 16, lockey$("credits.music.prelude"), 0)
+    addCreditText(886, 28, " ", 1)
+    set text loc CREDIT_LINES(CREDIT_COUNT - 1).id, "credits.and", "name", "Gustav Holst"
+    addCreditLocText(918, 16, lockey$("credits.music.midwinter"), 0)
 
     ` the pictures of the fish are from a pack by pixelGnome
-    addCreditText(1010, 18, "Fish icons by", 0)
+    addCreditLocText(1010, 18, lockey$("credits.fishicons"), 0)
     addCreditText(1034, 40, "pixelGnome", 1)
     addCreditText(1080, 16, "pixelgnome.itch.io/fish", 0)
 
     ` and the diver is from a pack by dkproductions
-    addCreditText(1140, 18, "Diver by", 0)
+    addCreditLocText(1140, 18, lockey$("credits.diver"), 0)
     addCreditText(1164, 40, "dkproductions", 1)
     addCreditText(1210, 16, "dkproductions.itch.io/pixel-art-diver", 0)
 
     ` CREDIT_LENGTH, in the fish headers, is where the bottom of this last line is
-    addCreditText(1310, 28, "Thanks for playing, friend", 1)
+    addCreditLocText(1310, 28, lockey$("credits.thanks"), 1)
 
     ` the splash screen is drawn into the menu, on top of the sky. it is a long way up in that sky, and
     ` the logos are left behind up there when the camera comes down to the main menu.
@@ -107,7 +108,7 @@ setup_credits:
     hide sprite SPLASH_MONOGAME_SPRITE
 
     reserve text id(SPLASH_TEXT_ID)
-    text SPLASH_TEXT_ID, WORLD_WIDTH / 2, 190, SCORE_FONT, "Made with Fade Basic, and MonoGame"
+    text loc SPLASH_TEXT_ID, WORLD_WIDTH / 2, 190, SCORE_FONT, "credits.madewith"
     size text y SPLASH_TEXT_ID, 20
     set text offset SPLASH_TEXT_ID, .5, 0
     color text SPLASH_TEXT_ID, rgb(150, 190, 255)
@@ -279,7 +280,7 @@ menu_run_credits:
 
     ` the menu gets out of the way, and the hint says how to stop
     showMenuChrome(0)
-    set text MENU_HINT_TEXT_ID, "{dir} faster, or back    {confirm} skip"
+    set text MENU_HINT_TEXT_ID, loc$("credits.hint")
     size text y MENU_HINT_TEXT_ID, 16
 
     ` the hint is fainter than it is on the menu, because the credits are the thing to look at.
@@ -397,6 +398,14 @@ function addCreditText(y, height, words$, bright)
 
     CREDIT_LINES(CREDIT_COUNT) = entry
     CREDIT_COUNT = CREDIT_COUNT + 1
+endfunction
+
+
+` the same, for a line that is bound to a key of the string tables, so that it follows a change of the
+` language by itself. the key is written with lockey$ by whoever calls this.
+function addCreditLocText(y, height, crLocKey$, bright)
+    addCreditText(y, height, " ", bright)
+    set text loc CREDIT_LINES(CREDIT_COUNT - 1).id, crLocKey$
 endfunction
 
 

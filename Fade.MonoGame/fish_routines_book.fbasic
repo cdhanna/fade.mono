@@ -118,7 +118,7 @@ book_show:
         endwhile
     endif
 
-    set text ABILITY_SELECT_LABEL_TEXT_ID, "Open Book"
+    set text loc ABILITY_SELECT_LABEL_TEXT_ID, "book.title"
     size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
 
     ` the pictures, in rows, with the grid in the middle of the screen
@@ -156,13 +156,13 @@ book_refresh:
     ` a card that runs out says how many of it are left, the same as it does when it is dealt
     bookAbout$ = CARDS(bookAboutCard).desc$
     if CARDS(bookAboutCard).maxUses > 0
-        bookAbout$ = bookAbout$ + " " + str$(CARDS(bookAboutCard).maxUses - CARDS(bookAboutCard).uses) + " left."
+        bookAbout$ = loc$("book.desc.left", "desc", CARDS(bookAboutCard).desc$, "count", CARDS(bookAboutCard).maxUses - CARDS(bookAboutCard).uses)
     endif
     set text BOOK_DESC_TEXT_ID, bookAbout$
 
     select CARDS(bookAboutCard).abilityType
         case ABILITY_TYPE_PASSIVE
-            set text BOOK_KIND_TEXT_ID, "{passive} passive"
+            set text BOOK_KIND_TEXT_ID, loc$("ability.type.passive")
         endcase
         case ABILITY_TYPE_MOVE
             ` a move says whether there is room for it, the same as its card does
@@ -170,17 +170,19 @@ book_refresh:
             for bookSlotN = 0 to MOVE_SLOTS_OPEN - 1
                 if MOVE_ABILITY_BINDINGS(bookSlotN).assigned = 0 then bookSlotsLeft = bookSlotsLeft + 1
             next
-            bookKind$ = "{move} move, " + str$(bookSlotsLeft) + " slots left"
-            if bookSlotsLeft = 1 then bookKind$ = "{move} move, 1 slot left"
-            if bookSlotsLeft = 0 then bookKind$ = "{move} move, no slots left"
+            if bookSlotsLeft = 0
+                bookKind$ = loc$("book.kind.move.noslots")
+            else
+                bookKind$ = loc$("book.kind.move.slots", "count", bookSlotsLeft)
+            endif
             set text BOOK_KIND_TEXT_ID, bookKind$
         endcase
         case ABILITY_TYPE_INSTANT
-            set text BOOK_KIND_TEXT_ID, "{instant} instant"
+            set text BOOK_KIND_TEXT_ID, loc$("ability.type.instant")
         endcase
     endselect
 
-    set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} take it    {pause} go back"
+    set text INFO_HINT_TEXT_ID, loc$("book.hint")
 
 return
 
@@ -263,7 +265,7 @@ book_run:
 
     ` the player went back, so the cards that were dealt come in, with the lines under them
     if BOOK_PICK < 0
-        set text ABILITY_SELECT_LABEL_TEXT_ID, "Select Upgrade"
+        set text loc ABILITY_SELECT_LABEL_TEXT_ID, "ability.title.select"
         size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
         create basic tween ABILITY_SELECT_LABEL_FADE_TWEEN_ID, 0, 1, 200, 0
         for bookN = 0 to choiceCount
@@ -276,7 +278,7 @@ book_run:
         show text UPGRADE_SKIP_TEXT_ID
         show text UPGRADE_REROLL_TEXT_ID
         show text UPGRADE_DROP_TEXT_ID
-        set text INFO_HINT_TEXT_ID, "{dir} choose    {confirm} take it"
+        set text INFO_HINT_TEXT_ID, loc$("ability.hint.take")
         showInfoBorder(ABILITY_CURSOR, 1)
     endif
 

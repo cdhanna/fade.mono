@@ -948,7 +948,7 @@ function createProgressBar(pos as vec, size as vec)
     enable text drop shadow bar.textNumId, 2, -2, rgb(0,0,0)
 
     reserve text id(bar.textTitleId)
-    text bar.textTitleId, pos.x, pos.y+3, SCORE_FONT, "Round Progress"
+    text loc bar.textTitleId, pos.x, pos.y+3, SCORE_FONT, "hud.roundprogress"
     order text bar.textTitleId, ORDER_HUD_TEXT
     size text y bar.textTitleId, 20
     set text offset bar.textTitleId, 0, 1
@@ -1845,6 +1845,10 @@ function startLiveMove(dirX, dirY, wantSwap)
         ` cursor carries is still in its own cell, so that is where it is turned. see FACING in fish_headers_school.
         if wantSwap
             schoolSwapTurns(bIndex, aIndex, dirX)
+
+            ` and a swap that goes down calls on the schools for the new fish, and one that goes up does
+            ` not. see THE FISH COME HOME in fish_headers_school.
+            schoolDrawWay(dirY)
         endif
 
         ` a shake that was still going is over. the cursor is on its way somewhere now.
@@ -1911,6 +1915,10 @@ function stepLiveMove()
                 CELLS(LIVE_MOVE_A).value = t
                 swapCellStacks(LIVE_MOVE_A, LIVE_MOVE_B)
 
+                ` the cursor carried a fish, and the school of its kind waits on the swap. see THE CURSOR
+                ` CALLS ON THE SCHOOLS in fish_headers_school.
+                schoolSwapMade(LIVE_MOVE_B)
+
                 updateCell(CELLS(LIVE_MOVE_A))
                 updateCell(CELLS(LIVE_MOVE_B))
 
@@ -1961,6 +1969,10 @@ function stepLiveMove()
             else
                 ` the cursor moved on its own, which may be a step of a hidden pattern. see CORAL in fish_headers.
                 coralCursorStepped(LIVE_MOVE_FROM_X, LIVE_MOVE_FROM_Y, LIVE_MOVE_DIR_X, LIVE_MOVE_DIR_Y)
+
+                ` and it left a fish, which may send its school away. see THE CURSOR CALLS ON THE SCHOOLS
+                ` in fish_headers_school.
+                schoolCursorStepped(LIVE_MOVE_FROM_X + LIVE_MOVE_FROM_Y * CELL_COLUMN_COUNT, LIVE_MOVE_TO_X + LIVE_MOVE_TO_Y * CELL_COLUMN_COUNT)
             endif
 
             SELECTION_POS.x = LIVE_MOVE_TO_X

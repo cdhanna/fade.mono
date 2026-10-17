@@ -73,7 +73,7 @@ setup_coral:
         hide sprite coralLinkId
         CORAL_RUNE_LINKS(coralSetupI) = coralLinkId
     next
-    INFO_INDEX_SONGS = allocateInfoBlob(CORAL_RUNE_X - 4, CORAL_RUNE_Y - 4, CORAL_RUNE_COLUMNS * CORAL_RUNE_WIDTH + 8, CORAL_RUNE_ROWS * CORAL_RUNE_HEIGHT + 8, "Songs", "These healing songs have been used.")
+    INFO_INDEX_SONGS = allocateInfoBlob(CORAL_RUNE_X - 4, CORAL_RUNE_Y - 4, CORAL_RUNE_COLUMNS * CORAL_RUNE_WIDTH + 8, CORAL_RUNE_ROWS * CORAL_RUNE_HEIGHT + 8, loc$("coral.songs"), loc$("coral.songs.desc"))
     setInfoBlobEnabled(INFO_INDEX_SONGS, 0)
 
     reserve text id(CORAL_DEBUG_TEXT_ID)
@@ -86,9 +86,9 @@ setup_coral:
     endif
 
     ` info mode says nothing about the coral until there is some. coralPlaceInfo puts this on it.
-    INFO_INDEX_CORAL = allocateInfoBlob(0, 0, CELL_SIZE, CELL_SIZE, "Coral", "Coral reefs are beautiful, but dying and lost. Maybe the ocean will sing them back to us.")
+    INFO_INDEX_CORAL = allocateInfoBlob(0, 0, CELL_SIZE, CELL_SIZE, loc$("coral.info"), loc$("coral.info.desc"))
     setInfoBlobEnabled(INFO_INDEX_CORAL, 0)
-    INFO_INDEX_CORAL_SICK = allocateInfoBlob(0, 0, CELL_SIZE, CELL_SIZE, "Horror Coral", "A song sung by the dead, too late to save them.")
+    INFO_INDEX_CORAL_SICK = allocateInfoBlob(0, 0, CELL_SIZE, CELL_SIZE, loc$("coral.horror"), loc$("coral.horror.desc"))
     setInfoBlobEnabled(INFO_INDEX_CORAL_SICK, 0)
 
     ` the two endings of the hidden game. see THE TWO ENDINGS in fish_headers.
@@ -194,9 +194,9 @@ finale_goodbye:
     ` the codec has an entry for this ending from now on. see CODEC_ENTRY_GOODBYE in fish_headers.
     codecSeeCard(CODEC_ENTRY_GOODBYE)
 
-    set text CORAL_END_TEXT_ID, "The fish need to go home, now. Bye bye!"
+    set text loc CORAL_END_TEXT_ID, "coral.end.goodbye"
     color text CORAL_END_TEXT_ID, rgb(200, 228, 255)
-    set text CORAL_END_SUB_TEXT_ID, "If they had a home..."
+    set text loc CORAL_END_SUB_TEXT_ID, "coral.end.goodbye.sub"
     color text CORAL_END_SUB_TEXT_ID, rgb(140, 165, 215)
 
     ` these words are longer than the words of the other endings, so they are made to fit
@@ -317,9 +317,9 @@ return
 ` and wander around among the coral, and then they find their own kind and school. see THE SCHOOLS in
 ` fish_headers. now and then one hops, and hearts come up from them, and the water is as bright as it gets.
 coral_finale_reef:
-    set text CORAL_END_TEXT_ID, "You saved the reef"
+    set text loc CORAL_END_TEXT_ID, "coral.end.reef"
     color text CORAL_END_TEXT_ID, rgb(255, 214, 120)
-    set text CORAL_END_SUB_TEXT_ID, "in " + str$(CURRENT_MOVE_COUNT) + " moves"
+    set text loc CORAL_END_SUB_TEXT_ID, "coral.end.moves", "moves", CURRENT_MOVE_COUNT
     color text CORAL_END_SUB_TEXT_ID, rgb(255, 170, 190)
 
     finStart = game ms()
@@ -523,9 +523,9 @@ return
 ` one after another, each of them turns into a skeleton, the ones at the bottom of the board first, more
 ` or less. the tentacles stay where they are once they are up.
 coral_finale_ancient:
-    set text CORAL_END_TEXT_ID, "You summoned the ancient one"
+    set text loc CORAL_END_TEXT_ID, "coral.end.ancient"
     color text CORAL_END_TEXT_ID, rgb(196, 255, 150)
-    set text CORAL_END_SUB_TEXT_ID, "in " + str$(CURRENT_MOVE_COUNT) + " moves"
+    set text loc CORAL_END_SUB_TEXT_ID, "coral.end.moves", "moves", CURRENT_MOVE_COUNT
     color text CORAL_END_SUB_TEXT_ID, rgb(200, 160, 255)
 
     show sprite TENTACLE_SPRITE
@@ -1031,6 +1031,8 @@ function coralPlaceInfo()
             coralInfoTo = (CELL_COLUMN_COUNT * coralInfoPart + coralInfoParts - 1) / coralInfoParts
 
             blob = INFOS(INFO_INDEX_CORAL)
+            blob.title$ = loc$("coral.info")
+            blob.desc$ = loc$("coral.info.desc")
             blob.topLeft.x = coralInfoLeft + coralInfoFrom * CELL_SIZE
             blob.topLeft.y = coralInfoTop
             blob.size.x = (coralInfoTo - coralInfoFrom) * CELL_SIZE
@@ -1047,6 +1049,8 @@ function coralPlaceInfo()
             coralInfoTo = (CELL_COLUMN_COUNT * coralInfoPart + coralInfoParts - 1) / coralInfoParts
 
             blob = INFOS(INFO_INDEX_CORAL_SICK)
+            blob.title$ = loc$("coral.horror")
+            blob.desc$ = loc$("coral.horror.desc")
             blob.topLeft.x = coralInfoLeft + coralInfoFrom * CELL_SIZE
             blob.topLeft.y = coralInfoTop
             blob.size.x = (coralInfoTo - coralInfoFrom) * CELL_SIZE
@@ -2108,6 +2112,8 @@ function coralRunesRefresh()
     coralRuneInfoRows = (CORAL_USED_COUNT + CORAL_RUNE_COLUMNS - 1) / CORAL_RUNE_COLUMNS
     if coralRuneInfoRows < 1 then coralRuneInfoRows = 1
     coralRuneBlob = INFOS(INFO_INDEX_SONGS)
+    coralRuneBlob.title$ = loc$("coral.songs")
+    coralRuneBlob.desc$ = loc$("coral.songs.desc")
     coralRuneBlob.size.y = coralRuneInfoRows * CORAL_RUNE_HEIGHT + 8
     coralRuneBlob.enabled = coralRuneAny
     INFOS(INFO_INDEX_SONGS) = coralRuneBlob

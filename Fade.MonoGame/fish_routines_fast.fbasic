@@ -201,14 +201,20 @@ endfunction
 
 ` what the hint of the table calls a modifier, by its number
 function modsTileHint(modsHintN, modsHintOn)
-    modsHint$ = "the oath"
-    if modsHintN = 1 then modsHint$ = "coral"
-    if modsHintN = 2 then modsHint$ = "a night"
-    if modsHintN = 3 then modsHint$ = "a dance"
+    modsHint$ = loc$("fast.mod.oath")
+    if modsHintN = 1
+        modsHint$ = loc$("fast.mod.coral")
+    endif
+    if modsHintN = 2
+        modsHint$ = loc$("fast.mod.night")
+    endif
+    if modsHintN = 3
+        modsHint$ = loc$("fast.mod.dance")
+    endif
     if modsHintOn
-        set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} hide games with " + modsHint$ + "    {pause} back"
+        set text MENU_HINT_TEXT_ID, loc$("fast.hint.hide", "mod", modsHint$)
     else
-        set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} show games with " + modsHint$ + "    {pause} back"
+        set text MENU_HINT_TEXT_ID, loc$("fast.hint.show", "mod", modsHint$)
     endif
 endfunction
 
@@ -370,7 +376,7 @@ endfunction
 
 ` the line that takes nothing says how long the fast has been: a dot for every time
 function fastSkipLine()
-    fastLine$ = "take nothing"
+    fastLine$ = loc$("upgrade.skip")
     fastDots = 0
     while fastDots < FAST_STREAK
         fastLine$ = fastLine$ + "."

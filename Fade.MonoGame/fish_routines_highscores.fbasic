@@ -99,14 +99,14 @@ setup_highscores:
 
     ` the tabs. whose scores they are is the top row, the modes are under that, and the lengths are
     ` the row that sits on the table.
-    createHighscoreTab(0, hsPanelX, 149, "Normal")
-    createHighscoreTab(1, hsPanelX + 151, 149, "Zen")
-    createHighscoreTab(2, hsPanelX, 98, "Short")
-    createHighscoreTab(3, hsPanelX + 101, 98, "Regular")
-    createHighscoreTab(4, hsPanelX + 202, 98, "Long")
-    createHighscoreTab(5, hsPanelX, 98, "Local")
-    createHighscoreTab(6, hsPanelX + 101, 98, "Friends")
-    createHighscoreTab(7, hsPanelX + 202, 98, "Global")
+    createHighscoreTab(0, hsPanelX, 149, lockey$("highscores.tab.normal"))
+    createHighscoreTab(1, hsPanelX + 151, 149, lockey$("highscores.tab.zen"))
+    createHighscoreTab(2, hsPanelX, 98, lockey$("highscores.tab.short"))
+    createHighscoreTab(3, hsPanelX + 101, 98, lockey$("highscores.tab.regular"))
+    createHighscoreTab(4, hsPanelX + 202, 98, lockey$("highscores.tab.long"))
+    createHighscoreTab(5, hsPanelX, 98, lockey$("highscores.tab.local"))
+    createHighscoreTab(6, hsPanelX + 101, 98, lockey$("highscores.tab.friends"))
+    createHighscoreTab(7, hsPanelX + 202, 98, lockey$("highscores.tab.global"))
 
     HISCORE_NOTE_TEXT_ID = createHighscoreText(WORLD_WIDTH / 2, 0, 16, "note")
 
@@ -144,10 +144,10 @@ setup_highscores:
     ` the columns. every row has a text in each of them, and the initials are a text for every letter.
     ` chr$ makes a letter out of a number. putting that straight onto a text works, but joining three of
     ` them into one word did not, so every letter gets a text of its own.
-    HISCORE_HEAD_TEXTS(0) = createHighscoreText(hsPanelX + 34, HISCORE_TOP + 5, 16, "Place")
-    HISCORE_HEAD_TEXTS(1) = createHighscoreText(hsPanelX + 100, HISCORE_TOP + 5, 16, "Initials")
-    HISCORE_HEAD_TEXTS(2) = createHighscoreText(hsPanelX + 176, HISCORE_TOP + 5, 16, "Moves")
-    HISCORE_HEAD_TEXTS(3) = createHighscoreText(hsPanelX + 252, HISCORE_TOP + 5, 16, "Multiplier")
+    HISCORE_HEAD_TEXTS(0) = createHighscoreLocText(hsPanelX + 34, HISCORE_TOP + 5, 16, lockey$("highscores.head.place"))
+    HISCORE_HEAD_TEXTS(1) = createHighscoreLocText(hsPanelX + 100, HISCORE_TOP + 5, 16, lockey$("highscores.head.initials"))
+    HISCORE_HEAD_TEXTS(2) = createHighscoreLocText(hsPanelX + 176, HISCORE_TOP + 5, 16, lockey$("highscores.head.moves"))
+    HISCORE_HEAD_TEXTS(3) = createHighscoreLocText(hsPanelX + 252, HISCORE_TOP + 5, 16, lockey$("highscores.head.multiplier"))
     for hsI = 0 to 3
         color text HISCORE_HEAD_TEXTS(hsI), rgb(64, 128, 255)
     next
@@ -197,10 +197,10 @@ setup_highscores:
 
     ` the page that shows the upgrades of one game. it is wider than the table is.
     hsDetailX = (WORLD_WIDTH - HISCORE_DETAIL_WIDTH) / 2
-    HISCORE_DETAIL_HEAD_TEXTS(0) = createHighscoreText(hsDetailX + 100, HISCORE_DETAIL_TOP + 5, 16, "Upgrade")
-    HISCORE_DETAIL_HEAD_TEXTS(1) = createHighscoreText(hsDetailX + 258, HISCORE_DETAIL_TOP + 5, 16, "Kind")
-    HISCORE_DETAIL_HEAD_TEXTS(2) = createHighscoreText(hsDetailX + 444, HISCORE_DETAIL_TOP + 5, 16, "Move")
-    HISCORE_DETAIL_HEAD_TEXTS(3) = createHighscoreText(hsDetailX + 362, HISCORE_DETAIL_TOP + 5, 16, "Quest")
+    HISCORE_DETAIL_HEAD_TEXTS(0) = createHighscoreLocText(hsDetailX + 100, HISCORE_DETAIL_TOP + 5, 16, lockey$("highscores.head.upgrade"))
+    HISCORE_DETAIL_HEAD_TEXTS(1) = createHighscoreLocText(hsDetailX + 258, HISCORE_DETAIL_TOP + 5, 16, lockey$("highscores.head.kind"))
+    HISCORE_DETAIL_HEAD_TEXTS(2) = createHighscoreLocText(hsDetailX + 444, HISCORE_DETAIL_TOP + 5, 16, lockey$("highscores.head.move"))
+    HISCORE_DETAIL_HEAD_TEXTS(3) = createHighscoreLocText(hsDetailX + 362, HISCORE_DETAIL_TOP + 5, 16, lockey$("highscores.head.quest"))
     for hsI = 0 to 3
         color text HISCORE_DETAIL_HEAD_TEXTS(hsI), rgb(64, 128, 255)
     next
@@ -381,19 +381,27 @@ return
 
 ` the line at the bottom of the screen says what the buttons do, which depends on what the outline is on
 highscore_table_hint:
-    hsHintEnd$ = "    {pause} done"
-    if hsLoopTabs then hsHintEnd$ = "    {pause} back"
+    hsHintEnd$ = loc$("highscores.hint.end.done")
+    if hsLoopTabs
+        hsHintEnd$ = loc$("highscores.hint.end.back")
+    endif
 
     if hsFocus = -2
         hsHintTile = HISCORE_TILE_ENDING(HISCORE_ENDING_AT)
-        hsHintEnding$ = "mystery"
-        if hsHintTile = CORAL_ENDING_REEF then hsHintEnding$ = "coral"
-        if hsHintTile = CORAL_ENDING_ANCIENT then hsHintEnding$ = "horror"
-        if hsHintTile = CORAL_ENDING_DIVER then hsHintEnding$ = "diver"
+        hsHintEnding$ = loc$("highscores.ending.mystery")
+        if hsHintTile = CORAL_ENDING_REEF
+            hsHintEnding$ = loc$("highscores.ending.coral")
+        endif
+        if hsHintTile = CORAL_ENDING_ANCIENT
+            hsHintEnding$ = loc$("highscores.ending.horror")
+        endif
+        if hsHintTile = CORAL_ENDING_DIVER
+            hsHintEnding$ = loc$("highscores.ending.diver")
+        endif
         if HISCORE_ENDING_SHOWN(hsHintTile)
-            set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} hide " + hsHintEnding$ + " endings" + hsHintEnd$
+            set text MENU_HINT_TEXT_ID, loc$("highscores.hint.endings.hide", "ending", hsHintEnding$, "end", hsHintEnd$)
         else
-            set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} show " + hsHintEnding$ + " endings" + hsHintEnd$
+            set text MENU_HINT_TEXT_ID, loc$("highscores.hint.endings.show", "ending", hsHintEnding$, "end", hsHintEnd$)
         endif
 
         ` the tile of a modifier says what it leaves out. see THE TILES OF THE MODIFIERS in fish_headers_fast.
@@ -401,7 +409,7 @@ highscore_table_hint:
             modsTileHint(hsHintTile - HISCORE_MOD_TILE, HISCORE_ENDING_SHOWN(hsHintTile))
         endif
     else
-        set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} details" + hsHintEnd$
+        set text MENU_HINT_TEXT_ID, loc$("highscores.hint.details", "end", hsHintEnd$)
     endif
     size text y MENU_HINT_TEXT_ID, 16
 return
@@ -546,7 +554,7 @@ highscore_details:
     endif
     hsPlayAsked = 0
     if hsPlayOk
-        set text MENU_HINT_TEXT_ID, "{dir} scroll    {confirm} back    {info} play this seed"
+        set text MENU_HINT_TEXT_ID, loc$("highscores.hint.playseed")
     endif
 
     do
@@ -571,9 +579,9 @@ highscore_details:
                     exit
                 endif
                 hsPlayAsked = 1
-                set text HISCORE_NOTE_TEXT_ID, "Your versions are different. The game may not be the same."
+                set text HISCORE_NOTE_TEXT_ID, loc$("highscores.note.versions")
                 color text HISCORE_NOTE_TEXT_ID, rgb(255, 220, 96)
-                set text MENU_HINT_TEXT_ID, "{info} play it anyway    {confirm} back"
+                set text MENU_HINT_TEXT_ID, loc$("highscores.hint.playanyway")
                 create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
                 set tween type SWAP_TWEEN_SFX, 1
             endif
@@ -771,24 +779,24 @@ highscore_game_end:
     requestOnlineScores(hsLoopTable)
     if hsEndPlace >= 0
         hsFocus = hsEndPlace + 2
-        hsNote$ = "A new high score! Number " + str$(hsEndPlace + 1) + " of " + str$(HISCORE_ROWS) + "."
+        hsNote$ = loc$("highscores.note.newplace", "place", hsEndPlace + 1, "rows", HISCORE_ROWS)
         hsNoteColor = rgb(255, 220, 96)
     else
-        hsNote$ = "Not a high score this time: " + str$(CURRENT_MOVE_COUNT) + " moves, and a multiplier of x" + str$(BEST_MULTIPLIER) + "."
+        hsNote$ = loc$("highscores.note.nothigh", "moves", CURRENT_MOVE_COUNT, "multiplier", BEST_MULTIPLIER)
         hsNoteColor = rgb(150, 190, 255)
     endif
 
     ` a game that ended with one of the two endings of the hidden game says so
     if CORAL_ENDING = CORAL_ENDING_REEF
-        hsNote$ = "You saved the reef, in " + str$(CURRENT_MOVE_COUNT) + " moves."
+        hsNote$ = loc$("highscores.note.reef", "moves", CURRENT_MOVE_COUNT)
         hsNoteColor = rgb(255, 170, 185)
     endif
     if CORAL_ENDING = CORAL_ENDING_ANCIENT
-        hsNote$ = "You summoned the ancient one, in " + str$(CURRENT_MOVE_COUNT) + " moves."
+        hsNote$ = loc$("highscores.note.ancient", "moves", CURRENT_MOVE_COUNT)
         hsNoteColor = rgb(200, 150, 255)
     endif
     if CORAL_ENDING = CORAL_ENDING_DIVER
-        hsNote$ = "You filled the album, in " + str$(CURRENT_MOVE_COUNT) + " moves."
+        hsNote$ = loc$("highscores.note.album", "moves", CURRENT_MOVE_COUNT)
         hsNoteColor = rgb(255, 228, 170)
     endif
 
@@ -1557,6 +1565,14 @@ function createHighscoreText(x, y, height, words$)
 endfunction madeId
 
 
+` the same, for a text that is bound to a key of the string tables, so that it follows a change of the
+` language by itself. the key is written with lockey$ by whoever calls this.
+function createHighscoreLocText(x, y, height, hsLocKey$)
+    hsLocMadeId = createHighscoreText(x, y, height, " ")
+    set text loc hsLocMadeId, hsLocKey$
+endfunction hsLocMadeId
+
+
 ` the list of the menu gets out of the way, and leaves its title and its panel for the high scores to use.
 ` the panel goes where it is told to.
 function openHighscoreChrome(x, y, width, height)
@@ -1655,7 +1671,7 @@ function openHighscoreTable(tableIndex, markedRow, cursorAt)
 
     ` the table is tall, so the title moves up to make room for it. closeHighscores puts it back.
     MENU_TITLE_Y = 26
-    set text MENU_TITLE_TEXT_ID, "Highscores"
+    set text MENU_TITLE_TEXT_ID, loc$("highscores.title")
     size text y MENU_TITLE_TEXT_ID, 36
 
     for i = 0 to 7
@@ -1695,14 +1711,18 @@ function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
     if isOnline
         if HISCORE_ONLINE_COUNT = 0
             hasStatus = 1
-            statusWords$ = "Loading..."
+            statusWords$ = loc$("highscores.status.loading")
             if HISCORE_ONLINE_STATE = 2
-                statusWords$ = "Nobody has a score here yet."
-                if HISCORE_SCOPE = HISCORE_SCOPE_FRIENDS then statusWords$ = "No scores from you or your friends yet."
+                statusWords$ = loc$("highscores.status.empty")
+                if HISCORE_SCOPE = HISCORE_SCOPE_FRIENDS
+                    statusWords$ = loc$("highscores.status.empty.friends")
+                endif
             endif
             if HISCORE_ONLINE_STATE = 3
-                statusWords$ = "Could not reach Steam."
-                if steam available() = 0 then statusWords$ = "Steam is not running."
+                statusWords$ = loc$("highscores.status.unreachable")
+                if steam available() = 0
+                    statusWords$ = loc$("highscores.status.nosteam")
+                endif
             endif
         endif
     endif
@@ -1714,9 +1734,9 @@ function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
     endif
 
     if isOnline
-        set text HISCORE_HEAD_TEXTS(1), "Player"
+        set text loc HISCORE_HEAD_TEXTS(1), "highscores.head.player"
     else
-        set text HISCORE_HEAD_TEXTS(1), "Initials"
+        set text loc HISCORE_HEAD_TEXTS(1), "highscores.head.initials"
     endif
 
     for i = 0 to HISCORE_ROWS - 1
@@ -1919,7 +1939,7 @@ endfunction tabY
 
 
 ` make one of the tabs: a block of color with a word on it. see refreshHighscoreTable for how they are colored.
-function createHighscoreTab(tabIndex, x, width, words$)
+function createHighscoreTab(tabIndex, x, width, tabKey$)
     tabY = getHighscoreTabY(tabIndex)
 
     madeId = 0
@@ -1932,7 +1952,7 @@ function createHighscoreTab(tabIndex, x, width, words$)
     hide sprite madeId
     HISCORE_TAB_SPRITES(tabIndex) = madeId
 
-    HISCORE_TAB_TEXTS(tabIndex) = createHighscoreText(x + width / 2, tabY + 1, 16, words$)
+    HISCORE_TAB_TEXTS(tabIndex) = createHighscoreLocText(x + width / 2, tabY + 1, 16, tabKey$)
 endfunction
 
 
@@ -1940,7 +1960,7 @@ endfunction
 function openHighscoreInitials(isHighscore)
     openHighscoreChrome((WORLD_WIDTH - 200) / 2, 120, 200, 72)
 
-    set text MENU_TITLE_TEXT_ID, "Run Complete"
+    set text MENU_TITLE_TEXT_ID, loc$("highscores.title.runcomplete")
     size text y MENU_TITLE_TEXT_ID, 36
 
     ` what the game came to, and what to do about it
@@ -1949,7 +1969,7 @@ function openHighscoreInitials(isHighscore)
 
     show text MENU_DESC_TEXT_ID
     set text position MENU_DESC_TEXT_ID, WORLD_WIDTH / 2, 198
-    set text MENU_DESC_TEXT_ID, str$(GAME_ROUND_CAP) + " rounds in " + str$(CURRENT_MOVE_COUNT) + " moves. The multiplier got to x" + str$(BEST_MULTIPLIER) + "."
+    set text MENU_DESC_TEXT_ID, loc$("highscores.run.summary", "rounds", GAME_ROUND_CAP, "moves", CURRENT_MOVE_COUNT, "multiplier", BEST_MULTIPLIER)
 
     noteHighscoreInitials(isHighscore, 0)
     size text y MENU_HINT_TEXT_ID, 16
@@ -1980,19 +2000,19 @@ endfunction digitsSeed
 function openSeedEntry()
     openHighscoreChrome((WORLD_WIDTH - 250) / 2, 120, 250, 72)
 
-    set text MENU_TITLE_TEXT_ID, "Seed"
+    set text MENU_TITLE_TEXT_ID, loc$("highscores.title.seed")
     size text y MENU_TITLE_TEXT_ID, 36
 
     show text HISCORE_NOTE_TEXT_ID
     set text position HISCORE_NOTE_TEXT_ID, WORLD_WIDTH / 2, 94
-    set text HISCORE_NOTE_TEXT_ID, "Enter a seed, from 1 to " + str$(SEED_MAX) + "."
+    set text HISCORE_NOTE_TEXT_ID, loc$("highscores.seed.enter", "max", SEED_MAX)
     color text HISCORE_NOTE_TEXT_ID, rgb(150, 190, 255)
 
     show text MENU_DESC_TEXT_ID
     set text position MENU_DESC_TEXT_ID, WORLD_WIDTH / 2, 198
-    set text MENU_DESC_TEXT_ID, "All zeros is no seed, and one is picked for you."
+    set text MENU_DESC_TEXT_ID, loc$("highscores.seed.zeros")
 
-    set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} done    {pause} back"
+    set text MENU_HINT_TEXT_ID, loc$("highscores.hint.seed")
     size text y MENU_HINT_TEXT_ID, 16
 
     for i = 0 to 5
@@ -2024,7 +2044,7 @@ function openHighscoreDetails(scoreIndex, place)
     panelHeight = 26 + HISCORE_DETAIL_ROWS * HISCORE_DETAIL_ROW_HEIGHT
     openHighscoreChrome(detailX, HISCORE_DETAIL_TOP, HISCORE_DETAIL_WIDTH, panelHeight)
 
-    set text MENU_TITLE_TEXT_ID, "Upgrades"
+    set text MENU_TITLE_TEXT_ID, loc$("highscores.title.upgrades")
     size text y MENU_TITLE_TEXT_ID, 36
 
     ` whose game it is, and how it did. the initials are the letters from the page where they are entered.
@@ -2044,14 +2064,14 @@ function openHighscoreDetails(scoreIndex, place)
 
     show text HISCORE_NOTE_TEXT_ID
     set text position HISCORE_NOTE_TEXT_ID, WORLD_WIDTH / 2 + 30, 50
-    set text HISCORE_NOTE_TEXT_ID, "Number " + str$(place) + "    " + str$(HISCORE_MOVES(scoreIndex)) + " moves    multiplier x" + str$(HISCORE_MULTS(scoreIndex))
+    set text HISCORE_NOTE_TEXT_ID, loc$("highscores.detail.note", "place", place, "moves", HISCORE_MOVES(scoreIndex), "multiplier", HISCORE_MULTS(scoreIndex))
 
     ` and its seed, when it has one. a seed that the player picked says so. see fish_headers_seed.
     if HISCORE_SEEDS(scoreIndex) > 0
         if HISCORE_PICKED(scoreIndex)
-            set text HISCORE_NOTE_TEXT_ID, str$(HISCORE_MOVES(scoreIndex)) + " moves    multiplier x" + str$(HISCORE_MULTS(scoreIndex)) + "    picked seed " + str$(HISCORE_SEEDS(scoreIndex))
+            set text HISCORE_NOTE_TEXT_ID, loc$("highscores.detail.note.picked", "moves", HISCORE_MOVES(scoreIndex), "multiplier", HISCORE_MULTS(scoreIndex), "seed", HISCORE_SEEDS(scoreIndex))
         else
-            set text HISCORE_NOTE_TEXT_ID, str$(HISCORE_MOVES(scoreIndex)) + " moves    multiplier x" + str$(HISCORE_MULTS(scoreIndex)) + "    seed " + str$(HISCORE_SEEDS(scoreIndex))
+            set text HISCORE_NOTE_TEXT_ID, loc$("highscores.detail.note.seed", "moves", HISCORE_MOVES(scoreIndex), "multiplier", HISCORE_MULTS(scoreIndex), "seed", HISCORE_SEEDS(scoreIndex))
         endif
     endif
     color text HISCORE_NOTE_TEXT_ID, rgb(150, 190, 255)
@@ -2060,7 +2080,7 @@ function openHighscoreDetails(scoreIndex, place)
     show text MENU_DESC_TEXT_ID
     set text position MENU_DESC_TEXT_ID, WORLD_WIDTH / 2, HISCORE_DETAIL_TOP + panelHeight + 4
 
-    set text MENU_HINT_TEXT_ID, "{dir} scroll    {confirm} back"
+    set text MENU_HINT_TEXT_ID, loc$("highscores.hint.scroll")
     size text y MENU_HINT_TEXT_ID, 16
 
     for i = 0 to 3
@@ -2098,13 +2118,13 @@ function refreshHighscoreDetails(scoreIndex, firstShown)
 
                 select CARDS(cardIndex).abilityType
                     case ABILITY_TYPE_PASSIVE
-                        set text HISCORE_DETAIL_KIND_TEXTS(i), "{passive} passive"
+                        set text HISCORE_DETAIL_KIND_TEXTS(i), loc$("highscores.kind.passive")
                     endcase
                     case ABILITY_TYPE_MOVE
-                        set text HISCORE_DETAIL_KIND_TEXTS(i), "{move} move"
+                        set text HISCORE_DETAIL_KIND_TEXTS(i), loc$("highscores.kind.move")
                     endcase
                     case ABILITY_TYPE_INSTANT
-                        set text HISCORE_DETAIL_KIND_TEXTS(i), "{instant} instant"
+                        set text HISCORE_DETAIL_KIND_TEXTS(i), loc$("highscores.kind.instant")
                     endcase
                 endselect
 
@@ -2115,7 +2135,7 @@ function refreshHighscoreDetails(scoreIndex, firstShown)
                 show text HISCORE_DETAIL_MOVE_TEXTS(i)
             else
                 ` the last round of the game, which has no upgrade, and is only here for its quest
-                set text HISCORE_DETAIL_NAME_TEXTS(i), "last round"
+                set text HISCORE_DETAIL_NAME_TEXTS(i), loc$("highscores.detail.lastround")
                 color text HISCORE_DETAIL_NAME_TEXTS(i), rgb(120, 140, 185)
                 loggedQuest = logLastQuestOf(HISCORE_LOGS(logStart))
                 hide sprite HISCORE_DETAIL_ART_SPRITES(i)
@@ -2125,7 +2145,7 @@ function refreshHighscoreDetails(scoreIndex, firstShown)
 
             if loggedQuest > QUEST_COUNT then loggedQuest = 0
             if loggedQuest > 0
-                set text HISCORE_DETAIL_QUEST_TEXTS(i), QUEST_DEFS(loggedQuest).name$
+                set text HISCORE_DETAIL_QUEST_TEXTS(i), loc$(QUEST_DEFS(loggedQuest).name$)
             else
                 set text HISCORE_DETAIL_QUEST_TEXTS(i), " "
             endif
@@ -2140,11 +2160,11 @@ function refreshHighscoreDetails(scoreIndex, firstShown)
     next
 
     if logLength = 0
-        set text MENU_DESC_TEXT_ID, "No upgrades were written down for this game."
+        set text MENU_DESC_TEXT_ID, loc$("highscores.detail.none")
     else
         lastShown = firstShown + HISCORE_DETAIL_ROWS
         if lastShown > logLength then lastShown = logLength
-        set text MENU_DESC_TEXT_ID, str$(firstShown + 1) + " to " + str$(lastShown) + " of " + str$(logLength)
+        set text MENU_DESC_TEXT_ID, loc$("highscores.detail.range", "first", firstShown + 1, "last", lastShown, "total", logLength)
     endif
 endfunction
 
@@ -2153,20 +2173,20 @@ endfunction
 ` the initials, or, when `asking` is 1, it asks if the ones that were picked are right.
 function noteHighscoreInitials(isHighscore, asking)
     if asking
-        set text HISCORE_NOTE_TEXT_ID, "Are these right?"
+        set text HISCORE_NOTE_TEXT_ID, loc$("highscores.initials.confirm")
         color text HISCORE_NOTE_TEXT_ID, rgb(255, 255, 255)
-        set text MENU_HINT_TEXT_ID, "{confirm} yes    {pause} go back"
+        set text MENU_HINT_TEXT_ID, loc$("highscores.hint.initials.confirm")
         exitfunction
     endif
 
     if isHighscore
-        set text HISCORE_NOTE_TEXT_ID, "A new high score! Enter your initials."
+        set text HISCORE_NOTE_TEXT_ID, loc$("highscores.initials.new")
         color text HISCORE_NOTE_TEXT_ID, rgb(255, 220, 96)
     else
-        set text HISCORE_NOTE_TEXT_ID, "Enter your initials."
+        set text HISCORE_NOTE_TEXT_ID, loc$("highscores.initials.enter")
         color text HISCORE_NOTE_TEXT_ID, rgb(150, 190, 255)
     endif
-    set text MENU_HINT_TEXT_ID, "{dir} choose    {confirm} done"
+    set text MENU_HINT_TEXT_ID, loc$("highscores.hint.initials")
 endfunction
 
 

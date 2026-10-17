@@ -217,3 +217,525 @@ test school_a_school_plays_the_next_chord_of_a_fanfare_that_fits_the_music from 
     assert SCHOOL_SONG_AT = 1, "of its eight"
     end
 endtest
+
+test school_a_swap_down_fills_the_board_from_the_schools from fishBoard
+    SCHOOL_DRAW_ON = 1 `the schools only fill the board when this is on, which it is not for now
+    ` three fish of kind 7 out in the background
+    for tDrawN = 0 to 2
+        CELLS(testIndex(0, 8)).value = 7
+        SCHOOL_FACE(testIndex(0, 8)) = 1
+        schoolFishLeaves(testIndex(0, 8), 0)
+        FLOCK_BORN(tDrawN) = -100000
+    next
+    testBoard()
+
+    ` a row of three that a swap down makes
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 1, 6)
+    testCursor(2, 1)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+    assert SCHOOL_DRAW = 1, "the swap went down, so the new fish come from the schools"
+    runto _loop
+
+    tDrawSevens = 0
+    for tDrawX = 2 to 4
+        if CELLS(testIndex(tDrawX, 0)).value = 7 then tDrawSevens = tDrawSevens + 1
+    next
+    tDrawHome = 0
+    if SCHOOL_DRAW_COUNT > 0 then tDrawHome = 1
+    assert tDrawHome = 1, "fish came home from the school to fill the board"
+    tDrawSafe = 0
+    if tDrawSevens < 3 then tDrawSafe = 1
+    assert tDrawSafe = 1, "but never so many in a row that they pop as soon as they land"
+    assert tDrawSevens = SCHOOL_DRAW_COUNT, "and every one that came home is a 7 in the top row"
+    end
+endtest
+
+test school_a_swap_up_fills_the_board_at_random_again from fishBoard
+    SCHOOL_DRAW_ON = 1 `the schools only fill the board when this is on, which it is not for now
+    SCHOOL_DRAW = 1
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+    assert SCHOOL_DRAW = 0, "the swap went up, so the new fish are picked at random again"
+    end
+endtest
+
+test school_a_fish_nearer_the_top_is_called_on_more_often from fishBoard
+    CELLS(testIndex(0, 8)).value = 7
+    schoolFishLeaves(testIndex(0, 8), 0)
+    schoolFishLeaves(testIndex(0, 8), 0)
+    FLOCK_BORN(0) = -100000
+    FLOCK_BORN(1) = -100000
+    FLOCK_Y#(0) = 30
+    FLOCK_Y#(1) = 290
+    testBoard()
+    tPickLast = CELL_COUNT - 1
+    for tPickI = 0 to tPickLast
+        SCHOOL_FUTURE(tPickI) = CELLS(tPickI).value
+    next
+    SCHOOL_FUTURE(testIndex(4, 0)) = 0
+    tPickFish = schoolPickFor(testIndex(4, 0), getRequiredComboCount())
+    tPickHigh = SCHOOL_PICK_WEIGHT(0)
+    tPickLow = SCHOOL_PICK_WEIGHT(1) * 4
+    tPickFavored = 0
+    if tPickHigh > tPickLow then tPickFavored = 1
+    assert tPickFavored = 1, "the fish up near the top has many times the chance of the one near the bottom"
+    tPickSome = 0
+    if SCHOOL_PICK_WEIGHT(1) > 0 then tPickSome = 1
+    assert tPickSome = 1, "but the low one still has a chance"
+    tPickOne = 0
+    if tPickFish >= 0 then tPickOne = 1
+    assert tPickOne = 1, "and one of them is picked"
+    end
+endtest
+
+test school_a_fish_on_its_way_out_is_not_called_on from fishBoard
+    CELLS(testIndex(0, 8)).value = 7
+    schoolFishLeaves(testIndex(0, 8), 0)
+    FLOCK_BORN(0) = game ms()
+    testBoard()
+    tPickLast = CELL_COUNT - 1
+    for tPickI = 0 to tPickLast
+        SCHOOL_FUTURE(tPickI) = CELLS(tPickI).value
+    next
+    SCHOOL_FUTURE(testIndex(4, 0)) = 0
+    tPickFish = schoolPickFor(testIndex(4, 0), getRequiredComboCount())
+    assert tPickFish = -1, "the only fish out there has only just left the board, so it is not called on"
+    end
+endtest
+
+` A SCHOOL ON CORAL. a row of four fish that face left, two of them on coral and two over open water.
+` the two on coral sing and stay. the other two leave, and the board settles: the group does not come
+` back and go off again.
+test school_facing_left_half_on_coral_leaves_once from fishBoard
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+    testPut(2, 3, 6)
+    SCHOOL_FACE(testIndex(3, 2)) = -1
+    SCHOOL_FACE(testIndex(4, 2)) = -1
+    SCHOOL_FACE(testIndex(5, 2)) = -1
+    SCHOOL_FACE(testIndex(2, 3)) = -1
+    CORAL_CELLS(testIndex(4, 2)) = 1
+    CORAL_CELLS(testIndex(5, 2)) = 1
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert SCHOOL_COUNT = 1, "the four fish that face left are a school"
+    assert testPops(2, 2), "the fish over open water leave"
+    assert testPops(3, 2), "both of them"
+    assert testPops(4, 2) = 0, "the fish on coral stay"
+    assert testPops(5, 2) = 0, "both of them"
+
+    for tReefFrame = 1 to 3
+        runto _loop
+    next
+    tReefScore = CURRENT_SCORE
+    for tReefFrame = 1 to 5
+        runto _loop
+    next
+    print "REEF left vertical: school=" + str$(SCHOOL_COUNT) + " score " + str$(tReefScore) + " -> " + str$(CURRENT_SCORE) + " row2=" + str$(CELLS(testIndex(2, 2)).value) + str$(CELLS(testIndex(3, 2)).value) + str$(CELLS(testIndex(4, 2)).value) + str$(CELLS(testIndex(5, 2)).value)
+    assert SCHOOL_COUNT = 1, "the school left once"
+    assert CURRENT_SCORE = tReefScore, "and the board settled, with nothing more popping"
+    tReefBack = 0
+    if CELLS(testIndex(2, 2)).value = 6 then tReefBack = 1
+    if CELLS(testIndex(3, 2)).value = 6 then tReefBack = 1
+    assert tReefBack = 0, "the fish that left did not come back"
+    end
+endtest
+
+` the same, made by carrying a fish to the left, which is how fish come to face left in a game
+test school_carried_left_half_on_coral_leaves_once from fishBoard
+    testPut(2, 2, 6)
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(6, 2, 6)
+    SCHOOL_FACE(testIndex(2, 2)) = -1
+    SCHOOL_FACE(testIndex(3, 2)) = -1
+    SCHOOL_FACE(testIndex(4, 2)) = -1
+    CORAL_CELLS(testIndex(4, 2)) = 1
+    CORAL_CELLS(testIndex(5, 2)) = 1
+    testCursor(6, 2)
+    testQueueMove(-1, 0, 1, -1)
+    runto _combos_judged
+
+    assert SCHOOL_FACE(testIndex(5, 2)) = -1, "the fish that was carried left faces left"
+    assert SCHOOL_COUNT = 1, "the four fish that face left are a school"
+    assert testPops(2, 2), "the fish over open water leave"
+    assert testPops(3, 2), "both of them"
+    assert testPops(4, 2) = 0, "the fish on coral stay"
+    assert testPops(5, 2) = 0, "both of them"
+
+    for tReefFrame = 1 to 3
+        runto _loop
+    next
+    tReefScore = CURRENT_SCORE
+    for tReefFrame = 1 to 5
+        runto _loop
+    next
+    print "REEF left carried: school=" + str$(SCHOOL_COUNT) + " score " + str$(tReefScore) + " -> " + str$(CURRENT_SCORE) + " row2=" + str$(CELLS(testIndex(2, 2)).value) + str$(CELLS(testIndex(3, 2)).value) + str$(CELLS(testIndex(4, 2)).value) + str$(CELLS(testIndex(5, 2)).value)
+    assert SCHOOL_COUNT = 1, "the school left once"
+    assert CURRENT_SCORE = tReefScore, "and the board settled, with nothing more popping"
+    tReefBack = 0
+    if CELLS(testIndex(2, 2)).value = 6 then tReefBack = 1
+    if CELLS(testIndex(3, 2)).value = 6 then tReefBack = 1
+    assert tReefBack = 0, "the fish that left did not come back"
+    end
+endtest
+
+test school_a_push_when_the_tide_wants_one_flushes_the_schools_up from fishBoard
+    SCHOOL_FLUSH_ON = 1 `the tide only flushes them when this is on, which it is not for now
+    SCHOOL_CURSOR_ON = 0
+    CELLS(testIndex(0, 8)).value = 7
+    schoolFishLeaves(testIndex(0, 8), 0)
+    FLOCK_BORN(0) = -100000
+    testBoard()
+    TIDE_LEVEL = 1
+    TIDE_FLOW = 1
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+    assert TIDE_LAST_SWAP = TIDE_SWAP_PUSH, "the swap was a push"
+    assert FLOCK_FLUSH(0) = -1, "which the tide wanted, so the fish out there is flushed, up"
+    end
+endtest
+
+test school_a_swap_that_the_tide_does_not_want_flushes_nothing from fishBoard
+    SCHOOL_FLUSH_ON = 1 `the tide only flushes them when this is on, which it is not for now
+    SCHOOL_CURSOR_ON = 0
+    CELLS(testIndex(0, 8)).value = 7
+    schoolFishLeaves(testIndex(0, 8), 0)
+    FLOCK_BORN(0) = -100000
+    testBoard()
+    TIDE_FLOW = 1
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    testCursor(2, 2)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+    assert TIDE_LAST_SWAP = TIDE_SWAP_PULL, "the swap was a pull"
+    assert FLOCK_FLUSH(0) = 0, "and the tide wanted a push, so nothing is flushed"
+    end
+endtest
+
+test school_flushed_fish_pop_at_the_edge_and_score_ten_more_each from fishBoard
+    CELLS(testIndex(0, 8)).value = 7
+    schoolFishLeaves(testIndex(0, 8), 0)
+    schoolFishLeaves(testIndex(0, 8), 0)
+    FLOCK_BORN(0) = -100000
+    FLOCK_BORN(1) = -100000
+    testBoard()
+    SCORE_MULTIPLIER = 2
+    CURRENT_SCORE = 0
+    schoolFlush(-1)
+    assert FLOCK_FLUSH(0) = -1, "both fish are flushed up"
+    assert FLOCK_FLUSH(1) = -1, "the two of them"
+    FLOCK_Y#(0) = 2
+    FLOCK_Y#(1) = 3
+    ` they punch, and then they pop
+    tFlushFrames = 0
+    while tFlushFrames < 200
+        runto _loop
+        tFlushFrames = tFlushFrames + 1
+        if FLOCK_ON(0) = 0
+            if FLOCK_ON(1) = 0 then tFlushFrames = 200
+        endif
+    endwhile
+    assert FLOCK_ON(0) = 0, "they got to the top, punched, and popped"
+    assert FLOCK_ON(1) = 0, "both of them"
+    assert CURRENT_SCORE = 60, "for 10 and then 20, times the multiplier of 2"
+    end
+endtest
+
+
+test school_a_flush_pops_its_fish_one_by_one from fishBoard
+    CELLS(testIndex(0, 8)).value = 7
+    for tFlushN = 0 to 3
+        schoolFishLeaves(testIndex(0, 8), 0)
+        FLOCK_BORN(tFlushN) = -100000
+        FLOCK_Y#(tFlushN) = 160
+    next
+    testBoard()
+    tFlushStart = game ms()
+    schoolFlush(-1)
+    tFlushEarliest = 1000000000
+    tFlushLatest = 0
+    tFlushApart = 1
+    for tFlushN = 0 to 3
+        tFlushAt = FLOCK_FLUSH_AT(tFlushN)
+        if tFlushAt < tFlushEarliest then tFlushEarliest = tFlushAt
+        if tFlushAt > tFlushLatest then tFlushLatest = tFlushAt
+        for tFlushM = 0 to 3
+            if tFlushM <> tFlushN
+                if FLOCK_FLUSH_AT(tFlushM) = tFlushAt then tFlushApart = 0
+            endif
+        next
+    next
+    assert tFlushApart = 1, "no two of them pop at once"
+    tFlushFirst = tFlushEarliest - tFlushStart
+    assert tFlushFirst = SCHOOL_FLUSH_FIRST, "the first pops a moment after the flush"
+    tFlushSpread = tFlushLatest - tFlushEarliest
+    tFlushWant = SCHOOL_FLUSH_GAP * 3
+    assert tFlushSpread = tFlushWant, "and the four of them pop a gap apart, one after the other"
+    end
+endtest
+
+test school_stepping_off_a_fish_sends_its_school_away from fishBoard
+    CELLS(testIndex(0, 8)).value = 7
+    schoolFishLeaves(testIndex(0, 8), 0)
+    CELLS(testIndex(0, 8)).value = 6
+    schoolFishLeaves(testIndex(0, 8), 0)
+    FLOCK_BORN(0) = -100000
+    FLOCK_BORN(1) = -100000
+    testBoard()
+    testPut(2, 2, 7)
+    testCursor(2, 2)
+    testQueueMove(1, 0, 0, -1)
+    runto _combos_judged
+    tLeaving = 0
+    if FLOCK_LEAVE(0) <> 0 then tLeaving = 1
+    assert tLeaving = 1, "the cursor stepped off of a 7 without a match, so the 7 out in the background leaves"
+    assert FLOCK_LEAVE(1) = 0, "and the 6 does not"
+    end
+endtest
+
+test school_a_swap_that_makes_a_match_pops_the_school_of_the_fish_carried from fishBoard
+    CELLS(testIndex(0, 8)).value = 6
+    schoolFishLeaves(testIndex(0, 8), 0)
+    CELLS(testIndex(0, 8)).value = 7
+    schoolFishLeaves(testIndex(0, 8), 0)
+    FLOCK_BORN(0) = -100000
+    FLOCK_BORN(1) = -100000
+    testBoard()
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    ` they face both ways, so the row is not a school of its own
+    SCHOOL_FACE(testIndex(3, 2)) = 1
+    SCHOOL_FACE(testIndex(4, 2)) = -1
+    SCHOOL_FACE(testIndex(2, 3)) = 1
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+    assert FLOCK_FLUSH(0) = 2, "the cursor carried a 6 into a match, so the 6 out in the background pops"
+    assert FLOCK_FLUSH(1) = 0, "and the 7 does not"
+    assert SCHOOL_VISIT_VALID = 1, "and stepping off now lets nothing go"
+    end
+endtest
+
+test school_a_swap_with_no_match_then_a_step_sends_the_school_away from fishBoard
+    CELLS(testIndex(0, 8)).value = 7
+    schoolFishLeaves(testIndex(0, 8), 0)
+    FLOCK_BORN(0) = -100000
+    testBoard()
+    testPut(2, 2, 7)
+    testCursor(2, 2)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+    assert FLOCK_LEAVE(0) = 0, "a swap that makes no match sends nothing away: the cursor is still on the 7"
+    runto _loop
+    testQueueMove(1, 0, 0, -1)
+    runto _combos_judged
+    tLeaving = 0
+    if FLOCK_LEAVE(0) <> 0 then tLeaving = 1
+    assert tLeaving = 1, "but stepping off of it after that does"
+    end
+endtest
+
+test school_stepping_to_a_fish_of_the_same_kind_keeps_the_school from fishBoard
+    CELLS(testIndex(0, 8)).value = 7
+    schoolFishLeaves(testIndex(0, 8), 0)
+    FLOCK_BORN(0) = -100000
+    testBoard()
+    testPut(2, 2, 7)
+    testPut(3, 2, 7)
+    testCursor(2, 2)
+    testQueueMove(1, 0, 0, -1)
+    runto _combos_judged
+    assert FLOCK_LEAVE(0) = 0, "the cursor went from a 7 to a 7, which is not leaving them"
+    end
+endtest
+
+test school_the_haze_goes_over_a_color_the_way_it_goes_over_a_fish from fishBoard
+    tHazeWhite = schoolHazeColor(rgb(255, 255, 255))
+    tHazeWant = rgb(FLOCK_HAZE_R, FLOCK_HAZE_G, FLOCK_HAZE_B)
+    assert tHazeWhite = tHazeWant, "white under the haze is the haze"
+    tHazeBlack = schoolHazeColor(rgb(0, 0, 0))
+    tHazeNone = rgb(0, 0, 0)
+    assert tHazeBlack = tHazeNone, "and black stays black"
+    end
+endtest
+
+test school_the_school_of_the_fish_under_the_cursor_comes_forward from fishBoard
+    CELLS(testIndex(0, 8)).value = 7
+    schoolFishLeaves(testIndex(0, 8), 0)
+    CELLS(testIndex(0, 8)).value = 6
+    schoolFishLeaves(testIndex(0, 8), 0)
+    FLOCK_BORN(0) = -100000
+    FLOCK_BORN(1) = -100000
+    testBoard()
+    testPut(2, 2, 7)
+    testCursor(2, 2)
+    tFocusUntil = wall ms() + 900
+    while wall ms() < tFocusUntil
+        runto _loop
+    endwhile
+    tFocusOn = 0
+    if FLOCK_FOCUS#(0) > .5 then tFocusOn = 1
+    assert tFocusOn = 1, "the cursor is on a 7, so the 7 out in the background comes forward"
+    tFocusOff = 0
+    if FLOCK_FOCUS#(1) < .1 then tFocusOff = 1
+    assert tFocusOff = 1, "and the 6 stays back"
+    end
+endtest
+
+test school_stepping_off_a_dead_fish_sends_nothing_away from fishBoard
+    CELLS(testIndex(0, 8)).value = 7
+    schoolFishLeaves(testIndex(0, 8), 0)
+    FLOCK_BORN(0) = -100000
+    testBoard()
+    testPut(2, 2, 7)
+    CELLS(testIndex(2, 2)).bellyUp = 2
+    testCursor(2, 2)
+    testQueueMove(1, 0, 0, -1)
+    runto _combos_judged
+    assert FLOCK_LEAVE(0) = 0, "the 7 under the cursor was bones, so stepping off of it is no mistake"
+    end
+endtest
+
+test school_a_stacked_fish_sends_one_out_for_every_fish_of_its_stack from fishBoard
+    testPut(2, 2, 7)
+    CELLS(testIndex(2, 2)).stack = 2
+    schoolFishLeaves(testIndex(2, 2), 1000)
+    tStackOut = 0
+    for tStackI = 0 to FLOCK_MAX - 1
+        if FLOCK_ON(tStackI)
+            if FLOCK_KIND(tStackI) = 7 then tStackOut = tStackOut + 1
+        endif
+    next
+    assert tStackOut = 3, "a fish with two behind it sends three fish out"
+    tStackFirst = 1000000000
+    tStackLast = 0
+    for tStackI = 0 to FLOCK_MAX - 1
+        if FLOCK_ON(tStackI)
+            if FLOCK_BORN(tStackI) < tStackFirst then tStackFirst = FLOCK_BORN(tStackI)
+            if FLOCK_BORN(tStackI) > tStackLast then tStackLast = FLOCK_BORN(tStackI)
+        endif
+    next
+    tStackSpread = tStackLast - tStackFirst
+    tStackWant = FISH_STACK_POP_GAP * 2
+    assert tStackSpread = tStackWant, "one at a time, the way that the stack pops"
+    end
+endtest
+
+test school_at_daybreak_every_group_facing_one_way_is_a_school from fishBoard
+    TIDE_DAWN_MS = 0
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 1
+    ` a row that the night is holding, every fish facing right, which no swap will touch
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+    SCHOOL_FACE(testIndex(3, 2)) = 1
+    SCHOOL_FACE(testIndex(4, 2)) = 1
+    SCHOOL_FACE(testIndex(5, 2)) = 1
+    ` and the last move of the night makes a second row, whose fish face both ways
+    testPut(3, 5, 7)
+    testPut(4, 5, 7)
+    testPut(2, 6, 7)
+    SCHOOL_FACE(testIndex(3, 5)) = 1
+    SCHOOL_FACE(testIndex(4, 5)) = -1
+    SCHOOL_FACE(testIndex(2, 6)) = 1
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    runto _loop
+    testCursor(2, 6)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+    assert TIDE_NIGHT = 0, "day has broken"
+    assert totalComboCount = 2, "and both rows pop"
+    assert SCHOOL_COUNT = 1, "the row that the night held, facing one way, is a school, though no swap made it"
+    assert SCHOOL_DAWN = 0, "and the look after this one is an ordinary one"
+    end
+endtest
+
+test school_a_swap_that_makes_a_school_grows_the_school_instead_of_popping_it from fishBoard
+    CELLS(testIndex(0, 8)).value = 6
+    schoolFishLeaves(testIndex(0, 8), 0)
+    FLOCK_BORN(0) = -100000
+    testBoard()
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    SCHOOL_FACE(testIndex(3, 2)) = 1
+    SCHOOL_FACE(testIndex(4, 2)) = 1
+    SCHOOL_FACE(testIndex(2, 3)) = 1
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+    assert SCHOOL_COUNT = 1, "the row of 6s facing right is a school"
+    assert FLOCK_FLUSH(0) = 0, "so the 6 already out in the background does not pop"
+    tGrowOut = 0
+    for tGrowI = 0 to FLOCK_MAX - 1
+        if FLOCK_ON(tGrowI)
+            if FLOCK_KIND(tGrowI) = 6 then tGrowOut = tGrowOut + 1
+        endif
+    next
+    assert tGrowOut = 4, "and the three new ones join it: the school is four now"
+    assert SCHOOL_VISIT_VALID = 1, "and stepping off is still safe"
+    end
+endtest
+
+
+test school_a_match_without_the_carried_fish_leaves_its_school_alone from fishBoard
+    CELLS(testIndex(0, 8)).value = 7
+    schoolFishLeaves(testIndex(0, 8), 0)
+    FLOCK_BORN(0) = -100000
+    testBoard()
+    ` the cursor is on a 7 above a 6, and carries the 7 down. the 6 goes up into a row of 6s.
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    testPut(2, 2, 7)
+    SCHOOL_FACE(testIndex(3, 2)) = 1
+    SCHOOL_FACE(testIndex(4, 2)) = -1
+    SCHOOL_FACE(testIndex(2, 3)) = 1
+    testCursor(2, 2)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+    assert totalComboCount = 1, "the 6s pop"
+    assert FLOCK_FLUSH(0) = 0, "the 7 that the cursor carried was not in the match, so its school does not pop"
+    assert FLOCK_LEAVE(0) = 0, "and does not go"
+    assert SCHOOL_VISIT_VALID = 1, "and stepping off is safe, since the swap made a match"
+    end
+endtest
+
+test school_fall_in_line_lets_fish_that_fell_together_school from fishBoard
+    CARDS(ABILITY_INDEX_FALL_IN_LINE).obtained = 1
+    testPut(2, 2, 6)
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    SCHOOL_FACE(testIndex(2, 2)) = 1
+    SCHOOL_FACE(testIndex(3, 2)) = 1
+    SCHOOL_FACE(testIndex(4, 2)) = 1
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert totalComboCount = 1, "the row pops"
+    assert SCHOOL_COUNT = 1, "and with fall in line, a row that no swap made is a school, too"
+    end
+endtest
+
+test school_fall_in_line_is_a_passive_that_is_dealt from fishBoard
+    assert ABILITY_INDEX_FALL_IN_LINE = CARD_LENGTH - 1, "it is the last card"
+    assert CARDS(ABILITY_INDEX_FALL_IN_LINE).abilityType = ABILITY_TYPE_PASSIVE, "it is a passive"
+    assert CARDS(ABILITY_INDEX_FALL_IN_LINE).stackable = 0, "and it is only taken once"
+    end
+endtest

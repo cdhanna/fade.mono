@@ -22,6 +22,17 @@ remstart
         it has SCHOOL_MIN fish, or more
         the swap that led to this look at the board put one of its two fish in it. a group that only
             fell together is never a school. SCHOOL_NEED_SWAP turns that off, for the debug panel.
+    THE CARD. "fall in line", a passive. with it, a group of fish that fell together, as the board filled
+    back in, can be a school too, and not only one that a swap made: see SCHOOL_NEED_SWAP. it comes
+    after the cards of the fast and the angler, like the angler it is dealt, and like them it is not
+    written in the log of a game, which has no room for it. Tools/fall_in_line_art_gen.py draws its
+    picture.
+
+    THE DAWN. at daybreak, every group that the night held pops at once, and none of them was made by a
+    swap just then, but by the moves of the night. so on that look at the board, every one of them that
+    faces one way is a school, whatever made it: the night is for setting the board up, and that goes
+    for schools too. tideDayBreaks, in fish_routines_tide, sets SCHOOL_DAWN, and the end of the look
+    clears it, so the fish that fall in after that are judged the usual way.
     by chance, three fish would face the same way one time in four, and four of them one time in eight.
     the swap has to have made it so that it does not happen too often without the player meaning it to.
 
@@ -60,6 +71,20 @@ remstart
     the longest goes. a new game starts with none. a fish turns around when it starts to swim the
     other way: it narrows to nothing and opens out again facing the other way, the way that the fish on
     the board turn. they are kept with the saved game: see THE SAVED GAME, below.
+    THE SCHOOLS SLEEP AT NIGHT. as night comes on, the fish out there stop swimming, and each one just
+    drifts, slowly, a little this way and that, in place, the way a fish asleep does. as day comes
+    back, they swim on from where they were. it follows how much of the night is drawn,
+    TIDE_NIGHT_SHOWN# in fish_headers_tide, so it comes and goes smoothly. they are not worked out
+    while it is all the way night, since they are not going anywhere.
+
+    A POP SENDS A WAVE through them. when a group of fish pops on the board, a ring goes out from the
+    middle of it, across the water behind the board, and every fish out there that it passes is pushed
+    straight away from the pop: harder the closer it was, and harder for a bigger group. a fish that is
+    still on its way out is left alone, so the fish of a school go off calmly. the push fades
+    by itself, since the next time that a fish is worked out it is brought back down to the fastest
+    that a fish swims, and then it swims back to its school. so a pop sends a ripple through the
+    schools. flockWave starts one, where handle_combos sends the shockwave of a group.
+
     the flock is worked out a few fish at a time, FLOCK_STEER_EACH of them on a frame, since every
     fish has to look at every other one. that is when a fish changes how fast it goes, and which way:
     for the rest of the time it just goes. they all move on every frame. this is slow work for the
@@ -72,6 +97,81 @@ remstart
     a row takes FORCE_SCHOOL and the row. schoolJudge does it, where handle_combos shoots the stingrays.
     SCHOOL_SWEEP is 0, for now.
 
+    THE CURSOR CALLS ON THE SCHOOLS. every time that the cursor comes to a fish, by a step or by
+    carrying it in a swap, that is a visit. while it is there, the school of that kind of fish, out in
+    the background, waits on it:
+        a swap that makes a match, any match, pops every fish of the kind that the cursor carried in
+            it, out in the background, one by one, where they are: each one punches and pops, the same
+            as in a flush (see below), and scores 10 more than the last, times the multiplier. but a
+            swap that makes a new school of that kind does not: the new fish join the school out there,
+            and it grows. so a school is grown with schools, and cashed in with any other match that the
+            carried fish is part of. a swap whose match is all of the fish that the cursor shoved back
+            does nothing to them: they do not pop, and they do not go, and stepping off after it is safe.
+        stepping off of the fish, without a swap that made a match there, sends every fish of its
+            kind out in the background away. they swim off the side of the screen that is nearer, at
+            an easy pace, and they do not come back. there are no points, and nothing is made of it,
+            but over the first SCHOOL_LEAVE_FADE_MS they get smaller, darker and fainter, so that a
+            player who looks can see that they are gone. a step to a fish of the same kind is not
+            stepping off of it: the visit goes on, so the cursor can move between two of them. and
+            stepping off of a dead fish, belly up or bones, is no mistake: nothing is at stake on it.
+        while the cursor is on a fish, the fish of its kind out in the background come a little
+            forward: a little bigger, a good way clear of the haze, and shimmering a little, the haze
+            coming and going over each of them in a time of its own. that is how it can be seen what
+            is at stake. nothing comes forward for a dead fish.
+    the score that a fish out there pops for is as far off as the fish: the same haze over its color,
+    and only as much of it shows as of the fish.
+            a swap that makes no match does not count: the cursor carried the fish, so it is still on
+            it, and stepping off of it after that sends them away.
+    so the schools are a store of points, and the cursor is how they are spent, or lost.
+    schoolSwapMade and schoolCursorStepped hear about the swaps and the steps, from stepLiveMove in
+    fish_funcs. schoolJudgeSwap pops them, from handle_combos. schoolDepart sends them away.
+
+    THE TIDE FLUSHES THE SCHOOLS. this is turned off for now, by SCHOOL_FLUSH_ON. the tide always wants one thing next, a push or a pull: the specks
+    in the water say which. a swap that is what the tide wants flushes every fish out in the
+    background. a push sends them up, and a pull sends them down. each one leaves its school and swims
+    off that way, faster and faster, and they pop, one by one, in an order picked at random, spread over
+    SCHOOL_FLUSH_SPAN, and never later than when one gets to the edge of the screen. when its turn comes,
+    a fish punches: it swells quickly to SCHOOL_PUNCH_SCALE of its size and comes clear of the haze, and
+    then it pops the way that the fish of the board do, with one of their puffs of smoke, out in the
+    water behind the board, and small bubbles. the sound is the pop of the board heard far off through
+    the water, made by Tools/school_pop_gen.py. and it scores. the first one to pop is worth 10, the
+    next 20, and so on, times the multiplier, the way that the fish of a group are, and the points go
+    onto the bar the same way. so the schools are a store of points, and the tide is how they are let
+    go. nothing pops at night, and the tide does not move then, so there is no flush at night.
+    judgeTide, in fish_routines_tide, calls schoolTideSwap, before it moves the water. schoolFlush
+    sends them, and schoolFlushPop pops one.
+
+    THE FISH COME HOME. this is turned off for now, by SCHOOL_DRAW_ON, and it may come back on a card.
+    a swap that goes down calls on the schools. from then on, until a swap goes up,
+    the new fish that drop in to fill the board come from the schools out in the background, where
+    they can: one of the fish out there, of a kind that does not pop as soon as it lands, swims over
+    to the column, as small and hazy as it was, and waits in a stack above it, with the others that
+    are going into that column: the one for the lowest cell at the bottom, just above the board. one
+    after the other, from the bottom up, each one hops in: it drops a little, grows to the size of the fish on the board and fades away, as the new
+    fish fades in and falls. it has left its school for good. a fish nearer the top of the screen is
+    picked more often: each one that would do has a chance that grows with how high up it is, squared.
+    a fish that is still on its way out to its school is never called on. a swap that goes up sends them back to being picked at random, the way
+    that they always were, and that is how a game starts. a swap that goes across changes nothing.
+    a fish from a school may make a pair where it lands, which a fish picked at random nearly never
+    may, and that is what the schools give. it may not make a whole group, so it never pops right away.
+    only the plain kinds of fish are called on: a jellyfish, a stingray, a bottle, the fish that a
+    "known fill" swap brings, and the fish that a quest brings, drop in as they always do.
+    THEY ARE PICKED EARLY, so that they have time to swim over without the board waiting for them. as
+    soon as handle_combos knows how far the fish that are left will fall, before anything moves, it is
+    known which cells will be empty: the top cells of every column, as many as popped in it. a fish
+    from the schools is picked for each of them then, against the board as it will be once the fish
+    have fallen, and it sets off at once. schoolEarlyPicks does that. it takes SCHOOL_DRAW_FLY to swim
+    over, which is about as long as the fish take to fall, and it waits above the column if it is early.
+    as the board fills back in, schoolDrawTake looks again, at the board as it really is: the fish that
+    was picked for the cell at random has to be a plain one, and the fish from the school must not make
+    a whole group there with the new fish that dropped in beside it. if it can not drop in after all,
+    it goes back to its school, and the fish that was picked at random drops in. if it can,
+    schoolDrawLand has the new fish fall when it would have, or once the fish from the school is there,
+    if that is later, and the fish from the school hops in as it starts to. where the swap
+    goes is told to schoolDrawWay, by startLiveMove in fish_funcs.
+    which fish out there is called on goes around them in turn, so a seed does not always play the
+    same once a game has schools in it: where the fish swim does not come from the seed.
+
     THE SAVED GAME. the way that every fish on the board faces, and the fish out in the background, are
     kept with the saved game, from SCHOOL_PREF on. a game that
     was saved before any of this deals the fish a way to face, and has nobody out in the background.
@@ -83,6 +183,9 @@ remend
 
 global SCHOOL_ON = 1 `0 turns the whole thing off
 global SCHOOL_MIN = 3 `how many fish a school needs, at the least
+global dim SCHOOL_MADE(64) `1 for every kind that a school was made of, on this look at the board. schoolJudgeSwap clears them.
+#constant ABILITY_INDEX_FALL_IN_LINE 36
+global SCHOOL_DAWN = 0 `1 for the look at the board that day breaks for, when any group can be a school. see THE DAWN.
 global SCHOOL_NEED_SWAP = 1 `1 when only a group that the last swap put together can be a school
 global FORCE_SCHOOL = 120 `the fish ahead of a school that swims off. the row is added to this. see FORCED POPS in fish_headers.
 
@@ -119,6 +222,105 @@ global dim FLOCK_BORN(48) `when it left the board, on the clock of the game. it 
 global dim FLOCK_FACE(48) `which way it faces: 1 to the right, and -1 to the left
 global dim FLOCK_SPRITES(48)
 global FLOCK_STEER_NEXT = 0 `the fish that is worked out next
+` THE CURSOR CALLS ON THE SCHOOLS. see above.
+global SCHOOL_CURSOR_ON = 1 `0 turns it off, for the debug panel
+global SCHOOL_PENDING = 0 `1 when a swap has been made, and has not been judged yet
+global SCHOOL_PENDING_KIND = 0 `the kind of fish that the cursor carried in it
+global SCHOOL_SWAP_VALID = 0 `1 when handle_combos has seen a group that the swap put together
+global SCHOOL_CARRIED_MATCHED = 0 `1 when the fish that the cursor carried in it is part of such a group
+global SCHOOL_VISIT_VALID = 0 `1 when a swap made a match since the cursor came to the fish that it is on
+global dim FLOCK_LEAVE(48) `-1 for a fish that is leaving off the left of the screen, 1 for the right, and 0 for one that is not
+global SCHOOL_LEAVE_SPEED = 35 `how fast a fish that is leaving swims, in pixels a second
+global dim FLOCK_LEAVE_AT(48) `when it started to leave, on the clock of the game
+global SCHOOL_LEAVE_FADE_MS = 750 `how long a fish that is leaving takes to get further off
+global SCHOOL_LEAVE_SHRINK = 30 `how much smaller it gets, in hundredths of its size
+global SCHOOL_LEAVE_FADE = 45 `and how much fainter, in hundredths
+global dim FLOCK_FOCUS#(48) `how far it has come forward, from 0 to 1, while the cursor is on a fish of its kind
+global SCHOOL_FOCUS_KIND = 0 `the kind of fish that the cursor is on, on this frame, or 0
+global SCHOOL_FOCUS_EASE# = 0.006 `how much of the way it comes forward, or goes back, in a millisecond
+global SCHOOL_FOCUS_GROW = 15 `how much bigger it gets when it comes forward, in hundredths of its size
+global SCHOOL_FOCUS_CLEAR = 50 `and how much of the haze comes off of it, in hundredths
+global SCHOOL_SHIMMER = 20 `and while it is forward, how much more of the haze comes and goes, as it shimmers, in hundredths
+global SCHOOL_SHIMMER_SPEED = 600 `how quickly it shimmers, in hundred-thousandths of a turn a millisecond
+global SCHOOL_DEPART_COUNT = 0 `how many fish have left in this game, for the debug panel
+global SCHOOL_FLUSH_ONLY_KIND = 0 `scratch, for schoolPopKind: the only kind that a flush takes, or 0 for all of them
+
+` THE TIDE FLUSHES THE SCHOOLS. see above.
+global SCHOOL_FLUSH_ON = 0 `1 turns it on. it is off for now.
+global dim FLOCK_FLUSH(48) `-1 for a fish that the tide is flushing up, 1 for one it is flushing down, and 0 for one it is not
+global SCHOOL_FLUSH_SPEED = 150 `how fast a flushed fish swims, at the most, in pixels a second
+global SCHOOL_FLUSH_PUSH = 260 `how quickly it gets up to that, in pixels a second, every second
+global dim FLOCK_FLUSH_AT(48) `when a flushed fish pops, on the clock of the game, if it has not got to the edge of the screen first
+global dim SCHOOL_FLUSH_ORDER(48) `scratch, for schoolFlush: the fish of a flush, in the order that they pop
+global dim FLOCK_PUNCH_AT(48) `when a flushed fish started its punch, on the clock of the game, or 0 before its turn
+global SCHOOL_PUNCH_MS = 110 `how long the punch takes, in milliseconds. the fish pops at the end of it.
+global SCHOOL_PUNCH_SCALE = 190 `how big it swells to, in hundredths of its size
+global SCHOOL_PUFF_MAX = 10 `how many puffs of smoke there can be at once, out in the background
+global dim SCHOOL_PUFF_SPRITES(10)
+global dim SCHOOL_PUFF_START(10) `when each one started, on the clock of the game, or 0 for one that is over
+global dim SCHOOL_PUFF_FROM(10) `the frames of the puff that it plays, from and to
+global dim SCHOOL_PUFF_TO(10)
+global SCHOOL_PUFF_NEXT = 0
+global SCHOOL_PUFF_MS = 400 `how long a puff takes, the same as the board's
+global SCHOOL_PUFF_ALPHA = 200 `how much of a puff shows, from 0 to 255
+global SCHOOL_FLUSH_FIRST = 200 `how long after the flush the first one pops, in milliseconds
+global SCHOOL_FLUSH_GAP = 120 `how far apart they pop, in milliseconds
+global SCHOOL_FLUSH_SPAN = 1600 `and the longest that a whole flush takes to pop: a big one pops closer together
+global SCHOOL_FAR_VOICES = 3 `how many of each far pop can be heard at once
+global dim SCHOOL_FAR_SFX(6) `the sounds of the far pops: the voices of the first, and then of the second
+global SCHOOL_FAR_NEXT = 0 `the voice that the next pop is played on
+global SCHOOL_FLUSH_EDGE = 6 `how far from the top or the bottom of the screen it pops, in pixels
+global SCHOOL_FLUSH_VOLUME = 35 `how loud a far pop is, in hundredths
+global SCHOOL_FLUSH_SCORE = 0 `what the last fish of the flush that is going scored, before the multiplier. the next scores 10 more.
+global SCHOOL_FLUSH_COUNT = 0 `how many flushes there have been in this game, for the debug panel
+
+` THE FISH COME HOME. see above.
+global SCHOOL_DRAW_ON = 0 `1 when a swap that goes down calls on the schools. it is off for now.
+global SCHOOL_DRAW = 0 `1 after a swap that went down, when the new fish come from the schools
+global SCHOOL_DRAW_NEXT = 0 `the fish out there that is looked at first, the next time that one is called on
+global SCHOOL_STACK_LIFT = 110 `how far above the middle of the top row of the board the bottom of a stack waits, in hundredths of a cell
+global SCHOOL_STACK_SPACE = 75 `how far apart the fish in a stack are, in hundredths of a cell
+global SCHOOL_STACK_GAP = 110 `how long after one fish of a stack drops in the next one does, in milliseconds
+global dim SCHOOL_COLUMN_EMPTY(32) `scratch, for schoolEarlyPicks: how many cells of every column will be empty
+global dim FLOCK_STACK(48) `the place of a fish from a school in its stack above the column, 0 at the bottom
+global SCHOOL_DRAW_FLY = 650 `how long a fish from a school takes to swim over to its column, in milliseconds
+global dim SCHOOL_EARLY(400) `the fish out there that has been sent for every cell that will be empty, or -1
+global dim SCHOOL_FUTURE(400) `scratch, for schoolEarlyPicks: the board as it will be once the fish have fallen
+global dim SCHOOL_FUTURE_MARKS(400) `scratch, for schoolFutureGroup
+global dim SCHOOL_FUTURE_STACK(400)
+global SCHOOL_FUTURE_STAMP = 0
+global dim FLOCK_HOP_AT(48) `when a fish from a school hops into its new fish, on the clock of the game, or 0 until that is known
+global SCHOOL_DRAW_HOP = 120 `how long the one from the school takes to hop in, in milliseconds
+global SCHOOL_PICK_TOP = 2 `how much a fish nearer the top is favored: 0 not at all, 1 by how high up it is, 2 by that squared
+global SCHOOL_PICK_STAMP = 0 `scratch, for schoolDrawPick: a number that is new for every pick
+global dim SCHOOL_PICK_ASKED(64) `the pick that each kind was last asked about on
+global dim SCHOOL_PICK_FITS(64) `and whether it fits: 1 when it does not pop where it lands
+global dim SCHOOL_PICK_WEIGHT(48) `the chance of every fish out there, on this pick
+global SCHOOL_DRAW_COUNT = 0 `how many fish have come home in this game, for the debug panel
+global dim FLOCK_FLY(48) `1 for a fish that is on its way to the board, to be a new fish
+global dim FLOCK_FLY_X#(48) `where it set off from, in pixels
+global dim FLOCK_FLY_Y#(48)
+global dim FLOCK_FLY_TO_X#(48) `and where it is going
+global dim FLOCK_FLY_TO_Y#(48)
+global dim FLOCK_FLY_START(48) `when it set off, on the clock of the game
+global dim FLOCK_FLY_MS(48) `and how long it takes
+
+` THE SCHOOLS SLEEP AT NIGHT. see above.
+global FLOCK_SLEEP_DRIFT = 15 `how far a sleeping fish drifts each way, in tenths of a pixel a second
+global FLOCK_SLEEP_SLOW = 25 `how slowly it drifts back and forth, in hundredths of a turn a second
+
+` A POP SENDS A WAVE. see above.
+global FLOCK_WAVE_MAX = 8 `how many waves can be going at once. a new one takes the place of the oldest.
+global dim FLOCK_WAVE_X#(8) `where each one started, in pixels
+global dim FLOCK_WAVE_Y#(8)
+global dim FLOCK_WAVE_START(8) `when it started, on the clock of the game, or 0 for one that is over
+global dim FLOCK_WAVE_POWER#(8) `how hard it pushes, from the group that sent it
+global FLOCK_WAVE_NEXT = 0
+global FLOCK_WAVE_SPEED = 260 `how fast the ring goes out, in pixels a second
+global FLOCK_WAVE_REACH = 360 `how far it gets before it is gone, in pixels
+global FLOCK_WAVE_BAND = 22 `how thick the ring is, in pixels. a fish is pushed for as long as it is inside it.
+global FLOCK_WAVE_PUSH = 350 `how hard it pushes a fish right next to the pop, in pixels a second, every second, for a group of three
+global FLOCK_WAVE_GROW = 25 `how much harder it is for every fish more in the group, in hundredths
 global FLOCK_STEER_EACH = 3 `how many fish are worked out on a frame. with FLOCK_MAX of them, each one is worked out every FLOCK_MAX / FLOCK_STEER_EACH frames.
 global dim FLOCK_STEERED(48) `when each one was last worked out, on the clock of the game. the steer is used for all of the time since.
 global dim FLOCK_DRAWN(48) `what its sprite has been told: 0 nothing yet, 1 while it is on its way out, and 2 once it is all the way out, after which its size, color and line are left alone

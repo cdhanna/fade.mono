@@ -51,6 +51,14 @@ public struct TextSprite
     // shows. Only text that goes through a layout (rich, or wrapped) can be revealed.
     public bool revealOn;
     public int reveal;
+
+    // The last `size text...` call, so it can be done again when a loc text's string changes (a new
+    // language, a new arg). None after `scale text`, which sets the scale by hand. See TextSizing.
+    public TextSizeMode sizeMode;
+    public float sizeX;
+    public float sizeY;
+    public float sizeMin;
+    public float sizeMax;
 }
 
 

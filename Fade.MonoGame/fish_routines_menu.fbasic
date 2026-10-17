@@ -124,141 +124,102 @@ setup_menu:
 
     ` the lines of the menu. the ones that are not ready cannot be picked yet.
     MENU_ITEMS(MENU_ITEM_RESUME) = {
-        name$ = "Resume"
-        desc$ = "Back to the fish."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_NEW_GAME) = {
-        name$ = "New Game"
-        desc$ = "Fresh and wet fish."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_HIGHSCORES) = {
-        name$ = "Highscores"
-        desc$ = "Gaze upon the glory."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_CODEC) = {
-        name$ = "Codec"
-        desc$ = "Review discovered upgrades."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_OPTIONS) = {
-        name$ = "Options"
-        desc$ = "Sound and screen."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_CREDITS) = {
-        name$ = "Credits"
-        desc$ = "Pay attention to me!"
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_QUIT) = {
-        name$ = "Quit"
-        desc$ = "Close the game."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_CONFIRM_NO) = {
-        name$ = "No"
-        desc$ = "Go back to the game."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_CONFIRM_YES) = {
-        name$ = "Yes"
-        desc$ = "This game will be lost."
         ready = 1
     }
 
     ` the lines of the options page. refreshOptionLines writes the setting onto the end of each name.
     MENU_ITEMS(MENU_ITEM_SET_SOUND) = {
-        name$ = "Sound"
-        desc$ = "How loud the sound effects are."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_SET_MUSIC) = {
-        name$ = "Music"
-        desc$ = "How loud the music is."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_SET_FULLSCREEN) = {
-        name$ = "Fullscreen"
-        desc$ = "Fill the whole screen."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_SET_BACK) = {
-        name$ = "Back"
-        desc$ = "Back to the menu."
         ready = 1
     }
 
     ` these two are only on the page once the main menu has them to show. see setMenuPage.
     MENU_ITEMS(MENU_ITEM_SET_REEF) = {
-        name$ = "Menu reef"
-        desc$ = "The reef you saved, on the main menu."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_SET_MONSTER) = {
-        name$ = "Menu monster"
-        desc$ = "The one you summoned, on the main menu."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_SET_PHOTOS) = {
-        name$ = "Menu photos"
-        desc$ = "The photos you took, on the main menu."
         ready = 1
     }
 
     ` the lines of the page that "New Game" opens. refreshOptionLines writes the choice onto the end of the
     ` first three, and gives them a description of whatever is chosen.
     MENU_ITEMS(MENU_ITEM_GAME_LENGTH) = {
-        name$ = "Length"
-        desc$ = "How many rounds the game lasts."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_GAME_MODE) = {
-        name$ = "Mode"
-        desc$ = "Normal, or zen."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_GAME_INTRO) = {
-        name$ = "Include intro"
-        desc$ = "Start with the first dive, or not."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_GAME_SEED) = {
-        name$ = "Seed"
-        desc$ = "Games with the same seed deal the same fish."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_GAME_START) = {
-        name$ = "Start"
-        desc$ = "Start the game."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_GAME_BACK) = {
-        name$ = "Back"
-        desc$ = "Back to the menu."
         ready = 1
     }
 
     ` the lines on the page that comes up when the last round has been won. see KEEP PLAYING in fish_headers.
     MENU_ITEMS(MENU_ITEM_OVER_DONE) = {
-        name$ = "Done"
-        desc$ = "Back to the title."
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_OVER_CONTINUE) = {
-        name$ = "Keep Playing"
-        desc$ = "Carry on with this board, for as long as you like. Your score is already in."
         ready = 1
     }
 
     ` the pause menu's way in to the page that moves the moves between the buttons
     MENU_ITEMS(MENU_ITEM_MOVES) = {
-        name$ = "Inventory"
-        desc$ = "Change which button each move is on."
         ready = 1
     }
+
+    MENU_ITEMS(MENU_ITEM_SET_LANGUAGE) = {
+        ready = 1
+    }
+
+    ` the strings of the game, in the language the player picked, or else in Steam's or the computer's.
+    ` the names and descriptions of the lines come from them. see loadMenuStrings.
+    load strings "Fish/Lang"
+    OPTION_LANGUAGE = get pref(PREF_LANGUAGE, 0)
+    applyLanguage()
+    loadMenuStrings()
 
     ` the options are remembered from the last time the game was run. the first time it is ever run,
     ` there is nothing to remember, and they are what they would be anyway.
@@ -359,7 +320,7 @@ setup_menu:
 
     ` the hint tells the player which keys do what, the same way that the hint in the game does.
     reserve text id(MENU_HINT_TEXT_ID)
-    text MENU_HINT_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT - 2, SCORE_FONT, "{dir} choose    {confirm} select"
+    text MENU_HINT_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT - 2, SCORE_FONT, loc$("menu.hint.main")
     enable rich text MENU_HINT_TEXT_ID
     set text offset MENU_HINT_TEXT_ID, .5, 1
     size text y MENU_HINT_TEXT_ID, 16
@@ -680,6 +641,9 @@ menu_pick:
         case MENU_ITEM_SET_FULLSCREEN
             changeMenuOption(MENU_ITEM_SET_FULLSCREEN, 1)
         endcase
+        case MENU_ITEM_SET_LANGUAGE
+            changeMenuOption(MENU_ITEM_SET_LANGUAGE, 1)
+        endcase
         case MENU_ITEM_SET_REEF
             changeMenuOption(MENU_ITEM_SET_REEF, 1)
         endcase
@@ -793,23 +757,23 @@ handle_game_end:
     show sprite MENU_DIM_SPRITE
     showSurface(0)
 
-    MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = str$(GAME_ROUND_CAP) + " rounds in " + str$(CURRENT_MOVE_COUNT) + " moves. Back to the title."
+    MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = loc$("menu.over.done.rounds", "rounds", GAME_ROUND_CAP, "moves", CURRENT_MOVE_COUNT)
 
     ` the game may have ended early, with one of the two endings of the hidden game. see THE TWO ENDINGS in fish_headers.
     if CORAL_ENDING = CORAL_ENDING_REEF
-        MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = "The reef was saved in " + str$(CURRENT_MOVE_COUNT) + " moves. Back to the title."
+        MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = loc$("menu.over.done.reef", "moves", CURRENT_MOVE_COUNT)
     endif
     if CORAL_ENDING = CORAL_ENDING_ANCIENT
-        MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = "The ancient one rose after " + str$(CURRENT_MOVE_COUNT) + " moves. Back to the title."
+        MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = loc$("menu.over.done.ancient", "moves", CURRENT_MOVE_COUNT)
     endif
     if CORAL_ENDING = CORAL_ENDING_DIVER
-        MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = "The album was filled in " + str$(CURRENT_MOVE_COUNT) + " moves. Back to the title."
+        MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = loc$("menu.over.done.album", "moves", CURRENT_MOVE_COUNT)
     endif
     setMenuPage(MENU_PAGE_GAME_OVER)
     selectMenuItem(0, 0)
 
     ` the end of a game is the best mark that the steam timeline gets. it says the same as the menu does.
-    add steam timeline event "The end", MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$, "steam_crown", 900, 2
+    add steam timeline event loc$("steam.theend"), MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$, "steam_crown", 900, 2
 
     hintShow(0)
     set screen shake amount 0
@@ -1447,37 +1411,37 @@ function setMenuPage(page)
     title$ = "Fish Fish Pop"
     titleSize = 48
     titleShadow = 4
-    hint$ = "{dir} choose    {confirm} select"
+    hint$ = loc$("menu.hint.main")
     first = MENU_ITEM_NEW_GAME
     last = MENU_ITEM_QUIT
     MENU_WIDTH = 180
-    MENU_ITEMS(MENU_ITEM_QUIT).desc$ = "Close the game."
+    MENU_ITEMS(MENU_ITEM_QUIT).desc$ = loc$("menu.quit.desc")
 
     ` when there is a saved game to go back to, the main menu starts with "Resume", the same as the pause menu does
     if page = MENU_PAGE_MAIN
         savedGame = hasSavedGame()
         if savedGame
             first = MENU_ITEM_RESUME
-            MENU_ITEMS(MENU_ITEM_RESUME).desc$ = "Slap those fish back into action."
+            MENU_ITEMS(MENU_ITEM_RESUME).desc$ = loc$("menu.resume.desc.saved")
         endif
     endif
 
     ` the options page can be opened from the main menu or from the pause menu, and looks the same from both.
     ` its lines are longer, because they have their settings on the end, so the panel is wider.
     if page = MENU_PAGE_OPTIONS
-        title$ = "Options"
+        title$ = loc$("menu.title.options")
         titleSize = 36
-        hint$ = "{dir} choose and change    {pause} back"
+        hint$ = loc$("menu.hint.options")
         first = MENU_ITEM_SET_SOUND
         last = MENU_ITEM_SET_BACK
-        MENU_WIDTH = 220
+        MENU_WIDTH = 260
     endif
 
     ` the page that "New Game" opens, to ask what kind of game it should be. it works like the options page.
     if page = MENU_PAGE_NEW_GAME
-        title$ = "New Game"
+        title$ = loc$("menu.title.newgame")
         titleSize = 36
-        hint$ = "{dir} choose and change    {confirm} select    {pause} back"
+        hint$ = loc$("menu.hint.newgame")
         first = MENU_ITEM_GAME_LENGTH
         last = MENU_ITEM_GAME_BACK
         MENU_WIDTH = 220
@@ -1485,29 +1449,29 @@ function setMenuPage(page)
 
     ` the page that comes up over the game when the last round has been won
     if page = MENU_PAGE_GAME_OVER
-        title$ = "You won, buddy!"
+        title$ = loc$("menu.title.won")
         titleSize = 36
-        hint$ = "{dir} choose    {confirm} select"
+        hint$ = loc$("menu.hint.main")
         first = MENU_ITEM_OVER_DONE
         last = MENU_ITEM_OVER_DONE
     endif
 
     if page = MENU_PAGE_PAUSE
-        title$ = "Paused"
+        title$ = loc$("menu.title.paused")
         titleSize = 36
-        hint$ = "{dir} choose    {confirm} select    {pause} resume"
+        hint$ = loc$("menu.hint.paused")
         first = MENU_ITEM_RESUME
-        MENU_ITEMS(MENU_ITEM_RESUME).desc$ = "Back to the fish."
+        MENU_ITEMS(MENU_ITEM_RESUME).desc$ = loc$("menu.resume.desc")
 
         ` quitting from a game goes back to the main menu, which has the quit that closes the window.
         ` the run is saved, and the main menu has a "Resume" that carries on with it.
-        MENU_ITEMS(MENU_ITEM_QUIT).desc$ = "Save these fish, for now..."
+        MENU_ITEMS(MENU_ITEM_QUIT).desc$ = loc$("menu.quit.desc.pause")
     endif
 
     if page = MENU_PAGE_CONFIRM
-        title$ = "Abandon current game?"
+        title$ = loc$("menu.title.abandon")
         titleSize = 28
-        hint$ = "{dir} choose    {confirm} select    {pause} back"
+        hint$ = loc$("menu.hint.confirm")
         first = MENU_ITEM_CONFIRM_NO
         last = MENU_ITEM_CONFIRM_YES
     endif
@@ -1568,6 +1532,11 @@ function setMenuPage(page)
             endif
         endif
 
+        ` and the options page has the language right under "Fullscreen", always
+        if i = MENU_ITEM_SET_LANGUAGE
+            if page = MENU_PAGE_OPTIONS then skip
+        endif
+
         ` and the page that "New Game" opens has the seed right under "Include intro"
         if i = MENU_ITEM_GAME_SEED
             if page = MENU_PAGE_NEW_GAME then skip
@@ -1596,6 +1565,9 @@ function setMenuPage(page)
 
             if page = MENU_PAGE_OPTIONS
                 if i = MENU_ITEM_SET_FULLSCREEN
+                    MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_LANGUAGE
+                    MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+                    showMenuItemText(MENU_ITEM_SET_LANGUAGE)
                     if SURFACE_REEF
                         MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_REEF
                         MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
@@ -1670,8 +1642,14 @@ function selectMenuItem(index, duration)
         itemColor = rgb(64, 128, 255, 150)
         if item.ready then itemColor = rgb(150, 190, 255)
         if i = index then itemColor = rgb(255, 255, 255)
+
+        ` the value of a setting is a paler shade than its name, so the two read apart
+        valueColor = rgb(64, 128, 255, 150)
+        if item.ready then valueColor = rgb(205, 225, 255)
+        if i = index then valueColor = rgb(170, 205, 255)
+
         color text item.textId, itemColor
-        color text item.valueTextId, itemColor
+        color text item.valueTextId, valueColor
 
         positionMenuItemText(MENU_PAGE_ITEMS(i), 0, MENU_LIST_TOP + i * MENU_ROW_HEIGHT)
     next
@@ -1728,62 +1706,178 @@ endfunction
 
 ` write the settings onto the lines of the options page.
 function refreshOptionLines()
-    setMenuItemValue(MENU_ITEM_SET_SOUND, "Sound", str$(OPTION_SOUND * 10) + "%")
-    setMenuItemValue(MENU_ITEM_SET_MUSIC, "Music", str$(OPTION_MUSIC * 10) + "%")
+    setMenuItemValue(MENU_ITEM_SET_SOUND, loc$("menu.sound"), str$(OPTION_SOUND * 10) + "%")
+    setMenuItemValue(MENU_ITEM_SET_MUSIC, loc$("menu.music"), str$(OPTION_MUSIC * 10) + "%")
 
+    on$ = loc$("menu.value.on")
+    off$ = loc$("menu.value.off")
     if OPTION_FULLSCREEN
-        setMenuItemValue(MENU_ITEM_SET_FULLSCREEN, "Fullscreen", "on")
+        setMenuItemValue(MENU_ITEM_SET_FULLSCREEN, loc$("menu.fullscreen"), on$)
     else
-        setMenuItemValue(MENU_ITEM_SET_FULLSCREEN, "Fullscreen", "off")
+        setMenuItemValue(MENU_ITEM_SET_FULLSCREEN, loc$("menu.fullscreen"), off$)
     endif
+
+    ` the language is shown in itself, so a player who cannot read the one the game is in can find their own
+    setMenuItemValue(MENU_ITEM_SET_LANGUAGE, loc$("menu.language"), language name$(currentLanguageIndex()))
 
     if OPTION_MENU_REEF
-        setMenuItemValue(MENU_ITEM_SET_REEF, "Menu reef", "on")
+        setMenuItemValue(MENU_ITEM_SET_REEF, loc$("menu.reef"), on$)
     else
-        setMenuItemValue(MENU_ITEM_SET_REEF, "Menu reef", "off")
+        setMenuItemValue(MENU_ITEM_SET_REEF, loc$("menu.reef"), off$)
     endif
     if OPTION_MENU_MONSTER
-        setMenuItemValue(MENU_ITEM_SET_MONSTER, "Menu monster", "on")
+        setMenuItemValue(MENU_ITEM_SET_MONSTER, loc$("menu.monster"), on$)
     else
-        setMenuItemValue(MENU_ITEM_SET_MONSTER, "Menu monster", "off")
+        setMenuItemValue(MENU_ITEM_SET_MONSTER, loc$("menu.monster"), off$)
     endif
     if OPTION_MENU_PHOTOS
-        setMenuItemValue(MENU_ITEM_SET_PHOTOS, "Menu photos", "on")
+        setMenuItemValue(MENU_ITEM_SET_PHOTOS, loc$("menu.photos"), on$)
     else
-        setMenuItemValue(MENU_ITEM_SET_PHOTOS, "Menu photos", "off")
+        setMenuItemValue(MENU_ITEM_SET_PHOTOS, loc$("menu.photos"), off$)
     endif
 
     ` and the kind of game onto the lines of the page that "New Game" opens
-    lengthName$ = "regular"
-    if OPTION_GAME_LENGTH = GAME_LENGTH_SHORT then lengthName$ = "short"
-    if OPTION_GAME_LENGTH = GAME_LENGTH_LONG then lengthName$ = "long"
-    setMenuItemValue(MENU_ITEM_GAME_LENGTH, "Length", lengthName$)
-    MENU_ITEMS(MENU_ITEM_GAME_LENGTH).desc$ = "The game is over after " + str$(getGameLengthRounds(OPTION_GAME_LENGTH)) + " rounds."
+    lengthName$ = loc$("menu.length.regular")
+    if OPTION_GAME_LENGTH = GAME_LENGTH_SHORT
+        lengthName$ = loc$("menu.length.short")
+    endif
+    if OPTION_GAME_LENGTH = GAME_LENGTH_LONG
+        lengthName$ = loc$("menu.length.long")
+    endif
+    setMenuItemValue(MENU_ITEM_GAME_LENGTH, loc$("menu.length"), lengthName$)
+    MENU_ITEMS(MENU_ITEM_GAME_LENGTH).desc$ = loc$("menu.length.desc.rounds", "rounds", getGameLengthRounds(OPTION_GAME_LENGTH))
 
     if OPTION_GAME_ZEN
-        setMenuItemValue(MENU_ITEM_GAME_MODE, "Mode", "zen")
-        MENU_ITEMS(MENU_ITEM_GAME_MODE).desc$ = "No upgrades. Fish can move around the edges of the board, and that is all."
+        setMenuItemValue(MENU_ITEM_GAME_MODE, loc$("menu.mode"), loc$("menu.mode.zen"))
+        MENU_ITEMS(MENU_ITEM_GAME_MODE).desc$ = loc$("menu.mode.zen.desc")
     else
-        setMenuItemValue(MENU_ITEM_GAME_MODE, "Mode", "normal")
-        MENU_ITEMS(MENU_ITEM_GAME_MODE).desc$ = "Pick an upgrade after every round."
+        setMenuItemValue(MENU_ITEM_GAME_MODE, loc$("menu.mode"), loc$("menu.mode.normal"))
+        MENU_ITEMS(MENU_ITEM_GAME_MODE).desc$ = loc$("menu.mode.normal.desc")
     endif
 
     if OPTION_GAME_INTRO
-        setMenuItemValue(MENU_ITEM_GAME_INTRO, "Include intro", "yes")
-        MENU_ITEMS(MENU_ITEM_GAME_INTRO).desc$ = "Start with the first dive again: a few words, and then the game a piece at a time."
+        setMenuItemValue(MENU_ITEM_GAME_INTRO, loc$("menu.intro"), loc$("menu.value.yes"))
+        MENU_ITEMS(MENU_ITEM_GAME_INTRO).desc$ = loc$("menu.intro.yes.desc")
     else
-        setMenuItemValue(MENU_ITEM_GAME_INTRO, "Include intro", "no")
-        MENU_ITEMS(MENU_ITEM_GAME_INTRO).desc$ = "Straight into the game."
+        setMenuItemValue(MENU_ITEM_GAME_INTRO, loc$("menu.intro"), loc$("menu.value.no"))
+        MENU_ITEMS(MENU_ITEM_GAME_INTRO).desc$ = loc$("menu.intro.no.desc")
     endif
 
     ` and the seed. see THE SEED OF A GAME in fish_headers_seed.
     if OPTION_GAME_SEED > 0
-        setMenuItemValue(MENU_ITEM_GAME_SEED, "Seed", str$(OPTION_GAME_SEED))
-        MENU_ITEMS(MENU_ITEM_GAME_SEED).desc$ = "The same fish, cards and quests as any other game on this seed."
+        setMenuItemValue(MENU_ITEM_GAME_SEED, loc$("menu.seed"), str$(OPTION_GAME_SEED))
+        MENU_ITEMS(MENU_ITEM_GAME_SEED).desc$ = loc$("menu.seed.set.desc")
     else
-        setMenuItemValue(MENU_ITEM_GAME_SEED, "Seed", "random")
-        MENU_ITEMS(MENU_ITEM_GAME_SEED).desc$ = "A seed is picked for you. Pick one to play the same game as somebody else."
+        setMenuItemValue(MENU_ITEM_GAME_SEED, loc$("menu.seed"), loc$("menu.seed.random"))
+        MENU_ITEMS(MENU_ITEM_GAME_SEED).desc$ = loc$("menu.seed.random.desc")
     endif
+endfunction
+
+
+` THE LANGUAGE. see OPTION_LANGUAGE in fish_headers.
+
+` set the language of the game: the one the player picked, or else the one Steam has for the game,
+` or else the computer's. best language$ picks from the languages the string tables have.
+function applyLanguage()
+    langPicked$ = ""
+    if OPTION_LANGUAGE > 0
+        langPicked$ = language code$(OPTION_LANGUAGE - 1)
+    endif
+    if langPicked$ = ""
+        langPicked$ = best language$(steam language$())
+    endif
+    set language langPicked$
+endfunction
+
+
+` which of the languages of the tables the game is in now, counted from 0
+function currentLanguageIndex()
+    langIndex = 0
+    for langI = 0 to language count() - 1
+        if language code$(langI) = language$()
+            langIndex = langI
+        endif
+    next
+endfunction langIndex
+
+
+` the names and descriptions of the lines of the menu, in the language of the game. the ones that
+` depend on a setting or on the page are written over by refreshOptionLines and setMenuPage.
+function loadMenuStrings()
+    MENU_ITEMS(MENU_ITEM_RESUME).name$ = loc$("menu.resume")
+    MENU_ITEMS(MENU_ITEM_RESUME).desc$ = loc$("menu.resume.desc")
+    MENU_ITEMS(MENU_ITEM_NEW_GAME).name$ = loc$("menu.newgame")
+    MENU_ITEMS(MENU_ITEM_NEW_GAME).desc$ = loc$("menu.newgame.desc")
+    MENU_ITEMS(MENU_ITEM_HIGHSCORES).name$ = loc$("menu.highscores")
+    MENU_ITEMS(MENU_ITEM_HIGHSCORES).desc$ = loc$("menu.highscores.desc")
+    MENU_ITEMS(MENU_ITEM_CODEC).name$ = loc$("menu.codec")
+    MENU_ITEMS(MENU_ITEM_CODEC).desc$ = loc$("menu.codec.desc")
+    MENU_ITEMS(MENU_ITEM_OPTIONS).name$ = loc$("menu.options")
+    MENU_ITEMS(MENU_ITEM_OPTIONS).desc$ = loc$("menu.options.desc")
+    MENU_ITEMS(MENU_ITEM_CREDITS).name$ = loc$("menu.credits")
+    MENU_ITEMS(MENU_ITEM_CREDITS).desc$ = loc$("menu.credits.desc")
+    MENU_ITEMS(MENU_ITEM_QUIT).name$ = loc$("menu.quit")
+    MENU_ITEMS(MENU_ITEM_QUIT).desc$ = loc$("menu.quit.desc")
+    MENU_ITEMS(MENU_ITEM_CONFIRM_NO).name$ = loc$("menu.confirm.no")
+    MENU_ITEMS(MENU_ITEM_CONFIRM_NO).desc$ = loc$("menu.confirm.no.desc")
+    MENU_ITEMS(MENU_ITEM_CONFIRM_YES).name$ = loc$("menu.confirm.yes")
+    MENU_ITEMS(MENU_ITEM_CONFIRM_YES).desc$ = loc$("menu.confirm.yes.desc")
+
+    MENU_ITEMS(MENU_ITEM_SET_SOUND).name$ = loc$("menu.sound")
+    MENU_ITEMS(MENU_ITEM_SET_SOUND).desc$ = loc$("menu.sound.desc")
+    MENU_ITEMS(MENU_ITEM_SET_MUSIC).name$ = loc$("menu.music")
+    MENU_ITEMS(MENU_ITEM_SET_MUSIC).desc$ = loc$("menu.music.desc")
+    MENU_ITEMS(MENU_ITEM_SET_FULLSCREEN).name$ = loc$("menu.fullscreen")
+    MENU_ITEMS(MENU_ITEM_SET_FULLSCREEN).desc$ = loc$("menu.fullscreen.desc")
+    MENU_ITEMS(MENU_ITEM_SET_LANGUAGE).name$ = loc$("menu.language")
+    MENU_ITEMS(MENU_ITEM_SET_LANGUAGE).desc$ = loc$("menu.language.desc")
+    MENU_ITEMS(MENU_ITEM_SET_BACK).name$ = loc$("menu.back")
+    MENU_ITEMS(MENU_ITEM_SET_BACK).desc$ = loc$("menu.back.desc")
+    MENU_ITEMS(MENU_ITEM_SET_REEF).name$ = loc$("menu.reef")
+    MENU_ITEMS(MENU_ITEM_SET_REEF).desc$ = loc$("menu.reef.desc")
+    MENU_ITEMS(MENU_ITEM_SET_MONSTER).name$ = loc$("menu.monster")
+    MENU_ITEMS(MENU_ITEM_SET_MONSTER).desc$ = loc$("menu.monster.desc")
+    MENU_ITEMS(MENU_ITEM_SET_PHOTOS).name$ = loc$("menu.photos")
+    MENU_ITEMS(MENU_ITEM_SET_PHOTOS).desc$ = loc$("menu.photos.desc")
+
+    MENU_ITEMS(MENU_ITEM_GAME_LENGTH).name$ = loc$("menu.length")
+    MENU_ITEMS(MENU_ITEM_GAME_LENGTH).desc$ = loc$("menu.length.desc")
+    MENU_ITEMS(MENU_ITEM_GAME_MODE).name$ = loc$("menu.mode")
+    MENU_ITEMS(MENU_ITEM_GAME_MODE).desc$ = loc$("menu.mode.desc")
+    MENU_ITEMS(MENU_ITEM_GAME_INTRO).name$ = loc$("menu.intro")
+    MENU_ITEMS(MENU_ITEM_GAME_INTRO).desc$ = loc$("menu.intro.desc")
+    MENU_ITEMS(MENU_ITEM_GAME_SEED).name$ = loc$("menu.seed")
+    MENU_ITEMS(MENU_ITEM_GAME_SEED).desc$ = loc$("menu.seed.desc")
+    MENU_ITEMS(MENU_ITEM_GAME_START).name$ = loc$("menu.start")
+    MENU_ITEMS(MENU_ITEM_GAME_START).desc$ = loc$("menu.start.desc")
+    MENU_ITEMS(MENU_ITEM_GAME_BACK).name$ = loc$("menu.back")
+    MENU_ITEMS(MENU_ITEM_GAME_BACK).desc$ = loc$("menu.back.desc")
+
+    MENU_ITEMS(MENU_ITEM_OVER_DONE).name$ = loc$("menu.over.done")
+    MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = loc$("menu.over.done.desc")
+    MENU_ITEMS(MENU_ITEM_OVER_CONTINUE).name$ = loc$("menu.over.continue")
+    MENU_ITEMS(MENU_ITEM_OVER_CONTINUE).desc$ = loc$("menu.over.continue.desc")
+    MENU_ITEMS(MENU_ITEM_MOVES).name$ = loc$("menu.moves")
+    MENU_ITEMS(MENU_ITEM_MOVES).desc$ = loc$("menu.moves.desc")
+endfunction
+
+
+` after the language changed: every line, title and hint of the menu again, in the new language
+function reloadMenuStrings()
+    loadMenuStrings()
+    ` the cards keep their text resolved (see loadCardStrings), and the quest badge its name
+    loadCardStrings()
+    questLanguageChanged()
+    for langI = 0 to MENU_ITEM_COUNT - 1
+        set text MENU_ITEMS(langI).textId, MENU_ITEMS(langI).name$
+    next
+    ` the lines with a setting get their values first, because setMenuPage only shows the value of a
+    ` line that has one already (the same as opening the options page does)
+    refreshOptionLines()
+    setMenuPage(MENU_PAGE)
+    refreshOptionLines()
+    ` and selecting the highlighted line again writes its description
+    selectMenuItem(MENU_SELECTED, 0)
 endfunction
 
 
@@ -1822,6 +1916,18 @@ function changeMenuOption(item, change)
             if OPTION_FULLSCREEN = 0
                 set screen size OPTION_WINDOW_W, OPTION_WINDOW_H
             endif
+        endcase
+
+        ` the languages go around, in the order of the columns of the string tables. every line of the
+        ` menu is written again in the new one, straight away.
+        case MENU_ITEM_SET_LANGUAGE
+            langNext = currentLanguageIndex()
+            langNext = langNext + change
+            if langNext >= language count() then langNext = 0
+            if langNext < 0 then langNext = language count() - 1
+            OPTION_LANGUAGE = langNext + 1
+            set language language code$(langNext)
+            reloadMenuStrings()
         endcase
 
         ` the main menu looks at these on every frame, so there is nothing else to do
@@ -1866,6 +1972,7 @@ function changeMenuOption(item, change)
     set pref PREF_MENU_REEF, OPTION_MENU_REEF
     set pref PREF_MENU_MONSTER, OPTION_MENU_MONSTER
     set pref PREF_MENU_PHOTOS, OPTION_MENU_PHOTOS
+    set pref PREF_LANGUAGE, OPTION_LANGUAGE
 
     ` the lines have changed, so write them again. selecting the line again colors it and fills in its description.
     refreshOptionLines()

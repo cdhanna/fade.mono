@@ -72,9 +72,32 @@ public class Program
                 }
                 game.Run();
                 FileLog.WriteLine("MONOGAME IS OVER");
-                await mtp;
-                FileLog.WriteLine("MTP IS OVER");
-                
+
+                // The test platform finishes within milliseconds of the game closing, once every
+                // test has reported. If a test ended the game before reporting (an error, or the
+                // program reaching `end` outside the test flow), the platform waits forever for
+                // that result, and the run hangs. So it gets a while, and then the run is called
+                // failed.
+                var finished = await Task.WhenAny(mtp, Task.Delay(TimeSpan.FromSeconds(TestFinishTimeoutSeconds)));
+                int testExitCode;
+                if (finished == mtp)
+                {
+                    testExitCode = await mtp;
+                }
+                else
+                {
+                    Console.WriteLine($"[test] the test platform did not finish within {TestFinishTimeoutSeconds}s of the game closing. A test probably ended the game before it reported. The run is called failed.");
+                    testExitCode = TestHungExitCode;
+                }
+                FileLog.WriteLine("MTP IS OVER " + testExitCode);
+
+                // The results are out, so nothing is left for the process to do. It ends right
+                // here, without the native libraries' own clean-up on exit, which has been seen to
+                // deadlock now and then and leave the window hanging. Windows takes back
+                // everything the process had either way.
+                ExitNow(testExitCode);
+                return testExitCode;
+
                 //
                 // MonoGameTestHost.onBeforeAll = () =>
                 // {
@@ -129,6 +152,34 @@ public class Program
         shipped.Services.AddService(typeof(IFadeHostSystem), NewSteamSystem());
         shipped.Run();
         return 0;
+    }
+
+    // A test run: how long the test platform gets to finish once the game has closed, and the exit
+    // code of a run where it never does. Microsoft.Testing.Platform's own codes are small (0 is a
+    // pass, 2 is a failed test), so this one stands apart from them.
+    const int TestFinishTimeoutSeconds = 30;
+    const int TestHungExitCode = 90;
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    static extern IntPtr GetCurrentProcess();
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    static extern bool TerminateProcess(IntPtr process, uint exitCode);
+
+    // End the process right now, with this exit code, once a test run has said all that it has to.
+    // Everything that was written is flushed first. On Windows it skips the clean-up that the native
+    // libraries do on the way out (the audio, the graphics driver, SDL), since one of them has been
+    // seen to deadlock there now and then. Windows takes back the memory, the handles, the device
+    // and the window either way. Elsewhere, it is a plain exit.
+    static void ExitNow(int exitCode)
+    {
+        try { Console.Out.Flush(); } catch { }
+        try { Console.Error.Flush(); } catch { }
+        if (OperatingSystem.IsWindows())
+        {
+            TerminateProcess(GetCurrentProcess(), (uint)exitCode);
+        }
+        Environment.Exit(exitCode);
     }
 
     // The version that the main menu shows in its corner. The game reads it from the

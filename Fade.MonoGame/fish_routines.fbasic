@@ -275,6 +275,7 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_OPEN_BOOK).artTexId), "Fish/Textures/Cards/see_all"
     texture reserve texture id(CARDS(ABILITY_INDEX_OATH).artTexId), "Fish/Textures/Cards/oceanic_oath"
     texture reserve texture id(CARDS(ABILITY_INDEX_ANGLER).artTexId), "Fish/Textures/Cards/bright_idea"
+    texture reserve texture id(CARDS(ABILITY_INDEX_FALL_IN_LINE).artTexId), "Fish/Textures/Cards/fall_in_line"
 
 return
 
@@ -383,7 +384,7 @@ setup_grid:
 
     ` the sprites are centered on their cell position, so the grid starts half a cell early
     INFO_INDEX_GRID = INFO_LENGTH
-    infoIndex = allocateInfoBlob(GRID_POS.x - CELL_SIZE / 2, GRID_POS.y - CELL_SIZE / 2, CELL_COLUMN_COUNT * CELL_SIZE, CELL_ROW_COUNT * CELL_SIZE, "The Fish", "{dir} moves the cursor. Hold {swap} and press {dir} to swap two fish. Connect three or more of the same kind to pop them.")
+    infoIndex = allocateInfoBlob(GRID_POS.x - CELL_SIZE / 2, GRID_POS.y - CELL_SIZE / 2, CELL_COLUMN_COUNT * CELL_SIZE, CELL_ROW_COUNT * CELL_SIZE, loc$("info.grid.title"), loc$("info.grid.desc"))
 return
 
 setup_score:
@@ -401,7 +402,7 @@ setup_score:
     INFO_L_W = 100
     INFO_L_H = 14
     INFO_L_INDEX = INFO_LENGTH
-    infoIndex = allocateInfoBlob(SCORE_POS.x - 4, SCORE_POS.y - 16, SCORE_SIZE.x + 8, 22, "Round Progress", "Popping fish fills the bar, and bigger groups are worth more. Fill it to finish the round and pick an upgrade.")
+    infoIndex = allocateInfoBlob(SCORE_POS.x - 4, SCORE_POS.y - 16, SCORE_SIZE.x + 8, 22, loc$("info.score.title"), loc$("info.score.desc"))
     INFO_INDEX_SCORE_BAR = infoIndex
     
     global dim PROGRESS_BARS(1) as progressBar
@@ -431,26 +432,27 @@ setup_score:
 
     ` set up the "moves" label on left
     reserve text id(MOVE_TEXT_ID)
-    text MOVE_TEXT_ID, 32, SCORE_POS.y - 16, SCORE_FONT, "Moves"
+    text loc MOVE_TEXT_ID, 32, SCORE_POS.y - 16, SCORE_FONT, "hud.moves"
     order text MOVE_TEXT_ID, ORDER_HUD_TEXT
-    size text y MOVE_TEXT_ID, 20
+    size text max MOVE_TEXT_ID, 120, 20
     set text offset MOVE_TEXT_ID, 0, 0
     color text MOVE_TEXT_ID, rgb(64, 128, 255, 200)
     enable text drop shadow MOVE_TEXT_ID, 2, -2, rgb(0,0,0)
-    infoIndex = allocateInfoBlob(32 - 4, SCORE_POS.y - 16 - 2, 56, 56, "Moves", "How many swaps you have made so far.")
+    infoIndex = allocateInfoBlob(32 - 4, SCORE_POS.y - 16 - 2, 56, 56, loc$("info.moves.title"), loc$("info.moves.desc"))
     MOVES_LABEL_TEXT_ID = MOVE_TEXT_ID
     INFO_INDEX_MOVE_COUNT = infoIndex
 
 
     ` re-use id, and set up "rounds left" label on right
     reserve text id(MOVE_TEXT_ID)
-    text MOVE_TEXT_ID, 570 - 32, SCORE_POS.y - 16, SCORE_FONT, "Rounds Left"
+    text loc MOVE_TEXT_ID, 570 - 32, SCORE_POS.y - 16, SCORE_FONT, "hud.roundsleft"
     order text MOVE_TEXT_ID, ORDER_HUD_TEXT
-    size text y MOVE_TEXT_ID, 20
+    ` the label ends at the right edge, so a long one would run into the bar of the round
+    size text max MOVE_TEXT_ID, 120, 20
     set text offset MOVE_TEXT_ID, 1, 0
     color text MOVE_TEXT_ID, rgb(64, 128, 255, 200)
     enable text drop shadow MOVE_TEXT_ID, 2, -2, rgb(0,0,0)
-    infoIndex = allocateInfoBlob(570 - 32 - 104, SCORE_POS.y - 16 - 2, 108, 56, "Rounds Left", "How many rounds are left to play. Every round needs more score than the one before.")
+    infoIndex = allocateInfoBlob(570 - 32 - 104, SCORE_POS.y - 16 - 2, 108, 56, loc$("info.rounds.title"), loc$("info.rounds.desc"))
     ROUNDS_LABEL_TEXT_ID = MOVE_TEXT_ID
     INFO_INDEX_ROUNDS = infoIndex
 
@@ -1023,8 +1025,8 @@ frame_steam_timeline:
         clear steam timeline tooltip
         return
     endif
-    start steam timeline range STEAM_RANGE_ROUND, "Round " + str$(timelineRound), "", "steam_flag", 50
-    set steam timeline tooltip "Round " + str$(timelineRound)
+    start steam timeline range STEAM_RANGE_ROUND, loc$("steam.round", "round", timelineRound), "", "steam_flag", 50
+    set steam timeline tooltip loc$("steam.round", "round", timelineRound)
 return
 
 frame_score:
@@ -1040,7 +1042,7 @@ frame_score:
         showRoundsLeft()
 
         ` a mark on the steam timeline, so that the round can be found again in a recording of the game
-        add steam timeline event "Round " + str$(CURRENT_ROUND) + " cleared", str$(CURRENT_MOVE_COUNT) + " moves so far", "steam_checkmark", 100, 0
+        add steam timeline event loc$("steam.round.cleared", "round", CURRENT_ROUND), loc$("steam.round.cleared.desc", "moves", CURRENT_MOVE_COUNT), "steam_checkmark", 100, 0
 
         ` the quest of the round is over with it. see QUESTS in fish_headers_quests.
         questRoundEnded()
@@ -1406,6 +1408,7 @@ handle_combos:
         comboOnCoral = 0 `1 when any fish of the group is on coral. the group has to be bigger then. see CORAL in fish_headers.
         comboForced = 0
         comboSwapped = 0
+        comboCarried = 0 `1 when the fish that the cursor carried in the last swap is part of the group
         comboBones = 0 `1 when a skeleton is part of the group, and the group is fish that matched
         comboFresh = 0 `1 when any fish of the group has not sung on coral already, so there is something for the group to do
         groupForce = 0 `which kind of forced pop the group is, or 0 for fish that matched. see FORCED POPS in fish_headers.
@@ -1429,7 +1432,10 @@ handle_combos:
             if CORAL_SUNG(i-1) <> cell.value then comboFresh = 1
             comboAt = i - 1
             if comboAt = CORAL_SWAP_A then comboSwapped = 1
-            if comboAt = CORAL_SWAP_B then comboSwapped = 1
+            if comboAt = CORAL_SWAP_B
+                comboSwapped = 1
+                comboCarried = 1
+            endif
         next
 
         ` a group with a fish on coral in it has to be bigger to pop. a forced pop goes whatever its size.
@@ -1444,6 +1450,8 @@ handle_combos:
             if comboSwapped
                 if comboWhole >= requiredComboCount
                     GLOW_SWAP_VALID = 1
+                    SCHOOL_SWAP_VALID = 1
+                    if comboCarried then SCHOOL_CARRIED_MATCHED = 1
                 endif
             endif
         endif
@@ -1741,6 +1749,11 @@ handle_combos:
             if groupShock# > 1 then groupShock# = 1
             spawnShockwave(groupMidX#, groupMidY#, groupShock#, groupDelay)
 
+            ` and a ring goes out through the fish in the background. see A POP SENDS A WAVE in fish_headers_school.
+            groupWaveX# = getCellX(0) + groupMidX# * CELL_SIZE
+            groupWaveY# = getCellY(0) + groupMidY# * CELL_SIZE
+            flockWave(groupWaveX#, groupWaveY#, groupSize#, groupDelay)
+
             ` a big group brings a hint with the next wave of the current. see THE HINTS in fish_headers.
             if groupSize# >= CORAL_HINT_GROUP_SIZE then CORAL_HINT_DUE = 1
 
@@ -1783,6 +1796,10 @@ handle_combos:
 
     ` the glow steps for the swap that led to this look, if it made a match. see fish_headers_glow.
     glowJudgeSwap()
+
+    ` and the school of the kind that the cursor carried pops, if it made a match. see THE CURSOR
+    ` CALLS ON THE SCHOOLS in fish_headers_school.
+    schoolJudgeSwap()
 
     ` the swap that led to this look at the board was a push, or a pull, and the water moves for it.
     ` this comes first, because the multiplier forgets the swap. see fish_headers_tide.
@@ -1989,6 +2006,10 @@ handle_combos:
         next
     next
 
+    ` the cells that will be empty are known now, so the fish from the schools that will fill them set
+    ` off already. see THEY ARE PICKED EARLY in fish_headers_school.
+    schoolEarlyPicks()
+
     ` and now for all cells, need to tween them to the correct position 
     for i = 1 to CELL_COUNT
         cell = CELLS(i-1)
@@ -2088,6 +2109,7 @@ handle_combos:
         targetY = y
         startAlpha = 255
         targetAlpha = 255
+        cellFromSchool = -1
         if cell.comboBlownUp > 0
             CELLS(i-1).value = getImpossibleRandomValueForCell(i - 1)
 
@@ -2096,6 +2118,9 @@ handle_combos:
 
             ` a quest may have its own idea of what drops in. see FORECAST in fish_quests.
             CELLS(i-1).value = questNewFish(i - 1, CELLS(i-1).value)
+
+            ` after a swap that went down, it may be a fish from the schools. see THE FISH COME HOME in fish_headers_school.
+            cellFromSchool = schoolDrawTake(i - 1)
 
             ` and it faces one way or the other. see FACING in fish_headers_school.
             schoolNewFish(i - 1)
@@ -2115,6 +2140,11 @@ handle_combos:
         create basic tween cell.comboDownShiftTweenId, targetY, y, 300, delay
         set tween easing cell.comboDownShiftTweenId, EASING_BOUNCE
         create basic tween cell.comboAlphaTweenId, startAlpha, targetAlpha, 150, delay
+
+        ` a fish from the schools darts over to the column, and the new fish is not seen until it gets there
+        if cellFromSchool >= 0
+            schoolDrawLand(cellFromSchool, i - 1, y, targetY, delay)
+        endif
     next
 
     ` that was the one fill that a "known fill" swap gets
