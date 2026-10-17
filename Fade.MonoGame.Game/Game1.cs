@@ -188,7 +188,10 @@ public class Game1 : Microsoft.Xna.Framework.Game
                 $"[perf] {_perfFrames} frames, worst {_perfFrameMax:F1} ms | program avg {_perfVmSum / _perfFrames:F2} max {_perfVmMax:F1}" +
                 $" | draw avg {_perfDrawSum / _perfFrames:F2} max {_perfDrawMax:F1} | audio avg {_perfAudioSum / _perfFrames:F2} max {_perfAudioMax:F1} | gc {gc0 - _perfGc0}/{gc1 - _perfGc1}/{gc2 - _perfGc2}" +
                 $" | heap {GC.GetTotalMemory(false) >> 20} MB, memory load {memory.MemoryLoadBytes * 100 / Math.Max(memory.TotalAvailableMemoryBytes, 1)}%" +
-                $" | sprites {SpriteSystem.spriteCount} texts {TextSystem.textSpriteCount} tweens {TweenSystem.tweenCount}");
+                $" | sprites {SpriteSystem.spriteCount} texts {TextSystem.textSpriteCount} tweens {TweenSystem.tweenCount}" +
+                // MonoGame sleeps InactiveSleepTime (20 ms) on every frame while the window is not
+                // in front, so a second in the background reads as about 40 frames.
+                (IsActive ? "" : " | in background"));
             _perfGc0 = gc0;
             _perfGc1 = gc1;
             _perfGc2 = gc2;

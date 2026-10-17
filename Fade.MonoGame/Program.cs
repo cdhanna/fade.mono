@@ -129,11 +129,14 @@ public class Program
 
         // Release, or no project on disk: run the program compiled at build time.
         // This is what ships. See steam/SETUP.md.
+        var launch = LaunchOptions.Read(args);
 #if !FADE_CONTENT_HOTRELOAD
         UseSaveDirectory();
-        StartLog();
+        StartLog(launch.perfLog ? GameFolder() : null);
 #endif
+        launch.Print();
         using var shipped = new Game1(new GeneratedFade());
+        launch.Apply(shipped);
 
         // A player has no debugger to attach, and running under the debug session more than
         // doubles what every frame of the program costs. FISH_DEBUG keeps it, for the inspector.
@@ -265,10 +268,15 @@ public class Program
     //
     // A warning that repeats on every frame would grow the file without end, so the log stops
     // taking lines at LogLimit characters. A crash is always written, whatever the size.
-    const long LogLimit = 2_000_000;
+    //
+    // With --perf-log (see LaunchOptions), the same log is also written to fishfishpop-log.txt in
+    // the game's own folder, the one Steam opens with Manage > Browse local files, which is
+    // easier to tell a player how to find. The perf log writes a few hundred characters a second,
+    // so the limit is raised too, to cover a few hours of play.
+    static long LogLimit = 2_000_000;
     static long _logLength;
 
-    static void StartLog()
+    static void StartLog(string alsoInFolder = null)
     {
         try
         {
@@ -277,7 +285,24 @@ public class Program
                 System.IO.File.Copy("log.txt", "log.prev.txt", overwrite: true);
             }
 
-            var file = new System.IO.StreamWriter("log.txt", append: false) { AutoFlush = true };
+            System.IO.TextWriter file = new System.IO.StreamWriter("log.txt", append: false) { AutoFlush = true };
+            string copyNote = null;
+            if (alsoInFolder != null)
+            {
+                LogLimit = 20_000_000;
+                var copyPath = System.IO.Path.Combine(alsoInFolder, "fishfishpop-log.txt");
+                try
+                {
+                    var copy = new System.IO.StreamWriter(copyPath, append: false) { AutoFlush = true };
+                    file = new BothWriter(file, copy);
+                    copyNote = "[log] also writing " + copyPath;
+                }
+                catch (Exception ex)
+                {
+                    // A game folder the player cannot write to: the log in the save folder still works.
+                    copyNote = "[log] could not write " + copyPath + ": " + ex.Message;
+                }
+            }
             Console.SetOut(new LogWriter(Console.Out, file));
             Console.SetError(new LogWriter(Console.Error, file));
 
@@ -285,6 +310,8 @@ public class Program
                 .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(Program).Assembly)
                 ?.InformationalVersion ?? "unknown";
             Console.WriteLine($"[log] started {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            Console.WriteLine("[log] writing " + System.IO.Path.GetFullPath("log.txt"));
+            if (copyNote != null) Console.WriteLine(copyNote);
             Console.WriteLine($"[log] version {version}");
             Console.WriteLine($"[log] os {System.Runtime.InteropServices.RuntimeInformation.OSDescription} " +
                               $"{System.Runtime.InteropServices.RuntimeInformation.OSArchitecture}");
@@ -366,6 +393,136 @@ public class Program
         {
             _inner.Flush();
             lock (_file) _file.Flush();
+        }
+    }
+
+    // Writes everything to two files.
+    sealed class BothWriter : System.IO.TextWriter
+    {
+        readonly System.IO.TextWriter _a;
+        readonly System.IO.TextWriter _b;
+
+        public BothWriter(System.IO.TextWriter a, System.IO.TextWriter b)
+        {
+            _a = a;
+            _b = b;
+        }
+
+        public override System.Text.Encoding Encoding => System.Text.Encoding.UTF8;
+        public override void Write(char value) { _a.Write(value); _b.Write(value); }
+        public override void Write(string value) { _a.Write(value); _b.Write(value); }
+        public override void WriteLine(string value) { _a.WriteLine(value); _b.WriteLine(value); }
+        public override void Flush() { _a.Flush(); _b.Flush(); }
+    }
+
+    // The folder the game is installed in, the one Steam opens with Manage > Browse local files.
+    // On macOS the executable is inside FishFishPop.app/Contents/MacOS, and that folder is the one
+    // the .app is in.
+    static string GameFolder()
+    {
+        var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
+        if (dir.Name == "MacOS" && dir.Parent?.Name == "Contents" && dir.Parent.Parent != null
+            && dir.Parent.Parent.Name.EndsWith(".app", StringComparison.OrdinalIgnoreCase)
+            && dir.Parent.Parent.Parent != null)
+        {
+            return dir.Parent.Parent.Parent.FullName;
+        }
+        return dir.FullName;
+    }
+
+    // Settings a player can give the game for a bug report, through Steam: right-click the game,
+    // Properties, General, Launch Options. Steam puts them on the command line. Each is a word,
+    // with one or two dashes or none, and maybe a value after "=":
+    //
+    //   --perf-log            the frame timing log (FADE_PERF_LOG in Game1), with the whole log
+    //                         also written into the game's folder (see StartLog). --perf-log=20
+    //                         counts a frame as slow past 20 ms of work instead of 14.
+    //   --vsync=off           present each frame as soon as it is drawn, instead of waiting for
+    //                         the display. It tears, but tells whether the waiting is the trouble.
+    //   --fixed-timestep=off  one update per drawn frame, at the display's rate, instead of a
+    //                         fixed 60 a second. What the program counts in frames (the tuna, the
+    //                         diver) then runs fast on a screen above 60 Hz, so this is only for
+    //                         finding out whether frame pacing is what a player sees.
+    //   --gc=low-latency      ask .NET to avoid full collections that stop the game, and do them
+    //                         alongside it instead (GCLatencyMode.SustainedLowLatency).
+    //
+    // The .NET GC's own settings (the size of gen 0, server GC) are read before any of this code
+    // runs, so they cannot be launch options. On macOS and Linux, Steam's launch options can set
+    // them as environment variables instead: DOTNET_GCgen0size=0x4000000 %command%
+    sealed class LaunchOptions
+    {
+        public bool perfLog;
+        public bool? vsync;
+        public bool? fixedTimeStep;
+        public bool lowLatencyGc;
+        string[] _args = Array.Empty<string>();
+        readonly System.Collections.Generic.List<string> _unknown = new();
+
+        public static LaunchOptions Read(string[] args)
+        {
+            var options = new LaunchOptions { _args = args ?? Array.Empty<string>() };
+            foreach (var arg in options._args)
+            {
+                var word = arg.TrimStart('-').ToLowerInvariant();
+                var equals = word.IndexOf('=');
+                var name = equals < 0 ? word : word.Substring(0, equals);
+                var value = equals < 0 ? null : word.Substring(equals + 1);
+                switch (name)
+                {
+                    case "perf-log":
+                        options.perfLog = true;
+                        // Game1 reads this when it is first used, which is after this.
+                        Environment.SetEnvironmentVariable("FADE_PERF_LOG",
+                            int.TryParse(value, out var slowMs) && slowMs > 1 ? slowMs.ToString() : "1");
+                        break;
+                    case "vsync":
+                        options.vsync = OnOff(value);
+                        break;
+                    case "fixed-timestep":
+                        options.fixedTimeStep = OnOff(value);
+                        break;
+                    case "gc":
+                        if (value == "low-latency") options.lowLatencyGc = true;
+                        else options._unknown.Add(arg);
+                        break;
+                    default:
+                        options._unknown.Add(arg);
+                        break;
+                }
+            }
+            return options;
+        }
+
+        // "off", "false", "no" and "0" are off. Anything else, or no value at all, is on.
+        static bool OnOff(string value) => value is not ("off" or "false" or "no" or "0");
+
+        // What the game was started with, and what it has to run on, for the top of a bug report.
+        public void Print()
+        {
+            if (_args.Length > 0) Console.WriteLine("[launch] options: " + string.Join(" ", _args));
+            foreach (var word in _unknown) Console.WriteLine("[launch] unknown option, ignored: " + word);
+            var memory = GC.GetGCMemoryInfo();
+            Console.WriteLine($"[launch] machine: {Environment.ProcessorCount} cpus" +
+                              $", {memory.TotalAvailableMemoryBytes >> 20} MB memory" +
+                              $", .NET {Environment.Version}" +
+                              $", {(System.Runtime.GCSettings.IsServerGC ? "server" : "workstation")} gc");
+        }
+
+        // Before Run(): the graphics device does not exist yet, so these are only what it is
+        // created with. What is printed is read back from the game, not from the options.
+        public void Apply(Game1 game)
+        {
+            var graphics = game.Services.GetService(typeof(Microsoft.Xna.Framework.IGraphicsDeviceManager))
+                as Microsoft.Xna.Framework.GraphicsDeviceManager;
+            if (vsync.HasValue && graphics != null) graphics.SynchronizeWithVerticalRetrace = vsync.Value;
+            if (fixedTimeStep.HasValue) game.IsFixedTimeStep = fixedTimeStep.Value;
+            if (lowLatencyGc) System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
+
+            Console.WriteLine($"[launch] perf log {(Environment.GetEnvironmentVariable("FADE_PERF_LOG") != null ? "on" : "off")}" +
+                              $", vsync {(graphics?.SynchronizeWithVerticalRetrace switch { true => "on", false => "off", null => "?" })}" +
+                              $", fixed timestep {(game.IsFixedTimeStep ? "on" : "off")}" +
+                              $", gc {System.Runtime.GCSettings.LatencyMode}" +
+                              (Environment.GetEnvironmentVariable("DOTNET_GCgen0size") is { } gen0 ? $", gen0size {gen0}" : ""));
         }
     }
 }
