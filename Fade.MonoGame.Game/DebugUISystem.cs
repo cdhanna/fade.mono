@@ -995,6 +995,11 @@ public static class DebugUISystem
             ImGui.Text($"FPS: {fps:F1}");
             ImGui.SameLine();
             ImGui.TextDisabled($"({frameMs:F1} ms)  min60s: {min60:F0}  avg10m: {avg10m:F0}");
+            // The FPS above comes from GameTime, which with a fixed timestep always says one step
+            // (60). These are counted, over the last second.
+            ImGui.Text($"drawn: {PerfKnobs.drawnPerSecond:F1}/s");
+            ImGui.SameLine();
+            ImGui.TextDisabled($"updates per draw: {PerfKnobs.updatesPerDraw:F1}");
 
             // fps history chart
             ImGui.PlotLines("##fps", ref _fpsHistory[0], FPS_HISTORY, _fpsHistoryIdx % FPS_HISTORY,

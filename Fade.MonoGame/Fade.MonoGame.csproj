@@ -60,6 +60,15 @@
     <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
         <Features>$(Features);experimental-data-section-string-literals</Features>
     </PropertyGroup>
+    <!-- GeneratedFade.g.cs is written once per configuration, under obj/, instead of one file in
+         Launch/ that both share. FadeBasic.Build only writes it again when a .fbasic or a reference
+         is newer than it, and does not look at the configuration, so a Release build straight after
+         a Debug one (a `dotnet test`) used to compile the Debug file: the tests, and the debug data
+         that only the flag above lets compile, so it failed with CS8103. Under obj/, it is not
+         picked up by the default Compile glob; the generator adds it itself. -->
+    <PropertyGroup>
+        <FadeGeneratedLaunchFile>$(MSBuildProjectDirectory)/obj/$(Configuration)/GeneratedFade.g.cs</FadeGeneratedLaunchFile>
+    </PropertyGroup>
     <PropertyGroup>
         <ApplicationManifest>app.manifest</ApplicationManifest>
 

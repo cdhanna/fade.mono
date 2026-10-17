@@ -445,6 +445,15 @@ public class Program
     //                         finding out whether frame pacing is what a player sees.
     //   --gc=low-latency      ask .NET to avoid full collections that stop the game, and do them
     //                         alongside it instead (GCLatencyMode.SustainedLowLatency).
+    //   --max-catchup=2       at most this many updates before a draw. On a machine that cannot
+    //                         keep up, the game then runs slower than real time instead of
+    //                         drawing twice a second. See PerfKnobs.
+    //   --effect-scale=2      the screen effect (the water) on a picture this many times the
+    //                         game's size, instead of the 3 the game asks for. 2 is 2.25 times
+    //                         fewer pixels for the graphics card and a little softer; 1 is 9
+    //                         times fewer, and blurry.
+    //   --slow-update=10      add this many milliseconds to every update, and --slow-draw=10 to
+    //   --slow-draw=10        every draw: a fast machine made to act like a slow one.
     //
     // The .NET GC's own settings (the size of gen 0, server GC) are read before any of this code
     // runs, so they cannot be launch options. On macOS and Linux, Steam's launch options can set
@@ -485,6 +494,27 @@ public class Program
                         if (value == "low-latency") options.lowLatencyGc = true;
                         else options._unknown.Add(arg);
                         break;
+                    case "effect-scale":
+                        // FADE_SCREEN_EFFECT_SCALE wins over the game's own `set screen effect scale`
+                        // (RenderCommands), and RenderSystem reads it when it is first used, after this.
+                        if (int.TryParse(value, out var effectScale) && effectScale >= 1)
+                            Environment.SetEnvironmentVariable("FADE_SCREEN_EFFECT_SCALE", effectScale.ToString());
+                        else options._unknown.Add(arg);
+                        break;
+                    case "max-catchup":
+                        if (int.TryParse(value, out var catchUp) && catchUp >= 0) PerfKnobs.maxCatchUp = catchUp;
+                        else options._unknown.Add(arg);
+                        break;
+                    case "slow-update":
+                        if (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var slowUpdate) && slowUpdate >= 0)
+                            PerfKnobs.updateDelayMs = slowUpdate;
+                        else options._unknown.Add(arg);
+                        break;
+                    case "slow-draw":
+                        if (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var slowDraw) && slowDraw >= 0)
+                            PerfKnobs.drawDelayMs = slowDraw;
+                        else options._unknown.Add(arg);
+                        break;
                     default:
                         options._unknown.Add(arg);
                         break;
@@ -522,7 +552,11 @@ public class Program
                               $", vsync {(graphics?.SynchronizeWithVerticalRetrace switch { true => "on", false => "off", null => "?" })}" +
                               $", fixed timestep {(game.IsFixedTimeStep ? "on" : "off")}" +
                               $", gc {System.Runtime.GCSettings.LatencyMode}" +
-                              (Environment.GetEnvironmentVariable("DOTNET_GCgen0size") is { } gen0 ? $", gen0size {gen0}" : ""));
+                              (Environment.GetEnvironmentVariable("DOTNET_GCgen0size") is { } gen0 ? $", gen0size {gen0}" : "") +
+                              $", max catch-up {(PerfKnobs.maxCatchUp > 0 ? PerfKnobs.maxCatchUp.ToString() : "default")}" +
+                              (Environment.GetEnvironmentVariable("FADE_SCREEN_EFFECT_SCALE") is { } effectScale ? $", effect scale {effectScale}" : "") +
+                              (PerfKnobs.updateDelayMs > 0 ? $", slow update +{PerfKnobs.updateDelayMs} ms" : "") +
+                              (PerfKnobs.drawDelayMs > 0 ? $", slow draw +{PerfKnobs.drawDelayMs} ms" : ""));
         }
     }
 }

@@ -120,6 +120,12 @@ public class Game1 : Microsoft.Xna.Framework.Game
     // frame, on average and at worst, and how many .NET collections ran. A frame that takes
     // more than FADE_PERF_LOG milliseconds of work (default 14, which leaves little of a 60 Hz
     // frame) gets a line of its own.
+    //
+    // A frame here is one drawn picture. With a fixed timestep MonoGame may run several updates
+    // before it draws one (see PerfKnobs), so a frame's "program" is the Fade program across all
+    // of its updates, and "updates" is the whole of every update, the program and the rest of the
+    // engine's work. "other" is what is left of the time since the last frame: handing the picture
+    // to the screen, waiting for it, and MonoGame sleeping while the window is behind others.
     private static readonly bool _perfLog = Environment.GetEnvironmentVariable("FADE_PERF_LOG") != null;
     private static readonly double _perfSpikeMs = Math.Max(ReadEnvInt("FADE_PERF_LOG"), 0) > 1 ? ReadEnvInt("FADE_PERF_LOG") : 14;
     private long _perfVmStart, _perfDrawStart, _perfWindowStart, _perfLastFrame;
@@ -127,6 +133,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private int _perfFrames, _perfGc0, _perfGc1, _perfGc2;
     private double _perfGcPauseMs, _perfAudioSum, _perfAudioMax;
     private int _perfWindows;
+    private int _perfFrameUpdates, _perfUpdatesSum, _perfUpdatesMax;
+    private double _perfFrameUpdateMs, _perfUpdateMsSum, _perfOtherSum;
+    private long _perfDrawCallsSum, _perfDrawCallsMax, _perfTexturesSum, _perfTargetsSum;
 
     private static int ReadEnvInt(string name)
     {
@@ -143,21 +152,29 @@ public class Game1 : Microsoft.Xna.Framework.Game
         var now = System.Diagnostics.Stopwatch.GetTimestamp();
         var drawMs = PerfMs(_perfDrawStart, now);
         var frameMs = _perfLastFrame == 0 ? 0 : PerfMs(_perfLastFrame, now);
+        var otherMs = Math.Max(0, frameMs - _perfFrameUpdateMs - drawMs);
         _perfLastFrame = now;
 
+        // What MonoGame sent to the graphics card for this picture, so far: Present() has not
+        // happened yet, and it is what starts the counts again.
+        var metrics = GraphicsDevice.Metrics;
+
         PerfSections.EndFrame();
-        if (++_perfWindows % 600 == 0)
-        {
-            var sections = PerfSections.Report();
-            if (sections != null) Console.Write(sections);
-        }
 
         _perfFrames++;
         _perfVmSum += _perfFrameVm;
         _perfDrawSum += drawMs;
+        _perfUpdatesSum += _perfFrameUpdates;
+        _perfUpdateMsSum += _perfFrameUpdateMs;
+        _perfOtherSum += otherMs;
+        _perfDrawCallsSum += metrics.DrawCount;
+        _perfTexturesSum += metrics.TextureCount;
+        _perfTargetsSum += metrics.TargetCount;
         if (_perfFrameVm > _perfVmMax) _perfVmMax = _perfFrameVm;
         if (drawMs > _perfDrawMax) _perfDrawMax = drawMs;
         if (frameMs > _perfFrameMax) _perfFrameMax = frameMs;
+        if (_perfFrameUpdates > _perfUpdatesMax) _perfUpdatesMax = _perfFrameUpdates;
+        if (metrics.DrawCount > _perfDrawCallsMax) _perfDrawCallsMax = metrics.DrawCount;
 
         // A frame is slow when its work is, or when it came late for any other reason: the time
         // between frames also covers handing the picture to the screen, which is where a graphics
@@ -172,10 +189,21 @@ public class Game1 : Microsoft.Xna.Framework.Game
         var gcPauseMs = GC.GetTotalPauseDuration().TotalMilliseconds;
         var gcMs = gcPauseMs - _perfGcPauseMs;
         _perfGcPauseMs = gcPauseMs;
+
+        // The numbers are written the same way whatever language the machine is set to, so that a
+        // log from anywhere reads, and parses, alike.
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
         if (_perfFrameVm + drawMs > _perfSpikeMs || frameMs > _perfSpikeMs * 2)
         {
-            Console.WriteLine($"[perf] slow frame at {PerfMs(0, now) / 1000:F2} s: program {_perfFrameVm:F1} ms (of which {audioMs:F1} starting {audioPlays} sounds), draw {drawMs:F1} ms, .NET gc pause {gcMs:F1} ms, {frameMs:F1} ms since the last frame");
+            Console.WriteLine(string.Create(inv,
+                $"[perf] slow frame at {PerfMs(0, now) / 1000:F2} s: {_perfFrameUpdates} updates {_perfFrameUpdateMs:F1} ms" +
+                $" (program {_perfFrameVm:F1} ms, of which {audioMs:F1} starting {audioPlays} sounds)" +
+                $", draw {drawMs:F1} ms ({metrics.DrawCount} draw calls), other {otherMs:F1} ms" +
+                $", .NET gc pause {gcMs:F1} ms, {frameMs:F1} ms since the last frame"));
         }
+        _perfFrameVm = 0;
+        _perfFrameUpdates = 0;
+        _perfFrameUpdateMs = 0;
 
         if (_perfWindowStart == 0) _perfWindowStart = now;
         if (PerfMs(_perfWindowStart, now) >= 1000 && _perfFrames > 0)
@@ -184,14 +212,23 @@ public class Game1 : Microsoft.Xna.Framework.Game
             var gc1 = GC.CollectionCount(1);
             var gc2 = GC.CollectionCount(2);
             var memory = GC.GetGCMemoryInfo();
-            Console.WriteLine(
-                $"[perf] {_perfFrames} frames, worst {_perfFrameMax:F1} ms | program avg {_perfVmSum / _perfFrames:F2} max {_perfVmMax:F1}" +
-                $" | draw avg {_perfDrawSum / _perfFrames:F2} max {_perfDrawMax:F1} | audio avg {_perfAudioSum / _perfFrames:F2} max {_perfAudioMax:F1} | gc {gc0 - _perfGc0}/{gc1 - _perfGc1}/{gc2 - _perfGc2}" +
+            var n = (double)_perfFrames;
+            var knobs = PerfKnobs.updateDelayMs > 0 || PerfKnobs.drawDelayMs > 0 || PerfKnobs.maxCatchUp > 0
+                ? string.Create(inv, $" | knobs: update +{PerfKnobs.updateDelayMs:F1} ms, draw +{PerfKnobs.drawDelayMs:F1} ms, catch-up {(PerfKnobs.maxCatchUp > 0 ? PerfKnobs.maxCatchUp.ToString() : "default")}")
+                : "";
+            // MonoGame sleeps InactiveSleepTime (20 ms) on every frame while the window is not
+            // in front, so a second in the background reads as about 40 frames.
+            var background = IsActive ? "" : " | in background";
+            Console.WriteLine(string.Create(inv,
+                $"[perf] {_perfFrames} frames, worst {_perfFrameMax:F1} ms" +
+                $" | updates {_perfUpdatesSum / n:F1} per frame, max {_perfUpdatesMax}, {_perfUpdateMsSum / n:F2} ms" +
+                $" | program avg {_perfVmSum / n:F2} max {_perfVmMax:F1}" +
+                $" | draw avg {_perfDrawSum / n:F2} max {_perfDrawMax:F1}" +
+                $", {_perfDrawCallsSum / n:F0} draw calls (max {_perfDrawCallsMax}), {_perfTexturesSum / n:F0} textures, {_perfTargetsSum / n:F0} targets" +
+                $" | other avg {_perfOtherSum / n:F2}" +
+                $" | audio avg {_perfAudioSum / n:F2} max {_perfAudioMax:F1} | gc {gc0 - _perfGc0}/{gc1 - _perfGc1}/{gc2 - _perfGc2}" +
                 $" | heap {GC.GetTotalMemory(false) >> 20} MB, memory load {memory.MemoryLoadBytes * 100 / Math.Max(memory.TotalAvailableMemoryBytes, 1)}%" +
-                $" | sprites {SpriteSystem.spriteCount} texts {TextSystem.textSpriteCount} tweens {TweenSystem.tweenCount}" +
-                // MonoGame sleeps InactiveSleepTime (20 ms) on every frame while the window is not
-                // in front, so a second in the background reads as about 40 frames.
-                (IsActive ? "" : " | in background"));
+                $" | sprites {SpriteSystem.spriteCount} texts {TextSystem.textSpriteCount} tweens {TweenSystem.tweenCount}{knobs}{background}"));
             _perfGc0 = gc0;
             _perfGc1 = gc1;
             _perfGc2 = gc2;
@@ -199,6 +236,17 @@ public class Game1 : Microsoft.Xna.Framework.Game
             _perfFrames = 0;
             _perfVmSum = _perfVmMax = _perfDrawSum = _perfDrawMax = _perfFrameMax = 0;
             _perfAudioSum = _perfAudioMax = 0;
+            _perfUpdatesSum = _perfUpdatesMax = 0;
+            _perfUpdateMsSum = _perfOtherSum = 0;
+            _perfDrawCallsSum = _perfDrawCallsMax = _perfTexturesSum = _perfTargetsSum = 0;
+
+            // Where the program's time went, every 10 seconds. It used to be every 600 frames,
+            // which at the 2 frames a second of a machine that cannot keep up is 5 minutes.
+            if (++_perfWindows % 10 == 0)
+            {
+                var sections = PerfSections.Report();
+                if (sections != null) Console.Write(sections);
+            }
         }
     }
 
@@ -882,7 +930,26 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private bool _testMode;
     private bool _testModeWithDebug;
 
+    // Around the real update (UpdateFrame, which has a dozen ways out), for what has to happen on
+    // every one of them: the frame timing log counts them and times the whole of each, and
+    // PerfKnobs can make each one slower, and limit how many MonoGame runs before it draws.
     protected override void Update(GameTime gameTime)
+    {
+        var maxElapsed = PerfKnobs.MaxElapsedTime(TargetElapsedTime);
+        if (MaxElapsedTime != maxElapsed) MaxElapsedTime = maxElapsed;
+
+        var start = _perfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+        UpdateFrame(gameTime);
+        PerfKnobs.BusyWait(PerfKnobs.updateDelayMs);
+        PerfKnobs.CountUpdate();
+        if (_perfLog)
+        {
+            _perfFrameUpdates++;
+            _perfFrameUpdateMs += PerfMs(start, System.Diagnostics.Stopwatch.GetTimestamp());
+        }
+    }
+
+    private void UpdateFrame(GameTime gameTime)
     {
         // a recording steps the clock by one frame of the video per frame. see RecordSystem.
         gameTime = RecordSystem.Clock(gameTime, advance: true);
@@ -1183,7 +1250,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
                     }
                 }
 
-                if (_perfLog) _perfFrameVm = PerfMs(_perfVmStart, System.Diagnostics.Stopwatch.GetTimestamp());
+                // += : MonoGame can run several updates before it draws, and the frame is all of them.
+                if (_perfLog) _perfFrameVm += PerfMs(_perfVmStart, System.Diagnostics.Stopwatch.GetTimestamp());
 
                 // Frame safepoint — runs after EITHER the debug or non-debug tick.
                 // (The fish game runs with _options.debug = true, so the module
@@ -1392,6 +1460,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
         _spriteBatch.End();
         base.Draw(gameTime);
+        PerfKnobs.BusyWait(PerfKnobs.drawDelayMs);
+        PerfKnobs.CountDraw();
         if (_perfLog) PerfEndFrame();
     }
 

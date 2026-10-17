@@ -1,4 +1,5 @@
-﻿using Fade.MonoGame.Core;
+﻿using System;
+using Fade.MonoGame.Core;
 using FadeBasic.SourceGenerators;
 using Microsoft.Xna.Framework;
 
@@ -211,10 +212,73 @@ public partial class FadeMonoGameCommands
         Fade.MonoGame.Core.PerfSections.Name(section, name);
     }
 
+    /// <summary>
+    /// <para>Makes every update take this many milliseconds longer, to see the game the way a slow
+    /// machine does. 0 turns it off.</para>
+    /// </summary>
+    /// <remarks>
+    /// It is a busy wait, so the thread is as occupied as a slow CPU would keep it. With a fixed
+    /// timestep, once an update and a draw take longer than a step, MonoGame runs extra updates to
+    /// keep up, and past a point it never draws: see <see cref="SetPerfMaxCatchUp">set perf max catch up</see>.
+    /// </remarks>
+    /// <param name="ms">Milliseconds added to every update.</param>
+    [FadeBasicCommand("set perf slow update")]
+    public static void SetPerfSlowUpdate(float ms) => PerfKnobs.updateDelayMs = Math.Max(0, ms);
+
+    /// <summary><para>The milliseconds that <see cref="SetPerfSlowUpdate">set perf slow update</see> adds to every update.</para></summary>
+    [FadeBasicCommand("perf slow update")]
+    public static float PerfSlowUpdate() => (float)PerfKnobs.updateDelayMs;
+
+    /// <summary>
+    /// <para>Makes every draw take this many milliseconds longer, to see the game the way a machine
+    /// with a slow graphics card does. 0 turns it off.</para>
+    /// </summary>
+    /// <param name="ms">Milliseconds added to every draw.</param>
+    [FadeBasicCommand("set perf slow draw")]
+    public static void SetPerfSlowDraw(float ms) => PerfKnobs.drawDelayMs = Math.Max(0, ms);
+
+    /// <summary><para>The milliseconds that <see cref="SetPerfSlowDraw">set perf slow draw</see> adds to every draw.</para></summary>
+    [FadeBasicCommand("perf slow draw")]
+    public static float PerfSlowDraw() => (float)PerfKnobs.drawDelayMs;
+
+    /// <summary>
+    /// <para>How many updates MonoGame may run to catch up before it has to draw. 0 is MonoGame's
+    /// own limit, which is as many as half a second of falling behind needs (30).</para>
+    /// </summary>
+    /// <remarks>
+    /// On a machine that cannot keep up, MonoGame's own limit keeps the game at full speed and
+    /// draws about twice a second. A small limit draws far more often, and the game runs slower
+    /// than real time instead. A machine that keeps up never gets near either.
+    /// </remarks>
+    /// <param name="updates">The most updates in a row, from 1. 0 for MonoGame's own.</param>
+    [FadeBasicCommand("set perf max catch up")]
+    public static void SetPerfMaxCatchUp(int updates) => PerfKnobs.maxCatchUp = Math.Max(0, updates);
+
+    /// <summary><para>The limit that <see cref="SetPerfMaxCatchUp">set perf max catch up</see> set, or 0.</para></summary>
+    [FadeBasicCommand("perf max catch up")]
+    public static int PerfMaxCatchUp() => PerfKnobs.maxCatchUp;
+
+    /// <summary>
+    /// <para>How many pictures were really drawn in the last second.</para>
+    /// </summary>
+    /// <remarks>
+    /// Not the same as one over the frame time of <see cref="GameTime">game ms</see>: with a fixed
+    /// timestep that is always one step, 60 a second, however few pictures are drawn.
+    /// </remarks>
+    [FadeBasicCommand("perf drawn per second")]
+    public static float PerfDrawnPerSecond() => (float)PerfKnobs.drawnPerSecond;
+
+    /// <summary>
+    /// <para>How many updates ran for every picture drawn, over the last second. 1 on a machine that
+    /// keeps up; more when MonoGame is catching up.</para>
+    /// </summary>
+    [FadeBasicCommand("perf updates per draw")]
+    public static float PerfUpdatesPerDraw() => (float)PerfKnobs.updatesPerDraw;
+
     [FadeBasicCommand("go kaboom")]
     public static void Throw()
     {
         throw new InvalidOperationException("Kaboom!");
     }
     
-}
+}

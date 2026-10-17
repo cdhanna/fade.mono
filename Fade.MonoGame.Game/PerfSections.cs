@@ -72,13 +72,15 @@ public static class PerfSections
         {
             if (_sumTicks[i] == 0) continue;
             var name = _names[i] ?? ("section " + i);
-            text.Append($"[perf]   {name,-28} avg {_sumTicks[i] * toMs / _frames,6:F3} ms  worst {_maxTicks[i] * toMs,6:F2} ms\n");
+            text.Append(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"[perf]   {name,-28} avg {_sumTicks[i] * toMs / _frames,6:F3} ms  worst {_maxTicks[i] * toMs,6:F2} ms\n"));
         }
 
         Array.Clear(_sumTicks);
         Array.Clear(_maxTicks);
         var frames = _frames;
         _frames = 0;
-        return text.Length == 0 ? null : $"[perf] sections over {frames} frames:\n" + text;
+        // A frame is a drawn picture, with every update that MonoGame ran before it.
+        return text.Length == 0 ? null : $"[perf] sections over {frames} frames, per frame (all of its updates):\n" + text;
     }
 }

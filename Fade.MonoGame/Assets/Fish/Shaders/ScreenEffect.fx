@@ -274,6 +274,11 @@ float2 randomVec2(float inVal)
 float makeWaves(float2 uv, float theTime, float offset)
 {
     float result = 0.0;
+    // UNROLLED, so that everything here that depends only on n (the direction, the frequency and
+    // the height of each wave, four sin()s through randomVal) is worked out by the compiler, and
+    // only the wave itself is left for every pixel. As a loop it was five sin()s a wave, 160 a
+    // pixel, on a buffer three times the size of the game's: a heavy load for an integrated GPU.
+    [unroll]
     for (int n = 0; n < 16; n++)
     {
         float i = n + offset;

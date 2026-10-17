@@ -117,6 +117,34 @@ frame_debug_cards:
         if DEBUG_ICON_FORCE > 0 then debugIconKind = DEBUG_ICON_FORCE
         set steam input type debugIconKind
     endif
+
+    ` a slow machine, on this one. every update, and every draw, takes this many milliseconds longer,
+    ` and the catch up is how many updates monogame may run before it has to draw (0 is its own,
+    ` which is 30). see PerfKnobs in Fade.MonoGame.Game, and the launch options --slow-update,
+    ` --slow-draw and --max-catchup, which set the same from the start.
+    begin debug window("Slow machine")
+    dbgPerfDrawn = perf drawn per second()
+    dbgPerfUpdates# = perf updates per draw()
+    dbgPerfUpdates10 = dbgPerfUpdates# * 10.0
+    debug text "drawn " + str$(dbgPerfDrawn) + " a second, " + str$(dbgPerfUpdates10) + " updates in 10 draws"
+    dbgPerfUpdate# = perf slow update()
+    if debug float slider("update + ms", dbgPerfUpdate#, 0.0, 40.0) = 1
+        set perf slow update dbgPerfUpdate#
+    endif
+    dbgPerfDraw# = perf slow draw()
+    if debug float slider("draw + ms", dbgPerfDraw#, 0.0, 40.0) = 1
+        set perf slow draw dbgPerfDraw#
+    endif
+    dbgPerfCatchUp = perf max catch up()
+    if debug int slider("max catch up (0 = 30)", dbgPerfCatchUp, 0, 30) = 1
+        set perf max catch up dbgPerfCatchUp
+    endif
+    if debug button("back to normal") = 1
+        set perf slow update 0.0
+        set perf slow draw 0.0
+        set perf max catch up 0
+    endif
+    end debug window
 return
 
 
