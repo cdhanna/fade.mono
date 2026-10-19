@@ -95,7 +95,7 @@ public static class LocalizationSystem
         loadedDirectory = directory;
         if (directory == null)
         {
-            Report($"no string table folder '{folder}' in Assets or Content");
+            Report($"no string table folder '{folder}': looked in Assets and in {string.Join(", ", ContentRoots())}");
             resolver.table = new StringTable();
             return 0;
         }
@@ -118,8 +118,30 @@ public static class LocalizationSystem
             if (Directory.Exists(assets)) return assets;
         }
 
-        var content = Path.Combine(AppContext.BaseDirectory, "Content", relative);
-        return Directory.Exists(content) ? content : null;
+        foreach (var contentRoot in ContentRoots())
+        {
+            var content = Path.Combine(contentRoot, relative);
+            if (Directory.Exists(content)) return content;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Where the built content can be, most likely first. The game's ContentManager knows for sure:
+    /// MonoGame puts its root wherever the platform keeps content, and in a macOS app bundle that is
+    /// Contents/Resources, not next to the executable (build/make-macos-app.sh moves it there). The
+    /// other two are for when there is no ContentManager yet.
+    /// </summary>
+    private static IEnumerable<string> ContentRoots()
+    {
+        string managed = null;
+        try { managed = GameSystem.game?.Content?.GetRootDirectoryFullPath(); }
+        catch (Exception) { /* a trimmed build could lose the property it reads; the fallbacks cover it */ }
+        if (!string.IsNullOrEmpty(managed)) yield return managed;
+
+        yield return Path.Combine(AppContext.BaseDirectory, "Content");
+        // A macOS bundle: the executable is in Contents/MacOS, the content in Contents/Resources.
+        yield return Path.Combine(AppContext.BaseDirectory, "..", "Resources", "Content");
     }
 
     private static void ReadTable(string directory)

@@ -50,6 +50,14 @@ public static class PrefsSystem
     private static int _batchDepth;
     private static bool _batchDirty;
 
+    // The sandbox: while it is on, nothing reaches the file, and when it goes off every change
+    // made inside it is thrown away. These are the preferences as they were when it went on.
+    private static bool _sandboxed;
+    private static int[] _sandboxValues = Array.Empty<int>();
+    private static bool[] _sandboxTaken = Array.Empty<bool>();
+
+    public static bool IsSandboxed => _sandboxed;
+
     public static string FilePath => Path.Combine(Environment.CurrentDirectory, FILE_NAME);
 
     /// <summary>
@@ -64,6 +72,39 @@ public static class PrefsSystem
 
         // A batch the old program never closed must not swallow the new program's writes.
         _batchDepth = 0;
+        _batchDirty = false;
+
+        // Nor may a sandbox it never left.
+        _sandboxed = false;
+        _sandboxValues = Array.Empty<int>();
+        _sandboxTaken = Array.Empty<bool>();
+    }
+
+    /// <summary>
+    /// From now on, changes are kept in memory only, and <see cref="EndSandbox"/> puts every
+    /// preference back to how it is right now. For a game that plays itself (a demo), so that
+    /// nothing it does is remembered. A sandbox does not nest: beginning one while in one does nothing.
+    /// </summary>
+    public static void BeginSandbox()
+    {
+        if (_sandboxed) return;
+        EnsureLoaded();
+        _sandboxValues = (int[])_values.Clone();
+        _sandboxTaken = (bool[])_taken.Clone();
+        _sandboxed = true;
+    }
+
+    /// <summary>Throw away every change made since <see cref="BeginSandbox"/>.</summary>
+    public static void EndSandbox()
+    {
+        if (!_sandboxed) return;
+        _values = _sandboxValues;
+        _taken = _sandboxTaken;
+        _sandboxValues = Array.Empty<int>();
+        _sandboxTaken = Array.Empty<bool>();
+        _sandboxed = false;
+
+        // a batch that was ended inside the sandbox has nothing left to write
         _batchDirty = false;
     }
 
@@ -119,6 +160,14 @@ public static class PrefsSystem
     /// <summary>Forget every preference, and delete the file.</summary>
     public static void Clear()
     {
+        // inside the sandbox, the file is not ours to delete. the preferences come back when it ends.
+        if (_sandboxed)
+        {
+            _values = Array.Empty<int>();
+            _taken = Array.Empty<bool>();
+            return;
+        }
+
         _values = Array.Empty<int>();
         _taken = Array.Empty<bool>();
         _loaded = true; // there is nothing to read back
@@ -193,6 +242,8 @@ public static class PrefsSystem
 
     private static void Save()
     {
+        if (_sandboxed) return;
+
         if (_batchDepth > 0)
         {
             _batchDirty = true;

@@ -114,6 +114,15 @@ public static class InputSystem
         return along > PAD_AXIS_THRESHOLD && along >= Math.Abs(across);
     }
 
+    /// <summary>
+    /// Whether anything at all was pressed this frame: a key, a mouse button, or a button on the
+    /// controller. Moving the mouse does not count, for the same reason it does not move the device over.
+    /// </summary>
+    public static bool IsNewAnyActivity()
+    {
+        return IsNewPadActivity() || IsNewKeyboardActivity() || IsNewMouseActivity();
+    }
+
     private static bool IsNewPadActivity()
     {
         for (var i = 0; i < _padButtons.Length; i++)

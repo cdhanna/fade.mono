@@ -14,6 +14,22 @@ setup_angler:
     texture reserve texture id(TEX_ANGLER_GLOW), "Fish/Textures/AnglerGlow"
     texture reserve texture id(TEX_ANGLER_ICON), "Fish/Textures/AnglerIcon"
 
+    ` the new art's angler. see THE NEW ART'S ANGLER in fish_headers_angler.
+    if NEW_ART
+        texture TEX_ANGLER, "Fish/Textures/Art32/Angler"
+        texture reserve texture id(TEX_ANGLER_HAPPY), "Fish/Textures/Art32/AnglerHappy"
+        ANGLER_ART_W = 32
+        ANGLER_ART_H = 32
+        ANGLER_TIP_X = 29 `the middle of the light, which is at 3, 11 before the picture is turned around
+        ANGLER_TIP_Y = 11
+        ANGLER_GLOW_DROP = 0
+        ANGLER_GLOW_R = 110 `the teal of its light
+        ANGLER_GLOW_G = 235
+        ANGLER_GLOW_B = 200
+        ANGLER_OWN_BULB = 1
+        ANGLER_SHIFT_X = 30
+    endif
+
     ` a kept light, in a line of text: {bulb}. it is white, so the text tints it, like {instant}.
     font icon SCORE_FONT, 14, "bulb", TEX_ANGLER_ICON
 
@@ -28,7 +44,8 @@ setup_angler:
     reserve sprite id(ANGLER_SPRITE)
     sprite ANGLER_SPRITE, -500, -500, TEX_ANGLER
     set sprite offset ANGLER_SPRITE, 0, 0
-    size sprite ANGLER_SPRITE, 52 * ANGLER_SCALE, 34 * ANGLER_SCALE
+    size sprite ANGLER_SPRITE, ANGLER_ART_W * ANGLER_SCALE, ANGLER_ART_H * ANGLER_SCALE
+    set sprite flip ANGLER_SPRITE, ANGLER_OWN_BULB, 0 `the new art's angler faces the other way
     order sprite ANGLER_SPRITE, ORDER_INFO_PANEL + 2
     hide sprite ANGLER_SPRITE
 
@@ -654,23 +671,37 @@ frame_angler:
     angBoxX = 150
     angBoxY# = 196 - 176 * angUp#
     angX# = -120 + 132 * angSwim#
+    angX# = angX# + ANGLER_SHIFT_X
     angBob# = sin(game ms() * .002) * 2
     angY# = angBoxY# + 22 + angBob#
     position sprite ANGLER_SPRITE, angX#, angY#
 
     anglerSpeakStep()
 
+    ` the new art's angler is happy while it talks. see THE NEW ART'S ANGLER in fish_headers_angler.
+    if TEX_ANGLER_HAPPY > 0
+        angFace = TEX_ANGLER
+        if ANGLER_SPEAKING then angFace = TEX_ANGLER_HAPPY
+        set sprite texture ANGLER_SPRITE, angFace
+    endif
+
     ` the light hangs from the end of its stalk, and swings a little
     angTipX# = angX# + ANGLER_TIP_X * ANGLER_SCALE + sin(game ms() * .003) * 1.5
     angTipY# = angY# + ANGLER_TIP_Y * ANGLER_SCALE
     position sprite ANGLER_BULB_SPRITE, angTipX#, angTipY#
-    angGlowY# = angTipY# + 12
+    if ANGLER_OWN_BULB
+        ` the light is in the picture, so it does not swing, and the glow sits right on it
+        angTipX# = angX# + ANGLER_TIP_X * ANGLER_SCALE
+    endif
+    angGlowY# = angTipY# + ANGLER_GLOW_DROP
     angGlowSize# = 84 + sin(game ms() * .004) * 6
     position sprite ANGLER_GLOW_SPRITE, angTipX#, angGlowY#
     size sprite ANGLER_GLOW_SPRITE, angGlowSize#, angGlowSize#
-    color sprite ANGLER_GLOW_SPRITE, rgb(255, 220, 140, 150 * angFade#)
+    color sprite ANGLER_GLOW_SPRITE, rgb(ANGLER_GLOW_R, ANGLER_GLOW_G, ANGLER_GLOW_B, 150 * angFade#)
     color sprite ANGLER_SPRITE, rgb(255, 255, 255, 255 * angFade#)
-    color sprite ANGLER_BULB_SPRITE, rgb(255, 255, 255, 255 * angFade#)
+    angBulbAlpha# = 255 * angFade#
+    if ANGLER_OWN_BULB then angBulbAlpha# = 0
+    color sprite ANGLER_BULB_SPRITE, rgb(255, 255, 255, angBulbAlpha#)
 
     ` the hole in the dark is around the light, or on whatever it is showing. it slides there.
     angWantX# = angTipX# - ANGLER_LIGHT_HOLE / 2

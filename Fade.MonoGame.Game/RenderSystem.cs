@@ -140,7 +140,31 @@ public static class RenderSystem
 
     public static RenderTarget2D mainBuffer;
     public static Vector2 mainBufferPosition;
+
+    /// <summary>
+    /// How many window pixels one pixel of the game takes up. A pixel of the GAME, the ones of
+    /// `set render size`, not a pixel of <see cref="mainBuffer"/>: with a <see cref="renderScale"/>
+    /// the buffer has more pixels than the game does, and everything that turns the window into
+    /// game coordinates (the mouse, the shake, the gizmos) wants the game's.
+    /// </summary>
     public static float mainBufferScale;
+
+    /// <summary>
+    /// The size of the game in its own pixels, as `set render size` gave it. <see cref="mainBuffer"/>
+    /// is this times <see cref="renderScale"/>.
+    /// </summary>
+    public static int renderWidth, renderHeight;
+
+    /// <summary>
+    /// How many pixels of the main buffer, and of every render target, one pixel of the game is
+    /// drawn with. Set by `set render scale`.
+    ///
+    /// The game keeps its coordinates; only the pictures get more pixels. A sprite that is 16
+    /// across is still 16 across, but at a scale of 2 it is drawn with 32 pixels, so a 32 pixel
+    /// picture squeezed into it keeps all of its pixels instead of losing every other one, and
+    /// text that is drawn smaller than its font was made is drawn half as much smaller.
+    /// </summary>
+    public static int renderScale = 1;
 
     /// <summary>
     /// The on-screen SIZE of the letterboxed main buffer, in back-buffer pixels.
@@ -230,8 +254,8 @@ public static class RenderSystem
         if (screenEffectScale <= 0 || mainBuffer == null) return null;
         if (screenEffectScale >= mainBufferScale) return null;
 
-        var width = mainBuffer.Width * screenEffectScale;
-        var height = mainBuffer.Height * screenEffectScale;
+        var width = renderWidth * screenEffectScale;
+        var height = renderHeight * screenEffectScale;
         if (screenBuffer == null || screenBuffer.IsDisposed || screenBuffer.Width != width || screenBuffer.Height != height)
         {
             screenBuffer?.Dispose();
@@ -284,8 +308,17 @@ public static class RenderSystem
         // Mode 4 has no singleton, and cannot share one: BlendState is mutable, so handing back a
         // cached instance would let a later output edit every earlier one's.
         4 => MaxBlendState(),
+        // Mode 6 has no singleton either, for the same reason as mode 4.
+        6 => OverBlendState(),
         _ => BlendState.NonPremultiplied
     };
+
+    private static BlendState OverBlendState()
+    {
+        var bs = new BlendState();
+        ApplyBlendMode(bs[0], 6);
+        return bs;
+    }
 
     private static BlendState MaxBlendState()
     {
@@ -357,6 +390,21 @@ public static class RenderSystem
                 target.AlphaDestinationBlend = Blend.One;
                 break;
 
+            case 6: // non-premultiplied alpha, for a target that is drawn again later
+                // The colour blends exactly as mode 0 does. The ALPHA is what differs: mode 0
+                // scales the incoming alpha by itself, so a half see-through sprite drawn over
+                // something solid leaves the target at .75 instead of 1, and whatever the target
+                // is later drawn over shows through it. Here alpha builds up the way coverage
+                // does (a + dst * (1 - a)), so a solid backing stays solid. The colour in the
+                // target is then the colour times that alpha; draw it with that divided back out.
+                target.ColorBlendFunction = BlendFunction.Add;
+                target.ColorSourceBlend = Blend.SourceAlpha;
+                target.ColorDestinationBlend = Blend.InverseSourceAlpha;
+                target.AlphaBlendFunction = BlendFunction.Add;
+                target.AlphaSourceBlend = Blend.One;
+                target.AlphaDestinationBlend = Blend.InverseSourceAlpha;
+                break;
+
             default: // non-premultiplied alpha
                 target.ColorBlendFunction = BlendFunction.Add;
                 target.ColorSourceBlend = Blend.SourceAlpha;
@@ -376,6 +424,8 @@ public static class RenderSystem
         mainBufferPosition = default;
         mainBufferScale = default;
         mainBufferSize = default;
+        renderWidth = renderHeight = 0;
+        renderScale = 1;
         screenPadLeft = screenPadRight = screenPadTop = screenPadBottom = 0;
         screenShakeOffset = default;
         screenShakeOffsetTarget = default;
@@ -588,8 +638,33 @@ public static class RenderSystem
     
     public static void SetMainRenderSize(int width, int height)
     {
-        mainBuffer = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice, width, height);
+        renderWidth = width;
+        renderHeight = height;
+        mainBuffer = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
+            width * renderScale, height * renderScale);
         ResetRenderPositioning();
+    }
+
+    /// <summary>
+    /// Draw the game with <paramref name="scale"/> buffer pixels to each of its own. The main
+    /// buffer is made again at the new size; render targets are not, so this belongs before the
+    /// first `render target`, next to `set render size`.
+    /// </summary>
+    public static void SetRenderScale(int scale)
+    {
+        renderScale = Math.Max(1, scale);
+        if (mainBuffer != null) SetMainRenderSize(renderWidth, renderHeight);
+    }
+
+    /// <summary>
+    /// What a sprite's position becomes in an output: the camera's view, then the stretch from
+    /// game pixels to buffer pixels. The camera works out its middle from the target's size in
+    /// GAME pixels, so that a camera looks at the same spot whatever the scale is.
+    /// </summary>
+    public static Matrix GetOutputMatrix(int cameraId, int targetWidth, int targetHeight)
+    {
+        var view = CameraSystem.GetMatrix(cameraId, targetWidth / renderScale, targetHeight / renderScale);
+        return renderScale == 1 ? view : view * Matrix.CreateScale(renderScale, renderScale, 1f);
     }
 
     public static void ResetRenderPositioning()
@@ -597,7 +672,7 @@ public static class RenderSystem
         GetLetterboxTransform(
             GameSystem.graphicsDeviceManager.PreferredBackBufferWidth,
             GameSystem.graphicsDeviceManager.PreferredBackBufferHeight,
-            mainBuffer.Width, mainBuffer.Height,
+            renderWidth, renderHeight,
             out mainBufferPosition, out mainBufferScale, out mainBufferSize);
     }
 
@@ -792,7 +867,7 @@ public static class RenderSystem
             // differently-sized target still describes the same world view.
             var cameraTargetWidth = output.targets == null ? mainBuffer.Width : output.targets[0].Width;
             var cameraTargetHeight = output.targets == null ? mainBuffer.Height : output.targets[0].Height;
-            var outputMatrix = CameraSystem.GetMatrix(output.cameraId, cameraTargetWidth, cameraTargetHeight);
+            var outputMatrix = GetOutputMatrix(output.cameraId, cameraTargetWidth, cameraTargetHeight);
 
             // Resolved once here for the same reason as the matrix above: the item loop
             // re-Begins on every effect change, and each of those batches needs the same

@@ -73,11 +73,43 @@ float4 Ripple4;
 float4 Ripple5;
 float4 Ripple6;
 float4 Ripple7;
+// THE SURGE OF A BURST of the rainbow fish: one bigger ring, whose edge is ragged, that goes out from the cursor.
+// x and y are where it starts, as a share of the screen, z is how far it has got, in pixels, and w is how
+// strong it is, from 0 to 1, or 0 for none. see THE BURST in fish_headers_rainbow.
+float4 Surge;
+// THE RAINBOW CLOUDS. when a fish turns into a rainbow fish, or a rainbow fish bursts, a cloud of rainbow
+// light claps out of it into the water: a ring that grows quickly and slows, and fades as it goes. it is
+// not drawn on its own: it is the ripples of light that the water already has (makeWaves), turned to the
+// colors of the rainbow and made brighter where the ring is, and only on the water, not the fish.
+// x and y of each are where it claps out from, in pixels of the game, z is when, in seconds on the clock
+// of CloudLook.z, and w is how big it gets, where 1 is CLOUD_REACH. a w of 0 is no cloud.
+// see THE RAINBOW CLOUDS in fish_headers_rainbow.
+float4 Cloud0;
+float4 Cloud1;
+float4 Cloud2;
+float4 Cloud3;
+float4 Cloud4;
+float4 Cloud5;
+float4 Cloud6;
+float4 Cloud7;
+// x is how strong they are, from 0 to 1, and 0 when none is going, so that none of it is worked out.
+// y is how long one lasts, in seconds, and z is now, in seconds.
+float4 CloudLook;
 
 // how thick a ring is, from the middle of it to either edge, and how far it pushes the picture at its
 // strongest. both are in pixels of the game. the push is small, because it is only meant to be felt.
 #define RIPPLE_WIDTH 18.0
 #define RIPPLE_PUSH 1.0
+// THE RAINBOW CLOUDS: how far one goes out, and how wide its ring is at the start, both in pixels of the
+// game for a cloud of size 1, and how much brighter the ripples of light get in one
+#define CLOUD_REACH 70.0
+#define CLOUD_WIDE  16.0
+#define CLOUD_LIGHT 1.3
+
+// THE SURGE: how wide its ring is, how hard it pushes, and how far its edge goes in and out, in pixels
+#define SURGE_WIDTH 24.0
+#define SURGE_PUSH 2.2
+#define SURGE_RAGGED 9.0
 
 // how much the wobble of the water bends a ring out of shape. 0 leaves it a perfect circle.
 #define RIPPLE_BEND 5.0
@@ -213,6 +245,66 @@ float3 ripple(float2 uv, float4 ring)
     return float3((away / dist) * push / grid, crest);
 }
 
+// THE SURGE. the same as a ring, but its edge goes in and out all the way around, by a few waves of
+// different sizes, which turn as it goes, so that it is ragged and never the same twice.
+float3 surge(float2 uv)
+{
+    // there is none most of the time, and then none of the rest has to be worked out
+    if (Surge.w <= 0.0)
+        return float3(0.0, 0.0, 0.0);
+    float2 grid = max(Grid, 1.0);
+    float2 away = (uv - Surge.xy) * grid;
+    float dist = max(length(away), 0.001);
+    float around = atan2(away.y, away.x);
+    float rag = sin(around * 7.0 + Time * 3.1) * 0.5 + sin(around * 13.0 - Time * 2.3) * 0.3 + sin(around * 23.0 + Time * 4.7) * 0.2;
+    float ahead = clamp((dist - (Surge.z + rag * SURGE_RAGGED)) / SURGE_WIDTH, -1.0, 1.0);
+    float strength = saturate(Surge.w);
+    float push = sin(ahead * 3.14159) * strength * SURGE_PUSH;
+    float crest = (0.5 + 0.5 * cos(ahead * 3.14159)) * strength;
+    return float3((away / dist) * push / grid, crest);
+}
+
+// THE RAINBOW CLOUDS. how much of the clouds there is on this pixel, and in what color, for the ripples of
+// light of the water, which are `light` bright here (the same `result` that they are drawn with).
+float3 rainbowClouds(float2 uv, float light)
+{
+    if (CloudLook.x <= 0.0)
+        return float3(0.0, 0.0, 0.0);
+    float2 px = floor(uv * max(Grid, 1.0));
+    float life = max(CloudLook.y, 0.05);
+    float4 clouds[8] = { Cloud0, Cloud1, Cloud2, Cloud3, Cloud4, Cloud5, Cloud6, Cloud7 };
+    float best = 0.0;
+    float2 bestAway = float2(1.0, 0.0);
+    for (int i = 0; i < 8; i++)
+    {
+        float4 c = clouds[i];
+        float age = CloudLook.z - c.z;
+        float t = age / life;
+        float live = step(0.0, t) * step(t, 1.0) * step(0.001, c.w);
+        float2 away = px - c.xy;
+        float dist = length(away);
+        // it claps out quickly, and slows, and there is a puff in the middle at the start
+        float reach = CLOUD_REACH * c.w * (1.0 - (1.0 - t) * (1.0 - t));
+        float wide = CLOUD_WIDE * c.w * (0.6 + t);
+        float ring = saturate(1.0 - abs(dist - reach) / max(wide, 1.0));
+        float puff = saturate(1.0 - dist / (CLOUD_WIDE * 1.2)) * saturate(1.0 - t * 3.0);
+        float one = max(ring, puff) * (1.0 - t) * (1.0 - t) * live;
+        if (one > best)
+        {
+            best = one;
+            bestAway = away;
+        }
+    }
+    // its colors go around it, and turn as it goes
+    float around = atan2(bestAway.y, bestAway.x);
+    float3 hue = 0.5 + 0.5 * cos(6.2832 * (around / 6.2832 + CloudLook.z * 0.4 + float3(0.0, 0.33, 0.67)));
+    // in steps, with a checkerboard between them, like the rest of the light of the sea
+    float checker = frac((px.x + px.y) * 0.5) * 2.0;
+    float lit = saturate(best * (0.15 + 1.5 * light) * CloudLook.x);
+    lit = floor(lit * 6.0 + checker * 0.5) / 6.0;
+    return saturate(hue * 0.9 + 0.25) * lit;
+}
+
 // how calm the water is on this pixel, from 0 to 1. it is calmest in the middle of the patch, and it
 // goes back to how the water is everywhere else, smoothly, by the edge.
 float wake(float2 uv)
@@ -334,7 +426,8 @@ float2 uv = texCoord;
     // and hardly at all where it is dark.
     float2 ringUv = uv + p * RIPPLE_BEND;
     float3 rings = ripple(ringUv, Ripple0) + ripple(ringUv, Ripple1) + ripple(ringUv, Ripple2) + ripple(ringUv, Ripple3)
-                 + ripple(ringUv, Ripple4) + ripple(ringUv, Ripple5) + ripple(ringUv, Ripple6) + ripple(ringUv, Ripple7);
+                 + ripple(ringUv, Ripple4) + ripple(ringUv, Ripple5) + ripple(ringUv, Ripple6) + ripple(ringUv, Ripple7)
+                 + surge(ringUv);
     rings.xy *= 0.45 + 1.6 * result;
 
     float2 texUv = uv + (p + rings.xy) * water;
@@ -355,6 +448,11 @@ float2 uv = texCoord;
 
     // the crest of a ring catches a little light
     finalColor.rgb += float3(.35, .55, .7) * min(rings.z, 1.0) * 0.025 * water;
+
+    // THE RAINBOW CLOUDS, in the ripples of light, on the water and not on the fish. what has little red
+    // or green in it is the water, the same as for the QR code.
+    float cloudWater = 1.0 - smoothstep(0.3, 0.6, max(tex.r, tex.g));
+    finalColor.rgb += rainbowClouds(uv, result) * CLOUD_LIGHT * water * cloudWater;
 
     // the water gets darker and bluer toward the corners of the screen. it goes in steps, with a
     // checkerboard between one step and the next, on the pixels of the game.

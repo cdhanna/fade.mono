@@ -162,7 +162,18 @@ public static class RecordSystem
     // FADE_STEPPED_CLOCK=1 steps the clock from the very first frame, and for good. a recording then
     // starts from the same moment of everything every time, not from wherever the real time had got
     // the game to while it started up.
-    static readonly bool _alwaysStepped = Environment.GetEnvironmentVariable("FADE_STEPPED_CLOCK") == "1";
+    // FADE_TURBO=n is for long test runs: the game is not held to the screen's pace, so it runs as fast
+    // as it can, and the clock is stepped, by n frames of time for every frame that runs (1 when it is
+    // not a number). everything that waits for a tween or for `game ms` waits that many times less.
+    // a recording still steps by one frame, so that the video plays at the right speed.
+    public static readonly int turbo = ReadTurbo();
+    static int ReadTurbo()
+    {
+        var text = Environment.GetEnvironmentVariable("FADE_TURBO");
+        if (string.IsNullOrEmpty(text) || text == "0") return 0;
+        return int.TryParse(text, out var n) && n > 0 ? n : 1;
+    }
+    static readonly bool _alwaysStepped = Environment.GetEnvironmentVariable("FADE_STEPPED_CLOCK") == "1" || turbo > 0;
     static long _updates, _draws, _captures;
     static bool _drawnSinceStep = true;
     static int _stepsWithoutDraw;
@@ -194,12 +205,26 @@ public static class RecordSystem
         if (_alwaysStepped) _clockTotal = TimeSpan.Zero;
     }
 
+    /// <summary>With FADE_TURBO, the game runs unpaced from the start. Game1 calls this once it is set up.</summary>
+    public static void ApplyTurbo(Game game, GraphicsDeviceManager graphics)
+    {
+        if (turbo <= 0 || game == null) return;
+        game.IsFixedTimeStep = false;
+        if (graphics != null)
+        {
+            graphics.SynchronizeWithVerticalRetrace = false;
+            graphics.ApplyChanges();
+        }
+        Console.WriteLine($"[fade] turbo: unpaced, {turbo} frame(s) of time per frame");
+    }
+
     /// <summary>The time that this frame of the game should see. Game1 calls this first thing in Update and Draw.</summary>
     public static GameTime Clock(GameTime real, bool advance)
     {
         if (!_clockTaken) return real;
 
         var frame = TimeSpan.FromTicks(TimeSpan.TicksPerSecond / Math.Max(1, framesPerSecond));
+        if (turbo > 1 && !IsRecording) frame = TimeSpan.FromTicks(frame.Ticks * turbo);
         if (_clockStepping)
         {
             if (advance) _updates++; else _draws++;
@@ -430,7 +455,7 @@ public static class RecordSystem
 
         // the part of the source that is recorded. the source can be bigger than the main buffer
         // (the screen effect's own buffer), so the view is scaled to it.
-        var mainWidth = RenderSystem.mainBuffer?.Width ?? source.Width;
+        var mainWidth = RenderSystem.mainBuffer != null ? RenderSystem.renderWidth : source.Width;
         var toSource = source.Width / (float)mainWidth;
         Rectangle? part = null;
         float partWidth = source.Width, partHeight = source.Height;

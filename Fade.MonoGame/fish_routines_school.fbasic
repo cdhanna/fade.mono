@@ -40,10 +40,11 @@ setup_school:
     SCHOOL_ART_FACE(TEX_GOLDFISH) = 1
     SCHOOL_ART_FACE(TEX_ANGELFISH) = 1
     SCHOOL_ART_FACE(TEX_BASS) = 1
-    SCHOOL_ART_FACE(TEX_WORM) = 1
-    ` but the new catfish and angelfish face left. see THE NEW ART in fish_headers_customart.
-    ` the new worm is a starfish, which looks at you, so either way will do; it stays 1, because 0
-    ` would mean it can never be in a school, and the new art must not change the rules.
+    ` the worm is a starfish now, which looks at you, and has no way that it faces, so it is never in a
+    ` school, the same as a crab. it is the same with the old pictures, so that the rules do not change
+    ` with the pictures.
+    SCHOOL_ART_FACE(TEX_WORM) = 0
+    ` the new catfish and angelfish face left. see THE NEW ART in fish_headers_customart.
     if NEW_ART
         SCHOOL_ART_FACE(TEX_CATFISH) = -1
         SCHOOL_ART_FACE(TEX_ANGELFISH) = -1
@@ -408,6 +409,8 @@ function schoolSave()
             if FLOCK_FACE(schoolSaveI) > 0 then schoolSaveFace = 1
             schoolSaveKind = FLOCK_KIND(schoolSaveI) mod 32
             schoolSaveOne = schoolSaveKind + schoolSaveFace * 32 + schoolSaveX * 64 + schoolSaveY * 65536
+            ` and whether it is a rainbow fish, above all of that. see IN A SCHOOL in fish_headers_rainbow.
+            if FLOCK_RAINBOW(schoolSaveI) then schoolSaveOne = schoolSaveOne + 33554432
             set pref SCHOOL_PREF_FLOCK + 1 + schoolSaveN, schoolSaveOne
             schoolSaveN = schoolSaveN + 1
         endif
@@ -443,10 +446,13 @@ function schoolLoad()
                 schoolLoadKind = schoolLoadOne mod 32
                 schoolLoadFace = (schoolLoadOne / 32) mod 2
                 schoolLoadX = (schoolLoadOne / 64) mod 1024
-                schoolLoadY = schoolLoadOne / 65536
+                schoolLoadY = (schoolLoadOne / 65536) mod 512
+                schoolLoadRainbow = (schoolLoadOne / 33554432) mod 2
                 if schoolLoadKind > 0
                     FLOCK_ON(schoolLoadI) = 1
                     FLOCK_KIND(schoolLoadI) = schoolLoadKind
+                    FLOCK_RAINBOW(schoolLoadI) = schoolLoadRainbow
+                    RAINBOW_FLOCK_POP_AT(schoolLoadI) = 0
                     FLOCK_X#(schoolLoadI) = schoolLoadX
                     FLOCK_Y#(schoolLoadI) = schoolLoadY
                     FLOCK_FACE(schoolLoadI) = -1
@@ -640,6 +646,8 @@ function flockReset()
         FLOCK_PUNCH_AT(flockResetI) = 0
         FLOCK_DRAWN(flockResetI) = 0
         FLOCK_SHOWING(flockResetI) = 0
+        FLOCK_RAINBOW(flockResetI) = 0
+        RAINBOW_FLOCK_POP_AT(flockResetI) = 0
         hide sprite FLOCK_SPRITES(flockResetI)
     next
 endfunction
@@ -716,6 +724,13 @@ function schoolFishLeavesOne(schoolLeaveCell, schoolLeaveWait, schoolLeaveBehind
     FLOCK_PUNCH_AT(schoolLeaveSlot) = 0
     FLOCK_LEAVE(schoolLeaveSlot) = 0
     FLOCK_FOCUS#(schoolLeaveSlot) = 0
+
+    ` a rainbow fish is a rainbow fish out there too. only the fish in front of a stack is one.
+    FLOCK_RAINBOW(schoolLeaveSlot) = 0
+    RAINBOW_FLOCK_POP_AT(schoolLeaveSlot) = 0
+    if schoolLeaveBehind = 0
+        if RAINBOW_FISH(schoolLeaveCell) then FLOCK_RAINBOW(schoolLeaveSlot) = 1
+    endif
 endfunction
 
 
@@ -1742,7 +1757,7 @@ function stepFlock(flockElapsed#)
                         size sprite flockSprite, flockFlySize, flockFlySize
                         color sprite flockSprite, rgb(flockFlyR, flockFlyG, flockFlyB)
                         set sprite alpha flockSprite, flockFlyAlpha
-                        set sprite all texcoord1 flockSprite, flockFlyOut#, flockFlyLine#, 0, 0
+                        set sprite all texcoord1 flockSprite, flockFlyOut#, flockFlyLine#, FLOCK_RAINBOW(flockI), 0
                         set sprite flip flockSprite, flockFlyFlip, 0
                         if FLOCK_SHOWING(flockI) = 0
                             show sprite flockSprite
@@ -1940,7 +1955,7 @@ function stepFlock(flockElapsed#)
                         flockLineKeep# = flockLineKeep# / 255.0
                         flockLineOut# = flockT# * (1 - flockClear#)
                         if flockFar# > 0 then flockLineOut# = 1
-                        set sprite all texcoord1 flockSprite, flockLineOut#, flockLineKeep#, 0, 0
+                        set sprite all texcoord1 flockSprite, flockLineOut#, flockLineKeep#, FLOCK_RAINBOW(flockI), 0
                         FLOCK_DRAWN(flockI) = 1
                         if flockT# >= 1 then FLOCK_DRAWN(flockI) = 2
                     endif

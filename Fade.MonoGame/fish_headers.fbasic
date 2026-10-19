@@ -394,6 +394,18 @@ global SHOCK_COUNT = 24 `how many can be going at once. past that, a new one tak
 global dim SHOCKS(SHOCK_COUNT) as shockwave
 global dim SHOCK_LIVE(SHOCK_COUNT) `which of them are going on this frame
 global SHOCK_LIVE_COUNT = 0
+` and the numbers of each of the ones that are going, copied out once a frame, so that the loop over every
+` fish in frame_fish_fx reads plain numbers instead of copying a whole ring for every fish: the middle,
+` how big it has got, how strong it is, the way that it is headed, and the squares of how near and how
+` far from the middle a fish can be and still be on it (the near one is -1 when the ring covers the middle)
+global dim SHOCK_LIVE_X#(SHOCK_COUNT)
+global dim SHOCK_LIVE_Y#(SHOCK_COUNT)
+global dim SHOCK_LIVE_R#(SHOCK_COUNT)
+global dim SHOCK_LIVE_P#(SHOCK_COUNT)
+global dim SHOCK_LIVE_DX#(SHOCK_COUNT)
+global dim SHOCK_LIVE_DY#(SHOCK_COUNT)
+global dim SHOCK_LIVE_IN2#(SHOCK_COUNT)
+global dim SHOCK_LIVE_OUT2#(SHOCK_COUNT)
 global SHOCK_SPEED# = 4.5 `how fast the ring grows, in cells per second
 global SHOCK_WIDTH# = 2.5 `how thick the ring is, in cells, from the middle of it to either edge. a thick one rolls over a fish slowly.
 global SHOCK_LIFE = 2000 `how many milliseconds one lasts. it gets weaker the whole time.
@@ -1446,10 +1458,10 @@ global TEX_CREDIT_CHRIS
 global TARGET_CREDITS `the credits are drawn to a render target of their own, so that they can be faded in and out
 
 ` everything that rolls by in the credits. setup_credits fills these in.
-global CREDIT_MAX = 32
+global CREDIT_MAX = 48 `how many lines and pictures the credits can have. it must be at least as many as setup_credits adds: there is no check, and going over it hangs the game as it starts
 global CREDIT_COUNT = 0
 global dim CREDIT_LINES(CREDIT_MAX) as creditLine
-global CREDIT_LENGTH = 1340 `how tall the whole roll is, from the top of the first line to the bottom of the last
+global CREDIT_LENGTH = 1424 `how tall the whole roll is, from the top of the first line to the bottom of the last
 global CREDIT_SPEED = 32 `how many pixels the credits roll in a second
 
 ` the logos that are shown when the game starts

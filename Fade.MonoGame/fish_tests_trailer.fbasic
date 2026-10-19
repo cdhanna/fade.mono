@@ -276,6 +276,56 @@ abstract test trailerShot
         set sprite all texcoord1 SELECTION_SPRITE, 0, 0, 0, 0
     endfunction
 
+    ` a school of tTrN fish of a kind, out in the water behind the board, around tTrX#, tTrY# (pixels),
+    ` swimming one way: 1 to the right, -1 to the left. they are all the way out there already, the way
+    ` that schoolLoad brings back the fish of a saved game, and they flock from there. the cursor is kept
+    ` from calling on them, so a step or a swap never pops them or sends them away. see THE SCHOOLS IN
+    ` THE BACKGROUND in fish_headers_school.
+    function trailerSchool(tTrKind, tTrN, tTrX#, tTrY#, tTrWay)
+        SCHOOL_CURSOR_ON = 0
+        tTrNow = game ms()
+        tTrPut = 0
+        for tTrSlot = 0 to FLOCK_MAX - 1
+            tTrFree = 0
+            if tTrPut < tTrN
+                if FLOCK_ON(tTrSlot) = 0 then tTrFree = 1
+            endif
+            if tTrFree
+                ` a loose bunch, four to a row, every other row set off by half a gap
+                tTrCol = tTrPut mod 4
+                tTrRow = tTrPut / 4
+                tTrOdd = tTrRow mod 2
+                tTrFx# = tTrCol * 12
+                tTrFx# = tTrFx# + tTrOdd * 6
+                tTrFy# = tTrRow * 10
+                FLOCK_ON(tTrSlot) = 1
+                FLOCK_KIND(tTrSlot) = tTrKind
+                FLOCK_X#(tTrSlot) = tTrX# + tTrFx#
+                FLOCK_Y#(tTrSlot) = tTrY# + tTrFy#
+                FLOCK_FACE(tTrSlot) = tTrWay
+                FLOCK_VX#(tTrSlot) = tTrWay * FLOCK_SPEED_MAX
+                FLOCK_VY#(tTrSlot) = 0
+                FLOCK_AX#(tTrSlot) = 0
+                FLOCK_AY#(tTrSlot) = 0
+                FLOCK_BORN(tTrSlot) = (tTrNow - FLOCK_SETTLE_MS) - tTrSlot
+                FLOCK_SHOWN#(tTrSlot) = 0
+                if schoolArtFace(tTrKind) <> 0
+                    if tTrWay <> schoolArtFace(tTrKind) then FLOCK_SHOWN#(tTrSlot) = 1
+                endif
+                set sprite texture FLOCK_SPRITES(tTrSlot), tTrKind
+                FLOCK_DRAWN(tTrSlot) = 0
+                FLOCK_SHOWING(tTrSlot) = 0
+                FLOCK_STEERED(tTrSlot) = tTrNow
+                FLOCK_FLY(tTrSlot) = 0
+                FLOCK_FLUSH(tTrSlot) = 0
+                FLOCK_PUNCH_AT(tTrSlot) = 0
+                FLOCK_LEAVE(tTrSlot) = 0
+                FLOCK_FOCUS#(tTrSlot) = 0
+                tTrPut = tTrPut + 1
+            endif
+        next
+    endfunction
+
     ` add a word to the title. trailerTitleLayout puts them in a row once they are all there.
     function trailerWord(tTrText$)
         trailerWordOn(tTrText$, 0)
@@ -414,9 +464,9 @@ abstract test trailerShot
         trailerTwinkle(tTrBoxX - 30, tTrBoxY - 18, tTrW + 80, tTrH + 48, tTrCount)
     endfunction
 
-    ` a word of the title turning into a pufferfish, the way the last shot ends. tTrAge is how many frames
-    ` since it started to (less than 0 for not yet), and tTrPopAge how many since the puffers started to
-    ` pop. the word shrinks and fades as the puffer grows in where it was. to pop, the puffer puffs up, and
+    ` a word of the title turning into a seahorse, the way the last shot ends. tTrAge is how many frames
+    ` since it started to (less than 0 for not yet), and tTrPopAge how many since the seahorses started to
+    ` pop. the word shrinks and fades as the seahorse grows in where it was. to pop, the seahorse puffs up, and
     ` then bursts: it grows on, and fades away.
     function trailerWordToPuffer(tTrPuff, tTrSlot, tTrAge, tTrPopAge)
         tTrId = TR_WORD(tTrSlot)
@@ -1168,9 +1218,9 @@ test trailer_tail from trailerShot
 endtest
 
 
-` SHOT 1. the empty sea. a puffer, a crab and a puffer rise into a row. the crab sinks away, a puffer
-` comes down into its place, and the three pop. every other fish is there, but hidden: the board is
-` stripes of kinds that never match, and none of them is a puffer or a crab. the slides are done by hand,
+` SHOT 1. the empty sea. a seahorse, a crab and a seahorse rise into a row. the crab sinks away, a
+` seahorse comes down into its place, and the three pop. every other fish is there, but hidden: the board
+` is stripes of kinds that never match, and none of them is a seahorse or a crab. the slides are done by hand,
 ` and the pop is the game's own.
 test trailer_first_pop from trailerShot
     ` SHOTS 1, 2 AND 3 are one run of the game, so that the sea and the light in it carry on, and nothing
@@ -1198,28 +1248,37 @@ test trailer_first_pop from trailerShot
     JELLY_STING_CHANCE = 100
     trailerBarShort(700)
 
-    ` stripes of kinds that never match, and none of them is a puffer or a crab, all hidden
+    ` stripes of kinds that never match, and none of them is a seahorse or a crab, all hidden
     for tS1Y = 0 to CELL_ROW_COUNT - 1
         for tS1X = 0 to CELL_COLUMN_COUNT - 1
             tS1K = tS1X + 2 * tS1Y
             tS1K = tS1K mod 5
-            tS1K = tS1K + 2
-            if tS1K >= TEX_CRAB then tS1K = tS1K + 1
-            trailerPut(tS1X, tS1Y, tS1K)
+            tS1Kind = TEX_PUFFER
+            if tS1K = 1 then tS1Kind = TEX_CATFISH
+            if tS1K = 2 then tS1Kind = TEX_GOLDFISH
+            if tS1K = 3 then tS1Kind = TEX_ANGELFISH
+            if tS1K = 4 then tS1Kind = TEX_WORM
+            trailerPut(tS1X, tS1Y, tS1Kind)
         next
     next
-    ` a puffer, a crab and a puffer in a row, and a fourth puffer over the crab, that comes in after them.
-    ` the cursor swaps the crab up, the puffer comes down into the row, and the three puffers pop.
+    ` a seahorse, a crab and a seahorse in a row, and a fourth seahorse over the crab, that comes in after
+    ` them. the cursor swaps the crab up, the seahorse comes down into the row, and the three pop. the two
+    ` in the row face each other, so the three never face one way, and are never a school that swims off
+    ` in place of popping.
     tS1Mid = CELL_COLUMN_COUNT / 2
     tS1Row = CELL_ROW_COUNT / 2
     tS1L = trailerIndex(tS1Mid - 1, tS1Row)
     tS1M = trailerIndex(tS1Mid, tS1Row)
     tS1R = trailerIndex(tS1Mid + 1, tS1Row)
     tS1A = trailerIndex(tS1Mid, tS1Row - 1)
-    trailerPut(tS1Mid - 1, tS1Row, TEX_PUFFER)
+    trailerPut(tS1Mid - 1, tS1Row, TEX_BASS)
     trailerPut(tS1Mid, tS1Row, TEX_CRAB)
-    trailerPut(tS1Mid + 1, tS1Row, TEX_PUFFER)
-    trailerPut(tS1Mid, tS1Row - 1, TEX_PUFFER)
+    trailerPut(tS1Mid + 1, tS1Row, TEX_BASS)
+    trailerPut(tS1Mid, tS1Row - 1, TEX_BASS)
+    SCHOOL_FACE(tS1L) = 1
+    SCHOOL_FACE(tS1R) = -1
+    SCHOOL_FACE(tS1A) = 1
+    SCHOOL_SNAP = 1
     tS1Y0 = getCellY(tS1Row)
     tS1Ya = getCellY(tS1Row - 1)
     trailerCursor(tS1Mid, tS1Row)
@@ -1235,6 +1294,15 @@ test trailer_first_pop from trailerShot
     tS1BoxY# = getCellY(tS1Row) - CELL_SIZE / 2
     tS1BoxY# = tS1BoxY# - tS1H# / 2
     set record view tS1BoxX#, tS1BoxY#, tS1W#, tS1H#
+
+    ` schools out in the water behind: two that cross the close up, above and below the row, and one far
+    ` off to the left that the close up only shows as it eases back out. the board is all hidden until
+    ` shot 3, so they may swim where it is until then.
+    tS1PullGrid = FLOCK_PULL_GRID
+    FLOCK_PULL_GRID = 0
+    trailerSchool(TEX_GOLDFISH, 7, tS1BoxX# + 20, tS1BoxY# + 8, 1)
+    trailerSchool(TEX_CATFISH, 6, tS1BoxX# + 140, tS1BoxY# + 86, -1)
+    trailerSchool(TEX_ANGELFISH, 6, 40, 50, 1)
 
     trailerRecord("trailer_first_pop")
     ` the three rise and fade in, one after another
@@ -1268,7 +1336,7 @@ test trailer_first_pop from trailerShot
         runto update_frame
     next
 
-    ` the swap, from the middle. the crab goes up, and the row of three puffers pops. once the fish start
+    ` the swap, from the middle. the crab goes up, and the row of three seahorses pops. once the fish start
     ` to fall, every fish is hidden, so the sea stays empty.
     trailerMove(0, -1, 1)
     tS1Gone = 0
@@ -1321,6 +1389,8 @@ test trailer_first_pop from trailerShot
     for tS1N = 0 to TR_WORD_COUNT - 1
         hide text TR_WORD(tS1N)
     next
+    ` the schools keep off of the board again, now that it is coming in
+    FLOCK_PULL_GRID = tS1PullGrid
     ` SHOT 3, in the same video. the board of a game that is well along, on the same sea: of the boards
     ` that a few seeds deal, the one with the swap that pops the most, and that swap.
     tS1BestSeed = 11
@@ -1692,6 +1762,17 @@ test trailer_coral_sings from trailerShot
     trailerSongGo(-1, 0)
     trailerSongGo(-1, 0)
     trailerSongEnd()
+    ` schools out in the water on both sides of the board, given the time before the shot to settle
+    tS9Left# = getCellX(0) - CELL_SIZE
+    tS9Right# = getCellX(CELL_COLUMN_COUNT - 1) + CELL_SIZE
+    tS9LeftX# = tS9Left# / 2
+    tS9LeftX# = tS9LeftX# - 20
+    tS9RightX# = WORLD_WIDTH - tS9Right#
+    tS9RightX# = tS9RightX# / 2
+    tS9RightX# = tS9RightX# + tS9Right#
+    tS9RightX# = tS9RightX# - 20
+    trailerSchool(TEX_CATFISH, 8, tS9LeftX#, 120, 1)
+    trailerSchool(TEX_PUFFER, 7, tS9RightX#, 170, -1)
     for tTrFrame = 1 to 120
         runto update_frame
     next
@@ -2284,7 +2365,7 @@ test trailer_finale from trailerShot
     next
     size sprite MORSE_STAR_HEAD, 3, 2
 
-    ` then the three words turn into three pufferfish, one after another, the way three puffers sat in a
+    ` then the three words turn into three seahorses, one after another, the way three seahorses sat in a
     ` row in the very first shot. when all three are there, they puff up and pop together, the way a row of
     ` three does, in a sparkle, with the sound of it. then it all fades to black.
     tTrPuffA = 0
@@ -2293,9 +2374,9 @@ test trailer_finale from trailerShot
     reserve sprite id(tTrPuffB)
     tTrPuffC = 0
     reserve sprite id(tTrPuffC)
-    sprite tTrPuffA, 0, 0, TEX_PUFFER
-    sprite tTrPuffB, 0, 0, TEX_PUFFER
-    sprite tTrPuffC, 0, 0, TEX_PUFFER
+    sprite tTrPuffA, 0, 0, TEX_BASS
+    sprite tTrPuffB, 0, 0, TEX_BASS
+    sprite tTrPuffC, 0, 0, TEX_BASS
     set sprite offset tTrPuffA, .5, .5
     set sprite offset tTrPuffB, .5, .5
     set sprite offset tTrPuffC, .5, .5

@@ -578,14 +578,10 @@ update_frame:
     stepMultiplier()
     perf lap 17
     stepCoral()
-    perf lap 33
     stepTideSleep()
-    perf lap 34
     stepGlow() `see fish_headers_glow
-    perf lap 35
     stepSchool() `see fish_headers_school
-    perf lap 36
-    stepWanted() `see fish_headers_wanted
+    stepRainbowFish() `see fish_headers_rainbow
     perf lap 18
     stepSkeletonGhosts()
     perf lap 19
@@ -639,6 +635,18 @@ frame_fish_fx:
                     SHOCKS(s).power# = shockPower#
 
                     SHOCK_LIVE(SHOCK_LIVE_COUNT) = s
+                    shockLiveR# = SHOCKS(s).radius#
+                    SHOCK_LIVE_X#(SHOCK_LIVE_COUNT) = SHOCKS(s).x#
+                    SHOCK_LIVE_Y#(SHOCK_LIVE_COUNT) = SHOCKS(s).y#
+                    SHOCK_LIVE_R#(SHOCK_LIVE_COUNT) = shockLiveR#
+                    SHOCK_LIVE_P#(SHOCK_LIVE_COUNT) = shockPower#
+                    SHOCK_LIVE_DX#(SHOCK_LIVE_COUNT) = SHOCKS(s).dirX#
+                    SHOCK_LIVE_DY#(SHOCK_LIVE_COUNT) = SHOCKS(s).dirY#
+                    shockLiveOut# = shockLiveR# + SHOCK_WIDTH#
+                    SHOCK_LIVE_OUT2#(SHOCK_LIVE_COUNT) = shockLiveOut# * shockLiveOut#
+                    shockLiveIn# = shockLiveR# - SHOCK_WIDTH#
+                    SHOCK_LIVE_IN2#(SHOCK_LIVE_COUNT) = -1
+                    if shockLiveIn# > 0 then SHOCK_LIVE_IN2#(SHOCK_LIVE_COUNT) = shockLiveIn# * shockLiveIn#
                     SHOCK_LIVE_COUNT = SHOCK_LIVE_COUNT + 1
                 endif
             endif
@@ -669,10 +677,6 @@ frame_fish_fx:
         if torchColumn > 0 then torchLeft = -1
     endif
 
-    ` MEASURING (temporary): the laps from 39 to 46 split the work of every fish into its parts, for
-    ` the frame timing log. a lap is a command, so they cost a little even with the log off. take
-    ` them out once the numbers are in.
-    perf lap 39
     for i = 0 to CELL_COUNT - 1
         c = CELLS(i)
 
@@ -681,24 +685,36 @@ frame_fish_fx:
         lift# = 0
         leanX# = 0
         leanY# = 0
+        shockTouched = 0 `1 once a ring reaches this fish. with none, there is nothing to bend over below.
         if SHOCK_LIVE_COUNT > 0
             for s = 0 to SHOCK_LIVE_COUNT - 1
-                wave = SHOCKS(SHOCK_LIVE(s))
-
-                shockX# = c.coord.x - wave.x#
-                shockY# = c.coord.y - wave.y#
-                shockDist# = sqrt(shockX# * shockX# + shockY# * shockY#)
+                ` most fish are nowhere near most rings: those are left out before anything else is worked out
+                shockX# = c.coord.x - SHOCK_LIVE_X#(s)
+                shockY# = c.coord.y - SHOCK_LIVE_Y#(s)
+                shockD2# = shockX# * shockX# + shockY# * shockY#
+                if shockD2# >= SHOCK_LIVE_OUT2#(s) then skip
+                if shockD2# <= SHOCK_LIVE_IN2#(s) then skip
+                ` how far, without a square root: the longer way, and some of the shorter way, never more than
+                ` about 4 in 100 off
+                shockAX# = abs(shockX#)
+                shockAY# = abs(shockY#)
+                if shockAX# > shockAY#
+                    shockDist# = shockAX# * .96 + shockAY# * .398
+                else
+                    shockDist# = shockAY# * .96 + shockAX# * .398
+                endif
 
                 ` this is 0 on top of the bump, 1 at the front edge of it, and -1 at the back edge
-                shockAhead# = (shockDist# - wave.radius#) / SHOCK_WIDTH#
+                shockAhead# = (shockDist# - SHOCK_LIVE_R#(s)) / SHOCK_WIDTH#
                 if abs(shockAhead#) >= 1 then skip
+                shockTouched = 1
 
                 ` a ring that is headed one way is at its strongest for the fish that are that way from where
                 ` it started. it fades off to the sides, and there is none of it for the fish straight behind.
-                shockPower# = wave.power#
+                shockPower# = SHOCK_LIVE_P#(s)
                 if shockDist# > .01
-                    if wave.dirX# <> 0 or wave.dirY# <> 0
-                        shockFacing# = .5 + (.5 * (shockX# * wave.dirX# + shockY# * wave.dirY#)) / shockDist#
+                    if SHOCK_LIVE_DX#(s) <> 0 or SHOCK_LIVE_DY#(s) <> 0
+                        shockFacing# = .5 + (.5 * (shockX# * SHOCK_LIVE_DX#(s) + shockY# * SHOCK_LIVE_DY#(s))) / shockDist#
                         shockPower# = shockPower# * shockFacing# * shockFacing#
                     endif
                 endif
@@ -713,21 +729,27 @@ frame_fish_fx:
                 endif
             next
         endif
-        perf lap 40
 
-        ` the sums bend over as they get big, so that rings on top of rings still show
-        lift# = lift# / sqrt(1 + (lift# * lift#) / (SHOCK_LIFT_MAX# * SHOCK_LIFT_MAX#))
-        leanBend# = sqrt(1 + (leanX# * leanX# + leanY# * leanY#) / (SHOCK_LEAN_MAX# * SHOCK_LEAN_MAX#))
-        leanX# = leanX# / leanBend#
-        leanY# = leanY# / leanBend#
+        if shockTouched
+            ` the sums bend over as they get big, so that rings on top of rings still show
+            lift# = lift# / sqrt(1 + (lift# * lift#) / (SHOCK_LIFT_MAX# * SHOCK_LIFT_MAX#))
+            leanBend# = sqrt(1 + (leanX# * leanX# + leanY# * leanY#) / (SHOCK_LEAN_MAX# * SHOCK_LEAN_MAX#))
+            leanX# = leanX# / leanBend#
+            leanY# = leanY# / leanBend#
 
-        ` positive yaw faces the fish to the right, and positive pitch faces it up, which is the other way from y
-        yaw# = leanX# * SHOCK_TILT#
-        pitch# = 0 - leanY# * SHOCK_TILT#
-        pushX# = leanX# * SHOCK_PUSH#
-        pushY# = leanY# * SHOCK_PUSH# - lift# * SHOCK_BOB# `up the screen is the other way from y
-        lift# = lift# * SHOCK_LIFT#
-        perf lap 41
+            ` positive yaw faces the fish to the right, and positive pitch faces it up, which is the other way from y
+            yaw# = leanX# * SHOCK_TILT#
+            pitch# = 0 - leanY# * SHOCK_TILT#
+            pushX# = leanX# * SHOCK_PUSH#
+            pushY# = leanY# * SHOCK_PUSH# - lift# * SHOCK_BOB# `up the screen is the other way from y
+            lift# = lift# * SHOCK_LIFT#
+        else
+            ` no ring is under it: all of that comes out as 0 anyway, and lift# already is
+            yaw# = 0
+            pitch# = 0
+            pushX# = 0
+            pushY# = 0
+        endif
 
         ` the current. the phase goes around once for every wave, and it is later for the fish that are
         ` further along the way that the wave goes.
@@ -756,7 +778,6 @@ frame_fish_fx:
             yaw# = yaw# + currentLean# * CURRENT_DIR_X#
             pitch# = pitch# - currentLean# * CURRENT_DIR_Y#
         endif
-        perf lap 42
 
         ` and the fish of a line that is one short nudge along it, one after another, starting when the
         ` wave gets to the left end of the line
@@ -783,7 +804,6 @@ frame_fish_fx:
                 pushY# = pushY# + diagonalNudge# * diagonalSlope#
             endif
         endif
-        perf lap 43
 
         ` nothing leans, shuffles or bobs while the fish are making the QR code. see TUNA in fish_headers.
         tunaCalm# = 1 - TUNA_EASED#
@@ -830,7 +850,6 @@ frame_fish_fx:
                 endif
             endif
         endif
-        perf lap 44
 
         ` the count that is drawn chases the real one, so that a new fish slides out from behind
         stackWant# = c.stack + 1
@@ -863,7 +882,6 @@ frame_fish_fx:
         endif
         yaw# = yaw# + SCHOOL_SHOWN#(i) * 3.14159
         set sprite all texcoord1 c.spriteId, pitch#, yaw#, stackShown#, fishSize#
-        perf lap 45
 
         ` the fish goes to its place in the QR code, and gets smaller. see TUNA in fish_headers.
         tunaPushX# = TUNA_CELL_DX(i) * TUNA_EASED#
@@ -909,14 +927,29 @@ frame_fish_fx:
         if customOutline = 1 then nightGlow# = nightGlow# + 100
         if customOutline = 2 then nightGlow# = nightGlow# + 200
 
-        ` a fish of a group in the wanted shape shimmers while the light goes through it. the effect
-        ` takes 1000 more for that. see A CATCH in fish_headers_wanted.
-        if WANTED_SHIMMERS(i)
-            if shockNow < WANTED_SHIMMER_UNTIL then nightGlow# = nightGlow# + 1000
+        ` a rainbow fish has a line of the rainbow. the effect takes 2000 more for that. see
+        ` fish_headers_rainbow.
+        if RAINBOW_FISH(i)
+            if c.value > 0 then nightGlow# = nightGlow# + 2000
         endif
 
+        ` a fish of a burst of the rainbow fish is flooded with the rainbow, from when it lights up until
+        ` it pops. the effect takes 1000 more for that. see THE BURST in fish_headers_rainbow.
+        ` and so is a fish of a group that brings more of them, for a moment. see AND THEY BREED.
+        cellFlooded = 0
+        if RAINBOW_BURST_CELLS(i)
+            if shockNow < RAINBOW_BURST_UNTIL
+                if shockNow >= RAINBOW_BURST_FROM(i) then cellFlooded = 1
+            endif
+        endif
+        if RAINBOW_BREED_CELLS(i)
+            if shockNow < RAINBOW_BREED_UNTIL
+                if shockNow >= RAINBOW_BREED_FROM then cellFlooded = 1
+            endif
+        endif
+        if cellFlooded then nightGlow# = nightGlow# + 1000
+
         set sprite all texcoord2 c.spriteId, pushX# * fishSize# + tunaPushX#, pushY# * fishSize# + tunaPushY#, lift# + TUNA_SHRINK#, nightGlow#
-        perf lap 46
     next
 
 return
@@ -924,6 +957,7 @@ return
 dbg# = 1.0
 dbg_str$ = "world2"
 frame_dbg:
+
 
 
 
@@ -967,7 +1001,7 @@ frame_dbg:
             gosub frame_debug_tide
             gosub frame_debug_glow
             gosub frame_debug_school
-            gosub frame_debug_wanted
+            gosub frame_debug_rainbow
             gosub frame_debug_quests
             gosub frame_debug_angler
             if INFO_MODE = 0
@@ -1432,10 +1466,25 @@ handle_combos:
     diverSnapAhead(groupId)
     ghostWait = ghostWait + DIVER_SNAP_HOLD
 
-    ` and a group in the wanted shape is found. see A CATCH in fish_headers_wanted.
-    wantedCatchAhead(groupId)
+    ` a big group bursts the rainbow fish. the burst goes first: a surge goes out from the cursor, and every
+    ` rainbow fish pops as it gets to it. every other pop of this look, the big group's too, waits until the
+    ` surge has got to the last of them. then the fish that the cursor is on swells up into a new rainbow
+    ` fish, as the big group pops. see THE BURST in fish_headers_rainbow.
+    rainbowBurstAhead(groupId, forceBase)
+    if RAINBOW_BURST_LIVE
+        RAINBOW_BURST_WAIT = ghostWait
+        rainbowBurstLight(ghostWait)
+        ghostWait = ghostWait + RAINBOW_BURST_LAST
+        ghostWait = ghostWait + RAINBOW_BURST_AFTER
+    endif
+    rainbowCursorPunch(ghostWait)
+
+    ` the groups beside a rainbow fish pop as a band of the rainbow gets to each, one after another. see
+    ` AND THEY BREED in fish_headers_rainbow.
+    rainbowBreedPlan(groupId, ghostWait)
 
     totalComboCount = 0
+    QUEST_BUNCH_GROUPS = 0
     CORAL_HELD_GROUPS = 0
     explodePitch# = (rnd(4)*.02)
     explodeIndex = 0
@@ -1568,13 +1617,11 @@ handle_combos:
         ` a quest can make a group worth nothing. see questGroupScore in fish_routines_quests.
         groupBonus = groupBonus * questGroupScore(g)
 
-        ` a group in the wanted shape lights up first: its pops, and every pop after them, wait for it.
-        ` and when it pops, the multiplier goes up. see A CATCH in fish_headers_wanted.
-        groupWanted = 0
-        if g = WANTED_CATCH_GROUP
-            groupWanted = 1
-            wantedCaught(g, ghostWait)
-            ghostWait = ghostWait + WANTED_HOLD
+        ` a group beside a rainbow fish brings more of them, and lights up first: the pops of the first one
+        ` of the look, and every pop after them, wait for it. see AND THEY BREED in fish_headers_rainbow.
+        if comboForced = 0
+            rainbowBreedGroup(g, ghostWait)
+            ghostWait = ghostWait + RAINBOW_FISH_SEEN
         endif
 
         ` fish that are going into a stack are not a combo, so nothing gets added to them
@@ -1596,7 +1643,9 @@ handle_combos:
                     if questKeepsFish(cellIndex) then stockOk = 0
                     if stockOk
                         CELLS(cellIndex).comboFillId = g
-                        CELLS(cellIndex).comboFillMask = 1
+                        ` 2, and not 1, so that a quest can tell the fish that the card added from the
+                        ` fish that matched. see questCollectGroups in fish_routines_quests.
+                        CELLS(cellIndex).comboFillMask = 2
                         showPassiveUsed(ABILITY_INDEX_PASSIVE_STOCK_MARKET)
                         exit
                     endif
@@ -1627,6 +1676,7 @@ handle_combos:
         endif
 
         totalComboCount += 1
+        if groupForce = FORCE_BUNCH then QUEST_BUNCH_GROUPS = QUEST_BUNCH_GROUPS + 1
         scoreAdd = 0
 
         ` the tide wants to know if the last swap put one of its two fish in this group. see fish_headers_tide.
@@ -1643,6 +1693,11 @@ handle_combos:
         groupSize# = 0
         groupDelay = (explodeIndex + 1) * 50 + ghostWait
         groupFirstIndex = explodeIndex
+        groupOnWave = 0 `1 for a group that pops when the band of the rainbow gets to it. see AND THEY BREED in fish_headers_rainbow.
+        if g <= 399
+            if RAINBOW_BREED_WAIT(g) >= 0 then groupOnWave = 1
+        endif
+        if groupOnWave then groupDelay = RAINBOW_BREED_WAIT(g) + 50
 
         for i = 1 to CELL_COUNT
             cell = CELLS(i-1)
@@ -1651,7 +1706,6 @@ handle_combos:
             groupSumX = groupSumX + cell.coord.x
             groupSumY = groupSumY + cell.coord.y
             groupSize# = groupSize# + 1
-            groupKind = cell.value
 
             ` a fish that is on coral does not pop. it stays, and sings, and scores more than it would
             ` have by popping. the fish of its stack score too, and stay. see THE FISH ON CORAL SING in fish_headers.
@@ -1702,6 +1756,22 @@ handle_combos:
             if groupForce >= FORCE_RAY and groupForce < FORCE_BOTTLE
                 rayStep = (rayBottomRow + 1) - cell.coord.y
                 delay = (groupFirstIndex + rayStep) * 50 + ghostWait
+            endif
+
+            ` a fish of a burst pops when the surge gets to it, whatever group it is in. see THE BURST in
+            ` fish_headers_rainbow.
+            if RAINBOW_BURST_LIVE
+                if RAINBOW_BURST_CELLS(i - 1) > 0
+                    delay = RAINBOW_BURST_WAIT + RAINBOW_BURST_DELAY(i - 1)
+                endif
+            endif
+            ` and a fish of a group on the wave of the rainbow pops once the band has gone over its group,
+            ` one after another, the way that any group's fish do
+            if groupOnWave
+                delay = explodeIndex - groupFirstIndex
+                delay = delay - 1
+                delay = delay * 50
+                delay = delay + RAINBOW_BREED_WAIT(g)
             endif
 
             ` a jellyfish stings the fish next to it, once all of the groups have been found.
@@ -1800,7 +1870,10 @@ handle_combos:
                 y = getCellY(cell.coord.y)
             }
             scoreAdd += 10
-            scorePoints = scoreAdd * SCORE_MULTIPLIER * SCHOOL_STAKES * groupBonus * coralScore
+            ` a rainbow fish is worth more. see THE RAINBOW FISH in fish_headers_rainbow.
+            cellRainbow = rainbowFishScore(i - 1)
+            cellWorth = scoreAdd + cellRainbow
+            scorePoints = cellWorth * SCORE_MULTIPLIER * SCHOOL_STAKES * groupBonus * coralScore
             txtId = spawnBoardScoreText(txtPos, "+" + str$(scorePoints), delay, 800)
             color text txtId, FISH_COLORS(getFishColorIndex(cell.value))
 
@@ -1827,13 +1900,6 @@ handle_combos:
 
             ` a big group brings a hint with the next wave of the current. see THE HINTS in fish_headers.
             if groupSize# >= CORAL_HINT_GROUP_SIZE then CORAL_HINT_DUE = 1
-
-            ` the bubbles of a group that matched come up in the wanted shape. see fish_headers_wanted.
-            if comboForced = 0
-                if groupWanted = 0
-                    wantedBubbles(groupWaveX#, groupWaveY#, groupKind, groupDelay)
-                endif
-            endif
 
             ` with the "bottles" card, a big group of fish that matched leaves a bottle behind, in the
             ` cell of the group that is closest to the middle of it. see BOTTLES in fish_headers.
@@ -1891,8 +1957,9 @@ handle_combos:
     ` that are popping now were scored without it. see CORAL in fish_headers.
     judgeCoralCast(totalComboCount)
 
-    ` the quest of the round hears what is popping, and whether the last swap popped anything
-    questJudge(totalComboCount)
+    ` the quest of the round hears what is popping, and whether the last swap popped anything. fish that
+    ` "bunch up" put into a stack go away, but they do not pop. see BUNCH UP in fish_headers.
+    questJudge(totalComboCount - QUEST_BUNCH_GROUPS)
 
     ` the tests stop here. what pops has been decided and scored, and none of it has been animated yet.
     _combos_judged:
@@ -1914,6 +1981,7 @@ handle_combos:
     if totalComboCount = 0
         REQUEST_COMBO_CHECK = 0
         SEABED_COMBO = 0
+        RAINBOW_NO_BREED = 0 `the board has settled, so groups bring rainbow fish again. see fish_headers_rainbow.
         KNOWN_FILL_VALUE = 0 `a "known fill" swap that popped nothing has nothing to fill
         TUTORIAL_SCORE_HOLD = 0 `the fish that brought the bar of the round in have all popped, so the next ones score
 
@@ -2202,6 +2270,7 @@ handle_combos:
 
             ` and it faces one way or the other. see FACING in fish_headers_school.
             schoolNewFish(i - 1)
+            rainbowNewFish(i - 1) `a rainbow fish, if its column is owed one. see AND THEY BREED in fish_headers_rainbow.
             setFishTexture(cell.spriteId, CELLS(i-1).value)
             targetY = y - CELL_SIZE * 2
             startAlpha = 0
@@ -2227,6 +2296,9 @@ handle_combos:
 
     ` that was the one fill that a "known fill" swap gets
     KNOWN_FILL_VALUE = 0
+
+    ` a big group leaves a rainbow fish where the cursor was. see WHERE THEY COME FROM in fish_headers_rainbow.
+    rainbowSpawnNow()
 
     ` wait for all exit animations to finish
     COMBO_PHASE = 3

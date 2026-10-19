@@ -1,0 +1,304 @@
+remstart
+    THE TESTS OF THE RAINBOW FISH. see fish_headers_rainbow.
+    most of them pop five in a row across the top, with fish 6, which is a big group, and look at what a
+    rainbow fish lower down does.
+remend
+
+test rainbow_burst_takes_a_pair_along from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    tRainbowBefore = RAINBOW_BURST_COUNT
+    testCursor(4, 6)
+    for tRainbowX = 0 to 4
+        testPut(tRainbowX, 0, 6)
+    next
+    RAINBOW_FISH(testIndex(6, 3)) = 1
+    testPut(7, 3, 7)
+    testPut(8, 3, 7)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert RAINBOW_BURST_COUNT = tRainbowBefore + 1, "five in a row bursts the rainbow fish"
+    assert testPops(6, 3) = 1, "the rainbow fish pops"
+    assert testPops(7, 3) = 1, "and the pair beside it, which it makes three, goes with it"
+    assert testPops(8, 3) = 1, "all of the pair"
+    assert testPops(5, 3) = 0, "and nothing else beside it"
+    assert RAINBOW_CURSOR_KEEP = testIndex(4, 6), "and the fish where the cursor is is due to turn into a new one"
+    assert RAINBOW_FISH_SPAWN = -1, "so none is due once the board fills in"
+    end
+endtest
+
+test rainbow_burst_pops_a_rainbow_fish_on_its_own from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    for tRainbowX = 0 to 4
+        testPut(tRainbowX, 0, 6)
+    next
+    RAINBOW_FISH(testIndex(6, 4)) = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert testPops(6, 4) = 1, "a rainbow fish with nothing to take along still pops"
+    end
+endtest
+
+test rainbow_no_burst_without_a_big_group from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    tRainbowBefore = RAINBOW_BURST_COUNT
+    for tRainbowX = 0 to 3
+        testPut(tRainbowX, 0, 6)
+    next
+    RAINBOW_FISH(testIndex(6, 3)) = 1
+    testPut(7, 3, 7)
+    testPut(8, 3, 7)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert RAINBOW_BURST_COUNT = tRainbowBefore, "four in a row does not burst them"
+    assert testPops(6, 3) = 0, "so the rainbow fish stays"
+    assert testPops(7, 3) = 0, "and so does the pair"
+    assert RAINBOW_BURST_LIVE = 0, "and no surge goes out"
+    assert RAINBOW_FISH_SPAWN = -1, "and no new one is due"
+    assert RAINBOW_CURSOR_KEEP = -1, "anywhere"
+    end
+endtest
+
+test rainbow_big_group_turns_the_fish_at_the_cursor from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    testCursor(2, 0)
+    for tRainbowX = 0 to 4
+        testPut(tRainbowX, 0, 6)
+    next
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert testPops(2, 0) = 0, "the fish of the big group that the cursor is on does not pop"
+    assert testPops(1, 0) = 1, "the rest of the group does"
+    assert testPops(3, 0) = 1, "on both sides of it"
+    assert RAINBOW_CURSOR_KEEP = testIndex(2, 0), "it is due to turn into a rainbow fish"
+
+    runto _loop
+    assert RAINBOW_FISH(testIndex(2, 0)) = 1, "once the group has popped, it is a rainbow fish"
+    rainbowFishCount()
+    assert RAINBOW_FISH_COUNT = 1, "and it is the only one"
+    end
+endtest
+
+test rainbow_big_group_leaves_one_at_the_cursor_elsewhere from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    testCursor(4, 6)
+    for tRainbowX = 0 to 4
+        testPut(tRainbowX, 0, 6)
+    next
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    runto _loop
+
+    assert RAINBOW_FISH(testIndex(4, 6)) = 1, "the fish where the cursor is, away from the group, turns into a rainbow fish"
+    rainbowFishCount()
+    assert RAINBOW_FISH_COUNT = 1, "and it is the only one"
+    end
+endtest
+
+test rainbow_surge_gets_to_the_near_one_first from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    testCursor(2, 0)
+    for tRainbowX = 0 to 4
+        testPut(tRainbowX, 0, 6)
+    next
+    tRainbowNear = testIndex(2, 2)
+    tRainbowFar = testIndex(8, 8)
+    RAINBOW_FISH(tRainbowNear) = 1
+    RAINBOW_FISH(tRainbowFar) = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert RAINBOW_BURST_LIVE = 1, "the big group sends out a surge"
+    assert RAINBOW_BURST_DELAY(tRainbowNear) < RAINBOW_BURST_DELAY(tRainbowFar), "it gets to the near rainbow fish first"
+    assert STING_DELAY(tRainbowNear) < STING_DELAY(tRainbowFar), "so the near one pops first"
+    tRainbowGroupWait = STING_DELAY(testIndex(0, 0))
+    assert tRainbowGroupWait > STING_DELAY(tRainbowFar), "and the big group pops after the last of them"
+    end
+endtest
+
+test rainbow_pair_pops_after_the_one_that_took_it from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    testCursor(4, 6)
+    for tRainbowX = 0 to 4
+        testPut(tRainbowX, 0, 6)
+    next
+    RAINBOW_FISH(testIndex(6, 3)) = 1
+    testPut(7, 3, 7)
+    testPut(8, 3, 7)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    tRainbowAfter = RAINBOW_BURST_DELAY(testIndex(6, 3)) + RAINBOW_BURST_ALONG
+    assert RAINBOW_BURST_DELAY(testIndex(7, 3)) = tRainbowAfter, "the pair pops just after the rainbow fish that took it along"
+    assert RAINBOW_BURST_DELAY(testIndex(8, 3)) = tRainbowAfter, "both of it"
+    end
+endtest
+
+test rainbow_fish_scores_more from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    RAINBOW_FISH(testIndex(0, 0)) = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    tRainbowWant = 60 + RAINBOW_FISH_BONUS
+    assert CURRENT_SCORE = tRainbowWant, "three fish score 10 + 20 + 30, and the rainbow one 5 more"
+    end
+endtest
+
+test rainbow_fish_goes_with_a_swap from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    tRainbowA = testIndex(3, 3)
+    tRainbowB = testIndex(4, 3)
+    RAINBOW_FISH(tRainbowA) = 1
+    swapCellStacks(tRainbowA, tRainbowB)
+    assert RAINBOW_FISH(tRainbowA) = 0, "the cell that it left is not one"
+    assert RAINBOW_FISH(tRainbowB) = 1, "and the cell that it went to is"
+    end
+endtest
+
+test rainbow_fish_in_a_pop_is_used_up from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    RAINBOW_FISH(testIndex(1, 0)) = 1
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    runto _loop
+
+    rainbowFishCount()
+    assert RAINBOW_FISH_COUNT = 0, "the rainbow fish popped, and the fish that came in are ordinary"
+    end
+endtest
+
+test rainbow_fish_beside_a_pop_brings_more from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    tRainbowBefore = RAINBOW_BREED_COUNT
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    RAINBOW_FISH(testIndex(1, 1)) = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert RAINBOW_BREED_COUNT = tRainbowBefore + 1, "a group beside a rainbow fish brings more"
+    assert RAINBOW_FISH_OWED(0) = 1, "the fish that fills the first column comes in a rainbow fish"
+    assert RAINBOW_FISH_OWED(1) = 1, "and the second"
+    assert RAINBOW_FISH_OWED(2) = 1, "and the third"
+    assert RAINBOW_FISH_OWED(3) = 0, "and no others"
+    assert RAINBOW_BREED_CELLS(testIndex(0, 0)) = 1, "and the group lights up before it pops"
+    end
+endtest
+
+test rainbow_fish_in_a_group_brings_none from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    RAINBOW_FISH(testIndex(0, 0)) = 1
+    RAINBOW_FISH(testIndex(1, 1)) = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    tRainbowOwed = RAINBOW_FISH_OWED(0) + RAINBOW_FISH_OWED(1)
+    tRainbowOwed = tRainbowOwed + RAINBOW_FISH_OWED(2)
+    assert tRainbowOwed = 0, "a group with a rainbow fish in it brings ordinary fish, even beside another one"
+    end
+endtest
+
+` the numbers that the saved game keeps bring back the same rainbow fish. the preferences are mocked in
+` the tests, so this goes through the numbers that rainbowSave writes, and rainbowLoad reads.
+test rainbow_fish_are_saved from fishBoard
+    dim tRainbowSaved(14)
+    rainbowFishReset()
+    RAINBOW_FISH(testIndex(0, 0)) = 1
+    RAINBOW_FISH(testIndex(5, 3)) = 1
+    tRainbowLastCell = CELL_COUNT - 1
+    RAINBOW_FISH(tRainbowLastCell) = 1
+    for tRainbowP = 0 to 13
+        tRainbowSaved(tRainbowP) = rainbowSaveNumber(tRainbowP)
+    next
+
+    rainbowFishReset()
+    for tRainbowP = 0 to 13
+        rainbowLoadNumber(tRainbowP, tRainbowSaved(tRainbowP))
+    next
+
+    assert RAINBOW_FISH(testIndex(0, 0)) = 1, "the first cell's rainbow fish comes back"
+    assert RAINBOW_FISH(testIndex(5, 3)) = 1, "and one in the middle"
+    assert RAINBOW_FISH(tRainbowLastCell) = 1, "and the last cell's"
+    rainbowFishCount()
+    assert RAINBOW_FISH_COUNT = 3, "and no others"
+    end
+endtest
+
+test rainbow_burst_brings_none from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    testCursor(4, 6)
+    for tRainbowX = 0 to 4
+        testPut(tRainbowX, 0, 6)
+    next
+    RAINBOW_FISH(testIndex(1, 1)) = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    tRainbowOwed = 0
+    for tRainbowX = 0 to 8
+        tRainbowOwed = tRainbowOwed + RAINBOW_FISH_OWED(tRainbowX)
+    next
+    assert tRainbowOwed = 0, "a big group beside a rainbow fish brings none, since the burst pops it"
+    assert RAINBOW_NO_BREED = 1, "and no group brings any until the board settles"
+    end
+endtest
+
+test rainbow_fish_in_a_school_pops_in_a_burst from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    flockReset()
+    FLOCK_ON(0) = 1
+    FLOCK_RAINBOW(0) = 1
+    FLOCK_X#(0) = 100
+    FLOCK_Y#(0) = 100
+    testCursor(2, 0)
+    for tRainbowX = 0 to 4
+        testPut(tRainbowX, 0, 6)
+    next
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert RAINBOW_BURST_LIVE = 1, "a rainbow fish out in a school sends the surge out"
+    assert RAINBOW_FLOCK_POP_AT(0) > 0, "and it is due to pop when the surge gets to it"
+    end
+endtest

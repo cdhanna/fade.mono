@@ -1,0 +1,768 @@
+goto routines_rainbow_exit
+
+remstart
+    THE RAINBOW FISH. see fish_headers_rainbow for what they are.
+    - handle_combos calls rainbowBurstAhead once a look, once the groups are found, rainbowBurstLight and
+      rainbowCursorPunch before it pops any group, rainbowNewFish for every fish that comes in, and
+      rainbowSpawnNow once the board has filled back in.
+    - stepRainbowFish() runs on every frame of the game, from update_frame.
+    - rainbowFishReset() starts them over, for a new game.
+remend
+
+` THE DEBUG WINDOW, in the debug panel. frame_dbg, in fish_routines, comes here on every frame.
+frame_debug_rainbow:
+    begin debug window("Rainbow fish")
+    debugRainbowChanged = debug toggle("on", RAINBOW_FISH_ON)
+    rainbowFishCount()
+    debug text "rainbow fish on the board: " + str$(RAINBOW_FISH_COUNT) + ", bursts: " + str$(RAINBOW_BURST_COUNT)
+    if debug button("make the fish under the cursor one") = 1
+        RAINBOW_FISH(SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT) = 1
+    endif
+    debug same line
+    if debug button("none") = 1
+        rainbowFishReset()
+    endif
+    debugRainbowChanged = debug int slider("a rainbow fish scores more by", RAINBOW_FISH_BONUS, 0, 50)
+    debugRainbowChanged = debug int slider("a group this big bursts them", RAINBOW_BURST_SIZE, 3, 9)
+    debugRainbowChanged = debug float slider("burst: surge speed (px/ms)", RAINBOW_SURGE_SPEED#, .05, 1.5)
+    debugRainbowChanged = debug int slider("burst: what it takes along pops after (ms)", RAINBOW_BURST_ALONG, 0, 500)
+    debugRainbowChanged = debug int slider("burst: the big group pops after that (ms)", RAINBOW_BURST_AFTER, 0, 2000)
+    debugRainbowChanged = debug int slider("burst: surge fades after (ms)", RAINBOW_SURGE_FADE, 0, 2000)
+    debugRainbowChanged = debug float slider("the cursor's fish swells to", RAINBOW_CURSOR_PUNCH#, 1, 3)
+    debugRainbowChanged = debug int slider("cloud: lasts (ms)", RAINBOW_CLOUD_LIFE, 200, 3000)
+    debugRainbowChanged = debug float slider("cloud: strength", RAINBOW_CLOUD_STRENGTH#, 0, 1)
+    debugRainbowChanged = debug float slider("cloud: size at the cursor", RAINBOW_CLOUD_CURSOR#, .3, 4)
+    if debug button("a cloud at the cursor") = 1
+        debugCloudX# = getCellX(SELECTION_POS.x)
+        debugCloudY# = getCellY(SELECTION_POS.y)
+        rainbowCloud(debugCloudX#, debugCloudY#, 0, RAINBOW_CLOUD_CURSOR#)
+    endif
+    debug same line
+    if debug button("a surge from the cursor") = 1
+        debugCloudX# = getCellX(SELECTION_POS.x)
+        debugCloudY# = getCellY(SELECTION_POS.y)
+        RAINBOW_SURGE_X# = debugCloudX#
+        RAINBOW_SURGE_Y# = debugCloudY#
+        RAINBOW_SURGE_AT = game ms()
+        RAINBOW_BURST_LAST = 1200
+    endif
+    debug separator
+    debugRainbowChanged = debug float slider("a group that brings them: band speed (along/ms)", RAINBOW_BREED_SPEED#, .0002, .006)
+    debugRainbowChanged = debug int slider("a group that brings them: wait after it pops (ms)", RAINBOW_BREED_PAUSE, 0, 1500)
+    debugRainbowChanged = debug float slider("a group that brings them: band width", RAINBOW_BREED_WIDE#, .02, .6)
+    debug separator
+    debug text "how a rainbow fish looks"
+    debugRainbowChanged = debug float slider("the line is the rainbow (0 dark, 1 rainbow)", RAINBOW_RIM_LINE#, 0, 1)
+    debugRainbowChanged = debug float slider("edge shimmer outside the line", RAINBOW_RIM#, 0, 1)
+    debugRainbowChanged = debug float slider("paleness", RAINBOW_RIM_PALE#, 0, 1)
+    debug text "the waves of the rainbow, across the board"
+    debugRainbowChanged = debug float slider("way they go (radians)", RAINBOW_WAVE_ANGLE#, -3.1416, 3.1416)
+    debugRainbowChanged = debug float slider("wave length (px)", RAINBOW_WAVE_LONG#, 10, 600)
+    debugRainbowChanged = debug float slider("waves a second", RAINBOW_RIM_SPEED#, -2, 2)
+    debugRainbowChanged = debug float slider("color steps (0 smooth)", RAINBOW_WAVE_STEPS#, 0, 12)
+    debugRainbowChanged = debug float slider("bend and ripple", RAINBOW_WAVE_SWIRL#, 0, 2)
+    debug text "the numbers that are settled on go into fish_headers_rainbow by hand"
+    end debug window
+return
+
+routines_rainbow_exit:
+
+
+` a new game has none
+function rainbowFishReset()
+    for resetRainbowI = 0 to 399
+        RAINBOW_FISH(resetRainbowI) = 0
+        RAINBOW_BURST_CELLS(resetRainbowI) = 0
+        RAINBOW_BURST_FROM(resetRainbowI) = 0
+        RAINBOW_BREED_CELLS(resetRainbowI) = 0
+    next
+    for resetRainbowI = 0 to 39
+        RAINBOW_FISH_OWED(resetRainbowI) = 0
+    next
+    RAINBOW_BREED_UNTIL = 0
+    RAINBOW_FISH_COUNT = 0
+    RAINBOW_FISH_SPAWN = -1
+    RAINBOW_BURST_GROUP = -1
+    RAINBOW_BURST_LIVE = 0
+    RAINBOW_BURST_UNTIL = 0
+    RAINBOW_SURGE_AT = 0
+    RAINBOW_BURST_LAST = 0
+    RAINBOW_CURSOR_KEEP = -1
+    RAINBOW_NO_BREED = 0
+    RAINBOW_FLOCK_DUE = 0
+    for resetRainbowI = 0 to 7
+        RAINBOW_CLOUD_SIZE#(resetRainbowI) = 0
+    next
+    RAINBOW_CLOUD_UNTIL = 1 `so that the next frame hides any cloud that was still going
+endfunction
+
+` THE SAVED GAME. which cells have a rainbow fish, 30 cells to a number, a bit for each. see fish_headers_rainbow.
+function rainbowSave()
+    set pref RAINBOW_PREF, 1
+    for rainbowSaveP = 0 to 13
+        rainbowSaveBits = rainbowSaveNumber(rainbowSaveP)
+        set pref RAINBOW_PREF + 1 + rainbowSaveP, rainbowSaveBits
+    next
+endfunction
+
+` the number that keeps cells part * 30 to part * 30 + 29
+function rainbowSaveNumber(numberPart)
+    numberBits = 0
+    numberBit = 1
+    for numberB = 0 to 29
+        numberCell = numberPart * 30 + numberB
+        if numberCell < 400
+            if RAINBOW_FISH(numberCell) then numberBits = numberBits + numberBit
+        endif
+        numberBit = numberBit * 2
+    next
+endfunction numberBits
+
+` and back again
+function rainbowLoadNumber(numberPart, numberBits)
+    for numberB = 0 to 29
+        numberCell = numberPart * 30 + numberB
+        if numberCell < 400
+            RAINBOW_FISH(numberCell) = numberBits mod 2
+        endif
+        numberBits = numberBits / 2
+    next
+endfunction
+
+` reset_game has already taken them all away. a game that was saved before there were any has none.
+function rainbowLoad()
+    if get pref(RAINBOW_PREF, 0) <> 1 then exitfunction
+    for rainbowLoadP = 0 to 13
+        rainbowLoadBits = get pref(RAINBOW_PREF + 1 + rainbowLoadP, 0)
+        rainbowLoadNumber(rainbowLoadP, rainbowLoadBits)
+    next
+    ` a cell with no fish in it has no rainbow fish either
+    rainbowLoadLast = CELL_COUNT - 1
+    for rainbowLoadCell = 0 to rainbowLoadLast
+        if CELLS(rainbowLoadCell).value <= 0 then RAINBOW_FISH(rainbowLoadCell) = 0
+    next
+    for rainbowLoadCell = CELL_COUNT to 399
+        RAINBOW_FISH(rainbowLoadCell) = 0
+    next
+endfunction
+
+` a rainbow cloud claps out of here, in pixels, waitMs from now. size 1 is about two cells across.
+` it takes the next of the 8, so the oldest one goes when they are all going.
+function rainbowCloud(cloudX#, cloudY#, waitMs, cloudSize#)
+    cloudSlot = RAINBOW_CLOUD_NEXT
+    RAINBOW_CLOUD_NEXT = RAINBOW_CLOUD_NEXT + 1
+    if RAINBOW_CLOUD_NEXT >= 8 then RAINBOW_CLOUD_NEXT = 0
+    RAINBOW_CLOUD_X#(cloudSlot) = cloudX#
+    RAINBOW_CLOUD_Y#(cloudSlot) = cloudY#
+    RAINBOW_CLOUD_AT(cloudSlot) = game ms() + waitMs
+    RAINBOW_CLOUD_SIZE#(cloudSlot) = cloudSize#
+    cloudOver = RAINBOW_CLOUD_AT(cloudSlot) + RAINBOW_CLOUD_LIFE
+    if cloudOver > RAINBOW_CLOUD_UNTIL then RAINBOW_CLOUD_UNTIL = cloudOver
+endfunction
+
+function rainbowFishCount()
+    RAINBOW_FISH_COUNT = 0
+    countLast = CELL_COUNT - 1
+    for countCell = 0 to countLast
+        RAINBOW_FISH_COUNT = RAINBOW_FISH_COUNT + RAINBOW_FISH(countCell)
+    next
+endfunction
+
+` a fish swapped places with another, or fell into its place: what is rainbow goes with them
+function rainbowTradeFish(tradeA, tradeB)
+    tradeWas = RAINBOW_FISH(tradeA)
+    RAINBOW_FISH(tradeA) = RAINBOW_FISH(tradeB)
+    RAINBOW_FISH(tradeB) = tradeWas
+endfunction
+
+` a fish was copied from one cell to another
+function rainbowCopyFish(copyFrom, copyTo)
+    RAINBOW_FISH(copyTo) = RAINBOW_FISH(copyFrom)
+endfunction
+
+` a fish has come in to fill this cell. it is a rainbow fish if its column is owed one. see AND THEY BREED.
+function rainbowNewFish(newCell)
+    RAINBOW_FISH(newCell) = 0
+    newColumn = newCell mod CELL_COLUMN_COUNT
+    if RAINBOW_FISH_OWED(newColumn) > 0
+        RAINBOW_FISH_OWED(newColumn) = RAINBOW_FISH_OWED(newColumn) - 1
+        RAINBOW_FISH(newCell) = 1
+    endif
+endfunction
+
+` AND THEY BREED. handle_combos has got to a group that matched, and pops. if rainbowBreedPlan put it on the
+` wave, the fish that come in to fill its cells are rainbow fish, and its fish turn to the rainbow as the
+` band goes over them. the band already holds its pops: RAINBOW_BREED_WAIT is when they start.
+function rainbowBreedGroup(breedGroup, waitMs)
+    RAINBOW_FISH_SEEN = 0
+    if breedGroup > 399 then exitfunction
+    if RAINBOW_BREED_WAIT(breedGroup) < 0 then exitfunction
+    RAINBOW_BREED_COUNT = RAINBOW_BREED_COUNT + 1
+    breedLast = CELL_COUNT - 1
+    for breedCell = 0 to breedLast
+        if CELLS(breedCell).comboFillId = breedGroup
+            breedColumn = breedCell mod CELL_COLUMN_COUNT
+            RAINBOW_FISH_OWED(breedColumn) = RAINBOW_FISH_OWED(breedColumn) + 1
+            RAINBOW_BREED_CELLS(breedCell) = 1
+        endif
+    next
+endfunction
+
+` THE WAVE OF A LOOK. handle_combos has found its groups, and is about to pop them, planWait from now:
+` planLast is the last group there is. this finds the groups that will bring rainbow fish (AND THEY
+` BREED), puts them in the order that they are along the wave, by their far ends, and works out when the
+` band gets all the way over each, which is when it pops, and how long the band waits there.
+function rainbowBreedPlan(planLast, planWait)
+    RAINBOW_BREED_STEPS = 0
+    for planG = 0 to 399
+        RAINBOW_BREED_WAIT(planG) = -1
+        RAINBOW_BREED_CELLS(planG) = 0
+    next
+    if planLast > 399 then exitfunction
+    if RAINBOW_FISH_ON = 0 then exitfunction
+    if RAINBOW_NO_BREED then exitfunction `see NONE ARE BROUGHT IN A BURST
+    if TIDE_NIGHT then exitfunction
+
+    comboCountGroups(planLast)
+    planNeed = getRequiredComboCount()
+    for planG = 0 to planLast
+        RAINBOW_PLAN_HAS(planG) = 0
+        RAINBOW_PLAN_BESIDE(planG) = 0
+        RAINBOW_PLAN_N(planG) = 0
+        RAINBOW_PLAN_FAR#(planG) = -99999
+        RAINBOW_PLAN_NEAR#(planG) = 99999
+        RAINBOW_PLAN_DONE(planG) = 1
+        if COMBO_GROUP_FORCED(planG) = 0
+            if COMBO_GROUP_SIZE(planG) >= planNeed then RAINBOW_PLAN_DONE(planG) = 0
+        endif
+    next
+
+    ` every fish of a group that pops: is it a rainbow fish, is one beside it, and how far along the wave is it
+    planNear# = 99999
+    planLastCell = CELL_COUNT - 1
+    for planCell = 0 to planLastCell
+        planG = CELLS(planCell).comboFillId
+        planOk = 0
+        if planG >= 0
+            if planG <= planLast
+                if RAINBOW_PLAN_DONE(planG) = 0 then planOk = 1
+            endif
+        endif
+        if planOk
+            RAINBOW_PLAN_N(planG) = RAINBOW_PLAN_N(planG) + 1
+            if RAINBOW_FISH(planCell) then RAINBOW_PLAN_HAS(planG) = 1
+            planColumn = planCell mod CELL_COLUMN_COUNT
+            planRow = planCell / CELL_COLUMN_COUNT
+            planSaw = 0
+            if planColumn > 0
+                planOne = rainbowFishBeside(planCell - 1, planG)
+                planSaw = planSaw + planOne
+            endif
+            if planColumn < CELL_COLUMN_COUNT - 1
+                planOne = rainbowFishBeside(planCell + 1, planG)
+                planSaw = planSaw + planOne
+            endif
+            if planRow > 0
+                planOne = rainbowFishBeside(planCell - CELL_COLUMN_COUNT, planG)
+                planSaw = planSaw + planOne
+            endif
+            if planRow < CELL_ROW_COUNT - 1
+                planOne = rainbowFishBeside(planCell + CELL_COLUMN_COUNT, planG)
+                planSaw = planSaw + planOne
+            endif
+            RAINBOW_PLAN_BESIDE(planG) = RAINBOW_PLAN_BESIDE(planG) + planSaw
+            planX# = getCellX(planColumn)
+            planY# = getCellY(planRow)
+            planAlong# = planX# * RAINBOW_BREED_WAVE_X# + planY# * RAINBOW_BREED_WAVE_Y#
+            if planAlong# > RAINBOW_PLAN_FAR#(planG) then RAINBOW_PLAN_FAR#(planG) = planAlong#
+            if planAlong# < RAINBOW_PLAN_NEAR#(planG) then RAINBOW_PLAN_NEAR#(planG) = planAlong#
+            if planAlong# < planNear# then planNear# = planAlong#
+        endif
+    next
+
+    ` only the groups beside a rainbow fish, with none in them, are on the wave
+    planAny = 0
+    for planG = 0 to planLast
+        if RAINBOW_PLAN_DONE(planG) = 0
+            if RAINBOW_PLAN_HAS(planG) then RAINBOW_PLAN_DONE(planG) = 1
+            if RAINBOW_PLAN_BESIDE(planG) = 0 then RAINBOW_PLAN_DONE(planG) = 1
+        endif
+        if RAINBOW_PLAN_DONE(planG) = 0 then planAny = 1
+    next
+    if planAny = 0 then exitfunction
+
+    ` the near end of the nearest of them
+    planNear# = 99999
+    for planCell = 0 to planLastCell
+        planG = CELLS(planCell).comboFillId
+        if planG >= 0
+            if planG <= planLast
+                if RAINBOW_PLAN_DONE(planG) = 0
+                    planX# = getCellX(planCell mod CELL_COLUMN_COUNT)
+                    planY# = getCellY(planCell / CELL_COLUMN_COUNT)
+                    planAlong# = planX# * RAINBOW_BREED_WAVE_X# + planY# * RAINBOW_BREED_WAVE_Y#
+                    if planAlong# < planNear# then planNear# = planAlong#
+                endif
+            endif
+        endif
+    next
+
+    ` the band starts just before the nearest of them, and goes to each in turn
+    planNow = game ms()
+    planT = planWait
+    planAt# = planNear# - RAINBOW_BREED_WIDE#
+    RAINBOW_BREED_FROM = planNow + planT
+    rainbowBreedStep(planNow + planT, planAt#)
+    planMore = 1
+    while planMore
+        planBest = -1
+        for planG = 0 to planLast
+            if RAINBOW_PLAN_DONE(planG) = 0
+                if planBest < 0
+                    planBest = planG
+                else
+                    if RAINBOW_PLAN_FAR#(planG) < RAINBOW_PLAN_FAR#(planBest) then planBest = planG
+                endif
+            endif
+        next
+        if planBest < 0
+            planMore = 0
+        else
+            RAINBOW_PLAN_DONE(planBest) = 1
+            ` it crosses the water to the near end of the group quickly, and then goes over the group
+            planTo# = RAINBOW_PLAN_NEAR#(planBest) - RAINBOW_BREED_WIDE#
+            if planTo# > planAt#
+                planGo# = (planTo# - planAt#) / (RAINBOW_BREED_SPEED# * RAINBOW_BREED_GAP#)
+                planGo = planGo#
+                planT = planT + planGo
+                planAt# = planTo#
+                rainbowBreedStep(planNow + planT, planAt#)
+            endif
+            planTo# = RAINBOW_PLAN_FAR#(planBest) + RAINBOW_BREED_WIDE#
+            if planTo# > planAt#
+                planGo# = (planTo# - planAt#) / RAINBOW_BREED_SPEED#
+                planGo = planGo#
+                planT = planT + planGo
+                planAt# = planTo#
+                rainbowBreedStep(planNow + planT, planAt#)
+            endif
+            RAINBOW_BREED_WAIT(planBest) = planT
+            planPops = RAINBOW_PLAN_N(planBest) * 50
+            planT = planT + planPops
+            planT = planT + RAINBOW_BREED_PAUSE
+            rainbowBreedStep(planNow + planT, planAt#)
+        endif
+    endwhile
+    RAINBOW_BREED_UNTIL = planNow + planT
+endfunction
+
+` one more place that the band is at, at a time on the clock of the game. see THE WAVE OF A LOOK.
+function rainbowBreedStep(stepAtMs, stepAtAlong#)
+    if RAINBOW_BREED_STEPS >= 100 then exitfunction
+    RAINBOW_BREED_T(RAINBOW_BREED_STEPS) = stepAtMs
+    RAINBOW_BREED_AT#(RAINBOW_BREED_STEPS) = stepAtAlong#
+    RAINBOW_BREED_STEPS = RAINBOW_BREED_STEPS + 1
+endfunction
+
+` 1 when the fish in this cell is a rainbow fish, and not one of the group
+function rainbowFishBeside(besideCell, besideGroup)
+    besideYes = 0
+    if CELLS(besideCell).comboFillId <> besideGroup
+        if RAINBOW_FISH(besideCell) then besideYes = 1
+    endif
+endfunction besideYes
+
+` the board has filled back in, after a big group: the fish in the cell that the cursor was on is a rainbow fish
+function rainbowSpawnNow()
+    if RAINBOW_FISH_SPAWN < 0 then exitfunction
+    if RAINBOW_FISH_SPAWN < CELL_COUNT
+        if CELLS(RAINBOW_FISH_SPAWN).value > 0 then RAINBOW_FISH(RAINBOW_FISH_SPAWN) = 1
+    endif
+    RAINBOW_FISH_SPAWN = -1
+endfunction
+
+` how much more the fish in this cell scores, as it pops
+function rainbowFishScore(scoreCell)
+    scoreMore = 0
+    if RAINBOW_FISH(scoreCell) then scoreMore = RAINBOW_FISH_BONUS
+endfunction scoreMore
+
+
+` THE BURST. handle_combos has found its groups, and given the forced ones their numbers: burstLast is the
+` last group there is, and burstBase is what the number of a forced pop is added to. if a group of
+` RAINBOW_BURST_SIZE or more, that matched, pops on this look, the cell of the cursor gets a new rainbow fish
+` later, and every rainbow fish bursts now: it, and any group beside it that it makes big enough to pop, go
+` into one forced group, RAINBOW_BURST_GROUP. a rainbow fish in a group that pops anyway is left in it.
+function rainbowBurstAhead(burstLast, burstBase)
+    RAINBOW_BURST_GROUP = -1
+    RAINBOW_BURST_LIVE = 0
+    ` a new look: no rainbow fish are owed yet, and no group has lit up for bringing them
+    for burstColumn = 0 to 39
+        RAINBOW_FISH_OWED(burstColumn) = 0
+    next
+    if RAINBOW_FISH_ON = 0 then exitfunction
+    if TIDE_NIGHT then exitfunction
+    if burstLast >= COMBO_GROUP_ROOM then exitfunction
+
+    ` is there a big group?
+    comboCountGroups(burstLast)
+    burstNeed = getRequiredComboCount()
+    burstBig = 0
+    for burstG = 0 to burstLast
+        if COMBO_GROUP_FORCED(burstG) = 0
+            if COMBO_GROUP_SIZE(burstG) >= RAINBOW_BURST_SIZE then burstBig = 1
+        endif
+    next
+    if burstBig = 0 then exitfunction
+
+    RAINBOW_BURST_COUNT = RAINBOW_BURST_COUNT + 1
+    RAINBOW_NO_BREED = 1
+
+    ` a rainbow fish out in a school sends the surge out too. see IN A SCHOOL.
+    for burstFlock = 0 to FLOCK_MAX - 1
+        if FLOCK_RAINBOW(burstFlock)
+            if FLOCK_ON(burstFlock) then RAINBOW_BURST_LIVE = 1
+        endif
+    next
+
+    burstLastCell = CELL_COUNT - 1
+    for burstCell = 0 to 399
+        RAINBOW_BURST_CELLS(burstCell) = 0
+    next
+
+    ` every rainbow fish, and what it takes along
+    for burstCell = 0 to burstLastCell
+        if RAINBOW_FISH(burstCell)
+            if CELLS(burstCell).value > 0
+                ` it bursts on its own, unless it is in a group that pops anyway
+                burstOwn = CELLS(burstCell).comboFillId
+                burstPops = 0
+                if burstOwn >= 0
+                    if burstOwn <= burstLast
+                        if COMBO_GROUP_SIZE(burstOwn) >= burstNeed then burstPops = 1
+                        if COMBO_GROUP_FORCED(burstOwn) then burstPops = 1
+                    else
+                        burstPops = 1
+                    endif
+                endif
+                if burstPops = 0 then RAINBOW_BURST_CELLS(burstCell) = 1
+                RAINBOW_BURST_LIVE = 1
+
+                burstColumn = burstCell mod CELL_COLUMN_COUNT
+                burstRow = burstCell / CELL_COLUMN_COUNT
+                if burstColumn > 0
+                    rainbowTakeAlong(burstCell - 1, burstLast, burstNeed, burstCell)
+                endif
+                if burstColumn < CELL_COLUMN_COUNT - 1
+                    rainbowTakeAlong(burstCell + 1, burstLast, burstNeed, burstCell)
+                endif
+                if burstRow > 0
+                    rainbowTakeAlong(burstCell - CELL_COLUMN_COUNT, burstLast, burstNeed, burstCell)
+                endif
+                if burstRow < CELL_ROW_COUNT - 1
+                    rainbowTakeAlong(burstCell + CELL_COLUMN_COUNT, burstLast, burstNeed, burstCell)
+                endif
+            endif
+        endif
+    next
+
+    ` they all go into one forced group
+    burstAny = 0
+    for burstCell = 0 to burstLastCell
+        if RAINBOW_BURST_CELLS(burstCell) > 0
+            CELLS(burstCell).comboForce = FORCE_RAINBOW
+            CELLS(burstCell).comboFillId = FORCE_RAINBOW + burstBase
+            burstAny = 1
+        endif
+    next
+    if burstAny
+        RAINBOW_BURST_GROUP = FORCE_RAINBOW + burstBase
+        COMBO_GROUPS_STALE = 1
+    endif
+
+    ` WHERE THEY COME FROM. the fish that the cursor is on stays, and turns into a rainbow fish, unless it is
+    ` a rainbow fish that bursts, or in some other group that pops: then the fish that fills its cell is one.
+    ` a fish of the big group is taken out of it, into a group of its own that is too small to pop: the last
+    ` number that there is, which no other group has.
+    burstCursor = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+    if burstCursor >= 0
+        if burstCursor < CELL_COUNT
+            burstCursorGroup = CELLS(burstCursor).comboFillId
+            burstCursorPops = 0
+            burstCursorBig = 0
+            if RAINBOW_BURST_CELLS(burstCursor) > 0 then burstCursorPops = 1
+            if burstCursorPops = 0
+                if burstCursorGroup >= 0
+                    if burstCursorGroup <= burstLast
+                        if COMBO_GROUP_FORCED(burstCursorGroup) then burstCursorPops = 1
+                        if COMBO_GROUP_SIZE(burstCursorGroup) >= burstNeed then burstCursorPops = 1
+                        if COMBO_GROUP_FORCED(burstCursorGroup) = 0
+                            if COMBO_GROUP_SIZE(burstCursorGroup) >= RAINBOW_BURST_SIZE then burstCursorBig = 1
+                        endif
+                    endif
+                endif
+            endif
+            if burstCursorBig
+                CELLS(burstCursor).comboFillId = burstLast
+                COMBO_GROUPS_STALE = 1
+                RAINBOW_CURSOR_KEEP = burstCursor
+            else
+                if burstCursorPops
+                    RAINBOW_FISH_SPAWN = burstCursor
+                else
+                    RAINBOW_CURSOR_KEEP = burstCursor
+                endif
+            endif
+        endif
+    endif
+endfunction
+
+` the fish that the cursor is on swells up, waitMs from now, as the big group pops, and turns into a rainbow
+` fish then, with a rainbow cloud that claps out of it. stepRainbowFish makes it one when the time comes.
+function rainbowCursorPunch(waitMs)
+    if RAINBOW_CURSOR_KEEP < 0 then exitfunction
+    punchCell = RAINBOW_CURSOR_KEEP
+    RAINBOW_CURSOR_AT = game ms() + waitMs
+    punchColumn# = punchCell mod CELL_COLUMN_COUNT
+    punchRow# = punchCell / CELL_COLUMN_COUNT
+    spawnShockwave(punchColumn#, punchRow#, .5, waitMs)
+    punchX = getCellX(punchCell mod CELL_COLUMN_COUNT)
+    punchY = getCellY(punchCell / CELL_COLUMN_COUNT)
+    spawnBubbles(punchX, punchY, CELL_SIZE / 3, 8, waitMs, rgb(255, 255, 255))
+    punchX# = punchX
+    punchY# = punchY
+    rainbowCloud(punchX#, punchY#, waitMs, RAINBOW_CLOUD_CURSOR#)
+endfunction
+
+` the group of the fish in this cell is beside a rainbow fish that is bursting. if it does not pop on its
+` own, but would with one more fish, it is taken along: all of its fish are marked 2.
+function rainbowTakeAlong(alongCell, alongLast, alongNeed, alongBy)
+    if RAINBOW_FISH(alongCell) then exitfunction
+    if RAINBOW_BURST_CELLS(alongCell) > 0 then exitfunction
+    alongGroup = CELLS(alongCell).comboFillId
+    if alongGroup < 0 then exitfunction
+    if alongGroup > alongLast then exitfunction
+    if COMBO_GROUP_FORCED(alongGroup) then exitfunction
+    alongSize = COMBO_GROUP_SIZE(alongGroup)
+    if alongSize >= alongNeed then exitfunction
+    alongWith = alongSize + 1
+    if alongWith < alongNeed then exitfunction
+    alongCount = CELL_COUNT - 1
+    for alongI = 0 to alongCount
+        if CELLS(alongI).comboFillId = alongGroup
+            if RAINBOW_FISH(alongI) = 0
+                RAINBOW_BURST_CELLS(alongI) = 2
+                RAINBOW_BURST_BY(alongI) = alongBy
+            endif
+        endif
+    next
+endfunction
+
+` how far it is across and down, without a square root: the longer way, and some of the shorter way. it is
+` never more than about 4 in 100 off.
+function rainbowRoughDistance(roughX#, roughY#)
+    roughA# = abs(roughX#)
+    roughB# = abs(roughY#)
+    if roughA# < roughB#
+        roughSwap# = roughA#
+        roughA# = roughB#
+        roughB# = roughSwap#
+    endif
+    roughD# = roughA# * .96 + roughB# * .398
+endfunction roughD#
+
+` the burst sets off, waitMs from now, before any group pops: a surge goes out from the cursor, and as it
+` gets to each rainbow fish, the fish lights up, a cloud claps out of it, and it pops. what it takes along
+` pops RAINBOW_BURST_ALONG after it. RAINBOW_BURST_DELAY is when each of them pops, after the surge set off,
+` and RAINBOW_BURST_LAST is when the last of them does. handle_combos makes everything else wait that long.
+function rainbowBurstLight(waitMs)
+    lightStart = game ms() + waitMs
+    lightFromX# = getCellX(SELECTION_POS.x)
+    lightFromY# = getCellY(SELECTION_POS.y)
+    RAINBOW_SURGE_X# = lightFromX#
+    RAINBOW_SURGE_Y# = lightFromY#
+    RAINBOW_SURGE_AT = lightStart
+    RAINBOW_BURST_LAST = 0
+    lightLast = CELL_COUNT - 1
+
+    ` the rainbow fish in groups that pop anyway burst too
+    for lightCell = 0 to lightLast
+        if RAINBOW_FISH(lightCell)
+            if CELLS(lightCell).value > 0
+                if RAINBOW_BURST_CELLS(lightCell) = 0 then RAINBOW_BURST_CELLS(lightCell) = 1
+            endif
+        endif
+    next
+
+    ` the rainbow fish pop as the surge gets to them
+    for lightCell = 0 to lightLast
+        RAINBOW_BURST_FROM(lightCell) = 0
+        RAINBOW_BURST_DELAY(lightCell) = 0
+        if RAINBOW_BURST_CELLS(lightCell) = 1
+            lightX# = getCellX(lightCell mod CELL_COLUMN_COUNT)
+            lightY# = getCellY(lightCell / CELL_COLUMN_COUNT)
+            lightDX# = lightX# - lightFromX#
+            lightDY# = lightY# - lightFromY#
+            lightDist# = rainbowRoughDistance(lightDX#, lightDY#)
+            lightDelay = lightDist# / RAINBOW_SURGE_SPEED#
+            RAINBOW_BURST_DELAY(lightCell) = lightDelay
+            lightFlood = lightStart + lightDelay
+            RAINBOW_BURST_FROM(lightCell) = lightFlood - 150
+            lightWait = waitMs + lightDelay
+            rainbowCloud(lightX#, lightY#, lightWait, 1)
+            if lightDelay > RAINBOW_BURST_LAST then RAINBOW_BURST_LAST = lightDelay
+        endif
+    next
+
+    ` and what they take along goes just after the one that took it
+    for lightCell = 0 to lightLast
+        if RAINBOW_BURST_CELLS(lightCell) = 2
+            lightBy = RAINBOW_BURST_BY(lightCell)
+            lightDelay = RAINBOW_BURST_DELAY(lightBy) + RAINBOW_BURST_ALONG
+            RAINBOW_BURST_DELAY(lightCell) = lightDelay
+            lightFlood = lightStart + lightDelay
+            RAINBOW_BURST_FROM(lightCell) = lightFlood - 150
+            if lightDelay > RAINBOW_BURST_LAST then RAINBOW_BURST_LAST = lightDelay
+        endif
+    next
+
+    ` the rainbow fish out in the schools pop as the surge gets to them too, with a smaller cloud. the
+    ` furthest off of them pops no later than RAINBOW_FLOCK_LATEST. see IN A SCHOOL.
+    SCHOOL_FLUSH_SCORE = 0
+    for lightFlock = 0 to FLOCK_MAX - 1
+        RAINBOW_FLOCK_POP_AT(lightFlock) = 0
+        lightFlockOk = FLOCK_RAINBOW(lightFlock) * FLOCK_ON(lightFlock)
+        if FLOCK_FLY(lightFlock) then lightFlockOk = 0
+        if FLOCK_FLUSH(lightFlock) <> 0 then lightFlockOk = 0
+        if FLOCK_LEAVE(lightFlock) <> 0 then lightFlockOk = 0
+        if lightFlockOk
+            lightDX# = FLOCK_X#(lightFlock) - lightFromX#
+            lightDY# = FLOCK_Y#(lightFlock) - lightFromY#
+            lightDist# = rainbowRoughDistance(lightDX#, lightDY#)
+            lightDelay = lightDist# / RAINBOW_SURGE_SPEED#
+            if lightDelay > RAINBOW_FLOCK_LATEST then lightDelay = RAINBOW_FLOCK_LATEST
+            RAINBOW_FLOCK_POP_AT(lightFlock) = lightStart + lightDelay
+            RAINBOW_FLOCK_DUE = RAINBOW_FLOCK_DUE + 1
+            lightWait = waitMs + lightDelay
+            rainbowCloud(FLOCK_X#(lightFlock), FLOCK_Y#(lightFlock), lightWait, .6)
+            if lightDelay > RAINBOW_BURST_LAST then RAINBOW_BURST_LAST = lightDelay
+        endif
+    next
+
+    RAINBOW_BURST_UNTIL = lightStart + RAINBOW_BURST_LAST + 400
+    schoolChord(5)
+endfunction
+
+` every frame: the shader learns how a rainbow fish looks, and where the rainbow is. the effects lose
+` their parameters when they are reloaded, so this is set every frame.
+function stepRainbowFish()
+    ` the fish that the cursor was on swells up into a rainbow fish, as the big group pops. the swell starts
+    ` here, and not with a delay, because a tween that waits holds its first size the whole time.
+    if RAINBOW_CURSOR_KEEP >= 0
+        if game ms() >= RAINBOW_CURSOR_AT
+            create basic tween CELLS(RAINBOW_CURSOR_KEEP).scaleWaveTweenId, RAINBOW_CURSOR_PUNCH#, 1, 320, 0
+            RAINBOW_FISH(RAINBOW_CURSOR_KEEP) = 1
+            RAINBOW_CURSOR_KEEP = -1
+        endif
+    endif
+
+    ` while a group that brings rainbow fish lights up, a band of the rainbow sweeps through it, from one end
+    ` to the other. the rest of the time, the rainbow lights up all of a fish that is flooded, for a burst.
+    stepNow = game ms()
+
+    ` the rainbow fish out in the schools pop when the surge gets to them. see IN A SCHOOL.
+    if RAINBOW_FLOCK_DUE > 0
+        RAINBOW_FLOCK_DUE = 0
+        for stepFlock = 0 to FLOCK_MAX - 1
+            if RAINBOW_FLOCK_POP_AT(stepFlock) > 0
+                if stepNow >= RAINBOW_FLOCK_POP_AT(stepFlock)
+                    RAINBOW_FLOCK_POP_AT(stepFlock) = 0
+                    if FLOCK_ON(stepFlock)
+                        if FLOCK_RAINBOW(stepFlock)
+                            FLOCK_RAINBOW(stepFlock) = 0
+                            schoolFlushPop(stepFlock)
+                        endif
+                    endif
+                else
+                    RAINBOW_FLOCK_DUE = RAINBOW_FLOCK_DUE + 1
+                endif
+            endif
+        next
+    endif
+    stepFlockTime# = stepNow * .001
+    set effect param float FLOCK_FX_ID, "Time", stepFlockTime#
+    ` THE WAVE OF A LOOK: where the band is now, between the two places that it is at either side of now
+    stepBreeding = 0
+    if stepNow < RAINBOW_BREED_UNTIL
+        if stepNow >= RAINBOW_BREED_FROM then stepBreeding = 1
+    endif
+    if RAINBOW_BREED_STEPS = 0 then stepBreeding = 0
+    if stepBreeding
+        stepBandAt# = RAINBOW_BREED_AT#(RAINBOW_BREED_STEPS - 1)
+        stepK = 1
+        while stepK < RAINBOW_BREED_STEPS
+            if stepNow < RAINBOW_BREED_T(stepK)
+                stepSpan# = RAINBOW_BREED_T(stepK) - RAINBOW_BREED_T(stepK - 1)
+                stepInto# = stepNow - RAINBOW_BREED_T(stepK - 1)
+                stepPart# = 1
+                if stepSpan# > 0 then stepPart# = stepInto# / stepSpan#
+                stepBandFrom# = RAINBOW_BREED_AT#(stepK - 1)
+                stepBandTo# = RAINBOW_BREED_AT#(stepK)
+                stepBandAt# = stepBandFrom# + (stepBandTo# - stepBandFrom#) * stepPart#
+                stepK = RAINBOW_BREED_STEPS
+            endif
+            stepK = stepK + 1
+        endwhile
+        ` with the band's two ends both here, and halfway through, the band is here
+        set effect param float4 FISH_FX_ID, "Rainbow", stepBandAt#, stepBandAt#, .5, RAINBOW_BREED_WIDE#
+    else
+        set effect param float4 FISH_FX_ID, "Rainbow", 0, 0, .5, 100
+    endif
+    set effect param float4 FISH_FX_ID, "RainbowRim", RAINBOW_RIM#, RAINBOW_RIM_SPEED#, RAINBOW_RIM_LINE#, RAINBOW_RIM_PALE#
+    set effect param float4 FISH_FX_ID, "RainbowWave", RAINBOW_WAVE_ANGLE#, RAINBOW_WAVE_LONG#, RAINBOW_WAVE_STEPS#, RAINBOW_WAVE_SWIRL#
+
+    ` THE SURGE, in the water of the whole screen. it is strong until it has got to the last rainbow fish,
+    ` and then it fades out.
+    stepSurgeR# = 0
+    stepSurgeW# = 0
+    if RAINBOW_SURGE_AT > 0
+        if stepNow >= RAINBOW_SURGE_AT
+            stepSurgeAge# = stepNow - RAINBOW_SURGE_AT
+            stepSurgeR# = stepSurgeAge# * RAINBOW_SURGE_SPEED#
+            stepSurgeW# = 1
+            stepSurgeOver# = stepSurgeAge# - RAINBOW_BURST_LAST
+            if stepSurgeOver# > 0
+                stepSurgeFade# = RAINBOW_SURGE_FADE + 1
+                stepSurgeW# = 1 - stepSurgeOver# / stepSurgeFade#
+            endif
+            if stepSurgeW# <= 0
+                stepSurgeW# = 0
+                RAINBOW_SURGE_AT = 0
+            endif
+        endif
+    endif
+    stepWorldW# = WORLD_WIDTH
+    stepWorldH# = WORLD_HEIGHT
+    stepSurgeU# = RAINBOW_SURGE_X# / stepWorldW#
+    stepSurgeV# = RAINBOW_SURGE_Y# / stepWorldH#
+    set effect param float4 1, "Surge", stepSurgeU#, stepSurgeV#, stepSurgeR#, stepSurgeW#
+
+    ` THE RAINBOW CLOUDS, in the ripples of light of ScreenEffect.fx. its strength is 0 while none is going,
+    ` and then it works none of them out. see THE RAINBOW CLOUDS in fish_headers_rainbow.
+    stepCloudNow# = stepNow * .001
+    if stepNow < RAINBOW_CLOUD_UNTIL
+        stepLife# = RAINBOW_CLOUD_LIFE * .001
+        set effect param float4 1, "CloudLook", RAINBOW_CLOUD_STRENGTH#, stepLife#, stepCloudNow#, 0
+        ` one line each, so that no name is put together on every frame
+        set effect param float4 1, "Cloud0", RAINBOW_CLOUD_X#(0), RAINBOW_CLOUD_Y#(0), RAINBOW_CLOUD_AT(0) * .001, RAINBOW_CLOUD_SIZE#(0)
+        set effect param float4 1, "Cloud1", RAINBOW_CLOUD_X#(1), RAINBOW_CLOUD_Y#(1), RAINBOW_CLOUD_AT(1) * .001, RAINBOW_CLOUD_SIZE#(1)
+        set effect param float4 1, "Cloud2", RAINBOW_CLOUD_X#(2), RAINBOW_CLOUD_Y#(2), RAINBOW_CLOUD_AT(2) * .001, RAINBOW_CLOUD_SIZE#(2)
+        set effect param float4 1, "Cloud3", RAINBOW_CLOUD_X#(3), RAINBOW_CLOUD_Y#(3), RAINBOW_CLOUD_AT(3) * .001, RAINBOW_CLOUD_SIZE#(3)
+        set effect param float4 1, "Cloud4", RAINBOW_CLOUD_X#(4), RAINBOW_CLOUD_Y#(4), RAINBOW_CLOUD_AT(4) * .001, RAINBOW_CLOUD_SIZE#(4)
+        set effect param float4 1, "Cloud5", RAINBOW_CLOUD_X#(5), RAINBOW_CLOUD_Y#(5), RAINBOW_CLOUD_AT(5) * .001, RAINBOW_CLOUD_SIZE#(5)
+        set effect param float4 1, "Cloud6", RAINBOW_CLOUD_X#(6), RAINBOW_CLOUD_Y#(6), RAINBOW_CLOUD_AT(6) * .001, RAINBOW_CLOUD_SIZE#(6)
+        set effect param float4 1, "Cloud7", RAINBOW_CLOUD_X#(7), RAINBOW_CLOUD_Y#(7), RAINBOW_CLOUD_AT(7) * .001, RAINBOW_CLOUD_SIZE#(7)
+    else
+        set effect param float4 1, "CloudLook", 0, 1, stepCloudNow#, 0
+    endif
+endfunction

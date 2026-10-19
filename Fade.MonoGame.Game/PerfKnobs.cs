@@ -19,14 +19,21 @@ namespace Fade.MonoGame.Core;
 /// A limit of n draws after at most n updates instead, and the game runs slower than real time.
 /// 0 leaves MonoGame's 500 ms.
 ///
+/// The limit is 3 unless something sets another. A machine that keeps up never needs more than
+/// one or two, so it only changes anything for one that cannot: a Windows laptop in October 2026
+/// went from 2 frames a second to about 15 with a limit of 2, at about half speed. 3 trades a
+/// little of that frame rate for speed.
+///
 /// The fish game's debug window has sliders for all three, and the launch options
 /// --slow-update, --slow-draw and --max-catchup set them from the start (Program.cs).
 /// </summary>
 public static class PerfKnobs
 {
+    public const int DefaultMaxCatchUp = 3;
+
     public static double updateDelayMs;
     public static double drawDelayMs;
-    public static int maxCatchUp;
+    public static int maxCatchUp = DefaultMaxCatchUp;
 
     static readonly TimeSpan _monoGameDefault = TimeSpan.FromMilliseconds(500);
 

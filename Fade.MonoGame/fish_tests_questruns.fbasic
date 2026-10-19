@@ -1841,3 +1841,48 @@ test quest_shark_lets_the_stock_market_pop_in_the_red from fishBoard
     assert QUEST_V(2) = 0, "and the shark did not eat it"
     end
 endtest
+
+
+` AVOID PUFFERS. only a group of pufferfish that pops is a pufferfish popping
+
+test quest_puffers_do_not_mind_a_pufferfish_that_the_stock_market_adds from fishBoard
+    grantPassive(ABILITY_INDEX_PASSIVE_STOCK_MARKET)
+    questForce(QUEST_PUFFERS)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert CELLS(0).value = QUEST_PUFFER_KIND, "the top left fish of the board of the tests is a pufferfish"
+
+    ` the stock market rolls high, and starts looking for its fish at the top left, before the group
+    global tPsRolls = 0
+    mock random stream
+        tPsRolls = tPsRolls + 1
+        tPsRoll = 0
+        if tPsRolls = 1 then tPsRoll = 9
+    endmock tPsRoll
+    testPut(6, 7, 6)
+    testPut(7, 7, 6)
+    testPut(8, 7, 6)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert testPops(0, 0), "the stock market added the pufferfish to the group"
+    assert QUEST_V(2) = 0, "but the group is of the fish that matched, and no pufferfish group popped"
+    end
+endtest
+
+test quest_puffers_do_not_mind_a_bunch_up from fishBoard
+    questForce(QUEST_PUFFERS)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    testPut(0, 0, QUEST_PUFFER_KIND)
+    testPut(1, 0, QUEST_PUFFER_KIND)
+    testPut(2, 1, QUEST_PUFFER_KIND)
+    tPbAt as vec = { x = 2, y = 1 }
+    tPbWay as vec = { x = 0, y = -1 }
+    doBunchUp(tPbAt, tPbWay)
+    assert CELLS(2).stack = 2, "the pufferfish went into a stack"
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert testPops(0, 0), "and left their cells"
+    assert QUEST_V(2) = 0, "which is not a pop"
+    end
+endtest

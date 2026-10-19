@@ -27,6 +27,11 @@ setup_quests:
     texture reserve texture id(TEX_Q_DOT), "Fish/Textures/Quests/Dot"
     texture reserve texture id(TEX_Q_SHARK), "Fish/Textures/Quests/Shark"
     texture reserve texture id(TEX_Q_STARFISH), "Fish/Textures/Quests/Starfish"
+    ` with the new art, the starfish of a quest is the starfish of the board, with its black line, since
+    ` a quest's pictures are not drawn by FishEffect, which would draw the line. see THE NEW ART in fish_headers_customart.
+    if NEW_ART
+        texture TEX_Q_STARFISH, "Fish/Textures/Art32/Worm_b"
+    endif
     texture reserve texture id(TEX_Q_PEARL), "Fish/Textures/Quests/Pearl"
     texture reserve texture id(TEX_Q_BUOY), "Fish/Textures/Quests/Buoy"
     texture reserve texture id(TEX_Q_ANGLER), "Fish/Textures/Quests/Angler"
@@ -1099,11 +1104,18 @@ endfunction
 
 
 ` list the groups that are popping: which group, what kind of fish, and how many
+` a fish that the "stock market" card added to a group is left out: the group is the kind of fish
+` that matched, wherever the extra fish is. it used to be the kind of its first fish on the board,
+` which could be the extra one, so a group with a pufferfish added to it read as pufferfish, and the
+` puffers started over. and fish that "bunch up" put into a stack go away, but they are not a pop.
 function questCollectGroups()
     QUEST_GROUP_N = 0
     qGroupLast = CELL_COUNT - 1
     for qGroupI = 0 to qGroupLast
-        if CELLS(qGroupI).comboBlownUp
+        qGroupCounts = CELLS(qGroupI).comboBlownUp
+        if CELLS(qGroupI).comboFillMask = 2 then qGroupCounts = 0
+        if CELLS(qGroupI).comboForce = FORCE_BUNCH then qGroupCounts = 0
+        if qGroupCounts
             qGroupId = CELLS(qGroupI).comboFillId
             qGroupAt = -1
             qGroupN = 0

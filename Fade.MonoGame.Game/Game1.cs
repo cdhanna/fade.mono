@@ -213,8 +213,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
             var gc2 = GC.CollectionCount(2);
             var memory = GC.GetGCMemoryInfo();
             var n = (double)_perfFrames;
-            var knobs = PerfKnobs.updateDelayMs > 0 || PerfKnobs.drawDelayMs > 0 || PerfKnobs.maxCatchUp > 0
-                ? string.Create(inv, $" | knobs: update +{PerfKnobs.updateDelayMs:F1} ms, draw +{PerfKnobs.drawDelayMs:F1} ms, catch-up {(PerfKnobs.maxCatchUp > 0 ? PerfKnobs.maxCatchUp.ToString() : "default")}")
+            var knobs = PerfKnobs.updateDelayMs > 0 || PerfKnobs.drawDelayMs > 0 || PerfKnobs.maxCatchUp != PerfKnobs.DefaultMaxCatchUp
+                ? string.Create(inv, $" | knobs: update +{PerfKnobs.updateDelayMs:F1} ms, draw +{PerfKnobs.drawDelayMs:F1} ms, catch-up {(PerfKnobs.maxCatchUp > 0 ? PerfKnobs.maxCatchUp.ToString() : "MonoGame's own")}")
                 : "";
             // MonoGame sleeps InactiveSleepTime (20 ms) on every frame while the window is not
             // in front, so a second in the background reads as about 40 frames.
@@ -490,6 +490,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
 #endif
 
         ResetFade();
+        RecordSystem.ApplyTurbo(this, GameSystem.graphicsDeviceManager);
 
 #if !BROWSER
         // A window the player can drag to a new size (see `set window resizable`). Subscribed
@@ -1378,8 +1379,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
         // `set screen effect scale`, the effect is run here, on a buffer of its own that is a
         // few times the size of the picture, and what goes to the window below is that buffer
         // with no effect. Otherwise the effect runs on the way to the window, once per pixel of it.
+        // mainBufferScale is per pixel of the game, and the buffer has renderScale of those per pixel
         Texture2D screenSource = RenderSystem.mainBuffer;
-        var screenSourceScale = RenderSystem.mainBufferScale;
+        var screenSourceScale = RenderSystem.mainBufferScale / RenderSystem.renderScale;
         var screenSampler = SamplerState.PointClamp;
         var screenBuffer = screenEffect != null ? RenderSystem.GetScreenBuffer() : null;
         if (screenBuffer != null)
@@ -1391,7 +1393,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
                 samplerState: SamplerState.PointClamp,
                 effect: screenEffect
                 );
-            _spriteBatch.Draw(RenderSystem.mainBuffer, Vector2.Zero, null, Color.White, 0f, Vector2.Zero, (float)RenderSystem.screenEffectScale, SpriteEffects.None, 0);
+            _spriteBatch.Draw(RenderSystem.mainBuffer, Vector2.Zero, null, Color.White, 0f, Vector2.Zero, RenderSystem.screenEffectScale / (float)RenderSystem.renderScale, SpriteEffects.None, 0);
             _spriteBatch.End();
 
             screenSource = screenBuffer;
