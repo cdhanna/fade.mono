@@ -360,9 +360,15 @@ endfunction
 ` ---------------------------------------------------------------------------------------------
 ` 5. SHARK. picked up. it eats any group that has a fish within QUEST_SHARK_REACH cells of it. V(0) is the cell that it is on, V(1) is how many swaps have popped fish
 ` without feeding it, V(2) is 1 when it has just eaten, and V(3) is how many swaps it takes.
-` questGroupScore, in fish_routines_quests, is where a group next to it scores nothing.
+` questGroupScore, in fish_routines_quests, is where a group next to it scores nothing. only what a
+` swap puts together feeds it, and not what falls into place after.
 ` ---------------------------------------------------------------------------------------------
 function questShark(qEv, qA, qB)
+    ` the board grew under it. see QEV_MOVED in fish_headers_quests.
+    if qEv = QEV_MOVED
+        questMoveV(0)
+    endif
+
     if qEv = QEV_START
         QUEST_V(0) = questOppositeCorner(QUEST_PICK_CELL)
         QUEST_V(3) = 10
@@ -1245,6 +1251,11 @@ endfunction
 ` fish, V(1) is how many it takes, and V(2) is how many cells long the tail is.
 ` ---------------------------------------------------------------------------------------------
 function questRemora(qEv, qA, qB)
+    ` the board grew under it. see QEV_MOVED in fish_headers_quests.
+    if qEv = QEV_MOVED
+        questMoveList(0, QUEST_LIST_N, 1)
+    endif
+
     if qEv = QEV_START
         QUEST_LIST_N = 0
         QUEST_V(1) = 10
@@ -1423,6 +1434,13 @@ endfunction
 ` of its swaps have popped fish.
 ` ---------------------------------------------------------------------------------------------
 function questEcho(qEv, qA, qB)
+    ` the board grew under it. see QEV_MOVED in fish_headers_quests.
+    if qEv = QEV_MOVED
+        ` the two cells of every swap that is waiting
+        questMoveList(0, QUEST_LIST_N / 3, 3)
+        questMoveList(1, QUEST_LIST_N / 3, 3)
+    endif
+
     if qEv = QEV_INIT
         QUEST_LIST_N = 0
         questProgress(0, 3)
@@ -1522,6 +1540,11 @@ function questPulseCorner(qCornerN)
 endfunction qCornerAt
 
 function questPulse(qEv, qA, qB)
+    ` the board grew under it. see QEV_MOVED in fish_headers_quests.
+    if qEv = QEV_MOVED
+        questMoveV(0)
+    endif
+
     if qEv = QEV_INIT
         QUEST_V(0) = questPickCell(1, CELL_COLUMN_COUNT - 2, 1, CELL_ROW_COUNT - 2)
         if QUEST_V(0) < 0
@@ -1593,6 +1616,12 @@ endfunction
 ` badge says which color wants what. three of them were filled in a handful of swaps.
 ` ---------------------------------------------------------------------------------------------
 function questWants(qEv, qA, qB)
+    ` the board grew under it. see QEV_MOVED in fish_headers_quests.
+    if qEv = QEV_MOVED
+        ` the cell of every pair
+        questMoveList(0, QUEST_LIST_N / 2, 2)
+    endif
+
     if qEv = QEV_SETTLE
         qWantMade = 0
         qWantN = 0
@@ -1776,6 +1805,12 @@ endfunction
 ` that it was last seen on, and V(1) is 1 when it has been swapped.
 ` ---------------------------------------------------------------------------------------------
 function questGlassFish(qEv, qA, qB)
+    ` the board grew under it. see QEV_MOVED in fish_headers_quests.
+    if qEv = QEV_MOVED
+        ` the row that it was last seen on
+        QUEST_V(0) = QUEST_V(0) + qB
+    endif
+
     if qEv = QEV_INIT
         qGlassAt = random stream(RNG_QUESTS, CELL_COLUMN_COUNT)
         ` when the diver is in that cell, the glass fish starts in the next one along
@@ -1846,6 +1881,12 @@ function questReflectPairs()
 endfunction qMirrorMade
 
 function questReflection(qEv, qA, qB)
+    ` the board grew under it. see QEV_MOVED in fish_headers_quests.
+    if qEv = QEV_MOVED
+        ` the row
+        QUEST_V(0) = QUEST_V(0) + qB
+    endif
+
     if qEv = QEV_INIT
         QUEST_V(1) = (CELL_COLUMN_COUNT - 9) / 2
 
@@ -1889,6 +1930,12 @@ endfunction
 ` and every swap that pops fish tugs the buoy one cell toward the cursor.
 ` ---------------------------------------------------------------------------------------------
 function questTether(qEv, qA, qB)
+    ` the board grew under it. see QEV_MOVED in fish_headers_quests.
+    if qEv = QEV_MOVED
+        questMoveV(0)
+        questMoveV(1)
+    endif
+
     if qEv = QEV_START
         QUEST_V(0) = QUEST_PICK_CELL
         QUEST_V(1) = questOppositeCorner(QUEST_PICK_CELL)
@@ -1951,6 +1998,11 @@ endfunction
 ` is, and V(1) to V(3) are 1 for the pearls that are lit. the list holds the cells of the three pearls.
 ` ---------------------------------------------------------------------------------------------
 function questLantern(qEv, qA, qB)
+    ` the board grew under it. see QEV_MOVED in fish_headers_quests.
+    if qEv = QEV_MOVED
+        questMoveList(0, 3, 1)
+    endif
+
     if qEv = QEV_START
         QUEST_V(4) = CELL_COLUMN_COUNT / 2 `not enough to get from one pearl to the next without two or three swaps that pop fish on the way
         QUEST_V(0) = QUEST_V(4)
@@ -2154,6 +2206,18 @@ function questForecastShift()
 endfunction
 
 function questForecast(qEv, qA, qB)
+    ` the board grew under it. see QEV_MOVED in fish_headers_quests.
+    if qEv = QEV_MOVED
+        ` a new column on the right has nothing waiting over it yet
+        if qA < CELL_COLUMN_COUNT
+            qForeNew = CELL_COLUMN_COUNT - 1
+            for qForeI = 0 to 15
+                QUEST_FORE(qForeNew * 16 + qForeI) = random stream(RNG_QUESTS, 7) + 1
+            next
+            QUEST_STACK(qForeNew) = 0
+        endif
+    endif
+
     if qEv = QEV_INIT
         for qForeI = 0 to 399
             QUEST_FORE(qForeI) = random stream(RNG_QUESTS, 7) + 1
@@ -2210,6 +2274,12 @@ endfunction
 ` when one of them has popped.
 ` ---------------------------------------------------------------------------------------------
 function questTradePlaces(qEv, qA, qB)
+    ` the board grew under it. see QEV_MOVED in fish_headers_quests.
+    if qEv = QEV_MOVED
+        questMoveV(0)
+        questMoveV(1)
+    endif
+
     if qEv = QEV_INIT
         qTradeTries = 0
         qTradeOne = -1
@@ -2289,6 +2359,17 @@ endfunction
 ` one more than the cell that the little fish was on as the last swap was made, or 0.
 ` ---------------------------------------------------------------------------------------------
 function questPilotFish(qEv, qA, qB)
+    ` the board grew under it. see QEV_MOVED in fish_headers_quests.
+    if qEv = QEV_MOVED
+        for qPilotN = 0 to 5
+            questMoveV(qPilotN)
+        next
+        ` V(6) is one more than a cell
+        if QUEST_V(6) > 0
+            QUEST_V(6) = questMovedCell(QUEST_V(6) - 1) + 1
+        endif
+    endif
+
     if qEv = QEV_INIT
         QUEST_V(0) = questCursorCell()
         QUEST_GLIDE_X# = getCellX(SELECTION_POS.x)
@@ -2398,6 +2479,13 @@ function questFerryArrive()
 endfunction
 
 function questFerry(qEv, qA, qB)
+    ` the board grew under it. see QEV_MOVED in fish_headers_quests.
+    if qEv = QEV_MOVED
+        for qFerryN = 1 to 3
+            questMoveV(qFerryN)
+        next
+    endif
+
     if qEv = QEV_INIT
         for qFerryN = 1 to 3
             QUEST_V(qFerryN) = ((CELL_ROW_COUNT * qFerryN) / 4) * CELL_COLUMN_COUNT
@@ -2567,6 +2655,11 @@ function questLassoHolds(qLoopFrom)
 endfunction qLoopShut
 
 function questLasso(qEv, qA, qB)
+    ` the board grew under it. see QEV_MOVED in fish_headers_quests.
+    if qEv = QEV_MOVED
+        questMoveList(0, QUEST_LIST_N, 1)
+    endif
+
     if qEv = QEV_INIT
         qLassoAt = questPickCell(2, CELL_COLUMN_COUNT - 3, 2, CELL_ROW_COUNT - 3)
         if qLassoAt < 0
@@ -2686,6 +2779,11 @@ endfunction
 ` of a swap say warmer or colder, but any pop on the cell digs it up.
 ` ---------------------------------------------------------------------------------------------
 function questTreasure(qEv, qA, qB)
+    ` the board grew under it. see QEV_MOVED in fish_headers_quests.
+    if qEv = QEV_MOVED
+        questMoveV(0)
+    endif
+
     if qEv = QEV_INIT
         QUEST_V(0) = random stream(RNG_QUESTS, CELL_COUNT)
         QUEST_V(1) = -1

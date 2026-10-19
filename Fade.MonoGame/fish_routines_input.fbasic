@@ -150,6 +150,9 @@ return
 
 
 process_input:
+    ` no moves while the fish are still falling in at the start of a game. see THE ENTRANCE in fish_headers_entrance.
+    if ENTRANCE_ON then return
+
     collectInput()
 
     ` a swap, or the cursor moving, does not stop the game while it plays out. it gets moved along a
@@ -225,6 +228,28 @@ process_input:
                 endif
             endif
 
+            ` "flipper" and "high stakes" are swaps like any other, with something more after them. see THREE
+            ` MORE CARDS in fish_headers_school.
+            schoolSwapMove = 0
+            if moveAbility.moveValue = [MOVE_FLIPPER] then schoolSwapMove = 1
+            if moveAbility.moveValue = [MOVE_HIGH_STAKES] then schoolSwapMove = 1
+            if schoolSwapMove
+                if moveAbility.movesLeft <= 0
+                    liveStarted = startLiveMove(swapDir.x, swapDir.y, 1)
+                    if liveStarted
+                        MOVE_ABILITY_BINDINGS(move.moveBindingIndex).movesLeft = moveAbility.resetTimer
+                        gosub update_ability_texts
+                        create basic tween MOVE_ABILITY_BINDINGS(move.moveBindingIndex).useShakeTweenId, 1, 0, 500, 0
+                        if moveAbility.moveValue = [MOVE_FLIPPER]
+                            schoolFlipped()
+                        else
+                            schoolStakes(2)
+                        endif
+                    endif
+                    return
+                endif
+            endif
+
             ` the "waste bucket" has nothing to do when no fish are belly up. it is not used, and its
             ` row shakes to say so. the cursor still moves, the same as for a move that is not ready.
             if moveAbility.moveValue = [MOVE_WASTE_BUCKET]
@@ -270,6 +295,7 @@ process_input:
 
             if moveAbility.movesLeft <= 0
                 usedAbility = 1
+                schoolStakes(1)
                 MOVE_ABILITY_BINDINGS(move.moveBindingIndex).movesLeft = moveAbility.resetTimer
                 gosub update_ability_texts
 

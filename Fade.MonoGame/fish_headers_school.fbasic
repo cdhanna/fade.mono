@@ -28,6 +28,18 @@ remstart
     written in the log of a game, which has no room for it. Tools/fall_in_line_art_gen.py draws its
     picture.
 
+    THREE MORE CARDS. they come after "fall in line", and they are dealt too.
+      "flipper", a move, is a swap like any other, and then both fish turn around. across, each one faces
+        the other way from the way that a swap would turn it; up or down, each one turns from the way that
+        it faced. schoolFlipped does it.
+      "high stakes", a move, is a swap like any other, whose points are doubled: the swap, the fish that
+        fall and pop after it, and the fish of a school that it pops, out in the background. SCHOOL_STAKES
+        is 2 from the swap until the next swap or special move, and every flushed fish keeps the stakes
+        it was flushed under in FLOCK_STAKES. the multiplier shows the doubled number, in gold.
+      "tolerance", a passive. when the cursor steps off a fish and sends its school away, a third of the
+        school stays, rounded down: the fish nearest the middle of the screen. schoolDepart does it.
+    Tools/school_cards_art_gen.py draws their pictures.
+
     THE DAWN. at daybreak, every group that the night held pops at once, and none of them was made by a
     swap just then, but by the moves of the night. so on that look at the board, every one of them that
     faces one way is a school, whatever made it: the night is for setting the board up, and that goes
@@ -185,6 +197,12 @@ global SCHOOL_ON = 1 `0 turns the whole thing off
 global SCHOOL_MIN = 3 `how many fish a school needs, at the least
 global dim SCHOOL_MADE(64) `1 for every kind that a school was made of, on this look at the board. schoolJudgeSwap clears them.
 #constant ABILITY_INDEX_FALL_IN_LINE 36
+#constant ABILITY_INDEX_FLIPPER 37
+#constant ABILITY_INDEX_HIGH_STAKES 38
+#constant ABILITY_INDEX_TOLERANCE 39
+global SCHOOL_STAKES = 1 `2 while the points of a "high stakes" swap are doubled. see THREE MORE CARDS.
+global dim FLOCK_STAKES(48) `the stakes that every fish out in the background was flushed under
+global dim SCHOOL_STAY(48) `1 for every fish out in the background that "tolerance" keeps, when its school is sent away
 global SCHOOL_DAWN = 0 `1 for the look at the board that day breaks for, when any group can be a school. see THE DAWN.
 global SCHOOL_NEED_SWAP = 1 `1 when only a group that the last swap put together can be a school
 global FORCE_SCHOOL = 120 `the fish ahead of a school that swims off. the row is added to this. see FORCED POPS in fish_headers.

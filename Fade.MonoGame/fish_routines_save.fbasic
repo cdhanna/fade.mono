@@ -20,6 +20,8 @@ remend
 
 ` write the game in progress into the preferences.
 save_game:
+    ` a demo is never saved, so the player's own game is still there afterwards. see THE DEMO in fish_headers_demo.
+    if DEMO_MODE then return
 
     ` all of this is written to the file once, at the end, instead of once for every number
     begin pref batch
@@ -266,6 +268,7 @@ return
 ` the main loop comes here on every frame of the game. it saves the game when something has changed.
 frame_autosave:
     if MENU_MODE then return
+    if DEMO_MODE then return
 
     ` not while fish are still popping and falling. the board is saved once it has settled.
     if REQUEST_COMBO_CHECK then return
@@ -284,6 +287,8 @@ return
 
 ` a new game has been started, so the saved one is not there to go back to any more.
 forget_saved_game:
+    ` nor does a demo throw the player's game away
+    if DEMO_MODE then return
     set pref SAVE_PREF + 1, 0
     SAVE_SIGNATURE = -1
 return
@@ -293,6 +298,9 @@ return
 menu_resume_game:
     gosub reset_game
     gosub load_game
+
+    ` the saved coral is drawn and the fish put away, so that they can fall in once the water is clear. see THE ENTRANCE in fish_headers_entrance.
+    gosub entrance_prepare
 
     TRANSITION_TO_MENU = 0
     gosub menu_transition

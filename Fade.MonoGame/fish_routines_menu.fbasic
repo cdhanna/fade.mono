@@ -30,6 +30,9 @@ setup_menu:
     reserve render target id(TARGET_MENU)
     render target TARGET_MENU
     set render target background color TARGET_MENU, rgb(0, 0, 0, 0)
+    ` its alpha builds up the way coverage does, so that something see-through drawn over the solid back of
+    ` the menu leaves it solid, and the game does not show through. see MenuCompositeEffect.fx.
+    set render target blend TARGET_MENU, 6
 
     ` the bubble mask is black, and the bubbles paint it white
     reserve render target id(TARGET_MASK)
@@ -695,6 +698,9 @@ menu_start_game:
     ` fish_routines_intro. for any other game, these two do nothing.
     gosub tutorial_prepare
 
+    ` the coral is drawn and the fish put away, so that they can fall in once the water is clear. see THE ENTRANCE in fish_headers_entrance.
+    gosub entrance_prepare
+
     TRANSITION_TO_MENU = 0
     gosub menu_transition
 
@@ -738,6 +744,9 @@ return
 ` up the high scores, over the game, the same way that the pause menu comes up.
 handle_game_end:
     if REQUEST_GAME_END = 0 then return
+
+    ` a demo never ends a game. frame_demo stops it instead. see THE DEMO in fish_headers_demo.
+    if DEMO_MODE then return
 
     ` let a swap that is playing out finish first
     if LIVE_MOVE_ACTIVE then return
@@ -923,6 +932,9 @@ menu_abandon_game:
 
     ` the new game can ask for the tutorial, the same as one that starts from the main menu
     gosub tutorial_prepare
+
+    ` and the fish fall in, the same as well. see THE ENTRANCE in fish_headers_entrance.
+    gosub entrance_prepare
 
     ` and then the bubbles take the curtain away, the same as when the game starts from the main menu
     TRANSITION_TO_MENU = 0
@@ -1278,6 +1290,7 @@ reset_game:
     ` the seed of the new game comes first, because everything that is picked from here on is
     ` picked from it. see THE SEED OF A GAME in fish_headers_seed.
     seedNewGame()
+    entranceCancel() `a game that ends while its fish are still falling in. see THE ENTRANCE in fish_headers_entrance.
 
     ` if the game that is being thrown away was still in its tutorial, the pieces that it had not got to are put back
     gosub tutorial_end
@@ -1374,6 +1387,7 @@ reset_game:
     tideReset()
     glowReset() `the glow. see fish_headers_glow.
     schoolReset() `which way the fish face. see fish_headers_school.
+    resetWanted() `the shape that is wanted. see fish_headers_wanted.
 
     ` any score that was still floating up off of the fish
     for resetI = 0 to SCORE_TEXT_COUNT - 1

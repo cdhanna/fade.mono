@@ -11,6 +11,8 @@
 ` texture file leaves the texture alone when there is no such file, so this runs after
 ` load_textures, over the textures that are already there.
 load_custom_art:
+    gosub load_new_art
+
     ` the seven that every game starts with
     loadCustomArt(TEX_PUFFER, TEX_PUFFER, "CustomArt/Pufferfish_b.png", "CustomArt/Pufferfish.png")
     loadCustomArt(TEX_CATFISH, TEX_CATFISH, "CustomArt/Catfish_b.png", "CustomArt/Catfish.png")
@@ -43,14 +45,93 @@ load_custom_art:
 return
 
 ` the picture with a line around it if there is one, and the plain one if not. slot is where
-` CUSTOM_ART_OUTLINE keeps which it was.
+` CUSTOM_ART_OUTLINE keeps which it was. with neither, the slot is left alone: load_new_art has
+` already set it for the new art's thick line.
 function loadCustomArt(artTexId, artSlot, outlinedPath$, plainPath$)
     artOk = texture file(artTexId, outlinedPath$)
     if artOk
         CUSTOM_ART_OUTLINE(artSlot) = 1
     else
-        CUSTOM_ART_OUTLINE(artSlot) = 0
         artOk = texture file(artTexId, plainPath$)
+        if artOk then CUSTOM_ART_OUTLINE(artSlot) = 0
     endif
     CUSTOM_ART_COUNT = CUSTOM_ART_COUNT + artOk
 endfunction
+
+
+` THE NEW ART. see fish_headers_customart. the old picture is already loaded, by load_textures, and the
+` new one goes on top of it, under the same id. the CustomArt folder comes after, so it still wins.
+load_new_art:
+    if is env set("FISH_OLD_ART") then return
+    NEW_ART = 1
+    if is env set("FISH_ART_OUTLINE")
+        if val(env$("FISH_ART_OUTLINE")) = 0 then NEW_ART_OUTLINE = 0
+    endif
+    gosub load_new_art_pictures
+
+    ` the color of each kind of fish, for its score text, its bubbles, its ghost and the rest, goes with the
+    ` new pictures. each is the hue that covers most of the picture, brightened so that it reads on the water.
+    ` the goldfish and the angelfish are both yellow, so the angelfish has the cream of its stripes, and the
+    ` stingray, which is grey, has a pale blue. the deep purples are a little lighter than the pictures, for
+    ` the same reason. load_textures has the colors of the old pictures.
+    FISH_COLORS(getFishColorIndex(TEX_PUFFER)) = rgb(255, 160, 22)
+    FISH_COLORS(getFishColorIndex(TEX_CATFISH)) = rgb(150, 140, 255)
+    FISH_COLORS(getFishColorIndex(TEX_GOLDFISH)) = rgb(255, 221, 35)
+    FISH_COLORS(getFishColorIndex(TEX_ANGELFISH)) = rgb(255, 240, 205)
+    FISH_COLORS(getFishColorIndex(TEX_CRAB)) = rgb(255, 79, 1)
+    FISH_COLORS(getFishColorIndex(TEX_BASS)) = rgb(80, 225, 235) `the seahorse
+    FISH_COLORS(getFishColorIndex(TEX_WORM)) = rgb(255, 62, 143) `the starfish
+    FISH_COLORS(getFishColorIndex(TEX_JELLY)) = rgb(210, 110, 255)
+    FISH_COLORS(getFishColorIndex(TEX_RAY)) = rgb(175, 190, 215)
+return
+
+` the new pictures, with the black line or without it, as NEW_ART_OUTLINE says. the pictures with the
+` line and without it are the same size, so the fish on the board can have theirs changed under them.
+` with NEW_ART_THICK (the default), the pictures are the ones without a line, and FishEffect draws a
+` thick one around them instead, the color of deep water: one pixel of the old 16 pixel art, the weight
+` that the old fish have. it is worked out on
+` the 32 pixels of the picture (a 2 in CUSTOM_ART_OUTLINE; the _b pictures of the CustomArt folder are a 1).
+` their own thin line would sit inside it, so it is left off.
+load_new_art_pictures:
+    newArtEnd$ = ""
+    if NEW_ART_OUTLINE
+        if NEW_ART_THICK = 0 then newArtEnd$ = "_b"
+    endif
+    texture TEX_PUFFER, "Fish/Textures/Art32/Pufferfish" + newArtEnd$
+    texture TEX_CATFISH, "Fish/Textures/Art32/Catfish" + newArtEnd$
+    texture TEX_GOLDFISH, "Fish/Textures/Art32/Goldfish" + newArtEnd$
+    texture TEX_ANGELFISH, "Fish/Textures/Art32/Angelfish" + newArtEnd$
+    texture TEX_CRAB, "Fish/Textures/Art32/Crab" + newArtEnd$
+    texture TEX_BASS, "Fish/Textures/Art32/Bass" + newArtEnd$ `a seahorse, in the place of the bass
+    texture TEX_WORM, "Fish/Textures/Art32/Worm" + newArtEnd$ `a starfish, in the place of the worm
+    texture TEX_JELLY, "Fish/Textures/Art32/Jellyfish" + newArtEnd$
+    texture TEX_RAY, "Fish/Textures/Art32/Stingray" + newArtEnd$
+
+    CUSTOM_ART_OUTLINE(TEX_PUFFER) = NEW_ART_THICK * 2
+    CUSTOM_ART_OUTLINE(TEX_CATFISH) = NEW_ART_THICK * 2
+    CUSTOM_ART_OUTLINE(TEX_GOLDFISH) = NEW_ART_THICK * 2
+    CUSTOM_ART_OUTLINE(TEX_ANGELFISH) = NEW_ART_THICK * 2
+    CUSTOM_ART_OUTLINE(TEX_CRAB) = NEW_ART_THICK * 2
+    CUSTOM_ART_OUTLINE(TEX_BASS) = NEW_ART_THICK * 2
+    CUSTOM_ART_OUTLINE(TEX_WORM) = NEW_ART_THICK * 2
+    CUSTOM_ART_OUTLINE(TEX_JELLY) = NEW_ART_THICK * 2
+    CUSTOM_ART_OUTLINE(TEX_RAY) = NEW_ART_THICK * 2
+return
+
+` keys in debug mode, for the new pictures. frame_dbg comes here. they do not look at the CustomArt
+` folder again, so a picture from there gives way to the new one.
+`   1: the thin black line that is drawn into the pictures, on or off.
+`   2: the thick line that FishEffect draws, on or off. while it is on, 1 does nothing that can be seen.
+frame_debug_art_outline:
+    if NEW_ART = 0 then return
+    newArtKeyHit = 0
+    if new key down(scancode("D1"))
+        NEW_ART_OUTLINE = 1 - NEW_ART_OUTLINE
+        newArtKeyHit = 1
+    endif
+    if new key down(scancode("D2"))
+        NEW_ART_THICK = 1 - NEW_ART_THICK
+        newArtKeyHit = 1
+    endif
+    if newArtKeyHit then gosub load_new_art_pictures
+return

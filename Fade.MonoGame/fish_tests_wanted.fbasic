@@ -1,0 +1,167 @@
+remstart
+    THE TESTS OF THE WANTED SHAPE. see fish_headers_wanted.
+    most of them want a T: three across, and one under the middle.
+remend
+
+test wanted_catch_raises_the_multiplier from fishBoard
+    wantedSetShape(1)
+    tWantedBefore = WANTED_CATCHES
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(1, 1, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert WANTED_CATCHES = tWantedBefore + 1, "a T is caught when a T is wanted"
+    assert CURRENT_SCORE = 100, "four fish score 10 + 20 + 30 + 40, the same as ever"
+    assert WANTED_MULT_DUE > 0, "the multiplier goes up when they pop"
+    assert WANTED_SHAPE = 2, "and then the next shape is wanted"
+    tWantedMult = SCORE_MULTIPLIER
+    MULT_PROGRESS = 1
+    wantedMultiplier()
+    assert SCORE_MULTIPLIER = tWantedMult + 1, "it goes up by one"
+    assert MULT_PROGRESS = 0, "and its bar is emptied"
+    end
+endtest
+
+test wanted_catch_the_shape_turned_and_flipped from fishBoard
+    ` an L is wanted, and a J standing up is caught as one
+    wantedSetShape(0)
+    tWantedBefore = WANTED_CATCHES
+    testPut(1, 0, 6)
+    testPut(1, 1, 6)
+    testPut(0, 2, 6)
+    testPut(1, 2, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert WANTED_CATCHES = tWantedBefore + 1, "a J is an L, flipped over and turned"
+    end
+endtest
+
+test wanted_catch_every_shape_every_way from fishBoard
+    ` every shape, turned each of the four ways here, by hand, and flipped over and turned again, and put
+    ` in the middle of the board
+    tWantedMissed = 0
+    for tWantedShape = 0 to WANTED_SHAPE_COUNT - 1
+        for tWantedWay = 0 to 7
+            runto _loop
+            testBoard()
+            wantedSetShape(tWantedShape)
+            for tWantedK = 0 to 3
+                tWantedCode = WANTED_SHAPES(tWantedShape * 4 + tWantedK)
+                tWantedC = tWantedCode mod 4
+                tWantedR = tWantedCode / 4
+                if tWantedWay >= 4 then tWantedC = 0 - tWantedC
+                tWantedN = 0
+                tWantedTurns = tWantedWay mod 4
+                while tWantedN < tWantedTurns
+                    tWantedN = tWantedN + 1
+                    tWantedWas = tWantedC
+                    tWantedC = 0 - tWantedR
+                    tWantedR = tWantedWas
+                endwhile
+                testPut(4 + tWantedC, 4 + tWantedR, 6)
+            next
+            tWantedBefore = WANTED_CATCHES
+            REQUEST_COMBO_CHECK = 1
+            runto _combos_judged
+            if WANTED_CATCHES = tWantedBefore
+                tWantedMissed = tWantedMissed + 1
+                print "wanted: missed shape " + str$(tWantedShape) + " way " + str$(tWantedWay)
+            endif
+        next
+    next
+    assert tWantedMissed = 0, "every shape is caught, turned any way, and flipped over or not"
+    end
+endtest
+
+test wanted_another_shape_scores_the_usual from fishBoard
+    wantedSetShape(1)
+    tWantedBefore = WANTED_CATCHES
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(3, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert WANTED_CATCHES = tWantedBefore, "a line is not a T"
+    assert WANTED_MULT_DUE = 0, "so the multiplier does not go up for it"
+    assert WANTED_SHAPE = 1, "and the T is still wanted"
+    end
+endtest
+
+test wanted_not_a_group_of_another_size from fishBoard
+    wantedSetShape(1)
+    tWantedBefore = WANTED_CATCHES
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(1, 1, 6)
+    testPut(1, 2, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert WANTED_CATCHES = tWantedBefore, "a T with one more fish under it is not a T"
+    end
+endtest
+
+test wanted_bubbles_come_up_from_every_group from fishBoard
+    wantedSetShape(1)
+    tWantedBefore = WANTED_FORMATIONS
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert WANTED_FORMATIONS = tWantedBefore + 1, "three in a row sends up the wanted shape in bubbles"
+    end
+endtest
+
+test wanted_light_goes_through_every_cell from fishBoard
+    ` a T is the hard one for a walk: the middle has to be gone over twice
+    wantedSetShape(1)
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(1, 1, 6)
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    tWantedCovered = 0
+    for tWantedK = 0 to 3
+        tWantedHit = 0
+        for tWantedStep = 0 to WANTED_WALK_COUNT - 1
+            if WANTED_WALK(tWantedStep) = WANTED_CELLS(tWantedK) then tWantedHit = 1
+        next
+        tWantedCovered = tWantedCovered + tWantedHit
+    next
+    assert tWantedCovered = 4, "the light goes through all four cells"
+    tWantedJumps = 0
+    for tWantedStep = 1 to WANTED_WALK_COUNT - 1
+        tWantedNext = wantedTouches(WANTED_WALK(tWantedStep - 1), WANTED_WALK(tWantedStep))
+        if tWantedNext = 0 then tWantedJumps = tWantedJumps + 1
+    next
+    assert tWantedJumps = 0, "and every step of it is to a cell next to the last"
+    assert WANTED_SHIMMERS(testIndex(1, 1)) = 1, "and the rainbow floods the fish of the group"
+    end
+endtest
+
+test wanted_shapes_are_at_most_two_rows_deep from fishBoard
+    tWantedDeep = 0
+    for tWantedShape = 0 to WANTED_SHAPE_COUNT - 1
+        wantedSetShape(tWantedShape)
+        if WANTED_DEEP > tWantedDeep then tWantedDeep = WANTED_DEEP
+    next
+    assert tWantedDeep = 2, "no wanted shape is shown three rows deep"
+    end
+endtest

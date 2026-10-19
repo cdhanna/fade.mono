@@ -303,6 +303,14 @@ test fast_cards_are_kept_apart_in_the_codec from fishBoard
     assert getCodecPref(31) = CODEC_PREF + 31, "the cards that there were before keep their places in the preferences"
     assert getCodecPref(ABILITY_INDEX_MOVE_ROTATE) = CODEC_PREF_LATE, "and the ones of the fast have a run of their own,"
     assert getCodecPref(ABILITY_INDEX_OATH) = CODEC_PREF_LATE + 2, "which does not run into anything"
+    ` the run used to start inside the saved quest, at 2700. the schools, at 5000, are the last thing
+    ` kept before it, and the log of the high scores, at 10000, the first after it.
+    tLateLast = getCodecPref(CARD_LENGTH - 1)
+    tLateAfter = SCHOOL_PREF + 1000
+    tLateClear = 1
+    if CODEC_PREF_LATE < tLateAfter then tLateClear = 0
+    if tLateLast >= HISCORE_LOG_PREF then tLateClear = 0
+    assert tLateClear = 1, "and that run is clear of the saved quest and everything else"
     assert getCodecPref(CODEC_ENTRY_CORAL) = CODEC_PREF_EXTRA, "and the entries that are not cards are where they were"
     end
 endtest

@@ -1,0 +1,296 @@
+
+` THE ENTRANCE. see fish_headers_entrance.
+
+` before the bubbles uncover the board. the coral is drawn all grown, the way it is, so that it is there the
+` moment the water shows, and none of the coral of the game before is. then the fish are put away, so that
+` they can fall in, and the cursor with them, and the HUD is moved off the edges of the screen, so that it
+` can slide back in. menu_start_game, menu_abandon_game and menu_resume_game come here.
+entrance_prepare:
+    gosub entrance_setup_hud
+    ENTRANCE_FLOCK# = 1.0
+    ENTRANCE_START = 0
+    ENTRANCE_LAST_PAST = -1
+
+    entWanted = 1
+    if TUTORIAL_STAGE = 1 then entWanted = 0
+    if PENDING_BOARD_EXPANSIONS > 0 then entWanted = 0
+    if REQUEST_ABILITY_SELECTION then entWanted = 0
+    ENTRANCE_ON = entWanted
+
+    ` the key hints along the bottom are laid out on every frame of the game, and the bubbles uncover the
+    ` board a frame before the first one. without this, they are all on top of each other in the corner.
+    gosub frame_hints
+
+    ` on before the coral is drawn, so that no fish has a shadow on it yet
+    for entI = 0 to CELL_COUNT - 1
+        CORAL_SHOWN#(entI) = CORAL_CELLS(entI)
+        CORAL_SIT#(entI) = 1 - CORAL_SIT_SHRINK# * CORAL_CELLS(entI)
+    next
+    stepCoral()
+
+    if ENTRANCE_ON = 0 then return
+
+    ENTRANCE_FLOCK# = 0
+    for entI = 0 to CELL_COUNT - 1
+        set sprite alpha CELLS(entI).spriteId, 0
+    next
+    hide sprite SELECTION_SPRITE
+
+    ` the sides of the HUD, off the edges, and every card up above its place
+    set transform position ENTRANCE_TF_LEFT, 0 - ENTRANCE_HUD_PUSH, 0
+    set transform position ENTRANCE_TF_RIGHT, ENTRANCE_HUD_PUSH, 0
+    set transform position ENTRANCE_TF_TOP, 0, 0 - ENTRANCE_HUD_LIFT
+    for entI = 0 to PASSIVE_BINDINGS_LENGTH - 1
+        set transform position ENTRANCE_TF_PASSIVE(entI), 0, 0 - ENTRANCE_CARD_DROP
+    next
+    for entI = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
+        set transform position ENTRANCE_TF_MOVE(entI), 0, 0 - ENTRANCE_CARD_DROP
+    next
+return
+
+` makes the transforms of the HUD, and attaches the HUD to them, the first time an entrance is wanted.
+` they all sit at 0, 0 until then, and after. see THE HUD COMES IN TOO in fish_headers_entrance.
+entrance_setup_hud:
+    if ENTRANCE_HUD_READY then return
+    ENTRANCE_HUD_READY = 1
+
+    reserve transform id(ENTRANCE_TF_LEFT)
+    transform ENTRANCE_TF_LEFT, 0, 0
+    reserve transform id(ENTRANCE_TF_RIGHT)
+    transform ENTRANCE_TF_RIGHT, 0, 0
+    reserve transform id(ENTRANCE_TF_TOP)
+    transform ENTRANCE_TF_TOP, 0, 0
+
+    ` the left: the count of moves, the multiplier, and the clock of the special moves
+    attach text to transform MOVES_LABEL_TEXT_ID, ENTRANCE_TF_LEFT
+    attach text to transform MOVE_COUNT_TEXT_ID, ENTRANCE_TF_LEFT
+    attach text to transform MULT_LABEL_TEXT_ID, ENTRANCE_TF_LEFT
+    attach text to transform MULT_TEXT_ID, ENTRANCE_TF_LEFT
+    attach text to transform MULT_NUM_TEXT_ID, ENTRANCE_TF_LEFT
+    attach sprite to transform MULT_BAR_BACK_SPRITE, ENTRANCE_TF_LEFT
+    attach sprite to transform MULT_BAR_FILL_SPRITE, ENTRANCE_TF_LEFT
+    attach sprite to transform COOLDOWN_CLOCK_SPRITE, ENTRANCE_TF_LEFT
+
+    ` the right: the rounds that are left
+    attach text to transform ROUNDS_LABEL_TEXT_ID, ENTRANCE_TF_RIGHT
+    attach text to transform ROUND_COUNT_TEXT_ID, ENTRANCE_TF_RIGHT
+
+    ` the top: the bar of the round
+    attach sprite to transform SCORE_BAR.backgroundSpriteId, ENTRANCE_TF_TOP
+    attach sprite to transform SCORE_BAR.foregroundSpriteId, ENTRANCE_TF_TOP
+    attach sprite to transform OVERFLOW_SPRITE, ENTRANCE_TF_TOP
+    attach text to transform SCORE_BAR.textNumId, ENTRANCE_TF_TOP
+    attach text to transform SCORE_BAR.textTitleId, ENTRANCE_TF_TOP
+
+    ` a transform for every row of cards, inside the one of its side: the passives are on the right, and
+    ` the special moves on the left
+    for entI = 0 to PASSIVE_BINDINGS_LENGTH - 1
+        entTf = 0
+        reserve transform id(entTf)
+        transform entTf, 0, 0
+        set transform parent entTf, ENTRANCE_TF_RIGHT
+        ENTRANCE_TF_PASSIVE(entI) = entTf
+        attach text to transform PASSIVE_BINDINGS(entI).titleTextId, entTf
+    next
+    for entI = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
+        entTf = 0
+        reserve transform id(entTf)
+        transform entTf, 0, 0
+        set transform parent entTf, ENTRANCE_TF_LEFT
+        ENTRANCE_TF_MOVE(entI) = entTf
+        attach text to transform MOVE_ABILITY_BINDINGS(entI).titleTextId, entTf
+        attach text to transform MOVE_ABILITY_BINDINGS(entI).keyTextId, entTf
+        attach text to transform MOVE_ABILITY_BINDINGS(entI).timerTextId, entTf
+    next
+return
+
+` every transform of the HUD back at 0, 0, which is where it is when there is no entrance
+function entranceHudHome()
+    if ENTRANCE_HUD_READY
+        set transform position ENTRANCE_TF_LEFT, 0, 0
+        set transform position ENTRANCE_TF_RIGHT, 0, 0
+        set transform position ENTRANCE_TF_TOP, 0, 0
+        for entHomeI = 0 to PASSIVE_BINDINGS_LENGTH - 1
+            set transform position ENTRANCE_TF_PASSIVE(entHomeI), 0, 0
+        next
+        for entHomeI = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
+            set transform position ENTRANCE_TF_MOVE(entHomeI), 0, 0
+        next
+    endif
+endfunction
+
+` a new game started some other way puts everything back the way it was. reset_game comes here.
+function entranceCancel()
+    if ENTRANCE_ON
+        ENTRANCE_ON = 0
+        ENTRANCE_FLOCK# = 1.0
+        show sprite SELECTION_SPRITE
+        entranceHudHome()
+    endif
+endfunction
+
+` how far into its fall a fish is, from 0 when it starts to 1 when it is in its place. it is less than 0
+` while it waits for its turn. entPast is how long ago the first one started, in ms.
+function entranceFallT(entCell, entPast)
+    entUp = CELL_ROW_COUNT - CELLS(entCell).coord.y
+    entUp = entUp - 1
+    entWait = (CELLS(entCell).coord.x + entUp) * ENTRANCE_STEP_MS
+    entFallT# = entPast - entWait
+    entFallMs# = ENTRANCE_FALL_MS
+    entFallT# = entFallT# / entFallMs#
+endfunction entFallT#
+
+` 1 when the fish in this cell has fallen into its place, or there is no entrance. the shadows on the coral
+` wait for it.
+function entranceLanded(entCell)
+    entLanded = 1
+    if ENTRANCE_ON
+        entLanded = 0
+        if ENTRANCE_START > 0
+            entLandT# = entranceFallT(entCell, game ms() - ENTRANCE_START)
+            if entLandT# >= 1 then entLanded = 1
+        endif
+    endif
+endfunction entLanded
+
+` every frame of the entrance. update_frame comes here, after frame_fish_fx, so that this has the last word
+` on where the fish are and how much of them shows. it comes before the passives and the special moves are
+` drawn, so that their fades are started over before they are looked at.
+frame_entrance:
+    if ENTRANCE_ON = 0 then return
+
+    entNow = game ms()
+    if ENTRANCE_START = 0
+        ENTRANCE_START = entNow
+        gosub entrance_deal_cards
+    endif
+    entPast = entNow - ENTRANCE_START
+
+    entAllIn = 1
+    entDropPx# = ENTRANCE_DROP * CELL_SIZE
+    for entI = 0 to CELL_COUNT - 1
+        entT# = entranceFallT(entI, entPast)
+        entX = getCellX(CELLS(entI).coord.x)
+        entY = getCellY(CELLS(entI).coord.y)
+        if entT# < 1
+            entAllIn = 0
+            entAlpha# = 0
+            entOffset# = entDropPx#
+            if entT# > 0
+                ` it falls fast and goes a little past its place, then settles back up into it
+                entU# = entT# - 1.0
+                entEase# = 1.0 + 2.70158 * entU# * entU# * entU# + 1.70158 * entU# * entU#
+                entOffset# = entDropPx# * (1.0 - entEase#)
+                entAlpha# = entT# * 4.0
+                if entAlpha# > 1 then entAlpha# = 1
+            endif
+            position sprite CELLS(entI).spriteId, entX, entY - entOffset#
+            set sprite alpha CELLS(entI).spriteId, entAlpha# * 255
+        else
+            ` it has just landed: it goes to its place for good, and sends up a bubble
+            entWasT# = entranceFallT(entI, ENTRANCE_LAST_PAST)
+            if entWasT# < 1
+                position sprite CELLS(entI).spriteId, entX, entY
+                set sprite alpha CELLS(entI).spriteId, 255
+                entKind = CELLS(entI).value
+                if entKind > 0
+                    spawnBubbles(entX, entY + CELL_SIZE / 3, CELL_SIZE / 4, 1, 0, FISH_COLORS(getFishColorIndex(entKind)))
+                endif
+            endif
+        endif
+    next
+    ENTRANCE_LAST_PAST = entPast
+
+    ` the schools out in the water fade in while the fish fall
+    entFlockMs# = ENTRANCE_FLOCK_MS
+    ENTRANCE_FLOCK# = entPast / entFlockMs#
+    if ENTRANCE_FLOCK# > 1 then ENTRANCE_FLOCK# = 1
+
+    ` the sides of the HUD slide in, fast and then slowing down
+    entHudT# = entPast - ENTRANCE_HUD_DELAY_MS
+    entHudMs# = ENTRANCE_HUD_MS
+    entHudT# = entHudT# / entHudMs#
+    if entHudT# < 0 then entHudT# = 0
+    if entHudT# < 1 then entAllIn = 0
+    if entHudT# > 1 then entHudT# = 1
+    entHudLeft# = 1.0 - entHudT#
+    entHudLeft# = entHudLeft# * entHudLeft# * entHudLeft#
+    set transform position ENTRANCE_TF_LEFT, 0 - ENTRANCE_HUD_PUSH * entHudLeft#, 0
+    set transform position ENTRANCE_TF_RIGHT, ENTRANCE_HUD_PUSH * entHudLeft#, 0
+    set transform position ENTRANCE_TF_TOP, 0, 0 - ENTRANCE_HUD_LIFT * entHudLeft#
+
+    ` and the cards drop into their places, each at its own time, with the same dip that the fish have
+    for entI = 0 to PASSIVE_BINDINGS_LENGTH - 1
+        entCardY# = entranceCardY(ENTRANCE_CARD_AT(entI), entPast)
+        if entCardY# < 0 then entAllIn = 0
+        set transform position ENTRANCE_TF_PASSIVE(entI), 0, entCardY#
+    next
+    for entI = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
+        entCardY# = entranceCardY(ENTRANCE_CARD_AT(PASSIVE_BINDINGS_LENGTH + entI), entPast)
+        if entCardY# < 0 then entAllIn = 0
+        set transform position ENTRANCE_TF_MOVE(entI), 0, entCardY#
+    next
+
+    if entAllIn = 0 then return
+    if ENTRANCE_FLOCK# < 1 then return
+
+    ` all in. every fish is put exactly in its place, the cursor comes back, and the schools are told to
+    ` look at themselves once more, at full strength. see FLOCK_DRAWN in fish_headers_school.
+    ENTRANCE_ON = 0
+    for entI = 0 to CELL_COUNT - 1
+        updateCell(CELLS(entI))
+        set sprite alpha CELLS(entI).spriteId, 255
+    next
+    show sprite SELECTION_SPRITE
+    for entI = 0 to FLOCK_MAX - 1
+        if FLOCK_DRAWN(entI) = 2 then FLOCK_DRAWN(entI) = 1
+    next
+    entranceHudHome()
+return
+
+` how far above its place a card is, at entPast ms into the entrance, for a card that drops at entAt ms.
+` 0 once it is in its place, or for a row with no card in it (entAt is -1).
+function entranceCardY(entAt, entPast)
+    entCardY# = 0
+    if entAt >= 0
+        entCardT# = entPast - entAt
+        entCardMs# = ENTRANCE_CARD_MS
+        entCardT# = entCardT# / entCardMs#
+        entCardY# = 0 - ENTRANCE_CARD_DROP
+        if entCardT# >= 1 then entCardY# = 0
+        if entCardT# > 0
+            if entCardT# < 1
+                entCardU# = entCardT# - 1.0
+                entCardEase# = 1.0 + 2.70158 * entCardU# * entCardU# * entCardU# + 1.70158 * entCardU# * entCardU#
+                entCardY# = (0 - ENTRANCE_CARD_DROP) * (1.0 - entCardEase#)
+            endif
+        endif
+    endif
+endfunction entCardY#
+
+` the first frame of the entrance. every card that the player has gets a time to drop in, one after another:
+` the special moves first, from the top of their list, and then the passives. each one's fade is started
+` over to go with it, so that it shows as it drops, not before. a new game usually has none.
+entrance_deal_cards:
+    entCardN = 0
+    for entI = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
+        ENTRANCE_CARD_AT(PASSIVE_BINDINGS_LENGTH + entI) = -1
+        if entI < MOVE_SLOT_COUNT
+            if MOVE_ABILITY_BINDINGS(entI).assigned
+                entCardAt = ENTRANCE_CARD_START_MS + entCardN * ENTRANCE_CARD_STEP_MS
+                ENTRANCE_CARD_AT(PASSIVE_BINDINGS_LENGTH + entI) = entCardAt
+                create basic tween MOVE_ABILITY_BINDINGS(entI).fadeTweenId, 0, 1, ENTRANCE_CARD_MS, entCardAt
+                entCardN = entCardN + 1
+            endif
+        endif
+    next
+    for entI = 0 to PASSIVE_BINDINGS_LENGTH - 1
+        ENTRANCE_CARD_AT(entI) = -1
+        if entI < PASSIVE_COUNT
+            entCardAt = ENTRANCE_CARD_START_MS + entCardN * ENTRANCE_CARD_STEP_MS
+            ENTRANCE_CARD_AT(entI) = entCardAt
+            create basic tween PASSIVE_BINDINGS(entI).fadeTweenId, 0, 1, ENTRANCE_CARD_MS, entCardAt
+            entCardN = entCardN + 1
+        endif
+    next
+return

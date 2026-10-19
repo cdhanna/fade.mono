@@ -1,0 +1,89 @@
+remstart
+    THE DEMO
+    when the main menu has been left alone for a while, the game plays itself, the way that an arcade
+    machine does: the bubbles take the menu away, a game is dealt, and "DEMO MODE" blinks over it while
+    a player that is not there makes the moves. anything at all that is pressed stops it, and the bubbles
+    bring the menu back.
+
+    a demo is a show of a few SCENES, one after another, with a wave of bubbles between them, and each one
+    shows off something that the game does not say out loud: the night that falls when the tide goes in and
+    out, the schools that swim off, a late round with stingrays and jellyfish, and last of all, the diver
+    that a bottle brings down. so it is a hint, too. after the diver, the bubbles bring the menu back.
+
+    the moves are not a recording. a recording only plays back the same game while the rules and the deal
+    of its seed stay the same, and they change whenever the game is balanced. so the scene sets the game
+    up, and the demo player picks its own moves, every time: the swap that pops the most, near where the
+    cursor is, with a little luck in it so that no two demos are alike. it walks the cursor there a step at
+    a time, and then swaps, like a person would.
+
+    nothing that happens in a demo is kept. the preferences are in a sandbox for as long as it lasts (see
+    `begin pref sandbox`), so the saved game, the codec and everything else in prefs.json are left alone,
+    and the few things that are kept in memory too are not touched while DEMO_MODE is 1: codecSeeCard,
+    modSet, morseBottle, save_game, forget_saved_game, the steam timeline. a demo round never gets the
+    upgrade screen (the bar empties out and the next round starts, the way that it does in a zen game),
+    and a demo never ends a game: the end of a game, or an ending, stops the demo instead.
+
+    fish_routines_demo has the rest. what the rest of the game does for it:
+    - the main loop does `gosub frame_demo` on every frame, before anything else looks at the menu.
+    - update_frame calls demoTick() on every frame, so that the banner blinks, and a press is heard,
+      even while fish are popping.
+    for trying it out: FISH_DEMO_IDLE_MS sets how long the menu has to be left alone, FISH_DEMO_LENGTH_MS
+    how long a scene lasts (the last one too), and FISH_DEMO_SCENE plays only that scene (1 to
+    DEMO_SCENE_COUNT), and then stops.
+remend
+
+global DEMO_MODE = 0 `1 while the game is playing itself
+global DEMO_IDLE_MS = 30000 `how long the main menu has to be left alone before a demo starts
+global DEMO_LENGTH_MS = 40000 `how long a scene plays for. it moves on at the first quiet moment after this.
+global DEMO_LENGTH_LAST_MS = 55000 `and the last one, the diver, which needs the time to dive, take its pictures, and go back up
+global DEMO_IDLE_FROM = 0 `when the menu was last touched, on the clock of the game
+global DEMO_MENU_FRAME = -10 `the last frame that the main menu was looked at. a page of its own in between does not count as being left alone.
+global DEMO_STARTED_MS = 0
+global DEMO_STOP_WANTED = 0 `1 once something has been pressed
+
+` THE SCENES are played one after another, in this order, with a wave of bubbles between them, and the
+` diver is always the last: its reveal is the end of the show. after it, the bubbles bring the menu back.
+global DEMO_SCENE_COUNT = 5
+global DEMO_SCENE_BASICS = 1 `the first round: swaps, and pops
+global DEMO_SCENE_NIGHT = 2 `the tide turns, night falls, the groups wait for the morning, and the morning pops them
+global DEMO_SCENE_SCHOOL = 3 `every fish faces the same way, so the groups swim off as schools
+global DEMO_SCENE_LATE = 4 `a late round, with cards, stingrays, jellyfish and a big multiplier
+global DEMO_SCENE_DIVER = 5 `a bottle is carried up to the top row, and the diver comes down to take pictures. always the last.
+global DEMO_SCENE = 0 `the scene that is playing
+global DEMO_SCENE_ONLY = 0 `a scene to play on its own, and then stop, from FISH_DEMO_SCENE. 0 plays them all.
+global DEMO_NIGHT_AFTER = 2 `in the night scene, night falls after this many swaps
+
+` THE PLAYER. it thinks, walks the cursor to the swap, and swaps, and then waits for the board to settle.
+global DEMO_STATE = 0 `0 thinking, 1 walking, 2 waiting for the swap to play out
+global DEMO_THINK_UNTIL = 0 `when it has thought for long enough
+global DEMO_THINK_MS = 350 `how long it thinks, at the least
+global DEMO_THINK_MORE_MS = 400 `and up to this much more
+global DEMO_STEP_MS = 120 `how long a step of the cursor takes
+global DEMO_STEP_AT = 0 `when the next step can be taken
+global DEMO_TARGET = 0 `the cell that the cursor walks to
+global DEMO_DIR_X = 1 `and the way that it swaps from there
+global DEMO_DIR_Y = 0
+global DEMO_SCRIPTED = 0 `1 when the scene has picked the next swap itself, so the player does not pick one
+global DEMO_SWAPS = 0 `how many swaps it has made in this demo
+global DEMO_MOVES_BEFORE = 0 `the count of moves and the score just before the swap, to tell whether it did anything
+global DEMO_SCORE_BEFORE = 0
+global DEMO_NIGHT_BEFORE = 0 `the moves that the night had left, or 0 in the day
+global DEMO_LAST_CELL = -1 `the swap it made last, which it does not make again straight away: that would undo it
+global DEMO_LAST_DOWN = 0
+global DEMO_BAN_COUNT = 0 `swaps that did nothing. they are not tried again until the score moves.
+global dim DEMO_BAN_CELL(64)
+global dim DEMO_BAN_DOWN(64)
+global dim DEMO_MARK(400) `for counting the fish of a group. a cell is counted when its mark is DEMO_STAMP.
+global dim DEMO_STACK(400)
+global DEMO_STAMP = 0
+global DEMO_TOUCHES_DIVER = 0 `1 when the group that was counted last is next to the diver
+global DEMO_SWAP_DIVER = 0 `1 when the swap that was weighed last pops a group next to the diver, which can be photographed
+global DEMO_DIVER_X = -10 `where the diver is, while the swaps are weighed. far off the board when there is none.
+global DEMO_DIVER_Y = -10
+
+` THE BANNER
+global DEMO_TEXT_ID = 0
+global DEMO_BLINK_ON_MS = 650 `it shows for this long
+global DEMO_BLINK_OFF_MS = 400 `and is gone for this long
+global DEMO_BANNER_Y = 0 `setup_demo works it out
+global ORDER_DEMO = 150 `on top of the board, the info screen and the overlay bubbles, and under the menu, whose bubbles wipe it away

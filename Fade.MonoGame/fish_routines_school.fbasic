@@ -34,12 +34,20 @@ setup_school:
     for schoolSetupI = 0 to 63
         SCHOOL_ART_FACE(schoolSetupI) = 0
     next
-    SCHOOL_ART_FACE(TEX_PUFFER) = -1
+    ` every one of these pictures faces right: its tail is on the left, and its eye on the right
+    SCHOOL_ART_FACE(TEX_PUFFER) = 1
     SCHOOL_ART_FACE(TEX_CATFISH) = 1
     SCHOOL_ART_FACE(TEX_GOLDFISH) = 1
     SCHOOL_ART_FACE(TEX_ANGELFISH) = 1
     SCHOOL_ART_FACE(TEX_BASS) = 1
     SCHOOL_ART_FACE(TEX_WORM) = 1
+    ` but the new catfish and angelfish face left. see THE NEW ART in fish_headers_customart.
+    ` the new worm is a starfish, which looks at you, so either way will do; it stays 1, because 0
+    ` would mean it can never be in a school, and the new art must not change the rules.
+    if NEW_ART
+        SCHOOL_ART_FACE(TEX_CATFISH) = -1
+        SCHOOL_ART_FACE(TEX_ANGELFISH) = -1
+    endif
 
     ` the puffs of smoke of the fish that pop out in the background, the same as the ones of the board
     for schoolSetupI = 0 to SCHOOL_PUFF_MAX - 1
@@ -1095,13 +1103,21 @@ function schoolDepart(schoolDepartKind)
     if schoolDepartKind > 0
         schoolDepartNow = game ms()
         schoolDepartMiddle = WORLD_WIDTH / 2
+
+        ` with "tolerance", a third of them stay. see THREE MORE CARDS in fish_headers_school.
         for schoolDepartI = 0 to FLOCK_MAX - 1
-            schoolDepartGo = FLOCK_ON(schoolDepartI)
-            if FLOCK_KIND(schoolDepartI) <> schoolDepartKind then schoolDepartGo = 0
-            if FLOCK_FLY(schoolDepartI) then schoolDepartGo = 0
-            if FLOCK_FLUSH(schoolDepartI) <> 0 then schoolDepartGo = 0
-            if FLOCK_LEAVE(schoolDepartI) <> 0 then schoolDepartGo = 0
-            if FLOCK_BORN(schoolDepartI) > schoolDepartNow then schoolDepartGo = 0
+            SCHOOL_STAY(schoolDepartI) = 0
+        next
+        if CARDS(ABILITY_INDEX_TOLERANCE).obtained
+            schoolDepartKept = schoolTolerate(schoolDepartKind, schoolDepartNow)
+            if schoolDepartKept > 0
+                showPassiveUsed(ABILITY_INDEX_TOLERANCE)
+            endif
+        endif
+
+        for schoolDepartI = 0 to FLOCK_MAX - 1
+            schoolDepartGo = schoolCanDepart(schoolDepartI, schoolDepartKind, schoolDepartNow)
+            if SCHOOL_STAY(schoolDepartI) then schoolDepartGo = 0
             if schoolDepartGo
                 FLOCK_LEAVE_AT(schoolDepartI) = schoolDepartNow
                 FLOCK_LEAVE(schoolDepartI) = 1
@@ -1109,6 +1125,82 @@ function schoolDepart(schoolDepartKind)
                 SCHOOL_DEPART_COUNT = SCHOOL_DEPART_COUNT + 1
             endif
         next
+    endif
+endfunction
+
+
+` 1 if this fish out in the background is one of this kind that is there, and can be sent away
+function schoolCanDepart(schoolCanI, schoolCanKind, schoolCanNow)
+    schoolCanGo = FLOCK_ON(schoolCanI)
+    if FLOCK_KIND(schoolCanI) <> schoolCanKind then schoolCanGo = 0
+    if FLOCK_FLY(schoolCanI) then schoolCanGo = 0
+    if FLOCK_FLUSH(schoolCanI) <> 0 then schoolCanGo = 0
+    if FLOCK_LEAVE(schoolCanI) <> 0 then schoolCanGo = 0
+    if FLOCK_BORN(schoolCanI) > schoolCanNow then schoolCanGo = 0
+endfunction schoolCanGo
+
+
+` "tolerance" keeps a third of a school that is sent away, rounded down, and two thirds of it go. the
+` ones that stay are the ones nearest the middle of the screen, and SCHOOL_STAY marks them. it gives
+` back how many stay. see THREE MORE CARDS in fish_headers_school.
+function schoolTolerate(schoolTolKind, schoolTolNow)
+    schoolTolN = 0
+    for schoolTolI = 0 to FLOCK_MAX - 1
+        schoolTolCan = schoolCanDepart(schoolTolI, schoolTolKind, schoolTolNow)
+        if schoolTolCan then schoolTolN = schoolTolN + 1
+    next
+
+    schoolTolKeep = 0
+    schoolTolNext = 3
+    while schoolTolNext <= schoolTolN
+        schoolTolKeep = schoolTolKeep + 1
+        schoolTolNext = schoolTolNext + 3
+    endwhile
+
+    schoolTolMiddle# = WORLD_WIDTH / 2
+    schoolTolKept = 0
+    while schoolTolKept < schoolTolKeep
+        schoolTolBest = -1
+        schoolTolBestGap# = 0
+        for schoolTolI = 0 to FLOCK_MAX - 1
+            schoolTolCan = schoolCanDepart(schoolTolI, schoolTolKind, schoolTolNow)
+            if SCHOOL_STAY(schoolTolI) then schoolTolCan = 0
+            if schoolTolCan
+                schoolTolGap# = FLOCK_X#(schoolTolI) - schoolTolMiddle#
+                if schoolTolGap# < 0 then schoolTolGap# = 0 - schoolTolGap#
+                if schoolTolBest < 0 then schoolTolBestGap# = schoolTolGap# + 1
+                if schoolTolGap# < schoolTolBestGap#
+                    schoolTolBest = schoolTolI
+                    schoolTolBestGap# = schoolTolGap#
+                endif
+            endif
+        next
+        if schoolTolBest >= 0
+            SCHOOL_STAY(schoolTolBest) = 1
+        endif
+        schoolTolKept = schoolTolKept + 1
+    endwhile
+endfunction schoolTolKeep
+
+
+` "flipper": the swap has started, and both of its fish turn around. a swap across has already
+` turned them, in startLiveMove, so this turns them the other way from that. see THREE MORE CARDS.
+function schoolFlipped()
+    SCHOOL_FACE(LIVE_MOVE_A) = 0 - SCHOOL_FACE(LIVE_MOVE_A)
+    SCHOOL_FACE(LIVE_MOVE_B) = 0 - SCHOOL_FACE(LIVE_MOVE_B)
+endfunction
+
+
+` the points are doubled from now on, for 2, or back to normal, for 1. the multiplier shows it. see
+` THREE MORE CARDS in fish_headers_school.
+function schoolStakes(schoolStakesAre)
+    if schoolStakesAre <> SCHOOL_STAKES
+        SCHOOL_STAKES = schoolStakesAre
+        refreshMultiplier(1)
+        if schoolStakesAre > 1
+            MULT_PUNCH_DIR = 1
+            create basic tween MULT_PUNCH_TWEEN_ID, 1, 0, 500, 0
+        endif
     endif
 endfunction
 
@@ -1162,6 +1254,7 @@ function schoolFlush(schoolFlushWay)
         endif
         if schoolFlushGo
             FLOCK_FLUSH(schoolFlushI) = schoolFlushWay
+            FLOCK_STAKES(schoolFlushI) = SCHOOL_STAKES
             FLOCK_PUNCH_AT(schoolFlushI) = 0
             SCHOOL_FLUSH_ORDER(schoolFlushN) = schoolFlushI
             schoolFlushN = schoolFlushN + 1
@@ -1256,7 +1349,9 @@ endfunction
 ` way that the points of a group do. each one is worth 10 more than the one before it, times the multiplier.
 function schoolFlushPop(schoolPopFish)
     SCHOOL_FLUSH_SCORE = SCHOOL_FLUSH_SCORE + 10
-    schoolPopPoints = SCHOOL_FLUSH_SCORE * SCORE_MULTIPLIER
+    schoolPopStakes = FLOCK_STAKES(schoolPopFish)
+    if schoolPopStakes < 1 then schoolPopStakes = 1
+    schoolPopPoints = SCHOOL_FLUSH_SCORE * SCORE_MULTIPLIER * schoolPopStakes
     schoolPopKind = FLOCK_KIND(schoolPopFish)
     schoolPopTint = FISH_COLORS(getFishColorIndex(schoolPopKind))
     schoolPopX = FLOCK_X#(schoolPopFish)
@@ -1810,6 +1905,7 @@ function stepFlock(flockElapsed#)
                     if flockFocus# > .01 then flockLook = 1
                     if flockT# < 1 then flockLook = 1
                     if FLOCK_DRAWN(flockI) < 2 then flockLook = 1
+                    if ENTRANCE_FLOCK# < 1 then flockLook = 1 `fading in at the start of a game. see THE ENTRANCE in fish_headers_entrance.
                     if flockLook > 0
                         flockClear# = SCHOOL_FOCUS_CLEAR * .01 * flockFocus#
 
@@ -1823,6 +1919,7 @@ function stepFlock(flockElapsed#)
                         flockAlpha# = 255 + (FLOCK_ALPHA - 255) * flockT#
                         flockAlpha# = flockAlpha# + (255 - flockAlpha#) * flockClear#
                         flockAlpha# = flockAlpha# * (1 - SCHOOL_LEAVE_FADE * .01 * flockFar#)
+                        flockAlpha# = flockAlpha# * ENTRANCE_FLOCK#
                         flockR# = 255 + (FLOCK_HAZE_R - 255) * flockT#
                         flockG# = 255 + (FLOCK_HAZE_G - 255) * flockT#
                         flockB# = 255 + (FLOCK_HAZE_B - 255) * flockT#

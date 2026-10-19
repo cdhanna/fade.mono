@@ -243,7 +243,7 @@ public partial class FadeMonoGameCommands
 
     /// <summary>
     /// <para>How many updates MonoGame may run to catch up before it has to draw. 0 is MonoGame's
-    /// own limit, which is as many as half a second of falling behind needs (30).</para>
+    /// own limit, which is as many as half a second of falling behind needs (30). It is 3 unless something sets it.</para>
     /// </summary>
     /// <remarks>
     /// On a machine that cannot keep up, MonoGame's own limit keeps the game at full speed and

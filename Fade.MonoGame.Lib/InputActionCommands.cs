@@ -654,4 +654,32 @@ public partial class FadeMonoGameCommands
     {
         return InputSystem.lastDevice != InputSystem.oldLastDevice;
     }
+
+    /// <summary>
+    /// <para>Returns <c>1</c> on a frame when anything at all is pressed: any key, any mouse button, or any button or stick on a controller.</para>
+    /// <para>On every other frame it returns <c>0</c>. Moving the mouse does not count.</para>
+    /// </summary>
+    /// <remarks>
+    /// It does not care which action, if any, the press is bound to. It is the "press any key" of a
+    /// title screen, and the way to tell that somebody has come back to a game that was left alone.
+    /// </remarks>
+    /// <example>
+    /// Wait on a title screen until something is pressed:
+    /// <code>
+    /// font 1, "font"
+    /// text 1, 460, 190, 1, "Press any key"
+    /// DO
+    ///   IF new any input() THEN EXIT
+    ///   sync
+    /// LOOP
+    /// </code>
+    /// </example>
+    /// <returns><c>1</c> if something was pressed this frame, otherwise <c>0</c>.</returns>
+    /// <seealso cref="IsNewInputDevice">new input device</seealso>
+    /// <seealso cref="Sync">sync</seealso>
+    [FadeBasicCommand("new any input")]
+    public static bool IsNewAnyInput()
+    {
+        return InputSystem.IsNewAnyActivity();
+    }
 }

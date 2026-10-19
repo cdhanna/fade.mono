@@ -143,6 +143,7 @@ setup_coral:
     gosub setup_tide
     gosub setup_glow
     gosub setup_school
+    gosub setup_wanted
 
     resetCoral()
 
@@ -159,6 +160,9 @@ handle_coral_ending:
         if DIVER_ENDING_DUE then CORAL_ENDING_DUE = CORAL_ENDING_DIVER
     endif
     if CORAL_ENDING_DUE = 0 then return
+
+    ` nor has a demo an ending. frame_demo stops it instead. see THE DEMO in fish_headers_demo.
+    if DEMO_MODE then return
 
     ` the board has to settle first, and a round that was just won gets its upgrade first
     if LIVE_MOVE_ACTIVE then return
@@ -1911,6 +1915,10 @@ function stepCoral()
                 if CORAL_NEAR(coralDrawI)
                     if CELLS(coralDrawI).value > 0
                         if CELLS(coralDrawI).comboBlownUp = 0 then coralShadowShow = 1
+                    endif
+                    ` and not a fish that has not fallen in yet, at the start of a game. see THE ENTRANCE in fish_headers_entrance.
+                    if coralShadowShow
+                        if entranceLanded(coralDrawI) = 0 then coralShadowShow = 0
                     endif
                 endif
             endif

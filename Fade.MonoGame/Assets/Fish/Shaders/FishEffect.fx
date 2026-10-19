@@ -27,6 +27,10 @@
 //                a fish that is drawn brighter glows more, too.
 //                -2 is a fish in the light of the diver's flashlight, which is drawn the way that it is in the day.
 //                10 more than that is a fish that shimmers around its edge at night, which is a jellyfish.
+//                1000 more than all of the rest is a fish that is flooded with the colors of the rainbow, day
+//                or night: they wash through it in a wave that crosses the screen, and its edge shimmers in
+//                them, the way that a jellyfish's does at night. that is a group in the wanted shape, before
+//                it pops. see THE RAINBOW FLOOD, further down, and fish_headers_wanted.
 //                100 more than all of that is a fish with a black line drawn around it, one pixel wide,
 //                just outside its picture. that is for art from the CustomArt folder that has no line
 //                of its own. see fish_headers_customart.
@@ -43,6 +47,10 @@ float4x4 MatrixTransform;
 // the game sets this on every frame. a parameter that the game never sets does not keep a value that
 // it is given here, so the things that never change are #defines instead.
 float2 Night;
+// THE RAINBOW FLOOD of a catch. x is where its band of light starts, along the wave, and y where it ends: the
+// near and far ends of the group. z is how far through its one sweep it has got, from 0 to 1, and w is how
+// wide the band is, along the wave. the game works these out, in fish_routines_wanted.
+float4 Rainbow;
 
 // what is left of the color of the body of a fish at night
 #define NIGHT_BODY float3(0.52, 0.57, 0.70)
@@ -56,6 +64,21 @@ float2 Night;
 
 // a fish is this many pixels across
 #define NIGHT_PIXELS 16.0
+// THE RAINBOW FLOOD. how far along the wave a pixel of the screen is, across and down. this is
+// WANTED_WAVE_X# and WANTED_WAVE_Y# in fish_headers_wanted, and the two have to be kept the same by hand.
+// how fast the colors inside the band run, how soft the band's edge is (the higher, the harder), and how much
+// of the rainbow there is, away from the band and in it.
+#define RAINBOW_WAVE   float2(0.0060, 0.0035)
+#define RAINBOW_SPEED  1.2
+#define RAINBOW_SHARP  1.5
+#define RAINBOW_LOW    0.06
+#define RAINBOW_HIGH   0.85
+
+// how many pixels across the new art is. the thick line around it is worked out on these. see THE THICK LINE.
+#define FINE_PIXELS 32.0
+
+// the color of the thick line: deep water, rgb(14, 22, 44). softer against the sea than black. see THE THICK LINE.
+#define THICK_LINE_COLOR float3(14.0 / 255.0, 22.0 / 255.0, 44.0 / 255.0)
 
 // how far out the halo goes, where 1 is the size of a fish, and how strong it is at the middle
 #define NIGHT_HALO_REACH 0.95
@@ -110,8 +133,10 @@ struct VertexShaderOutput
 	// and w is how brightly the fish glows right now, which is 0 for a fish that does not
 	float4 CountGlow : TEXCOORD4;
 
-	// x is 1 for a fish that shimmers around its edge at night, and y is 1 for one with a black line around it
-	float2 Flags : TEXCOORD5;
+	// x is 1 for a fish that shimmers around its edge at night, and 2 or more for one that is flooded with the
+	// rainbow. y is 1 for one with a black line around it. z is where the fish is along the wave of the
+	// rainbow, from where it is on the screen.
+	float4 Flags : TEXCOORD5;
 };
 
 VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
@@ -149,7 +174,12 @@ VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
 	// the wave of light gets to every fish at its own time, by where the middle of the fish is on the screen
 	float2 middle = position.xy - corner * custom.w * (1.0 + grow) * lift;
 	float wave = 0.5 + 0.5 * sin(Night.y * NIGHT_WAVE_SPEED - dot(middle, NIGHT_WAVE));
-	// 100 more says that it has a line around it. the rest is read from what is left.
+	// 200 more says that it has the thick line of the 32 pixel art around it, and 100 more the line of
+	// a 16 pixel picture. the rest is read from what is left. see THE LINE AROUND IT.
+	float dayShimmer = step(500.0, custom2.w);
+	custom2.w -= 1000.0 * dayShimmer;
+	float thick = step(150.0, custom2.w);
+	custom2.w -= 200.0 * thick;
 	float outline = step(50.0, custom2.w);
 	custom2.w -= 100.0 * outline;
 	float glows = step(-0.5, custom2.w);
@@ -162,7 +192,7 @@ VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
 	float brighter = max(custom2.w - 10.0 * shimmers, 0.0);
 
 	output.CountGlow = float4(clamp(custom.z, 1.0, MAX_STACK), brighter, saturate(Night.x) * (1.0 - lamp), glows * (0.62 + 0.38 * wave) * (1.0 + 1.6 * brighter));
-	output.Flags = float2(shimmers, outline);
+	output.Flags = float4(shimmers + 2.0 * dayShimmer, outline + 2.0 * thick, dot(middle, RAINBOW_WAVE), 0.0);
 
 	output.Position = mul(position, MatrixTransform);
 	output.Color = color;
@@ -208,8 +238,22 @@ float4 SampleLayer(VertexShaderOutput input, float index)
 	float one = 1.0 / NIGHT_PIXELS;
 	float2 cell = (floor((uv + .5) * NIGHT_PIXELS) + .5) / NIGHT_PIXELS - .5;
 	float beside = max(max(solidAt(cell + float2(one, 0.0)), solidAt(cell - float2(one, 0.0))), max(solidAt(cell + float2(0.0, one)), solidAt(cell - float2(0.0, one))));
-	float line1 = beside * step(c.a, .5) * input.Flags.y;
+	float line1 = beside * step(c.a, .5) * step(.5, input.Flags.y) * step(input.Flags.y, 1.5);
+
+	// THE THICK LINE, for the 32 pixel art. the line above lands on the corners between its pixels,
+	// and comes out one of them wide. this one is worked out on the picture's own pixels instead: an
+	// empty one that is 1 or 2 from the picture, straight across or down, or 1 from it on a slant, is
+	// the color of deep water. 2 of them is one pixel of the old art, so the new fish get the weight of
+	// line that the old ones have, and it follows their own shape, with rounded corners. it was picked
+	// from a few widths, shapes and colors tried side by side. see THE NEW ART in fish_headers_customart.
+	float fine = 1.0 / FINE_PIXELS;
+	float near = max(max(solidAt(uv + float2(fine, 0.0)), solidAt(uv - float2(fine, 0.0))), max(solidAt(uv + float2(0.0, fine)), solidAt(uv - float2(0.0, fine))));
+	near = max(near, max(max(solidAt(uv + float2(2.0 * fine, 0.0)), solidAt(uv - float2(2.0 * fine, 0.0))), max(solidAt(uv + float2(0.0, 2.0 * fine)), solidAt(uv - float2(0.0, 2.0 * fine)))));
+	near = max(near, max(max(solidAt(uv + float2(fine, fine)), solidAt(uv - float2(fine, fine))), max(solidAt(uv + float2(fine, -fine)), solidAt(uv - float2(fine, -fine)))));
+	float line2 = near * step(c.a, .5) * step(1.5, input.Flags.y);
+
 	c = lerp(c, float4(0, 0, 0, 1), line1);
+	c = lerp(c, float4(THICK_LINE_COLOR, 1), line2);
 	c.a *= step(.001, there);
 
 	// the ones in the back are darker, so that the one in front stands out
@@ -293,8 +337,23 @@ float4 MainPS(VertexShaderOutput input) : COLOR
 	float around = atan2(spot.y, spot.x);
 	float sweep = 0.5 + 0.5 * sin(around * 2.0 - Night.y * 3.2);
 	float twinkle = 0.5 + 0.5 * sin(Night.y * 9.0 + hash(pixel + 29.0) * 40.0);
-	float shimmer = rim * saturate(0.25 + 0.75 * sweep * sweep) * (0.45 + 0.55 * twinkle) * night * input.Flags.x;
+	float flooded = step(1.5, input.Flags.x);
+	float shimmerOn = saturate(saturate(input.Flags.x) * night + flooded);
+	float shimmer = rim * saturate(0.25 + 0.75 * sweep * sweep) * (0.45 + 0.55 * twinkle) * shimmerOn;
 	float3 shimmerColor = lerp(light, float3(1.0, 1.0, 1.0), 0.6);
+
+	// THE RAINBOW FLOOD. a band of rainbow light sweeps once through the group, from one end of it to the other,
+	// across the screen, and lights up each fish as it goes over it, so it goes from one fish of the group to
+	// the next, and not all of them at once. inside the band the colors run through the rainbow. the edge
+	// shimmers in them, as the band goes by, and only faintly away from it.
+	float along = input.Flags.z + dot(input.Quad, float2(0.05, 0.03));
+	float bandAt = lerp(Rainbow.x - Rainbow.w, Rainbow.y + Rainbow.w, saturate(Rainbow.z));
+	float band = pow(saturate(1.0 - abs(along - bandAt) / max(Rainbow.w, 0.001)), RAINBOW_SHARP) * step(0.0, Rainbow.z);
+	float3 hue = 0.5 + 0.5 * cos(6.2832 * (along * 6.0 - Night.y * RAINBOW_SPEED + input.Quad.x * 0.15 + float3(0.0, 0.33, 0.67)));
+	float wash = flooded * result.a * (RAINBOW_LOW + (RAINBOW_HIGH - RAINBOW_LOW) * band);
+	result.rgb = lerp(result.rgb, result.rgb * 0.45 + hue * 0.85, wash);
+	shimmer *= lerp(1.0, 0.15 + 0.85 * band, flooded);
+	shimmerColor = lerp(shimmerColor, saturate(hue + 0.35), flooded);
 	result.rgb = lerp(result.rgb, shimmerColor, shimmer);
 	result.a = max(result.a, shimmer);
 

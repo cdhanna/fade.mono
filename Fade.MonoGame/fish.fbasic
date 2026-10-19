@@ -26,6 +26,12 @@ global WORLD_HEIGHT = 320
 ` it leaves a strip along the bottom of the screen for the line of key hints.
 global ABILITY_ROWS_Y = WORLD_HEIGHT - 46
 set render size WORLD_WIDTH, WORLD_HEIGHT
+
+` every pixel of the world is drawn with 2 by 2 pixels. the world stays 570 by 320, and a fish is still
+` 16 across, but the new fish art is 32 pixels, and at 1 it lost every other row and column of them.
+` the text is cleaner too, because the font is made big and shrunk to fit. the old 16 pixel art looks
+` the same as it did. this has to come before any render target is made: they are made at this scale too.
+set render scale 2
 ` set stage sampler 1 SAMPLER_STATE_POINT
 ` set background color rgb(32, 40, 64)
 set render target background color 1, rgb(32, 40, 64)
@@ -65,8 +71,10 @@ set screen effect 1
 
 ` the water runs on a picture three times the size of the game's, and that is stretched to the window.
 ` without this it runs once for every pixel of the window, which on a big screen is a great many more.
-` at 2 it starts to look soft on a big screen, and 1 is a blur.
-set screen effect scale 3
+` at 2 it starts to look soft on a big screen, and 1 is a blur. it is 4 and not 3 because of the render
+` scale of 2 above: the picture is 1140 across, and 3 times the world would stretch it by one and a half,
+` which doubles every other pixel.
+set screen effect scale 4
 
 
 effect FISH_FX_ID, "Fish/Shaders/FishEffect"
@@ -115,6 +123,7 @@ gosub setup_cameo `the words that these swim through for are set in setup_morse
 gosub setup_beat `these use the bubble effect too
 gosub setup_angler `on top of the dark of info mode, and after the hints that it puts its lights in
 gosub setup_questtalk `the creatures that talk when a quest is taken. it borrows the voices of the angler.
+gosub setup_demo `the game plays itself when the main menu is left alone. see THE DEMO in fish_headers_demo.
 
 
 
@@ -175,12 +184,16 @@ do
     ` the bar under a steam recording of the game shows the menus in one color, and the game in another
     timelineMode = 1
     if MENU_MODE then timelineMode = 3
+    if DEMO_MODE then timelineMode = 3 `nobody is playing a demo. see THE DEMO in fish_headers_demo.
     if timelineMode <> STEAM_TIMELINE_MODE
         STEAM_TIMELINE_MODE = timelineMode
         set steam timeline mode timelineMode
     endif
     gosub frame_steam_timeline
     perf lap 1
+
+    ` the main menu, left alone, starts a demo, and anything pressed in a demo stops it. see THE DEMO in fish_headers_demo.
+    gosub frame_demo
 
     if MENU_MODE
         ` a menu is up, so the game waits underneath it.

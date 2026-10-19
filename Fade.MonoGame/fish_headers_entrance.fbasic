@@ -1,0 +1,44 @@
+
+` THE ENTRANCE. a new game, or one that is taken up again, does not just snap into place when the bubbles
+` take the menu away. the coral is there already, under the water, before the bubbles uncover it, and the
+` fish are not. once the water is clear, the fish fall into the board one after another, from the bottom
+` left corner up to the top right, each with a little dip past its place and a puff of bubbles where it
+` lands. the fish of the schools out in the water fade in while they do. the cursor comes last, and moves
+` are not taken until it has. see fish_routines_entrance.
+`
+` it is only how things look. nothing is picked from the streams, and no fish is dealt or turned, so a
+` seed plays the same with it as without it. it is not used by the tests, which skip the menu, nor by the
+` tutorial, which brings the board in its own way, nor for a saved game that has a card to choose or the
+` board to grow first.
+global ENTRANCE_ON = 0 `1 from entrance_prepare until the last fish has landed and the schools are all there
+global ENTRANCE_START = 0 `game ms() when the first fish started to fall. 0 until the first frame after the bubbles
+global ENTRANCE_LAST_PAST = -1 `how far into the entrance the frame before was, in ms, so that a fish can tell when it has just landed
+global ENTRANCE_FLOCK# = 1.0 `how much of the schools out in the water shows: from 0 to 1 while they fade in
+
+global ENTRANCE_FALL_MS = 420 `how long one fish takes to fall into its place
+global ENTRANCE_STEP_MS = 30 `how much later each fish starts than the one next to it, across or up
+global ENTRANCE_DROP = 3 `how many cells above its place a fish starts from
+global ENTRANCE_FLOCK_MS = 1200 `how long the schools take to fade in
+
+` THE HUD COMES IN TOO. the count of moves, the multiplier and the special moves slide in from the left,
+` the rounds that are left and the passives from the right, and the bar of the round down from the top.
+` then the cards that the player has, the special moves and the passives, drop into their places one
+` after another. each piece of the HUD is attached to a transform for its side, which sits at 0, 0 the
+` rest of the time, so nothing else that moves the HUD about has to know. each card has a transform of
+` its own, inside the one of its side. entrance_setup_hud makes them, the first time that they are needed.
+global ENTRANCE_HUD_READY = 0 `1 once the transforms are made and the HUD is attached to them
+global ENTRANCE_TF_LEFT = 0
+global ENTRANCE_TF_RIGHT = 0
+global ENTRANCE_TF_TOP = 0
+global dim ENTRANCE_TF_PASSIVE(PASSIVE_BINDINGS_LENGTH) `a transform for every row of the passives
+global dim ENTRANCE_TF_MOVE(MOVE_ABILITY_BINDINGS_LENGTH) `and for every row of the special moves
+global dim ENTRANCE_CARD_AT(PASSIVE_BINDINGS_LENGTH + MOVE_ABILITY_BINDINGS_LENGTH) `when each card drops in, in ms into the entrance. -1 for a row with no card
+
+global ENTRANCE_HUD_DELAY_MS = 120 `when the sides start to slide in, in ms into the entrance
+global ENTRANCE_HUD_MS = 550 `how long they take
+global ENTRANCE_HUD_PUSH = 150 `how far off the side of the screen the left and right of the HUD start
+global ENTRANCE_HUD_LIFT = 70 `how far above the top the bar starts
+global ENTRANCE_CARD_START_MS = 450 `when the first card drops in
+global ENTRANCE_CARD_STEP_MS = 90 `how much later each card drops than the one before
+global ENTRANCE_CARD_MS = 280 `how long one card takes to drop into its place
+global ENTRANCE_CARD_DROP = 14 `how far above its place a card starts

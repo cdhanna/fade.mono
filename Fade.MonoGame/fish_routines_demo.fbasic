@@ -1,0 +1,668 @@
+goto routines_demo_exit
+
+remstart
+    THE DEMO. see fish_headers_demo.
+remend
+
+` the banner that blinks over the game. fish.fbasic does this once, with the rest of the setup. it is
+` where the hints of the keys are, along the bottom, which a demo puts away: nobody is at the keys.
+setup_demo:
+    reserve text id(DEMO_TEXT_ID)
+    DEMO_BANNER_Y = WORLD_HEIGHT - 12
+    text loc DEMO_TEXT_ID, WORLD_WIDTH / 2, DEMO_BANNER_Y, SCORE_FONT, "hud.demo"
+    set text offset DEMO_TEXT_ID, .5, .5
+    size text max DEMO_TEXT_ID, 220, 22
+    color text DEMO_TEXT_ID, rgb(255, 222, 96)
+    enable text drop shadow DEMO_TEXT_ID, 2, -2, rgb(150, 36, 24)
+    order text DEMO_TEXT_ID, ORDER_DEMO
+    hide text DEMO_TEXT_ID
+
+    if is env set("FISH_DEMO_IDLE_MS")
+        DEMO_IDLE_MS = val(env$("FISH_DEMO_IDLE_MS"))
+    endif
+    if is env set("FISH_DEMO_LENGTH_MS")
+        DEMO_LENGTH_MS = val(env$("FISH_DEMO_LENGTH_MS"))
+        DEMO_LENGTH_LAST_MS = DEMO_LENGTH_MS
+    endif
+return
+
+
+` the main loop comes here on every frame, before it looks at the menu. it starts a demo when the main
+` menu has been left alone for long enough, and plays the one that is going.
+frame_demo:
+    if DEMO_MODE = 0
+        gosub demo_idle
+        return
+    endif
+
+    ` anything at all that is pressed stops it. so does the steam overlay, which would pause a game.
+    dmStop = DEMO_STOP_WANTED
+    if new any input() then dmStop = 1
+    if steam overlay open() then dmStop = 1
+
+    ` a demo never ends a game, nor has one of its endings. those stop it instead.
+    if REQUEST_GAME_END then dmStop = 1
+    if CORAL_ENDING_DUE then dmStop = 1
+    if DIVER_ENDING_DUE then dmStop = 1
+
+    if dmStop
+        gosub demo_stop
+        return
+    endif
+
+    ` a scene is over when it has played for long enough, at the first moment that nothing is going on.
+    ` a board that never settles gets a little while longer than that, and then it is over anyway.
+    dmLength = DEMO_LENGTH_MS
+    if DEMO_SCENE = DEMO_SCENE_COUNT then dmLength = DEMO_LENGTH_LAST_MS
+    dmPlayed = game ms() - DEMO_STARTED_MS
+    dmSceneOver = 0
+    if dmPlayed >= dmLength
+        dmStillBusy = demoBusy()
+        if dmStillBusy = 0 then dmSceneOver = 1
+        dmOverdue = dmPlayed - dmLength
+        if dmOverdue >= 15000 then dmSceneOver = 1
+    endif
+
+    ` then the bubbles bring on the next one. the last one, the diver, is the end of the show.
+    if dmSceneOver
+        dmShowOver = 0
+        if DEMO_SCENE >= DEMO_SCENE_COUNT then dmShowOver = 1
+        if DEMO_SCENE_ONLY > 0 then dmShowOver = 1
+        if dmShowOver
+            gosub demo_stop
+        else
+            DEMO_SCENE = DEMO_SCENE + 1
+            gosub demo_next
+        endif
+        return
+    endif
+
+    gosub demo_play
+return
+
+
+` the main menu is up. a demo starts when it has been left alone for DEMO_IDLE_MS: nothing pressed, and
+` nothing but the main page of it. the high scores, the codec and the credits are loops of their own,
+` which do not come here, so a gap in the frames means somebody was looking at one of those.
+demo_idle:
+    dmOnMain = 0
+    if MENU_MODE = MENU_MODE_MAIN
+        if MENU_PAGE = MENU_PAGE_MAIN then dmOnMain = 1
+    endif
+
+    dmFrame = frame number()
+    dmGap = dmFrame - DEMO_MENU_FRAME
+    DEMO_MENU_FRAME = dmFrame
+
+    dmTouched = 0
+    if dmOnMain = 0 then dmTouched = 1
+    if dmGap <> 1 then dmTouched = 1
+    if new any input() then dmTouched = 1
+    if dmTouched
+        DEMO_IDLE_FROM = game ms()
+        return
+    endif
+
+    dmIdle = game ms() - DEMO_IDLE_FROM
+    if dmIdle >= DEMO_IDLE_MS
+        gosub demo_start
+    endif
+return
+
+
+` the show starts: the first scene is dealt, and the bubbles take the menu away. this is most of what
+` menu_start_game does, without what would touch the player's own game: it does not forget the saved
+` game, and it has no tutorial. see THE DEMO in fish_headers_demo.
+demo_start:
+    DEMO_MODE = 1
+    begin pref sandbox
+    DEMO_STOP_WANTED = 0
+    DEMO_STARTED_MS = game ms()
+
+    ` the show always starts from the first scene, so that it always ends with the diver
+    DEMO_SCENE = 1
+    DEMO_SCENE_ONLY = 0
+    if is env set("FISH_DEMO_SCENE")
+        DEMO_SCENE_ONLY = val(env$("FISH_DEMO_SCENE"))
+        DEMO_SCENE = DEMO_SCENE_ONLY
+    endif
+    gosub demo_deal
+
+    ` the banner takes the place of the hints. the way back to the menu brings them back. see menu_fade_out.
+    hintShow(0)
+    show text DEMO_TEXT_ID
+    TRANSITION_TO_MENU = 0
+    gosub menu_transition
+    MENU_MODE = MENU_MODE_CLOSED
+
+    ` the scene starts when it can be seen, with a moment for the bubbles to clear before the first move
+    DEMO_STARTED_MS = game ms()
+    DEMO_THINK_UNTIL = game ms() + 900
+return
+
+
+` from one scene to the next. a wave of bubbles pulls the deep blue of the main menu over the board, like
+` a curtain, the next scene is dealt behind it, and a second wave takes the curtain away. it is the same
+` curtain that a new game from the pause menu has (see menu_abandon_game), and with the menu in its
+` pause mode, the waves are plain bubbles, not the waterline of the main menu.
+demo_next:
+    gosub clear_queued_moves
+    MENU_MODE = MENU_MODE_PAUSE
+    hide sprite MENU_DIM_SPRITE
+    showSurface(0)
+    order sprite MENU_BG_SPRITE, ORDER_MENU_CURTAIN
+    set sprite alpha MENU_BG_SPRITE, 255
+    show sprite MENU_BG_SPRITE
+
+    TRANSITION_TO_MENU = 1
+    gosub menu_transition
+
+    gosub demo_deal
+
+    TRANSITION_TO_MENU = 0
+    gosub menu_transition
+    order sprite MENU_BG_SPRITE, ORDER_MENU_BACKDROP
+    MENU_MODE = MENU_MODE_CLOSED
+
+    DEMO_STARTED_MS = game ms()
+    DEMO_THINK_UNTIL = game ms() + 900
+return
+
+
+` deal a new game for the scene in DEMO_SCENE, and set the scene up on it. nothing is drawn: the menu, or
+` the curtain, is over the board while this happens.
+demo_deal:
+    ` a new seed every time, so that the board is never the same. the seed that the player may have
+    ` picked for their next game is put back straight away.
+    dmSeedKeep = OPTION_GAME_SEED
+    OPTION_GAME_SEED = rnd(SEED_MAX) + 1
+    gosub reset_game
+    OPTION_GAME_SEED = dmSeedKeep
+    GAME_ROUND_CAP = getGameLengthRounds(GAME_LENGTH_REGULAR)
+    GAME_ZEN = 0
+    showRoundsLeft()
+
+    ` the ending of the diver draws frames of its own, and a demo never gets that far
+    DIVER_ENDING_HOLD = 1
+
+    DEMO_STATE = 0
+    DEMO_SWAPS = 0
+    DEMO_BAN_COUNT = 0
+    DEMO_LAST_CELL = -1
+    DEMO_SCRIPTED = 0
+    gosub demo_set_scene
+return
+
+
+` the bubbles bring the main menu back, and the game underneath is put back to how it starts. then the
+` sandbox is let go of, and every preference is as it was before the demo.
+demo_stop:
+    DEMO_STOP_WANTED = 0
+    gosub clear_queued_moves
+    REQUEST_GAME_END = 0
+    CORAL_ENDING_DUE = 0
+    DIVER_ENDING_DUE = 0
+
+    ` the same way out as a game that is quit from the pause menu
+    MENU_MODE = MENU_MODE_PAUSE
+    gosub menu_quit_to_title
+
+    hide text DEMO_TEXT_ID
+    DIVER_ENDING_HOLD = 0
+    DEMO_MODE = 0
+    end pref sandbox
+
+    ` the menu starts being left alone again from now
+    DEMO_IDLE_FROM = game ms()
+    DEMO_MENU_FRAME = frame number()
+return
+
+
+` THE SCENES. each one puts something on the board, or in the game, that it is there to show.
+demo_set_scene:
+    ` every fish faces right, so a group that a swap makes swims off as a school. new fish face any way,
+    ` so it wears off as the board fills back up.
+    if DEMO_SCENE = DEMO_SCENE_SCHOOL
+        schoolFaceAll(1)
+    endif
+
+    if DEMO_SCENE = DEMO_SCENE_DIVER
+        gosub demo_set_diver
+    endif
+
+    if DEMO_SCENE = DEMO_SCENE_LATE
+        gosub demo_set_late
+    endif
+
+    ` the night scene starts as a day like any other. see demoSceneSwapped.
+return
+
+
+` a bottle, one row from the top, and the first swap carries it up. that is what brings the diver down.
+demo_set_diver:
+    dmBottleCell = CELL_COLUMN_COUNT / 2 + CELL_COLUMN_COUNT
+    CELLS(dmBottleCell).value = TEX_BOTTLE
+    clearCellStack(dmBottleCell)
+    updateCell(CELLS(dmBottleCell))
+
+    DEMO_TARGET = dmBottleCell
+    DEMO_DIR_X = 0
+    DEMO_DIR_Y = -1
+    DEMO_SCRIPTED = 1
+return
+
+
+` a round from late in a game: cards that bring stingrays and jellyfish, a big multiplier, and a bar that
+` is over half full, so that the round is won while the demo plays.
+demo_set_late:
+    grantPassive(ABILITY_INDEX_JELLIES)
+    grantPassive(ABILITY_INDEX_RAYS)
+    grantPassive(ABILITY_INDEX_RAYS)
+    grantPassive(ABILITY_INDEX_BOTTLES)
+    grantPassive(ABILITY_INDEX_CONTAGIOUS_SMILE)
+
+    CURRENT_ROUND = 8
+    showRoundsLeft()
+    SCORE_MULTIPLIER = 5
+    BEST_MULTIPLIER = 5
+    MULT_PROGRESS = 1
+    refreshMultiplier(1)
+    CURRENT_MOVE_COUNT = 96
+    registerMove(0)
+
+    dmSpan = getRoundSpan(CURRENT_ROUND)
+    SCORE_BAR.startVal = 64000
+    SCORE_BAR.endVal = SCORE_BAR.startVal + dmSpan
+    PROGRESS_BARS(0) = SCORE_BAR
+    CURRENT_SCORE = SCORE_BAR.startVal + dmSpan * 55 / 100
+    syncScoreShown()
+    setProgressTween(SCORE_BAR, CURRENT_SCORE)
+
+    ` the cards bring them in with the new fish, which takes a while, so a few are there already.
+    ` none of them goes next to another one of its own kind.
+    dmPlaced = 0
+    dmTries = 0
+    while dmPlaced < 5 and dmTries < 200
+        dmTries = dmTries + 1
+        dmAt = rnd(CELL_COUNT)
+        dmKindNew = TEX_RAY
+        if dmPlaced >= 3 then dmKindNew = TEX_JELLY
+        dmFree = demoCanPlace(dmAt, dmKindNew)
+        if dmFree
+            CELLS(dmAt).value = dmKindNew
+            clearCellStack(dmAt)
+            updateCell(CELLS(dmAt))
+            dmPlaced = dmPlaced + 1
+        endif
+    endwhile
+return
+
+
+` THE PLAYER. it thinks, walks the cursor to the swap that it picked, swaps, and waits for the board to
+` settle, and then it starts again.
+demo_play:
+    if MENU_MODE <> MENU_MODE_CLOSED then return
+    if INFO_MODE then return
+
+    dmNow = game ms()
+    dmBusy = demoBusy()
+
+    if DEMO_STATE = 2
+        if dmBusy = 0
+            demoJudge()
+            DEMO_STATE = 0
+            DEMO_THINK_UNTIL = dmNow + DEMO_THINK_MS + rnd(DEMO_THINK_MORE_MS)
+            demoSceneSwapped()
+        endif
+        return
+    endif
+
+    if dmBusy then return
+
+    if DEMO_STATE = 0
+        if dmNow < DEMO_THINK_UNTIL then return
+        if DEMO_SCRIPTED
+            DEMO_SCRIPTED = 0
+        else
+            dmFound = demoPick()
+            if dmFound = 0
+                ` every swap there is did nothing. try them all again, after a moment.
+                DEMO_BAN_COUNT = 0
+                DEMO_THINK_UNTIL = dmNow + DEMO_THINK_MS
+                return
+            endif
+        endif
+        DEMO_STATE = 1
+        DEMO_STEP_AT = dmNow
+    endif
+
+    if DEMO_STATE = 1
+        if dmNow < DEMO_STEP_AT then return
+        DEMO_STEP_AT = dmNow + DEMO_STEP_MS
+
+        ` one step at a time: across first, and then up or down
+        dmToX = DEMO_TARGET mod CELL_COLUMN_COUNT
+        dmToY = DEMO_TARGET / CELL_COLUMN_COUNT
+        dmStepX = 0
+        dmStepY = 0
+        if SELECTION_POS.x < dmToX then dmStepX = 1
+        if SELECTION_POS.x > dmToX then dmStepX = -1
+        if dmStepX = 0
+            if SELECTION_POS.y < dmToY then dmStepY = 1
+            if SELECTION_POS.y > dmToY then dmStepY = -1
+        endif
+
+        dmThere = 1
+        if dmStepX <> 0 then dmThere = 0
+        if dmStepY <> 0 then dmThere = 0
+        if dmThere
+            DEMO_MOVES_BEFORE = CURRENT_MOVE_COUNT
+            DEMO_SCORE_BEFORE = CURRENT_SCORE
+            DEMO_NIGHT_BEFORE = 0
+            if TIDE_NIGHT then DEMO_NIGHT_BEFORE = TIDE_NIGHT_LEFT
+            demoQueue(DEMO_DIR_X, DEMO_DIR_Y, 1)
+            DEMO_SWAPS = DEMO_SWAPS + 1
+            DEMO_STATE = 2
+        else
+            demoQueue(dmStepX, dmStepY, 0)
+        endif
+    endif
+return
+
+routines_demo_exit:
+
+
+` every frame of the game, from update_frame: the banner blinks, and a press is heard even in the middle
+` of a long run of pops, which does not come back to the main loop until it is over.
+function demoTick()
+    if DEMO_MODE = 0 then exitfunction
+    if new any input() then DEMO_STOP_WANTED = 1
+
+    dtNow = game ms()
+    dtAt = dtNow - DEMO_STARTED_MS
+    dtCycle = DEMO_BLINK_ON_MS + DEMO_BLINK_OFF_MS
+    dtPhase = dtAt mod dtCycle
+    if dtPhase < DEMO_BLINK_ON_MS
+        show text DEMO_TEXT_ID
+    else
+        hide text DEMO_TEXT_ID
+    endif
+endfunction
+
+
+` something is still going on: fish popping or falling, a move playing out, points on their way to the
+` bar, a full bar, or the diver swimming up. the player waits for all of it, the same as the balance bot.
+function demoBusy()
+    dbBusy = 0
+    if REQUEST_COMBO_CHECK then dbBusy = 1
+    if LIVE_MOVE_ACTIVE then dbBusy = 1
+    if QUEUED_MOVE_NUM > 0 then dbBusy = 1
+    if SCORE_TICK_COUNT > 0 then dbBusy = 1
+    if SCORE_BAR_HOLD > 0 then dbBusy = 1
+    if REQUEST_ABILITY_SELECTION then dbBusy = 1
+    if DIVER_RISING then dbBusy = 1
+endfunction dbBusy
+
+
+` ask for a move, the way that the keys do. 1 in dqSwap swaps, and 0 only moves the cursor.
+function demoQueue(dqX, dqY, dqSwap)
+    dqDir as vec = {
+        x = dqX,
+        y = dqY
+    }
+    QUEUED_MOVES(QUEUED_MOVE_NUM) = {
+        dir = dqDir
+        swap = dqSwap,
+        moveBindingIndex = -1
+    }
+    QUEUED_MOVE_NUM = QUEUED_MOVE_NUM + 1
+endfunction
+
+
+` the swap just played out. one that the game did not make, or that popped nothing, is not tried again
+` until the score moves. at night nothing pops until the morning, and a move is not counted either: it
+` only takes one off of the moves that the night has left. so then only a swap that the night did not
+` feel counts. see THE MOVES OF THE NIGHT in fish_headers_tide.
+function demoJudge()
+    djNoGood = 0
+    if DEMO_NIGHT_BEFORE > 0
+        if TIDE_NIGHT
+            if TIDE_NIGHT_LEFT = DEMO_NIGHT_BEFORE then djNoGood = 1
+        endif
+    else
+        if CURRENT_MOVE_COUNT = DEMO_MOVES_BEFORE then djNoGood = 1
+        if CURRENT_SCORE = DEMO_SCORE_BEFORE then djNoGood = 1
+    endif
+
+    djCell = DEMO_TARGET
+    djDown = 0
+    if DEMO_DIR_Y <> 0 then djDown = 1
+    if djNoGood
+        if DEMO_BAN_COUNT < 64
+            DEMO_BAN_CELL(DEMO_BAN_COUNT) = djCell
+            DEMO_BAN_DOWN(DEMO_BAN_COUNT) = djDown
+            DEMO_BAN_COUNT = DEMO_BAN_COUNT + 1
+        endif
+    else
+        DEMO_BAN_COUNT = 0
+    endif
+    DEMO_LAST_CELL = djCell
+    DEMO_LAST_DOWN = djDown
+endfunction
+
+
+` what a scene does after a swap. in the night scene, the tide turns for the last time after a couple of
+` swaps, and night falls, the same as it does at the end of a third cycle. see THE TIDE in fish_headers_tide.
+function demoSceneSwapped()
+    if DEMO_SCENE = DEMO_SCENE_NIGHT
+        if TIDE_NIGHT = 0
+            if DEMO_SWAPS = DEMO_NIGHT_AFTER
+                TIDE_CYCLES = TIDE_CYCLES_TO_TURN - 1
+                tideCycleDone()
+            endif
+        endif
+    endif
+endfunction
+
+
+` pick the next swap: the one that pops the most, near the cursor, with a little luck. it is left in
+` DEMO_TARGET and DEMO_DIR_X / DEMO_DIR_Y. 0 comes back when there is no swap to try at all.
+function demoPick()
+    dpFound = 0
+    dpBest = -1000000
+    dpFromX = SELECTION_POS.x
+    dpFromY = SELECTION_POS.y
+
+    DEMO_DIVER_X = -10
+    DEMO_DIVER_Y = -10
+    if DIVER_ON
+        if DIVER_AT >= 0
+            DEMO_DIVER_X = DIVER_AT mod CELL_COLUMN_COUNT
+            DEMO_DIVER_Y = DIVER_AT / CELL_COLUMN_COUNT
+        endif
+    endif
+
+    for dpCell = 0 to CELL_COUNT - 1
+        dpCol = dpCell mod CELL_COLUMN_COUNT
+        dpRow = dpCell / CELL_COLUMN_COUNT
+        for dpDown = 0 to 1
+            dpOther = -1
+            if dpDown = 0
+                if dpCol < CELL_COLUMN_COUNT - 1 then dpOther = dpCell + 1
+            else
+                if dpRow < CELL_ROW_COUNT - 1 then dpOther = dpCell + CELL_COLUMN_COUNT
+            endif
+            dpOk = 0
+            if dpOther >= 0
+                dpOk = demoSwapAllowed(dpCell, dpOther, dpDown)
+            endif
+            if dpOk
+                dpWorth = demoSwapWorth(dpCell, dpOther)
+                dpScore = dpWorth * 12
+                if dpWorth > 0
+                    ` a swap up or down leaves the fish facing the way they were, so in the school
+                    ` scene those are the ones that make schools
+                    if DEMO_SCENE = DEMO_SCENE_SCHOOL
+                        if dpDown then dpScore = dpScore + 30
+                    endif
+                    ` fish that pop next to the diver can have their picture taken
+                    if DEMO_SWAP_DIVER then dpScore = dpScore + 40
+                endif
+
+                dpDistX = dpCol - dpFromX
+                if dpDistX < 0 then dpDistX = 0 - dpDistX
+                dpDistY = dpRow - dpFromY
+                if dpDistY < 0 then dpDistY = 0 - dpDistY
+                dpScore = dpScore - dpDistX * 2
+                dpScore = dpScore - dpDistY * 2
+                dpScore = dpScore + rnd(10)
+
+                if dpScore > dpBest
+                    dpBest = dpScore
+                    dpFound = 1
+                    DEMO_TARGET = dpCell
+                    DEMO_DIR_X = 1
+                    DEMO_DIR_Y = 0
+                    if dpDown
+                        DEMO_DIR_X = 0
+                        DEMO_DIR_Y = 1
+                    endif
+                endif
+            endif
+        next
+    next
+endfunction dpFound
+
+
+` whether the player would try this swap: two different kinds that a swap can move (the fish, and the
+` jellyfish, stingrays and bottles), not one that did nothing a moment ago, and not the one that would
+` undo the last swap.
+function demoSwapAllowed(daA, daB, daDown)
+    daOk = 1
+    daKindA = CELLS(daA).value
+    daKindB = CELLS(daB).value
+    if daKindA < 1 then daOk = 0
+    if daKindB < 1 then daOk = 0
+    if daKindA > TEX_BOTTLE then daOk = 0
+    if daKindB > TEX_BOTTLE then daOk = 0
+    if daKindA = daKindB then daOk = 0
+    if daOk
+        if daA = DEMO_LAST_CELL
+            if daDown = DEMO_LAST_DOWN then daOk = 0
+        endif
+    endif
+    if daOk
+        if DEMO_BAN_COUNT > 0
+            for daBan = 0 to DEMO_BAN_COUNT - 1
+                if DEMO_BAN_CELL(daBan) = daA
+                    if DEMO_BAN_DOWN(daBan) = daDown then daOk = 0
+                endif
+            next
+        endif
+    endif
+endfunction daOk
+
+
+` how many fish a swap of two cells would pop: the groups of 3 or more that the two are in after it.
+` DEMO_SWAP_DIVER says whether one of those groups is next to the diver.
+function demoSwapWorth(dwA, dwB)
+    dwWorth = 0
+    DEMO_SWAP_DIVER = 0
+    dwKindA = CELLS(dwA).value
+    dwKindB = CELLS(dwB).value
+    CELLS(dwA).value = dwKindB
+    CELLS(dwB).value = dwKindA
+
+    dwSizeA = demoGroupSize(dwA)
+    if dwSizeA >= 3
+        dwWorth = dwWorth + dwSizeA
+        if DEMO_TOUCHES_DIVER then DEMO_SWAP_DIVER = 1
+    endif
+    dwSizeB = demoGroupSize(dwB)
+    if dwSizeB >= 3
+        dwWorth = dwWorth + dwSizeB
+        if DEMO_TOUCHES_DIVER then DEMO_SWAP_DIVER = 1
+    endif
+
+    CELLS(dwA).value = dwKindA
+    CELLS(dwB).value = dwKindB
+endfunction dwWorth
+
+
+` how many fish the group that a cell is in has, as the board is now. only the fish count: the
+` jellyfish, stingrays and bottles do not make groups. DEMO_TOUCHES_DIVER says whether any of the
+` group is next to the diver.
+function demoGroupSize(dgFrom)
+    dgKind = CELLS(dgFrom).value
+    dgCount = 0
+    DEMO_TOUCHES_DIVER = 0
+    if dgKind >= 1 and dgKind <= 7
+        DEMO_STAMP = DEMO_STAMP + 1
+        DEMO_MARK(dgFrom) = DEMO_STAMP
+        DEMO_STACK(0) = dgFrom
+        dgTop = 1
+        while dgTop > 0
+            dgTop = dgTop - 1
+            dgAt = DEMO_STACK(dgTop)
+            dgCount = dgCount + 1
+            dgX = dgAt mod CELL_COLUMN_COUNT
+            dgY = dgAt / CELL_COLUMN_COUNT
+
+            dgOffX = dgX - DEMO_DIVER_X
+            if dgOffX < 0 then dgOffX = 0 - dgOffX
+            dgOffY = dgY - DEMO_DIVER_Y
+            if dgOffY < 0 then dgOffY = 0 - dgOffY
+            dgOff = dgOffX + dgOffY
+            if dgOff = 1 then DEMO_TOUCHES_DIVER = 1
+
+            for dgSide = 0 to 3
+                dgNext = -1
+                if dgSide = 0
+                    if dgX > 0 then dgNext = dgAt - 1
+                endif
+                if dgSide = 1
+                    if dgX < CELL_COLUMN_COUNT - 1 then dgNext = dgAt + 1
+                endif
+                if dgSide = 2
+                    if dgY > 0 then dgNext = dgAt - CELL_COLUMN_COUNT
+                endif
+                if dgSide = 3
+                    if dgY < CELL_ROW_COUNT - 1 then dgNext = dgAt + CELL_COLUMN_COUNT
+                endif
+                if dgNext >= 0
+                    if DEMO_MARK(dgNext) <> DEMO_STAMP
+                        if CELLS(dgNext).value = dgKind
+                            DEMO_MARK(dgNext) = DEMO_STAMP
+                            DEMO_STACK(dgTop) = dgNext
+                            dgTop = dgTop + 1
+                        endif
+                    endif
+                endif
+            next
+        endwhile
+    endif
+endfunction dgCount
+
+
+` whether a jellyfish or a stingray can go in this cell, for the late scene: a plain fish is there now,
+` and none of the four next to it is already one of that kind.
+function demoCanPlace(dcAt, dcKind)
+    dcOk = 1
+    dcHere = CELLS(dcAt).value
+    if dcHere < 1 then dcOk = 0
+    if dcHere > 7 then dcOk = 0
+    dcX = dcAt mod CELL_COLUMN_COUNT
+    dcY = dcAt / CELL_COLUMN_COUNT
+    if dcX > 0
+        if CELLS(dcAt - 1).value = dcKind then dcOk = 0
+    endif
+    if dcX < CELL_COLUMN_COUNT - 1
+        if CELLS(dcAt + 1).value = dcKind then dcOk = 0
+    endif
+    if dcY > 0
+        if CELLS(dcAt - CELL_COLUMN_COUNT).value = dcKind then dcOk = 0
+    endif
+    if dcY < CELL_ROW_COUNT - 1
+        if CELLS(dcAt + CELL_COLUMN_COUNT).value = dcKind then dcOk = 0
+    endif
+endfunction dcOk

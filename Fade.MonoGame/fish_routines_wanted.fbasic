@@ -1,0 +1,619 @@
+goto routines_wanted_exit
+
+remstart
+    THE WANTED SHAPE. see fish_headers_wanted for what this is.
+    - setup_wanted runs once, from setup_coral.
+    - stepWanted() runs on every frame of the game, from update_frame.
+    - resetWanted() starts it over, for a new game.
+    - handle_combos calls wantedCatchAhead before the groups pop, wantedBubbles for every group that
+      matched and pops, and wantedCaught for one in the wanted shape.
+remend
+
+setup_wanted:
+    ` THE SHAPES, four fish each, as column + row * 4: an L, a T, an S, a square and a line
+    wantedSetupAt = 0
+    wantedAddShape(wantedSetupAt, 0, 4, 8, 9)
+    wantedSetupAt = wantedSetupAt + 4
+    wantedAddShape(wantedSetupAt, 0, 1, 2, 5)
+    wantedSetupAt = wantedSetupAt + 4
+    wantedAddShape(wantedSetupAt, 1, 2, 4, 5)
+    wantedSetupAt = wantedSetupAt + 4
+    wantedAddShape(wantedSetupAt, 0, 1, 4, 5)
+    wantedSetupAt = wantedSetupAt + 4
+    wantedAddShape(wantedSetupAt, 0, 1, 2, 3)
+    wantedPrepareShapes()
+
+    ` THE PULSE, a color of the rainbow for each step
+    WANTED_HUES(0) = rgb(255, 90, 90)
+    WANTED_HUES(1) = rgb(255, 170, 60)
+    WANTED_HUES(2) = rgb(255, 235, 90)
+    WANTED_HUES(3) = rgb(100, 230, 130)
+    WANTED_HUES(4) = rgb(100, 165, 255)
+    WANTED_HUES(5) = rgb(195, 120, 255)
+
+    ` THE TEXT OF A CATCH, on a render target of its own, which is see-through wherever there is nothing
+    reserve render target id(TARGET_WANTED_TEXT)
+    render target TARGET_WANTED_TEXT
+    set render target background color TARGET_WANTED_TEXT, rgb(0, 0, 0, 0)
+    reserve effect id(WANTED_TEXT_FX_ID)
+    effect WANTED_TEXT_FX_ID, "Fish/Shaders/RainbowTextEffect"
+    reserve sprite id(WANTED_TEXT_SPRITE)
+    sprite WANTED_TEXT_SPRITE, 0, 0, render target texture(TARGET_WANTED_TEXT)
+    set sprite offset WANTED_TEXT_SPRITE, 0, 0
+    size sprite WANTED_TEXT_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    order sprite WANTED_TEXT_SPRITE, ORDER_SCORE_TEXT + 1
+    set sprite effect WANTED_TEXT_SPRITE, WANTED_TEXT_FX_ID
+    reserve text id(WANTED_TEXT_ID)
+    text WANTED_TEXT_ID, 0, 0, SCORE_FONT, "x+1"
+    set text render target WANTED_TEXT_ID, TARGET_WANTED_TEXT
+    enable text drop shadow WANTED_TEXT_ID, 2, -4, rgb(0, 0, 40)
+    set text alpha WANTED_TEXT_ID, 0
+
+    resetWanted()
+return
+
+
+` THE DEBUG WINDOW, in the debug panel. frame_dbg, in fish_routines, comes here on every frame.
+frame_debug_wanted:
+    begin debug window("Wanted shape")
+    debugWantedChanged = debug toggle("on", WANTED_ON)
+    debug text "wanted: shape " + str$(WANTED_SHAPE + 1) + " of " + str$(WANTED_SHAPE_COUNT) + ", caught " + str$(WANTED_CATCHES)
+    if debug button("L") = 1
+        wantedSetShape(0)
+    endif
+    debug same line
+    if debug button("T") = 1
+        wantedSetShape(1)
+    endif
+    debug same line
+    if debug button("S") = 1
+        wantedSetShape(2)
+    endif
+    debug same line
+    if debug button("O") = 1
+        wantedSetShape(3)
+    endif
+    debug same line
+    if debug button("I") = 1
+        wantedSetShape(4)
+    endif
+    if debug button("send up the shape from the cursor") = 1
+        debugWantedX = getCellX(SELECTION_POS.x)
+        debugWantedY = getCellY(SELECTION_POS.y)
+        wantedBubbles(debugWantedX, debugWantedY, CELLS(SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT).value, 0)
+    endif
+    if debug button("light up the shape at the cursor") = 1
+        wantedDebugLight()
+    endif
+    debug separator
+    debugWantedChanged = debug float slider("bubbles: apart (of a cell)", WANTED_GAP#, .2, 1.5)
+    debugWantedChanged = debug int slider("bubbles: size", WANTED_BUBBLE_SIZE, 2, 20)
+    debugWantedChanged = debug int slider("bubbles: rise (px a second)", WANTED_RISE, 5, 150)
+    debugWantedChanged = debug int slider("bubbles: last (ms)", WANTED_LIFE, 200, 5000)
+    debugWantedChanged = debug int slider("bubbles: solid", WANTED_ALPHA, 30, 255)
+    debugWantedChanged = debug int slider("bubbles: ms after the pop", WANTED_AFTER, 0, 1000)
+    debugWantedChanged = debug int slider("bubbles: out of place (px)", WANTED_JITTER, 0, 10)
+    debugWantedChanged = debug int slider("bubbles: rise spread (px a second)", WANTED_RISE_SPREAD, 0, 40)
+    debugWantedChanged = debug int slider("bubbles: pop spread (ms)", WANTED_LIFE_SPREAD, 0, 3000)
+    debugWantedChanged = debug int slider("light: ms a cell", WANTED_HINT_STEP, 80, 1500)
+    debugWantedChanged = debug int slider("text: tall", WANTED_TEXT_HEIGHT, 8, 80)
+    debugWantedChanged = debug int slider("pulse: bubbles", WANTED_PULSE_BUBBLES, 0, 30)
+    debugWantedChanged = debug int slider("pulse: stars", WANTED_PULSE_STARS, 0, 20)
+    debugWantedChanged = debug float slider("pulse: ring", WANTED_PULSE_SHOCK#, 0, 1)
+    debug text "the numbers that are settled on go into fish_headers_wanted by hand"
+    end debug window
+return
+
+routines_wanted_exit:
+
+
+function wantedAddShape(slot, first, second, third, fourth)
+    WANTED_SHAPES(slot) = first
+    WANTED_SHAPES(slot + 1) = second
+    WANTED_SHAPES(slot + 2) = third
+    WANTED_SHAPES(slot + 3) = fourth
+endfunction
+
+` a new game wants the first shape
+function resetWanted()
+    WANTED_CATCH_GROUP = -1
+    wantedSetShape(0)
+endfunction
+
+` this shape is wanted now. it works out how many columns and rows it takes, for the bubbles.
+function wantedSetShape(setShape)
+    WANTED_SHAPE = setShape
+    WANTED_WIDE = 1
+    WANTED_DEEP = 1
+    setFirst = WANTED_SHAPE * WANTED_SHAPE_SIZE
+    for setI = 0 to WANTED_SHAPE_SIZE - 1
+        setColumn = WANTED_SHAPES(setFirst + setI) mod 4
+        if setColumn + 1 > WANTED_WIDE then WANTED_WIDE = setColumn + 1
+        setRow = WANTED_SHAPES(setFirst + setI) / 4
+        if setRow + 1 > WANTED_DEEP then WANTED_DEEP = setRow + 1
+    next
+endfunction
+
+` every frame: the specks are the colors of the rainbow while a catch lights up, there is a burst at each of
+` its cells in turn, and the multiplier goes up when it pops
+function stepWanted()
+    stepNow = game ms()
+    if WANTED_MULT_DUE > 0
+        if stepNow >= WANTED_MULT_DUE
+            WANTED_MULT_DUE = 0
+            wantedMultiplier()
+        endif
+    endif
+    if stepNow < WANTED_RAINBOW_UNTIL
+        if stepNow >= WANTED_RAINBOW_FROM then SEABED_RAINBOW# = 1
+    endif
+    wantedText(stepNow)
+
+    ` the band of the rainbow flood, once through the group while its pops wait. see THE RAINBOW FLOOD in
+    ` FishEffect.fx. the effects lose their parameters when they are reloaded, so this is set every frame.
+    stepSweep# = -1
+    if stepNow < WANTED_SHIMMER_UNTIL
+        stepSweep# = stepNow - WANTED_LIGHT_FROM
+        stepHold# = WANTED_HOLD
+        stepSweep# = stepSweep# / stepHold#
+    endif
+    set effect param float4 FISH_FX_ID, "Rainbow", WANTED_WAVE_FROM#, WANTED_WAVE_TO#, stepSweep#, WANTED_WAVE_WIDE#
+
+    ` the light has got to the next cell of its walk: a burst there
+    if WANTED_LIGHT_NEXT < WANTED_WALK_COUNT
+        stepFireAt = WANTED_LIGHT_NEXT * WANTED_HINT_STEP
+        stepFireAt = stepFireAt + WANTED_LIGHT_FROM
+        if stepNow >= stepFireAt
+            wantedPulse(WANTED_LIGHT_NEXT)
+            WANTED_LIGHT_NEXT = WANTED_LIGHT_NEXT + 1
+        endif
+    endif
+endfunction
+
+` THE PULSE, at a step of the walk of the light: bubbles in a color of the rainbow, little stars, and a ring
+` that goes out through the fish
+function wantedPulse(pulseStep)
+    pulseCell = WANTED_WALK(pulseStep)
+    pulseColumn = pulseCell mod CELL_COLUMN_COUNT
+    pulseRow = pulseCell / CELL_COLUMN_COUNT
+    pulseX = getCellX(pulseColumn)
+    pulseY = getCellY(pulseRow)
+    pulseHue = WANTED_HUES(pulseStep mod 6)
+    spawnBubbles(pulseX, pulseY, CELL_SIZE / 3, WANTED_PULSE_BUBBLES, 0, pulseHue)
+    pulseLeft = pulseX - CELL_SIZE / 2
+    pulseTop = pulseY - CELL_SIZE / 2
+    spawnWakeSparkles(pulseLeft, pulseTop, CELL_SIZE, CELL_SIZE, WANTED_PULSE_STARS, ORDER_FLOAT_BUBBLES)
+    pulseColumn# = pulseColumn
+    pulseRow# = pulseRow
+    spawnShockwave(pulseColumn#, pulseRow#, WANTED_PULSE_SHOCK#, 0)
+endfunction
+
+
+` THE BUBBLES SHOW IT. one bubble for each fish of the wanted shape comes up from here, in that shape, all
+` of them together, waitMs from now, in the color of a fish of this kind. see fish_headers_wanted.
+function wantedBubbles(fromX, fromY, fromKind, waitMs)
+    if WANTED_ON = 0 then exitfunction
+    WANTED_FORMATIONS = WANTED_FORMATIONS + 1
+    bubbleGap# = CELL_SIZE * WANTED_GAP#
+    bubbleMidColumn# = WANTED_WIDE - 1
+    bubbleMidColumn# = bubbleMidColumn# * .5
+    bubbleMidRow# = WANTED_DEEP - 1
+    bubbleMidRow# = bubbleMidRow# * .5
+    bubbleTint = FISH_COLORS(getFishColorIndex(fromKind))
+    bubbleScale# = getBoardBubbleScale()
+    bubblePhase = rnd(628)
+    bubbleFirst = WANTED_SHAPE * WANTED_SHAPE_SIZE
+    for bubbleK = 0 to WANTED_SHAPE_SIZE - 1
+        bubbleCode = WANTED_SHAPES(bubbleFirst + bubbleK)
+        bubbleColumn# = bubbleCode mod 4
+        bubbleRow# = bubbleCode / 4
+
+        bubbleI = FLOAT_BUBBLE_NEXT
+        FLOAT_BUBBLE_NEXT = (FLOAT_BUBBLE_NEXT + 1) mod FLOAT_BUBBLE_COUNT
+        wantedFloaty = FLOAT_BUBBLES(bubbleI)
+        wantedFloaty.active = 1
+        wantedFloaty.star = 0
+        wantedFloaty.heart = 0
+        wantedFloaty.age = 0
+        wantedFloaty.alpha = WANTED_ALPHA
+        wantedFloaty.delay = 1 + waitMs + WANTED_AFTER
+        ` they go up together, but not lined up exactly: each is a little out of its place, a little bigger
+        ` or smaller, a little faster or slower, a little out of time, and they pop one after another
+        bubbleSpread = WANTED_LIFE_SPREAD + 1
+        wantedFloaty.life = WANTED_LIFE + rnd(bubbleSpread)
+        wantedFloaty.phase = bubblePhase + rnd(160)
+        wantedFloaty.size = WANTED_BUBBLE_SIZE * bubbleScale# + .5
+        wantedFloaty.size = wantedFloaty.size + rnd(3) - 1
+        bubbleJitter = WANTED_JITTER * 2 + 1
+        bubbleJitterX = rnd(bubbleJitter) - WANTED_JITTER
+        bubbleJitterY = rnd(bubbleJitter) - WANTED_JITTER
+        wantedFloaty.x# = fromX + (bubbleColumn# - bubbleMidColumn#) * bubbleGap#
+        wantedFloaty.x# = wantedFloaty.x# + bubbleJitterX
+        wantedFloaty.y# = fromY + (bubbleRow# - bubbleMidRow#) * bubbleGap#
+        wantedFloaty.y# = wantedFloaty.y# + bubbleJitterY
+        wantedFloaty.vx# = 0
+        wantedFloaty.vy# = 0
+        bubbleRiseSpread = WANTED_RISE_SPREAD * 2 + 1
+        wantedFloaty.rise = WANTED_RISE + rnd(bubbleRiseSpread)
+        wantedFloaty.rise = wantedFloaty.rise - WANTED_RISE_SPREAD
+        wantedFloaty.loud = 0
+        color sprite wantedFloaty.spriteId, bubbleTint
+        order sprite wantedFloaty.spriteId, ORDER_FLOAT_BUBBLES
+        reset sprite render target wantedFloaty.spriteId
+        hide sprite wantedFloaty.spriteId
+        FLOAT_BUBBLES(bubbleI) = wantedFloaty
+    next
+    FLOAT_BUBBLE_LIVE = FLOAT_BUBBLE_LIVE + WANTED_SHAPE_SIZE
+endfunction
+
+
+` A CATCH. handle_combos has found its groups, and is about to pop them. is one of them in the wanted
+` shape? catchLast is the last group there is. it leaves the group in WANTED_CATCH_GROUP, or -1.
+` a group's fish are looked at in the order of the board, row by row, and so are the cells of the shape,
+` turned each of the eight ways (WANTED_ROTS), so the first fish of a group is where the first cell is, and
+` every other fish has to be as far from it as its cell is from the first cell.
+function wantedCatchAhead(catchLast)
+    WANTED_CATCH_GROUP = -1
+    if WANTED_ON = 0 then exitfunction
+    if catchLast >= COMBO_GROUP_ROOM then exitfunction
+    catchNeed = getRequiredComboCount()
+    if catchNeed > WANTED_SHAPE_SIZE then exitfunction
+
+    comboCountGroups(catchLast)
+    for catchG = 0 to catchLast
+        WANTED_G_SEEN(catchG) = 0
+        for catchTurn = 0 to WANTED_WAYS - 1
+            WANTED_G_BAD(catchG * 8 + catchTurn) = 0
+        next
+    next
+
+    catchRots = WANTED_SHAPE * 32
+    catchLastCell = CELL_COUNT - 1
+    for catchCell = 0 to catchLastCell
+        catchG = CELLS(catchCell).comboFillId
+        catchLooks = 0
+        if catchG >= 0
+            if catchG <= catchLast
+                if COMBO_GROUP_SIZE(catchG) = WANTED_SHAPE_SIZE
+                    if COMBO_GROUP_FORCED(catchG) = 0 then catchLooks = 1
+                endif
+            endif
+        endif
+        if catchLooks
+            catchK = WANTED_G_SEEN(catchG)
+            if catchK = 0 then WANTED_G_ANCHOR(catchG) = catchCell
+            catchAnchor = WANTED_G_ANCHOR(catchG)
+            catchColumn = catchCell mod CELL_COLUMN_COUNT
+            catchAnchorColumn = catchAnchor mod CELL_COLUMN_COUNT
+            catchDx = catchColumn - catchAnchorColumn
+            catchRow = catchCell / CELL_COLUMN_COUNT
+            catchAnchorRow = catchAnchor / CELL_COLUMN_COUNT
+            catchDy = catchRow - catchAnchorRow
+            for catchTurn = 0 to WANTED_WAYS - 1
+                catchTurnAt = catchRots + catchTurn * 4
+                catchBase = WANTED_ROTS(catchTurnAt)
+                catchWant = WANTED_ROTS(catchTurnAt + catchK)
+                catchWantColumn = catchWant mod 4
+                catchBaseColumn = catchBase mod 4
+                catchWantDx = catchWantColumn - catchBaseColumn
+                catchWantRow = catchWant / 4
+                catchBaseRow = catchBase / 4
+                catchWantDy = catchWantRow - catchBaseRow
+                catchBad = catchG * 8 + catchTurn
+                if catchDx <> catchWantDx then WANTED_G_BAD(catchBad) = 1
+                if catchDy <> catchWantDy then WANTED_G_BAD(catchBad) = 1
+            next
+            WANTED_G_SEEN(catchG) = catchK + 1
+        endif
+    next
+
+    ` the first group that is the shape all the way, turned any way round
+    for catchG = 0 to catchLast
+        if WANTED_CATCH_GROUP < 0
+            if WANTED_G_SEEN(catchG) = WANTED_SHAPE_SIZE
+                for catchTurn = 0 to WANTED_WAYS - 1
+                    if WANTED_G_BAD(catchG * 8 + catchTurn) = 0 then WANTED_CATCH_GROUP = catchG
+                next
+            endif
+        endif
+    next
+endfunction
+
+` the group in the wanted shape pops: it lights up, waitMs from now, a chord rings, and the next shape is
+` wanted. see A CATCH in fish_headers_wanted.
+function wantedCaught(caughtGroup, waitMs)
+    WANTED_CATCH_GROUP = -1
+    WANTED_CATCHES = WANTED_CATCHES + 1
+    caughtK = 0
+    for caughtCell = 0 to CELL_COUNT - 1
+        if CELLS(caughtCell).comboFillId = caughtGroup
+            if caughtK < 4 then WANTED_CELLS(caughtK) = caughtCell
+            caughtK = caughtK + 1
+        endif
+    next
+    wantedLight(waitMs)
+    schoolChord(5)
+    ` the multiplier goes up when the group pops
+    WANTED_MULT_DUE = game ms() + waitMs
+    WANTED_MULT_DUE = WANTED_MULT_DUE + WANTED_HOLD
+
+    ` and "x+1" pops up over the middle of the group, and waits with it
+    caughtSumX# = 0
+    caughtSumY# = 0
+    for caughtK = 0 to 3
+        caughtSumX# = caughtSumX# + getCellX(WANTED_CELLS(caughtK) mod CELL_COLUMN_COUNT)
+        caughtSumY# = caughtSumY# + getCellY(WANTED_CELLS(caughtK) / CELL_COLUMN_COUNT)
+    next
+    WANTED_TEXT_X# = caughtSumX# * .25
+    WANTED_TEXT_Y# = caughtSumY# * .25
+    WANTED_TEXT_FROM = game ms() + waitMs
+    WANTED_TEXT_UNTIL = WANTED_MULT_DUE + 200
+    caughtNext = WANTED_SHAPE + 1
+    if caughtNext >= WANTED_SHAPE_COUNT then caughtNext = 0
+    wantedSetShape(caughtNext)
+endfunction
+
+` THE LIGHT OF A CATCH, through the four cells in WANTED_CELLS, waitMs from now: the rainbow floods their
+` fish, a burst goes off at each of them in turn, along a walk that goes from one to the one next to it, and
+` the specks are the colors of the rainbow while it goes
+function wantedLight(waitMs)
+    wantedWalk()
+    if WANTED_WALK_COUNT < 2 then exitfunction
+
+    lightLong = WANTED_WALK_COUNT - 1
+    lightLong = lightLong * WANTED_HINT_STEP
+    lightLong = lightLong + CORAL_HINT_FADE_MS
+    WANTED_RAINBOW_FROM = game ms() + waitMs
+    WANTED_RAINBOW_UNTIL = WANTED_RAINBOW_FROM + lightLong
+    WANTED_LIGHT_FROM = WANTED_RAINBOW_FROM
+    WANTED_LIGHT_NEXT = 0
+
+    ` the pops wait until the light has been to the last cell of the walk, and a little more
+    WANTED_HOLD = WANTED_WALK_COUNT - 1
+    WANTED_HOLD = WANTED_HOLD * WANTED_HINT_STEP
+    WANTED_HOLD = WANTED_HOLD + 150
+
+    ` and the fish shimmer until then
+    for lightI = 0 to 399
+        WANTED_SHIMMERS(lightI) = 0
+    next
+    for lightI = 0 to 3
+        WANTED_SHIMMERS(WANTED_CELLS(lightI)) = 1
+    next
+    WANTED_SHIMMER_UNTIL = WANTED_LIGHT_FROM + WANTED_HOLD
+
+    ` where the group starts and ends, along the wave of the rainbow flood
+    WANTED_WAVE_FROM# = 99999
+    WANTED_WAVE_TO# = -99999
+    for lightI = 0 to 3
+        lightCellX# = getCellX(WANTED_CELLS(lightI) mod CELL_COLUMN_COUNT)
+        lightCellY# = getCellY(WANTED_CELLS(lightI) / CELL_COLUMN_COUNT)
+        lightAlong# = lightCellX# * WANTED_WAVE_X# + lightCellY# * WANTED_WAVE_Y#
+        if lightAlong# < WANTED_WAVE_FROM# then WANTED_WAVE_FROM# = lightAlong#
+        if lightAlong# > WANTED_WAVE_TO# then WANTED_WAVE_TO# = lightAlong#
+    next
+endfunction
+
+` a walk through the four cells in WANTED_CELLS, each step to a cell next to the last, that goes through
+` all of them: from an end of the shape, on to a cell that it has not been to, and back the way that it
+` came when there is none, until it has been to all of them. it is left in WANTED_WALK.
+function wantedWalk()
+    WANTED_WALK_COUNT = 0
+    for walkI = 0 to 3
+        WANTED_WALK_SEEN(walkI) = 0
+    next
+
+    ` start at an end, a cell with only one of the others next to it, if there is one
+    walkStart = 0
+    walkFound = 0
+    for walkI = 0 to 3
+        walkNext = 0
+        for walkJ = 0 to 3
+            if walkI <> walkJ
+                walkTouch = wantedTouches(WANTED_CELLS(walkI), WANTED_CELLS(walkJ))
+                walkNext = walkNext + walkTouch
+            endif
+        next
+        if walkFound = 0
+            if walkNext = 1
+                walkStart = walkI
+                walkFound = 1
+            endif
+        endif
+    next
+
+    walkDepth = 1
+    WANTED_WALK_STACK(0) = walkStart
+    WANTED_WALK_SEEN(walkStart) = 1
+    walkSeen = 1
+    WANTED_WALK(0) = WANTED_CELLS(walkStart)
+    WANTED_WALK_COUNT = 1
+    walkGuard = 0
+    while walkGuard < 16
+        walkGuard = walkGuard + 1
+        walkTop = WANTED_WALK_STACK(walkDepth - 1)
+        walkTo = -1
+        for walkJ = 0 to 3
+            if walkTo < 0
+                if WANTED_WALK_SEEN(walkJ) = 0
+                    walkTouch = wantedTouches(WANTED_CELLS(walkTop), WANTED_CELLS(walkJ))
+                    if walkTouch then walkTo = walkJ
+                endif
+            endif
+        next
+        if walkTo >= 0
+            WANTED_WALK_SEEN(walkTo) = 1
+            walkSeen = walkSeen + 1
+            WANTED_WALK_STACK(walkDepth) = walkTo
+            walkDepth = walkDepth + 1
+            WANTED_WALK(WANTED_WALK_COUNT) = WANTED_CELLS(walkTo)
+            WANTED_WALK_COUNT = WANTED_WALK_COUNT + 1
+            if walkSeen >= 4 then walkGuard = 99
+        else
+            ` back the way that it came
+            walkDepth = walkDepth - 1
+            if walkDepth < 1 then walkGuard = 99
+            if walkDepth >= 1
+                WANTED_WALK(WANTED_WALK_COUNT) = WANTED_CELLS(WANTED_WALK_STACK(walkDepth - 1))
+                WANTED_WALK_COUNT = WANTED_WALK_COUNT + 1
+            endif
+        endif
+    endwhile
+endfunction
+
+` 1 when these two cells are next to each other, side by side or one over the other
+function wantedTouches(touchA, touchB)
+    touchAColumn = touchA mod CELL_COLUMN_COUNT
+    touchBColumn = touchB mod CELL_COLUMN_COUNT
+    touchDx = touchAColumn - touchBColumn
+    if touchDx < 0 then touchDx = 0 - touchDx
+    touchARow = touchA / CELL_COLUMN_COUNT
+    touchBRow = touchB / CELL_COLUMN_COUNT
+    touchDy = touchARow - touchBRow
+    if touchDy < 0 then touchDy = 0 - touchDy
+    touchSum = touchDx + touchDy
+    touchYes = 0
+    if touchSum = 1 then touchYes = 1
+endfunction touchYes
+
+` THE TEXT OF A CATCH, every frame. it pops up over the group, bigger for a moment and then its own size,
+` floats up while the pops wait, and fades as the group pops.
+function wantedText(textNow)
+    textTime# = textNow * .001
+    set effect param float WANTED_TEXT_FX_ID, "Time", textTime#
+    textOn = 0
+    if textNow >= WANTED_TEXT_FROM
+        if textNow < WANTED_TEXT_UNTIL then textOn = 1
+    endif
+    if textOn = 0
+        set text alpha WANTED_TEXT_ID, 0
+        exitfunction
+    endif
+
+    textAge# = textNow - WANTED_TEXT_FROM
+    textLife# = WANTED_TEXT_UNTIL - WANTED_TEXT_FROM
+    textHigh# = WANTED_TEXT_HEIGHT
+    textSize# = textHigh#
+    if textAge# < 160
+        textSize# = textHigh# * 1.25 * textAge# / 160
+    else
+        if textAge# < 280
+            textSize# = textHigh# * (1.25 - .25 * (textAge# - 160) / 120)
+        endif
+    endif
+    if textSize# < 1 then textSize# = 1
+    textRise# = WANTED_TEXT_RISE * textAge# / textLife#
+    textAlpha# = 255
+    textLeft# = textLife# - textAge#
+    if textLeft# < 250 then textAlpha# = 255 * textLeft# / 250
+    textY# = WANTED_TEXT_Y# - textRise#
+    set text position WANTED_TEXT_ID, WANTED_TEXT_X#, textY#
+    size text y WANTED_TEXT_ID, textSize#
+    set text alpha WANTED_TEXT_ID, textAlpha#
+endfunction
+
+` THE MULTIPLIER OF A CATCH. it goes up by one, and its bar is emptied, as if the bar had been filled
+function wantedMultiplier()
+    MULT_PROGRESS = 0
+    addMultiplier(1)
+endfunction
+
+` the debug window lights up the wanted shape, with its top left at the cursor
+function wantedDebugLight()
+    debugLightFirst = WANTED_SHAPE * WANTED_SHAPE_SIZE
+    for debugLightK = 0 to 3
+        debugLightCode = WANTED_SHAPES(debugLightFirst + debugLightK)
+        debugLightColumn = SELECTION_POS.x + debugLightCode mod 4
+        debugLightRow = SELECTION_POS.y + debugLightCode / 4
+        if debugLightColumn >= CELL_COLUMN_COUNT then debugLightColumn = CELL_COLUMN_COUNT - 1
+        if debugLightRow >= CELL_ROW_COUNT then debugLightRow = CELL_ROW_COUNT - 1
+        WANTED_CELLS(debugLightK) = debugLightColumn + debugLightRow * CELL_COLUMN_COUNT
+    next
+    wantedLight(0)
+    schoolChord(5)
+endfunction
+
+
+` THE SHAPES, turned. each shape is shown the way round that has the fewest rows, and every shape is
+` kept turned all eight ways, for a catch.
+function wantedPrepareShapes()
+    for prepShape = 0 to WANTED_SHAPE_COUNT - 1
+        prepFirst = prepShape * WANTED_SHAPE_SIZE
+
+        ` the way round that has the fewest rows. the way that it was written wins a tie.
+        prepBest = 0
+        prepBestDeep = 99
+        for prepTurn = 0 to 3
+            wantedTurnShape(prepFirst, prepTurn)
+            if WANTED_TURN_DEEP < prepBestDeep
+                prepBest = prepTurn
+                prepBestDeep = WANTED_TURN_DEEP
+            endif
+        next
+        wantedTurnShape(prepFirst, prepBest)
+        for prepK = 0 to WANTED_SHAPE_SIZE - 1
+            WANTED_SHAPES(prepFirst + prepK) = WANTED_TURN_CODE(prepK)
+        next
+
+        ` and the eight ways round of that, for a catch: turned, and flipped over and turned
+        for prepTurn = 0 to WANTED_WAYS - 1
+            wantedTurnShape(prepFirst, prepTurn)
+            for prepK = 0 to WANTED_SHAPE_SIZE - 1
+                prepAt = prepShape * 32 + prepTurn * 4
+                prepAt = prepAt + prepK
+                WANTED_ROTS(prepAt) = WANTED_TURN_CODE(prepK)
+            next
+        next
+    next
+endfunction
+
+` one shape, from WANTED_SHAPES at turnFirst, turned a quarter of the way round turnWay times, moved up to
+` the top left, and put in the order of the board, row by row. a way of 4 to 7 is flipped over first, left
+` for right, and then turned turnWay - 4 times.
+function wantedTurnShape(turnFirst, turnWay)
+    turnCount = turnWay mod 4
+    turnFlip = turnWay / 4
+    for turnK = 0 to 3
+        turnCode = WANTED_SHAPES(turnFirst + turnK)
+        turnColumn = turnCode mod 4
+        turnRow = turnCode / 4
+        if turnFlip then turnColumn = 0 - turnColumn
+        turnN = 0
+        while turnN < turnCount
+            turnN = turnN + 1
+            turnWas = turnColumn
+            turnColumn = 0 - turnRow
+            turnRow = turnWas
+        endwhile
+        WANTED_TURN_COLUMN(turnK) = turnColumn
+        WANTED_TURN_ROW(turnK) = turnRow
+    next
+
+    ` up to the top left
+    turnLeft = 99
+    turnTop = 99
+    turnBottom = -99
+    for turnK = 0 to 3
+        if WANTED_TURN_COLUMN(turnK) < turnLeft then turnLeft = WANTED_TURN_COLUMN(turnK)
+        if WANTED_TURN_ROW(turnK) < turnTop then turnTop = WANTED_TURN_ROW(turnK)
+        if WANTED_TURN_ROW(turnK) > turnBottom then turnBottom = WANTED_TURN_ROW(turnK)
+    next
+    WANTED_TURN_DEEP = turnBottom - turnTop
+    WANTED_TURN_DEEP = WANTED_TURN_DEEP + 1
+    for turnK = 0 to 3
+        turnColumn = WANTED_TURN_COLUMN(turnK) - turnLeft
+        turnRow = WANTED_TURN_ROW(turnK) - turnTop
+        WANTED_TURN_CODE(turnK) = turnColumn + turnRow * 4
+    next
+
+    ` in the order of the board, row by row
+    for turnPass = 0 to 2
+        for turnK = 0 to 2
+            if WANTED_TURN_CODE(turnK) > WANTED_TURN_CODE(turnK + 1)
+                turnSwap = WANTED_TURN_CODE(turnK)
+                WANTED_TURN_CODE(turnK) = WANTED_TURN_CODE(turnK + 1)
+                WANTED_TURN_CODE(turnK + 1) = turnSwap
+            endif
+        next
+    next
+endfunction

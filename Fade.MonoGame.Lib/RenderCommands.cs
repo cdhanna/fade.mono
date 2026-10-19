@@ -120,6 +120,57 @@ public partial class FadeMonoGameCommands
     {
         RenderSystem.SetMainRenderSize(width, height);
     }
+
+    /// <summary>
+    /// <para>Draws the game with more pixels than <see cref="SetRenderSize">set render size</see>
+    /// gives it, without changing any of its coordinates.</para>
+    ///
+    /// <para>At a scale of <c>2</c>, every pixel of the game is drawn as 2 by 2 pixels of the
+    /// render buffer. A sprite that is 16 across is still 16 across, and is still placed in the same
+    /// spot, but it is drawn with 32 pixels.</para>
+    /// </summary>
+    /// <remarks>
+    /// This is for a pixel-art game that has some art drawn at a higher resolution than the rest.
+    /// A 32 pixel picture shown at a size of 16 loses every other row and column of its pixels at a
+    /// scale of 1, and keeps all of them at a scale of 2. Art drawn at the game's own size looks
+    /// the same as before, just with each of its pixels drawn twice as big. Text that is drawn
+    /// smaller than its font was made comes out cleaner, because it is shrunk half as much.
+    ///
+    /// <see cref="GetRenderWidth">render width</see>, <see cref="GetRenderHeight">render height</see>,
+    /// the mouse and the cameras all stay in the game's own pixels. A
+    /// <see cref="SetRenderTargetTexture">render target</see> made after this is made bigger by the
+    /// same scale, so a sprite that shows one should be sized with <c>size sprite</c> to the
+    /// render size, as the main buffer is. A <see cref="TakeSnapshot">screenshot</see> saves the
+    /// buffer, so it is bigger by the scale too.
+    ///
+    /// Set it once at startup, after <c>set render size</c> and before any render target is made.
+    /// The screen effect scale (<c>set screen effect scale</c>) stays a multiple of the render size;
+    /// a whole multiple of this scale keeps the pixels even.
+    /// </remarks>
+    /// <example>
+    /// A small pixel-art game that draws its 32 pixel art at a size of 16:
+    /// <code>
+    /// set render size 320, 180
+    /// set render scale 2
+    ///
+    /// texture 1, "ghost32"
+    /// sprite 1, 100, 100, 1
+    /// size sprite 1, 16, 16
+    ///
+    /// DO
+    ///   sync
+    /// LOOP
+    /// </code>
+    /// </example>
+    /// <param name="scale">How many buffer pixels each pixel of the game is drawn with, across and down. 1 is the default.</param>
+    /// <seealso cref="SetRenderSize">set render size</seealso>
+    /// <seealso cref="GetRenderWidth">render width</seealso>
+    /// <seealso cref="SetRenderTargetTexture">render target</seealso>
+    [FadeBasicCommand("set render scale")]
+    public static void SetRenderScale(int scale)
+    {
+        RenderSystem.SetRenderScale(scale);
+    }
     /// <summary>
     /// <para>Returns the width of the main render buffer in pixels.</para>
     ///
@@ -155,7 +206,7 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("render width")]
     public static int GetRenderWidth()
     {
-        return RenderSystem.mainBuffer.Width;
+        return RenderSystem.renderWidth;
     }
     /// <summary>
     /// <para>Returns the height of the main render buffer in pixels.</para>
@@ -191,7 +242,7 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("render height")]
     public static int GetRenderHeight()
     {
-        return RenderSystem.mainBuffer.Height;
+        return RenderSystem.renderHeight;
     }
 
     /// <summary>
@@ -1280,7 +1331,8 @@ public partial class FadeMonoGameCommands
     /// <summary>
     /// <para>Sets how a render output's sprites blend with what is already in the target.</para>
     /// <para>Modes: <c>0</c> alpha (the default), <c>1</c> additive, <c>2</c> opaque,
-    /// <c>3</c> premultiplied alpha.</para>
+    /// <c>3</c> premultiplied alpha, <c>6</c> alpha for a target that is drawn again later: its own alpha
+    /// builds up the way coverage does, so a see-through sprite over a solid backing leaves it solid.</para>
     /// </summary>
     /// <remarks>
     /// Additive is what makes light accumulation possible: a shader cannot add to its own
@@ -1295,7 +1347,7 @@ public partial class FadeMonoGameCommands
     /// additive target should output alpha 1 unless it means to scale itself down.
     /// </remarks>
     /// <param name="outputId">The render output to change. 1 is the default output.</param>
-    /// <param name="mode">0 alpha, 1 additive, 2 opaque, 3 premultiplied.</param>
+    /// <param name="mode">0 alpha, 1 additive, 2 opaque, 3 premultiplied, 6 alpha for a target that is drawn again.</param>
     /// <seealso cref="SetRenderTargetBackground">set render target background color</seealso>
     [FadeBasicCommand("set render target blend")]
     public static void SetRenderTargetBlend(int outputId, int mode)

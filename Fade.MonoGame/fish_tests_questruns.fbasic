@@ -1,0 +1,1843 @@
+remstart
+    THE QUESTS, PLAYED
+    a long test (see THE LONG TESTS in fish_tests_seed): every quest is played from its pickup to
+    its finish, the way that a player would, with real moves of the cursor and real swaps, through
+    handle_combos and everything else that a swap goes through. it is there to show that every
+    quest can be finished, and to catch the quest that cannot, after a change to the game.
+
+    a script for each quest says what to do next, from what the quest knows. the board of the tests
+    has no matches on it, so the script makes the swap that it wants pop: it sets the kinds of a few
+    fish next to the swap, so that the swap makes a line of three. that is the only thing that it
+    does by hand. see THE RIGGING below.
+
+    every quest is played four ways:
+        0  straight through
+        1  the round ends in the middle of it, and the upgrade screen comes up, and nothing is taken
+        2  the same, and the "mind expansion" card is taken, so the board grows under the quest
+        3  the same, and the "stock market" card is taken, so fish join the pops from then on
+    the round is ended by hand, by moving the end of the score bar back to the score.
+
+        FISH_TESTS_LONG=1 Fade.MonoGame.exe --filter-uid fade::long_quests_play_through
+    or build/run-long-tests.ps1 -Name long_quests_play_through. it prints a line that starts with
+    "questrun:" for every quest and way, and a table at the end. FISH_QUEST_ONLY=30 plays only
+    that quest, and FISH_QUEST_WAY=2 plays only that way.
+remend
+
+abstract test questRun from fishBoard
+
+    ` THE RIGGING. the cells that a script must not touch, the kind of fish that it has to use, or
+    ` must not use, and the swap that it decided on
+    global dim tqKeep(400)
+    global dim tqSeen(400)
+    global dim tqStk(400)
+    global dim tqMem(64)
+    global tqAllow = -1 `a cell that is let into a group that pops, though it is kept or marked
+    global tqLetMove = 0 `1 when the swap may move a marked fish
+    global tqForceK = 0 `the kind that the group has to be, or 0 for any
+    global tqAvoidK = 0 `a kind that the group must not be, or 0
+    global tqHorizOnly = 0 `1 when the line of three has to be across
+    global tqSpin = 0
+    global tqMoveCell = -1
+    global tqMoveDir = -1
+    global tqLastO1 = -1
+    global tqLastO2 = -1
+
+    function tqClearKeep()
+        for tqCk = 0 to 399
+            tqKeep(tqCk) = 0
+        next
+        tqAllow = -1
+        tqLetMove = 0
+        tqForceK = 0
+        tqAvoidK = 0
+        tqHorizOnly = 0
+    endfunction
+
+    ` the cell next to this one: 0 is right, 1 is left, 2 is down, and 3 is up. -1 is off of the board.
+    function tqSide(tqSideAt, tqSideDir)
+        tqSideCell = -1
+        if tqSideAt >= 0
+            tqSideX = tqSideAt mod CELL_COLUMN_COUNT
+            tqSideY = tqSideAt / CELL_COLUMN_COUNT
+            if tqSideDir = 0
+                if tqSideX < CELL_COLUMN_COUNT - 1 then tqSideCell = tqSideAt + 1
+            endif
+            if tqSideDir = 1
+                if tqSideX > 0 then tqSideCell = tqSideAt - 1
+            endif
+            if tqSideDir = 2
+                if tqSideY < CELL_ROW_COUNT - 1 then tqSideCell = tqSideAt + CELL_COLUMN_COUNT
+            endif
+            if tqSideDir = 3
+                if tqSideY > 0 then tqSideCell = tqSideAt - CELL_COLUMN_COUNT
+            endif
+        endif
+    endfunction tqSideCell
+
+    ` which way it is from one cell to the one next to it, or -1
+    function tqDirOf(tqDirFrom, tqDirTo)
+        tqDirWay = -1
+        for tqDirN = 0 to 3
+            if tqSide(tqDirFrom, tqDirN) = tqDirTo then tqDirWay = tqDirN
+        next
+    endfunction tqDirWay
+
+    function tqBack(tqBackDir)
+        tqBackWay = 0
+        if tqBackDir = 0 then tqBackWay = 1
+        if tqBackDir = 2 then tqBackWay = 3
+        if tqBackDir = 3 then tqBackWay = 2
+    endfunction tqBackWay
+
+    function tqCursor()
+    endfunction SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+
+    function tqPutCursor(tqPutAt)
+        SELECTION_POS.x = tqPutAt mod CELL_COLUMN_COUNT
+        SELECTION_POS.y = tqPutAt / CELL_COLUMN_COUNT
+    endfunction
+
+    ` can a script change the kind of the fish in this cell?
+    function tqFree(tqFreeAt)
+        tqFreeOk = 0
+        if tqFreeAt >= 0
+            tqFreeKind = CELLS(tqFreeAt).value
+            if tqFreeKind >= 1 and tqFreeKind <= 7 then tqFreeOk = 1
+            if QUEST_MARK(tqFreeAt) > 0 then tqFreeOk = 0
+            if tqKeep(tqFreeAt) then tqFreeOk = 0
+            if CELLS(tqFreeAt).comboForce > 0 then tqFreeOk = 0
+            if CELLS(tqFreeAt).stack > 0 then tqFreeOk = 0
+            if CELLS(tqFreeAt).bellyUp > 0 then tqFreeOk = 0
+            if CORAL_CELLS(tqFreeAt) then tqFreeOk = 0
+        endif
+    endfunction tqFreeOk
+
+    ` how many fish the group that this cell is in has. tqSeen is 1 for the cells of it afterwards.
+    function tqGroup(tqGAt)
+        tqGLast = CELL_COUNT - 1
+        for tqGI = 0 to tqGLast
+            tqSeen(tqGI) = 0
+        next
+        tqSeen(tqGAt) = 1
+        tqGCount = 1
+        tqGKind = CELLS(tqGAt).value
+        tqGMatches = 0
+        if tqGKind >= 1 and tqGKind < QUEST_SOLID_FROM then tqGMatches = 1
+        if tqGMatches
+            tqStk(0) = tqGAt
+            tqGTop = 1
+            tqGCount = 0
+            while tqGTop > 0
+                tqGTop = tqGTop - 1
+                tqGCur = tqStk(tqGTop)
+                tqGCount = tqGCount + 1
+                for tqGS = 0 to 3
+                    tqGN = tqSide(tqGCur, tqGS)
+                    if tqGN >= 0
+                        if tqSeen(tqGN) = 0
+                            if CELLS(tqGN).value = tqGKind
+                                tqSeen(tqGN) = 1
+                                tqStk(tqGTop) = tqGN
+                                tqGTop = tqGTop + 1
+                            endif
+                        endif
+                    endif
+                next
+            endwhile
+        endif
+    endfunction tqGCount
+
+    ` is the group that tqGroup just walked one that must not pop? it may only have kept or marked
+    ` fish in it when that is tqAllow.
+    function tqGroupHurts()
+        tqHurt = 0
+        tqHLast = CELL_COUNT - 1
+        for tqHI = 0 to tqHLast
+            if tqSeen(tqHI)
+                if tqHI <> tqAllow
+                    if QUEST_MARK(tqHI) > 0 then tqHurt = 1
+                    if tqKeep(tqHI) then tqHurt = 1
+                endif
+            endif
+        next
+    endfunction tqHurt
+
+    ` can this cell be one of the three of a line of kind tqUseK? it is already that kind, or it can be made that kind.
+    function tqCanBe(tqCanAt, tqUseK)
+        tqCan = tqFree(tqCanAt)
+        if tqCanAt >= 0
+            if CELLS(tqCanAt).value = tqUseK
+                if QUEST_MARK(tqCanAt) = 0 and tqKeep(tqCanAt) = 0 then tqCan = 1
+                if tqCanAt = tqAllow then tqCan = 1
+            endif
+        endif
+    endfunction tqCan
+
+    ` THE ONE RIG. the fish in `tqF` is swapped into `tqL`, where it makes a line of three with `tqO1`
+    ` and `tqO2`, of kind `tqK`. the kinds are set, if that can be done without anything popping
+    ` before the swap, and without the swap popping a fish that must not pop. 1 if it was done.
+    function tqTry(tqL, tqF, tqO1, tqO2, tqK)
+        tqOk = 1
+        if tqL < 0 or tqF < 0 or tqO1 < 0 or tqO2 < 0 then tqOk = 0
+        if tqOk
+            if tqL = tqF or tqL = tqO1 or tqL = tqO2 then tqOk = 0
+            if tqF = tqO1 or tqF = tqO2 or tqO1 = tqO2 then tqOk = 0
+        endif
+        if tqOk
+            if tqForceK > 0
+                if tqK <> tqForceK then tqOk = 0
+            endif
+            if tqK = tqAvoidK then tqOk = 0
+            if questLocksCell(tqL) then tqOk = 0
+            if questLocksCell(tqF) then tqOk = 0
+            if tqLetMove = 0
+                if QUEST_MARK(tqL) > 0 then tqOk = 0
+            endif
+            if tqKeep(tqL)
+                if tqL <> tqAllow then tqOk = 0
+            endif
+            if CELLS(tqL).value < 1 then tqOk = 0
+            if CELLS(tqL).value = TEX_DIVER then tqOk = 0
+        endif
+        if tqOk
+            if tqCanBe(tqF, tqK) = 0 then tqOk = 0
+            if tqCanBe(tqO1, tqK) = 0 then tqOk = 0
+            if tqCanBe(tqO2, tqK) = 0 then tqOk = 0
+            if CELLS(tqL).value = tqK then tqOk = 0
+        endif
+        if tqOk
+            tqOldF = CELLS(tqF).value
+            tqOldO1 = CELLS(tqO1).value
+            tqOldO2 = CELLS(tqO2).value
+            CELLS(tqF).value = tqK
+            CELLS(tqO1).value = tqK
+            CELLS(tqO2).value = tqK
+
+            ` nothing pops before the swap
+            if tqGroup(tqF) >= getRequiredComboCount() then tqOk = 0
+            if tqGroup(tqO1) >= getRequiredComboCount() then tqOk = 0
+            if tqGroup(tqO2) >= getRequiredComboCount() then tqOk = 0
+            if tqGroup(tqL) >= getRequiredComboCount() then tqOk = 0
+
+            ` and after it, the line pops, and nothing that must not
+            ` the marks go with their fish
+            tqSwapKeep = CELLS(tqL).value
+            CELLS(tqL).value = CELLS(tqF).value
+            CELLS(tqF).value = tqSwapKeep
+            tqMarkKeep = QUEST_MARK(tqL)
+            QUEST_MARK(tqL) = QUEST_MARK(tqF)
+            QUEST_MARK(tqF) = tqMarkKeep
+            if tqGroup(tqL) < getRequiredComboCount() then tqOk = 0
+            if tqGroupHurts() then tqOk = 0
+            if tqAllow >= 0
+                if tqSeen(tqAllow) = 0 then tqOk = 0
+            endif
+            if tqGroup(tqF) >= getRequiredComboCount()
+                if tqGroupHurts() then tqOk = 0
+            endif
+            CELLS(tqF).value = CELLS(tqL).value
+            CELLS(tqL).value = tqSwapKeep
+            QUEST_MARK(tqF) = QUEST_MARK(tqL)
+            QUEST_MARK(tqL) = tqMarkKeep
+
+            if tqOk = 0
+                CELLS(tqF).value = tqOldF
+                CELLS(tqO1).value = tqOldO1
+                CELLS(tqO2).value = tqOldO2
+            endif
+        endif
+        if tqOk
+            updateCell(CELLS(tqF))
+            updateCell(CELLS(tqO1))
+            updateCell(CELLS(tqO2))
+            tqMoveCell = tqF
+            tqMoveDir = tqDirOf(tqF, tqL)
+            tqLastO1 = tqO1
+            tqLastO2 = tqO2
+        endif
+    endfunction tqOk
+
+    ` the two other cells of a line of three through `tqLnAt`. 0 is across, with it in the middle, 1
+    ` is across to its left, 2 to its right, 3 is up and down, with it in the middle, 4 is up, and 5 is down.
+    function tqLineCell(tqLnAt, tqLnOpt, tqLnN)
+        tqLnCell = -1
+        if tqLnOpt = 0
+            tqLnCell = tqSide(tqLnAt, 1 - tqLnN)
+        endif
+        if tqLnOpt = 1
+            tqLnCell = tqSide(tqLnAt, 1)
+            if tqLnN = 1
+                tqLnCell = tqSide(tqLnCell, 1)
+            endif
+        endif
+        if tqLnOpt = 2
+            tqLnCell = tqSide(tqLnAt, 0)
+            if tqLnN = 1
+                tqLnCell = tqSide(tqLnCell, 0)
+            endif
+        endif
+        if tqLnOpt = 3
+            tqLnCell = tqSide(tqLnAt, 3 - tqLnN)
+        endif
+        if tqLnOpt = 4
+            tqLnCell = tqSide(tqLnAt, 3)
+            if tqLnN = 1
+                tqLnCell = tqSide(tqLnCell, 3)
+            endif
+        endif
+        if tqLnOpt = 5
+            tqLnCell = tqSide(tqLnAt, 2)
+            if tqLnN = 1
+                tqLnCell = tqSide(tqLnCell, 2)
+            endif
+        endif
+    endfunction tqLnCell
+
+    ` make the fish in `tqRF`, swapped into `tqRL`, pop there
+    function tqRigPop(tqRL, tqRF)
+        tqRDone = 0
+        tqSpin = tqSpin + 1
+        tqROptLast = 5
+        if tqHorizOnly then tqROptLast = 2
+        for tqRKi = 0 to 6
+            tqRK = ((tqRKi + tqSpin) mod 7) + 1
+            for tqROpt = 0 to tqROptLast
+                if tqRDone = 0
+                    tqRA = tqLineCell(tqRL, tqROpt, 0)
+                    tqRB = tqLineCell(tqRL, tqROpt, 1)
+                    if tqRA >= 0 and tqRB >= 0
+                        if tqRA <> tqRF and tqRB <> tqRF
+                            tqRDone = tqTry(tqRL, tqRF, tqRA, tqRB, tqRK)
+                        endif
+                    endif
+                endif
+            next
+        next
+    endfunction tqRDone
+
+    ` make a swap pop, with the cursor going from `tqStepFrom` to `tqStepTo`: either fish can be the one that pops
+    function tqRigStep(tqStepFrom, tqStepTo)
+        tqStepDone = tqRigPop(tqStepTo, tqStepFrom)
+        if tqStepDone = 0
+            tqStepDone = tqRigPop(tqStepFrom, tqStepTo)
+            ` the swap is still made from where the cursor is
+            if tqStepDone
+                tqMoveCell = tqStepFrom
+                tqMoveDir = tqDirOf(tqStepFrom, tqStepTo)
+            endif
+        endif
+    endfunction tqStepDone
+
+    ` make a line of three of these cells pop, by swapping a fish into one of them
+    function tqRigTriple(tqT1, tqT2, tqT3)
+        tqTDone = 0
+        if tqT1 >= 0 and tqT2 >= 0 and tqT3 >= 0
+            tqSpin = tqSpin + 1
+            for tqTKi = 0 to 6
+                tqTK = ((tqTKi + tqSpin) mod 7) + 1
+                for tqTWhich = 0 to 2
+                    tqTL = tqT1
+                    tqTO1 = tqT2
+                    tqTO2 = tqT3
+                    if tqTWhich = 1
+                        tqTL = tqT2
+                        tqTO1 = tqT1
+                    endif
+                    if tqTWhich = 2
+                        tqTL = tqT3
+                        tqTO2 = tqT1
+                    endif
+                    for tqTD = 0 to 3
+                        if tqTDone = 0
+                            tqTF = tqSide(tqTL, tqTD)
+                            if tqTF >= 0
+                                if tqTF <> tqT1 and tqTF <> tqT2 and tqTF <> tqT3
+                                    tqTDone = tqTry(tqTL, tqTF, tqTO1, tqTO2, tqTK)
+                                endif
+                            endif
+                        endif
+                    next
+                next
+            next
+        endif
+    endfunction tqTDone
+
+    ` make the fish in this cell pop, in a line of three, without moving it
+    function tqRigInclude(tqIAt)
+        tqIDone = 0
+        tqIOptLast = 3
+        if tqHorizOnly then tqIOptLast = 1
+        for tqIDir = 0 to tqIOptLast
+            ` the line runs this way, through the cell: it is at the start, in the middle, or at the end
+            tqIOne = tqSide(tqIAt, tqIDir)
+            tqITwo = tqSide(tqIOne, tqIDir)
+            tqIBack = tqSide(tqIAt, tqBack(tqIDir))
+            if tqIDone = 0
+                tqIDone = tqRigTriple(tqIAt, tqIOne, tqITwo)
+            endif
+            if tqIDone = 0
+                tqIDone = tqRigTriple(tqIBack, tqIAt, tqIOne)
+            endif
+        next
+    endfunction tqIDone
+
+    ` make a swap pop somewhere, anywhere, from the top of the board down. the top is best, because
+    ` nothing above it falls, so nothing else pops after.
+    function tqRigSomewhere()
+        tqSwDone = 0
+        tqSwLast = CELL_COUNT - 1
+        for tqSwAt = 0 to tqSwLast
+            if tqSwDone = 0
+                tqSwDone = tqRigTriple(tqSwAt, tqSide(tqSwAt, 0), tqSide(tqSide(tqSwAt, 0), 0))
+            endif
+        next
+    endfunction tqSwDone
+
+    ` find a swap that pops nothing, away from what is kept. across, when `tqMissAcross` is 1.
+    ` with `tqMissAlone` set, the two fish must have no krill next to them.
+    function tqMiss(tqMissAcross, tqMissAlone)
+        tqMsDone = 0
+        tqMsLast = CELL_COUNT - 1
+        tqSpin = tqSpin + 1
+        tqMsDirLast = 2
+        if tqMissAcross then tqMsDirLast = 0
+        for tqMsN = 0 to tqMsLast
+            tqMsA = (tqMsN + tqSpin * 7) mod CELL_COUNT
+            if tqMissAlone then tqMsA = tqMsN
+            for tqMsDir = 0 to tqMsDirLast
+                if tqMsDone = 0
+                    if tqMsDir <> 1
+                        tqMsB = tqSide(tqMsA, tqMsDir)
+                        tqMsOk = tqFree(tqMsA)
+                        if tqFree(tqMsB) = 0 then tqMsOk = 0
+                        if tqMsOk
+                            if CELLS(tqMsA).value = CELLS(tqMsB).value then tqMsOk = 0
+                        endif
+                        if tqMsOk
+                            if tqMissAlone
+                                for tqMsS = 0 to 3
+                                    tqMsNear = tqSide(tqMsA, tqMsS)
+                                    if tqMsNear >= 0
+                                        if CELLS(tqMsNear).value = TEX_KRILL then tqMsOk = 0
+                                    endif
+                                    tqMsNear = tqSide(tqMsB, tqMsS)
+                                    if tqMsNear >= 0
+                                        if CELLS(tqMsNear).value = TEX_KRILL then tqMsOk = 0
+                                    endif
+                                next
+                            endif
+                        endif
+                        if tqMsOk
+                            tqMsKeepA = CELLS(tqMsA).value
+                            CELLS(tqMsA).value = CELLS(tqMsB).value
+                            CELLS(tqMsB).value = tqMsKeepA
+                            if tqGroup(tqMsA) >= getRequiredComboCount() then tqMsOk = 0
+                            if tqGroup(tqMsB) >= getRequiredComboCount() then tqMsOk = 0
+                            CELLS(tqMsB).value = CELLS(tqMsA).value
+                            CELLS(tqMsA).value = tqMsKeepA
+                        endif
+                        if tqMsOk
+                            tqMsDone = 1
+                            tqMoveCell = tqMsA
+                            tqMoveDir = tqMsDir
+                        endif
+                    endif
+                endif
+            next
+        next
+    endfunction tqMsDone
+
+    ` bring a fish of kind `tqBrK` into the cell `tqBrAt`, with a swap from the cell next to it, that
+    ` pops nothing
+    function tqBring(tqBrAt, tqBrK)
+        tqBrDone = 0
+        for tqBrDir = 0 to 3
+            tqBrFrom = tqSide(tqBrAt, tqBrDir)
+            if tqBrDone = 0
+                if tqFree(tqBrFrom)
+                    if questLocksCell(tqBrAt) = 0
+                        tqBrOld = CELLS(tqBrFrom).value
+                        CELLS(tqBrFrom).value = tqBrK
+                        tqBrOk = 1
+                        if tqGroup(tqBrFrom) >= getRequiredComboCount() then tqBrOk = 0
+                        tqBrSwap = CELLS(tqBrAt).value
+                        CELLS(tqBrAt).value = tqBrK
+                        CELLS(tqBrFrom).value = tqBrSwap
+                        if tqGroup(tqBrAt) >= getRequiredComboCount() then tqBrOk = 0
+                        if tqGroup(tqBrFrom) >= getRequiredComboCount() then tqBrOk = 0
+                        CELLS(tqBrAt).value = tqBrSwap
+                        CELLS(tqBrFrom).value = tqBrK
+                        if tqBrOk
+                            updateCell(CELLS(tqBrFrom))
+                            tqMoveCell = tqBrFrom
+                            tqMoveDir = tqDirOf(tqBrFrom, tqBrAt)
+                            tqBrDone = 1
+                        else
+                            CELLS(tqBrFrom).value = tqBrOld
+                        endif
+                    endif
+                endif
+            endif
+        next
+    endfunction tqBrDone
+
+    ` the next step of the cursor toward a cell, across first. -1 when it is there.
+    function tqToward(tqTwTo)
+        tqTwDir = -1
+        tqTwX = tqTwTo mod CELL_COLUMN_COUNT
+        tqTwY = tqTwTo / CELL_COLUMN_COUNT
+        if SELECTION_POS.y < tqTwY then tqTwDir = 2
+        if SELECTION_POS.y > tqTwY then tqTwDir = 3
+        if SELECTION_POS.x < tqTwX then tqTwDir = 0
+        if SELECTION_POS.x > tqTwX then tqTwDir = 1
+    endfunction tqTwDir
+
+    ` WHAT TO DO NEXT. a code: 1 is to only let the board be looked at, 10 + a way is a step of the
+    ` cursor, 20 + a way is a swap, 30 + a way is the free move, and 0 is that there is nothing to
+    ` be done. a script that swaps puts the cursor where the swap starts, if the quest does not care
+    ` where the cursor has been.
+    function tqSwapCode()
+        tqPutCursor(tqMoveCell)
+    endfunction 20 + tqMoveDir
+
+    ` step the cursor to a cell, and make a swap that pops on every step, or just step when there is none
+    function tqWalkPopping(tqWpTo)
+        tqWpCode = 1
+        tqWpDir = tqToward(tqWpTo)
+        if tqWpDir >= 0
+            tqWpCode = 10 + tqWpDir
+            if tqRigStep(tqCursor(), tqSide(tqCursor(), tqWpDir))
+                tqWpCode = 20 + tqMoveDir
+            endif
+        endif
+    endfunction tqWpCode
+
+    function tqPlanLeftRight()
+        tqPlCode = 1
+        tqDollar = questFindKind(TEX_SAND_DOLLAR)
+        if tqDollar >= 0
+            if tqDollar mod CELL_COLUMN_COUNT < CELL_COLUMN_COUNT - 1
+                ` the fish to its right takes its cell, and pops there, so the sand dollar goes right
+                if tqRigPop(tqDollar, tqDollar + 1)
+                    tqPlCode = tqSwapCode()
+                else
+                    tqPlCode = 0
+                endif
+            endif
+        endif
+    endfunction tqPlCode
+
+    function tqPlanKrill()
+        tqPlCode = 0
+        if tqMiss(1, 1)
+            tqPlCode = tqSwapCode()
+        endif
+    endfunction tqPlCode
+
+    ` move a marked fish one cell along, with a swap that pops the fish that takes its cell
+    function tqMoveMark(tqMmAt, tqMmDir)
+        tqMmDone = 0
+        tqMmTo = tqSide(tqMmAt, tqMmDir)
+        if tqMmTo >= 0
+            if QUEST_MARK(tqMmTo) = 0
+                tqLetMove = 1
+                tqMmDone = tqRigPop(tqMmAt, tqMmTo)
+                tqLetMove = 0
+            endif
+        endif
+    endfunction tqMmDone
+
+    function tqPlanLostPair()
+        tqPlCode = 1
+        tqP1 = questFindMark(1)
+        tqP2 = questFindMark(2)
+        if tqP1 >= 0 and tqP2 >= 0
+            if questManhattan(tqP1, tqP2) > 1
+                tqP1Y = tqP1 / CELL_COLUMN_COUNT
+                tqP2Y = tqP2 / CELL_COLUMN_COUNT
+                tqPlCode = 0
+                tqPlMoved = 0
+                if tqP1Y < tqP2Y
+                    tqPlMoved = tqMoveMark(tqP1, 2)
+                endif
+                if tqP2Y < tqP1Y
+                    tqPlMoved = tqMoveMark(tqP2, 2)
+                endif
+                if tqP1Y = tqP2Y
+                    if tqP1 < tqP2
+                        tqPlMoved = tqMoveMark(tqP1, 0)
+                    else
+                        tqPlMoved = tqMoveMark(tqP1, 1)
+                    endif
+                endif
+                if tqPlMoved
+                    tqPlCode = tqSwapCode()
+                endif
+            endif
+        endif
+    endfunction tqPlCode
+
+    function tqPlanSequence()
+        tqPlCode = 1
+        if QUEST_V(4) < 4
+            tqForceK = QUEST_V(QUEST_V(4))
+            tqPlCode = 0
+            if tqRigSomewhere()
+                tqPlCode = tqSwapCode()
+            endif
+        endif
+    endfunction tqPlCode
+
+    function tqPlanShark()
+        ` keep away from the shark, by a cell more than it can bite
+        tqPlLast = CELL_COUNT - 1
+        for tqPlI = 0 to tqPlLast
+            if questChebyshev(tqPlI, QUEST_V(0)) <= QUEST_SHARK_REACH + 1
+                tqKeep(tqPlI) = 1
+            endif
+        next
+        tqPlCode = 0
+        if tqRigSomewhere()
+            tqPlCode = tqSwapCode()
+        endif
+    endfunction tqPlCode
+
+    function tqPlanPopAnywhere()
+        tqPlCode = 0
+        if tqRigSomewhere()
+            tqPlCode = tqSwapCode()
+        endif
+    endfunction tqPlCode
+
+    function tqPlanSunbeam()
+        tqPlCode = 0
+        tqBeamRow = 0
+        while tqBeamRow < CELL_ROW_COUNT
+            if tqPlCode = 0
+                tqBeamAt = tqBeamRow * CELL_COLUMN_COUNT + QUEST_V(0)
+                if tqRigInclude(tqBeamAt)
+                    tqPlCode = tqSwapCode()
+                endif
+            endif
+            tqBeamRow = tqBeamRow + 1
+        endwhile
+    endfunction tqPlCode
+
+    ` how tall the stalk of seaweed in a column is
+    function tqWeedTall(tqWtX)
+        tqWtTall = 0
+        tqWtY = CELL_ROW_COUNT - 1
+        while tqWtY >= 0
+            if CELLS(tqWtY * CELL_COLUMN_COUNT + tqWtX).value = TEX_SEAWEED
+                tqWtTall = tqWtTall + 1
+                tqWtY = tqWtY - 1
+            else
+                tqWtY = -1
+            endif
+        endwhile
+    endfunction tqWtTall
+
+    function tqPlanSeaweed()
+        ` the first three columns grow together, a row at a time, from a line across them
+        tqPlCode = 1
+        tqWeedLow = tqWeedTall(0)
+        if tqWeedTall(1) < tqWeedLow
+            tqWeedLow = tqWeedTall(1)
+        endif
+        if tqWeedTall(2) < tqWeedLow
+            tqWeedLow = tqWeedTall(2)
+        endif
+        tqWeedRow = CELL_ROW_COUNT - 1
+        tqWeedRow = tqWeedRow - tqWeedLow
+        if tqWeedRow >= 0
+            tqPlCode = 0
+            tqWeedAt = tqWeedRow * CELL_COLUMN_COUNT
+            if tqRigTriple(tqWeedAt, tqWeedAt + 1, tqWeedAt + 2)
+                tqPlCode = tqSwapCode()
+            endif
+        endif
+    endfunction tqPlCode
+
+    function tqPlanWake()
+        ` pops across the top row, from the left, three columns at a time, before the first ones fade
+        tqPlCode = 0
+        tqWakeFrom = -1
+        for tqWakeX = 0 to CELL_COLUMN_COUNT - 1
+            if tqWakeFrom < 0
+                if QUEST_SPOT(tqWakeX) <= 1 then tqWakeFrom = tqWakeX
+            endif
+        next
+        if tqWakeFrom < 0 then tqWakeFrom = 0
+        if tqWakeFrom > CELL_COLUMN_COUNT - 3 then tqWakeFrom = CELL_COLUMN_COUNT - 3
+        if tqRigTriple(tqWakeFrom, tqWakeFrom + 1, tqWakeFrom + 2)
+            tqPlCode = tqSwapCode()
+        endif
+    endfunction tqPlCode
+
+    function tqPlanTurtle()
+        tqPlCode = 0
+        tqTurtle = questFindKind(TEX_TURTLE)
+        if tqTurtle >= 0
+            if tqTurtle mod CELL_COLUMN_COUNT < CELL_COLUMN_COUNT - 1
+                tqKeep(tqTurtle) = 1
+                if CELLS(tqTurtle + 1).value = QUEST_V(0)
+                    ` what it wants is in front of it already, so any swap will do
+                    tqKeep(tqTurtle + 1) = 1
+                    if tqMiss(0, 0)
+                        tqPlCode = tqSwapCode()
+                    endif
+                else
+                    if tqBring(tqTurtle + 1, QUEST_V(0))
+                        tqPlCode = tqSwapCode()
+                    endif
+                endif
+            endif
+        endif
+    endfunction tqPlCode
+
+    function tqPlanCuttlefish()
+        tqPlCode = 0
+        tqCuttle = questFindMark(1)
+        if tqCuttle >= 0
+            if QUEST_V(5 + QUEST_V(4))
+                ` it has popped as this kind already. a swap that pops nothing turns it into the next.
+                tqKeep(tqCuttle) = 1
+                if tqMiss(0, 0)
+                    tqPlCode = tqSwapCode()
+                endif
+            else
+                tqAllow = tqCuttle
+                if tqRigInclude(tqCuttle)
+                    tqPlCode = tqSwapCode()
+                endif
+            endif
+        endif
+    endfunction tqPlCode
+
+    ` CONSTELLATION. the shape is made on the bottom of the board, under the patch, where nothing
+    ` falls out from under it: the marked fish only ever go down, or across.
+    function tqStarTarget(tqStShape, tqStN, tqStLeft)
+        tqStBottom = CELL_ROW_COUNT - 1
+        tqStX = tqStLeft + tqStN
+        tqStY = tqStBottom
+        if tqStShape = 1
+            tqStX = tqStLeft + (tqStN mod 2)
+            tqStY = tqStBottom - tqStN / 2
+        endif
+        if tqStShape = 2
+            if tqStN = 3
+                tqStX = tqStLeft
+                tqStY = tqStBottom - 1
+            endif
+        endif
+    endfunction tqStX + tqStY * CELL_COLUMN_COUNT
+
+    ` one go at a move toward the shape, with its left edge in the column `tqStLeft`. 0 when there is none.
+    function tqStarTry(tqStShape, tqStLeft)
+        tqPlCode = 0
+        ` the four places, and which fish goes to which. the lowest fish go to the places on the
+        ` bottom row, and the rest to the ones above, each from the left.
+        tqStBottomN = 4
+        if tqStShape = 1 then tqStBottomN = 2
+        if tqStShape = 2 then tqStBottomN = 3
+        for tqStN = 0 to 3
+            tqMem(10 + tqStN) = tqStarTarget(tqStShape, tqStN, tqStLeft)
+            tqMem(20 + tqStN) = 0
+        next
+        for tqStN = 1 to 4
+            tqMem(30 + tqStN) = 2
+            tqMem(40 + tqStN) = 0
+        next
+        for tqStPick = 1 to tqStBottomN
+            tqStBest = -1
+            tqStBestRow = -1
+            for tqStN = 1 to 4
+                if tqMem(30 + tqStN) = 2
+                    tqStAt = questFindMark(tqStN)
+                    if tqStAt >= 0
+                        tqStRowNow = tqStAt / CELL_COLUMN_COUNT
+                        if tqStRowNow > tqStBestRow
+                            tqStBestRow = tqStRowNow
+                            tqStBest = tqStN
+                        endif
+                    endif
+                endif
+            next
+            if tqStBest > 0
+                tqMem(30 + tqStBest) = 1
+            endif
+        next
+        for tqStPlace = 0 to 3
+            tqStGroupOf = 2
+            if tqStPlace < tqStBottomN then tqStGroupOf = 1
+            tqStBest = -1
+            tqStBestX = 999
+            for tqStN = 1 to 4
+                if tqMem(30 + tqStN) = tqStGroupOf and tqMem(40 + tqStN) = 0
+                    tqStAt = questFindMark(tqStN)
+                    if tqStAt >= 0
+                        tqStColNow = tqStAt mod CELL_COLUMN_COUNT
+                        if tqStColNow < tqStBestX
+                            tqStBestX = tqStColNow
+                            tqStBest = tqStN
+                        endif
+                    endif
+                endif
+            next
+            if tqStBest > 0
+                tqMem(40 + tqStBest) = 1
+                tqMem(20 + tqStPlace) = tqStBest
+            endif
+        next
+
+        ` move the first fish that is not in its place, down first, then across
+        for tqStPlace = 0 to 3
+            if tqPlCode = 0
+                tqStMark = tqMem(20 + tqStPlace)
+                if tqStMark > 0
+                    tqStAt = questFindMark(tqStMark)
+                    tqStTo = tqMem(10 + tqStPlace)
+                    if tqStAt >= 0 and tqStAt <> tqStTo
+                        tqStDir = -1
+                        if tqStAt / CELL_COLUMN_COUNT < tqStTo / CELL_COLUMN_COUNT
+                            tqStDir = 2
+                        else
+                            if tqStAt mod CELL_COLUMN_COUNT < tqStTo mod CELL_COLUMN_COUNT then tqStDir = 0
+                            if tqStAt mod CELL_COLUMN_COUNT > tqStTo mod CELL_COLUMN_COUNT then tqStDir = 1
+                        endif
+                        if tqStDir >= 0
+                            if tqMoveMark(tqStAt, tqStDir)
+                                tqPlCode = tqSwapCode()
+                            endif
+                        endif
+                        ` down is blocked, so across first
+                        if tqPlCode = 0 and tqStDir = 2
+                            tqStDir = -1
+                            if tqStAt mod CELL_COLUMN_COUNT < tqStTo mod CELL_COLUMN_COUNT then tqStDir = 0
+                            if tqStAt mod CELL_COLUMN_COUNT > tqStTo mod CELL_COLUMN_COUNT then tqStDir = 1
+                            if tqStDir >= 0
+                                if tqMoveMark(tqStAt, tqStDir)
+                                    tqPlCode = tqSwapCode()
+                                endif
+                            endif
+                        endif
+                    endif
+                endif
+            endif
+        next
+    endfunction tqPlCode
+
+    function tqPlanConstellation()
+        tqPlCode = 0
+        tqStShape = QUEST_V(0)
+        tqStLeft = 99
+        for tqStN = 1 to 4
+            tqStAt = questFindMark(tqStN)
+            if tqStAt >= 0
+                if tqStAt mod CELL_COLUMN_COUNT < tqStLeft then tqStLeft = tqStAt mod CELL_COLUMN_COUNT
+            endif
+        next
+        tqStWide = 4
+        if tqStShape = 1 then tqStWide = 2
+        if tqStShape = 2 then tqStWide = 3
+        if tqStLeft > CELL_COLUMN_COUNT - tqStWide then tqStLeft = CELL_COLUMN_COUNT - tqStWide
+
+        ` and if no fish can move toward the shape there, it is put somewhere else
+        tqPlCode = tqStarTry(tqStShape, tqStLeft)
+        tqStAlt = 0
+        while tqPlCode = 0 and tqStAlt <= CELL_COLUMN_COUNT - tqStWide
+            if tqStAlt <> tqStLeft
+                tqPlCode = tqStarTry(tqStShape, tqStAlt)
+            endif
+            tqStAlt = tqStAlt + 1
+        endwhile
+        if tqPlCode = 0
+            if questShapeMade(tqStShape) then tqPlCode = 1
+        endif
+    endfunction tqPlCode
+
+    function tqPlanRemora()
+        ` back and forth across the board, a row at a time, never onto the tail, with every step a swap that pops
+        tqPlCode = 0
+        if tqMem(1) = 0
+            tqMem(1) = 1
+        endif
+        tqRmNext = -1
+        if tqMem(1) > 0
+            tqRmNext = tqSide(tqCursor(), 0)
+        endif
+        if tqMem(1) < 0
+            tqRmNext = tqSide(tqCursor(), 1)
+        endif
+        if tqRmNext < 0
+            tqRmNext = tqSide(tqCursor(), 2)
+            if tqRmNext < 0
+                tqRmNext = tqSide(tqCursor(), 3)
+            endif
+            tqMem(1) = 0 - tqMem(1)
+        endif
+        if tqRmNext >= 0
+            tqPlCode = 10 + tqDirOf(tqCursor(), tqRmNext)
+            if tqRigStep(tqCursor(), tqRmNext) then tqPlCode = 20 + tqMoveDir
+        endif
+    endfunction tqPlCode
+
+    function tqPlanSleepers()
+        ` a new group of the kind that is asleep, away from the ones that are waiting already
+        tqForceK = QUEST_V(0)
+        tqSlLast = CELL_COUNT - 1
+        for tqSlI = 0 to tqSlLast
+            if CELLS(tqSlI).value = tqForceK
+                if tqGroup(tqSlI) >= getRequiredComboCount()
+                    tqKeep(tqSlI) = 1
+                    for tqSlS = 0 to 3
+                        tqSlNear = tqSide(tqSlI, tqSlS)
+                        if tqSlNear >= 0
+                            tqKeep(tqSlNear) = 1
+                            for tqSlT = 0 to 3
+                                tqSlFar = tqSide(tqSlNear, tqSlT)
+                                if tqSlFar >= 0
+                                    tqKeep(tqSlFar) = 1
+                                endif
+                            next
+                        endif
+                    next
+                endif
+            endif
+        next
+        tqPlCode = 0
+        if tqRigSomewhere()
+            tqPlCode = tqSwapCode()
+        endif
+    endfunction tqPlCode
+
+    function tqPlanEcho()
+        tqPlCode = 0
+        ` a swap of the ghost that comes after this swap is made to pop
+        tqEcN = 0
+        tqEcRigged = 0
+        while tqEcN < QUEST_LIST_N
+            if QUEST_LIST(tqEcN + 2) = 1
+                if tqEcRigged = 0
+                    tqEcA = QUEST_LIST(tqEcN)
+                    tqEcB = QUEST_LIST(tqEcN + 1)
+                    if tqRigPop(tqEcB, tqEcA)
+                        tqEcRigged = 1
+                        tqKeep(tqEcA) = 1
+                        tqKeep(tqEcB) = 1
+                        tqKeep(tqLastO1) = 1
+                        tqKeep(tqLastO2) = 1
+                    endif
+                endif
+            endif
+            tqKeep(QUEST_LIST(tqEcN)) = 1
+            tqKeep(QUEST_LIST(tqEcN + 1)) = 1
+            tqEcN = tqEcN + 3
+        endwhile
+        if tqMiss(0, 0)
+            tqPlCode = tqSwapCode()
+        endif
+    endfunction tqPlCode
+
+    function tqPlanPulse()
+        tqPlCode = 0
+        tqPuAt = QUEST_V(0)
+        tqPuKind = CELLS(tqPuAt).value
+        ` one of the four cells between two corners is made the kind of the cell that pulses, so that
+        ` the corners make a line with it when they turn
+        tqPuHas = 0
+        for tqPuS = 0 to 3
+            if CELLS(tqSide(tqPuAt, tqPuS)).value = tqPuKind then tqPuHas = 1
+        next
+        if tqPuHas = 0
+            for tqPuS = 0 to 3
+                if tqPuHas = 0
+                    tqPuMid = tqSide(tqPuAt, tqPuS)
+                    if tqFree(tqPuMid)
+                        tqPuOld = CELLS(tqPuMid).value
+                        CELLS(tqPuMid).value = tqPuKind
+                        if tqGroup(tqPuMid) >= getRequiredComboCount()
+                            CELLS(tqPuMid).value = tqPuOld
+                        else
+                            updateCell(CELLS(tqPuMid))
+                            tqPuHas = 1
+                        endif
+                    endif
+                endif
+            next
+        endif
+
+        ` and a swap that pops nothing, well away from it, counts the moves down
+        tqPuX = tqPuAt mod CELL_COLUMN_COUNT
+        tqPuY = tqPuAt / CELL_COLUMN_COUNT
+        tqPuLast = CELL_COUNT - 1
+        for tqPuI = 0 to tqPuLast
+            tqPuFarX = abs(tqPuI mod CELL_COLUMN_COUNT - tqPuX)
+            tqPuFarY = abs(tqPuI / CELL_COLUMN_COUNT - tqPuY)
+            if tqPuFarX <= 2 and tqPuFarY <= 2
+                tqKeep(tqPuI) = 1
+            endif
+        next
+        if tqMiss(0, 0)
+            tqPlCode = tqSwapCode()
+        endif
+    endfunction tqPlCode
+
+    ` TOTEM and MOORINGS. the cells that are not right yet get their kind brought in, one swap at a time
+    function tqPlanWants()
+        tqPlCode = 0
+        tqWnN = 0
+        while tqWnN < QUEST_LIST_N
+            tqKeep(QUEST_LIST(tqWnN)) = 1
+            tqWnN = tqWnN + 2
+        endwhile
+        tqWnN = 0
+        while tqWnN < QUEST_LIST_N
+            if tqPlCode = 0
+                tqWnAt = QUEST_LIST(tqWnN)
+                tqWnKind = QUEST_LIST(tqWnN + 1)
+                if CELLS(tqWnAt).value <> tqWnKind
+                    if tqBring(tqWnAt, tqWnKind)
+                        tqPlCode = tqSwapCode()
+                    endif
+                endif
+            endif
+            tqWnN = tqWnN + 2
+        endwhile
+        if tqPlCode = 0 then tqPlCode = 1
+    endfunction tqPlCode
+
+    function tqPlanRollCall()
+        tqPlCode = 0
+        tqRcAt = questFindMark(QUEST_V(0))
+        if tqRcAt >= 0
+            tqAllow = tqRcAt
+            if tqRigInclude(tqRcAt)
+                tqPlCode = tqSwapCode()
+            endif
+        endif
+    endfunction tqPlCode
+
+    function tqPlanGlassFish()
+        ` the one fish under it pops, in a line across, so it comes down one row
+        tqPlCode = 1
+        tqGlAt = questFindKind(TEX_GLASS_FISH)
+        if tqGlAt >= 0
+            if tqGlAt / CELL_COLUMN_COUNT < CELL_ROW_COUNT - 1
+                tqKeep(tqGlAt) = 1
+                tqHorizOnly = 1
+                tqPlCode = 0
+                if tqRigInclude(tqGlAt + CELL_COLUMN_COUNT)
+                    tqPlCode = tqSwapCode()
+                endif
+            endif
+        endif
+    endfunction tqPlCode
+
+    function tqPlanReflection()
+        tqPlCode = 0
+        tqRfFrom = QUEST_V(0) * CELL_COLUMN_COUNT + QUEST_V(1)
+        for tqRfN = 0 to 8
+            tqKeep(tqRfFrom + tqRfN) = 1
+        next
+        for tqRfN = 0 to 3
+            if tqPlCode = 0
+                tqRfOne = tqRfFrom + tqRfN
+                tqRfTwo = tqRfFrom + 8 - tqRfN
+                tqRfSame = 0
+                if CELLS(tqRfOne).value = CELLS(tqRfTwo).value then tqRfSame = 1
+                if tqRfSame = 0
+                    if tqBring(tqRfTwo, CELLS(tqRfOne).value)
+                        tqPlCode = tqSwapCode()
+                    else
+                        if tqBring(tqRfOne, CELLS(tqRfTwo).value)
+                            tqPlCode = tqSwapCode()
+                        endif
+                    endif
+                endif
+            endif
+        next
+        if tqPlCode = 0
+            if questReflectPairs() >= 4 then tqPlCode = 1
+        endif
+    endfunction tqPlCode
+
+    function tqPlanTether()
+        ` toward the corner, a swap that pops at a time, and never more than three cells from the buoy
+        tqPlCode = 0
+        tqThBuoy = QUEST_V(0)
+        tqThBest = -1
+        tqThBestFar = 999
+        for tqThDir = 0 to 3
+            tqThTo = tqSide(tqCursor(), tqThDir)
+            if tqThTo >= 0
+                if questChebyshev(tqThTo, tqThBuoy) <= 3
+                    tqThFar = questManhattan(tqThTo, QUEST_V(1))
+                    if tqThFar < tqThBestFar
+                        tqThBestFar = tqThFar
+                        tqThBest = tqThDir
+                    endif
+                endif
+            endif
+        next
+        if tqThBest >= 0
+            tqThTo = tqSide(tqCursor(), tqThBest)
+            if tqRigStep(tqCursor(), tqThTo) then tqPlCode = 20 + tqMoveDir
+        endif
+    endfunction tqPlCode
+
+    function tqPlanLantern()
+        tqPlCode = 1
+        tqLaBest = -1
+        tqLaBestFar = 999
+        for tqLaN = 0 to 2
+            if QUEST_V(1 + tqLaN) = 0
+                tqLaFar = questManhattan(tqCursor(), QUEST_LIST(tqLaN))
+                if tqLaFar < tqLaBestFar
+                    tqLaBestFar = tqLaFar
+                    tqLaBest = QUEST_LIST(tqLaN)
+                endif
+            endif
+        next
+        if tqLaBest >= 0
+            tqPlCode = tqWalkPopping(tqLaBest)
+        endif
+    endfunction tqPlCode
+
+    function tqPlanHatch()
+        tqPlCode = 0
+        for tqHaN = 1 to 3
+            tqHaAt = questFindMark(tqHaN)
+            if tqHaAt >= 0
+                tqKeep(tqHaAt) = 1
+            endif
+        next
+        for tqHaN = 1 to 3
+            if tqPlCode = 0
+                if QUEST_V(20 + tqHaN) = 0
+                    if QUEST_V(tqHaN) = 1
+                        tqHaAt = questFindMark(tqHaN)
+                        if tqHaAt >= 0
+                            tqAllow = tqHaAt
+                            if tqRigInclude(tqHaAt)
+                                tqPlCode = tqSwapCode()
+                            endif
+                            tqAllow = -1
+                        endif
+                    endif
+                endif
+            endif
+        next
+        if tqPlCode = 0
+            if tqMiss(0, 0)
+                tqPlCode = tqSwapCode()
+            endif
+        endif
+    endfunction tqPlCode
+
+    function tqPlanForecast()
+        ` the next fish of a column is set up to land on two of its kind: the two under the top cell
+        ` are made that kind, and the top row pops across the column
+        tqPlCode = 0
+        tqSpin = tqSpin + 1
+        for tqFcTry = 0 to CELL_COLUMN_COUNT - 3
+            if tqPlCode = 0
+                tqFcX = 1 + ((tqFcTry + tqSpin) mod (CELL_COLUMN_COUNT - 2))
+                tqFcKind = QUEST_FORE(tqFcX * 16)
+                tqFcOne = tqFcX + CELL_COLUMN_COUNT
+                tqFcTwo = tqFcOne + CELL_COLUMN_COUNT
+                if tqFree(tqFcOne) and tqFree(tqFcTwo) and tqFree(tqFcX)
+                    tqFcOldOne = CELLS(tqFcOne).value
+                    tqFcOldTwo = CELLS(tqFcTwo).value
+                    tqFcOldTop = CELLS(tqFcX).value
+                    ` the top cell pops, so what is in it now does not matter, as long as it is not that kind
+                    if tqFcOldTop = tqFcKind then CELLS(tqFcX).value = (tqFcKind mod 7) + 1
+                    CELLS(tqFcOne).value = tqFcKind
+                    CELLS(tqFcTwo).value = tqFcKind
+                    tqFcOk = 1
+                    if tqGroup(tqFcOne) >= getRequiredComboCount() then tqFcOk = 0
+                    if tqFcOk
+                        tqKeep(tqFcOne) = 1
+                        tqKeep(tqFcTwo) = 1
+                        tqAvoidK = tqFcKind
+                        if tqRigTriple(tqFcX - 1, tqFcX, tqFcX + 1) = 0 then tqFcOk = 0
+                        tqAvoidK = 0
+                        tqKeep(tqFcOne) = 0
+                        tqKeep(tqFcTwo) = 0
+                    endif
+                    if tqFcOk
+                        updateCell(CELLS(tqFcOne))
+                        updateCell(CELLS(tqFcTwo))
+                        tqPlCode = tqSwapCode()
+                    else
+                        CELLS(tqFcOne).value = tqFcOldOne
+                        CELLS(tqFcTwo).value = tqFcOldTwo
+                        CELLS(tqFcX).value = tqFcOldTop
+                    endif
+                endif
+            endif
+        next
+    endfunction tqPlCode
+
+    function tqPlanTradePlaces()
+        ` the second fish comes one cell along, then the "free move" swaps the two, then the first goes on
+        tqPlCode = 0
+        tqTp1 = questFindMark(1)
+        tqTp2 = questFindMark(2)
+        if tqTp1 >= 0 and tqTp2 >= 0
+            if tqTp2 = QUEST_V(1)
+                if tqMoveMark(tqTp2, 1)
+                    tqPlCode = tqSwapCode()
+                endif
+            endif
+            if tqTp2 = QUEST_V(0) + 1
+                if tqTp1 = QUEST_V(0)
+                    tqPutCursor(tqTp1)
+                    tqPlCode = 30
+                endif
+            endif
+            if tqTp2 = QUEST_V(0)
+                if tqTp1 = QUEST_V(0) + 1
+                    if tqMoveMark(tqTp1, 0)
+                        tqPlCode = tqSwapCode()
+                    endif
+                endif
+                if tqTp1 = QUEST_V(1) then tqPlCode = 1
+            endif
+        endif
+    endfunction tqPlCode
+
+    function tqPlanPilotFish()
+        tqPlCode = 1
+        tqPiRing = -1
+        for tqPiN = 0 to 4
+            if tqPiRing < 0
+                if QUEST_V(11 + tqPiN) = 0
+                    tqPiRing = QUEST_V(1 + tqPiN)
+                endif
+            endif
+        next
+        if tqPiRing >= 0
+            if QUEST_V(0) = tqPiRing and tqCursor() <> tqPiRing
+                ` the little fish is in the ring, so a swap that pops, from wherever the cursor is, takes it
+                tqPlCode = 0
+                for tqPiDir = 0 to 3
+                    if tqPlCode = 0
+                        tqPiTo = tqSide(tqCursor(), tqPiDir)
+                        if tqPiTo >= 0 and tqPiTo <> tqPiRing
+                            if tqRigStep(tqCursor(), tqPiTo) then tqPlCode = 20 + tqMoveDir
+                        endif
+                    endif
+                next
+            else
+                if tqCursor() = tqPiRing
+                    ` step off of it, so that the little fish comes onto it
+                    tqPlCode = 0
+                    for tqPiDir = 0 to 3
+                        if tqPlCode = 0
+                            if tqSide(tqCursor(), tqPiDir) >= 0 then tqPlCode = 10 + tqPiDir
+                        endif
+                    next
+                else
+                    tqPlCode = 10 + tqToward(tqPiRing)
+                endif
+            endif
+        endif
+    endfunction tqPlCode
+
+    function tqPlanFerry()
+        tqPlCode = 1
+        if QUEST_V(0) = 0
+            ` walk to a starfish that is waiting
+            tqFeTo = -1
+            for tqFeN = 1 to 3
+                if tqFeTo < 0
+                    if QUEST_V(10 + tqFeN) = 0
+                        tqFeTo = QUEST_V(tqFeN)
+                    endif
+                endif
+            next
+            if tqFeTo >= 0
+                if tqCursor() = tqFeTo
+                    ` it is only picked up by stepping onto it
+                    tqPlCode = 10 + 2
+                    if tqSide(tqCursor(), 2) < 0 then tqPlCode = 10 + 3
+                else
+                    tqPlCode = 10 + tqToward(tqFeTo)
+                endif
+            endif
+        else
+            ` across to the right edge, with the first steps swaps that pop, until there have been enough
+            tqFeTo = SELECTION_POS.y * CELL_COLUMN_COUNT + CELL_COLUMN_COUNT - 1
+            if tqCursor() <> tqFeTo
+                tqPlCode = 10 + 0
+                if QUEST_V(5) < QUEST_V(7)
+                    if tqRigStep(tqCursor(), tqCursor() + 1) then tqPlCode = 20 + tqMoveDir
+                endif
+            endif
+        endif
+    endfunction tqPlCode
+
+    function tqPlanLasso()
+        tqPlCode = 1
+        tqLsAt = questFindMark(1)
+        if tqLsAt >= 0
+            ` nothing may pop under the ringed fish, or it falls out of the loop
+            tqLsY = tqLsAt / CELL_COLUMN_COUNT
+            while tqLsY < CELL_ROW_COUNT
+                tqKeep(tqLsY * CELL_COLUMN_COUNT + tqLsAt mod CELL_COLUMN_COUNT) = 1
+                tqLsY = tqLsY + 1
+            endwhile
+
+            ` the ring of eight cells around it, from its top left, clockwise
+            tqLsStart = tqLsAt - (CELL_COLUMN_COUNT + 1)
+            tqLsRingAt = -1
+            for tqLsN = 0 to 7
+                tqLsCell = tqLsStart
+                if tqLsN = 1 then tqLsCell = tqLsStart + 1
+                if tqLsN = 2 then tqLsCell = tqLsStart + 2
+                if tqLsN = 3 then tqLsCell = tqLsAt + 1
+                if tqLsN = 4 then tqLsCell = tqLsAt + CELL_COLUMN_COUNT + 1
+                if tqLsN = 5 then tqLsCell = tqLsAt + CELL_COLUMN_COUNT
+                if tqLsN = 6 then tqLsCell = tqLsAt + CELL_COLUMN_COUNT - 1
+                if tqLsN = 7 then tqLsCell = tqLsAt - 1
+                if tqCursor() = tqLsCell then tqLsRingAt = tqLsN
+            next
+            if tqLsRingAt < 0
+                tqPlCode = 10 + tqToward(tqLsStart)
+            else
+                tqLsDir = 0
+                if tqLsRingAt = 2 or tqLsRingAt = 3 then tqLsDir = 2
+                if tqLsRingAt = 4 or tqLsRingAt = 5 then tqLsDir = 1
+                if tqLsRingAt = 6 or tqLsRingAt = 7 then tqLsDir = 3
+                tqPlCode = 10 + tqLsDir
+                if questLassoKnots(0) < QUEST_V(2)
+                    if tqRigStep(tqCursor(), tqSide(tqCursor(), tqLsDir)) then tqPlCode = 20 + tqMoveDir
+                endif
+            endif
+        endif
+    endfunction tqPlCode
+
+    function tqPlanTreasure()
+        tqPlCode = 0
+        if tqRigInclude(QUEST_V(0))
+            tqPlCode = tqSwapCode()
+        endif
+    endfunction tqPlCode
+
+    ` the quest is waiting on its pickup: the cursor goes out to it, and swaps it down onto the check mark
+    function tqPlanPickup()
+        tqPlCode = 1
+        if QUEST_PICK_CELL >= 0
+            if QUEST_CURSOR_OUT = 0
+                tqPutCursor(QUEST_PICK_CELL)
+                tqPlCode = 10 + 0
+            else
+                if QUEST_ACCEPT_MS < 0 then tqPlCode = 20 + 2
+            endif
+        endif
+    endfunction tqPlCode
+
+    function tqPlan()
+        tqClearKeep()
+        tqPlanCode = 1
+        if QUEST_STATE = QSTATE_OFFERED
+            tqPlanCode = tqPlanPickup()
+        endif
+        if QUEST_STATE = QSTATE_ACTIVE
+            if QUEST_CURSOR_OUT
+                ` back onto the board from the pickup
+                tqPlanCode = 1
+                if QUEST_ACCEPT_MS < 0 then tqPlanCode = 10 + 1
+            else
+                tqPlanCode = tqPlanQuest()
+            endif
+        endif
+    endfunction tqPlanCode
+
+    function tqPlanQuest()
+        tqQc = 0
+        if QUEST_ID = QUEST_LEFT_RIGHT
+            tqQc = tqPlanLeftRight()
+        endif
+        if QUEST_ID = QUEST_KRILL
+            tqQc = tqPlanKrill()
+        endif
+        if QUEST_ID = QUEST_LOST_PAIR
+            tqQc = tqPlanLostPair()
+        endif
+        if QUEST_ID = QUEST_SEQUENCE
+            tqQc = tqPlanSequence()
+        endif
+        if QUEST_ID = QUEST_SHARK
+            tqQc = tqPlanShark()
+        endif
+        if QUEST_ID = QUEST_PUFFERS
+            tqAvoidK = QUEST_PUFFER_KIND
+            tqQc = tqPlanPopAnywhere()
+        endif
+        if QUEST_ID = QUEST_PROTECTED
+            tqQc = tqPlanPopAnywhere()
+        endif
+        if QUEST_ID = QUEST_SUNBEAM
+            tqQc = tqPlanSunbeam()
+        endif
+        if QUEST_ID = QUEST_CONTINUOUS
+            tqQc = tqPlanPopAnywhere()
+        endif
+        if QUEST_ID = QUEST_SEAWEED
+            tqQc = tqPlanSeaweed()
+        endif
+        if QUEST_ID = QUEST_WAKE
+            tqQc = tqPlanWake()
+        endif
+        if QUEST_ID = QUEST_TURTLE
+            tqQc = tqPlanTurtle()
+        endif
+        if QUEST_ID = QUEST_CUTTLEFISH
+            tqQc = tqPlanCuttlefish()
+        endif
+        if QUEST_ID = QUEST_CONSTELLATION
+            tqQc = tqPlanConstellation()
+        endif
+        if QUEST_ID = QUEST_REMORA
+            tqQc = tqPlanRemora()
+        endif
+        if QUEST_ID = QUEST_SLEEPERS
+            tqQc = tqPlanSleepers()
+        endif
+        if QUEST_ID = QUEST_ECHO
+            tqQc = tqPlanEcho()
+        endif
+        if QUEST_ID = QUEST_PULSE
+            tqQc = tqPlanPulse()
+        endif
+        if QUEST_ID = QUEST_TOTEM
+            tqQc = tqPlanWants()
+        endif
+        if QUEST_ID = QUEST_ROLL_CALL
+            tqQc = tqPlanRollCall()
+        endif
+        if QUEST_ID = QUEST_GLASS_FISH
+            tqQc = tqPlanGlassFish()
+        endif
+        if QUEST_ID = QUEST_REFLECTION
+            tqQc = tqPlanReflection()
+        endif
+        if QUEST_ID = QUEST_TETHER
+            tqQc = tqPlanTether()
+        endif
+        if QUEST_ID = QUEST_LANTERN
+            tqQc = tqPlanLantern()
+        endif
+        if QUEST_ID = QUEST_HATCH
+            tqQc = tqPlanHatch()
+        endif
+        if QUEST_ID = QUEST_FORECAST
+            tqQc = tqPlanForecast()
+        endif
+        if QUEST_ID = QUEST_MOORINGS
+            tqQc = tqPlanWants()
+        endif
+        if QUEST_ID = QUEST_TRADE_PLACES
+            tqQc = tqPlanTradePlaces()
+        endif
+        if QUEST_ID = QUEST_PILOT_FISH
+            tqQc = tqPlanPilotFish()
+        endif
+        if QUEST_ID = QUEST_FERRY
+            tqQc = tqPlanFerry()
+        endif
+        if QUEST_ID = QUEST_LASSO
+            tqQc = tqPlanLasso()
+        endif
+        if QUEST_ID = QUEST_TREASURE
+            tqQc = tqPlanTreasure()
+        endif
+    endfunction tqQc
+
+    ` a new game, on the board of the tests, with the quest waiting on its pickup
+    function tqStartQuest(tqSqId, tqSqWay)
+        for tqSqN = 0 to 63
+            tqMem(tqSqN) = 0
+        next
+        QTALK_ENABLED = 0
+        OPTION_SOUND = 0
+        OPTION_MUSIC = 0
+        SCORE_BAR.endVal = CURRENT_SCORE + 1000000
+        ` half of the round has to be scored with the guarded fish left alone. not half of a million.
+        if tqSqId = QUEST_PROTECTED
+            SCORE_BAR.startVal = CURRENT_SCORE
+            SCORE_BAR.endVal = CURRENT_SCORE + 600
+        endif
+        PROGRESS_BARS(0) = SCORE_BAR
+        testBoard()
+        testCursor(4, 4)
+        ` the fish of a quest that is taken can only swap places with the "free move"
+        if tqSqId = QUEST_TRADE_PLACES
+            grantMoveToSlot(ABILITY_INDEX_MOVE_FREE, 0)
+        endif
+        questForce(tqSqId)
+        QUEST_REARM = 0 `it waits to be picked up, the way that it does in a game
+    endfunction
+endtest
+
+
+test long_quests_play_through from questRun
+    if val(env$("FISH_TESTS_LONG")) = 0 then end
+
+    ` the upgrade screen waits for a key. it is held down while the screen is up.
+    global tqPress = 0
+    mock new action down
+    endmock tqPress
+
+    tqOnly = val(env$("FISH_QUEST_ONLY"))
+    tqOneWay = val(env$("FISH_QUEST_WAY"))
+    tqWayText$ = env$("FISH_QUEST_WAY")
+    if tqWayText$ = "" then tqOneWay = -1
+    global dim tqResult(200)
+    global dim tqActions(200)
+    tqFailures = 0
+    tqPlayed = 0
+
+    for tqWay = 0 to 3
+        tqWayOn = 1
+        if tqOneWay >= 0
+            if tqOneWay <> tqWay then tqWayOn = 0
+        endif
+        for tqQuest = 1 to QUEST_COUNT
+            tqOn = tqWayOn
+            if tqOnly > 0
+                if tqOnly <> tqQuest then tqOn = 0
+            endif
+            if tqOn
+                tqPlayed = tqPlayed + 1
+
+                ` a new game for every quest, on a seed of its own, so that a quest is played the same every time
+                OPTION_GAME_SEED = 7000 + tqQuest * 10 + tqWay
+                OPTION_GAME_LENGTH = GAME_LENGTH_REGULAR
+                OPTION_GAME_ZEN = 0
+                REQUEST_SEED_RESTART = 1
+                runto _loop
+                runto _loop
+                tqStartQuest(tqQuest, tqWay)
+                set sfx group volume SFX_GROUP_SFX, 0
+                set sfx group volume SFX_GROUP_MUSIC, 0
+
+                tqDoneBefore = QUESTS_DONE
+                tqCount = 0
+                tqActive = 0
+                tqStuck = 0
+                tqNothing = 0
+                tqRestarts = 0
+                tqInterrupted = 0
+                tqWasActive = 0
+                tqWhy$ = "too many moves"
+                tqFinished = 0
+                tqBumpDue = 0
+                tqLost = 0
+                tqProgBefore = 0
+                while tqFinished = 0
+                    ` the round is ended in the middle of the quest, and the card of the way is taken
+                    if tqWay > 0 and tqInterrupted = 0
+                        ` once the quest has got somewhere, so that there is something for the upgrade to lose
+                        tqEndNow = 0
+                        if tqActive >= 3 and QUEST_STATE = QSTATE_ACTIVE
+                            if QUEST_PROG_NOW > 0 then tqEndNow = 1
+                        endif
+                        ` a quest with no count on its badge has nothing to show, and some are over quickly
+                        if tqActive >= 2 and QUEST_STATE = QSTATE_ACTIVE
+                            if QUEST_PROG_NEED = 0 then tqEndNow = 1
+                        endif
+                        if tqActive >= 15 then tqEndNow = 1
+                        if tqEndNow
+                            tqInterrupted = 1
+                            tqProgBefore = QUEST_PROG_NOW
+                            ` a round is never empty: a bar that ends where it starts divides by nothing
+                            SCORE_BAR.endVal = CURRENT_SCORE
+                            if SCORE_BAR.startVal > CURRENT_SCORE - 10 then SCORE_BAR.startVal = CURRENT_SCORE - 10
+                            PROGRESS_BARS(0) = SCORE_BAR
+                            print "questrun: the round is ended, " + str$(tqActive) + " moves into the quest, at " + str$(QUEST_PROG_NOW) + "/" + str$(QUEST_PROG_NEED)
+                        endif
+                    endif
+
+                    tqCode = tqPlan()
+                    tqCount = tqCount + 1
+                    if QUEST_STATE = QSTATE_ACTIVE then tqActive = tqActive + 1
+                    print "questrun: " + str$(tqQuest) + " move " + str$(tqCount) + " code " + str$(tqCode) + " cursor " + str$(SELECTION_POS.x) + "," + str$(SELECTION_POS.y) + " state " + str$(QUEST_STATE) + " " + str$(QUEST_PROG_NOW) + "/" + str$(QUEST_PROG_NEED)
+                    if tqCode = 0
+                        tqNothing = tqNothing + 1
+                        REQUEST_COMBO_CHECK = 1
+                    else
+                        tqNothing = 0
+                        tqDir = tqCode mod 10
+                        tqDx = 0
+                        tqDy = 0
+                        if tqDir = 0 then tqDx = 1
+                        if tqDir = 1 then tqDx = -1
+                        if tqDir = 2 then tqDy = 1
+                        if tqDir = 3 then tqDy = -1
+                        if tqCode = 1 then REQUEST_COMBO_CHECK = 1
+                        if tqCode >= 10 and tqCode < 20
+                            testQueueMove(tqDx, tqDy, 0, -1)
+                        endif
+                        if tqCode >= 20 and tqCode < 30
+                            testQueueMove(tqDx, tqDy, 1, -1)
+                        endif
+                        if tqCode >= 30
+                            MOVE_ABILITY_BINDINGS(0).movesLeft = 0
+                            testQueueMove(tqDx, tqDy, 1, 0)
+                        endif
+                    endif
+
+                    ` the board settles, and a round that ends brings the upgrade screen
+                    tqFrames = 0
+                    tqBusy = 1
+                    tqCalm = 0
+                    while tqBusy
+                        runto _loop
+                        tqFrames = tqFrames + 1
+                        if QUEST_STATE = QSTATE_ACTIVE then tqWasActive = 1
+                        ` the screen only comes up once the swap that is playing out has finished. see handle_ability_selection.
+                        if REQUEST_ABILITY_SELECTION and LIVE_MOVE_ACTIVE = 0
+                            tqCard = 0
+                            if tqWay = 2 then tqCard = ABILITY_INDEX_MIND_EXPANSION
+                            if tqWay = 3 then tqCard = ABILITY_INDEX_PASSIVE_STOCK_MARKET
+                            if QUESTS_DONE > tqDoneBefore then tqCard = 0
+                            print "questrun: the upgrade screen, card " + str$(tqCard) + ", quest state " + str$(QUEST_STATE)
+                            tqPress = 1
+                            tqShut = 0
+                            tqScreenFrames = 0
+                            while tqShut = 0
+                                runto frame_ability_selection
+                                tqScreenFrames = tqScreenFrames + 1
+                                tqFade# = tweenVal(INFO_FADE_TWEEN_ID)
+                                if tqFade# < 1
+                                    tqShut = 1
+                                else
+                                    if tqCard > 0
+                                        ABILITY_CHOICES(0).abilityIndex = tqCard
+                                        ABILITY_SELECTION_INDEX = 0
+                                        UPGRADE_SKIP_SELECTED = 0
+                                    else
+                                        UPGRADE_SKIP_SELECTED = 1
+                                        UPGRADE_ROW_PICK = 0
+                                    endif
+                                endif
+                                if tqScreenFrames > 2000 then tqShut = 1
+                            endwhile
+                            tqPress = 0
+                            tqBumpDue = 1
+                            runto _loop
+                        endif
+                        ` the next round is as long as a quest needs
+                        if tqBumpDue
+                            if SCORE_BAR_HOLD = 0 and REQUEST_ABILITY_SELECTION = 0
+                                tqBumpDue = 0
+                                ` the quest comes through the upgrade screen as it was, board or no board
+                                if tqInterrupted = 1
+                                    tqInterrupted = 2
+                                    if QUESTS_DONE = tqDoneBefore
+                                        if QUEST_STATE <> QSTATE_ACTIVE or QUEST_PROG_NOW < tqProgBefore
+                                            tqLost = 1
+                                        endif
+                                    endif
+                                endif
+                                print "questrun: after the upgrade screen, the board is " + str$(CELL_COLUMN_COUNT) + "x" + str$(CELL_ROW_COUNT) + ", quest state " + str$(QUEST_STATE) + " at " + str$(QUEST_PROG_NOW) + "/" + str$(QUEST_PROG_NEED)
+                                SCORE_BAR.endVal = CURRENT_SCORE + 1000000
+                                PROGRESS_BARS(0) = SCORE_BAR
+                            endif
+                        endif
+                        tqBusy = 0
+                        if REQUEST_COMBO_CHECK then tqBusy = 1
+                        if LIVE_MOVE_ACTIVE then tqBusy = 1
+                        if QUEUED_MOVE_NUM > 0 then tqBusy = 1
+                        if SCORE_TICK_COUNT > 0 then tqBusy = 1
+                        if SCORE_BAR_HOLD = 1 then tqBusy = 1
+                        if REQUEST_ABILITY_SELECTION then tqBusy = 1
+                        if PENDING_BOARD_EXPANSIONS > 0 then tqBusy = 1
+                        if QUEST_ACCEPT_MS >= 0 then tqBusy = 1
+                        if QUEST_INIT_DUE and QUEST_ARRIVING = 0 then tqBusy = 1
+                        if tqBumpDue then tqBusy = 1
+                        if COMBO_PHASE > 0 then tqBusy = 1
+                        ` a couple of quiet frames, so that the quest has heard everything
+                        if tqBusy = 0
+                            tqCalm = tqCalm + 1
+                            if tqCalm < 3 then tqBusy = 1
+                        else
+                            tqCalm = 0
+                        endif
+                        if tqFrames > 1500
+                            tqBusy = 0
+                            tqStuck = tqStuck + 1
+                            print "questrun: stuck: combo " + str$(REQUEST_COMBO_CHECK) + " live " + str$(LIVE_MOVE_ACTIVE) + " queued " + str$(QUEUED_MOVE_NUM) + " ticks " + str$(SCORE_TICK_COUNT) + " hold " + str$(SCORE_BAR_HOLD) + " init " + str$(QUEST_INIT_DUE) + " phase " + str$(COMBO_PHASE)
+                        endif
+                    endwhile
+
+                    if tqWasActive
+                        if QUEST_STATE = QSTATE_NONE and QUESTS_DONE = tqDoneBefore then tqRestarts = tqRestarts + 1
+                    endif
+                    tqWasActive = 0
+
+                    if QUESTS_DONE > tqDoneBefore
+                        tqFinished = 1
+                        tqWhy$ = "done"
+                    endif
+                    if tqFinished = 0
+                        if tqCount >= 160 then tqFinished = 2
+                        if tqStuck >= 3
+                            tqFinished = 2
+                            tqWhy$ = "the board never settled"
+                        endif
+                        if tqNothing >= 4
+                            tqFinished = 2
+                            tqWhy$ = "the script found nothing to do"
+                        endif
+                        if QUEST_ID <> tqQuest
+                            tqFinished = 2
+                            tqWhy$ = "the quest went away"
+                        endif
+                    endif
+                endwhile
+
+                if tqLost
+                    tqFinished = 2
+                    tqWhy$ = "it lost what it had done at the upgrade screen, and then " + tqWhy$
+                endif
+                tqSlot = tqWay * 40 + tqQuest
+                tqResult(tqSlot) = tqFinished
+                tqActions(tqSlot) = tqCount
+                if tqFinished <> 1 then tqFailures = tqFailures + 1
+                tqWayWords$ = "straight"
+                if tqWay = 1 then tqWayWords$ = "upgrade, nothing taken"
+                if tqWay = 2 then tqWayWords$ = "upgrade, mind expansion"
+                if tqWay = 3 then tqWayWords$ = "upgrade, stock market"
+                tqLine$ = "questrun: RESULT " + str$(tqQuest) + " " + loc$(QUEST_DEFS(tqQuest).name$) + " (" + tqWayWords$ + "): " + tqWhy$ + " after " + str$(tqCount) + " moves, " + str$(tqRestarts) + " restarts"
+                if tqWay > 0 and tqInterrupted = 0 then tqLine$ = tqLine$ + ", finished before the round could be ended"
+                print tqLine$
+            endif
+        next
+    next
+
+    print "questrun: " + str$(tqPlayed) + " played, " + str$(tqFailures) + " not finished"
+    assert tqFailures = 0, "every quest can be finished, every way"
+    end
+endtest
+
+
+` THE BOARD GROWS UNDER A QUEST. the "mind expansion" card adds a column, or a row, once the upgrade
+` screen is out of the way. the quest comes along, as it was. it used to start over.
+
+test quest_ferry_keeps_its_starfish_when_the_board_grows from fishBoard
+    questForce(QUEST_FERRY)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_STATE = QSTATE_ACTIVE, "the ferry is being played"
+
+    ` one starfish is across, and the second one is on its way
+    QUEST_V(11) = 2
+    QUEST_V(6) = 1
+    QUEST_V(0) = 2
+    QUEST_V(12) = 1
+    QUEST_V(5) = 2
+    tFkRow = QUEST_V(3) / CELL_COLUMN_COUNT
+
+    PENDING_BOARD_EXPANSIONS = 1
+    tFkFrames = 0
+    while tFkFrames < 300
+        runto _loop
+        tFkFrames = tFkFrames + 1
+        if PENDING_BOARD_EXPANSIONS = 0 and QUEST_HOLD = 0 then tFkFrames = 300
+    endwhile
+    assert CELL_COLUMN_COUNT = 10, "the board has a new column"
+    assert QUEST_STATE = QSTATE_ACTIVE, "the ferry is still being played"
+    assert QUEST_V(6) = 1, "the starfish that was across still is"
+    assert QUEST_V(0) = 2, "and the one that was being carried still is"
+    assert QUEST_V(5) = 2, "with the pops that it had on the way"
+    assert QUEST_V(3) = tFkRow * CELL_COLUMN_COUNT, "the one that is waiting is at the left edge of its row, as it was"
+    end
+endtest
+
+test quest_pickup_stays_beside_the_board_when_it_grows from fishBoard
+    questForce(QUEST_FERRY)
+    QUEST_REARM = 0
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    assert QUEST_STATE = QSTATE_OFFERED, "the ferry waits to be picked up"
+    tPkRow = QUEST_PICK_CELL / CELL_COLUMN_COUNT
+
+    PENDING_BOARD_EXPANSIONS = 1
+    tPkFrames = 0
+    while tPkFrames < 300
+        runto _loop
+        tPkFrames = tPkFrames + 1
+        if PENDING_BOARD_EXPANSIONS = 0 and QUEST_HOLD = 0 then tPkFrames = 300
+    endwhile
+    assert QUEST_STATE = QSTATE_OFFERED, "it still waits to be picked up"
+    tPkWant = tPkRow * CELL_COLUMN_COUNT + CELL_COLUMN_COUNT - 1
+    assert QUEST_PICK_CELL = tPkWant, "beside the new last cell of its row"
+    end
+endtest
+
+
+` THE SHARK only eats what a swap puts together, and not what falls into place after it
+
+test quest_shark_is_not_fed_by_what_falls from fishBoard
+    questForce(QUEST_SHARK)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    QUEST_V(0) = testIndex(1, 1)
+
+    ` three fish under the red pop, three cells from the shark, which is out of its reach. the column
+    ` over them falls three cells, and the fish from the top lands between two of its kind, in the red.
+    testPut(1, 4, 7)
+    testPut(1, 5, 7)
+    testPut(1, 6, 7)
+    testPut(1, 0, 6)
+    testPut(0, 3, 6)
+    testPut(2, 3, 6)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert totalComboCount = 1, "the three fish under the red pop"
+    assert QUEST_V(2) = 0, "out of its reach"
+    runto _combos_judged
+    assert testPops(1, 3), "the fish that fell makes a group in the red, which pops"
+    assert QUEST_V(2) = 0, "and the shark does not eat it"
+    tShFrames = 0
+    while tShFrames < 60
+        runto _loop
+        tShFrames = tShFrames + 1
+    endwhile
+    assert QUEST_STATE = QSTATE_ACTIVE, "so the quest carries on"
+    end
+endtest
+
+test quest_shark_lets_the_stock_market_pop_in_the_red from fishBoard
+    grantPassive(ABILITY_INDEX_PASSIVE_STOCK_MARKET)
+    questForce(QUEST_SHARK)
+    REQUEST_COMBO_CHECK = 0
+    stepQuest()
+    QUEST_V(0) = testIndex(1, 1)
+
+    ` the stock market rolls high, and starts looking for its fish right next to the shark
+    global tSsRolls = 0
+    global tSsStart = 0
+    tSsStart = testIndex(2, 2)
+    mock random stream
+        tSsRolls = tSsRolls + 1
+        tSsRoll = 0
+        if tSsRolls = 1 then tSsRoll = 9
+        if tSsRolls = 2 then tSsRoll = tSsStart
+    endmock tSsRoll
+
+    ` a group far from the shark
+    testPut(6, 7, 6)
+    testPut(7, 7, 6)
+    testPut(8, 7, 6)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert testPopCount() = 4, "the stock market added a fish to the group"
+    assert testPops(2, 2), "right next to the shark"
+    assert QUEST_V(2) = 0, "and the shark did not eat it"
+    end
+endtest

@@ -734,8 +734,136 @@ test school_fall_in_line_lets_fish_that_fell_together_school from fishBoard
 endtest
 
 test school_fall_in_line_is_a_passive_that_is_dealt from fishBoard
-    assert ABILITY_INDEX_FALL_IN_LINE = CARD_LENGTH - 1, "it is the last card"
+    assert ABILITY_INDEX_FALL_IN_LINE = 36, "it comes after the angler"
     assert CARDS(ABILITY_INDEX_FALL_IN_LINE).abilityType = ABILITY_TYPE_PASSIVE, "it is a passive"
     assert CARDS(ABILITY_INDEX_FALL_IN_LINE).stackable = 0, "and it is only taken once"
+    end
+endtest
+
+
+` THREE MORE CARDS
+
+test school_flipper_turns_both_fish_of_a_swap_across_the_other_way from fishBoard
+    grantMoveToSlot(ABILITY_INDEX_FLIPPER, 0)
+    MOVE_ABILITY_BINDINGS(0).movesLeft = 0
+    testCursor(2, 2)
+    testQueueMove(1, 0, 1, 0)
+    runto _combos_judged
+    assert SCHOOL_FACE(testIndex(3, 2)) = -1, "the fish carried right faces left"
+    assert SCHOOL_FACE(testIndex(2, 2)) = 1, "and the one shoved left faces right"
+    assert MOVE_ABILITY_BINDINGS(0).movesLeft = 3, "and the move has to recharge"
+    end
+endtest
+
+test school_flipper_turns_both_fish_of_a_swap_down_around from fishBoard
+    grantMoveToSlot(ABILITY_INDEX_FLIPPER, 0)
+    MOVE_ABILITY_BINDINGS(0).movesLeft = 0
+    SCHOOL_FACE(testIndex(2, 2)) = 1
+    SCHOOL_FACE(testIndex(2, 3)) = -1
+    testCursor(2, 2)
+    testQueueMove(0, 1, 1, 0)
+    runto _combos_judged
+    assert SCHOOL_FACE(testIndex(2, 3)) = -1, "the fish that went down faced right, and now faces left"
+    assert SCHOOL_FACE(testIndex(2, 2)) = 1, "and the one that came up faced left, and now faces right"
+    end
+endtest
+
+test school_high_stakes_doubles_until_the_next_swap from fishBoard
+    grantMoveToSlot(ABILITY_INDEX_HIGH_STAKES, 0)
+    MOVE_ABILITY_BINDINGS(0).movesLeft = 0
+    testCursor(4, 4)
+    testQueueMove(1, 0, 1, 0)
+    runto _combos_judged
+    assert SCHOOL_STAKES = 2, "the points are doubled"
+    assert MOVE_ABILITY_BINDINGS(0).movesLeft = 6, "and the move is ready again after six more"
+    assert get text$(MULT_TEXT_ID) = "x2", "the multiplier shows it"
+    runto _loop
+    testQueueMove(-1, 0, 1, -1)
+    runto _combos_judged
+    assert SCHOOL_STAKES = 1, "the next swap is back to normal"
+    end
+endtest
+
+test school_high_stakes_doubles_the_points_of_a_group from fishBoard
+    schoolStakes(2)
+    CURRENT_SCORE = 0
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert CURRENT_SCORE = 120, "three fish score 10 + 20 + 30, twice over"
+    end
+endtest
+
+test school_high_stakes_doubles_the_fish_flushed_under_it from fishBoard
+    CELLS(testIndex(0, 8)).value = 7
+    schoolFishLeaves(testIndex(0, 8), 0)
+    schoolFishLeaves(testIndex(0, 8), 0)
+    FLOCK_BORN(0) = -100000
+    FLOCK_BORN(1) = -100000
+    testBoard()
+    CURRENT_SCORE = 0
+    schoolStakes(2)
+    schoolFlush(-1)
+    schoolStakes(1)
+    FLOCK_Y#(0) = 2
+    FLOCK_Y#(1) = 3
+    tStakeFrames = 0
+    while tStakeFrames < 200
+        runto _loop
+        tStakeFrames = tStakeFrames + 1
+        if FLOCK_ON(0) = 0
+            if FLOCK_ON(1) = 0 then tStakeFrames = 200
+        endif
+    endwhile
+    assert FLOCK_ON(0) = 0, "they popped"
+    assert CURRENT_SCORE = 60, "for 10 and then 20, doubled, though the stakes were back to normal when they popped"
+    end
+endtest
+
+test school_tolerance_keeps_a_third_of_a_school_sent_away from fishBoard
+    CELLS(testIndex(0, 8)).value = 7
+    for tTolI = 0 to 5
+        schoolFishLeaves(testIndex(0, 8), 0)
+    next
+    testBoard()
+    for tTolI = 0 to 5
+        FLOCK_BORN(tTolI) = -100000
+        FLOCK_X#(tTolI) = 20 + tTolI * 40
+    next
+    FLOCK_X#(2) = WORLD_WIDTH / 2
+    FLOCK_X#(4) = WORLD_WIDTH / 2 + 5
+    CARDS(ABILITY_INDEX_TOLERANCE).obtained = 1
+    schoolDepart(7)
+    tTolGone = 0
+    for tTolI = 0 to 5
+        if FLOCK_LEAVE(tTolI) <> 0 then tTolGone = tTolGone + 1
+    next
+    assert tTolGone = 4, "two thirds of the six leave"
+    assert FLOCK_LEAVE(2) = 0, "the one in the middle stays"
+    assert FLOCK_LEAVE(4) = 0, "and so does the one next nearest to it"
+    end
+endtest
+
+test school_tolerance_sends_a_small_school_all_away from fishBoard
+    CELLS(testIndex(0, 8)).value = 7
+    schoolFishLeaves(testIndex(0, 8), 0)
+    schoolFishLeaves(testIndex(0, 8), 0)
+    FLOCK_BORN(0) = -100000
+    FLOCK_BORN(1) = -100000
+    testBoard()
+    CARDS(ABILITY_INDEX_TOLERANCE).obtained = 1
+    schoolDepart(7)
+    assert FLOCK_LEAVE(0) <> 0, "a third of two is none, so both leave"
+    assert FLOCK_LEAVE(1) <> 0, "the two of them"
+    end
+endtest
+
+test school_the_three_cards_after_fall_in_line_are_dealt from fishBoard
+    assert ABILITY_INDEX_TOLERANCE = CARD_LENGTH - 1, "tolerance is the last card"
+    assert CARDS(ABILITY_INDEX_FLIPPER).abilityType = ABILITY_TYPE_MOVE, "flipper is a move"
+    assert CARDS(ABILITY_INDEX_HIGH_STAKES).moveClock = 7, "high stakes waits six moves after its own"
+    assert CARDS(ABILITY_INDEX_TOLERANCE).abilityType = ABILITY_TYPE_PASSIVE, "tolerance is a passive"
     end
 endtest

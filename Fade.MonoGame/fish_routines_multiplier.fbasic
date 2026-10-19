@@ -187,7 +187,8 @@ endfunction
 
 ` write the multiplier onto the screen, and slide the bar to where it should be over `duration` milliseconds
 function refreshMultiplier(duration)
-    set text MULT_TEXT_ID, "x" + str$(SCORE_MULTIPLIER)
+    ` with "high stakes", it shows the doubled number. see THREE MORE CARDS in fish_headers_school.
+    set text MULT_TEXT_ID, "x" + str$(SCORE_MULTIPLIER * SCHOOL_STAKES)
 
     requiredNow = getMultiplierRequired()
     set text MULT_NUM_TEXT_ID, str$(MULT_PROGRESS) + "/" + str$(requiredNow)
@@ -201,6 +202,7 @@ endfunction
 ` a new game starts with no multiplier, and an empty bar
 function resetMultiplier()
     SCORE_MULTIPLIER = 1
+    SCHOOL_STAKES = 1
     BEST_MULTIPLIER = 1
     MULT_PROGRESS = 0
     MULT_PENDING_SWAPS = 0
@@ -236,22 +238,30 @@ function stepMultiplier()
     textX# = MULT_POS.x + 24
     textSize# = 30
 
-    ` it is blue like the rest of the numbers, and it flashes when it changes
-    flashR# = 64
-    flashG# = 128
-    flashB# = 255
+    ` it is blue like the rest of the numbers, or gold while the stakes are high, and it flashes when it changes
+    baseR# = 64
+    baseG# = 128
+    baseB# = 255
+    if SCHOOL_STAKES > 1
+        baseR# = 255
+        baseG# = 200
+        baseB# = 60
+    endif
+    flashR# = baseR#
+    flashG# = baseG#
+    flashB# = baseB#
     if MULT_PUNCH_DIR > 0
         ` going up: it jumps bigger, and flashes white
         textSize# = 30 + 6 * punch#
-        flashR# = 64 + 191 * punch#
-        flashG# = 128 + 127 * punch#
+        flashR# = baseR# + (255 - baseR#) * punch#
+        flashG# = baseG# + (255 - baseG#) * punch#
     endif
     if MULT_PUNCH_DIR < 0
         ` going down: it shakes, and flashes red
         textX# = textX# + sin(game ms() * .05) * 4 * punch#
-        flashR# = 64 + 191 * punch#
-        flashG# = 128 - 48 * punch#
-        flashB# = 255 - 175 * punch#
+        flashR# = baseR# + (255 - baseR#) * punch#
+        flashG# = baseG# + (80 - baseG#) * punch#
+        flashB# = baseB# + (80 - baseB#) * punch#
     endif
 
     size text y MULT_TEXT_ID, textSize#

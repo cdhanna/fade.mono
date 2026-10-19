@@ -7,3 +7,21 @@ global CUSTOM_ART_SLOTS = 32
 global CUSTOM_ART_BONES_SLOT = 30
 global dim CUSTOM_ART_OUTLINE(CUSTOM_ART_SLOTS)
 global CUSTOM_ART_COUNT = 0 `how many pictures came from the folder
+
+` THE NEW ART. the fish that have been drawn again, at 32 pixels, are in Fish/Textures/Art32, and
+` load_new_art puts them in place of the old 16 pixel ones. FISH_OLD_ART keeps the old ones. the render
+` scale of 2 (in fish) is what lets 32 pixels show at the size of 16. NEW_ART is 1 when they are in.
+global NEW_ART = 0
+
+` THE LINE AROUND THE NEW ART. the fish have a thick line around them, the color of deep water, that
+` FishEffect draws: one pixel of the old 16 pixel art wide, which is the weight of line that the old
+` fish have. with the finer drawing of the new art, the old fish's heavier line is what keeps the game
+` looking like itself. NEW_ART_THICK is 1 for it. see THE THICK LINE in FishEffect.fx. it was picked from
+` a few widths, shapes and colors tried side by side, on 2026-10-18.
+global NEW_ART_THICK = 1
+
+` every new picture also comes with a thin black line drawn into it (Name_b), and without one (Name).
+` the thick line goes around the picture without one, so this only shows when NEW_ART_THICK is 0.
+` NEW_ART_OUTLINE is 1 for the thin line. FISH_ART_OUTLINE=0 starts the game without it.
+` in debug mode, the 1 key flips the thin line and the 2 key the thick one. see load_new_art_pictures.
+global NEW_ART_OUTLINE = 1

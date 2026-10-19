@@ -65,10 +65,20 @@
          is newer than it, and does not look at the configuration, so a Release build straight after
          a Debug one (a `dotnet test`) used to compile the Debug file: the tests, and the debug data
          that only the flag above lets compile, so it failed with CS8103. Under obj/, it is not
-         picked up by the default Compile glob; the generator adds it itself. -->
+         picked up by the default Compile glob, and the generator only adds it to the build when
+         it runs, which an up-to-date build skips: FadeCompileGeneratedLaunch adds it every time. -->
     <PropertyGroup>
         <FadeGeneratedLaunchFile>$(MSBuildProjectDirectory)/obj/$(Configuration)/GeneratedFade.g.cs</FadeGeneratedLaunchFile>
     </PropertyGroup>
+    <!-- Whatever else has added it (the generator does when it runs), it is taken out and put
+         back once, so that it is never compiled twice (warning CS2002). -->
+    <Target Name="FadeCompileGeneratedLaunch" DependsOnTargets="GenerateFadeBasic" BeforeTargets="CoreCompile"
+            Condition="Exists('$(FadeGeneratedLaunchFile)')">
+        <ItemGroup>
+            <Compile Remove="@(Compile)" Condition="'%(Filename)%(Extension)' == 'GeneratedFade.g.cs'" />
+            <Compile Include="$(FadeGeneratedLaunchFile)" />
+        </ItemGroup>
+    </Target>
     <PropertyGroup>
         <ApplicationManifest>app.manifest</ApplicationManifest>
 
@@ -380,6 +390,9 @@
         <FadeSource Include="fish_headers_angler.fbasic" />
         <FadeSource Include="fish_headers_questtalk.fbasic" />
         <FadeSource Include="fish_headers_customart.fbasic" />
+        <FadeSource Include="fish_headers_entrance.fbasic" />
+        <FadeSource Include="fish_headers_demo.fbasic" />
+        <FadeSource Include="fish_headers_wanted.fbasic" />
         <FadeSource Include="fish.fbasic" />
 
         <FadeSource Include="fish_routines_ability.fbasic" />
@@ -391,6 +404,7 @@
 
         <FadeSource Include="fish_routines.fbasic" />
         <FadeSource Include="fish_routines_customart.fbasic" />
+        <FadeSource Include="fish_routines_entrance.fbasic" />
         <FadeSource Include="fish_routines_input.fbasic" />
         <FadeSource Include="fish_routines_fast.fbasic" />
         <FadeSource Include="fish_routines_seed.fbasic" />
@@ -423,6 +437,8 @@
         <FadeSource Include="fish_tuna_code.fbasic" />
         <FadeSource Include="fish_routines_quests.fbasic" />
         <FadeSource Include="fish_quests.fbasic" />
+        <FadeSource Include="fish_routines_demo.fbasic" />
+        <FadeSource Include="fish_routines_wanted.fbasic" />
 
 
         <FadeSource Include="fish_funcs.fbasic" />
@@ -437,6 +453,7 @@
         <FadeSource Include="fish_tests_horror.fbasic" />
         <FadeSource Include="fish_tests_quests.fbasic" />
         <FadeSource Include="fish_tests_questbalance.fbasic" />
+        <FadeSource Include="fish_tests_questruns.fbasic" />
         <FadeSource Include="fish_tests_diver.fbasic" />
         <FadeSource Include="fish_tests_tide.fbasic" />
         <FadeSource Include="fish_tests_glow.fbasic" />
@@ -450,6 +467,8 @@
         <FadeSource Include="fish_tests_questtalk.fbasic" />
         <FadeSource Include="fish_tests_trailer.fbasic" />
         <FadeSource Include="fish_tests_loc.fbasic" />
+        <FadeSource Include="fish_tests_demo.fbasic" />
+        <FadeSource Include="fish_tests_wanted.fbasic" />
         <!-- <FadeSource Include="game.fbasic" /> -->
     </ItemGroup>
     <!-- A shipped game has no tests in it. FadeBasic 0.2.6.1 compiles `test` blocks into the

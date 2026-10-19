@@ -177,7 +177,7 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("screen to world x")]
     public static float ScreenToWorldX(int cameraId, float screenX)
         => screenX - CameraSystem.GetTranslation(cameraId,
-            RenderSystem.mainBuffer.Width, RenderSystem.mainBuffer.Height).X;
+            RenderSystem.renderWidth, RenderSystem.renderHeight).X;
 
     /// <summary>
     /// <para>Converts a screen Y coordinate into a world Y coordinate, through a camera.</para>
@@ -190,7 +190,7 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("screen to world y")]
     public static float ScreenToWorldY(int cameraId, float screenY)
         => screenY - CameraSystem.GetTranslation(cameraId,
-            RenderSystem.mainBuffer.Width, RenderSystem.mainBuffer.Height).Y;
+            RenderSystem.renderWidth, RenderSystem.renderHeight).Y;
 
     /// <summary>
     /// <para>Converts a world X coordinate into a screen X coordinate, through a camera.</para>
@@ -206,7 +206,7 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("world to screen x")]
     public static float WorldToScreenX(int cameraId, float worldX)
         => worldX + CameraSystem.GetTranslation(cameraId,
-            RenderSystem.mainBuffer.Width, RenderSystem.mainBuffer.Height).X;
+            RenderSystem.renderWidth, RenderSystem.renderHeight).X;
 
     /// <summary>
     /// <para>Converts a world Y coordinate into a screen Y coordinate, through a camera.</para>
@@ -219,5 +219,5 @@ public partial class FadeMonoGameCommands
     [FadeBasicCommand("world to screen y")]
     public static float WorldToScreenY(int cameraId, float worldY)
         => worldY + CameraSystem.GetTranslation(cameraId,
-            RenderSystem.mainBuffer.Width, RenderSystem.mainBuffer.Height).Y;
+            RenderSystem.renderWidth, RenderSystem.renderHeight).Y;
 }

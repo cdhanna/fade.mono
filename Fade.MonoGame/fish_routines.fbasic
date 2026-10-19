@@ -276,6 +276,9 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_OATH).artTexId), "Fish/Textures/Cards/oceanic_oath"
     texture reserve texture id(CARDS(ABILITY_INDEX_ANGLER).artTexId), "Fish/Textures/Cards/bright_idea"
     texture reserve texture id(CARDS(ABILITY_INDEX_FALL_IN_LINE).artTexId), "Fish/Textures/Cards/fall_in_line"
+    texture reserve texture id(CARDS(ABILITY_INDEX_FLIPPER).artTexId), "Fish/Textures/Cards/flipper"
+    texture reserve texture id(CARDS(ABILITY_INDEX_HIGH_STAKES).artTexId), "Fish/Textures/Cards/high_stakes"
+    texture reserve texture id(CARDS(ABILITY_INDEX_TOLERANCE).artTexId), "Fish/Textures/Cards/tolerance"
 
 return
 
@@ -542,6 +545,11 @@ return
 
 time# = 0
 update_frame:
+    ` the banner of a demo blinks, and a press stops it, even in the middle of a run of pops. see THE DEMO in fish_headers_demo.
+    if DEMO_MODE
+        demoTick()
+    endif
+
     ` a new game on a seed, asked for from outside the menu. see A NEW GAME ON A SEED in fish_headers_seed.
     if REQUEST_SEED_RESTART
         REQUEST_SEED_RESTART = 0
@@ -556,6 +564,7 @@ update_frame:
     gosub frame_scale_wave
     perf lap 11
     gosub frame_fish_fx `after the scale wave, because it needs to know how big the fish ended up
+    gosub frame_entrance `the fish falling in at the start of a game. see THE ENTRANCE in fish_headers_entrance.
     perf lap 12
     gosub frame_score
     perf lap 13
@@ -569,9 +578,14 @@ update_frame:
     stepMultiplier()
     perf lap 17
     stepCoral()
+    perf lap 33
     stepTideSleep()
+    perf lap 34
     stepGlow() `see fish_headers_glow
+    perf lap 35
     stepSchool() `see fish_headers_school
+    perf lap 36
+    stepWanted() `see fish_headers_wanted
     perf lap 18
     stepSkeletonGhosts()
     perf lap 19
@@ -655,6 +669,10 @@ frame_fish_fx:
         if torchColumn > 0 then torchLeft = -1
     endif
 
+    ` MEASURING (temporary): the laps from 39 to 46 split the work of every fish into its parts, for
+    ` the frame timing log. a lap is a command, so they cost a little even with the log off. take
+    ` them out once the numbers are in.
+    perf lap 39
     for i = 0 to CELL_COUNT - 1
         c = CELLS(i)
 
@@ -695,6 +713,7 @@ frame_fish_fx:
                 endif
             next
         endif
+        perf lap 40
 
         ` the sums bend over as they get big, so that rings on top of rings still show
         lift# = lift# / sqrt(1 + (lift# * lift#) / (SHOCK_LIFT_MAX# * SHOCK_LIFT_MAX#))
@@ -708,6 +727,7 @@ frame_fish_fx:
         pushX# = leanX# * SHOCK_PUSH#
         pushY# = leanY# * SHOCK_PUSH# - lift# * SHOCK_BOB# `up the screen is the other way from y
         lift# = lift# * SHOCK_LIFT#
+        perf lap 41
 
         ` the current. the phase goes around once for every wave, and it is later for the fish that are
         ` further along the way that the wave goes.
@@ -736,6 +756,7 @@ frame_fish_fx:
             yaw# = yaw# + currentLean# * CURRENT_DIR_X#
             pitch# = pitch# - currentLean# * CURRENT_DIR_Y#
         endif
+        perf lap 42
 
         ` and the fish of a line that is one short nudge along it, one after another, starting when the
         ` wave gets to the left end of the line
@@ -762,6 +783,7 @@ frame_fish_fx:
                 pushY# = pushY# + diagonalNudge# * diagonalSlope#
             endif
         endif
+        perf lap 43
 
         ` nothing leans, shuffles or bobs while the fish are making the QR code. see TUNA in fish_headers.
         tunaCalm# = 1 - TUNA_EASED#
@@ -798,16 +820,17 @@ frame_fish_fx:
             endif
         endif
         if skeletonWant
-            set sprite texture c.spriteId, SKELETON_TEX(c.value)
+            setFishTexture(c.spriteId, SKELETON_TEX(c.value))
             SKELETON_SHOWN(i) = 1
         else
             if SKELETON_SHOWN(i)
                 SKELETON_SHOWN(i) = 0
                 if c.value > 0
-                    set sprite texture c.spriteId, c.value
+                    setFishTexture(c.spriteId, c.value)
                 endif
             endif
         endif
+        perf lap 44
 
         ` the count that is drawn chases the real one, so that a new fish slides out from behind
         stackWant# = c.stack + 1
@@ -840,6 +863,7 @@ frame_fish_fx:
         endif
         yaw# = yaw# + SCHOOL_SHOWN#(i) * 3.14159
         set sprite all texcoord1 c.spriteId, pitch#, yaw#, stackShown#, fishSize#
+        perf lap 45
 
         ` the fish goes to its place in the QR code, and gets smaller. see TUNA in fish_headers.
         tunaPushX# = TUNA_CELL_DX(i) * TUNA_EASED#
@@ -876,16 +900,23 @@ frame_fish_fx:
         endif
 
         ` a picture from the CustomArt folder whose name ends in _b gets a black line drawn around it.
-        ` the effect takes 100 more for that. see fish_headers_customart.
+        ` the effect takes 100 more for that. the new art's thick line is a 2, and the effect takes 200
+        ` more for that one. see fish_headers_customart.
         customOutline = CUSTOM_ART_OUTLINE(c.value)
         if skeletonWant
             customOutline = CUSTOM_ART_OUTLINE(CUSTOM_ART_BONES_SLOT)
         endif
-        if customOutline
-            nightGlow# = nightGlow# + 100
+        if customOutline = 1 then nightGlow# = nightGlow# + 100
+        if customOutline = 2 then nightGlow# = nightGlow# + 200
+
+        ` a fish of a group in the wanted shape shimmers while the light goes through it. the effect
+        ` takes 1000 more for that. see A CATCH in fish_headers_wanted.
+        if WANTED_SHIMMERS(i)
+            if shockNow < WANTED_SHIMMER_UNTIL then nightGlow# = nightGlow# + 1000
         endif
 
         set sprite all texcoord2 c.spriteId, pushX# * fishSize# + tunaPushX#, pushY# * fishSize# + tunaPushY#, lift# + TUNA_SHRINK#, nightGlow#
+        perf lap 46
     next
 
 return
@@ -893,6 +924,25 @@ return
 dbg# = 1.0
 dbg_str$ = "world2"
 frame_dbg:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     ` the debug keys are only there in debug mode. see DEBUG_MODE in fish_headers.
     ` the debug panel also has a window that gives the player any card. see fish_routines_debug.
     ` U turns the fish above the cursor belly up, and a second press turns it into a skeleton.
@@ -907,14 +957,17 @@ frame_dbg:
     ` B puts a bottle on the cell that the cursor is on. carry it up to the top row for the diver. see fish_headers_diver.
     ` L puts a jellyfish there, and V a stingray.
     ` O fills the album of the diver, so that the diver swims up and its ending plays. it brings the diver down first, if it is not.
+    ` 1 turns the thin black line drawn into the new art on or off, and 2 the thick deep-water line (on to start). see THE NEW ART in fish_headers_customart.
     if DEBUG_MODE
         debugSplashStep(game ms())
+        gosub frame_debug_art_outline
         if MENU_MODE = 0
             gosub frame_debug_cards
             gosub frame_debug_beat
             gosub frame_debug_tide
             gosub frame_debug_glow
             gosub frame_debug_school
+            gosub frame_debug_wanted
             gosub frame_debug_quests
             gosub frame_debug_angler
             if INFO_MODE = 0
@@ -1009,6 +1062,8 @@ return
 ` its own, which handle_ability_selection starts and advanceScoreBar ends, because the main loop does
 ` not come here while the upgrade screen is up.
 frame_steam_timeline:
+    ` a demo is not marked on the timeline. see THE DEMO in fish_headers_demo.
+    if DEMO_MODE then return
     timelineRound = 0
     if MENU_MODE = 0
         if SCORE_BAR_HOLD = 0 then timelineRound = CURRENT_ROUND + 1
@@ -1042,7 +1097,9 @@ frame_score:
         showRoundsLeft()
 
         ` a mark on the steam timeline, so that the round can be found again in a recording of the game
-        add steam timeline event loc$("steam.round.cleared", "round", CURRENT_ROUND), loc$("steam.round.cleared.desc", "moves", CURRENT_MOVE_COUNT), "steam_checkmark", 100, 0
+        if DEMO_MODE = 0
+            add steam timeline event loc$("steam.round.cleared", "round", CURRENT_ROUND), loc$("steam.round.cleared.desc", "moves", CURRENT_MOVE_COUNT), "steam_checkmark", 100, 0
+        endif
 
         ` the quest of the round is over with it. see QUESTS in fish_headers_quests.
         questRoundEnded()
@@ -1076,6 +1133,7 @@ frame_score:
                 ` and neither does a game under the "oceanic oath". see fish_headers_fast.
                 roundNoUpgrade = GAME_ZEN
                 if fastOath() then roundNoUpgrade = 1
+                if DEMO_MODE then roundNoUpgrade = 1 `nor does a demo. see THE DEMO in fish_headers_demo.
                 if roundNoUpgrade
                     ` a zen game has no upgrades. the bar empties out, and the next round starts.
                     advanceScoreBar()
@@ -1374,6 +1432,9 @@ handle_combos:
     diverSnapAhead(groupId)
     ghostWait = ghostWait + DIVER_SNAP_HOLD
 
+    ` and a group in the wanted shape is found. see A CATCH in fish_headers_wanted.
+    wantedCatchAhead(groupId)
+
     totalComboCount = 0
     CORAL_HELD_GROUPS = 0
     explodePitch# = (rnd(4)*.02)
@@ -1507,6 +1568,15 @@ handle_combos:
         ` a quest can make a group worth nothing. see questGroupScore in fish_routines_quests.
         groupBonus = groupBonus * questGroupScore(g)
 
+        ` a group in the wanted shape lights up first: its pops, and every pop after them, wait for it.
+        ` and when it pops, the multiplier goes up. see A CATCH in fish_headers_wanted.
+        groupWanted = 0
+        if g = WANTED_CATCH_GROUP
+            groupWanted = 1
+            wantedCaught(g, ghostWait)
+            ghostWait = ghostWait + WANTED_HOLD
+        endif
+
         ` fish that are going into a stack are not a combo, so nothing gets added to them
         groupStock = isAbility_Passive_StockMarket()
         if groupForce = FORCE_BUNCH then groupStock = 0
@@ -1581,6 +1651,7 @@ handle_combos:
             groupSumX = groupSumX + cell.coord.x
             groupSumY = groupSumY + cell.coord.y
             groupSize# = groupSize# + 1
+            groupKind = cell.value
 
             ` a fish that is on coral does not pop. it stays, and sings, and scores more than it would
             ` have by popping. the fish of its stack score too, and stay. see THE FISH ON CORAL SING in fish_headers.
@@ -1594,7 +1665,7 @@ handle_combos:
                 while singLeft > 0
                     singLeft = singLeft - 1
                     scoreAdd += 10
-                    singPoints = singPoints + scoreAdd * SCORE_MULTIPLIER * CORAL_SCORE_BONUS
+                    singPoints = singPoints + scoreAdd * SCORE_MULTIPLIER * SCHOOL_STAKES * CORAL_SCORE_BONUS
                 endwhile
 
                 singPos as vec = {
@@ -1668,7 +1739,7 @@ handle_combos:
                     y = getCellY(cell.coord.y)
                 }
                 scoreAdd += 10
-                scorePoints = scoreAdd * SCORE_MULTIPLIER * groupBonus * coralScore `see THE MULTIPLIER in fish_headers
+                scorePoints = scoreAdd * SCORE_MULTIPLIER * SCHOOL_STAKES * groupBonus * coralScore `see THE MULTIPLIER in fish_headers
                 ` this one is gone by the time the next fish of the stack pops, so that each of them
                 ` gets a text of its own to be read
                 stackTxtId = spawnBoardScoreText(stackTxtPos, "+" + str$(scorePoints), delay, FISH_STACK_POP_GAP - 20)
@@ -1729,7 +1800,7 @@ handle_combos:
                 y = getCellY(cell.coord.y)
             }
             scoreAdd += 10
-            scorePoints = scoreAdd * SCORE_MULTIPLIER * groupBonus * coralScore
+            scorePoints = scoreAdd * SCORE_MULTIPLIER * SCHOOL_STAKES * groupBonus * coralScore
             txtId = spawnBoardScoreText(txtPos, "+" + str$(scorePoints), delay, 800)
             color text txtId, FISH_COLORS(getFishColorIndex(cell.value))
 
@@ -1756,6 +1827,13 @@ handle_combos:
 
             ` a big group brings a hint with the next wave of the current. see THE HINTS in fish_headers.
             if groupSize# >= CORAL_HINT_GROUP_SIZE then CORAL_HINT_DUE = 1
+
+            ` the bubbles of a group that matched come up in the wanted shape. see fish_headers_wanted.
+            if comboForced = 0
+                if groupWanted = 0
+                    wantedBubbles(groupWaveX#, groupWaveY#, groupKind, groupDelay)
+                endif
+            endif
 
             ` with the "bottles" card, a big group of fish that matched leaves a bottle behind, in the
             ` cell of the group that is closest to the middle of it. see BOTTLES in fish_headers.
@@ -2124,7 +2202,7 @@ handle_combos:
 
             ` and it faces one way or the other. see FACING in fish_headers_school.
             schoolNewFish(i - 1)
-            set sprite texture cell.spriteId, CELLS(i-1).value
+            setFishTexture(cell.spriteId, CELLS(i-1).value)
             targetY = y - CELL_SIZE * 2
             startAlpha = 0
             `color sprite cell.spriteId, rgb(0,0,0)
@@ -2201,7 +2279,7 @@ handle_board_expansion:
     ` the board is as big as it gets
     if CELL_COLUMN_COUNT >= GRID_MAX_COUNT and CELL_ROW_COUNT >= GRID_MAX_COUNT then return
 
-    ` nothing that the quest of the round knows about the board will be true on the new one, so it starts over
+    ` the quest of the round holds still while the board grows. see questBoardGrowing.
     questBoardGrowing()
 
     ` remember how the board is laid out now, so that the fish can slide from there
@@ -2259,6 +2337,9 @@ handle_board_expansion:
     ` the cursor stays on the fish that it was on
     SELECTION_POS.y = SELECTION_POS.y + rowShift
 
+    ` and the quest of the round comes along, with everything that it knows by the cell
+    questBoardMoved(oldColumns, rowShift)
+
     ` the cells to the left and above already have their fish by the time a new cell gets its turn
     for i = 0 to CELL_COUNT - 1
         c = CELLS(i)
@@ -2284,7 +2365,7 @@ handle_board_expansion:
             spawnBubbles(getCellX(c.coord.x), cellY, CELL_SIZE / 4, 3, delay + 200, FISH_COLORS(getFishColorIndex(CELLS(i).value)))
         else
             ` the cell holds a different fish than it did before, but that fish does not move until the loop below
-            set sprite texture c.spriteId, c.value
+            setFishTexture(c.spriteId, c.value)
             set sprite alpha c.spriteId, 255
             show sprite c.spriteId
         endif

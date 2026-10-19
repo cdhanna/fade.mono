@@ -1,0 +1,54 @@
+` THE DEMO. see fish_headers_demo.
+
+` the player of a demo counts what a swap would pop: the group that each of the two fish ends up in.
+` the board is put back the way it was.
+test demo_counts_what_a_swap_would_pop from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(3, 0, 6)
+    testPut(2, 1, 6)
+    tDmBefore = CELLS(testIndex(2, 0)).value
+    DEMO_DIVER_X = -10
+    DEMO_DIVER_Y = -10
+    tDmWorth = demoSwapWorth(testIndex(2, 0), testIndex(2, 1))
+    assert tDmWorth = 4, "the fish that goes up makes a row of four"
+    assert CELLS(testIndex(2, 1)).value = 6, "and the board is as it was"
+    assert CELLS(testIndex(2, 0)).value = tDmBefore, "on both sides of the swap"
+
+    tDmNothing = demoSwapWorth(testIndex(5, 5), testIndex(6, 5))
+    assert tDmNothing = 0, "a swap that makes no group of three pops nothing"
+    end
+endtest
+
+` what a demo shows was not the player's: the codec does not unlock, and no modifier is known from it.
+` the game itself still has the modifier, for its own score.
+test demo_keeps_nothing_of_its_own from fishBoard
+    DEMO_MODE = 1
+    CODEC_SEEN(CODEC_ENTRY_NIGHT) = 0
+    codecSeeCard(CODEC_ENTRY_NIGHT)
+    assert CODEC_SEEN(CODEC_ENTRY_NIGHT) = 0, "the night is not unlocked in the codec"
+
+    MODS_KNOWN = 0
+    GAME_MODS = 0
+    modSet(MOD_NIGHT)
+    assert GAME_MODS = MOD_NIGHT, "the game had a night"
+    assert MODS_KNOWN = 0, "and the player did not"
+    DEMO_MODE = 0
+
+    codecSeeCard(CODEC_ENTRY_NIGHT)
+    assert CODEC_SEEN(CODEC_ENTRY_NIGHT) = 1, "out of a demo, it unlocks as it always has"
+    end
+endtest
+
+` a round that is won in a demo starts the next one, with no upgrade screen, the way that a zen game does
+test demo_round_has_no_upgrade_screen from fishBoard
+    DEMO_MODE = 1
+    SCORE_BAR_HOLD = 1
+    REQUEST_COMBO_CHECK = 0
+    runto _loop
+    runto _loop
+    assert REQUEST_ABILITY_SELECTION = 0, "no upgrade screen is asked for"
+    assert SCORE_BAR_HOLD = 0, "the bar empties out for the next round"
+    DEMO_MODE = 0
+    end
+endtest

@@ -256,6 +256,27 @@ setup_abilities:
         stackable = 0
     }
 
+    ` see THREE MORE CARDS in fish_headers_school. these are dealt too.
+    CARDS(ABILITY_INDEX_FLIPPER) = {
+        obtained = 0
+        abilityType = ABILITY_TYPE_MOVE
+        stackable = 0
+        moveClock = 4
+        moveValue = [MOVE_FLIPPER]
+    }
+    CARDS(ABILITY_INDEX_HIGH_STAKES) = {
+        obtained = 0
+        abilityType = ABILITY_TYPE_MOVE
+        stackable = 0
+        moveClock = 7
+        moveValue = [MOVE_HIGH_STAKES]
+    }
+    CARDS(ABILITY_INDEX_TOLERANCE) = {
+        obtained = 0
+        abilityType = ABILITY_TYPE_PASSIVE
+        stackable = 0
+    }
+
     ` the names and descriptions, in the language of the game
     loadCardStrings()
 
@@ -572,11 +593,9 @@ assign_ability_selection:
                 valid = 1
 
                 ` the cards that only a fast gives out are never dealt. see THE FAST in fish_headers_fast.
-                ` the angler comes after them, and it is dealt, and so is "fall in line" after that.
+                ` the angler comes after them, and it is dealt, and so is every card after that.
                 if candidate >= FAST_CARD_FROM
-                    if candidate <> ABILITY_INDEX_ANGLER
-                        if candidate <> ABILITY_INDEX_FALL_IN_LINE then valid = 0
-                    endif
+                    if candidate < ABILITY_INDEX_ANGLER then valid = 0
                 endif
 
                 ` the angler is rare. one more roll of the cards says if it stays. see THE CARD in fish_headers_angler.
@@ -784,6 +803,9 @@ return
 handle_ability_selection:
 
     if REQUEST_ABILITY_SELECTION = 0 then return
+
+    ` a demo has no upgrade screen: frame_score starts the next round instead. see THE DEMO in fish_headers_demo.
+    if DEMO_MODE then return
 
     ` let a swap that is playing out finish first, so that it is not left hanging behind the cards
     if LIVE_MOVE_ACTIVE then return
@@ -1118,7 +1140,6 @@ return
 
 ` everything on the upgrade screen that changes from frame to frame
 frame_ability_selection:
-
     ` the main loop does not run while the upgrade screen is up, so this has to keep the input icons right itself
     gosub frame_input_icons
 
@@ -1407,8 +1428,9 @@ function loadCardStrings()
     CARDS(ABILITY_INDEX_WRAP).desc$ = loc$("ability.seamless.desc")
     CARDS(ABILITY_INDEX_CRABS).name$ = loc$("ability.crabs.name")
     CARDS(ABILITY_INDEX_CRABS).desc$ = loc$("ability.crabs.desc")
-    CARDS(ABILITY_INDEX_BIRD_FEAST).name$ = loc$("ability.birdfeast.name")
-    CARDS(ABILITY_INDEX_BIRD_FEAST).desc$ = loc$("ability.birdfeast.desc")
+    ` "bird feast" was about worms. the worm is a starfish in the new art, so the card is about those now.
+    CARDS(ABILITY_INDEX_BIRD_FEAST).name$ = loc$("ability.starless.name")
+    CARDS(ABILITY_INDEX_BIRD_FEAST).desc$ = loc$("ability.starless.desc")
     CARDS(ABILITY_INDEX_PASSIVE_STOCK_MARKET).name$ = loc$("ability.stockmarket.name")
     CARDS(ABILITY_INDEX_PASSIVE_STOCK_MARKET).desc$ = loc$("ability.stockmarket.desc")
     CARDS(ABILITY_INDEX_THINK_BIGGER).name$ = loc$("ability.thinkbigger.name")
@@ -1471,6 +1493,12 @@ function loadCardStrings()
     CARDS(ABILITY_INDEX_ANGLER).desc$ = loc$("ability.angler.desc")
     CARDS(ABILITY_INDEX_FALL_IN_LINE).name$ = loc$("ability.fall_in_line.name")
     CARDS(ABILITY_INDEX_FALL_IN_LINE).desc$ = loc$("ability.fall_in_line.desc")
+    CARDS(ABILITY_INDEX_FLIPPER).name$ = loc$("ability.flipper.name")
+    CARDS(ABILITY_INDEX_FLIPPER).desc$ = loc$("ability.flipper.desc")
+    CARDS(ABILITY_INDEX_HIGH_STAKES).name$ = loc$("ability.high_stakes.name")
+    CARDS(ABILITY_INDEX_HIGH_STAKES).desc$ = loc$("ability.high_stakes.desc")
+    CARDS(ABILITY_INDEX_TOLERANCE).name$ = loc$("ability.tolerance.name")
+    CARDS(ABILITY_INDEX_TOLERANCE).desc$ = loc$("ability.tolerance.desc")
 endfunction
 
 ` how many cards the upgrade screen offers. see DEEP POCKETS in fish_headers.

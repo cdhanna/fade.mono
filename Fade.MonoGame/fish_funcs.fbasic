@@ -602,7 +602,20 @@ function doBunchUp(start as vec, dir as vec)
 endfunction
 
 function updateCell(c as cell)
-    sprite c.spriteId, getCellX(c.coord.x), getCellY(c.coord.y), fishPicture(c.value, c.bellyUp)
+    updateCellTex = fishPicture(c.value, c.bellyUp)
+    setFishTexture(c.spriteId, updateCellTex)
+    sprite c.spriteId, getCellX(c.coord.x), getCellY(c.coord.y), updateCellTex
+endfunction
+
+` puts another picture on a fish, at the size the fish is drawn at now. the pictures are not all the
+` same size: the new art is 32 pixels, and the old art and the bones are 16. size sprite is kept as a
+` stretch of the picture it was given, so a plain set sprite texture would draw a 32 pixel goldfish
+` twice as big as it should be, and the bones it turns into half as big.
+function setFishTexture(ftSprite, ftTex)
+    ftWide# = sprite width(ftSprite) * sprite scale x(ftSprite)
+    ftHigh# = sprite height(ftSprite) * sprite scale y(ftSprite)
+    set sprite texture ftSprite, ftTex
+    size sprite ftSprite, ftWide#, ftHigh#
 endfunction
 
 ` the picture of a fish of a kind: the fish, or the bones of it when it is a skeleton. see SKELETONS in
@@ -866,7 +879,9 @@ function advanceScoreBar()
         SCORE_BAR_HOLD = 0
 
         ` the upgrade screen is over, if there was one. see frame_steam_timeline, in fish_routines.
-        end steam timeline range STEAM_RANGE_UPGRADE
+        if DEMO_MODE = 0
+            end steam timeline range STEAM_RANGE_UPGRADE
+        endif
 
         ` the round was counted when its bar filled up, so CURRENT_ROUND is already the round that is starting
         newSpan = getRoundSpan(CURRENT_ROUND)
@@ -1233,7 +1248,7 @@ function doBomb(start as vec, dir as vec)
                     if position.y >= 0 and position.y < CELL_ROW_COUNT
                         bIndex = getCellIndex(position)
                         scaleVal = tweenVal(cells(bIndex).shiftTweenId)
-                        scale sprite cells(bIndex).spriteId, scaleVal, scaleVal
+                        size sprite cells(bIndex).spriteId, CELL_ART_SIZE * scaleVal, CELL_ART_SIZE * scaleVal
                     endif
                 endif
             next 
@@ -1285,7 +1300,7 @@ function doBomb(start as vec, dir as vec)
                     if position.y >= 0 and position.y < CELL_ROW_COUNT
                         bIndex = getCellIndex(position)
                         scaleVal = tweenVal(cells(bIndex).shiftTweenId)
-                        scale sprite cells(bIndex).spriteId, scaleVal, scaleVal
+                        size sprite cells(bIndex).spriteId, CELL_ART_SIZE * scaleVal, CELL_ART_SIZE * scaleVal
                     endif
                 endif
             next 
@@ -1361,7 +1376,7 @@ function doLineOut(start as vec, dir as vec)
             endif
             bIndex = getCellIndex(position)
             scaleVal = tweenVal(cells(bIndex).shiftTweenId)
-            scale sprite cells(bIndex).spriteId, scaleVal, scaleVal
+            size sprite cells(bIndex).spriteId, CELL_ART_SIZE * scaleVal, CELL_ART_SIZE * scaleVal
         next
 
         position sprite SELECTION_SPRITE, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
@@ -1397,7 +1412,7 @@ function doLineOut(start as vec, dir as vec)
             endif
             bIndex = getCellIndex(position)
             scaleVal = tweenVal(cells(bIndex).shiftTweenId)
-            scale sprite cells(bIndex).spriteId, scaleVal, scaleVal
+            size sprite cells(bIndex).spriteId, CELL_ART_SIZE * scaleVal, CELL_ART_SIZE * scaleVal
         next
 
         position sprite SELECTION_SPRITE, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
@@ -1455,11 +1470,11 @@ function doClone(start as vec, dir as vec)
             ` position sprite cells(bIndex).spriteId, tweenVal(TWEEN_SWAP_BX), tweenVal(TWEEN_SWAP_BY)
         
         if (is tween done(TWEEN_SWAP_BX) < 1)
-            scale sprite cells(bIndex).spriteId, tweenVal(TWEEN_SWAP_BX), tweenVal(TWEEN_SWAP_BX)
+            size sprite cells(bIndex).spriteId, CELL_ART_SIZE * tweenVal(TWEEN_SWAP_BX), CELL_ART_SIZE * tweenVal(TWEEN_SWAP_BX)
         else 
             position sprite cells(bIndex).spriteId, startPosition.x, startPosition.y
             set sprite texture cells(bIndex).spriteId, fishPicture(cells(aIndex).value, cells(aIndex).bellyUp)
-            scale sprite cells(bIndex).spriteId, tweenVal(TWEEN_SWAP_BY), tweenVal(TWEEN_SWAP_BY)
+            size sprite cells(bIndex).spriteId, CELL_ART_SIZE * tweenVal(TWEEN_SWAP_BY), CELL_ART_SIZE * tweenVal(TWEEN_SWAP_BY)
 
         endif
 
@@ -1844,6 +1859,7 @@ function startLiveMove(dirX, dirY, wantSwap)
         ` a swap that goes across turns the two fish, and they turn while they move. the fish that the
         ` cursor carries is still in its own cell, so that is where it is turned. see FACING in fish_headers_school.
         if wantSwap
+            schoolStakes(1)
             schoolSwapTurns(bIndex, aIndex, dirX)
 
             ` and a swap that goes down calls on the schools for the new fish, and one that goes up does

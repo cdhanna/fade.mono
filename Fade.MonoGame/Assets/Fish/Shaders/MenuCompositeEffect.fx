@@ -64,9 +64,11 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 	float foam = max(step(under, 0.0085) * 0.95, step(under, 0.045) * 0.22);
 	foam *= step(0.0, under) * WaterLine.w;
 
-	// the menu was alpha blended onto a see-through target, which multiplied its color by its
-	// alpha, and its alpha by itself. undo both, so that blending it again comes out right.
-	float alpha = sqrt(menu.a);
+	// the menu was alpha blended onto a see-through target, with blend mode 6, so its alpha is how much
+	// of each spot is covered and its color is multiplied by that. divide it back out, so that blending
+	// it again comes out right. (mode 0 would square the alpha of a see-through sprite even over the solid
+	// back of the menu, and the game showed through the menu wherever there was one, like a logo fading in.)
+	float alpha = menu.a;
 	float3 color = menu.rgb / max(alpha, 0.001);
 
 	float shown = lerp(mask, 1 - mask, Invert);

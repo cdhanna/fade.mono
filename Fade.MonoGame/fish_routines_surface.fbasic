@@ -249,6 +249,12 @@ frame_surface:
         endif
         position sprite SURFACE_FISH_SPRITES(surfaceFishI), surfaceFishX#, surfaceFishY# + surfaceShift
 
+        ` they all swim to the right, so a picture that faces left is turned around. some of the new art
+        ` does. see SCHOOL_ART_FACE in fish_headers_school.
+        surfaceFishFlip = 0
+        if schoolArtFace(surfaceFishI + 1) < 0 then surfaceFishFlip = 1
+        set sprite flip SURFACE_FISH_SPRITES(surfaceFishI), surfaceFishFlip, 0
+
         ` they are only there while there is a reef for them to be over
         if surfaceReef# > 0
             show sprite SURFACE_FISH_SPRITES(surfaceFishI)

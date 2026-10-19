@@ -32,6 +32,9 @@ remstart
     - QEV_SETTLE   handle_combos has looked at the board, and nothing pops. this is the only time
                    that a quest changes the fish on the board, because nothing else is moving them.
     - QEV_DRAW     once a frame, to draw itself
+    - QEV_MOVED    the board has grown, with the "mind expansion" card, and every cell has a new number.
+                   the marks and the spots have moved already. a quest moves the cells that it keeps in
+                   QUEST_V or QUEST_LIST, with questMoveV and questMoveList. see questBoardMoved.
 remend
 
 global QUEST_FIRST_ROUND = 2 `the first round that has a quest, counting from 0. so the third round.
@@ -114,6 +117,9 @@ global QEV_STEP = 4
 global QEV_JUDGE = 5
 global QEV_SETTLE = 6
 global QEV_DRAW = 7
+global QEV_MOVED = 8
+global QUEST_MOVE_COLUMNS = 0 `how many columns the board had before it grew. see questBoardMoved.
+global QUEST_MOVE_SHIFT = 0 `1 when the board grew a row on the top, which put every cell a row down
 
 ` what the quest knows about the swaps that handle_combos has not looked at the board for yet
 global QUEST_PENDING_SWAPS = 0 `how many there are

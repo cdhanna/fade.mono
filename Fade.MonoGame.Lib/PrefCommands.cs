@@ -236,6 +236,67 @@ public partial class FadeMonoGameCommands
     }
 
     /// <summary>
+    /// <para>From now on, <see cref="SetPref">set pref</see> only changes the preferences in memory, and never the file.</para>
+    /// <para><see cref="EndPrefSandbox">end pref sandbox</see> puts every preference back the way it was when this was called.</para>
+    /// </summary>
+    /// <remarks>
+    /// This is for a game that plays by itself, like the demo that a title screen shows when
+    /// nobody is at the controls. Anything it saves along the way can be read back while it
+    /// plays, and is all forgotten when it is over, so the player's own preferences and saved
+    /// game are never touched.
+    ///
+    /// A sandbox does not nest. Beginning one while in one does nothing, and the first end
+    /// leaves it.
+    /// </remarks>
+    /// <example>
+    /// A change made in the sandbox is gone afterwards:
+    /// <code>
+    /// set pref 1, 5
+    /// begin pref sandbox
+    /// set pref 1, 9
+    /// end pref sandbox
+    ///
+    /// font 1, "font"
+    /// text 1, 470, 200, 1, "number 1 is " + str$(get pref(1))
+    ///
+    /// do
+    ///   sync
+    /// loop
+    /// </code>
+    /// </example>
+    /// <seealso cref="EndPrefSandbox">end pref sandbox</seealso>
+    /// <seealso cref="SetPref">set pref</seealso>
+    [FadeBasicCommand("begin pref sandbox")]
+    public static void BeginPrefSandbox()
+    {
+        PrefsSystem.BeginSandbox();
+    }
+
+    /// <summary>
+    /// <para>Leaves the sandbox that <see cref="BeginPrefSandbox">begin pref sandbox</see> started, and throws away every change made in it.</para>
+    /// </summary>
+    /// <remarks>
+    /// Leaving a sandbox that was never begun does nothing.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// begin pref sandbox
+    /// set pref 1, 9
+    /// end pref sandbox
+    ///
+    /// do
+    ///   sync
+    /// loop
+    /// </code>
+    /// </example>
+    /// <seealso cref="BeginPrefSandbox">begin pref sandbox</seealso>
+    [FadeBasicCommand("end pref sandbox")]
+    public static void EndPrefSandbox()
+    {
+        PrefsSystem.EndSandbox();
+    }
+
+    /// <summary>
     /// <para>Forgets every preference, and deletes the file they are saved in.</para>
     /// </summary>
     /// <remarks>

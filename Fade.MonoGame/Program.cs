@@ -447,7 +447,8 @@ public class Program
     //                         alongside it instead (GCLatencyMode.SustainedLowLatency).
     //   --max-catchup=2       at most this many updates before a draw. On a machine that cannot
     //                         keep up, the game then runs slower than real time instead of
-    //                         drawing twice a second. See PerfKnobs.
+    //                         drawing twice a second. 3 when not given; 0 is MonoGame's own
+    //                         limit (30). See PerfKnobs.
     //   --effect-scale=2      the screen effect (the water) on a picture this many times the
     //                         game's size, instead of the 3 the game asks for. 2 is 2.25 times
     //                         fewer pixels for the graphics card and a little softer; 1 is 9
@@ -553,7 +554,7 @@ public class Program
                               $", fixed timestep {(game.IsFixedTimeStep ? "on" : "off")}" +
                               $", gc {System.Runtime.GCSettings.LatencyMode}" +
                               (Environment.GetEnvironmentVariable("DOTNET_GCgen0size") is { } gen0 ? $", gen0size {gen0}" : "") +
-                              $", max catch-up {(PerfKnobs.maxCatchUp > 0 ? PerfKnobs.maxCatchUp.ToString() : "default")}" +
+                              $", max catch-up {(PerfKnobs.maxCatchUp > 0 ? PerfKnobs.maxCatchUp.ToString() : "MonoGame's own (30)")}" +
                               (Environment.GetEnvironmentVariable("FADE_SCREEN_EFFECT_SCALE") is { } effectScale ? $", effect scale {effectScale}" : "") +
                               (PerfKnobs.updateDelayMs > 0 ? $", slow update +{PerfKnobs.updateDelayMs} ms" : "") +
                               (PerfKnobs.drawDelayMs > 0 ? $", slow draw +{PerfKnobs.drawDelayMs} ms" : ""));

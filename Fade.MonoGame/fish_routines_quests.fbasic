@@ -1133,10 +1133,17 @@ endfunction
 
 ` what a group that is popping scores: 1 for the usual, and 0 for nothing at all.
 ` krill is worth nothing, and so is anything that pops next to the shark.
+` the shark only eats what a swap puts together, the first time that the board is looked at after
+` it. the groups that fish fall into after that, as the board fills in, are luck, and so is what
+` the "stock market" card adds: its fish pops wherever it is, and the fish over it fall into the
+` red. those fed the shark, and the quest started over for a swap that was nowhere near it.
 function questGroupScore(qScoreGroup)
     qScoreWorth = 1
     qScoreQuest = 0
     if QUEST_STATE = QSTATE_ACTIVE then qScoreQuest = QUEST_ID
+    if qScoreQuest = QUEST_SHARK
+        if QUEST_CHAIN > 0 then qScoreQuest = 0
+    endif
 
     if qScoreQuest = QUEST_KRILL
         qScoreLast = CELL_COUNT - 1
@@ -1276,19 +1283,88 @@ function questNewFish(qNewCell, qNewKind)
 endfunction qNewPicked
 
 
-` the board is about to change shape, so nothing that a quest knows about it will be true. the
-` quest starts over on the new board.
+` the board is about to change shape. it holds still while it does: nothing is set up on it. a quest
+` that is being played, or that waits to be picked up, comes along onto the new board, just as it
+` was. see questBoardMoved. it used to start over, and a ferry with two starfish across had none.
 function questBoardGrowing()
     QUEST_HOLD = 1
     if QUEST_ID > 0
-        if QUEST_STATE <> QSTATE_DONE
-            ` one that was being played carries on, on the new board
-            if QUEST_STATE = QSTATE_ACTIVE then QUEST_REARM = 1
-            QUEST_STATE = QSTATE_NONE
-            QUEST_INIT_DUE = 1
+        if QUEST_STATE = QSTATE_DONE
+            questSweep()
+            questForget()
         endif
-        questSweep()
-        questForget()
+    endif
+endfunction
+
+` the new number of a cell of the board as it was. a new column goes on the right, so a cell keeps
+` its place in its row, and a new row goes on the top, so every cell is a row further down.
+function questMovedCell(qMovedOld)
+    qMovedNew = qMovedOld
+    if qMovedOld >= 0
+        qMovedX = qMovedOld mod QUEST_MOVE_COLUMNS
+        qMovedY = qMovedOld / QUEST_MOVE_COLUMNS
+        qMovedY = qMovedY + QUEST_MOVE_SHIFT
+        qMovedNew = qMovedX + qMovedY * CELL_COLUMN_COUNT
+    endif
+endfunction qMovedNew
+
+` a cell that a quest keeps in QUEST_V goes to its new number
+function questMoveV(qMoveSlot)
+    QUEST_V(qMoveSlot) = questMovedCell(QUEST_V(qMoveSlot))
+endfunction
+
+` and so do the cells that it keeps in QUEST_LIST: `qListCount` of them, from `qListFrom`, every `qListStride`
+function questMoveList(qListFrom, qListCount, qListStride)
+    qListN = 0
+    while qListN < qListCount
+        qListAt = qListFrom + qListN * qListStride
+        QUEST_LIST(qListAt) = questMovedCell(QUEST_LIST(qListAt))
+        qListN = qListN + 1
+    endwhile
+endfunction
+
+` the board has grown, and the fish are in their new cells. `qMovedColumns` is how many columns it
+` had before, and `qMovedShift` is 1 when the new row went on the top. handle_board_expansion calls
+` this, right after it has moved the fish. the marks, the spots and the pickup go to the new numbers
+` of their cells, and the quest moves whatever else it keeps by the cell. see QEV_MOVED.
+function questBoardMoved(qMovedColumns, qMovedShift)
+    if QUEST_ID = 0 then exitfunction
+    QUEST_MOVE_COLUMNS = qMovedColumns
+    QUEST_MOVE_SHIFT = qMovedShift
+    qMovedRows = CELL_ROW_COUNT - qMovedShift
+    qMovedCount = qMovedColumns * qMovedRows
+
+    ` a cell's new number is never less than its old one, so they are moved from the last one back,
+    ` and nothing is written over before it has been moved
+    qMovedI = qMovedCount - 1
+    while qMovedI >= 0
+        qMovedTo = questMovedCell(qMovedI)
+        if qMovedTo <> qMovedI
+            QUEST_MARK(qMovedTo) = QUEST_MARK(qMovedI)
+            QUEST_SPOT(qMovedTo) = QUEST_SPOT(qMovedI)
+            QUEST_FRESH(qMovedTo) = QUEST_FRESH(qMovedI)
+            QUEST_REBORN(qMovedTo) = QUEST_REBORN(qMovedI)
+            QUEST_MARK(qMovedI) = 0
+            QUEST_SPOT(qMovedI) = 0
+            QUEST_FRESH(qMovedI) = 0
+            QUEST_REBORN(qMovedI) = 0
+        endif
+        qMovedI = qMovedI - 1
+    endwhile
+
+    ` the pickup is beside the last cell of its row, which is a new cell when a column was added
+    if QUEST_PICK_CELL >= 0
+        qMovedRow = QUEST_PICK_CELL / qMovedColumns
+        qMovedRow = qMovedRow + qMovedShift
+        QUEST_PICK_CELL = qMovedRow * CELL_COLUMN_COUNT + CELL_COLUMN_COUNT - 1
+    endif
+    ` and the cursor that is out on it stays beside it
+    if QUEST_CURSOR_OUT
+        SELECTION_POS.x = CELL_COLUMN_COUNT - 1
+    endif
+
+    if QUEST_STATE = QSTATE_ACTIVE
+        questEvent(QEV_MOVED, qMovedColumns, qMovedShift)
     endif
 endfunction
 
