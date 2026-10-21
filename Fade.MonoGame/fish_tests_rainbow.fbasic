@@ -200,6 +200,7 @@ test rainbow_fish_beside_a_pop_brings_more from fishBoard
     rainbowFishReset()
     RAINBOW_FISH_ON = 1
     tRainbowBefore = RAINBOW_BREED_COUNT
+    testCursor(5, 6)
     testPut(0, 0, 6)
     testPut(1, 0, 6)
     testPut(2, 0, 6)
@@ -208,12 +209,15 @@ test rainbow_fish_beside_a_pop_brings_more from fishBoard
     REQUEST_COMBO_CHECK = 1
     runto _combos_judged
 
-    assert RAINBOW_BREED_COUNT = tRainbowBefore + 1, "a group beside a rainbow fish brings more"
-    assert RAINBOW_FISH_OWED(0) = 1, "the fish that fills the first column comes in a rainbow fish"
-    assert RAINBOW_FISH_OWED(1) = 1, "and the second"
-    assert RAINBOW_FISH_OWED(2) = 1, "and the third"
-    assert RAINBOW_FISH_OWED(3) = 0, "and no others"
-    assert RAINBOW_BREED_CELLS(testIndex(0, 0)) = 1, "and the group lights up before it pops"
+    assert RAINBOW_BREED_COUNT = tRainbowBefore + 1, "a rainbow fish beside a group that pops sends a flow"
+    assert RAINBOW_SEED_CELL(testIndex(5, 6)) = 1, "to the cell that the cursor is on"
+    assert RAINBOW_SEED_CELL(testIndex(1, 0)) = 0, "and not to the group"
+
+    runto _loop
+    runto _loop
+    assert RAINBOW_FISH(testIndex(5, 6)) = 1, "once the board has filled back in, and the flow has got there, the fish at the cursor is a rainbow fish"
+    rainbowFishCount()
+    assert RAINBOW_FISH_COUNT = 2, "so there is one more, and only one"
     end
 endtest
 
@@ -229,9 +233,12 @@ test rainbow_fish_in_a_group_brings_none from fishBoard
     REQUEST_COMBO_CHECK = 1
     runto _combos_judged
 
-    tRainbowOwed = RAINBOW_FISH_OWED(0) + RAINBOW_FISH_OWED(1)
-    tRainbowOwed = tRainbowOwed + RAINBOW_FISH_OWED(2)
-    assert tRainbowOwed = 0, "a group with a rainbow fish in it brings ordinary fish, even beside another one"
+    tRainbowSeeded = 0
+    for tRainbowX = 0 to 2
+        tRainbowSeeded = tRainbowSeeded + RAINBOW_SEED_CELL(testIndex(tRainbowX, 0))
+    next
+    tRainbowSeeded = tRainbowSeeded + RAINBOW_SEED_CELL(SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT)
+    assert tRainbowSeeded = 0, "a group with a rainbow fish in it brings none, even beside another one"
     end
 endtest
 
@@ -273,11 +280,12 @@ test rainbow_burst_brings_none from fishBoard
     REQUEST_COMBO_CHECK = 1
     runto _combos_judged
 
-    tRainbowOwed = 0
-    for tRainbowX = 0 to 8
-        tRainbowOwed = tRainbowOwed + RAINBOW_FISH_OWED(tRainbowX)
+    tRainbowSeeded = 0
+    tRainbowLastCell = CELL_COUNT - 1
+    for tRainbowX = 0 to tRainbowLastCell
+        tRainbowSeeded = tRainbowSeeded + RAINBOW_SEED_CELL(tRainbowX)
     next
-    assert tRainbowOwed = 0, "a big group beside a rainbow fish brings none, since the burst pops it"
+    assert tRainbowSeeded = 0, "a big group beside a rainbow fish brings none, since the burst pops it"
     assert RAINBOW_NO_BREED = 1, "and no group brings any until the board settles"
     end
 endtest
@@ -300,5 +308,43 @@ test rainbow_fish_in_a_school_pops_in_a_burst from fishBoard
 
     assert RAINBOW_BURST_LIVE = 1, "a rainbow fish out in a school sends the surge out"
     assert RAINBOW_FLOCK_POP_AT(0) > 0, "and it is due to pop when the surge gets to it"
+    end
+endtest
+
+test rainbow_fish_are_wild from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    tRainbowBefore = RAINBOW_WILD_COUNT
+    RAINBOW_FISH(testIndex(3, 4)) = 1
+    RAINBOW_FISH(testIndex(4, 4)) = 1
+    RAINBOW_FISH(testIndex(4, 5)) = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert RAINBOW_WILD_COUNT = tRainbowBefore + 1, "three rainbow fish that touch match, whatever kinds they are"
+    assert testPops(3, 4) = 1, "so all of them pop"
+    assert testPops(4, 4) = 1, "the middle one"
+    assert testPops(4, 5) = 1, "and the one below it"
+    assert RAINBOW_WILD_SWEEP_MS > 0, "once a band of the rainbow has swept across them"
+    tRainbowSwept = RAINBOW_WILD_WAIT + RAINBOW_WILD_SWEEP_MS
+    tRainbowHeld = 0
+    if STING_DELAY(testIndex(3, 4)) >= tRainbowSwept then tRainbowHeld = 1
+    assert tRainbowHeld = 1, "so their pops wait for it"
+    end
+endtest
+
+test rainbow_two_rainbow_fish_are_not_enough from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    tRainbowBefore = RAINBOW_WILD_COUNT
+    RAINBOW_FISH(testIndex(3, 4)) = 1
+    RAINBOW_FISH(testIndex(4, 4)) = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert RAINBOW_WILD_COUNT = tRainbowBefore, "two rainbow fish do not match on their own"
+    assert testPops(3, 4) = 0, "so they stay"
     end
 endtest

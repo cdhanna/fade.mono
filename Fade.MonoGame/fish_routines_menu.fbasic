@@ -216,6 +216,12 @@ setup_menu:
     MENU_ITEMS(MENU_ITEM_SET_LANGUAGE) = {
         ready = 1
     }
+    MENU_ITEMS(MENU_ITEM_SET_MOTION) = {
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_SET_POP_SPEED) = {
+        ready = 1
+    }
 
     ` the strings of the game, in the language the player picked, or else in Steam's or the computer's.
     ` the names and descriptions of the lines come from them. see loadMenuStrings.
@@ -261,6 +267,15 @@ setup_menu:
     if OPTION_SOUND < 0 then OPTION_SOUND = 0
     if OPTION_MUSIC > 10 then OPTION_MUSIC = 10
     if OPTION_MUSIC < 0 then OPTION_MUSIC = 0
+
+    OPTION_WATER_MOTION = get pref(PREF_WATER_MOTION, WATER_MOTION_REGULAR)
+    if OPTION_WATER_MOTION > WATER_MOTION_NONE then OPTION_WATER_MOTION = WATER_MOTION_REGULAR
+    if OPTION_WATER_MOTION < 0 then OPTION_WATER_MOTION = WATER_MOTION_REGULAR
+    applyWaterMotion()
+
+    ` see THE BIG MOMENTS in fish_headers_teach
+    OPTION_POP_SPEED = get pref(PREF_POP_SPEED, POP_SPEED_REGULAR)
+    if OPTION_POP_SPEED <> POP_SPEED_FAST then OPTION_POP_SPEED = POP_SPEED_REGULAR
 
     ` what the main menu remembers is shown, until the player says otherwise
     OPTION_MENU_REEF = get pref(PREF_MENU_REEF, 1)
@@ -427,12 +442,48 @@ frame_menu:
         selectMenuItem(menuNext, 120)
     endif
 
+    ` the mouse. the highlight follows it, and a click is the same as the confirm key. a line with a
+    ` setting on it goes down when its left half is clicked, and up when its right half is, the same as
+    ` the left and right keys. see THE MOUSE in fish_headers_mouse.
+    menuMsPick = -1
+    menuMsMoved = 0
+    menuMsX = (WORLD_WIDTH - MENU_WIDTH) / 2
+    menuMsLast = MENU_PAGE_LENGTH - 1
+    for menuMsRow = 0 to menuMsLast
+        menuMsY = MENU_LIST_TOP + menuMsRow * MENU_ROW_HEIGHT
+        menuMsOn = mouseHover(menuMsX, menuMsY, MENU_WIDTH, MENU_ROW_HEIGHT)
+        if menuMsOn
+            if menuMsRow <> MENU_SELECTED
+                selectMenuItem(menuMsRow, 120)
+                menuMsMoved = 1
+            endif
+        endif
+        menuMsHit = mouseClick(menuMsX, menuMsY, MENU_WIDTH, MENU_ROW_HEIGHT)
+        if menuMsHit
+            if menuMsRow <> MENU_SELECTED
+                selectMenuItem(menuMsRow, 0)
+            endif
+            menuMsItem = MENU_PAGE_ITEMS(menuMsRow)
+            menuMsPick = menuMsItem
+            if menuSettingsPage
+                if MENU_ITEMS(menuMsItem).hasValue
+                    if menuMsItem <> MENU_ITEM_GAME_SEED
+                        menuMsPick = -1
+                        menuChange = 1
+                        if MOUSE_X < WORLD_WIDTH / 2 then menuChange = -1
+                    endif
+                endif
+            endif
+        endif
+    next
+
     if menuChange <> 0
         changeMenuOption(MENU_PAGE_ITEMS(MENU_SELECTED), menuChange)
     endif
 
     ` the same swell of sound that the cursor in the game makes when it moves. a change to
     ` how loud the sound is makes it too, so that the new setting can be heard.
+    if menuMsMoved then menuStep = 1
     if menuStep <> 0 or menuChange <> 0
         create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
         set tween type SWAP_TWEEN_SFX, 1
@@ -440,6 +491,7 @@ frame_menu:
 
     menuPicked = -1
     if new action down(ACT_CONFIRM) then menuPicked = MENU_PAGE_ITEMS(MENU_SELECTED)
+    if menuMsPick >= 0 then menuPicked = menuMsPick
 
     ` the pause key backs out of the pause menu, the same as picking "Resume". it backs out of the question, too.
     if MENU_MODE = MENU_MODE_PAUSE
@@ -493,11 +545,12 @@ menu_pick:
         case MENU_ITEM_NEW_GAME
             ` the very first game is not asked what kind of game it should be. it is a regular one, and it
             ` starts straight away. it is the first one for as long as the lines of THE FIRST DIVE have not
-            ` been shown, and they are shown when it starts. see fish_routines_intro.
+            ` been shown, and they are shown when it starts. a player who saw an older tutorial gets the new
+            ` one the same way. see INTRO_VERSION, and fish_routines_intro.
             menuFirstGame = 0
             if MENU_MODE = MENU_MODE_MAIN
                 menuIntroSeen = get pref(PREF_INTRO_SEEN, 0)
-                if menuIntroSeen = 0 then menuFirstGame = 1
+                if menuIntroSeen < INTRO_VERSION then menuFirstGame = 1
             endif
 
             if menuFirstGame
@@ -646,6 +699,12 @@ menu_pick:
         endcase
         case MENU_ITEM_SET_LANGUAGE
             changeMenuOption(MENU_ITEM_SET_LANGUAGE, 1)
+        endcase
+        case MENU_ITEM_SET_MOTION
+            changeMenuOption(MENU_ITEM_SET_MOTION, 1)
+        endcase
+        case MENU_ITEM_SET_POP_SPEED
+            changeMenuOption(MENU_ITEM_SET_POP_SPEED, 1)
         endcase
         case MENU_ITEM_SET_REEF
             changeMenuOption(MENU_ITEM_SET_REEF, 1)
@@ -1291,6 +1350,7 @@ reset_game:
     ` picked from it. see THE SEED OF A GAME in fish_headers_seed.
     seedNewGame()
     entranceCancel() `a game that ends while its fish are still falling in. see THE ENTRANCE in fish_headers_entrance.
+    teachResetGame() `every big moment is new again in a new game. see THE BIG MOMENTS in fish_headers_teach.
 
     ` if the game that is being thrown away was still in its tutorial, the pieces that it had not got to are put back
     gosub tutorial_end
@@ -1546,8 +1606,14 @@ function setMenuPage(page)
             endif
         endif
 
-        ` and the options page has the language right under "Fullscreen", always
+        ` and the options page has the language right under "Fullscreen", always, and the water motion under that
         if i = MENU_ITEM_SET_LANGUAGE
+            if page = MENU_PAGE_OPTIONS then skip
+        endif
+        if i = MENU_ITEM_SET_MOTION
+            if page = MENU_PAGE_OPTIONS then skip
+        endif
+        if i = MENU_ITEM_SET_POP_SPEED
             if page = MENU_PAGE_OPTIONS then skip
         endif
 
@@ -1582,6 +1648,12 @@ function setMenuPage(page)
                     MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_LANGUAGE
                     MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
                     showMenuItemText(MENU_ITEM_SET_LANGUAGE)
+                    MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_MOTION
+                    MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+                    showMenuItemText(MENU_ITEM_SET_MOTION)
+                    MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_POP_SPEED
+                    MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+                    showMenuItemText(MENU_ITEM_SET_POP_SPEED)
                     if SURFACE_REEF
                         MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_REEF
                         MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
@@ -1734,6 +1806,21 @@ function refreshOptionLines()
     ` the language is shown in itself, so a player who cannot read the one the game is in can find their own
     setMenuItemValue(MENU_ITEM_SET_LANGUAGE, loc$("menu.language"), language name$(currentLanguageIndex()))
 
+    motionName$ = loc$("menu.motion.regular")
+    if OPTION_WATER_MOTION = WATER_MOTION_LOW
+        motionName$ = loc$("menu.motion.low")
+    endif
+    if OPTION_WATER_MOTION = WATER_MOTION_NONE
+        motionName$ = loc$("menu.motion.none")
+    endif
+    setMenuItemValue(MENU_ITEM_SET_MOTION, loc$("menu.motion"), motionName$)
+
+    popSpeedName$ = loc$("menu.popspeed.regular")
+    if OPTION_POP_SPEED = POP_SPEED_FAST
+        popSpeedName$ = loc$("menu.popspeed.fast")
+    endif
+    setMenuItemValue(MENU_ITEM_SET_POP_SPEED, loc$("menu.popspeed"), popSpeedName$)
+
     if OPTION_MENU_REEF
         setMenuItemValue(MENU_ITEM_SET_REEF, loc$("menu.reef"), on$)
     else
@@ -1845,6 +1932,10 @@ function loadMenuStrings()
     MENU_ITEMS(MENU_ITEM_SET_FULLSCREEN).desc$ = loc$("menu.fullscreen.desc")
     MENU_ITEMS(MENU_ITEM_SET_LANGUAGE).name$ = loc$("menu.language")
     MENU_ITEMS(MENU_ITEM_SET_LANGUAGE).desc$ = loc$("menu.language.desc")
+    MENU_ITEMS(MENU_ITEM_SET_MOTION).name$ = loc$("menu.motion")
+    MENU_ITEMS(MENU_ITEM_SET_MOTION).desc$ = loc$("menu.motion.desc")
+    MENU_ITEMS(MENU_ITEM_SET_POP_SPEED).name$ = loc$("menu.popspeed")
+    MENU_ITEMS(MENU_ITEM_SET_POP_SPEED).desc$ = loc$("menu.popspeed.desc")
     MENU_ITEMS(MENU_ITEM_SET_BACK).name$ = loc$("menu.back")
     MENU_ITEMS(MENU_ITEM_SET_BACK).desc$ = loc$("menu.back.desc")
     MENU_ITEMS(MENU_ITEM_SET_REEF).name$ = loc$("menu.reef")
@@ -1944,6 +2035,19 @@ function changeMenuOption(item, change)
             reloadMenuStrings()
         endcase
 
+        ` regular, low, none, and back to regular. the water changes straight away, behind the menu.
+        case MENU_ITEM_SET_MOTION
+            OPTION_WATER_MOTION = OPTION_WATER_MOTION + change
+            if OPTION_WATER_MOTION > WATER_MOTION_NONE then OPTION_WATER_MOTION = WATER_MOTION_REGULAR
+            if OPTION_WATER_MOTION < WATER_MOTION_REGULAR then OPTION_WATER_MOTION = WATER_MOTION_NONE
+            applyWaterMotion()
+        endcase
+
+        ` regular or fast. see THE BIG MOMENTS in fish_headers_teach.
+        case MENU_ITEM_SET_POP_SPEED
+            OPTION_POP_SPEED = 1 - OPTION_POP_SPEED
+        endcase
+
         ` the main menu looks at these on every frame, so there is nothing else to do
         case MENU_ITEM_SET_REEF
             OPTION_MENU_REEF = 1 - OPTION_MENU_REEF
@@ -1987,10 +2091,31 @@ function changeMenuOption(item, change)
     set pref PREF_MENU_MONSTER, OPTION_MENU_MONSTER
     set pref PREF_MENU_PHOTOS, OPTION_MENU_PHOTOS
     set pref PREF_LANGUAGE, OPTION_LANGUAGE
+    set pref PREF_WATER_MOTION, OPTION_WATER_MOTION
+    set pref PREF_POP_SPEED, OPTION_POP_SPEED
 
     ` the lines have changed, so write them again. selecting the line again colors it and fills in its description.
     refreshOptionLines()
     selectMenuItem(MENU_SELECTED, 0)
+endfunction
+
+
+` tell the screen effect how much the water moves. see THE WATER MOTION in fish_headers.
+function applyWaterMotion()
+    motionWobble# = 1
+    motionRings# = 1
+    motionDim# = WATER_HINT_DIM#
+    if OPTION_WATER_MOTION = WATER_MOTION_LOW
+        motionWobble# = WATER_WOBBLE_LOW#
+        motionRings# = WATER_RINGS_LOW#
+        motionDim# = WATER_HINT_DIM_CALMER#
+    endif
+    if OPTION_WATER_MOTION = WATER_MOTION_NONE
+        motionWobble# = 0
+        motionRings# = WATER_RINGS_NONE#
+        motionDim# = WATER_HINT_DIM_CALMER#
+    endif
+    set effect param float4 1, "Motion", motionWobble#, motionRings#, motionDim#, 0
 endfunction
 
 

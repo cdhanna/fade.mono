@@ -1,0 +1,377 @@
+goto routines_mouse_exit
+
+
+` THE MOUSE. see fish_headers_mouse.
+setup_mouse:
+    ` the buttons are little panels with an outline, the same as a line of the menu. a page puts them
+    ` in its own render target, at its own order. see mouseButtonOn.
+    MOUSE_BUTTON_XS(MOUSE_BUTTON_BACK) = 8
+    MOUSE_BUTTON_XS(MOUSE_BUTTON_GO) = WORLD_WIDTH - (8 + MOUSE_BUTTON_W)
+    for msB = 0 to 1
+        msBX = MOUSE_BUTTON_XS(msB)
+        reserve sprite id(msBSprite)
+        sprite msBSprite, msBX, MOUSE_BUTTON_Y, TEX_PIXEL
+        set sprite offset msBSprite, 0, 0
+        size sprite msBSprite, MOUSE_BUTTON_W, MOUSE_BUTTON_H
+        color sprite msBSprite, rgb(10, 14, 30, 235)
+        hide sprite msBSprite
+        MOUSE_BUTTON_SPRITES(msB) = msBSprite
+
+        MOUSE_BUTTON_BORDERS(msB) = createInfoBorder(ORDER_MENU_TEXT)
+        layoutInfoBorder(MOUSE_BUTTON_BORDERS(msB), msBX, MOUSE_BUTTON_Y, MOUSE_BUTTON_W, MOUSE_BUTTON_H)
+
+        reserve text id(msBText)
+        text msBText, msBX + MOUSE_BUTTON_W / 2, MOUSE_BUTTON_Y + MOUSE_BUTTON_H / 2, SCORE_FONT, loc$("menu.back")
+        set text offset msBText, .5, .5
+        size text max msBText, MOUSE_BUTTON_W - 6, 16
+        enable text drop shadow msBText, 2, -2, rgb(0,0,0)
+        hide text msBText
+        MOUSE_BUTTON_TEXTS(msB) = msBText
+    next
+
+    ` the words that a mouse over the board gets
+    reserve text id(MOUSE_NO_TEXT_ID)
+    text MOUSE_NO_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT / 2, SCORE_FONT, loc$("hud.mouse.keys")
+    set text offset MOUSE_NO_TEXT_ID, .5, 1
+    size text max MOUSE_NO_TEXT_ID, 300, 16
+    color text MOUSE_NO_TEXT_ID, rgb(255, 230, 150)
+    enable text drop shadow MOUSE_NO_TEXT_ID, 2, -2, rgb(0,0,0)
+    order text MOUSE_NO_TEXT_ID, ORDER_QTALK + 14 `over the box of the quest talk, and under info mode
+    hide text MOUSE_NO_TEXT_ID
+
+    reserve sprite id(MOUSE_NO_PANEL_SPRITE)
+    sprite MOUSE_NO_PANEL_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset MOUSE_NO_PANEL_SPRITE, 0, 0
+    order sprite MOUSE_NO_PANEL_SPRITE, ORDER_QTALK + 8
+    hide sprite MOUSE_NO_PANEL_SPRITE
+    MOUSE_NO_BORDER = createInfoBorder(ORDER_QTALK + 9)
+    reserve tween id(MOUSE_NO_POP_TWEEN_ID)
+    create basic tween MOUSE_NO_POP_TWEEN_ID, 1, 1, 1, 0
+return
+
+
+` the main loop reads the mouse first thing on every frame
+frame_mouse:
+    mouseStep()
+return
+
+` and while the board is up, with no menu over it, the mouse gets its "no, no, no". a demo is nobody's
+` game, and the mouse stops it anyway. see frame_demo. info mode can be used with the mouse, so there
+` the words go away. see handle_info_input.
+frame_mouse_board:
+    if INFO_MODE
+        if MOUSE_NO_SHOWN
+            mouseNoHide()
+        endif
+        MOUSE_NO_TRAVEL = 0
+        return
+    endif
+    if DEMO_MODE = 0
+        mouseNoStep()
+    endif
+return
+
+` a menu covers the words up
+frame_mouse_menu:
+    if MOUSE_NO_SHOWN
+        mouseNoHide()
+    endif
+return
+
+
+routines_mouse_exit:
+
+
+` read the mouse, once a frame. it can be called any number of times in a frame: after the first, it does
+` nothing. a mouse that moves, or clicks, is in use, and its pointer shows. a key or a button puts it away.
+function mouseStep()
+    msFrame = frame number()
+    if msFrame = MOUSE_FRAME then exitfunction
+
+    ` the pointer hides until the mouse is moved. the splash is the first thing to ask, before setup_mouse.
+    if MOUSE_FRAME < 0
+        if MOUSE_ON = 0
+            hide mouse
+        endif
+    endif
+    MOUSE_FRAME = msFrame
+
+    MOUSE_MOVED = 0
+    MOUSE_CLICKED = 0
+    MOUSE_GONE = 0
+    msX = mouse x()
+    msY = mouse y()
+
+    ` the mouse is read over every window. when the game is not the one in use, nothing that it does counts,
+    ` and coming back to the game is not a move of it either.
+    if window active() = 0
+        MOUSE_LAST_X = msX
+        MOUSE_LAST_Y = msY
+        exitfunction
+    endif
+
+    msOver = 1
+    if msX < 0 or msY < 0 then msOver = 0
+    if msX >= WORLD_WIDTH or msY >= WORLD_HEIGHT then msOver = 0
+
+    if MOUSE_LAST_X >= 0
+        msDx = abs(msX - MOUSE_LAST_X)
+        msDy = abs(msY - MOUSE_LAST_Y)
+        msGone = msDx + msDy
+        if msGone > 0
+            if msOver
+                MOUSE_TRAVEL = MOUSE_TRAVEL + msGone
+                if MOUSE_TRAVEL >= MOUSE_WAKE_TRAVEL
+                    MOUSE_MOVED = 1
+                    MOUSE_GONE = msGone
+                endif
+            endif
+        endif
+    endif
+    MOUSE_LAST_X = msX
+    MOUSE_LAST_Y = msY
+    MOUSE_X = msX
+    MOUSE_Y = msY
+
+    if new left click()
+        if msOver then MOUSE_CLICKED = 1
+    endif
+
+    msUsed = MOUSE_MOVED + MOUSE_CLICKED
+    if msUsed > 0
+        if MOUSE_ON = 0
+            MOUSE_ON = 1
+            show mouse
+        endif
+    else
+        ` a key, or a button of a controller. the other buttons of the mouse are not keys.
+        msKeys = new any input()
+        if new right click() then msKeys = 0
+        if new left click() then msKeys = 0
+        if msKeys
+            MOUSE_TRAVEL = 0
+            MOUSE_NO_TRAVEL = 0
+
+            ` the keys are what the words asked for, so the words pop, in a puff of bubbles
+            if MOUSE_NO_SHOWN
+                spawnWakeBubbles(MOUSE_NO_X, MOUSE_NO_Y, MOUSE_NO_W, 22, 14, rgb(255, 230, 150), ORDER_QTALK + 15)
+                mouseNoHide()
+            endif
+            if MOUSE_ON
+                MOUSE_ON = 0
+                hide mouse
+            endif
+        endif
+    endif
+endfunction
+
+
+` is the mouse in use, and over this box? the box is in the pixels of the game.
+function mouseOver(x, y, w, h)
+    mouseStep()
+    msIn = 0
+    if MOUSE_ON
+        if MOUSE_X >= x and MOUSE_X < x + w
+            if MOUSE_Y >= y and MOUSE_Y < y + h then msIn = 1
+        endif
+    endif
+endfunction msIn
+
+` did the mouse move onto, or over, this box on this frame? a page moves its highlight to what this says,
+` and a mouse that is still leaves the highlight where the keys put it.
+function mouseHover(x, y, w, h)
+    mouseStep()
+    msHover = 0
+    if MOUSE_MOVED
+        msHover = mouseOver(x, y, w, h)
+    endif
+endfunction msHover
+
+` was this box clicked? a click that is taken is used up, so nothing else takes it on the same frame.
+function mouseClick(x, y, w, h)
+    mouseStep()
+    msHit = 0
+    if MOUSE_CLICKED
+        msHit = mouseOver(x, y, w, h)
+        if msHit then MOUSE_CLICKED = 0
+    endif
+endfunction msHit
+
+` a click anywhere at all, for the pages that only wait for one, like the words of the intro
+function mouseClickAnywhere()
+    mouseStep()
+    msAny = MOUSE_CLICKED
+    MOUSE_CLICKED = 0
+endfunction msAny
+
+
+` THE BUTTONS. a page that needs one calls mouseButtonOn when it opens, mouseButtonStep on every frame,
+` and mouseButtonOff when it closes. the back button has a short way of saying each of these.
+function mouseButtonOn(button, words$, targetId, drawOrder)
+    mbBorder as infoBorder = MOUSE_BUTTON_BORDERS(button)
+    mbSprite = MOUSE_BUTTON_SPRITES(button)
+    mbText = MOUSE_BUTTON_TEXTS(button)
+    ` 0 is the screen itself, for info mode
+    if targetId = 0
+        reset sprite render target mbSprite
+        reset sprite render target mbBorder.topId
+        reset sprite render target mbBorder.bottomId
+        reset sprite render target mbBorder.leftId
+        reset sprite render target mbBorder.rightId
+        reset text render target mbText
+    else
+        set sprite render target mbSprite, targetId
+        set sprite render target mbBorder.topId, targetId
+        set sprite render target mbBorder.bottomId, targetId
+        set sprite render target mbBorder.leftId, targetId
+        set sprite render target mbBorder.rightId, targetId
+        set text render target mbText, targetId
+    endif
+    order sprite mbSprite, drawOrder
+    order sprite mbBorder.topId, drawOrder + 1
+    order sprite mbBorder.bottomId, drawOrder + 1
+    order sprite mbBorder.leftId, drawOrder + 1
+    order sprite mbBorder.rightId, drawOrder + 1
+    order text mbText, drawOrder + 2
+
+    ` the language may have changed since it was last up
+    set text mbText, words$
+    MOUSE_BUTTON_WANTED(button) = 1
+    mouseButtonShow(button)
+endfunction
+
+function mouseButtonOff(button)
+    MOUSE_BUTTON_WANTED(button) = 0
+    mouseButtonShow(button)
+endfunction
+
+function mouseButtonShow(button)
+    mbShow = 0
+    if MOUSE_BUTTON_WANTED(button)
+        if MOUSE_ON then mbShow = 1
+    endif
+    if mbShow
+        show sprite MOUSE_BUTTON_SPRITES(button)
+        show text MOUSE_BUTTON_TEXTS(button)
+    else
+        hide sprite MOUSE_BUTTON_SPRITES(button)
+        hide text MOUSE_BUTTON_TEXTS(button)
+    endif
+    showInfoBorder(MOUSE_BUTTON_BORDERS(button), mbShow)
+endfunction
+
+` show or hide it as the mouse comes and goes, light it up while the mouse is over it, and say 1 when it is clicked
+function mouseButtonStep(button)
+    mouseStep()
+    mouseButtonShow(button)
+    mbX = MOUSE_BUTTON_XS(button)
+    mbOver = mouseOver(mbX, MOUSE_BUTTON_Y, MOUSE_BUTTON_W, MOUSE_BUTTON_H)
+    if mbOver
+        colorInfoBorder(MOUSE_BUTTON_BORDERS(button), rgb(160, 200, 255))
+        color text MOUSE_BUTTON_TEXTS(button), rgb(230, 240, 255)
+    else
+        colorInfoBorder(MOUSE_BUTTON_BORDERS(button), rgb(64, 128, 255, 200))
+        color text MOUSE_BUTTON_TEXTS(button), rgb(64, 128, 255)
+    endif
+    mbHit = 0
+    if MOUSE_BUTTON_WANTED(button)
+        mbHit = mouseClick(mbX, MOUSE_BUTTON_Y, MOUSE_BUTTON_W, MOUSE_BUTTON_H)
+    endif
+endfunction mbHit
+
+function mouseBackOn(targetId, drawOrder)
+    mouseButtonOn(MOUSE_BUTTON_BACK, loc$("menu.back"), targetId, drawOrder)
+endfunction
+
+function mouseBackOff()
+    mouseButtonOff(MOUSE_BUTTON_BACK)
+endfunction
+
+function mouseBackStep()
+    mbBackHit = mouseButtonStep(MOUSE_BUTTON_BACK)
+endfunction mbBackHit
+
+
+` THE "NO, NO, NO". this runs on every frame of the game, while the board is up and no menu is.
+function mouseNoStep()
+    mouseStep()
+    mnNow = game ms()
+    mnUsed = MOUSE_CLICKED
+    MOUSE_CLICKED = 0
+
+    ` a little nudge of the mouse is let go. it has to be moved for a while, without stopping.
+    if MOUSE_MOVED
+        mnStill = mnNow - MOUSE_NO_MOVED_MS
+        if mnStill > MOUSE_NO_STILL_MS then MOUSE_NO_TRAVEL = 0
+        MOUSE_NO_MOVED_MS = mnNow
+        MOUSE_NO_TRAVEL = MOUSE_NO_TRAVEL + MOUSE_GONE
+        if MOUSE_NO_TRAVEL >= MOUSE_NO_WAKE_TRAVEL then mnUsed = 1
+    endif
+
+    if mnUsed > 0
+        ` the words stay up for as long as the mouse keeps moving, and a while after
+        if MOUSE_NO_SHOWN = 0
+            MOUSE_NO_SHOWN = 1
+            set text MOUSE_NO_TEXT_ID, loc$("hud.mouse.keys")
+            show text MOUSE_NO_TEXT_ID
+            show sprite MOUSE_NO_PANEL_SPRITE
+            showInfoBorder(MOUSE_NO_BORDER, 1)
+            create basic tween MOUSE_NO_POP_TWEEN_ID, 0, 1, 250, 0
+        endif
+        MOUSE_NO_UNTIL_MS = mnNow + MOUSE_NO_HOLD_MS
+
+        ` and the cursor shakes its head, from side to side
+        if mnNow >= MOUSE_NO_NEXT_MS
+            cursorShakeNo()
+            MOUSE_NO_NEXT_MS = mnNow + MOUSE_NO_GAP_MS
+        endif
+    endif
+
+    if MOUSE_NO_SHOWN
+        if mnNow >= MOUSE_NO_UNTIL_MS
+            mouseNoHide()
+        else
+            ` the words pop up over the cursor, on their panel, and stay inside the screen
+            mnW = get text size x(MOUSE_NO_TEXT_ID) + 16
+            mnHalf = mnW / 2
+            mnX = getCellX(SELECTION_POS.x) + CELL_SIZE / 2
+            mnY = getCellY(SELECTION_POS.y) - 8
+            if mnX < mnHalf + 4 then mnX = mnHalf + 4
+            if mnX > WORLD_WIDTH - (mnHalf + 4) then mnX = WORLD_WIDTH - (mnHalf + 4)
+            if mnY < 30 then mnY = getCellY(SELECTION_POS.y) + CELL_SIZE + 30
+            mnPop# = tweenVal(MOUSE_NO_POP_TWEEN_ID)
+            mnY = mnY + (1 - mnPop#) * 6
+            set text position MOUSE_NO_TEXT_ID, mnX, mnY - 4
+            position sprite MOUSE_NO_PANEL_SPRITE, mnX - mnHalf, mnY - 22
+            size sprite MOUSE_NO_PANEL_SPRITE, mnW, 22
+            layoutInfoBorder(MOUSE_NO_BORDER, mnX - mnHalf, mnY - 22, mnW, 22)
+            MOUSE_NO_X = mnX - mnHalf
+            MOUSE_NO_Y = mnY - 22
+            MOUSE_NO_W = mnW
+
+            ` they fade away over the last half a second
+            mnLeft = MOUSE_NO_UNTIL_MS - mnNow
+            mnAlpha = 255
+            if mnLeft < 500 then mnAlpha = mnLeft * 255 / 500
+            color text MOUSE_NO_TEXT_ID, rgb(255, 230, 150, mnAlpha)
+            color sprite MOUSE_NO_PANEL_SPRITE, rgb(10, 14, 30, mnAlpha * 235 / 255)
+            colorInfoBorder(MOUSE_NO_BORDER, rgb(255, 210, 120, mnAlpha * 160 / 255))
+        endif
+    endif
+endfunction
+
+function mouseNoHide()
+    MOUSE_NO_SHOWN = 0
+    hide text MOUSE_NO_TEXT_ID
+    hide sprite MOUSE_NO_PANEL_SPRITE
+    showInfoBorder(MOUSE_NO_BORDER, 0)
+endfunction
+
+` the shake that the cursor does when a move cannot be made, but from side to side, and for longer
+function cursorShakeNo()
+    CURSOR_SHAKING = 1
+    CURSOR_SHAKE_DIR_X = 1
+    CURSOR_SHAKE_DIR_Y = 0
+    CURSOR_SHAKE_AMOUNT = MOUSE_NO_SHAKE_SIZE
+    create basic tween CURSOR_SHAKE_TWEEN_ID, 1, 0, MOUSE_NO_SHAKE_TIME, 0
+endfunction

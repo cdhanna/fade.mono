@@ -46,6 +46,26 @@ public class Game1 : Microsoft.Xna.Framework.Game
         public FadeTestResult result;
         public TaskCompletionSource source;
     }
+    // Runs while a test runs; a test that takes longer than FADE_TEST_TIMEOUT fails.
+    private readonly Stopwatch _testClock = new Stopwatch();
+
+    /// <summary>
+    /// Ends the running test as failed and moves on to the next one. A runtime error, an exception
+    /// from the game, or a timeout used to stop the program (or the whole process) with the test
+    /// never reported, so a suite run hung or died with no test name.
+    /// </summary>
+    void FailCurrentTest(string message)
+    {
+        if (currentTest == null) return;
+        currentTest.result.passed = false;
+        currentTest.result.failureMessage = message;
+        Console.Error.WriteLine($"[test] {currentTest.result.testName} failed: {message}");
+        FileLog.WriteLine($"TEST FAILED {currentTest.result.testName}: {message}");
+        currentTest.source.TrySetResult();
+        currentTest = null;
+        _fatal = null;
+    }
+
     public async Task<FadeTestResult> QueueTest(FadeTestRunContext ctx, CancellationToken ct)
     {
         // return new FadeTestResult
@@ -80,7 +100,15 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private GraphicsDeviceManager _graphics;
     private SpriteBatch _spriteBatch;
     public VirtualMachine _vm;
-    // Public so the browser JS bridge (Pages/Index.razor.cs) can drive
+    // What actually runs the program each frame. With a launchable built with
+    // FadeBackend=CSharp this is the compiled program (unless FADE_BACKEND=vm); otherwise
+    // a VmRunner over _vm. _vm always exists: the debug session, F2 module reload and the
+    // in-game console are VM features, and only work when the VM is the runner.
+    public IFadeRunner Runner => _runner;
+    private IFadeRunner _runner;
+    private bool _runnerStarted;
+    private bool RunningCompiled => _runner != null && !(_runner is VmRunner);
+// Public so the browser JS bridge (Pages/Index.razor.cs) can drive
     // step/pause/breakpoint requests + drain outbound messages. Desktop
     // uses its TCP socket and never accesses this from outside.
     public DebugSession DebugSession => _debugSession;
@@ -696,7 +724,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         return GameReloader.LatestBuild != null && GameReloader.LatestBuild != _fadeProgram;
     }
     
-    public void ResetFade(Action<VirtualMachine> customize=null)
+    public void ResetFade(Action<VirtualMachine> customize=null, TestManifestEntry testEntry=null)
     {
 
         // var x = Content.GetRootDirectoryFullPath();
@@ -707,10 +735,14 @@ public class Game1 : Microsoft.Xna.Framework.Game
         // if (_vm == null)
         var oldVm = _vm;
         {
-            _vm = new VirtualMachine(_fadeProgram.Bytecode)
-            {
-                hostMethods = HostMethodTable.FromCommandCollection(_fadeProgram.CommandCollection)
-            };
+            // A FadeBackend=CSharp build carries no bytecode. The VM is then only a stand-in for the
+            // VM-side features (debug session, module reload), which are off while compiled code runs.
+            _vm = FadeRunners.HasBytecode(_fadeProgram)
+                ? new VirtualMachine(_fadeProgram.Bytecode)
+                {
+                    hostMethods = HostMethodTable.FromCommandCollection(_fadeProgram.CommandCollection)
+                }
+                : VirtualMachine.CreateHostContext();
         }
         // Apply GC knobs from fade.json settings (funneled in via SetGcSettings)
         // to the freshly-built VM. sweepInterval 0 → keep the VM default.
@@ -722,6 +754,26 @@ public class Game1 : Microsoft.Xna.Framework.Game
         // from the running program's SourceMap (desktop runtime context); a
         // no-op if the program can't provide source.
         _moduleReloader.Bind(_vm, _fadeProgram.CommandCollection, _fadeProgram as FadeRuntimeContext);
+
+        // Pick the backend. The compiled program starts a test by name; the VM was already
+        // positioned at the test's entry by `customize`.
+        _runnerStarted = false;
+        if (FadeRunners.UseCompiled(_fadeProgram))
+        {
+            var program = ((ICompiledLaunchable)_fadeProgram).CreateCompiledProgram();
+            if (testEntry != null && !program.StartTest(testEntry.name))
+            {
+                throw new InvalidOperationException($"the compiled program has no test named {testEntry.name}");
+            }
+            _runner = program;
+            Console.WriteLine(FadeRunners.HasBytecode(_fadeProgram)
+                ? "[fade] running the compiled C# program (set FADE_BACKEND=vm for the bytecode VM)"
+                : "[fade] running the compiled C# program (build with -p:FadeBackend=VM for the bytecode VM)");
+        }
+        else
+        {
+            _runner = new VmRunner(_vm);
+        }
 
         // LaunchOptions had a static initializer that allocated a TCP port
         // for DAP — System.Net.Sockets is unavailable in WASM, so touching
@@ -736,7 +788,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
         // Enable debug for normal runs and for test-debug runs.
         // Plain test runs (withDebug=false) stay non-debug so the Execute2
         // path runs without breakpoint overhead.
-        if ((!_testMode || _testModeWithDebug) && DebugProgram && Environment.GetEnvironmentVariable("FADE_NO_DEBUG") == null)
+        // The Fade debugger steps the VM, so it is off while the compiled program runs.
+        if ((!_testMode || _testModeWithDebug) && DebugProgram && Environment.GetEnvironmentVariable("FADE_NO_DEBUG") == null
+            && !RunningCompiled)
         {
             _options.debug = true;
             _options.debugWaitForConnection = false;
@@ -940,7 +994,15 @@ public class Game1 : Microsoft.Xna.Framework.Game
         if (MaxElapsedTime != maxElapsed) MaxElapsedTime = maxElapsed;
 
         var start = _perfLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
-        UpdateFrame(gameTime);
+        try
+        {
+            UpdateFrame(gameTime);
+        }
+        catch (Exception ex) when (_testMode && currentTest != null)
+        {
+            // an exception from the game itself (not the Fade program) fails this test, not the run
+            FailCurrentTest($"the game threw {ex.GetType().Name}: {ex.Message}");
+        }
         PerfKnobs.BusyWait(PerfKnobs.updateDelayMs);
         PerfKnobs.CountUpdate();
         if (_perfLog)
@@ -980,7 +1042,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
                     FileLog.WriteLine("FadeProgram: " + nextTest.ctx.Launchable.Bytecode.Length);
                     currentTest = nextTest;
-                    ResetFade(vm =>
+                    _testClock.Restart();
+                    ResetFade(testEntry: nextTest.ctx.Entry, customize: vm =>
                     {
                         vm.instructionIndex = nextTest.ctx.Entry.entryPointAddress;
                         // Without this, ASSERT_FAIL ops take the
@@ -1012,6 +1075,12 @@ public class Game1 : Microsoft.Xna.Framework.Game
                     FileLog.WriteLine("TRYING TO CANCEL EARLY");
                     currentTest.source.TrySetCanceled(currentTest.ct);
                     currentTest = null;
+                    return;
+                }
+
+                if (FadeTestExecutor.Timeout is TimeSpan limit && _testClock.Elapsed > limit)
+                {
+                    FailCurrentTest($"timed out after {limit.TotalSeconds:0.#} s ({FadeTestExecutor.ENV_TEST_TIMEOUT})");
                     return;
                 }
             }
@@ -1127,7 +1196,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
 #if !BROWSER
         DebugUISystem.renderer = _imguiRenderer;
 #endif
-        if (_vm.instructionIndex >= _vm.program.Length)
+        if (_runner.IsComplete)
         {
             // if we are testing, then mark the current test as complete. 
             if (currentTest != null)
@@ -1136,23 +1205,32 @@ public class Game1 : Microsoft.Xna.Framework.Game
                
                 currentTest.result.passed = true; // TODO;
 
-                if (_vm.assertionFailure != null)
+                var assertionFailure = _runner.AssertionFailure;
+                if (assertionFailure != null)
                 {
                     currentTest.result.passed = false;
-                    
-                    currentTest.result.failureInstructionIndex = _vm.assertionFailure.instructionIndex;
-                    currentTest.result.failureSourceText = _vm.assertionFailure.sourceText;
-                    currentTest.result.failureMessage = "Failed Assert: " + _vm.assertionFailure.sourceText;
-                    var map = new IndexCollection(_fadeProgram.DebugData.statementTokens);
-                    if (map.TryFindClosestTokenBeforeIndex(_vm.assertionFailure.instructionIndex, out var token))
+
+                    currentTest.result.failureInstructionIndex = assertionFailure.instructionIndex;
+                    currentTest.result.failureSourceText = assertionFailure.sourceText;
+                    currentTest.result.failureMessage = "Failed Assert: " + assertionFailure.sourceText;
+                    var runtime = GameReloader.LatestRuntime;
+                    if (assertionFailure.instructionIndex >= 0)
                     {
-                        var runtime = GameReloader.LatestRuntime;
-                        if (runtime?.SourceMap != null)
+                        var map = new IndexCollection(_fadeProgram.DebugData.statementTokens);
+                        if (map.TryFindClosestTokenBeforeIndex(assertionFailure.instructionIndex, out var token)
+                            && runtime?.SourceMap != null)
                         {
                             var local = runtime.SourceMap.GetOriginalLocation(token.token);
                             currentTest.result.failureMessage += Environment.NewLine + "\t" +
                                                                  $"source location: {local.fileName} - {local.startLine}:{local.startChar}";
                         }
+                    }
+                    else if (assertionFailure.sourceLine >= 0 && runtime?.SourceMap != null)
+                    {
+                        // the compiled program reports the failing statement's line
+                        var local = runtime.SourceMap.GetOriginalLocation(assertionFailure.sourceLine, 0);
+                        currentTest.result.failureMessage += Environment.NewLine + "\t" +
+                                                             $"source location: {local.fileName} - {local.startLine}:{local.startChar}";
                     }
 
                 }
@@ -1201,7 +1279,13 @@ public class Game1 : Microsoft.Xna.Framework.Game
                 // desktop has its DAP socket. The StartDebugging path
                 // handles breakpoints, pause, step, and ticking when no
                 // debug state is active (just keeps ticking).
-                if (_options.debug)
+                if (RunningCompiled)
+                {
+                    // the compiled program runs until it suspends (`sync`) or ends
+                    _runner.Run();
+                    _runnerStarted = true;
+                }
+                else if (_options.debug)
                 {
                     _debugSession._vm.isSuspendRequested = false;
                     while (!_debugSession._vm.isSuspendRequested && _vm.instructionIndex < _vm.program.Length)
@@ -1255,6 +1339,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
                 if (_perfLog) _perfFrameVm += PerfMs(_perfVmStart, System.Diagnostics.Stopwatch.GetTimestamp());
 
                 // Frame safepoint — runs after EITHER the debug or non-debug tick.
+                // Module reload swaps bytecode under the VM, so it only applies when the VM runs.
                 // (The fish game runs with _options.debug = true, so the module
                 // reload MUST live outside the non-debug branch.) Arm/classify a
                 // newer build; F2 applies the state-preserving reload live.
@@ -1265,7 +1350,10 @@ public class Game1 : Microsoft.Xna.Framework.Game
                     // via TryCommitPending — it re-classifies + applies as soon as
                     // the VM leaves the edited statement (drains like the web path),
                     // instead of relying on SyncPoint's one-shot arm-time verdict.
-                    if (_webReloadAutoAccept && _pendingWebReload != null)
+                    if (RunningCompiled)
+                    {
+                    }
+                    else if (_webReloadAutoAccept && _pendingWebReload != null)
                     {
                         if (_moduleReloader.TryCommitPending())
                         {
@@ -1328,14 +1416,40 @@ public class Game1 : Microsoft.Xna.Framework.Game
                     }
                 }
             }
+            catch (FadeBasic.Compiled.CompiledFadeRuntimeException ex)
+            {
+                // the compiled program knows the failing statement's line, not an instruction
+                var runtime = GameReloader.LatestRuntime;
+                if (ex.SourceLine >= 0 && runtime?.SourceMap != null)
+                {
+                    var local = runtime.SourceMap.GetOriginalLocation(ex.SourceLine, 0);
+                    Console.Error.WriteLine($"source location: {local.fileName} - {local.startLine + 1}");
+                }
+                else
+                {
+                    Console.Error.WriteLine($"source line (concatenated program): {ex.SourceLine + 1}");
+                }
+                Console.Error.WriteLine(ex.Message);
+                _fatal = ex;
+                if (currentTest != null)
+                {
+                    var where = ex.SourceLine >= 0 && runtime?.SourceMap != null
+                        ? runtime.SourceMap.GetOriginalLocation(ex.SourceLine, 0)
+                        : default;
+                    FailCurrentTest($"runtime error: {ex.Message}" +
+                                    (where.fileName != null ? $" at {where.fileName}:{where.startLine + 1}" : ""));
+                }
+            }
             catch (VirtualRuntimeException ex)
             {
+                string failedAt = null;
                 var map = new IndexCollection(_fadeProgram.DebugData.statementTokens);
                 if (map.TryFindClosestTokenBeforeIndex(ex.Error.insIndex, out var token))
                 {
                     if (GameReloader.LatestRuntime != null)
                     {
                         var local = GameReloader.LatestRuntime.SourceMap.GetOriginalLocation(token.token);
+                        failedAt = $"{local.fileName}:{local.startLine + 1}";
                         Console.Error.WriteLine(
                             $"source location: {local.fileName} - {local.startLine+1}:{local.startChar}");
                     }
@@ -1350,6 +1464,10 @@ public class Game1 : Microsoft.Xna.Framework.Game
                 }
                 Console.Error.WriteLine(ex.Message);
                 _fatal = ex;
+                if (currentTest != null)
+                {
+                    FailCurrentTest($"runtime error: {ex.Message}" + (failedAt != null ? $" at {failedAt}" : ""));
+                }
             }
         }
 
@@ -1364,7 +1482,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
     protected override void Draw(GameTime gameTime)
     {
         gameTime = RecordSystem.Clock(gameTime, advance: false);
-        if (_vm.instructionIndex <= 4) return; // the VM hasn't started yet; so don't draw anything...
+        // the program hasn't started yet; so don't draw anything...
+        if (RunningCompiled ? !_runnerStarted : _vm.instructionIndex <= 4) return;
         if (_perfLog) _perfDrawStart = System.Diagnostics.Stopwatch.GetTimestamp();
 
         // the final image will be stored in the mainBuffer...
@@ -1410,6 +1529,23 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
         GraphicsDevice.SetRenderTarget(null);
         GraphicsDevice.Clear(Color.Black);
+
+        // The picture is fitted to the window as it really is, every frame. The resize event is
+        // the usual way to hear of a new size, but a backend can raise it late, at another size,
+        // or not at all (the Vulkan one is not built on the SDL that raises it on OpenGL), and a
+        // stale fit leaves the picture stretched or off centre, and the mouse off with it. The
+        // viewport here is the back buffer's, so it is the size that is drawn into.
+        var windowView = GraphicsDevice.Viewport;
+#if !BROWSER
+        LiveResize.EnsureWindowHook();
+#endif
+        if (!_graphics.IsFullScreen && windowView.Width > 0 && windowView.Height > 0 &&
+            (windowView.Width != _graphics.PreferredBackBufferWidth ||
+             windowView.Height != _graphics.PreferredBackBufferHeight))
+        {
+            Console.WriteLine($"[fade] the window is {windowView.Width}x{windowView.Height}, not the {_graphics.PreferredBackBufferWidth}x{_graphics.PreferredBackBufferHeight} it was fitted to: fitting again");
+            FitImageToWindow(windowView.Width, windowView.Height);
+        }
 
         // screenShakeOffsetTarget.X = (Random.Shared.NextSingle()-.5f) * screenShakeMag;
         // screenShakeOffsetTarget.Y = (Random.Shared.NextSingle()-.5f) * screenShakeMag;

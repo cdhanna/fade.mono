@@ -1,0 +1,206 @@
+` THE BIG MOMENTS. see fish_headers_teach.
+
+test teach_is_off_in_the_tests from fishBoard
+    assert TEACH_ENABLED = 0, "the tests turn it off, so nothing else is held up"
+    assert teachLevel(TEACH_BELLY_UP) = TEACH_OFF, "and nothing is shown"
+    end
+endtest
+
+` the first time in a game is the whole show, then a shorter hold, then only the words, then nothing
+test teach_eases_off_through_a_game from fishBoard
+    TEACH_ENABLED = 1
+    OPTION_POP_SPEED = POP_SPEED_REGULAR
+    TEACH_LIFE(TEACH_SCHOOL) = 0
+    teachResetGame()
+    assert teachLevel(TEACH_SCHOOL) = TEACH_FULL, "the first time is the whole show"
+    TEACH_GAME(TEACH_SCHOOL) = 1
+    assert teachLevel(TEACH_SCHOOL) = TEACH_SHORT, "the second time holds for less"
+    TEACH_GAME(TEACH_SCHOOL) = 2
+    assert teachLevel(TEACH_SCHOOL) = TEACH_WORDS, "the third time is only the words"
+    TEACH_GAME(TEACH_SCHOOL) = 3
+    assert teachLevel(TEACH_SCHOOL) = TEACH_OFF, "and after that, nothing"
+    teachResetGame()
+    assert teachLevel(TEACH_SCHOOL) = TEACH_FULL, "a new game starts over"
+    assert teachHoldFor(TEACH_WORDS) = 0, "only the words hold nothing up"
+    TEACH_ENABLED = 0
+    end
+endtest
+
+` a player who has seen it many times, over all of their games, only gets the words, once a game
+test teach_lifetime_cap_leaves_only_the_words from fishBoard
+    TEACH_ENABLED = 1
+    OPTION_POP_SPEED = POP_SPEED_REGULAR
+    teachResetGame()
+    TEACH_LIFE(TEACH_RAINBOW_NEW) = TEACH_LIFE_CAP
+    assert teachLevel(TEACH_RAINBOW_NEW) = TEACH_WORDS, "the first time in a game is only the words"
+    TEACH_GAME(TEACH_RAINBOW_NEW) = 1
+    assert teachLevel(TEACH_RAINBOW_NEW) = TEACH_OFF, "and then nothing"
+    TEACH_ENABLED = 0
+    end
+endtest
+
+` "Fast" turns it all off, but the demo plays it the way a new player sees it
+test teach_fast_turns_it_off_but_not_in_the_demo from fishBoard
+    TEACH_ENABLED = 1
+    teachResetGame()
+    TEACH_LIFE(TEACH_BELLY_UP) = TEACH_LIFE_CAP
+    OPTION_POP_SPEED = POP_SPEED_FAST
+    assert teachLevel(TEACH_BELLY_UP) = TEACH_OFF, "fast shows nothing"
+    DEMO_MODE = 1
+    tDemoLevel = teachLevel(TEACH_BELLY_UP)
+    DEMO_MODE = 0
+    assert tDemoLevel = TEACH_FULL, "the demo shows the whole thing, whatever the option and the count"
+    OPTION_POP_SPEED = POP_SPEED_REGULAR
+    TEACH_ENABLED = 0
+    end
+endtest
+
+` the first belly up fish that the cursor pops holds the pops back, and is counted
+test teach_belly_up_holds_the_pops from fishBoard
+    TEACH_ENABLED = 1
+    OPTION_POP_SPEED = POP_SPEED_REGULAR
+    TEACH_LIFE(TEACH_BELLY_UP) = 0
+    teachResetGame()
+    CELLS(testIndex(4, 4)).bellyUp = 1
+    CELLS(testIndex(5, 4)).bellyUp = 1
+
+    popBellyUpFish(testIndex(4, 4))
+    runto _combos_judged
+
+    assert testPopCount() = 2, "the belly up fish still pop"
+    assert TEACH_LINE_COUNT = 1, "one moment came up"
+    assert TEACH_LINE_KIND(0) = TEACH_BELLY_UP, "the belly up fish"
+    assert TEACH_GAME(TEACH_BELLY_UP) = 1, "it is counted for the game"
+    assert TEACH_LIFE(TEACH_BELLY_UP) = 1, "and for every game"
+    assert TEACH_SHOWING = 1, "its words are coming up"
+    tHeld = 0
+    if ghostWait >= TEACH_HOLD_FULL_MS then tHeld = 1
+    assert tHeld = 1, "and the pops wait for it"
+    assert teachHolding() = 1, "new moves wait too"
+    TEACH_ENABLED = 0
+    teachForget()
+    end
+endtest
+
+` a coral song is claimed at the start of a look, and dropped when nothing pops after all
+test teach_claim_that_does_not_happen_is_dropped from fishBoard
+    TEACH_ENABLED = 1
+    OPTION_POP_SPEED = POP_SPEED_REGULAR
+    TEACH_LIFE(TEACH_CORAL_SONG) = 0
+    teachResetGame()
+    teachLookStart()
+    teachClaim(TEACH_CORAL_SONG, 0)
+    tHeld = 0
+    if TEACH_CLAIM_MS > 0 then tHeld = 1
+    assert tHeld = 1, "it was claimed"
+    teachLookJudged()
+    assert TEACH_LINE_COUNT = 0, "it never happened, so there is nothing to show"
+    assert TEACH_GAME(TEACH_CORAL_SONG) = 0, "and nothing was counted"
+    assert TEACH_SHOWING = 0, "and no words come up"
+    TEACH_ENABLED = 0
+    end
+endtest
+
+` a pop that teaches two things teaches both, one after the other
+test teach_two_in_one_look_both_come_up from fishBoard
+    TEACH_ENABLED = 1
+    OPTION_POP_SPEED = POP_SPEED_REGULAR
+    TEACH_LIFE(TEACH_BELLY_UP) = 0
+    TEACH_LIFE(TEACH_SCHOOL) = 0
+    teachResetGame()
+    teachLookStart()
+    teachClaim(TEACH_BELLY_UP, 0)
+    tFirst = TEACH_CLAIM_MS
+    teachShow(TEACH_BELLY_UP, 100, 100)
+    teachClaim(TEACH_SCHOOL, tFirst)
+    tSecond = TEACH_CLAIM_MS
+    teachShow(TEACH_SCHOOL, 120, 120)
+    teachLookJudged()
+
+    assert TEACH_LINE_COUNT = 2, "both moments came up"
+    assert TEACH_GAME(TEACH_BELLY_UP) = 1, "the belly up fish is counted"
+    assert TEACH_GAME(TEACH_SCHOOL) = 1, "and so is the school"
+    assert tFirst = TEACH_HOLD_FULL_MS, "the first holds for the whole show"
+    tLess = TEACH_HOLD_FULL_MS * TEACH_HOLD_MORE_PERCENT / 100
+    assert tSecond = tLess, "and the second a little less"
+    tAfter = 0
+    if TEACH_LINE_AT(1) > TEACH_LINE_AT(0) then tAfter = 1
+    assert tAfter = 1, "the school's words wait for the belly up turn to be over"
+    tGone = 0
+    if TEACH_LINE_SLIDE(0) <= TEACH_LINE_AT(1) then tGone = 1
+    assert tGone = 1, "and the first words have burst by then"
+    TEACH_ENABLED = 0
+    teachForget()
+    end
+endtest
+
+` the same thing again, in the same moment, is not counted again, and holds nothing
+test teach_again_in_the_same_moment_only_jumps from fishBoard
+    TEACH_ENABLED = 1
+    OPTION_POP_SPEED = POP_SPEED_REGULAR
+    TEACH_LIFE(TEACH_SCHOOL) = 0
+    teachResetGame()
+    teachLookStart()
+    teachClaim(TEACH_SCHOOL, 0)
+    teachShow(TEACH_SCHOOL, 100, 100)
+    teachLookJudged()
+    assert TEACH_LINE_COUNT = 1, "the school came up"
+
+    teachLookStart()
+    teachClaim(TEACH_SCHOOL, 0)
+    assert TEACH_CLAIM_MS = 0, "the second time in the moment holds nothing"
+    teachShow(TEACH_SCHOOL, 100, 100)
+    teachLookJudged()
+    assert TEACH_LINE_COUNT = 1, "there is still one"
+    assert TEACH_GAME(TEACH_SCHOOL) = 1, "and it was counted once"
+    tJumped = 0
+    if TEACH_LINE_PUNCH(0) >= 0 then tJumped = 1
+    assert tJumped = 1, "its words jump instead"
+    TEACH_ENABLED = 0
+    teachForget()
+    end
+endtest
+
+` NEW IN THE CODEC. see fish_headers_teach.
+
+` an entry that is unlocked is new, until it is looked at in the codec
+test codec_new_entry_until_it_is_read from fishBoard
+    CODEC_SEEN(CODEC_ENTRY_BELLY) = 0
+    CODEC_NEW(CODEC_ENTRY_BELLY) = 0
+    codecNewRecount()
+    tBefore = CODEC_NEW_COUNT
+    codecSeeCard(CODEC_ENTRY_BELLY)
+    assert CODEC_NEW(CODEC_ENTRY_BELLY) = 1, "it is new"
+    assert CODEC_NEW_COUNT = tBefore + 1, "and it is counted"
+    codecGoToNew()
+    tFirst = 0
+    if CODEC_SELECTED = CODEC_FIRST_NEW then tFirst = 1
+    assert tFirst = 1, "the codec opens on the first new entry"
+    codecMarkRead(CODEC_ENTRY_BELLY)
+    assert CODEC_NEW(CODEC_ENTRY_BELLY) = 0, "looking at it makes it old"
+    assert CODEC_NEW_COUNT = tBefore, "and it is not counted any more"
+    end
+endtest
+
+` a demo unlocks nothing, so nothing is new
+test codec_new_not_in_a_demo from fishBoard
+    CODEC_SEEN(CODEC_ENTRY_RAY) = 0
+    CODEC_NEW(CODEC_ENTRY_RAY) = 0
+    DEMO_MODE = 1
+    codecSeeCard(CODEC_ENTRY_RAY)
+    DEMO_MODE = 0
+    assert CODEC_NEW(CODEC_ENTRY_RAY) = 0, "nothing new from a demo"
+    end
+endtest
+
+` info mode has a spot for the codec, that is always there
+test codec_spot_in_info_mode from fishBoard
+    tSpot = 0
+    if INFO_INDEX_CODEC >= 0 then tSpot = 1
+    assert tSpot = 1, "there is a spot"
+    tBase = 0
+    if INFO_INDEX_CODEC < INFO_BASE_LENGTH then tBase = 1
+    assert tBase = 1, "and a new game does not take it away"
+    assert INFOS(INFO_INDEX_CODEC).enabled = 1, "and it can be picked"
+    end
+endtest

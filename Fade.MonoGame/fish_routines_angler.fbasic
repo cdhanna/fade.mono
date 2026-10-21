@@ -164,6 +164,13 @@ return
 #constant ANGLER_R_CLOWN 33
 #constant ANGLER_R_LEG 34
 #constant ANGLER_R_CALL 41
+` the ones that came with the schools, the rainbow fish and the rounds (2026-10-20). see setup_angler_topics.
+#constant ANGLER_T_FACING 42
+#constant ANGLER_T_SCHOOL 43
+#constant ANGLER_T_FLOCK 44
+#constant ANGLER_T_RAINBOW 45
+#constant ANGLER_R_RAINBOW_BURST 46
+#constant ANGLER_T_ROUNDS 47
 
 setup_angler_topics:
     ANGLER_TOPIC_COUNT = 0
@@ -252,7 +259,7 @@ setup_angler_topics:
         " ")
     anglerTopic(ANGLER_TIER_PLAIN,
         lockey$("angler.topic.info.ask"),
-        lockey$("angler.topic.info.say"),
+        lockey$("angler.topic.info2.say"),
         " ")
 
     ` the rumors. secrets of the sea, every one of them true.
@@ -350,6 +357,34 @@ setup_angler_topics:
         lockey$("angler.topic.call.ask"),
         lockey$("angler.topic.call.say"),
         lockey$("angler.topic.call.more"))
+
+    ` the way that the fish face, the schools, the fish out in the distance, the rainbow fish, and the
+    ` rounds. they were things for the player to work out once, but the big moments name them now. see
+    ` fish_headers_school, fish_headers_rainbow and fish_headers_teach.
+    anglerTopic(ANGLER_TIER_PLAIN,
+        lockey$("angler.topic.facing.ask"),
+        lockey$("angler.topic.facing.say"),
+        lockey$("angler.topic.facing.more"))
+    anglerTopic(ANGLER_TIER_PLAIN,
+        lockey$("angler.topic.school.ask"),
+        lockey$("angler.topic.school.say"),
+        lockey$("angler.topic.school.more"))
+    anglerTopic(ANGLER_TIER_PLAIN,
+        lockey$("angler.topic.flock.ask"),
+        lockey$("angler.topic.flock.say"),
+        lockey$("angler.topic.flock.more"))
+    anglerTopic(ANGLER_TIER_PLAIN,
+        lockey$("angler.topic.rainbow.ask"),
+        lockey$("angler.topic.rainbow.say"),
+        lockey$("angler.topic.rainbow.more"))
+    anglerTopic(ANGLER_TIER_RUMOR,
+        lockey$("angler.topic.burst.ask"),
+        lockey$("angler.topic.burst.say"),
+        " ")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        lockey$("angler.topic.rounds.ask"),
+        lockey$("angler.topic.rounds.say"),
+        " ")
 return
 
 
@@ -611,7 +646,29 @@ angler_choose:
                 if angChoiceWas = 0 then ANGLER_CHOICE = ANGLER_LINE_LAST - 1
             endif
 
-            if new action down(ACT_CONFIRM)
+            ` the mouse. the outline follows it over the lines, and a click is the same as the confirm
+            ` key. while the angler is still talking, a click anywhere hurries the words along, the same
+            ` as the confirm key does. see THE MOUSE in fish_headers_mouse.
+            angConfirm = new action down(ACT_CONFIRM)
+            if ANGLER_SPEAKING
+                angMsAny = mouseClickAnywhere()
+                if angMsAny then angConfirm = 1
+            else
+                ` the box is where frame_angler puts it
+                angMsBoxY# = 196 - 176 * tweenVal(ANGLER_UP_TWEEN_ID)
+                for angMsN = 0 to ANGLER_LINE_LAST
+                    angMsY = angMsBoxY# + 28 + angMsN * 17
+                    angMsOn = mouseHover(158, angMsY, ANGLER_BOX_W - 16, 18)
+                    angMsHit = mouseClick(158, angMsY, ANGLER_BOX_W - 16, 18)
+                    angMsOff = anglerLineOff(angMsN)
+                    if angMsOff = 0
+                        if angMsOn + angMsHit > 0 then ANGLER_CHOICE = angMsN
+                        if angMsHit then angConfirm = 1
+                    endif
+                next
+            endif
+
+            if angConfirm
                 if ANGLER_SPEAKING
                     anglerSpeakAll()
                 else
@@ -639,7 +696,10 @@ angler_wait:
     angWaited = 0
     while angWaited = 0
         gosub angler_frame
-        if new action down(ACT_CONFIRM)
+        angWaitGo = new action down(ACT_CONFIRM)
+        angMsAny = mouseClickAnywhere() `a click anywhere is the confirm key here. see THE MOUSE in fish_headers_mouse.
+        if angMsAny then angWaitGo = 1
+        if angWaitGo
             if ANGLER_SPEAKING
                 anglerSpeakAll()
             else
@@ -1197,22 +1257,40 @@ function anglerTopicBlob(angBlobTopic)
             ANGLER_FOUND = INFO_INDEX_DIVER
         endcase
         case ANGLER_T_STACK
-            ANGLER_FOUND = INFO_INDEX_GRID
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_STACK, INFO_INDEX_GRID)
         endcase
         case ANGLER_T_BELLY
-            ANGLER_FOUND = INFO_INDEX_GRID
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_BELLY, INFO_INDEX_GRID)
         endcase
         case ANGLER_T_BONES
-            ANGLER_FOUND = INFO_INDEX_GRID
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_BONES, INFO_INDEX_GRID)
         endcase
         case ANGLER_T_JELLY
-            ANGLER_FOUND = INFO_INDEX_GRID
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_JELLY, INFO_INDEX_GRID)
         endcase
         case ANGLER_T_RAY
-            ANGLER_FOUND = INFO_INDEX_GRID
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_RAY, INFO_INDEX_GRID)
         endcase
         case ANGLER_T_BOTTLE
-            ANGLER_FOUND = INFO_INDEX_GRID
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_BOTTLE, INFO_INDEX_GRID)
+        endcase
+        case ANGLER_T_NIGHT
+            ANGLER_FOUND = INFO_INDEX_TIDE
+        endcase
+        case ANGLER_T_FACING
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_FACING, INFO_INDEX_GRID)
+        endcase
+        case ANGLER_T_SCHOOL
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_FACING, INFO_INDEX_GRID)
+        endcase
+        case ANGLER_T_RAINBOW
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_RAINBOW, INFO_INDEX_GRID)
+        endcase
+        case ANGLER_R_RAINBOW_BURST
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_RAINBOW, INFO_INDEX_GRID)
+        endcase
+        case ANGLER_T_ROUNDS
+            ANGLER_FOUND = INFO_INDEX_ROUNDS
         endcase
     endselect
     if anglerBlobUp(ANGLER_FOUND) = 0 then ANGLER_FOUND = -1
@@ -1227,7 +1305,7 @@ function anglerTopicForBlob(angForBlob)
     if angForBlob = INFO_INDEX_SCORE_BAR then ANGLER_FOUND = ANGLER_T_SCORE
     if angForBlob = INFO_INDEX_MULTIPLIER then ANGLER_FOUND = ANGLER_T_MULT
     if angForBlob = INFO_INDEX_MOVE_COUNT then ANGLER_FOUND = ANGLER_T_MOVES
-    if angForBlob = INFO_INDEX_ROUNDS then ANGLER_FOUND = ANGLER_T_SCORE
+    if angForBlob = INFO_INDEX_ROUNDS then ANGLER_FOUND = ANGLER_T_ROUNDS
     if angForBlob = INFO_INDEX_PASSIVES then ANGLER_FOUND = ANGLER_T_CARDS
     if angForBlob = INFO_INDEX_MOVES then ANGLER_FOUND = ANGLER_T_SLOTS
     if angForBlob = INFO_INDEX_QUEST then ANGLER_FOUND = ANGLER_T_QUEST
@@ -1235,12 +1313,36 @@ function anglerTopicForBlob(angForBlob)
     if angForBlob = INFO_INDEX_CORAL then ANGLER_FOUND = ANGLER_T_CORAL
     if angForBlob = INFO_INDEX_CORAL_SICK then ANGLER_FOUND = ANGLER_T_HORROR
     if angForBlob = INFO_INDEX_SONGS then ANGLER_FOUND = ANGLER_T_SONGS
-    if angForBlob = INFO_INDEX_TIDE then ANGLER_FOUND = ANGLER_T_MOON
+    if angForBlob = INFO_INDEX_TIDE
+        ANGLER_FOUND = ANGLER_T_MOON
+        ` at night, the moon is asleep, and the night is what there is to know about
+        if TIDE_NIGHT then ANGLER_FOUND = ANGLER_T_NIGHT
+    endif
     if angForBlob = INFO_INDEX_DIVER then ANGLER_FOUND = ANGLER_T_DIVER
 
-    ` the passives and the moves explain themselves, one by one. asking about one is asking about the cards.
+    ` an outline of a thing on the board is about that thing, when there is a topic for it. see fish_headers_boardinfo.
+    angForKind = boardInfoKindOf(angForBlob)
+    if angForKind = BOARD_INFO_DIVER then ANGLER_FOUND = ANGLER_T_DIVER
+    if angForKind = BOARD_INFO_BOTTLE then ANGLER_FOUND = ANGLER_T_BOTTLE
+    if angForKind = BOARD_INFO_JELLY then ANGLER_FOUND = ANGLER_T_JELLY
+    if angForKind = BOARD_INFO_RAY then ANGLER_FOUND = ANGLER_T_RAY
+    if angForKind = BOARD_INFO_BONES then ANGLER_FOUND = ANGLER_T_BONES
+    if angForKind = BOARD_INFO_BELLY then ANGLER_FOUND = ANGLER_T_BELLY
+    if angForKind = BOARD_INFO_STACK then ANGLER_FOUND = ANGLER_T_STACK
+    if angForKind = BOARD_INFO_MARK then ANGLER_FOUND = ANGLER_T_QUEST
+    if angForKind >= BOARD_INFO_KRILL
+        if angForKind <= BOARD_INFO_GLASS then ANGLER_FOUND = ANGLER_T_QUEST
+    endif
+    if angForKind = BOARD_INFO_RAINBOW then ANGLER_FOUND = ANGLER_T_RAINBOW
+    if angForKind = BOARD_INFO_FACING then ANGLER_FOUND = ANGLER_T_FACING
+
+    ` the passives and the moves explain themselves, one by one. asking about one that has a topic of its
+    ` own is asking about that: "bottoms up" is about the belly up fish. any other is about the cards.
     if ANGLER_FOUND < 0
-        if angForBlob >= INFO_BASE_LENGTH then ANGLER_FOUND = ANGLER_T_CARDS
+        if angForBlob >= INFO_BASE_LENGTH
+            anglerCardTopic(angForBlob)
+            if ANGLER_FOUND < 0 then ANGLER_FOUND = ANGLER_T_CARDS
+        endif
     endif
     if angForBlob = INFO_INDEX_GRID
         anglerScanBoard()
@@ -1251,7 +1353,14 @@ function anglerTopicForBlob(angForBlob)
         if ANGLER_SEE_JELLY then ANGLER_FOUND = ANGLER_T_JELLY
         if ANGLER_SEE_BONES then ANGLER_FOUND = ANGLER_T_BONES
         if ANGLER_SEE_BELLY then ANGLER_FOUND = ANGLER_T_BELLY
-        ` one that has been heard already gives way to the round, which every board is about
+        rainbowFishCount()
+        if RAINBOW_FISH_COUNT > 0 then ANGLER_FOUND = ANGLER_T_RAINBOW
+        ` one that has been heard already gives way to the way that the fish face, which every board has,
+        ` and that to the round, which every board is about
+        if ANGLER_FOUND >= 0
+            if ANGLER_HEARD(ANGLER_FOUND) > 0 then ANGLER_FOUND = -1
+        endif
+        if ANGLER_FOUND < 0 then ANGLER_FOUND = ANGLER_T_FACING
         if ANGLER_FOUND >= 0
             if ANGLER_HEARD(ANGLER_FOUND) > 0 then ANGLER_FOUND = -1
         endif
@@ -1306,6 +1415,13 @@ function anglerTopicNear(angNearTopic)
         case ANGLER_T_SLOTS
             if MOVE_ABILITY_COUNT > 0 then angNear = 1
         endcase
+        case ANGLER_T_FLOCK
+            angNear = anglerFlockOut()
+        endcase
+        case ANGLER_T_RAINBOW
+            rainbowFishCount()
+            if RAINBOW_FISH_COUNT > 0 then angNear = 1
+        endcase
     endselect
 endfunction angNear
 
@@ -1359,6 +1475,16 @@ function anglerTopicOpen(angOpenTopic)
         case ANGLER_T_CROOKED
             angOpen = anglerSeen(CODEC_ENTRY_CROOKED)
         endcase
+        ` the fish out in the distance only once a school has swum off, in any game
+        case ANGLER_T_FLOCK
+            angOpen = 0
+            if TEACH_LIFE(TEACH_SCHOOL) > 0 then angOpen = 1
+        endcase
+        ` and the rainbow fish once one has been made
+        case ANGLER_T_RAINBOW
+            angOpen = 0
+            if TEACH_LIFE(TEACH_RAINBOW_NEW) > 0 then angOpen = 1
+        endcase
     endselect
     if anglerTopicNear(angOpenTopic) then angOpen = 1
 endfunction angOpen
@@ -1375,6 +1501,13 @@ function anglerRumorOpen(angRumorOpenTopic)
     if angRumorCoral
         angRumorIsOpen = anglerSeen(CODEC_ENTRY_CORAL)
         if CORAL_COUNT > 0 then angRumorIsOpen = 1
+    endif
+    ` and the burst waits until there has been a rainbow fish, so it does not give them away
+    if angRumorOpenTopic = ANGLER_R_RAINBOW_BURST
+        angRumorIsOpen = 0
+        if TEACH_LIFE(TEACH_RAINBOW_NEW) > 0 then angRumorIsOpen = 1
+        rainbowFishCount()
+        if RAINBOW_FISH_COUNT > 0 then angRumorIsOpen = 1
     endif
 endfunction angRumorIsOpen
 
@@ -1577,4 +1710,44 @@ function anglerPickTopics(angAnchor)
         ANGLER_PICK(ANGLER_PICK_COUNT) = ANGLER_FOUND
         ANGLER_PICK_COUNT = ANGLER_PICK_COUNT + 1
     endif
+endfunction
+
+
+` 1 when any fish is out in the distance, swum off from the board in a school. see fish_headers_school.
+function anglerFlockOut()
+    angFlockOut = 0
+    for angFlockI = 0 to FLOCK_MAX - 1
+        if FLOCK_ON(angFlockI) then angFlockOut = 1
+    next
+endfunction angFlockOut
+
+` the topic of the card that a passive or a move of info mode is, in ANGLER_FOUND, or -1 when the card
+` has no topic of its own
+function anglerCardTopic(angCardBlob)
+    ANGLER_FOUND = -1
+    angCardIndex = -1
+    if PASSIVE_COUNT > 0
+        for angCardRow = 0 to PASSIVE_COUNT - 1
+            if PASSIVE_INFO(angCardRow) = angCardBlob then angCardIndex = PASSIVE_BINDINGS(angCardRow).abilityIndex
+        next
+    endif
+    for angCardSlot = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
+        if MOVE_ABILITY_BINDINGS(angCardSlot).assigned
+            if MOVE_ABILITY_BINDINGS(angCardSlot).infoIndex = angCardBlob then angCardIndex = MOVE_ABILITY_BINDINGS(angCardSlot).abilityIndex
+        endif
+    next
+    if angCardIndex < 0 then exitfunction
+
+    if angCardIndex = ABILITY_INDEX_BOTTOMS_UP then ANGLER_FOUND = ANGLER_T_BELLY
+    if angCardIndex = ABILITY_INDEX_MOVE_WASTE_BUCKET then ANGLER_FOUND = ANGLER_T_BELLY
+    if angCardIndex = ABILITY_INDEX_BOTTLES then ANGLER_FOUND = ANGLER_T_BOTTLE
+    if angCardIndex = ABILITY_INDEX_JELLIES then ANGLER_FOUND = ANGLER_T_JELLY
+    if angCardIndex = ABILITY_INDEX_RAYS then ANGLER_FOUND = ANGLER_T_RAY
+    if angCardIndex = ABILITY_INDEX_CONTAGIOUS_SMILE then ANGLER_FOUND = ANGLER_T_STACK
+    if angCardIndex = ABILITY_INDEX_MOVE_BUNCH_UP then ANGLER_FOUND = ANGLER_T_STACK
+    if angCardIndex = ABILITY_INDEX_SNEAKING_DEATH then ANGLER_FOUND = ANGLER_T_CROOKED
+    if angCardIndex = ABILITY_INDEX_FALL_IN_LINE then ANGLER_FOUND = ANGLER_T_SCHOOL
+    if angCardIndex = ABILITY_INDEX_FLIPPER then ANGLER_FOUND = ANGLER_T_FACING
+    if angCardIndex = ABILITY_INDEX_HIGH_STAKES then ANGLER_FOUND = ANGLER_T_FLOCK
+    if angCardIndex = ABILITY_INDEX_TOLERANCE then ANGLER_FOUND = ANGLER_T_FLOCK
 endfunction

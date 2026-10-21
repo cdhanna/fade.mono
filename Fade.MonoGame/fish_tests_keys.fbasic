@@ -1,0 +1,31 @@
+remstart
+    THE TESTS OF THE TWO HANDS OF THE KEYBOARD
+    the move icons show z x c v b for a player on the arrow keys, and y u i o p for a player on
+    wasd. see THE TWO HANDS OF THE KEYBOARD in fish_headers, and fish_tests for how the tests work.
+remend
+
+` a mock cannot read a number that is passed to it, so the tests cannot press one key and not
+` another. they set the hand that the keys asked for, the way that a press of w or of an arrow
+` key does, and check that the icons follow it.
+test keys_the_icons_follow_the_hand_that_is_free from fishBoard
+    mock new key down
+    endmock 0
+    mock input device
+    endmock 0
+
+    runto _loop
+    assert INPUT_ICON_DEVICE = 0, "the icons are of the keyboard"
+    assert INPUT_KEY_HANDS = 0, "and a game starts with the moves under the left hand, beside the arrow keys"
+
+    INPUT_KEY_HANDS_NEXT = 1
+    runto _loop
+    assert INPUT_KEY_HANDS = 1, "wasd puts the moves under the right hand"
+
+    runto _loop
+    assert INPUT_KEY_HANDS = 1, "and they stay there when no key is pressed"
+
+    INPUT_KEY_HANDS_NEXT = 0
+    runto _loop
+    assert INPUT_KEY_HANDS = 0, "and the arrow keys put them back under the left hand"
+    end
+endtest

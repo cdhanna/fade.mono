@@ -15,6 +15,13 @@ public class Program
 {
     // Release has nothing to await: the whole dev path below is compiled out.
 #pragma warning disable CS1998
+    /// <summary>
+    /// A build made with FadeBackend=CSharp (the default, see Fade.MonoGame.csproj) carries the game
+    /// compiled to C# as well as its bytecode, and runs the compiled program unless FADE_BACKEND=vm.
+    /// The VM is what the Fade debugger, hot reload and the in-game console work with.
+    /// </summary>
+    static bool UseCompiledProgram() => FadeRunners.UseCompiled(new GeneratedFade());
+
     public static async Task<int> Main(string[] args)
 #pragma warning restore CS1998
     {
@@ -38,8 +45,18 @@ public class Program
           
             if (FadeTestApplicationBuilder.IsTestInvocation(args))
             {
-                GameReloader.Build(csProjPath, commandCollection);
-                var fade = GameReloader.LatestBuild;
+                // A FadeBackend=CSharp build runs the program compiled at build time (see
+                // UseCompiledProgram); otherwise compile the source now, for the VM.
+                ILaunchable fade;
+                if (UseCompiledProgram())
+                {
+                    fade = new GeneratedFade();
+                }
+                else
+                {
+                    GameReloader.Build(csProjPath, commandCollection);
+                    fade = GameReloader.LatestBuild;
+                }
 
                 // --help, --list-tests, --info, etc. don't run a test session,
                 // so skip the (expensive, window-popping) MonoGame boot and
@@ -110,8 +127,17 @@ public class Program
             }
             else
             {
-                GameReloader.WatchFiles(csProjPath, commandCollection);
-                var fade = GameReloader.LatestBuild;
+                ILaunchable fade;
+                if (UseCompiledProgram())
+                {
+                    // no source watch: hot reload swaps bytecode under the VM
+                    fade = new GeneratedFade();
+                }
+                else
+                {
+                    GameReloader.WatchFiles(csProjPath, commandCollection);
+                    fade = GameReloader.LatestBuild;
+                }
                 var game = new Game1(fade);
                 game.Services.AddService(typeof(IFadeHostSystem), NewSteamSystem());
                 game.SetGcSettings(4096, paranoid: false); // the same as the game that ships. see below.

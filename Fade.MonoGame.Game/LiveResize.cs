@@ -75,11 +75,23 @@ internal static class LiveResize
     {
         if (!OperatingSystem.IsWindows()) return;
 
-        // One watch for the life of the process. A second Game1 (a reload builds one) just
-        // becomes the game that the existing watch ticks.
+        // One hook for the life of the process. A second Game1 (a reload builds one) just
+        // becomes the game that the existing hook ticks.
         _game = game;
         _gameThreadId = Environment.CurrentManagedThreadId;
-        if (_filter != null) return;
+        if (_filter != null || _wndProc != null) return;
+
+        // The Vulkan backend has SDL built into its own native runtime, where nothing outside
+        // can reach it. An SDL2 library loaded by name here would be a second, separate SDL
+        // that never sees the window -- the watch would install fine and never fire. So there,
+        // the window's own message handler is hooked instead (InstallWindowHook).
+        if (GraphicsBackend.Name == "Vulkan")
+        {
+            // The window is not up yet while the game is starting, so this is tried again
+            // every frame for a while (EnsureWindowHook).
+            _hookTries = 0;
+            return;
+        }
 
         try
         {
@@ -88,8 +100,8 @@ internal static class LiveResize
         }
         catch (Exception ex) when (ex is DllNotFoundException || ex is EntryPointNotFoundException)
         {
-            // A backend that is not built on SDL2 (the Vulkan one). The window simply goes
-            // back to freezing during a drag, which is what it did before this existed.
+            // A backend that is not built on SDL2. The window simply goes back to freezing
+            // during a drag, which is what it did before this existed.
             _filter = null;
         }
     }
@@ -100,8 +112,6 @@ internal static class LiveResize
         // SDL: there is no managed frame above this one to catch it.
         try
         {
-            if (_ticking || _game == null) return 1;
-
             // SDL_WindowEvent: type, timestamp, windowID (4 bytes each), then the kind of
             // window event (1 byte, padded to 4), then its two numbers.
             if ((uint)Marshal.ReadInt32(sdlEvent, 0) != SDL_WINDOWEVENT) return 1;
@@ -112,36 +122,189 @@ internal static class LiveResize
             var kind = Marshal.ReadByte(sdlEvent, 12);
             if (kind != SDL_WINDOWEVENT_EXPOSED && kind != SDL_WINDOWEVENT_SIZE_CHANGED) return 1;
 
-            if (Environment.CurrentManagedThreadId != _gameThreadId) return 1;
-
-            // Only during a drag. A size change the PROGRAM asked for (`set screen size`) is
-            // reported from inside the frame that asked for it, and running a frame within a
-            // frame is exactly what this must not do. MonoGame handles that one normally.
-            if (!TryGetDraggedWindowSize(out var width, out var height)) return 1;
-
-            _ticking = true;
-            try
-            {
-                _game.TickAtWindowSize(width, height);
-            }
-            finally
-            {
-                _ticking = false;
-            }
+            TickIfDragging();
         }
         catch (Exception ex)
         {
-            if (!_reportedFailure)
-            {
-                _reportedFailure = true;
-                Console.Error.WriteLine($"[fade] drawing during a window resize failed, and will not be tried again: {ex}");
-            }
-
-            // Stop ticking, rather than failing the same way on every pixel of every drag.
-            _game = null;
+            GiveUp(ex);
         }
 
         return 1;
+    }
+
+    /// <summary>
+    /// Run a frame at the size the window is being dragged to, if it is being dragged now.
+    /// </summary>
+    private static void TickIfDragging()
+    {
+        if (_ticking || _game == null) return;
+        if (Environment.CurrentManagedThreadId != _gameThreadId) return;
+
+        // Only during a drag. A size change the PROGRAM asked for (`set screen size`) is
+        // reported from inside the frame that asked for it, and running a frame within a
+        // frame is exactly what this must not do. MonoGame handles that one normally.
+        if (!TryGetDraggedWindowSize(out var width, out var height)) return;
+
+        _ticking = true;
+        try
+        {
+            _game.TickAtWindowSize(width, height);
+        }
+        finally
+        {
+            _ticking = false;
+        }
+    }
+
+    private static void GiveUp(Exception ex)
+    {
+        if (!_reportedFailure)
+        {
+            _reportedFailure = true;
+            Console.Error.WriteLine($"[fade] drawing during a window resize failed, and will not be tried again: {ex}");
+        }
+
+        // Stop ticking, rather than failing the same way on every pixel of every drag.
+        _game = null;
+    }
+
+    // ---- the Vulkan backend: the window's own message handler ------------------------------------
+    //
+    // The modal loop that a drag runs still sends the window a WM_SIZE for every size it passes
+    // through, to the window procedure, from inside the loop. So the window procedure is wrapped
+    // (subclassed): every message goes on to the one that was there, and after a WM_SIZE during a
+    // drag a frame is run at the new size, as the SDL watch does on the OpenGL backend.
+
+    private const int GWLP_WNDPROC = -4;
+    private const uint WM_SIZE = 0x0005;
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    private delegate IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    private static extern IntPtr SetWindowLongPtr(IntPtr hwnd, int index, IntPtr value);
+
+    [DllImport("user32.dll", EntryPoint = "CallWindowProcW")]
+    private static extern IntPtr CallWindowProc(IntPtr previous, IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumThreadWindows(uint threadId, EnumWindowsProc callback, IntPtr lParam);
+
+    // Held in a field for the same reason as _filter: the window keeps the function pointer.
+    private static WndProc _wndProc;
+    private static IntPtr _previousProc;
+
+    // Frames the window hook has been looked for (-1, not wanted or done with), and how many
+    // to look for before giving up.
+    private static int _hookTries = -1;
+    private const int HookTriesMax = 600;
+
+    /// <summary>
+    /// Called every frame (Game1.Draw): on the Vulkan backend, hooks the game's window once it is
+    /// up. Nothing to do once it is hooked, or given up on.
+    /// </summary>
+    public static void EnsureWindowHook()
+    {
+        if (_hookTries < 0 || _wndProc != null || _game == null) return;
+        _hookTries++;
+        if (TryInstallWindowHook(_game))
+        {
+            _hookTries = -1;
+            return;
+        }
+        if (_hookTries >= HookTriesMax)
+        {
+            _hookTries = -1;
+            Console.Error.WriteLine("[fade] no game window found to keep drawing in while it is resized");
+        }
+    }
+
+    private static bool TryInstallWindowHook(Game1 game)
+    {
+        try
+        {
+            var hwnd = FindGameWindow(game);
+            if (hwnd == IntPtr.Zero) return false;
+
+            _wndProc = OnWindowMessage;
+            _previousProc = SetWindowLongPtr(hwnd, GWLP_WNDPROC, Marshal.GetFunctionPointerForDelegate(_wndProc));
+            if (_previousProc == IntPtr.Zero)
+            {
+                _wndProc = null;
+                return false;
+            }
+            Console.WriteLine($"[fade] the window keeps drawing while it is resized (window 0x{hwnd.ToInt64():x})");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _wndProc = null;
+            _hookTries = -1;
+            Console.Error.WriteLine($"[fade] could not hook the game window to keep drawing in while it is resized: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The game's window: MonoGame's own handle when it is a window this thread made, or else
+    /// the biggest visible window this thread made (the Vulkan runtime's handle may not be a
+    /// Windows one). Never a window of another thread or process.
+    /// </summary>
+    private static IntPtr FindGameWindow(Game1 game)
+    {
+        var thread = GetCurrentThreadId();
+        var handle = game.Window?.Handle ?? IntPtr.Zero;
+        if (handle != IntPtr.Zero && IsWindow(handle) && GetWindowThreadProcessId(handle, out _) == thread)
+        {
+            return handle;
+        }
+
+        var best = IntPtr.Zero;
+        var bestArea = 0;
+        EnumThreadWindows(thread, (hwnd, _) =>
+        {
+            if (IsWindowVisible(hwnd) && GetClientRect(hwnd, out var r))
+            {
+                var area = (r.right - r.left) * (r.bottom - r.top);
+                if (area > bestArea)
+                {
+                    bestArea = area;
+                    best = hwnd;
+                }
+            }
+            return true;
+        }, IntPtr.Zero);
+        return best;
+    }
+
+    private static IntPtr OnWindowMessage(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
+    {
+        // The window's own handler first, always: this only ever adds a frame after it.
+        var result = CallWindowProc(_previousProc, hwnd, msg, wParam, lParam);
+        if (msg != WM_SIZE) return result;
+
+        // As with the watch, nothing may escape back into the operating system's loop.
+        try
+        {
+            TickIfDragging();
+        }
+        catch (Exception ex)
+        {
+            GiveUp(ex);
+        }
+        return result;
     }
 
     /// <summary>

@@ -1,0 +1,71 @@
+remstart
+    THE MOUSE
+    the game is played with keys, or with a controller. the menus can be used with the mouse as well: the
+    title and pause menus and the pages that they open, and the pages of the upgrade screen. when the mouse
+    moves, its pointer shows, the highlight follows it, and a click is the same as the confirm key. a page
+    that has no line of its own to go back with gets a "back" button in its corner while the mouse is in use.
+
+    as soon as a key or a button is pressed, the pointer hides again, and the page is back to the keys.
+
+    the board is not played with the mouse. moving it there gives the cursor a little "no, no, no" shake
+    from side to side, and words pop up over it to say that the game is played with the keys.
+
+    mouseStep, in fish_routines_mouse, reads the mouse. it can be called from anywhere, any number of times:
+    it only looks at the mouse once on each frame. a click is used up by whatever takes it, so the click
+    that opens a page does not click on something in the page as well.
+remend
+
+` the mouse is in use. its pointer shows, and the menus follow it.
+global MOUSE_ON = 0
+
+` where it is, in the pixels of the game, and what it did on this frame
+global MOUSE_X = 0
+global MOUSE_Y = 0
+global MOUSE_MOVED = 0 `it moved, and far enough to count
+global MOUSE_CLICKED = 0 `the left button went down, over the game, and nothing has taken the click yet
+global MOUSE_FRAME = -1 `the frame that the mouse was last read on
+global MOUSE_LAST_X = -1
+global MOUSE_LAST_Y = -1
+
+` a bump of the desk should not wake the mouse. it has to go this far, in pixels of the game, since the
+` keys were last used.
+global MOUSE_TRAVEL = 0
+global MOUSE_WAKE_TRAVEL = 6
+global MOUSE_GONE = 0 `how far it moved on this frame, when that counted
+
+` THE BUTTONS. a page that needs them puts one, or both, in the bottom corners of the screen: "back" on
+` the left, and on the right one that does what the confirm key does there, like "OK", or "Play". they
+` only show while the mouse is in use. see mouseButtonOn.
+#constant MOUSE_BUTTON_BACK 0
+#constant MOUSE_BUTTON_GO 1
+global dim MOUSE_BUTTON_SPRITES(2)
+global dim MOUSE_BUTTON_TEXTS(2)
+global dim MOUSE_BUTTON_BORDERS(2) as infoBorder
+global dim MOUSE_BUTTON_WANTED(2) `a page has asked for it
+global dim MOUSE_BUTTON_XS(2)
+global MOUSE_BUTTON_Y = 294
+global MOUSE_BUTTON_W = 64
+global MOUSE_BUTTON_H = 20
+
+` THE "NO, NO, NO". the shake of the cursor and the words, for a mouse that moves over the board.
+global MOUSE_NO_TEXT_ID
+global MOUSE_NO_PANEL_SPRITE `the words are on a little panel, so that they can be read over the fish
+global MOUSE_NO_BORDER as infoBorder
+global MOUSE_NO_POP_TWEEN_ID
+global MOUSE_NO_UNTIL_MS = 0 `the words go away at this time
+global MOUSE_NO_NEXT_MS = 0 `and the cursor does not shake again until this time
+global MOUSE_NO_SHOWN = 0
+global MOUSE_NO_X = 0 `where the panel of the words is, for the bubbles that it goes away in
+global MOUSE_NO_Y = 0
+global MOUSE_NO_W = 0
+global MOUSE_NO_SHAKE_SIZE = 5 `pixels, from side to side
+global MOUSE_NO_SHAKE_TIME = 650 `milliseconds
+global MOUSE_NO_HOLD_MS = 2500 `how long the words stay up after the mouse stops
+global MOUSE_NO_GAP_MS = 1800 `the least time from one shake to the next
+
+` the board only says no to a mouse that is really being moved: this far, in pixels of the game, with
+` no stop longer than MOUSE_NO_STILL_MS along the way. a click says it straight away.
+global MOUSE_NO_TRAVEL = 0
+global MOUSE_NO_WAKE_TRAVEL = 120
+global MOUSE_NO_STILL_MS = 600
+global MOUSE_NO_MOVED_MS = 0 `when it last moved over the board

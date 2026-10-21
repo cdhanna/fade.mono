@@ -270,6 +270,8 @@ menu_run_seed_entry:
     hsSeedTaken = 0
     hsHeldDir = 0
     openSeedEntry()
+    mouseBackOn(TARGET_MENU, ORDER_MENU_TEXT) `see THE BUTTONS in fish_headers_mouse
+    mouseButtonOn(MOUSE_BUTTON_GO, loc$("menu.mouse.ok"), TARGET_MENU, ORDER_MENU_TEXT)
 
     do
         refreshSeedEntry(hsSlot)
@@ -278,7 +280,12 @@ menu_run_seed_entry:
 
         ` these are checked after the frame, so that the press that brought the page up is not used twice
         if new action down(ACT_PAUSE) then exit
-        if new action down(ACT_CONFIRM)
+        hsBackClicked = mouseBackStep()
+        if hsBackClicked then exit
+        hsSeedOk = new action down(ACT_CONFIRM)
+        hsOkClicked = mouseButtonStep(MOUSE_BUTTON_GO)
+        if hsOkClicked then hsSeedOk = 1
+        if hsSeedOk
             hsSeedTaken = 1
             exit
         endif
@@ -313,6 +320,27 @@ menu_run_seed_entry:
             endif
         endif
 
+        ` the mouse picks a digit by going over it. a click on its top half goes back by one, and a
+        ` click on its bottom half goes on by one, the same as up and down. so does the wheel.
+        for hsMsSlot = 0 to 5
+            hsMsX = (WORLD_WIDTH / 2 - 100) + hsMsSlot * SEED_DIGIT_GAP
+            hsMsOn = mouseHover(hsMsX, 130, 30, 48)
+            hsMsHit = mouseClick(hsMsX, 130, 30, 48)
+            if hsMsOn + hsMsHit > 0
+                if hsSlot <> hsMsSlot
+                    hsSlot = hsMsSlot
+                    hsChanged = 1
+                endif
+            endif
+            if hsMsHit
+                hsLetterStep = 1
+                if MOUSE_Y < 154 then hsLetterStep = -1
+            endif
+        next
+        hsWheel = mouse wheel()
+        if hsWheel > 0 then hsLetterStep = -1
+        if hsWheel < 0 then hsLetterStep = 1
+
         if hsLetterStep <> 0
             hsLetter = SEED_DIGITS(hsSlot) + hsLetterStep
             if hsLetter > 9 then hsLetter = 0
@@ -326,6 +354,8 @@ menu_run_seed_entry:
             set tween type SWAP_TWEEN_SFX, 1
         endif
     loop
+    mouseBackOff()
+    mouseButtonOff(MOUSE_BUTTON_GO)
 
     if hsSeedTaken
         OPTION_GAME_SEED = seedFromDigits()
@@ -366,6 +396,7 @@ return
 highscore_table_open:
     loadKnownEndings() `the player may have got to an ending since the last time
     openHighscoreTable(hsLoopTable, hsLoopMarked, hsFocus)
+    mouseBackOn(TARGET_MENU, ORDER_MENU_TEXT) `see THE BUTTONS in fish_headers_mouse
 
     ` the line under the table says how the game that just ended did. the main menu has no game to talk about.
     if hsLoopNote
@@ -431,7 +462,9 @@ highscore_table_loop:
 
         ` these are checked after the frame, so that the press that brought the table up is not used twice
         if new action down(ACT_PAUSE) then exit
-    
+        hsBackClicked = mouseBackStep()
+        if hsBackClicked then exit
+
         hsLoopChanged = 0
         hsLoopAsk = 0
         hsLoopStep = 0
@@ -489,6 +522,9 @@ highscore_table_loop:
             endif
         endif
 
+        hsMsConfirm = 0
+        gosub highscore_table_mouse
+
         ` a different table, or somebody else's scores, has to be asked for from Steam
         if hsLoopAsk
             requestOnlineScores(hsLoopTable)
@@ -498,7 +534,9 @@ highscore_table_loop:
         gosub highscore_online_poll
 
         ` the upgrades of the game on the row. a row that nobody has taken has no game to show.
-        if new action down(ACT_CONFIRM)
+        hsLoopConfirm = new action down(ACT_CONFIRM)
+        if hsMsConfirm then hsLoopConfirm = 1
+        if hsLoopConfirm
             ` on a tile of the endings, it leaves the games with that ending out, or puts them back.
             ` the scores from Steam are gone through again, so that the table is filled with what is left.
             if hsFocus = -2
@@ -532,6 +570,113 @@ highscore_table_loop:
             set tween type SWAP_TWEEN_SFX, 1
         endif
     loop
+    mouseBackOff()
+return
+
+
+` the mouse on the table. the outline follows it over the rows, the tabs and the tiles of the endings,
+` and a click is the confirm key, or a press of left or right that lands on the tab that was clicked.
+` see THE MOUSE in fish_headers_mouse.
+highscore_table_mouse:
+    hsMsConfirm = 0
+    hsMsTableX = (WORLD_WIDTH - HISCORE_WIDTH) / 2
+
+    hsMsLast = HISCORE_ROWS - 1
+    for hsMsRow = 0 to hsMsLast
+        hsMsY = HISCORE_TOP + 23 + hsMsRow * HISCORE_ROW_HEIGHT
+        hsMsOn = mouseHover(hsMsTableX + 6, hsMsY, HISCORE_WIDTH - 12, HISCORE_ROW_HEIGHT)
+        hsMsHit = mouseClick(hsMsTableX + 6, hsMsY, HISCORE_WIDTH - 12, HISCORE_ROW_HEIGHT)
+        if hsMsOn + hsMsHit > 0
+            if hsFocus <> hsMsRow + 2
+                hsFocus = hsMsRow + 2
+                hsLoopChanged = 1
+            endif
+            if hsMsHit then hsMsConfirm = 1
+        endif
+    next
+
+    hsMsLast = HISCORE_TILE_COUNT - 1
+    for hsMsTile = 0 to hsMsLast
+        hsMsX = getEndingTileX(hsMsTile)
+        hsMsY = getEndingTileY()
+        hsMsOn = mouseHover(hsMsX, hsMsY, HISCORE_ENDING_SIZE, HISCORE_ENDING_SIZE)
+        hsMsHit = mouseClick(hsMsX, hsMsY, HISCORE_ENDING_SIZE, HISCORE_ENDING_SIZE)
+        if hsMsOn + hsMsHit > 0
+            if hsFocus <> -2 or HISCORE_ENDING_AT <> hsMsTile
+                hsFocus = -2
+                HISCORE_ENDING_AT = hsMsTile
+                hsLoopChanged = 1
+            endif
+            if hsMsHit then hsMsConfirm = 1
+        endif
+    next
+
+    ` whose scores they are
+    for hsMsTab = HISCORE_SCOPE_LOCAL to HISCORE_SCOPE_GLOBAL
+        hsMsX = hsMsTableX + hsMsTab * 101
+        hsMsY = getHighscoreTabY(5)
+        hsMsOn = mouseHover(hsMsX, hsMsY, 98, HISCORE_TAB_HEIGHT)
+        hsMsHit = mouseClick(hsMsX, hsMsY, 98, HISCORE_TAB_HEIGHT)
+        if hsMsOn + hsMsHit > 0
+            if hsFocus <> -1
+                hsFocus = -1
+                hsLoopChanged = 1
+            endif
+            if hsMsHit
+                if HISCORE_SCOPE <> hsMsTab
+                    HISCORE_SCOPE = hsMsTab
+                    hsLoopChanged = 1
+                    hsLoopAsk = 1
+                endif
+            endif
+        endif
+    next
+
+    ` the modes and the lengths, when the table can be changed for another kind of game
+    if hsLoopTabs
+        for hsMsTab = 0 to 1
+            hsMsX = hsMsTableX + hsMsTab * 151
+            hsMsY = getHighscoreTabY(0)
+            hsMsOn = mouseHover(hsMsX, hsMsY, 149, HISCORE_TAB_HEIGHT)
+            hsMsHit = mouseClick(hsMsX, hsMsY, 149, HISCORE_TAB_HEIGHT)
+            if hsMsOn + hsMsHit > 0
+                if hsFocus <> 0
+                    hsFocus = 0
+                    hsLoopChanged = 1
+                endif
+                if hsMsHit
+                    hsMsLength = hsLoopTable / 2
+                    hsMsTable = getHighscoreTable(hsMsLength, hsMsTab)
+                    if hsMsTable <> hsLoopTable
+                        hsLoopTable = hsMsTable
+                        hsLoopChanged = 1
+                        hsLoopAsk = 1
+                    endif
+                endif
+            endif
+        next
+        for hsMsTab = GAME_LENGTH_SHORT to GAME_LENGTH_LONG
+            hsMsX = hsMsTableX + hsMsTab * 101
+            hsMsY = getHighscoreTabY(2)
+            hsMsOn = mouseHover(hsMsX, hsMsY, 98, HISCORE_TAB_HEIGHT)
+            hsMsHit = mouseClick(hsMsX, hsMsY, 98, HISCORE_TAB_HEIGHT)
+            if hsMsOn + hsMsHit > 0
+                if hsFocus <> 1
+                    hsFocus = 1
+                    hsLoopChanged = 1
+                endif
+                if hsMsHit
+                    hsMsZen = hsLoopTable mod 2
+                    hsMsTable = getHighscoreTable(hsMsTab, hsMsZen)
+                    if hsMsTable <> hsLoopTable
+                        hsLoopTable = hsMsTable
+                        hsLoopChanged = 1
+                        hsLoopAsk = 1
+                    endif
+                endif
+            endif
+        next
+    endif
 return
 
 
@@ -557,17 +702,28 @@ highscore_details:
         set text MENU_HINT_TEXT_ID, loc$("highscores.hint.playseed")
     endif
 
+    ` the mouse has a button to go back, and one to play the seed. see THE BUTTONS in fish_headers_mouse.
+    mouseBackOn(TARGET_MENU, ORDER_MENU_TEXT)
+    if hsPlayOk
+        mouseButtonOn(MOUSE_BUTTON_GO, loc$("menu.mouse.play"), TARGET_MENU, ORDER_MENU_TEXT)
+    endif
+
     do
         gosub frame_highscores
         sync
 
         if new action down(ACT_CONFIRM) then exit
         if new action down(ACT_PAUSE) then exit
+        hsBackClicked = mouseBackStep()
+        if hsBackClicked then exit
 
         ` a score from another version of the rules is asked about first, because its seed may not
         ` deal the same game any more. the second press plays it anyway.
         if hsPlayOk
-            if new action down(ACT_INFO)
+            hsPlayPressed = new action down(ACT_INFO)
+            hsPlayClicked = mouseButtonStep(MOUSE_BUTTON_GO)
+            if hsPlayClicked then hsPlayPressed = 1
+            if hsPlayPressed
                 hsPlayNow = 1
                 if HISCORE_RULES(hsDetailIndex) <> GAME_RULES_VERSION
                     if hsPlayAsked = 0 then hsPlayNow = 0
@@ -605,6 +761,10 @@ highscore_details:
             endif
         endif
 
+        ` and the wheel of the mouse scrolls it too. turning it away scrolls up.
+        hsWheel = mouse wheel()
+        if hsWheel <> 0 then hsScrollStep = 0 - hsWheel
+
         if hsScrollStep <> 0
             hsScrollTo = hsDetailScroll + hsScrollStep
             if hsScrollTo > hsDetailLast then hsScrollTo = hsDetailLast
@@ -617,6 +777,8 @@ highscore_details:
             endif
         endif
     loop
+    mouseBackOff()
+    mouseButtonOff(MOUSE_BUTTON_GO)
 return
 
 
@@ -657,6 +819,8 @@ highscore_game_end:
     ` once the initials are picked, the player is asked if they are right. yes takes them, and the
     ` pause key goes back to change them. hsAsking is 1 while that question is up.
     hsAsking = 0
+    ` the mouse has "OK" for the confirm key, and "back" while the question is up. see THE BUTTONS in fish_headers_mouse.
+    mouseButtonOn(MOUSE_BUTTON_GO, loc$("menu.mouse.ok"), TARGET_MENU, ORDER_MENU_TEXT)
     do
         if hsAsking
             refreshHighscoreInitials(-1)
@@ -668,10 +832,15 @@ highscore_game_end:
 
         hsConfirmed = new action down(ACT_CONFIRM)
         hsBackedOut = new action down(ACT_PAUSE)
+        hsOkClicked = mouseButtonStep(MOUSE_BUTTON_GO)
+        if hsOkClicked then hsConfirmed = 1
+        hsBackClicked = mouseBackStep()
+        if hsBackClicked then hsBackedOut = 1
             if hsAsking
             if hsConfirmed then exit
             if hsBackedOut
                 hsAsking = 0
+                mouseBackOff()
                 noteHighscoreInitials(hsIsHighscore, 0)
                 create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
                 set tween type SWAP_TWEEN_SFX, 1
@@ -679,6 +848,7 @@ highscore_game_end:
         else
             if hsConfirmed
                 hsAsking = 1
+                mouseBackOn(TARGET_MENU, ORDER_MENU_TEXT)
                 noteHighscoreInitials(hsIsHighscore, 1)
                 create basic tween SWAP_TWEEN_SFX, 0, 1, 150, 0
                 set tween type SWAP_TWEEN_SFX, 1
@@ -723,6 +893,28 @@ highscore_game_end:
             endif
         endif
 
+        ` the mouse picks a letter by going over it. a click on its top half goes back through the
+        ` alphabet, and a click on its bottom half goes on, the same as up and down. so does the wheel.
+        for hsMsSlot = 0 to 2
+            hsMsX = 285 + (hsMsSlot - 1) * 56
+            hsMsX = hsMsX - 22
+            hsMsOn = mouseHover(hsMsX, 128, 44, 56)
+            hsMsHit = mouseClick(hsMsX, 128, 44, 56)
+            if hsMsOn + hsMsHit > 0
+                if hsSlot <> hsMsSlot
+                    hsSlot = hsMsSlot
+                    hsChanged = 1
+                endif
+            endif
+            if hsMsHit
+                hsLetterStep = 1
+                if MOUSE_Y < 156 then hsLetterStep = -1
+            endif
+        next
+        hsWheel = mouse wheel()
+        if hsWheel > 0 then hsLetterStep = -1
+        if hsWheel < 0 then hsLetterStep = 1
+
         if hsLetterStep <> 0
             hsLetter = HISCORE_LETTERS(hsSlot) + hsLetterStep
             if hsLetter > 25 then hsLetter = 0
@@ -737,6 +929,8 @@ highscore_game_end:
             set tween type SWAP_TWEEN_SFX, 1
         endif
     loop
+    mouseBackOff()
+    mouseButtonOff(MOUSE_BUTTON_GO)
 
     ` the initials are remembered for the next time
     hsPacked = packInitials(HISCORE_LETTERS(0), HISCORE_LETTERS(1), HISCORE_LETTERS(2))

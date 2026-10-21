@@ -1,0 +1,125 @@
+remstart
+    THE TESTS OF THE MOUSE
+    the menus follow the mouse, and the board says no to it. see THE MOUSE in fish_headers_mouse, and
+    fish_tests for how the tests work. fishBoard puts the mouse at TEST_MOUSE_X and TEST_MOUSE_Y.
+remend
+
+test mouse_wakes_when_it_moves_far_enough from fishBoard
+    assert MOUSE_ON = 0, "the mouse is not in use when the game starts"
+
+    TEST_MOUSE_X = TEST_MOUSE_X + 3
+    runto _loop
+    assert MOUSE_ON = 0, "a bump of the desk does not wake it"
+
+    TEST_MOUSE_X = TEST_MOUSE_X + 10
+    runto _loop
+    assert MOUSE_ON = 1, "but moving it does"
+
+    TEST_ANY_INPUT = 1
+    runto _loop
+    TEST_ANY_INPUT = 0
+    assert MOUSE_ON = 0, "and a key puts it away again"
+
+    TEST_MOUSE_X = TEST_MOUSE_X + 3
+    runto _loop
+    assert MOUSE_ON = 0, "after which it has to go far enough again"
+    end
+endtest
+
+test mouse_nudged_over_the_board_says_nothing from fishBoard
+    for tMsI = 1 to 6
+        TEST_MOUSE_X = TEST_MOUSE_X + 10
+        runto _loop
+    next
+    assert MOUSE_ON = 1, "the mouse is in use"
+    assert MOUSE_NO_SHOWN = 0, "but a little way is not enough for the board to say no"
+    assert CURSOR_SHAKING = 0, "and the cursor stays still"
+    end
+endtest
+
+test mouse_over_the_board_shakes_its_head from fishBoard
+    tMsWas as vec = SELECTION_POS
+    for tMsI = 1 to 15
+        TEST_MOUSE_X = TEST_MOUSE_X + 10
+        runto _loop
+    next
+    assert MOUSE_NO_SHOWN = 1, "the words say that the game is played with the keys"
+    assert CURSOR_SHAKING = 1, "and the cursor shakes"
+    assert CURSOR_SHAKE_DIR_X = 1, "from side to side"
+    assert CURSOR_SHAKE_DIR_Y = 0, "and not up and down"
+    assert CURSOR_SHAKE_AMOUNT = MOUSE_NO_SHAKE_SIZE, "and further than for a move that cannot be made"
+    assert SELECTION_POS.x = tMsWas.x, "the mouse does not move the cursor"
+    assert SELECTION_POS.y = tMsWas.y, "not up or down either"
+
+    TEST_MOUSE_CLICK = 1
+    runto _loop
+    TEST_MOUSE_CLICK = 0
+    assert SELECTION_POS.x = tMsWas.x, "and a click does not either"
+    end
+endtest
+
+test mouse_words_go_as_soon_as_a_key_is_pressed from fishBoard
+    for tMsI = 1 to 15
+        TEST_MOUSE_X = TEST_MOUSE_X + 10
+        runto _loop
+    next
+    assert MOUSE_NO_SHOWN = 1, "the board says that the game is played with the keys"
+
+    TEST_ANY_INPUT = 1
+    runto _loop
+    TEST_ANY_INPUT = 0
+    assert MOUSE_NO_SHOWN = 0, "and the words go away on the first press of one"
+    assert MOUSE_ON = 0, "with the mouse"
+    end
+endtest
+
+` info mode follows the mouse onto what it is over, and says nothing about the keys
+test mouse_looks_around_info_mode from fishBoard
+    INFO_MODE = 1
+    INFO_SELECTED = INFO_INDEX_GRID
+    tMsAt = INFO_INDEX_MOVE_COUNT
+    TEST_MOUSE_X = INFOS(tMsAt).topLeft.x + INFOS(tMsAt).size.x / 2
+    TEST_MOUSE_Y = INFOS(tMsAt).topLeft.y + INFOS(tMsAt).size.y / 2
+    runto _loop
+    runto _loop
+    assert INFO_SELECTED = INFO_INDEX_MOVE_COUNT, "the outline goes onto what the mouse is over"
+
+    tMsAt = INFO_INDEX_SCORE_BAR
+    TEST_MOUSE_X = INFOS(tMsAt).topLeft.x + INFOS(tMsAt).size.x / 2
+    TEST_MOUSE_Y = INFOS(tMsAt).topLeft.y + INFOS(tMsAt).size.y / 2
+    runto _loop
+    assert INFO_SELECTED = INFO_INDEX_SCORE_BAR, "and follows it to the next thing"
+    assert MOUSE_NO_SHOWN = 0, "and info mode does not say that the mouse is not for it"
+    end
+endtest
+
+` the pause menu comes up, and the mouse goes over its lines, and clicks "Resume"
+test mouse_picks_a_line_of_the_pause_menu from fishBoard
+    TEST_OVERLAY = 1
+    runto frame_menu_render
+    TEST_OVERLAY = 0
+    for tMsI = 1 to 3
+        runto frame_menu_render
+    next
+    assert MENU_MODE = MENU_MODE_PAUSE, "the pause menu is up"
+    assert MENU_SELECTED = 0, "with the first line highlighted"
+
+    TEST_MOUSE_X = WORLD_WIDTH / 2
+    TEST_MOUSE_Y = MENU_LIST_TOP + MENU_ROW_HEIGHT + 10
+    runto frame_menu_render
+    assert MOUSE_ON = 1, "the mouse is in use"
+    assert MENU_SELECTED = 1, "and the highlight follows it onto the second line"
+
+    TEST_MOUSE_Y = MENU_LIST_TOP + 10
+    runto frame_menu_render
+    assert MENU_SELECTED = 0, "and back up to the first"
+
+    TEST_MOUSE_CLICK = 1
+    runto frame_menu_render
+    TEST_MOUSE_CLICK = 0
+    for tMsI = 1 to 3
+        runto _loop
+    next
+    assert MENU_MODE = 0, "a click on Resume goes back to the game"
+    end
+endtest

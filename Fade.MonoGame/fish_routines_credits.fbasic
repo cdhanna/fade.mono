@@ -220,6 +220,8 @@ menu_run_splash:
         ` it does not have to be sat through
         if splashAge > SPLASH_FADE_IN + SPLASH_LOGO_WAIT + SPLASH_DURATION then exit
         if new action down(ACT_CONFIRM) then exit
+        splashClicked = mouseClickAnywhere() `see THE MOUSE in fish_headers_mouse
+        if splashClicked then exit
     loop
 
     ` the camera comes down. it is slow to start and slow to stop. the logos stay where they are in
@@ -306,6 +308,7 @@ menu_run_credits:
     ` how far the roll has gone, in pixels. everything starts just below the bottom of the screen.
     creditRolled# = 0
     creditLast = game ms()
+    mouseBackOn(TARGET_MENU, ORDER_MENU_TEXT) `see THE BACK BUTTON in fish_headers_mouse
     do
         ` holding down hurries the credits along, and holding up runs them backwards
         creditRate# = CREDIT_SPEED
@@ -348,7 +351,10 @@ menu_run_credits:
         ` these are checked after the frame, so that the press that picked "Credits" is not the press that skips them
         if new action down(ACT_CONFIRM) then exit
         if new action down(ACT_PAUSE) then exit
+        creditBackClicked = mouseBackStep()
+        if creditBackClicked then exit
     loop
+    mouseBackOff()
 
     for creditI = 0 to CREDIT_COUNT - 1
         if CREDIT_LINES(creditI).isSprite

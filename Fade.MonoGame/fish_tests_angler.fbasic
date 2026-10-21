@@ -55,7 +55,7 @@ test angler_keeps_no_more_than_four_lights from fishBoard
 endtest
 
 test angler_topics_are_all_there from fishBoard
-    assert ANGLER_TOPIC_COUNT = 42, "every topic was made"
+    assert ANGLER_TOPIC_COUNT = 48, "every topic was made"
     assert ANGLER_TOPIC_COUNT <= ANGLER_TOPIC_ROOM, "and they fit"
     tAngBadPages = 0
     tAngLast = ANGLER_TOPIC_COUNT - 1
@@ -291,5 +291,75 @@ test angler_keeps_the_coral_rumors_until_coral_is_found from fishBoard
     if ANGLER_FOUND = ANGLER_R_STILL then tAngIsCoral = 1
     if ANGLER_FOUND = ANGLER_R_SING then tAngIsCoral = 1
     assert tAngIsCoral = 1, "and it comes before the deep ones, as a rumor of the first tier"
+    end
+endtest
+
+
+` THE TOPICS THAT CAME WITH THE SCHOOLS, THE RAINBOW FISH AND THE ROUNDS (2026-10-20)
+
+test angler_rounds_and_moon_spots_have_their_own_topics from fishBoard
+    anglerTopicForBlob(INFO_INDEX_ROUNDS)
+    assert ANGLER_FOUND = ANGLER_T_ROUNDS, "the rounds that are left are about the rounds"
+    TIDE_NIGHT = 0
+    anglerTopicForBlob(INFO_INDEX_TIDE)
+    assert ANGLER_FOUND = ANGLER_T_MOON, "the moon is about the moon"
+    TIDE_NIGHT = 1
+    anglerTopicForBlob(INFO_INDEX_TIDE)
+    tAngNight = ANGLER_FOUND
+    TIDE_NIGHT = 0
+    assert tAngNight = ANGLER_T_NIGHT, "but at night it is about the night"
+    end
+endtest
+
+test angler_rainbow_and_facing_outlines_have_topics from fishBoard
+    anglerTopicForBlob(BOARD_INFO_BLOB(BOARD_INFO_RAINBOW))
+    assert ANGLER_FOUND = ANGLER_T_RAINBOW, "a rainbow fish is about the rainbow fish"
+    anglerTopicForBlob(BOARD_INFO_BLOB(BOARD_INFO_FACING))
+    assert ANGLER_FOUND = ANGLER_T_FACING, "and the way a fish faces is about facing"
+    end
+endtest
+
+test angler_cards_with_a_topic_are_about_it from fishBoard
+    tAngBlob = allocateInfoBlob(0, 0, 10, 10, " ", " ")
+    tAngWasCount = PASSIVE_COUNT
+    tAngWasInfo = PASSIVE_INFO(0)
+    tAngWasCard = PASSIVE_BINDINGS(0).abilityIndex
+    PASSIVE_COUNT = 1
+    PASSIVE_INFO(0) = tAngBlob
+    PASSIVE_BINDINGS(0).abilityIndex = ABILITY_INDEX_BOTTOMS_UP
+    anglerTopicForBlob(tAngBlob)
+    tAngBelly = ANGLER_FOUND
+    PASSIVE_BINDINGS(0).abilityIndex = ABILITY_INDEX_FALL_IN_LINE
+    anglerTopicForBlob(tAngBlob)
+    tAngSchool = ANGLER_FOUND
+    PASSIVE_BINDINGS(0).abilityIndex = ABILITY_INDEX_MOVE_SHIFT
+    anglerTopicForBlob(tAngBlob)
+    tAngOther = ANGLER_FOUND
+    PASSIVE_COUNT = tAngWasCount
+    PASSIVE_INFO(0) = tAngWasInfo
+    PASSIVE_BINDINGS(0).abilityIndex = tAngWasCard
+    assert tAngBelly = ANGLER_T_BELLY, "bottoms up is about the belly up fish"
+    assert tAngSchool = ANGLER_T_SCHOOL, "fall in line is about the schools"
+    assert tAngOther = ANGLER_T_CARDS, "and a card with no topic of its own is about the cards"
+    end
+endtest
+
+test angler_new_topics_wait_until_they_have_been_seen from fishBoard
+    TEACH_LIFE(TEACH_SCHOOL) = 0
+    TEACH_LIFE(TEACH_RAINBOW_NEW) = 0
+    RAINBOW_FISH_ON = 0
+    rainbowFishReset()
+    assert anglerTopicOpen(ANGLER_T_FACING) = 1, "the way the fish face can always be asked about"
+    assert anglerTopicOpen(ANGLER_T_SCHOOL) = 1, "and the schools"
+    assert anglerTopicOpen(ANGLER_T_ROUNDS) = 1, "and the rounds"
+    assert anglerTopicOpen(ANGLER_T_RAINBOW) = 0, "a rainbow fish waits until there has been one"
+    assert anglerRumorOpen(ANGLER_R_RAINBOW_BURST) = 0, "and so does its burst"
+    TEACH_LIFE(TEACH_RAINBOW_NEW) = 1
+    assert anglerTopicOpen(ANGLER_T_RAINBOW) = 1, "once one has been made, it can be asked about"
+    assert anglerRumorOpen(ANGLER_R_RAINBOW_BURST) = 1, "and its burst told"
+    TEACH_LIFE(TEACH_SCHOOL) = 1
+    assert anglerTopicOpen(ANGLER_T_FLOCK) = 1, "the fish out there, once a school has swum off"
+    TEACH_LIFE(TEACH_SCHOOL) = 0
+    TEACH_LIFE(TEACH_RAINBOW_NEW) = 0
     end
 endtest

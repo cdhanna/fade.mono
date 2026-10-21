@@ -102,7 +102,8 @@ function judgeMultiplierSwaps(comboCount)
             ` fish, corner to corner, is let off the same way. see DIAGONALS in fish_headers.
             ` and a quest can let a swap off too. see questMissLetOff in fish_routines_quests.
             ` and nothing pops at night, so no swap of the night is held against the player. see fish_headers_tide.
-            swapLetOff = CORAL_HELD_GROUPS + DIAGONAL_LINES + questMissLetOff() + TIDE_NIGHT
+            ` and a swap that put 3 fish together under "think bigger" is let off. see THINK BIGGER in fish_headers.
+            swapLetOff = CORAL_HELD_GROUPS + DIAGONAL_LINES + questMissLetOff() + TIDE_NIGHT + THINK_BIGGER_HELD_GROUPS
             if swapLetOff = 0
                 ` the player can swap while fish are still popping, so more than one swap can be waiting.
                 ` every one of them that popped nothing costs one thing: the bar, if there is anything in
@@ -125,6 +126,9 @@ function judgeMultiplierSwaps(comboCount)
                     endif
                 endwhile
                 if SCORE_MULTIPLIER < 1 then SCORE_MULTIPLIER = 1
+
+                ` the tutorial says so. see THE LITTLE BOARDS in fish_routines_intro.
+                tutorialMissed()
             endif
         endif
 

@@ -145,6 +145,11 @@ load_textures:
     ` the diver comes right after those, so it is fish 16, and it never matches either. see fish_headers_diver.
     texture free texture id(TEX_DIVER), "Fish/Textures/Diver"
 
+    ` most of the small pictures are rectangles of one atlas picture, and it has to be loaded before any of
+    ` them. it comes after the fish, because the kind of a fish is the id of its texture, from 1 up to the
+    ` diver: the atlas taking an id among them would put every kind out by one. see THE ATLAS in fish_routines_atlas.
+    gosub load_atlas
+
     texture reserve texture id(TEX_NOISE), "Fish/Textures/Turbulence_13-256x256"
 
     ` every skeleton is the same pile of bones, whatever kind of fish it was. and the ghost that one
@@ -388,6 +393,14 @@ setup_grid:
     ` the sprites are centered on their cell position, so the grid starts half a cell early
     INFO_INDEX_GRID = INFO_LENGTH
     infoIndex = allocateInfoBlob(GRID_POS.x - CELL_SIZE / 2, GRID_POS.y - CELL_SIZE / 2, CELL_COLUMN_COUNT * CELL_SIZE, CELL_ROW_COUNT * CELL_SIZE, loc$("info.grid.title"), loc$("info.grid.desc"))
+
+    ` info mode does not explain the board as a whole. the tutorial has done that by the time it is open.
+    ` the blob is still kept, and still follows the board, for the angler, which shows a topic on it when
+    ` nothing else is about it, and finds nothing there. see coralPlaceInfo.
+    setInfoBlobEnabled(INFO_INDEX_GRID, 0)
+
+    ` the things on the board get outlines of their own. see fish_headers_boardinfo.
+    boardInfoSetup()
 return
 
 setup_score:
@@ -598,6 +611,8 @@ update_frame:
     perf lap 24
     stepQuest()
     questTalkStep(game ms()) `the creature that talks about the quest that was taken. see fish_headers_questtalk.
+    teachStep() `the words of a big moment, and the dark corners. see fish_headers_teach.
+    codecNewStep() `the "new info!" badges. see NEW IN THE CODEC in fish_headers_teach.
     gosub frame_dbg
     perf lap 25
 
@@ -942,10 +957,8 @@ frame_fish_fx:
                 if shockNow >= RAINBOW_BURST_FROM(i) then cellFlooded = 1
             endif
         endif
-        if RAINBOW_BREED_CELLS(i)
-            if shockNow < RAINBOW_BREED_UNTIL
-                if shockNow >= RAINBOW_BREED_FROM then cellFlooded = 1
-            endif
+        if shockNow < RAINBOW_LIT_UNTIL(i)
+            if shockNow >= RAINBOW_LIT_FROM(i) then cellFlooded = 1
         endif
         if cellFlooded then nightGlow# = nightGlow# + 1000
 
@@ -1457,6 +1470,11 @@ handle_combos:
     ` group that has a skeleton in it adds to this. see THE GHOST OF A SKELETON in fish_headers.
     ghostWait = 0
 
+    ` the first few times that something big happens in a game, the pops hold back for it, so that it
+    ` can be seen. a coral song is known to be coming now. see THE BIG MOMENTS in fish_headers_teach.
+    teachLookStart()
+    ghostWait = ghostWait + TEACH_CLAIM_MS
+
     ` a swap that left a line of fish of one kind, corner to corner, gets paid for it, before any group
     ` is scored, and the pops wait until the line has been seen. see DIAGONALS in fish_headers.
     judgeDiagonals()
@@ -1477,11 +1495,29 @@ handle_combos:
         ghostWait = ghostWait + RAINBOW_BURST_LAST
         ghostWait = ghostWait + RAINBOW_BURST_AFTER
     endif
+    ` the first few times, the new rainbow fish waits for its words. see THE BIG MOMENTS in fish_headers_teach.
+    teachRainbowNew = 0
+    if RAINBOW_CURSOR_KEEP >= 0 then teachRainbowNew = 1
+    if RAINBOW_FISH_SPAWN >= 0 then teachRainbowNew = 1
+    if teachRainbowNew
+        teachClaim(TEACH_RAINBOW_NEW, ghostWait)
+        ghostWait = ghostWait + TEACH_CLAIM_MS
+        teachShowCursor(TEACH_RAINBOW_NEW)
+    endif
     rainbowCursorPunch(ghostWait)
 
-    ` the groups beside a rainbow fish pop as a band of the rainbow gets to each, one after another. see
-    ` AND THEY BREED in fish_headers_rainbow.
-    rainbowBreedPlan(groupId, ghostWait)
+    ` three rainbow fish that touch pop, whatever kinds they are, once a band of the rainbow has swept across
+    ` them. see RAINBOW FISH ARE WILD in fish_headers_rainbow.
+    rainbowWildAhead(groupId, forceBase)
+    if RAINBOW_WILD_LIVE
+        teachClaim(TEACH_RAINBOW_WILD, ghostWait)
+        ghostWait = ghostWait + TEACH_CLAIM_MS
+        teachShowCursor(TEACH_RAINBOW_WILD)
+    endif
+    if RAINBOW_WILD_LIVE
+        RAINBOW_WILD_WAIT = ghostWait
+        rainbowWildLight(ghostWait)
+    endif
 
     totalComboCount = 0
     QUEST_BUNCH_GROUPS = 0
@@ -1489,6 +1525,9 @@ handle_combos:
     explodePitch# = (rnd(4)*.02)
     explodeIndex = 0
     requiredComboCount = getRequiredComboCount()
+
+    ` a swap that put 3 fish together, which only "think bigger" kept from popping, is let off. see THINK BIGGER in fish_headers.
+    THINK_BIGGER_HELD_GROUPS = thinkBiggerHeld()
 
     ` the fish of every group get counted, so that a group that is too small to do anything is passed
     ` over without a walk over the board. see COMBO_GROUP_SIZE in fish_headers.
@@ -1610,6 +1649,13 @@ handle_combos:
         ` every group after it. see THE GHOST OF A SKELETON in fish_headers.
         if comboBones then ghostWait = ghostWait + SKELETON_GHOST_MS
 
+        ` a belly up fish that the cursor came to, which is forced pop 1. see THE BIG MOMENTS in fish_headers_teach.
+        if groupForce = 1
+            teachClaim(TEACH_BELLY_UP, ghostWait)
+            ghostWait = ghostWait + TEACH_CLAIM_MS
+            teachShowGroup(TEACH_BELLY_UP, g)
+        endif
+
         ` the belly up fish of the waste bucket score more
         groupBonus = 1
         if groupForce = FORCE_BUCKET then groupBonus = WASTE_BUCKET_BONUS
@@ -1617,11 +1663,13 @@ handle_combos:
         ` a quest can make a group worth nothing. see questGroupScore in fish_routines_quests.
         groupBonus = groupBonus * questGroupScore(g)
 
-        ` a group beside a rainbow fish brings more of them, and lights up first: the pops of the first one
-        ` of the look, and every pop after them, wait for it. see AND THEY BREED in fish_headers_rainbow.
+        ` a rainbow fish beside a group sends a pulse into one of its cells once its fish are gone, and the
+        ` fish that ends up there is a rainbow fish. see AND THEY BREED in fish_headers_rainbow.
         if comboForced = 0
-            rainbowBreedGroup(g, ghostWait)
-            ghostWait = ghostWait + RAINBOW_FISH_SEEN
+            groupGoneAt = explodeIndex + comboWhole
+            groupGoneAt = groupGoneAt * 50
+            groupGoneAt = groupGoneAt + ghostWait
+            rainbowBreedGroup(g, groupGoneAt)
         endif
 
         ` fish that are going into a stack are not a combo, so nothing gets added to them
@@ -1674,6 +1722,13 @@ handle_combos:
         if comboForced = 0
             schoolJudge(g, forceBase, comboSwapped)
         endif
+        ` and the school swims off after a moment to see it. see THE BIG MOMENTS in fish_headers_teach.
+        if SCHOOL_JUDGED = g
+            codecSeeCard(CODEC_ENTRY_SCHOOL) `and it is in the codec from now on
+            teachClaim(TEACH_SCHOOL, ghostWait)
+            ghostWait = ghostWait + TEACH_CLAIM_MS
+            teachShowGroup(TEACH_SCHOOL, g)
+        endif
 
         totalComboCount += 1
         if groupForce = FORCE_BUNCH then QUEST_BUNCH_GROUPS = QUEST_BUNCH_GROUPS + 1
@@ -1693,11 +1748,6 @@ handle_combos:
         groupSize# = 0
         groupDelay = (explodeIndex + 1) * 50 + ghostWait
         groupFirstIndex = explodeIndex
-        groupOnWave = 0 `1 for a group that pops when the band of the rainbow gets to it. see AND THEY BREED in fish_headers_rainbow.
-        if g <= 399
-            if RAINBOW_BREED_WAIT(g) >= 0 then groupOnWave = 1
-        endif
-        if groupOnWave then groupDelay = RAINBOW_BREED_WAIT(g) + 50
 
         for i = 1 to CELL_COUNT
             cell = CELLS(i-1)
@@ -1758,6 +1808,15 @@ handle_combos:
                 delay = (groupFirstIndex + rayStep) * 50 + ghostWait
             endif
 
+            ` the fish of a bomb pop out from the middle of it, in waves. see THE BOMB in fish_headers.
+            if groupForce = FORCE_BOMB
+                bombWave = abs(cell.coord.x - CELLS(BOMB_AT).coord.x)
+                bombWave = bombWave + abs(cell.coord.y - CELLS(BOMB_AT).coord.y)
+                delay = (groupFirstIndex + 1) * 50
+                delay = delay + bombWave * BOMB_WAVE_MS
+                delay = delay + ghostWait
+            endif
+
             ` a fish of a burst pops when the surge gets to it, whatever group it is in. see THE BURST in
             ` fish_headers_rainbow.
             if RAINBOW_BURST_LIVE
@@ -1765,13 +1824,16 @@ handle_combos:
                     delay = RAINBOW_BURST_WAIT + RAINBOW_BURST_DELAY(i - 1)
                 endif
             endif
-            ` and a fish of a group on the wave of the rainbow pops once the band has gone over its group,
-            ` one after another, the way that any group's fish do
-            if groupOnWave
-                delay = explodeIndex - groupFirstIndex
-                delay = delay - 1
-                delay = delay * 50
-                delay = delay + RAINBOW_BREED_WAIT(g)
+            ` and the rainbow fish that are wild pop once the band has swept across them, one after another.
+            ` see RAINBOW FISH ARE WILD in fish_headers_rainbow.
+            if RAINBOW_WILD_LIVE
+                if groupForce = FORCE_RAINBOW
+                    delay = explodeIndex - groupFirstIndex
+                    delay = delay - 1
+                    delay = delay * 50
+                    delay = delay + RAINBOW_WILD_WAIT
+                    delay = delay + RAINBOW_WILD_SWEEP_MS
+                endif
             endif
 
             ` a jellyfish stings the fish next to it, once all of the groups have been found.
@@ -1961,12 +2023,17 @@ handle_combos:
     ` "bunch up" put into a stack go away, but they do not pop. see BUNCH UP in fish_headers.
     questJudge(totalComboCount - QUEST_BUNCH_GROUPS)
 
+    ` a moment that was claimed at the start of the look, and did not happen, is dropped. see THE BIG
+    ` MOMENTS in fish_headers_teach.
+    teachLookJudged()
+
     ` the tests stop here. what pops has been decided and scored, and none of it has been animated yet.
     _combos_judged:
 
-    ` the first pops of the very first game bring the pieces of the game in. see THE FIRST DIVE, in
-    ` fish_routines_intro. only the pop that a move makes counts, and not the ones that follow from it.
-    if TUTORIAL_STAGE > 2
+    ` the pops of the little boards of the very first game bring the pieces of the game in, and the next
+    ` board. see THE FIRST DIVE, in fish_routines_intro. only the pop that a move makes counts, and not
+    ` the ones that follow from it.
+    if TUTORIAL_BOARD
         if totalComboCount > 0
             if SEABED_COMBO = 0
                 gosub tutorial_pop
@@ -2257,7 +2324,12 @@ handle_combos:
         targetAlpha = 255
         cellFromSchool = -1
         if cell.comboBlownUp > 0
-            CELLS(i-1).value = getImpossibleRandomValueForCell(i - 1)
+            ` a little board of the tutorial has its new fish picked out already. see THE LITTLE BOARDS in fish_routines_intro.
+            if TUTORIAL_BOARD
+                CELLS(i-1).value = tutorialNewFish(i - 1)
+            else
+                CELLS(i-1).value = getImpossibleRandomValueForCell(i - 1)
+            endif
 
             ` after a "known fill" swap, the new fish are all the kind that was moved. see KNOWN FILL in fish_headers.
             if KNOWN_FILL_VALUE > 0 then CELLS(i-1).value = KNOWN_FILL_VALUE
@@ -2270,7 +2342,7 @@ handle_combos:
 
             ` and it faces one way or the other. see FACING in fish_headers_school.
             schoolNewFish(i - 1)
-            rainbowNewFish(i - 1) `a rainbow fish, if its column is owed one. see AND THEY BREED in fish_headers_rainbow.
+            rainbowNewFish(i - 1) `an ordinary fish. see fish_headers_rainbow.
             setFishTexture(cell.spriteId, CELLS(i-1).value)
             targetY = y - CELL_SIZE * 2
             startAlpha = 0
@@ -2299,6 +2371,7 @@ handle_combos:
 
     ` a big group leaves a rainbow fish where the cursor was. see WHERE THEY COME FROM in fish_headers_rainbow.
     rainbowSpawnNow()
+    rainbowSeedNow() `and the fish in a cell that a pulse clouded is one too. see AND THEY BREED.
 
     ` wait for all exit animations to finish
     COMBO_PHASE = 3

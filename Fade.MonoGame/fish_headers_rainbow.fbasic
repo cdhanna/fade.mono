@@ -16,15 +16,21 @@ remstart
     group pops, it swells up and turns into a rainbow fish (rainbowCursorPunch). if the cursor is on a
     rainbow fish that bursts, or on a fish of some other group that pops, the fish that comes in to fill
     the cell is the rainbow fish, once the board has filled back in. there are none when a game starts.
-    AND THEY BREED. a group of fish that matched, and pops, beside a rainbow fish, with none in it, brings
-    rainbow fish: the fish that come in to fill its cells are rainbow fish. a group with a rainbow fish in it
-    uses it up, and brings ordinary fish.
-    so that it can be seen to, a band of rainbow light goes across the screen, along the wave, through the
-    groups that bring them, one after another (rainbowBreedPlan, before handle_combos pops anything). all
-    of each fish that it goes over turns to the rainbow (THE RAINBOW FLOOD in FishEffect.fx). once it has
-    gone all the way over a group, it stops there, and the group pops, one fish after another, the way that
-    any group does, and RAINBOW_BREED_PAUSE later, the band goes on to the next group along the wave. the
-    other groups of the look pop the way that they always do.
+    AND THEY BREED. a group of fish that matched, and pops, beside a rainbow fish, with none in it, pops the
+    way that any group does. once its fish are gone, the rainbow fish lights up, and a ribbon of rainbow
+    light flows from it, along a curve, to the cell that the cursor is on (THE RAINBOW FLOW in
+    ScreenEffect.fx), where a rainbow cloud blooms. once the board has filled back in, and the flow has got
+    there, the fish in that cell, whichever it is, shimmers with all of the rainbow, and is a rainbow fish
+    (rainbowBreedGroup, rainbowSeedNow, and stepRainbowFish). so the player picks where the new one goes.
+    there is one flow a look at most, from the first rainbow fish that brings one, and one that pops on
+    that look brings none. a group with a rainbow fish in it uses it up.
+
+    RAINBOW FISH ARE WILD. rainbow fish match with each other, whatever kind of fish they are: three or more
+    of them touching, across or down, pop as one forced group (FORCE_RAINBOW), the way that a group of
+    fish of one kind would (rainbowWildAhead). one that is in a group that pops anyway stays in it. before
+    they pop, a band of the rainbow sweeps across them, along the wave across the screen, and all of each
+    fish turns to the rainbow as it goes over it (THE RAINBOW FLOOD in FishEffect.fx). their pops wait until
+    it has gone all the way over them (rainbowWildLight). the other groups of the look do not wait.
 
     THE BURST. a group of RAINBOW_BURST_SIZE or more, that matched, also sets off every rainbow fish that
     there is. each one counts as one more fish of any group that it touches, so a pair of fish beside it,
@@ -84,39 +90,63 @@ global RAINBOW_FISH_BONUS = 5 `how much more a rainbow fish scores when it pops,
 global RAINBOW_FISH_COUNT = 0 `how many there are, for the debug window
 global RAINBOW_FISH_SPAWN = -1 `the cell that gets a new rainbow fish once the board has filled back in, or -1
 
-` AND THEY BREED. how many of the fish that come in to fill each column, from the top, are rainbow fish, for
-` this look at the board, how long a group that brings them lights up for, in milliseconds, which fish are lit
-` up, and until when
-global dim RAINBOW_FISH_OWED(40)
-global RAINBOW_BREED_SPEED# = .0012 `how far along the wave the band goes in a millisecond, between the groups
-global RAINBOW_BREED_PAUSE = 250 `how long it waits at a group, after the group's last fish has popped, in milliseconds
-` THE WAVE OF A LOOK. for each group, how many milliseconds from when handle_combos laid them out its first
-` fish pops, or -1 for a group that brings none. and where the band is along the wave, at times on the
-` clock of the game, from one to the next of which it goes in a straight line.
-global dim RAINBOW_BREED_WAIT(400)
-global dim RAINBOW_BREED_T(100)
-global dim RAINBOW_BREED_AT#(100)
-global RAINBOW_BREED_STEPS = 0
-` what rainbowBreedPlan works out for each group: if there is a rainbow fish in it, how many rainbow fish
-` are beside it, how many fish it has, and where its far end is along the wave
-global dim RAINBOW_PLAN_HAS(400)
-global dim RAINBOW_PLAN_BESIDE(400)
-global dim RAINBOW_PLAN_N(400)
-global dim RAINBOW_PLAN_FAR#(400)
-global dim RAINBOW_PLAN_NEAR#(400)
-global RAINBOW_BREED_GAP# = 3 `how many times faster the band crosses the water between two groups
-global dim RAINBOW_PLAN_DONE(400)
-global dim RAINBOW_BREED_CELLS(400)
-global RAINBOW_BREED_FROM = 0
-global RAINBOW_BREED_UNTIL = 0
-global RAINBOW_BREED_COUNT = 0 `how many groups have brought them, for the tests
+` AND THEY BREED. for each cell: 1 when the flow from a rainbow fish is headed for it, so the fish that ends
+` up there once the board has filled back in turns into a rainbow fish. 1 once a flow has gone on this look,
+` so that there is one at most. and when each cell's fish shimmers with all of the rainbow, on the clock of
+` the game, for the new rainbow fish and the one whose flow made it.
+global dim RAINBOW_SEED_CELL(400)
+global RAINBOW_PULSE_LOOK = 0
+global dim RAINBOW_LIT_FROM(400)
+global dim RAINBOW_LIT_UNTIL(400)
+global RAINBOW_BREED_COUNT = 0 `how many flows have gone, for the tests
+global RAINBOW_SEED_AFTER = 120 `how long after a group's last fish pops the flow sets off, in milliseconds
+` THE RAINBOW FLOW. where it sets off from, where it is going and where its curve bends toward, in pixels,
+` when it sets off, on the clock of the game, and how long it takes, in milliseconds. how fast it goes, in
+` pixels a millisecond, the least time that it takes, and how far its curve bends, as a share of how far it
+` goes. which side it bends to goes back and forth from one to the next. the cell whose fish turns into a
+` rainbow fish when it gets there, or -1, and when that is. see THE RAINBOW FLOW in ScreenEffect.fx.
+global RAINBOW_FLOW_FROM_X# = 0
+global RAINBOW_FLOW_FROM_Y# = 0
+global RAINBOW_FLOW_TO_X# = 0
+global RAINBOW_FLOW_TO_Y# = 0
+global RAINBOW_FLOW_BEND_X# = 0
+global RAINBOW_FLOW_BEND_Y# = 0
+global RAINBOW_FLOW_AT = 0
+global RAINBOW_FLOW_MS = 0
+global RAINBOW_FLOW_SPEED# = .45
+global RAINBOW_FLOW_LEAST = 300
+global RAINBOW_FLOW_CURVE# = .3
+global RAINBOW_FLOW_SIDE = 1
+global RAINBOW_SEED_WAIT_CELL = -1
+global RAINBOW_SEED_ARRIVE = 0
+global RAINBOW_SEED_FALL = 250 `how long after the board fills back in the new rainbow fish shimmers, while it lands
+global RAINBOW_SEED_SHIMMER = 700 `and for how long, in milliseconds
+global RAINBOW_SEED_SOURCE_LIT = 300 `how long the rainbow fish that sends a pulse lights up, in milliseconds
+global RAINBOW_SEED_CLOUD# = .45 `how big the cloud in the clouded cell is
+` RAINBOW FISH ARE WILD. how many times three or more rainbow fish touching have popped, for the tests
+global RAINBOW_WILD_COUNT = 0
+` 1 when three or more rainbow fish pop together on this look. before they pop, a band of the rainbow sweeps
+` across them, along the wave, and all of each fish that it goes over turns to the rainbow. where it starts
+` and ends along the wave, when, on the clock of the game, and how long it takes, in milliseconds, which is
+` how long their pops wait. the wait of handle_combos when it set off. how fast it goes, along the wave, in a
+` millisecond, and the least time that it takes.
+global RAINBOW_WILD_LIVE = 0
+global RAINBOW_WILD_ALONG_FROM# = 0
+global RAINBOW_WILD_ALONG_TO# = 0
+global RAINBOW_WILD_FROM = 0
+global RAINBOW_WILD_UNTIL = 0
+global RAINBOW_WILD_SWEEP_MS = 0
+global RAINBOW_WILD_WAIT = 0
+global RAINBOW_WILD_SPEED# = .0015
+global RAINBOW_WILD_LEAST = 450
+global dim RAINBOW_WILD_MARK(400)
+global dim RAINBOW_WILD_QUEUE(400)
 ` how far along the wave of the rainbow a pixel of the screen is, across and down. FishEffect.fx has these
 ` too, as RAINBOW_WAVE, and the two have to be kept the same by hand. the band goes from the near end of
 ` the groups that bring rainbow fish to the far end, and it is RAINBOW_BREED_WIDE# wide.
 global RAINBOW_BREED_WAVE_X# = .006
 global RAINBOW_BREED_WAVE_Y# = .0035
 global RAINBOW_BREED_WIDE# = .15
-global RAINBOW_FISH_SEEN = 0 `what rainbowFishBeside found
 
 ` THE BURST. how big a group sets it off, the forced group that it pops as, how long after the rainbow fish
 ` light up the fish that they take along do, and how long the pops wait in all, in milliseconds

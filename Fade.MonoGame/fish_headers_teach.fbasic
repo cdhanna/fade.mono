@@ -1,0 +1,211 @@
+remstart
+    THE BIG MOMENTS
+    the first few times that something big happens in a game, the game slows down for it, so that a new
+    player can see what happened. the pops hold back for a moment, the corners of the screen get darker,
+    the screen knocks, and the name of what happened pops up where it happened: "Belly Up!", "Schooling
+    Fish!", "Coral Song Done!", "Rainbow Fish!" and "Wild Rainbow!". then the words burst into bubbles.
+
+    it eases off. the first time in a game is the whole show (TEACH_FULL). the second time the hold is
+    shorter, and the corners only get a little darker (TEACH_SHORT). the third time it is only the words,
+    and nothing waits for them (TEACH_WORDS). after that, nothing.
+
+    a player who has seen a moment TEACH_LIFE_CAP times, over all of their games, knows it: from then on
+    it only gets the words, the first time in a game, and never holds anything up. the counts are kept
+    in the preferences, from TEACH_PREF. FISH_TEACH_RESET=1 forgets them every time the game starts.
+
+    "Pop Speed" on the options page is "Regular", which is all of the above, or "Fast", which is none
+    of it. the demo always plays it as a new player would see it, whatever the option says, and it
+    keeps nothing (see THE DEMO in fish_headers_demo). the little boards of the first dive have their
+    own words, so there is none of this while they are up. and the tests turn it off.
+
+    ONE MOMENT, FROM START TO FINISH. everything from the first words until the board settles is one
+    moment. the corners get dark when the first words come up, and stay dark through every pop and fall
+    of the run, however many looks it takes; they only get light again once the board has settled and
+    the last words have burst. a moment that happens more than once in the run is only counted once: its
+    words give a little jump, if they are still up, and nothing more is held for it.
+
+    MORE THAN ONE AT ONCE. a pop can teach several things: a new rainbow fish, a school, and a belly up
+    fish, all in one look. each gets its turn, one after the other: its words pop up where it happened, the
+    pops wait for it, and then its words burst into bubbles, in their color, out of the way of the next
+    one. the second and later of one look hold a little less (TEACH_HOLD_MORE_PERCENT). there are
+    TEACH_LINES_MAX of them in a moment at the most.
+
+    HOW IT HOLDS. handle_combos works out every pop of a look before any of them is animated: each one
+    is given a delay, and the pops wait for ghostWait. so a moment is claimed (teachClaim) as soon as it
+    is known, before the delays of the fish that it is about are worked out, and its hold goes onto
+    ghostWait, so the pops after that wait for it, and so do its words: they come up at the ghostWait it
+    was claimed at. a moment that is only known for sure once the look has been judged (a coral song) is
+    claimed at the start of the look, and shown (teachShow) once it has happened; when it did not
+    happen after all, the claim is dropped, and nothing was held up, because a look that pops nothing is
+    not animated. teachClaimFree is for a moment that is only known after the delays of the fish before
+    it are worked out: it holds nothing, and its words come up when they are told to. the moves that
+    the player presses while the pops are held wait in the queue until they go.
+    fish_routines_teach has all of it.
+remend
+
+#constant TEACH_NONE 0
+#constant TEACH_BELLY_UP 1
+#constant TEACH_SCHOOL 2
+#constant TEACH_CORAL_SONG 3
+#constant TEACH_RAINBOW_NEW 4
+#constant TEACH_RAINBOW_WILD 5
+global TEACH_KINDS = 6 `one more than the last kind, so that the kinds can be used as indexes
+
+` how much of a moment is shown
+#constant TEACH_OFF 0
+#constant TEACH_FULL 1
+#constant TEACH_SHORT 2
+#constant TEACH_WORDS 3
+` TEACH_AGAIN is a moment that is up already, in this moment. its words jump, and that is all.
+#constant TEACH_AGAIN 4
+
+` THE POP SPEED option, on the options page. it is kept between runs of the game. see THE OPTIONS in fish_headers.
+#constant PREF_POP_SPEED 19
+#constant POP_SPEED_REGULAR 0
+#constant POP_SPEED_FAST 1
+global OPTION_POP_SPEED = 0
+
+global TEACH_ENABLED = 1 `0 and no moment is ever shown. the tests turn it off.
+global TEACH_PREF = 7000 `how many times each moment has been seen, over every game, one number for each kind. it must not move.
+global TEACH_LIFE_CAP = 12 `a moment that has been seen this many times, over every game, only gets its words
+global dim TEACH_GAME(TEACH_KINDS) `how many times each moment has been shown, this game
+global dim TEACH_LIFE(TEACH_KINDS) `and over every game, from the preferences
+global dim TEACH_KEY$(TEACH_KINDS) `the words of each, as a key of the strings
+global dim TEACH_COLOR(TEACH_KINDS) `the color of its words. 0 for the colors of the rainbow.
+global dim TEACH_COLOR_PART#(TEACH_KINDS * 3) `and the same color as red, green and blue, from 0 to 1, for the dark of the spotlight
+
+` how long the pops are held for, how dark the corners get (0 to 1), how hard the screen knocks, and how
+` big the words are, for TEACH_FULL and TEACH_SHORT. TEACH_WORDS holds nothing and darkens nothing.
+global TEACH_HOLD_FULL_MS = 1100
+global TEACH_HOLD_SHORT_MS = 550
+global TEACH_HOLD_MORE_PERCENT = 70 `how much of that the second and later moments of one look hold for
+global TEACH_DARK_FULL# = 1
+global TEACH_DARK_SHORT# = .5
+global TEACH_SHAKE_FULL# = 7
+global TEACH_SHAKE_SHORT# = 4
+global TEACH_SHAKE_MS = 450
+global TEACH_TEXT_FULL_H = 34
+global TEACH_TEXT_SHORT_H = 28
+global TEACH_TEXT_WORDS_H = 24
+global TEACH_TEXT_W = 230 `the words are never wider than this, in any language
+global TEACH_POP_MS = 220 `how long the words take to pop up
+global TEACH_WORDS_MS = 700 `how long words that hold nothing stay up before they burst
+global TEACH_READ_MS = 150 `how long after the last words have burst the dark starts to lift, at the least
+global TEACH_GONE_MS = 450 `how long the score takes to fade away
+global TEACH_PUNCH_MS = 260 `how long the words of a moment that happens again jump for
+global TEACH_DARK_IN_MS = 200 `how long the corners take to get dark
+global TEACH_DARK_OUT_MS = 500 `and to get light again
+
+` the words of the moments, one line for each
+global TEACH_LINES_MAX = 6
+
+` the claims of the look at the board that is going on, one for each kind
+global dim TEACH_PEND_LEVEL(TEACH_KINDS) `how much of it will be shown, or TEACH_OFF for no claim
+global dim TEACH_PEND_AT(TEACH_KINDS) `when its words come up, in milliseconds after the look
+global dim TEACH_PEND_HOLD(TEACH_KINDS) `how long the pops are held for it
+global TEACH_LOOK_NEW = 0 `how many new moments this look has claimed
+global TEACH_CLAIM_MS = 0 `teachClaim leaves the hold that it adds here. handle_combos adds it to ghostWait.
+
+` the moment that is on the screen
+global TEACH_SHOWING = 0 `1 from the first words until the dark has lifted
+global TEACH_SETTLED_MS = -1 `when the board settled, or -1 while it has not
+global TEACH_HOLD_END_MS = 0 `when the last hold is over. moves wait until then.
+global TEACH_READY_MS = 0 `when the last words have burst
+global TEACH_FADE_MS = -1 `when the dark starts to lift, or -1 while the moment is still going
+global TEACH_DARK# = 0 `how dark the corners get, for the darkest moment so far
+global TEACH_VIGNETTE# = 0 `how dark the corners are on this frame. teachStepCorners tells the screen effect.
+global TEACH_VIGNETTE_MS = 0 `the frame that it was worked out on
+global TEACH_SHAKING = 0 `1 while the knock of a moment is moving the screen
+global TEACH_FOUND = -1 `what teachFindLine found
+global TEACH_LINE_COUNT = 0
+global dim TEACH_LINE_KIND(TEACH_LINES_MAX)
+global dim TEACH_LINE_LEVEL(TEACH_LINES_MAX)
+global dim TEACH_LINE_AT(TEACH_LINES_MAX) `when its words come up
+global dim TEACH_LINE_SLIDE(TEACH_LINES_MAX) `when they burst into bubbles
+global dim TEACH_LINE_PUNCH(TEACH_LINES_MAX) `when they last jumped, or -1
+global dim TEACH_LINE_X#(TEACH_LINES_MAX) `where it happened
+global dim TEACH_LINE_Y#(TEACH_LINES_MAX)
+global dim TEACH_LINE_TEXT(TEACH_LINES_MAX)
+global dim TEACH_LINE_BUBBLED(TEACH_LINES_MAX) `1 once its words have burst into bubbles
+global TEACH_BURST_MS = 220 `how long the words take to burst
+global TEACH_BUBBLE_PUFFS = 6 `how many puffs of bubbles they burst into, along them
+global dim TEACH_LINE_TIMES(TEACH_LINES_MAX) `how many times it has happened in this moment
+global ORDER_TEACH = 34 `over the score texts, and under the info screen
+
+` THE SPOTLIGHT. the dark does not only come in from the corners: it closes in around where the moment
+` happened, and the light follows each moment as it comes up, and stays where the last one was until the
+` end. the fish that it is about jump while the pops wait for them. and the dark takes
+` the color of the moment: blue for a school, pink for coral, green for belly up. see Vignette in ScreenEffect.fx.
+global TEACH_SPOT_X# = 0 `where the light is, in pixels of the game, on this frame
+global TEACH_SPOT_Y# = 0
+global TEACH_TINT_R# = 1 `and the color of the dark, from 0 to 1
+global TEACH_TINT_G# = 1
+global TEACH_TINT_B# = 1
+global TEACH_SPOT_EASE_MS = 140 `how quickly the light and the color follow, in milliseconds. less is quicker.
+global TEACH_PULSE_ROOM = 576 `the most cells there can be room for
+global dim TEACH_PULSE_NEXT(TEACH_PULSE_ROOM) `when the fish in each cell jumps next
+global dim TEACH_PULSE_END(TEACH_PULSE_ROOM) `and when it stops, or 0 for not at all
+global TEACH_PULSING = 0 `1 while any fish is
+global TEACH_PULSE_GAP = 520 `how far apart the jumps are
+
+global TEACH_COLOR_R# = 1 `what teachColorOf leaves
+global TEACH_COLOR_G# = 1
+global TEACH_COLOR_B# = 1
+global TEACH_PULSE_FROM = 0 `what teachPulseTimes leaves
+global TEACH_PULSE_UNTIL = 0
+
+remstart
+    NEW IN THE CODEC
+    a big moment teaches what happened in a word. the codec says the rest. so when something is found
+    that the codec has an entry for, the player is told that there is something new to read in it:
+    - the key hint for info mode, at the bottom of the screen, has a little "new info!" that bobs over it.
+    - info mode has a "Codec" spot, under the rounds that are left, and while there is something new, a
+      "new info!" badge bumps around on it. the confirm key there opens the codec, and it goes straight to
+      the first new entry. backing out of it goes straight back to the game.
+    - the tiles of the new entries have a dot on them that bobs, until each one has been looked at.
+    an entry is new from when it is unlocked (codecSeeCard) until it is highlighted in the codec. what was
+    unlocked before any of this was not new, and is not now. a demo unlocks nothing. it is kept in the
+    preferences from CODEC_NEW_PREF, one number for each entry.
+    the routines are in fish_routines_teach.
+remend
+global CODEC_NEW_PREF = 7100 `it must not move. there is room for 128 entries.
+global dim CODEC_NEW(128) `1 while an entry has been unlocked and not looked at
+global CODEC_NEW_COUNT = 0
+global CODEC_FIRST_NEW = -1 `what codecNewRecount found: the first new entry, or -1
+global CODEC_FROM_INFO = 0 `1 while the codec was opened from info mode, so it goes back to the game
+global INFO_INDEX_CODEC = -1 `the spot of info mode
+global CODEC_SPOT_X = 0
+global CODEC_SPOT_Y = 68
+global CODEC_SPOT_W = 108
+global CODEC_SPOT_H = 22
+global CODEC_SPOT_TEXT_ID = 0 `"Codec", on the spot. it is only there in info mode.
+global CODEC_SPOT_BADGE_ID = 0 `"new info!", on the spot
+global CODEC_HINT_BADGE_ID = 0 `"new info!", over the key hint
+global dim CODEC_NEW_DOTS(32) `the dots on the tiles of the codec
+global CODEC_BUMP_GAP = 1600 `how often the badges give a jump, in milliseconds
+global CODEC_BUMP_Y# = 0 `what codecBump leaves
+global CODEC_BUMP_TURN# = 0
+
+remstart
+    THE BADGE ON THE KEY HINT. when something new turns up in the codec, "new info!" pops up beside the
+    key hint for info mode, in a small puff of bubbles, and dances there, gently, with a bubble or two
+    now and then. it is meant to be noticed, not to nag. after CODEC_DANCE_MS it shrinks, and flies to the corner of the picture of the key,
+    where it turns into a little badge, a dot that pulses gently. the badge stays until everything new
+    has been read. something new that turns up while the badge is there starts the dance again. a
+    game that starts with something new from before only has the badge.
+remend
+#constant CODEC_BADGE_NONE 0
+#constant CODEC_BADGE_DANCE 1
+#constant CODEC_BADGE_FLY 2
+#constant CODEC_BADGE_DOT 3
+global CODEC_BADGE_MODE = 0
+global CODEC_BADGE_FROM_MS = 0 `when the dance, or the flight, started
+global CODEC_BADGE_KNOWN = -1 `how many new entries there were the last time that codecNewStep looked, or -1 before it has
+global CODEC_BADGE_HOP = 0 `which jump of the dance the last puff of bubbles was for
+global CODEC_BADGE_DOT_ID = 0 `the dot on the corner of the key
+global CODEC_BADGE_FLY_X# = 0 `where the words were when they set off
+global CODEC_BADGE_FLY_Y# = 0
+global CODEC_DANCE_MS = 5000 `how long "new info!" dances, before it turns into the badge
+global CODEC_FLY_MS = 450 `how long it takes to fly to the key
+global CODEC_DOT_SIZE = 7 `how big the dot is, in pixels
+global CODEC_NEW_LIST_MAX = 6 `info mode lists this many of the new entries by name, and says how many more there are

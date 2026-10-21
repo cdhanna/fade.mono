@@ -811,6 +811,12 @@ handle_ability_selection:
     if LIVE_MOVE_ACTIVE then return
     REQUEST_ABILITY_SELECTION = 0
 
+    ` the first upgrade screen of a game that had the tutorial has a few words first. see THE FIRST
+    ` UPGRADE in fish_routines_intro.
+    if TUTORIAL_UPGRADE_TALK
+        gosub tutorial_upgrade_talk
+    endif
+
     ` a stretch of the steam timeline for the upgrade screen, in the color for getting ready to play.
     ` advanceScoreBar ends it, when a card has been picked. see frame_steam_timeline, in fish_routines.
     start steam timeline range STEAM_RANGE_UPGRADE, loc$("ability.steam.upgrade"), loc$("ability.steam.picking"), "steam_chest", 50
@@ -955,6 +961,54 @@ handle_ability_selection:
             endif
         endif
 
+        ` the mouse. going over a card is the same as the left and right keys going to it, going over a
+        ` line under the cards is the same as going down to it, and a click takes it, the same as the
+        ` confirm key. see THE MOUSE in fish_headers_mouse.
+        upMsPick = 0
+        upMsCard = -1
+        for upMsI = 0 to choiceCount
+            upMsT = ABILITY_CHOICES(upMsI).transformId
+            upMsScale# = get local transform scale x(upMsT)
+            upMsW = CARD_WIDTH * upMsScale#
+            upMsH = CARD_HEIGHT * upMsScale#
+            upMsX = get local transform x(upMsT) - upMsW / 2
+            upMsY = get local transform y(upMsT)
+            upMsOn = mouseHover(upMsX, upMsY, upMsW, upMsH)
+            upMsHit = mouseClick(upMsX, upMsY, upMsW, upMsH)
+            if upMsOn + upMsHit > 0 then upMsCard = upMsI
+            if upMsHit then upMsPick = 1
+        next
+        if upMsCard >= 0
+            UPGRADE_SKIP_SELECTED = 0
+            dir = upMsCard - ABILITY_SELECTION_INDEX
+        endif
+
+        upMsRow = -1
+        upMsRerollW = get text size x(UPGRADE_REROLL_TEXT_ID) + 16
+        if upMsRerollW < 152 then upMsRerollW = 152
+        for upMsI = 0 to 2
+            upMsW = 128
+            upMsX = UPGRADE_SKIP_X
+            if upMsI = 1
+                upMsW = upMsRerollW
+                upMsX = UPGRADE_REROLL_X
+            endif
+            if upMsI = 2
+                upMsW = 144
+                upMsX = UPGRADE_DROP_X
+            endif
+            upMsX = upMsX - upMsW / 2
+            upMsOn = mouseHover(upMsX, UPGRADE_SKIP_Y - 3, upMsW, 26)
+            upMsHit = mouseClick(upMsX, UPGRADE_SKIP_Y - 3, upMsW, 26)
+            if upMsOn + upMsHit > 0 then upMsRow = upMsI
+            if upMsHit then upMsPick = 1
+        next
+        if upMsRow >= 0
+            UPGRADE_SKIP_SELECTED = 1
+            UPGRADE_ROW_PICK = upMsRow
+            dir = 0
+        endif
+
         ` where the line that was highlighted is, for the bubbles that the outline leaves behind
         rowWasX = UPGRADE_SKIP_X
         if rowWas = 1 then rowWasX = UPGRADE_REROLL_X
@@ -1012,6 +1066,7 @@ handle_ability_selection:
         upgradePicked = 0
         if new action down(ACT_CONFIRM) then upgradePicked = 1
         if new action down(ACT_UP) and skipLeft = 0 then upgradePicked = 1
+        if upMsPick then upgradePicked = 1
 
         ` a card that was taken from the book is the pick, whatever is highlighted
         if bookTaken >= 0
@@ -1364,6 +1419,34 @@ endfunction CARDS(ABILITY_INDEX_PASSIVE_STOCK_MARKET).obtained > 0
 function isAbility_ThinkBigger()
 endfunction CARDS(ABILITY_INDEX_THINK_BIGGER).obtained > 0
 
+` how many of the two cells of the last swap are in a group that would have popped without "think bigger",
+` and did not pop with it. handle_combos calls this once it has found the groups. see THINK BIGGER in fish_headers.
+function thinkBiggerHeld()
+    held = 0
+    if isAbility_ThinkBigger()
+        held = thinkBiggerHeldCell(CORAL_SWAP_A) + thinkBiggerHeldCell(CORAL_SWAP_B)
+    endif
+endfunction held
+
+` 1 when the cell is in a group of at least THINK_BIGGER_LET_OFF_SIZE fish that matched, and 0 otherwise.
+` a group that is big enough to pop anyway fills the bar, so it does not matter that it counts here too.
+function thinkBiggerHeldCell(heldCell)
+    held = 0
+    if heldCell >= 0
+        heldGroup = CELLS(heldCell).comboFillId
+        if heldGroup >= 0
+            if CELLS(heldCell).comboForce = 0
+                heldSize = 0
+                heldLast = CELL_COUNT - 1
+                for heldAt = 0 to heldLast
+                    if CELLS(heldAt).comboFillId = heldGroup then heldSize = heldSize + 1
+                next
+                if heldSize >= THINK_BIGGER_LET_OFF_SIZE then held = 1
+            endif
+        endif
+    endif
+endfunction held
+
 function isAbility_BottomFeeder()
 endfunction CARDS(ABILITY_INDEX_BOTTOM_FEEDER).obtained > 0
 
@@ -1434,7 +1517,7 @@ function loadCardStrings()
     CARDS(ABILITY_INDEX_PASSIVE_STOCK_MARKET).name$ = loc$("ability.stockmarket.name")
     CARDS(ABILITY_INDEX_PASSIVE_STOCK_MARKET).desc$ = loc$("ability.stockmarket.desc")
     CARDS(ABILITY_INDEX_THINK_BIGGER).name$ = loc$("ability.thinkbigger.name")
-    CARDS(ABILITY_INDEX_THINK_BIGGER).desc$ = loc$("ability.thinkbigger.desc")
+    CARDS(ABILITY_INDEX_THINK_BIGGER).desc$ = loc$("ability.thinkbigger.letoff.desc")
     CARDS(ABILITY_INDEX_BOTTOM_FEEDER).name$ = loc$("ability.bottomfeeder.name")
     CARDS(ABILITY_INDEX_BOTTOM_FEEDER).desc$ = loc$("ability.bottomfeeder.desc", "percent", BOTTOM_FEEDER_CHANCE)
     CARDS(ABILITY_INDEX_BOTTOM_FEEDER_2).name$ = loc$("ability.bottomfeeder2.name")
@@ -1468,7 +1551,7 @@ function loadCardStrings()
     CARDS(ABILITY_INDEX_MOVE_BOMB3x3).name$ = loc$("ability.bomb.name")
     CARDS(ABILITY_INDEX_MOVE_BOMB3x3).desc$ = loc$("ability.bomb.desc")
     CARDS(ABILITY_INDEX_MOVE_LINE_OUT).name$ = loc$("ability.lineout.name")
-    CARDS(ABILITY_INDEX_MOVE_LINE_OUT).desc$ = loc$("ability.lineout.desc")
+    CARDS(ABILITY_INDEX_MOVE_LINE_OUT).desc$ = loc$("ability.lineout.kind_desc")
     CARDS(ABILITY_INDEX_MOVE_FREE).name$ = loc$("ability.freemove.name")
     CARDS(ABILITY_INDEX_MOVE_FREE).desc$ = loc$("ability.freemove.desc")
     CARDS(ABILITY_INDEX_MOVE_SONG).name$ = loc$("ability.easysong.name")

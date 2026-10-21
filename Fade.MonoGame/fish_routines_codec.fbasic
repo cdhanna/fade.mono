@@ -65,6 +65,8 @@ setup_codec:
     CODEC_ENTRY_SING = CARD_LENGTH + 16
     CODEC_ENTRY_CTHULHU = CARD_LENGTH + 17
     CODEC_ENTRY_NIGHT = CARD_LENGTH + 18
+    CODEC_ENTRY_RAINBOW = CARD_LENGTH + CODEC_EXTRA_FISH
+    CODEC_ENTRY_SCHOOL = CARD_LENGTH + CODEC_EXTRA_FISH + 1
     CODEC_ENTRY_CAMEO = CARD_LENGTH + CODEC_EXTRA_PLAIN
 
     ` and the usual ending is the last of the entries that are not cards, after the last of the words
@@ -88,6 +90,7 @@ setup_codec:
     codecFile(0, CARD_LENGTH)
     codecStartCategory(lockey$("codec.cat.fish"))
     codecFile(CODEC_ENTRY_JELLY, 7)
+    codecFile(CODEC_ENTRY_RAINBOW, 2)
     codecStartCategory(lockey$("codec.cat.secrets"))
     codecFile(CODEC_ENTRY_CORAL, 2)
     codecFile(CODEC_ENTRY_TUNA, 3)
@@ -108,13 +111,26 @@ setup_codec:
         CODEC_SEEN(codecI) = get pref(getCodecPref(codecI), 0)
     next
 
+    ` these are whole ifs, not one-line ones: a one-line `if ... then codecSeeCard(...)` took the statement
+    ` after it as part of itself, so each of them only ran when the one before it was true, and the house
+    ` of the ending where the fish go home was only loaded once the diver's ending had been reached.
+
     ` SONG had an entry of its own once, which SING has now. whoever found that one has found this one.
-    if get pref(CODEC_PREF_MORE + 7, 0) then codecSeeCard(CODEC_ENTRY_SING)
+    if get pref(CODEC_PREF_MORE + 7, 0)
+        codecSeeCard(CODEC_ENTRY_SING)
+    endif
 
     ` an ending that was reached before the codec had an entry for it counts, too
-    if get pref(PREF_ENDING_REEF, 0) then codecSeeCard(CODEC_ENTRY_REEF)
-    if get pref(PREF_ENDING_ANCIENT, 0) then codecSeeCard(CODEC_ENTRY_ANCIENT)
-    if get pref(PREF_ENDING_DIVER, 0) then codecSeeCard(CODEC_ENTRY_ALBUM)
+    if get pref(PREF_ENDING_REEF, 0)
+        codecSeeCard(CODEC_ENTRY_REEF)
+    endif
+    if get pref(PREF_ENDING_ANCIENT, 0)
+        codecSeeCard(CODEC_ENTRY_ANCIENT)
+    endif
+    if get pref(PREF_ENDING_DIVER, 0)
+        codecSeeCard(CODEC_ENTRY_ALBUM)
+    endif
+
     texture reserve texture id(TEX_ENDING_GOODBYE), "Fish/Textures/ending_home"
 
     texture reserve texture id(TEX_ENDING_REEF), "Fish/Textures/ending_reef"
@@ -124,6 +140,7 @@ setup_codec:
     texture reserve texture id(TEX_CROOKED), "Fish/Textures/Cards/crooked_bar"
     texture reserve texture id(TEX_CODEC_RADIO), "Fish/Textures/Cards/radio"
     texture reserve texture id(TEX_CODEC_NIGHT), "Fish/Textures/Cards/night_dive"
+    texture reserve texture id(TEX_CODEC_SCHOOL), "Fish/Textures/Anchovy"
 
     ` what a locked entry has for a picture is a question mark, and not a lock, whatever the names say
     texture reserve texture id(TEX_LOCK), "Fish/Textures/Cards/question"
@@ -294,8 +311,10 @@ return
 ` "Codec" on the main menu, or on the pause menu. show the codec, in place of the menu, until the player backs out.
 menu_run_codec:
     CODEC_ON_LIST = 0
+    codecGoToNew() `straight to what is new. see NEW IN THE CODEC in fish_headers_teach.
     openCodec()
     refreshCodec()
+    mouseBackOn(TARGET_MENU, ORDER_MENU_TEXT) `see THE BACK BUTTON in fish_headers_mouse
 
     do
         gosub frame_codec
@@ -304,6 +323,8 @@ menu_run_codec:
         ` these are checked after the frame, so that the press that picked "Codec" is not the press that leaves
         if new action down(ACT_CONFIRM) then exit
         if new action down(ACT_PAUSE) then exit
+        codecBackClicked = mouseBackStep()
+        if codecBackClicked then exit
 
         ` see codecGo for where each direction goes. a press that goes nowhere makes no sound.
         codecGoX = 0
@@ -317,6 +338,7 @@ menu_run_codec:
         if codecGoX <> 0 or codecGoY <> 0
             codecGo(codecGoX, codecGoY)
         endif
+        codecMouse()
         codecMoved = 0
         if CODEC_SELECTED <> codecWas then codecMoved = 1
         if CODEC_ON_LIST <> codecWasOnList then codecMoved = 1
@@ -330,6 +352,8 @@ menu_run_codec:
         endif
     loop
 
+    mouseBackOff()
+
     ` back to whichever menu the codec was opened from, with "Codec" highlighted again
     closeCodec()
     if MENU_MODE = MENU_MODE_PAUSE
@@ -338,6 +362,12 @@ menu_run_codec:
         setMenuPage(MENU_PAGE_MAIN)
     endif
     selectMenuItem(getMenuRow(MENU_ITEM_CODEC), 0)
+
+    ` it was opened from info mode, so it goes straight back to the game. see NEW IN THE CODEC in fish_headers_teach.
+    if CODEC_FROM_INFO
+        CODEC_FROM_INFO = 0
+        gosub menu_close_pause
+    endif
 return
 
 
@@ -345,6 +375,8 @@ return
 frame_codec:
     codecPulse# = .8 + .2 * sin(game ms() * .006)
     colorInfoBorder(CODEC_CURSOR, rgb(255, 255, 255, 255 * codecPulse#))
+    codecNewDots() `see NEW IN THE CODEC in fish_headers_teach
+    codecRainbowTint()
 
     gosub frame_menu_render
 return
@@ -362,6 +394,8 @@ function codecSeeCard(cardIndex)
         if CODEC_SEEN(cardIndex) = 0
             CODEC_SEEN(cardIndex) = 1
             set pref getCodecPref(cardIndex), 1
+            ` and it is new, until it has been looked at. see NEW IN THE CODEC in fish_headers_teach.
+            codecMarkNew(cardIndex)
         endif
     endif
 endfunction
@@ -386,6 +420,11 @@ function getCodecPref(prefEntry)
             ` SONG had an entry of its own once, right after SING. the ones that came after it are
             ` still remembered where they were, one further along.
             if prefEntry > CODEC_ENTRY_SING then prefSlot = prefSlot + 1
+        endif
+
+        ` rainbow fish and schooling fish came later, and have a run of their own
+        if prefExtra >= CODEC_EXTRA_FISH
+            prefSlot = CODEC_PREF_FISH + (prefExtra - CODEC_EXTRA_FISH)
         endif
 
         ` and that one ran out too. the words that bring somebody swimming through have a third.
@@ -433,6 +472,13 @@ function codecSeeBoard()
         if CELLS(seeI).stack > 0 then seeEntry = CODEC_ENTRY_STACK
         codecSeeCard(seeEntry)
 
+        ` a rainbow fish. see fish_headers_rainbow.
+        seeEntry = -1
+        if RAINBOW_FISH(seeI)
+            if seeKind > 0 then seeEntry = CODEC_ENTRY_RAINBOW
+        endif
+        codecSeeCard(seeEntry)
+
         ` a fish that is sitting on coral that is well
         seeEntry = -1
         if CORAL_CELLS(seeI) > CORAL_SICK(seeI)
@@ -468,6 +514,8 @@ function getCodecEntryTex(entryIndex)
     if entryIndex = CODEC_ENTRY_SING then entryTex = TEX_CODEC_RADIO
     if entryIndex = CODEC_ENTRY_CTHULHU then entryTex = TEX_BADGE_TENTACLE
     if entryIndex = CODEC_ENTRY_NIGHT then entryTex = TEX_CODEC_NIGHT
+    if entryIndex = CODEC_ENTRY_RAINBOW then entryTex = CODEC_FISH_TEX `the goldfish, in every color. see codecRainbowTint.
+    if entryIndex = CODEC_ENTRY_SCHOOL then entryTex = TEX_CODEC_SCHOOL
 
     ` a word that brings somebody swimming through has the picture of whoever it brings
     entryCameo = entryIndex - CODEC_ENTRY_CAMEO
@@ -604,6 +652,65 @@ function codecGo(cdcGoX, cdcGoY)
 endfunction
 
 
+` the mouse. the highlight follows it over the tiles and over the list of the categories, and a click
+` on one of the arrows turns the page. see THE MOUSE in fish_headers_mouse.
+function codecMouse()
+    codecFindSelected()
+    cmCat = CODEC_CAT
+    cmFirst = CODEC_CAT_FIRST(cmCat)
+    cmPageStart = (CODEC_CAT_AT / CODEC_PAGE_SIZE) * CODEC_PAGE_SIZE
+    cmSize = CODEC_CAT_SIZE(cmCat)
+
+    cmLastSlot = CODEC_PAGE_SIZE - 1
+    for cmSlot = 0 to cmLastSlot
+        cmAt = cmPageStart + cmSlot
+        if cmAt < cmSize
+            cmX = getCodecTileX(cmSlot) - 18
+            cmY = getCodecTileY(cmSlot) - 18
+            cmOn = mouseHover(cmX, cmY, 36, 36)
+            cmHit = mouseClick(cmX, cmY, 36, 36)
+            if cmOn + cmHit > 0
+                CODEC_ON_LIST = 0
+                CODEC_SELECTED = CODEC_ORDER(cmFirst + cmAt)
+            endif
+        endif
+    next
+
+    cmLastCat = CODEC_CAT_COUNT - 1
+    for cmCatI = 0 to cmLastCat
+        cmY = CODEC_TOP + 6 + cmCatI * 14
+        cmOn = mouseHover(CODEC_X + 5, cmY, CODEC_SIDE - 10, 14)
+        cmHit = mouseClick(CODEC_X + 5, cmY, CODEC_SIDE - 10, 14)
+        if cmOn + cmHit > 0
+            cmChange = 1 - CODEC_ON_LIST
+            if cmCatI <> cmCat then cmChange = 1
+            if cmChange
+                CODEC_ON_LIST = 1
+                CODEC_SELECTED = CODEC_ORDER(CODEC_CAT_FIRST(cmCatI))
+            endif
+        endif
+    next
+
+    ` the arrows: "<" is the page before, and ">" is the page after
+    cmArrowX = CODEC_X + CODEC_WIDTH - 28
+    cmUp = mouseClick(cmArrowX, getCodecTileY(0) - 12, 24, 24)
+    if cmUp
+        if cmPageStart > 0
+            CODEC_ON_LIST = 0
+            CODEC_SELECTED = CODEC_ORDER(cmFirst + cmPageStart - CODEC_PAGE_SIZE)
+        endif
+    endif
+    cmDown = mouseClick(cmArrowX, getCodecTileY(cmLastSlot) - 12, 24, 24)
+    if cmDown
+        cmNextPage = cmPageStart + CODEC_PAGE_SIZE
+        if cmNextPage < cmSize
+            CODEC_ON_LIST = 0
+            CODEC_SELECTED = CODEC_ORDER(cmFirst + cmNextPage)
+        endif
+    endif
+endfunction
+
+
 ` how many pages the grid has, for a category
 function getCodecPageCount(pageCat)
     pageCount = (CODEC_CAT_SIZE(pageCat) + CODEC_PAGE_SIZE - 1) / CODEC_PAGE_SIZE
@@ -686,6 +793,7 @@ function closeCodec()
     hide text CODEC_KIND_TEXT_ID
     hide text CODEC_DESC_TEXT_ID
     showInfoBorder(CODEC_CURSOR, 0)
+    codecNewDotsHide()
 
     MENU_TITLE_Y = 62
     showMenuChrome(1)
@@ -695,6 +803,11 @@ endfunction
 ` put the page that the highlighted entry is on onto the tiles, color every tile by whether it is
 ` locked, put the outline on the highlighted one, and explain it.
 function refreshCodec()
+    ` the highlighted entry has been looked at, so it is not new any more. see NEW IN THE CODEC in fish_headers_teach.
+    if CODEC_ON_LIST = 0
+        codecMarkRead(CODEC_SELECTED)
+    endif
+
     foundCount = 0
     for i = 0 to CODEC_COUNT - 1
         if CODEC_SEEN(i) then foundCount = foundCount + 1
@@ -1062,6 +1175,20 @@ function refreshCodec()
             exitfunction
         endif
 
+        ` rainbow fish and schooling fish. see fish_headers_rainbow and fish_headers_school.
+        if CODEC_SELECTED = CODEC_ENTRY_RAINBOW
+            set text CODEC_NAME_TEXT_ID, loc$("codec.rainbow.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.rainbow.about")
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.status")
+            exitfunction
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_SCHOOL
+            set text CODEC_NAME_TEXT_ID, loc$("codec.school.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.school.about")
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.status")
+            exitfunction
+        endif
+
         ` see DIAGONALS in fish_headers
         if CODEC_SELECTED = CODEC_ENTRY_CROOKED
             set text CODEC_NAME_TEXT_ID, loc$("codec.crooked.name")
@@ -1139,3 +1266,120 @@ function codecMorse(signalWord)
         if signalMark = 2 then signalSays$ = signalSays$ + "  "
     next
 endfunction signalSays$
+
+
+
+` the picture of rainbow fish is the goldfish, going through every color, on its tile and as the big
+` picture. frame_codec does this, after refreshCodec has given every tile its color.
+function codecRainbowTint()
+    crtNow# = game ms()
+    crtHue# = crtNow# * .004
+    crtR = 160 + 95 * sin(crtHue#)
+    crtG = 160 + 95 * sin(crtHue# + 2.094)
+    crtB = 160 + 95 * sin(crtHue# + 4.189)
+    crtColor = rgb(crtR, crtG, crtB)
+    if CODEC_SEEN(CODEC_ENTRY_RAINBOW) = 0 then exitfunction
+
+    crtPage = CODEC_CAT_AT / CODEC_PAGE_SIZE
+    for crtI = 0 to CODEC_PAGE_SIZE - 1
+        crtAt = crtPage * CODEC_PAGE_SIZE + crtI
+        if crtAt < CODEC_CAT_SIZE(CODEC_CAT)
+            if CODEC_ORDER(CODEC_CAT_FIRST(CODEC_CAT) + crtAt) = CODEC_ENTRY_RAINBOW
+                color sprite CODEC_ICON_SPRITES(crtI), crtColor
+            endif
+        endif
+    next
+    if CODEC_SELECTED = CODEC_ENTRY_RAINBOW
+        color sprite CODEC_BIG_SPRITE, crtColor
+    endif
+endfunction
+
+
+` the name of an entry of the codec, the way that the codec writes it over the entry. info mode lists the
+` new entries by name. see NEW IN THE CODEC in fish_headers_teach. it is worked out the same way that
+` refreshCodec works it out.
+function codecEntryName(cenEntry)
+    cenName$ = ""
+    if cenEntry < CARD_LENGTH
+        cenName$ = CARDS(cenEntry).name$
+    endif
+    if cenEntry = CODEC_ENTRY_CORAL
+        cenName$ = INFOS(INFO_INDEX_CORAL).title$
+    endif
+    if cenEntry = CODEC_ENTRY_HORROR
+        cenName$ = INFOS(INFO_INDEX_CORAL_SICK).title$
+    endif
+    if cenEntry = CODEC_ENTRY_REEF
+        cenName$ = loc$("codec.reef.name")
+    endif
+    if cenEntry = CODEC_ENTRY_ANCIENT
+        cenName$ = loc$("codec.ancient.name")
+    endif
+    if cenEntry = CODEC_ENTRY_GOODBYE
+        cenName$ = loc$("codec.goodbye.name")
+    endif
+    if cenEntry = CODEC_ENTRY_DIVER
+        cenName$ = INFOS(INFO_INDEX_DIVER).title$
+    endif
+    if cenEntry = CODEC_ENTRY_ALBUM
+        cenName$ = loc$("codec.album.name")
+    endif
+    if cenEntry = CODEC_ENTRY_JELLY
+        cenName$ = loc$("codec.jelly.name")
+    endif
+    if cenEntry = CODEC_ENTRY_RAY
+        cenName$ = loc$("codec.ray.name")
+    endif
+    if cenEntry = CODEC_ENTRY_BOTTLE
+        cenName$ = loc$("codec.bottle.name")
+    endif
+    if cenEntry = CODEC_ENTRY_BELLY
+        cenName$ = loc$("codec.belly.name")
+    endif
+    if cenEntry = CODEC_ENTRY_SKELETON
+        cenName$ = loc$("codec.skeleton.name")
+    endif
+    if cenEntry = CODEC_ENTRY_STACK
+        cenName$ = loc$("codec.stack.name")
+    endif
+    if cenEntry = CODEC_ENTRY_HOME
+        cenName$ = loc$("codec.home.name")
+    endif
+    if cenEntry = CODEC_ENTRY_TUNA
+        cenName$ = loc$("codec.tuna.name")
+    endif
+    if cenEntry = CODEC_ENTRY_CROOKED
+        cenName$ = loc$("codec.crooked.name")
+    endif
+    if cenEntry = CODEC_ENTRY_RADIO
+        cenName$ = loc$("codec.radio.name")
+    endif
+    if cenEntry = CODEC_ENTRY_SING
+        cenName$ = loc$("codec.sing.name")
+    endif
+    if cenEntry = CODEC_ENTRY_CTHULHU
+        cenName$ = loc$("codec.cthulhu.name")
+    endif
+    if cenEntry = CODEC_ENTRY_NIGHT
+        cenName$ = loc$("codec.night.name")
+    endif
+    if cenEntry = CODEC_ENTRY_RAINBOW
+        cenName$ = loc$("codec.rainbow.name")
+    endif
+    if cenEntry = CODEC_ENTRY_SCHOOL
+        cenName$ = loc$("codec.school.name")
+    endif
+    if cenEntry = CODEC_ENTRY_CALL
+        cenName$ = loc$("codec.call.name")
+    endif
+    cenCameo = cenEntry - CODEC_ENTRY_CAMEO
+    if cenCameo >= 0
+        if cenCameo < CAMEO_WORD_COUNT
+            cenName$ = loc$(CAMEO_NAME$(cenCameo))
+        endif
+    endif
+    cenQuest = getCodecQuest(cenEntry)
+    if cenQuest > 0
+        cenName$ = loc$(QUEST_DEFS(cenQuest).name$)
+    endif
+endfunction cenName$

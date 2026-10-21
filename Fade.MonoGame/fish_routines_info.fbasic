@@ -123,6 +123,12 @@ return
 info_open:
     if INFO_LENGTH = 0 then return
 
+    ` the things on the board get their outlines, where they are now. see fish_headers_boardinfo.
+    gosub board_info_place
+
+    ` and the spot of the codec says whether there is something new in it. see NEW IN THE CODEC in fish_headers_teach.
+    codecSpotRefresh()
+
     ` the selected blob may have been disabled since the last time
     if INFOS(INFO_SELECTED).enabled = 0 then INFO_SELECTED = findFirstEnabledInfo()
     if INFO_SELECTED < 0
@@ -182,6 +188,9 @@ info_open:
     ` snap the cursor onto the selection instead of sliding in from wherever it was last
     selectInfo(INFO_SELECTED, 0)
 
+    ` the mouse goes back to the game with a button. it is drawn on the screen, over the panel.
+    mouseBackOn(0, ORDER_INFO_PANEL)
+
     create basic tween INFO_FADE_TWEEN_ID, 0, 1, 150, 0
     while is tween done(INFO_FADE_TWEEN_ID) < 1
         gosub frame_info_render
@@ -193,6 +202,7 @@ return
 
 
 info_close:
+    mouseBackOff()
     create basic tween INFO_FADE_TWEEN_ID, 1, 0, 150, 0
     while is tween done(INFO_FADE_TWEEN_ID) < 1
         gosub frame_info_render
@@ -229,14 +239,40 @@ return
 ` the arrow keys move the selection to the nearest blob in that direction
 handle_info_input:
 
+    ` the mouse. the outline follows it onto whatever it is over, a click on a thing is the confirm key
+    ` there, and the back button goes back to the game. see THE MOUSE in fish_headers_mouse.
+    infoMsBack = mouseBackStep()
+    if infoMsBack
+        gosub info_close
+        return
+    endif
+    infoMsConfirm = 0
+    if MOUSE_MOVED + MOUSE_CLICKED > 0
+        infoMsAt = findInfoAtMouse()
+        if infoMsAt >= 0
+            if infoMsAt <> INFO_SELECTED
+                selectInfo(infoMsAt, 180)
+            endif
+            infoMsConfirm = mouseClickAnywhere()
+        endif
+    endif
+
     ` the confirm button on a move leaves info mode, and opens the page that moves the moves between
     ` the buttons, on that move. see fish_routines_equip.
-    if new action down(ACT_CONFIRM)
+    infoConfirm = new action down(ACT_CONFIRM)
+    if infoMsConfirm then infoConfirm = 1
+    if infoConfirm
         infoMoveSlot = getInfoMoveSlot(INFO_SELECTED)
         if infoMoveSlot >= 0
             gosub info_close
             EQUIP_START_SLOT = infoMoveSlot
             gosub handle_move_rearrange
+            return
+        endif
+
+        ` on the spot of the codec, it opens the codec. see NEW IN THE CODEC in fish_headers_teach.
+        if INFO_SELECTED = INFO_INDEX_CODEC
+            gosub info_open_codec
             return
         endif
 
@@ -386,6 +422,39 @@ function findFirstEnabledInfo()
         if found < 0 and INFOS(i).enabled then found = i
     next
 endfunction found
+
+
+` the enabled blob that the mouse is over, or -1. where one sits inside another, the smaller one is it.
+` the two with a leg are over the mouse on their leg too. see THE MOUSE in fish_headers_mouse.
+function findInfoAtMouse()
+    imFound = -1
+    imFoundArea = 0
+    imLast = INFO_LENGTH - 1
+    for imI = 0 to imLast
+        if INFOS(imI).enabled
+            imX = INFOS(imI).topLeft.x
+            imY = INFOS(imI).topLeft.y
+            imW = INFOS(imI).size.x
+            imH = INFOS(imI).size.y
+            imOver = mouseOver(imX, imY, imW, imH)
+            if imI = INFO_L_INDEX
+                imLegOver = mouseOver(imX + imW - INFO_L_W, imY + imH, INFO_L_W, INFO_L_H)
+                if imLegOver then imOver = 1
+            endif
+            if imI = INFO_L2_INDEX
+                imLegOver = mouseOver(imX + imW - INFO_L2_W, imY + imH, INFO_L2_W, INFO_L2_H)
+                if imLegOver then imOver = 1
+            endif
+            if imOver
+                imArea = imW * imH
+                if imFound < 0 or imArea < imFoundArea
+                    imFound = imI
+                    imFoundArea = imArea
+                endif
+            endif
+        endif
+    next
+endfunction imFound
 
 
 ` find the closest enabled blob in the given direction, or -1 if there is nothing that way.

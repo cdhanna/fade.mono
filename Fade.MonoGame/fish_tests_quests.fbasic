@@ -371,7 +371,7 @@ test quest_free_move_can_move_a_quest_thing from fishBoard
 endtest
 
 test quest_has_a_codec_entry_that_is_marked_when_it_is_finished from fishBoard
-    assert CODEC_ENTRY_QUEST = CARD_LENGTH + 30,"the quests come after everything else in the codec"
+    assert CODEC_ENTRY_QUEST = CARD_LENGTH + CODEC_EXTRA_COUNT,"the quests come after everything else in the codec"
     tEntry = CODEC_ENTRY_QUEST + QUEST_WAKE - 1
     assert getCodecQuest(tEntry) = QUEST_WAKE, "an entry knows which quest it is"
     assert getCodecQuest(CODEC_ENTRY_CROOKED) = 0, "and the entry before the quests is not one"
@@ -678,6 +678,9 @@ test quest_name_shows_while_the_cursor_looks_at_it from fishBoard
     tQuestRight = INFOS(INFO_INDEX_QUEST).topLeft.x + INFOS(INFO_INDEX_QUEST).size.x
     tLegLeft = INFOS(INFO_INDEX_SCORE_BAR).topLeft.x + INFOS(INFO_INDEX_SCORE_BAR).size.x - INFO_L_W
     assert tQuestRight = tLegLeft, "and it stops where the leg of the L comes down"
+    ` the outlines of the things on the board are left out of the way, for this. see fish_tests_boardinfo.
+    SCHOOL_ON = 0
+    boardInfoPlace()
     INFO_SELECTED = INFO_INDEX_SCORE_BAR
     assert findInfoInDirection(0, 1) = INFO_INDEX_QUEST, "down from the bar of the round is the quest"
     INFO_SELECTED = INFO_INDEX_GRID

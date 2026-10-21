@@ -5,24 +5,29 @@ goto routines_input_exit
 ` the rest of the game only asks about the actions, so it works the same on both.
 setup_input:
 
-    ` directions come from the arrow keys, the d-pad, or the left stick
+    ` directions come from the arrow keys, wasd, the d-pad, or the left stick. both sets of keys
+    ` always work. see THE TWO HANDS OF THE KEYBOARD in fish_headers.
     reserve action id(ACT_LEFT)
     bind action key ACT_LEFT, scancode("Left")
+    bind action key ACT_LEFT, scancode("A")
     bind action button ACT_LEFT, padCode("DPadLeft")
     bind action button ACT_LEFT, padCode("LeftThumbstickLeft")
 
     reserve action id(ACT_RIGHT)
     bind action key ACT_RIGHT, scancode("Right")
+    bind action key ACT_RIGHT, scancode("D")
     bind action button ACT_RIGHT, padCode("DPadRight")
     bind action button ACT_RIGHT, padCode("LeftThumbstickRight")
 
     reserve action id(ACT_UP)
     bind action key ACT_UP, scancode("Up")
+    bind action key ACT_UP, scancode("W")
     bind action button ACT_UP, padCode("DPadUp")
     bind action button ACT_UP, padCode("LeftThumbstickUp")
 
     reserve action id(ACT_DOWN)
     bind action key ACT_DOWN, scancode("Down")
+    bind action key ACT_DOWN, scancode("S")
     bind action button ACT_DOWN, padCode("DPadDown")
     bind action button ACT_DOWN, padCode("LeftThumbstickDown")
 
@@ -38,26 +43,32 @@ setup_input:
 
     ` tab is the key that the game shows. while the debug inspector is enabled (see FISH_DEBUG, in
     ` fish.fbasic), imgui takes the keyboard when tab is pressed, and then the game does not see any
-    ` keys at all. so i still works too, for then.
+    ` keys at all. so f1 works too, for then. (it used to be i, but i is a move key now.)
     reserve action id(ACT_INFO)
     bind action key ACT_INFO, scancode("Tab")
-    bind action key ACT_INFO, scancode("I")
+    bind action key ACT_INFO, scancode("F1")
     bind action button ACT_INFO, padCode("Back")
 
-    ` escape pauses, and backs out of menus. p still works too.
+    ` escape pauses, and backs out of menus. (p used to as well, but p is a move key now.)
     reserve action id(ACT_PAUSE)
     bind action key ACT_PAUSE, scancode("Escape")
-    bind action key ACT_PAUSE, scancode("P")
     bind action button ACT_PAUSE, padCode("Start")
 
-    ` the move abilities, in the order that they get handed out
+    ` the move abilities, in the order that they get handed out. each one has a key for the left
+    ` hand, beside the arrow keys' hand, and a key for the right hand, beside wasd.
     dim abilityKeys$(MOVE_SLOT_COUNT)
+    dim abilityRightKeys$(MOVE_SLOT_COUNT)
     dim abilityButtons$(MOVE_SLOT_COUNT)
     abilityKeys$(0) = "Z"
     abilityKeys$(1) = "X"
     abilityKeys$(2) = "C"
     abilityKeys$(3) = "V"
     abilityKeys$(4) = "B"
+    abilityRightKeys$(0) = "Y"
+    abilityRightKeys$(1) = "U"
+    abilityRightKeys$(2) = "I"
+    abilityRightKeys$(3) = "O"
+    abilityRightKeys$(4) = "P"
     abilityButtons$(0) = "B"
     abilityButtons$(1) = "X"
     abilityButtons$(2) = "Y"
@@ -66,6 +77,7 @@ setup_input:
     for i = 0 to MOVE_SLOT_COUNT - 1
         reserve action id(abilityActionId)
         bind action key abilityActionId, scancode(abilityKeys$(i))
+        bind action key abilityActionId, scancode(abilityRightKeys$(i))
         bind action button abilityActionId, padCode(abilityButtons$(i))
         ACT_ABILITY(i) = abilityActionId
     next
@@ -93,11 +105,29 @@ frame_input_icons:
 
     iconPadKind = 0
     if iconDevice = 1 then iconPadKind = steam input type()
+
+    ` which hand the moves are under, for the keys that were pressed last.
+    ` see THE TWO HANDS OF THE KEYBOARD in fish_headers.
+    if iconDevice = 0
+        if new key down(scancode("W")) then INPUT_KEY_HANDS_NEXT = 1
+        if new key down(scancode("A")) then INPUT_KEY_HANDS_NEXT = 1
+        if new key down(scancode("S")) then INPUT_KEY_HANDS_NEXT = 1
+        if new key down(scancode("D")) then INPUT_KEY_HANDS_NEXT = 1
+        if new key down(scancode("Left")) then INPUT_KEY_HANDS_NEXT = 0
+        if new key down(scancode("Right")) then INPUT_KEY_HANDS_NEXT = 0
+        if new key down(scancode("Up")) then INPUT_KEY_HANDS_NEXT = 0
+        if new key down(scancode("Down")) then INPUT_KEY_HANDS_NEXT = 0
+    endif
+
     if iconDevice = INPUT_ICON_DEVICE
-        if iconPadKind = INPUT_ICON_PAD_KIND then return
+        if iconPadKind = INPUT_ICON_PAD_KIND
+            if iconDevice = 1 then return
+            if INPUT_KEY_HANDS_NEXT = INPUT_KEY_HANDS then return
+        endif
     endif
     INPUT_ICON_DEVICE = iconDevice
     INPUT_ICON_PAD_KIND = iconPadKind
+    INPUT_KEY_HANDS = INPUT_KEY_HANDS_NEXT
 
     ` the last number is the frame of the picture in its sheet. the sheets are grids, and the
     ` frames count across each row, starting from the top left.
@@ -135,11 +165,20 @@ frame_input_icons:
             steamIcon(12, "confirm", 6, "A")
         endif
     else
-        font icon SCORE_FONT, 1, "move1", TEX_KEYS, 44 `z
-        font icon SCORE_FONT, 2, "move2", TEX_KEYS, 40 `x
-        font icon SCORE_FONT, 3, "move3", TEX_KEYS, 189 `c
-        font icon SCORE_FONT, 4, "move4", TEX_KEYS, 34 `v
-        font icon SCORE_FONT, 13, "move5", TEX_KEYS, 207 `b
+        if INPUT_KEY_HANDS = 1
+            font icon SCORE_FONT, 1, "move1", TEX_KEYS, 42 `y
+            font icon SCORE_FONT, 2, "move2", TEX_KEYS, 64 `u
+            font icon SCORE_FONT, 3, "move3", TEX_KEYS, 119 `i
+            font icon SCORE_FONT, 4, "move4", TEX_KEYS, 107 `o
+            font icon SCORE_FONT, 13, "move5", TEX_KEYS, 112 `p
+        else
+            font icon SCORE_FONT, 1, "move1", TEX_KEYS, 44 `z
+            font icon SCORE_FONT, 2, "move2", TEX_KEYS, 40 `x
+            font icon SCORE_FONT, 3, "move3", TEX_KEYS, 189 `c
+            font icon SCORE_FONT, 4, "move4", TEX_KEYS, 34 `v
+            font icon SCORE_FONT, 13, "move5", TEX_KEYS, 207 `b
+        endif
+        ` the four keys in the shape of the arrows. it has no letters on it, so it stands for wasd too.
         font icon SCORE_FONT, 5, "info", TEX_KEY_TAB `tab. it is a picture of its own, wider than the keys on the sheet.
         font icon SCORE_FONT, 6, "swap", TEX_KEYS, 51 `space
         font icon SCORE_FONT, 7, "dir", TEX_KEYS, 224 `the arrow keys
@@ -257,6 +296,18 @@ process_input:
                     create basic tween MOVE_ABILITY_BINDINGS(move.moveBindingIndex).useShakeTweenId, 1, 0, 500, 0
                     liveStarted = startLiveMove(swapDir.x, swapDir.y, 0)
                     return
+                endif
+            endif
+
+            ` "line out" pops the kind of fish under the cursor, and the diver is not a kind that pops. on
+            ` the diver, the move is not used, and its row shakes to say so. see LINE OUT in fish_headers.
+            if moveAbility.moveValue = [MOVE_LINE_OUT]
+                if moveAbility.movesLeft <= 0
+                    if CELLS(getCellIndex(SELECTION_POS)).value = TEX_DIVER
+                        create basic tween MOVE_ABILITY_BINDINGS(move.moveBindingIndex).useShakeTweenId, 1, 0, 500, 0
+                        liveStarted = startLiveMove(swapDir.x, swapDir.y, 0)
+                        return
+                    endif
                 endif
             endif
 
@@ -419,6 +470,10 @@ frame_combo_input:
 
     if LIVE_MOVE_HOLD then return
     if QUEUED_MOVE_NUM <= 0 then return
+
+    ` and moves wait while a big moment is being shown. see THE BIG MOMENTS in fish_headers_teach.
+    liveTeachWait = teachHolding()
+    if liveTeachWait then return
 
     liveMove = QUEUED_MOVES(QUEUED_MOVE_TAIL)
     liveSwap = liveMove.swap

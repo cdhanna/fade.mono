@@ -1,0 +1,1048 @@
+` THE BIG MOMENTS. see fish_headers_teach.
+
+goto routines_teach_exit
+
+setup_teach:
+    TEACH_KEY$(TEACH_BELLY_UP) = lockey$("teach.bellyup")
+    TEACH_KEY$(TEACH_SCHOOL) = lockey$("teach.school")
+    TEACH_KEY$(TEACH_CORAL_SONG) = lockey$("teach.coralsong")
+    TEACH_KEY$(TEACH_RAINBOW_NEW) = lockey$("teach.rainbownew")
+    TEACH_KEY$(TEACH_RAINBOW_WILD) = lockey$("teach.rainbowwild")
+
+    teachSetColor(TEACH_BELLY_UP, 190, 235, 150)
+    teachSetColor(TEACH_SCHOOL, 150, 215, 255)
+    teachSetColor(TEACH_CORAL_SONG, 255, 170, 190)
+    ` the rainbow ones go through the colors of the rainbow
+    TEACH_COLOR(TEACH_RAINBOW_NEW) = 0
+    TEACH_COLOR(TEACH_RAINBOW_WILD) = 0
+
+    ` FISH_TEACH_RESET=1 forgets every moment that has been seen, every time the game starts
+    teachForgetSeen = 0
+    if is env set("FISH_TEACH_RESET")
+        if val(env$("FISH_TEACH_RESET")) <> 0 then teachForgetSeen = 1
+    endif
+    for teachSetupI = 1 to TEACH_KINDS - 1
+        if teachForgetSeen
+            set pref TEACH_PREF + teachSetupI, 0
+        endif
+        TEACH_LIFE(teachSetupI) = get pref(TEACH_PREF + teachSetupI, 0)
+        TEACH_GAME(teachSetupI) = 0
+    next
+
+    for teachSetupI = 0 to TEACH_LINES_MAX - 1
+        teachSetupText = 0
+        reserve text id(teachSetupText)
+        TEACH_LINE_TEXT(teachSetupI) = teachSetupText
+        text loc teachSetupText, WORLD_WIDTH / 2, WORLD_HEIGHT / 2, SCORE_FONT, "teach.bellyup"
+        set text offset teachSetupText, .5, .5
+        size text max teachSetupText, TEACH_TEXT_W, TEACH_TEXT_FULL_H
+        enable text drop shadow teachSetupText, 2, -3, rgb(0, 0, 40)
+        order text teachSetupText, ORDER_TEACH
+        hide text teachSetupText
+    next
+
+    ` the dots on the tiles of the new entries of the codec. see NEW IN THE CODEC.
+    for teachSetupI = 0 to CODEC_PAGE_SIZE - 1
+        teachDotSprite = 0
+        reserve sprite id(teachDotSprite)
+        sprite teachDotSprite, 0, 0, TEX_PIXEL
+        set sprite offset teachDotSprite, .5, .5
+        size sprite teachDotSprite, 5, 5
+        color sprite teachDotSprite, rgb(255, 222, 96)
+        order sprite teachDotSprite, ORDER_MENU_TEXT + 2
+        set sprite render target teachDotSprite, TARGET_MENU
+        hide sprite teachDotSprite
+        CODEC_NEW_DOTS(teachSetupI) = teachDotSprite
+    next
+return
+
+` NEW IN THE CODEC. see fish_headers_teach. the spot of info mode has to be made before INFO_BASE_LENGTH
+` is taken, so fish.fbasic does this right after setup_quests.
+setup_codec_spot:
+    CODEC_SPOT_X = WORLD_WIDTH - 32 - 104
+    INFO_INDEX_CODEC = allocateInfoBlob(CODEC_SPOT_X, CODEC_SPOT_Y, CODEC_SPOT_W, CODEC_SPOT_H, loc$("info.codec.title"), loc$("info.codec.desc"))
+
+    for codecSpotI = 0 to 127
+        CODEC_NEW(codecSpotI) = get pref(CODEC_NEW_PREF + codecSpotI, 0)
+    next
+    codecNewRecount()
+
+    reserve text id(CODEC_SPOT_TEXT_ID)
+    text loc CODEC_SPOT_TEXT_ID, CODEC_SPOT_X + CODEC_SPOT_W / 2, CODEC_SPOT_Y + CODEC_SPOT_H / 2, SCORE_FONT, "info.codec.title"
+    set text offset CODEC_SPOT_TEXT_ID, .5, .5
+    size text max CODEC_SPOT_TEXT_ID, CODEC_SPOT_W - 8, 16
+    color text CODEC_SPOT_TEXT_ID, rgb(150, 190, 255)
+    order text CODEC_SPOT_TEXT_ID, ORDER_INFO_TEXT
+    hide text CODEC_SPOT_TEXT_ID
+
+    reserve text id(CODEC_SPOT_BADGE_ID)
+    text loc CODEC_SPOT_BADGE_ID, CODEC_SPOT_X + CODEC_SPOT_W - 8, CODEC_SPOT_Y, SCORE_FONT, "info.codec.badge"
+    set text offset CODEC_SPOT_BADGE_ID, .5, .5
+    size text max CODEC_SPOT_BADGE_ID, 90, 13
+    color text CODEC_SPOT_BADGE_ID, rgb(255, 222, 96)
+    enable text drop shadow CODEC_SPOT_BADGE_ID, 1, -2, rgb(150, 36, 24)
+    order text CODEC_SPOT_BADGE_ID, ORDER_INFO_TEXT + 1
+    hide text CODEC_SPOT_BADGE_ID
+
+    reserve text id(CODEC_HINT_BADGE_ID)
+    text loc CODEC_HINT_BADGE_ID, 0, 0, SCORE_FONT, "info.codec.badge"
+    set text offset CODEC_HINT_BADGE_ID, .5, .5
+    size text max CODEC_HINT_BADGE_ID, 80, 13
+    color text CODEC_HINT_BADGE_ID, rgb(255, 222, 96)
+    enable text drop shadow CODEC_HINT_BADGE_ID, 1, -1, rgb(150, 36, 24)
+    order text CODEC_HINT_BADGE_ID, ORDER_HUD_TEXT + 1
+    hide text CODEC_HINT_BADGE_ID
+
+    ` the badge that "new info!" turns into, on the corner of the picture of the key. see THE BADGE ON THE KEY HINT.
+    reserve sprite id(CODEC_BADGE_DOT_ID)
+    sprite CODEC_BADGE_DOT_ID, 0, 0, TEX_PIXEL
+    set sprite offset CODEC_BADGE_DOT_ID, .5, .5
+    size sprite CODEC_BADGE_DOT_ID, CODEC_DOT_SIZE, CODEC_DOT_SIZE
+    color sprite CODEC_BADGE_DOT_ID, rgb(255, 222, 96)
+    order sprite CODEC_BADGE_DOT_ID, ORDER_HUD_TEXT + 2
+    hide sprite CODEC_BADGE_DOT_ID
+return
+
+` the confirm key on the "Codec" spot of info mode. the codec opens over the game, the way that the pause
+` menu's does, and backing out of it goes straight back to the game.
+info_open_codec:
+    gosub info_close
+    gosub menu_open_pause
+    CODEC_FROM_INFO = 1
+    gosub menu_run_codec
+    CODEC_FROM_INFO = 0
+return
+
+
+routines_teach_exit:
+
+
+` the color of a moment's words, and of the dark around it
+function teachSetColor(teachSetKind, teachSetR, teachSetG, teachSetB)
+    TEACH_COLOR(teachSetKind) = rgb(teachSetR, teachSetG, teachSetB)
+    teachSetR# = teachSetR
+    teachSetG# = teachSetG
+    teachSetB# = teachSetB
+    TEACH_COLOR_PART#(teachSetKind * 3) = teachSetR# / 255.0
+    TEACH_COLOR_PART#(teachSetKind * 3 + 1) = teachSetG# / 255.0
+    TEACH_COLOR_PART#(teachSetKind * 3 + 2) = teachSetB# / 255.0
+endfunction
+
+` a new game has started, so every moment is new again in it
+function teachResetGame()
+    for teachResetI = 0 to TEACH_KINDS - 1
+        TEACH_GAME(teachResetI) = 0
+    next
+    teachForget()
+endfunction
+
+` whatever is on the screen goes away, at once. a game that is left in the middle of a moment.
+function teachForget()
+    for teachForgetI = 0 to TEACH_KINDS - 1
+        TEACH_PEND_LEVEL(teachForgetI) = TEACH_OFF
+    next
+    TEACH_LOOK_NEW = 0
+    teachClearLines()
+    TEACH_SHOWING = 0
+    TEACH_VIGNETTE# = 0
+    if TEACH_SHAKING
+        TEACH_SHAKING = 0
+        set screen shake amount 0
+    endif
+endfunction
+
+` the list is emptied, for a new moment
+function teachClearLines()
+    for teachClearI = 0 to TEACH_LINES_MAX - 1
+        hide text TEACH_LINE_TEXT(teachClearI)
+    next
+    TEACH_LINE_COUNT = 0
+    TEACH_SETTLED_MS = -1
+    TEACH_FADE_MS = -1
+    TEACH_HOLD_END_MS = 0
+    TEACH_READY_MS = 0
+    if TEACH_PULSING
+        for teachClearI = 0 to TEACH_PULSE_ROOM - 1
+            TEACH_PULSE_END(teachClearI) = 0
+        next
+        TEACH_PULSING = 0
+    endif
+endfunction
+
+` how much of a moment is shown, the next time that it happens. see fish_headers_teach.
+function teachLevel(teachKind)
+    teachLvl = TEACH_OFF
+    teachSeen = TEACH_GAME(teachKind)
+    teachKnown = TEACH_LIFE(teachKind)
+    teachFast = 0
+    if OPTION_POP_SPEED = POP_SPEED_FAST then teachFast = 1
+
+    ` the demo shows it the way that a new player sees it
+    if DEMO_MODE
+        teachKnown = 0
+        teachFast = 0
+    endif
+
+    if teachSeen = 0 then teachLvl = TEACH_FULL
+    if teachSeen = 1 then teachLvl = TEACH_SHORT
+    if teachSeen = 2 then teachLvl = TEACH_WORDS
+
+    ` a player who knows it only gets the words, the first time in a game
+    if teachKnown >= TEACH_LIFE_CAP
+        teachLvl = TEACH_OFF
+        if teachSeen = 0 then teachLvl = TEACH_WORDS
+    endif
+
+    if teachFast then teachLvl = TEACH_OFF
+    if TEACH_ENABLED = 0 then teachLvl = TEACH_OFF
+    if TUTORIAL_BOARD then teachLvl = TEACH_OFF
+endfunction teachLvl
+
+` how long the pops are held for a moment that is shown this much
+function teachHoldFor(teachHoldLvl)
+    teachHoldMs = 0
+    if teachHoldLvl = TEACH_FULL then teachHoldMs = TEACH_HOLD_FULL_MS
+    if teachHoldLvl = TEACH_SHORT then teachHoldMs = TEACH_HOLD_SHORT_MS
+endfunction teachHoldMs
+
+` which line of the list this kind is on, in TEACH_FOUND, or -1. a list that is fading away is over.
+function teachFindLine(teachFindKind)
+    TEACH_FOUND = -1
+    if TEACH_SHOWING = 0 then exitfunction
+    if TEACH_FADE_MS >= 0 then exitfunction
+    for teachFindI = 0 to TEACH_LINES_MAX - 1
+        if teachFindI < TEACH_LINE_COUNT
+            if TEACH_LINE_KIND(teachFindI) = teachFindKind then TEACH_FOUND = teachFindI
+        endif
+    next
+endfunction
+
+` handle_combos is starting a look at the board. a coral song is known to be coming at the
+` start of the look, though not whether it really happens: that is only known once the look has been
+` judged. so they are claimed now, one after the other, and shown then. handle_combos adds
+` TEACH_CLAIM_MS to ghostWait.
+function teachLookStart()
+    for teachStartI = 0 to TEACH_KINDS - 1
+        TEACH_PEND_LEVEL(teachStartI) = TEACH_OFF
+    next
+    TEACH_LOOK_NEW = 0
+    teachStartHold = 0
+
+    ` the swap at the end of a song, if it pops anything, grows the coral. see judgeCoralCast in fish_routines_coral.
+    if CORAL_PENDING_SLOT >= 0
+        teachClaim(TEACH_CORAL_SONG, teachStartHold)
+        teachStartHold = teachStartHold + TEACH_CLAIM_MS
+    endif
+
+    TEACH_CLAIM_MS = teachStartHold
+endfunction
+
+` claim a moment for this look. its words come up `teachAtMs` milliseconds after the look, which is the
+` ghostWait so far, and the hold that it adds is left in TEACH_CLAIM_MS (0 for none), for handle_combos
+` to add to ghostWait.
+function teachClaim(teachClaimKind, teachAtMs)
+    teachClaimWith(teachClaimKind, teachAtMs, 1)
+endfunction
+
+` the same, for a moment that cannot hold anything up. see HOW IT HOLDS.
+function teachClaimFree(teachFreeKind, teachFreeAtMs)
+    teachClaimWith(teachFreeKind, teachFreeAtMs, 0)
+endfunction
+
+function teachClaimWith(teachWithKind, teachWithAt, teachMayHold)
+    TEACH_CLAIM_MS = 0
+    if TEACH_PEND_LEVEL(teachWithKind) <> TEACH_OFF then exitfunction
+
+    ` it is up already, in this moment: its words jump, and it is not counted again
+    teachFindLine(teachWithKind)
+    if TEACH_FOUND >= 0
+        TEACH_PEND_LEVEL(teachWithKind) = TEACH_AGAIN
+        TEACH_PEND_AT(teachWithKind) = teachWithAt
+        TEACH_PEND_HOLD(teachWithKind) = 0
+        exitfunction
+    endif
+
+    teachWithLvl = teachLevel(teachWithKind)
+    if teachWithLvl = TEACH_OFF then exitfunction
+
+    ` the list only has so much room
+    teachWithLines = TEACH_LINE_COUNT
+    if TEACH_SHOWING = 0 then teachWithLines = 0
+    if TEACH_FADE_MS >= 0 then teachWithLines = 0
+    teachWithLines = teachWithLines + TEACH_LOOK_NEW
+    if teachWithLines >= TEACH_LINES_MAX then exitfunction
+
+    teachWithHold = 0
+    if teachMayHold
+        teachWithHold = teachHoldFor(teachWithLvl)
+        if TEACH_LOOK_NEW > 0
+            teachWithHold = teachWithHold * TEACH_HOLD_MORE_PERCENT / 100
+        endif
+    endif
+
+    TEACH_PEND_LEVEL(teachWithKind) = teachWithLvl
+    TEACH_PEND_AT(teachWithKind) = teachWithAt
+    TEACH_PEND_HOLD(teachWithKind) = teachWithHold
+    TEACH_LOOK_NEW = TEACH_LOOK_NEW + 1
+    TEACH_CLAIM_MS = teachWithHold
+endfunction
+
+` the moment has happened, at this spot on the screen. when this look claimed it, its words come up there
+` once the pops before it are done, and it is counted.
+function teachShow(teachShowKind, teachX#, teachY#)
+    teachShowLvl = TEACH_PEND_LEVEL(teachShowKind)
+    if teachShowLvl = TEACH_OFF then exitfunction
+    TEACH_PEND_LEVEL(teachShowKind) = TEACH_OFF
+
+    teachNow = game ms()
+    teachAt = teachNow + TEACH_PEND_AT(teachShowKind)
+
+    ` a moment whose list is fading away is over, and this starts a new one
+    if TEACH_SHOWING
+        if TEACH_FADE_MS >= 0
+            teachClearLines()
+            TEACH_SHOWING = 0
+        endif
+    endif
+
+    ` the same thing again, in the same moment. its words jump, if they are still up.
+    if teachShowLvl = TEACH_AGAIN
+        teachFindLine(teachShowKind)
+        if TEACH_FOUND >= 0
+            TEACH_LINE_PUNCH(TEACH_FOUND) = teachAt
+            TEACH_LINE_TIMES(TEACH_FOUND) = TEACH_LINE_TIMES(TEACH_FOUND) + 1
+            TEACH_SETTLED_MS = -1
+        endif
+        exitfunction
+    endif
+    if TEACH_SHOWING
+        if TEACH_LINE_COUNT >= TEACH_LINES_MAX then exitfunction
+    endif
+
+    TEACH_GAME(teachShowKind) = TEACH_GAME(teachShowKind) + 1
+    ` the demo keeps nothing. see THE DEMO in fish_headers_demo.
+    if DEMO_MODE = 0
+        TEACH_LIFE(teachShowKind) = TEACH_LIFE(teachShowKind) + 1
+        set pref TEACH_PREF + teachShowKind, TEACH_LIFE(teachShowKind)
+    endif
+
+    ` the words are kept inside of the board, so that a long one at the edge can still be read
+    teachLeft# = getCellX(0) + TEACH_TEXT_W / 2 - CELL_SIZE
+    teachRight# = getCellX(CELL_COLUMN_COUNT - 1) - TEACH_TEXT_W / 2 + CELL_SIZE
+    teachMiddle# = (getCellX(0) + getCellX(CELL_COLUMN_COUNT - 1)) / 2
+    if teachLeft# > teachRight#
+        teachX# = teachMiddle#
+    else
+        if teachX# < teachLeft# then teachX# = teachLeft#
+        if teachX# > teachRight# then teachX# = teachRight#
+    endif
+    teachTop# = getCellY(0)
+    if teachY# < teachTop# then teachY# = teachTop#
+
+    ` a new moment starts with the light where it happened, and its color
+    if TEACH_SHOWING = 0
+        teachClearLines()
+        TEACH_SHOWING = 1
+        TEACH_SPOT_X# = teachX#
+        TEACH_SPOT_Y# = teachY#
+        teachColorOf(teachShowKind, teachNow)
+        TEACH_TINT_R# = TEACH_COLOR_R#
+        TEACH_TINT_G# = TEACH_COLOR_G#
+        TEACH_TINT_B# = TEACH_COLOR_B#
+    endif
+    TEACH_SETTLED_MS = -1
+
+    teachLine = TEACH_LINE_COUNT
+    TEACH_LINE_COUNT = TEACH_LINE_COUNT + 1
+    TEACH_LINE_KIND(teachLine) = teachShowKind
+    TEACH_LINE_LEVEL(teachLine) = teachShowLvl
+    TEACH_LINE_AT(teachLine) = teachAt
+    TEACH_LINE_PUNCH(teachLine) = -1
+    TEACH_LINE_TIMES(teachLine) = 1
+    TEACH_LINE_BUBBLED(teachLine) = 0
+    TEACH_LINE_X#(teachLine) = teachX#
+    TEACH_LINE_Y#(teachLine) = teachY#
+
+    ` the words stay where it happened while the pops wait for them, then burst into bubbles. they are
+    ` gone by the time the hold is over, so that the words of the next moment have the spot to themselves.
+    teachHeld = TEACH_PEND_HOLD(teachShowKind)
+    teachSlide = teachHeld - TEACH_BURST_MS
+    if teachSlide < TEACH_WORDS_MS then teachSlide = TEACH_WORDS_MS
+    TEACH_LINE_SLIDE(teachLine) = teachAt + teachSlide
+    teachHeldEnd = teachAt + teachHeld
+    if teachHeldEnd > TEACH_HOLD_END_MS then TEACH_HOLD_END_MS = teachHeldEnd
+    teachReady = teachAt + teachSlide
+    teachReady = teachReady + TEACH_BURST_MS
+    if teachReady > TEACH_READY_MS then TEACH_READY_MS = teachReady
+
+    teachLineText = TEACH_LINE_TEXT(teachLine)
+    set text loc teachLineText, TEACH_KEY$(teachShowKind)
+    set text position teachLineText, teachX#, teachY#
+    if TEACH_COLOR(teachShowKind) <> 0
+        color text teachLineText, TEACH_COLOR(teachShowKind)
+    endif
+    hide text teachLineText
+endfunction
+
+` the fish in this cell jumps while the pops wait for the moment it is in. see THE SPOTLIGHT.
+function teachPulseCell(teachPulseCellAt, teachPulseFrom, teachPulseUntil)
+    if teachPulseCellAt < 0 then exitfunction
+    if teachPulseCellAt >= TEACH_PULSE_ROOM then exitfunction
+    TEACH_PULSE_NEXT(teachPulseCellAt) = teachPulseFrom
+    TEACH_PULSE_END(teachPulseCellAt) = teachPulseUntil
+    TEACH_PULSING = 1
+endfunction
+
+` when the fish of a moment that is about to be shown start and stop jumping
+function teachPulseTimes(teachTimesKind)
+    teachTimesNow = game ms()
+    TEACH_PULSE_FROM = teachTimesNow + TEACH_PEND_AT(teachTimesKind)
+    teachTimesHold = TEACH_PEND_HOLD(teachTimesKind)
+    if teachTimesHold < TEACH_PULSE_GAP then teachTimesHold = TEACH_PULSE_GAP
+    TEACH_PULSE_UNTIL = TEACH_PULSE_FROM + teachTimesHold
+endfunction
+
+` the same, at the middle of the cells of a group, and every fish of the group jumps
+function teachShowGroup(teachShowGroupKind, teachGroup)
+    if TEACH_PEND_LEVEL(teachShowGroupKind) = TEACH_OFF then exitfunction
+    teachPulseTimes(teachShowGroupKind)
+    teachGroupJumps = 1
+    if TEACH_PEND_LEVEL(teachShowGroupKind) = TEACH_AGAIN then teachGroupJumps = 0
+    teachSumX = 0
+    teachSumY = 0
+    teachCount = 0
+    for teachGroupI = 0 to CELL_COUNT - 1
+        if CELLS(teachGroupI).comboFillId = teachGroup
+            teachSumX = teachSumX + CELLS(teachGroupI).coord.x
+            teachSumY = teachSumY + CELLS(teachGroupI).coord.y
+            teachCount = teachCount + 1
+            if teachGroupJumps
+                teachPulseCell(teachGroupI, TEACH_PULSE_FROM, TEACH_PULSE_UNTIL)
+            endif
+        endif
+    next
+    if teachCount = 0 then teachCount = 1
+    teachMidX# = teachSumX
+    teachMidY# = teachSumY
+    teachMidX# = teachMidX# / teachCount
+    teachMidY# = teachMidY# / teachCount
+    teachGroupX# = getCellX(0) + teachMidX# * CELL_SIZE
+    teachGroupY# = getCellY(0) + teachMidY# * CELL_SIZE - CELL_SIZE * 3 / 2
+    teachShow(teachShowGroupKind, teachGroupX#, teachGroupY#)
+endfunction
+
+` the same, over the cursor, and the fish under it jumps
+function teachShowCursor(teachShowCursorKind)
+    if TEACH_PEND_LEVEL(teachShowCursorKind) = TEACH_OFF then exitfunction
+    if TEACH_PEND_LEVEL(teachShowCursorKind) <> TEACH_AGAIN
+        teachPulseTimes(teachShowCursorKind)
+        teachCursorCell = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+        teachPulseCell(teachCursorCell, TEACH_PULSE_FROM, TEACH_PULSE_UNTIL)
+    endif
+    teachCursorX# = getCellX(SELECTION_POS.x)
+    teachCursorY# = getCellY(SELECTION_POS.y) - CELL_SIZE * 3 / 2
+    teachShow(teachShowCursorKind, teachCursorX#, teachCursorY#)
+endfunction
+
+` handle_combos has judged the look. a claim that did not come to anything is dropped: whatever it was
+` did not happen. nothing was held up for it, because a look that pops nothing is not animated.
+function teachLookJudged()
+    for teachJudgedI = 0 to TEACH_KINDS - 1
+        TEACH_PEND_LEVEL(teachJudgedI) = TEACH_OFF
+    next
+    TEACH_LOOK_NEW = 0
+endfunction
+
+` 1 while the pops are being held for a moment. new moves wait in the queue until it is over.
+function teachHolding()
+    teachHold = 0
+    if TEACH_SHOWING
+        teachHoldNow = game ms()
+        if teachHoldNow < TEACH_HOLD_END_MS then teachHold = 1
+    endif
+endfunction teachHold
+
+` how big the words of a moment are, where it happened
+function teachBigH(teachBigLvl)
+    teachBigHeight = TEACH_TEXT_WORDS_H
+    if teachBigLvl = TEACH_FULL then teachBigHeight = TEACH_TEXT_FULL_H
+    if teachBigLvl = TEACH_SHORT then teachBigHeight = TEACH_TEXT_SHORT_H
+endfunction teachBigHeight
+
+` the color of a moment, from 0 to 1, in TEACH_COLOR_R#, TEACH_COLOR_G# and TEACH_COLOR_B#. the rainbow
+` ones go through the colors of the rainbow, and `teachHueSeed` moves them along.
+function teachColorOf(teachColorKind, teachHueSeed)
+    teachColorRgb = TEACH_COLOR(teachColorKind)
+    if teachColorRgb = 0
+        teachHue# = teachHueSeed * .004
+        TEACH_COLOR_R# = .75 + .25 * sin(teachHue#)
+        TEACH_COLOR_G# = .75 + .25 * sin(teachHue# + 2.1)
+        TEACH_COLOR_B# = .75 + .25 * sin(teachHue# + 4.2)
+        exitfunction
+    endif
+    TEACH_COLOR_R# = TEACH_COLOR_PART#(teachColorKind * 3)
+    TEACH_COLOR_G# = TEACH_COLOR_PART#(teachColorKind * 3 + 1)
+    TEACH_COLOR_B# = TEACH_COLOR_PART#(teachColorKind * 3 + 2)
+endfunction
+
+` every frame: the words pop up, sit, and slide into the list; the screen knocks; the light follows the
+` moments, in their colors; the corners stay dark for the whole moment; and once the board has settled
+` and everything has been read, the list folds into the score of the run, which flies up into the bar.
+function teachStep()
+    teachStepNow = game ms()
+    teachDarkWant# = 0
+    teachShakeWant# = 0
+    teachSpotWantX# = TEACH_SPOT_X#
+    teachSpotWantY# = TEACH_SPOT_Y#
+
+    if TEACH_SHOWING
+        ` the board has settled. the moment is over once the last words have burst.
+        if TEACH_SETTLED_MS < 0
+            if REQUEST_COMBO_CHECK = 0 then TEACH_SETTLED_MS = teachStepNow
+        endif
+        if TEACH_FADE_MS < 0
+            if TEACH_SETTLED_MS >= 0
+                teachFadeAt = TEACH_READY_MS + TEACH_READ_MS
+                if teachFadeAt < TEACH_SETTLED_MS then teachFadeAt = TEACH_SETTLED_MS
+                if teachStepNow >= teachFadeAt then TEACH_FADE_MS = teachFadeAt
+            endif
+        endif
+    endif
+
+    ` and then the dark lifts, and that is the end of it
+    if TEACH_SHOWING
+        if TEACH_FADE_MS >= 0
+            teachOverAt = TEACH_FADE_MS + TEACH_DARK_OUT_MS
+            if teachStepNow >= teachOverAt
+                teachClearLines()
+                TEACH_SHOWING = 0
+            endif
+        endif
+    endif
+
+    if TEACH_SHOWING
+        if TEACH_LINE_COUNT > 0
+            teachSpotAt = -1
+            for teachStepI = 0 to TEACH_LINE_COUNT - 1
+                teachStepLine(teachStepI, teachStepNow)
+                if teachStepNow >= TEACH_LINE_AT(teachStepI)
+                    ` how dark the lines that are up want the corners
+                    if TEACH_FADE_MS < 0
+                        teachLineDark# = 0
+                        if TEACH_LINE_LEVEL(teachStepI) = TEACH_FULL then teachLineDark# = TEACH_DARK_FULL#
+                        if TEACH_LINE_LEVEL(teachStepI) = TEACH_SHORT then teachLineDark# = TEACH_DARK_SHORT#
+                        if teachLineDark# > teachDarkWant# then teachDarkWant# = teachLineDark#
+                    endif
+                    ` and how hard a knock
+                    teachKnockAge = teachStepNow - TEACH_LINE_AT(teachStepI)
+                    if teachKnockAge < TEACH_SHAKE_MS
+                        teachKnock# = 0
+                        if TEACH_LINE_LEVEL(teachStepI) = TEACH_FULL then teachKnock# = TEACH_SHAKE_FULL#
+                        if TEACH_LINE_LEVEL(teachStepI) = TEACH_SHORT then teachKnock# = TEACH_SHAKE_SHORT#
+                        teachKnockLeft# = TEACH_SHAKE_MS - teachKnockAge
+                        teachKnockMs# = TEACH_SHAKE_MS
+                        teachKnock# = teachKnock# * teachKnockLeft# / teachKnockMs#
+                        if teachKnock# > teachShakeWant# then teachShakeWant# = teachKnock#
+                    endif
+                    ` the light goes to the newest moment that has come up
+                    if TEACH_LINE_AT(teachStepI) > teachSpotAt
+                        teachSpotAt = TEACH_LINE_AT(teachStepI)
+                        teachSpotLine = teachStepI
+                    endif
+                endif
+            next
+
+            ` it sits on where that moment happened, and stays there once its words are gone, until the
+            ` next one comes up
+            if TEACH_FADE_MS < 0
+                if teachSpotAt >= 0
+                    teachSpotWantX# = TEACH_LINE_X#(teachSpotLine)
+                    teachSpotWantY# = TEACH_LINE_Y#(teachSpotLine) + CELL_SIZE
+                    teachColorOf(TEACH_LINE_KIND(teachSpotLine), teachStepNow)
+                endif
+            endif
+        endif
+    endif
+
+    ` the fish of a moment jump while the pops wait for it
+    if TEACH_PULSING
+        teachPulseAny = 0
+        teachPulseLast = CELL_COUNT - 1
+        if teachPulseLast >= TEACH_PULSE_ROOM then teachPulseLast = TEACH_PULSE_ROOM - 1
+        for teachPulseI = 0 to teachPulseLast
+            if TEACH_PULSE_END(teachPulseI) > 0
+                teachPulseAny = 1
+                if teachStepNow >= TEACH_PULSE_NEXT(teachPulseI)
+                    create basic tween CELLS(teachPulseI).scaleWaveTweenId, 1.35, 1, 420, 0
+                    set tween easing CELLS(teachPulseI).scaleWaveTweenId, EASING_BOUNCE
+                    TEACH_PULSE_NEXT(teachPulseI) = TEACH_PULSE_NEXT(teachPulseI) + TEACH_PULSE_GAP
+                    if TEACH_PULSE_NEXT(teachPulseI) >= TEACH_PULSE_END(teachPulseI) then TEACH_PULSE_END(teachPulseI) = 0
+                endif
+            endif
+        next
+        if teachPulseAny = 0 then TEACH_PULSING = 0
+    endif
+
+    ` the knock of the words that have just come up. the pops have knocks of their own, and are left alone
+    ` once this one is over.
+    if teachShakeWant# > 0
+        set screen shake amount teachShakeWant#
+        set screen shake bounce .5
+        TEACH_SHAKING = 1
+    else
+        if TEACH_SHAKING
+            TEACH_SHAKING = 0
+            set screen shake amount 0
+        endif
+    endif
+
+    ` the corners get dark, and stay dark, and get light again, at their own pace. the light and the color
+    ` follow along, a little behind.
+    teachStepMs = teachStepNow - TEACH_VIGNETTE_MS
+    TEACH_VIGNETTE_MS = teachStepNow
+    if teachStepMs < 0 then teachStepMs = 0
+    if teachStepMs > 100 then teachStepMs = 100
+    teachStepMs# = teachStepMs
+    if teachDarkWant# > TEACH_VIGNETTE#
+        teachInMs# = TEACH_DARK_IN_MS
+        TEACH_VIGNETTE# = TEACH_VIGNETTE# + teachStepMs# / teachInMs#
+        if TEACH_VIGNETTE# > teachDarkWant# then TEACH_VIGNETTE# = teachDarkWant#
+    else
+        teachOutMs2# = TEACH_DARK_OUT_MS
+        TEACH_VIGNETTE# = TEACH_VIGNETTE# - teachStepMs# / teachOutMs2#
+        if TEACH_VIGNETTE# < teachDarkWant# then TEACH_VIGNETTE# = teachDarkWant#
+    endif
+    teachEaseMs# = TEACH_SPOT_EASE_MS
+    teachEase# = teachStepMs# / teachEaseMs#
+    if teachEase# > 1 then teachEase# = 1
+    TEACH_SPOT_X# = TEACH_SPOT_X# + (teachSpotWantX# - TEACH_SPOT_X#) * teachEase#
+    TEACH_SPOT_Y# = TEACH_SPOT_Y# + (teachSpotWantY# - TEACH_SPOT_Y#) * teachEase#
+    if TEACH_SHOWING
+        if TEACH_FADE_MS < 0
+            TEACH_TINT_R# = TEACH_TINT_R# + (TEACH_COLOR_R# - TEACH_TINT_R#) * teachEase#
+            TEACH_TINT_G# = TEACH_TINT_G# + (TEACH_COLOR_G# - TEACH_TINT_G#) * teachEase#
+            TEACH_TINT_B# = TEACH_TINT_B# + (TEACH_COLOR_B# - TEACH_TINT_B#) * teachEase#
+        endif
+    endif
+    teachStepCorners()
+endfunction
+
+` one line of the moment, on this frame. its words pop up where it happened, sit there while the pops wait
+` for them, and then burst into bubbles.
+function teachStepLine(teachL, teachLNow)
+    teachLText = TEACH_LINE_TEXT(teachL)
+    teachLAge = teachLNow - TEACH_LINE_AT(teachL)
+    teachLBurstAge = teachLNow - TEACH_LINE_SLIDE(teachL)
+    if teachLAge < 0
+        hide text teachLText
+        exitfunction
+    endif
+    if teachLBurstAge >= TEACH_BURST_MS
+        hide text teachLText
+        exitfunction
+    endif
+
+    teachLBig# = teachBigH(TEACH_LINE_LEVEL(teachL))
+    teachLX# = TEACH_LINE_X#(teachL)
+    teachLY# = TEACH_LINE_Y#(teachL)
+    teachLH# = teachLBig#
+    teachLW# = TEACH_TEXT_W
+    teachLTurn# = sin(teachLAge * .006) * .04
+
+    ` the words pop up a little too big, and settle
+    if teachLAge < TEACH_POP_MS
+        teachLAgeF# = teachLAge
+        teachLPopMs# = TEACH_POP_MS
+        teachLP# = teachLAgeF# / teachLPopMs#
+        teachLScale# = 1
+        if teachLP# < .6
+            teachLScale# = teachLP# / .6 * 1.25
+        else
+            teachLScale# = 1.25 - (teachLP# - .6) / .4 * .25
+        endif
+        if teachLScale# < .1 then teachLScale# = .1
+        teachLH# = teachLH# * teachLScale#
+        teachLW# = teachLW# * teachLScale#
+    endif
+
+    ` the same thing again, in the same moment, and the words jump
+    teachLPunch = TEACH_LINE_PUNCH(teachL)
+    if teachLPunch >= 0
+        teachLPunchAge = teachLNow - teachLPunch
+        if teachLPunchAge >= 0
+            if teachLPunchAge < TEACH_PUNCH_MS
+                teachLPunchLeft# = TEACH_PUNCH_MS - teachLPunchAge
+                teachLPunchMs# = TEACH_PUNCH_MS
+                teachLJump# = 1 + .4 * teachLPunchLeft# / teachLPunchMs#
+                teachLH# = teachLH# * teachLJump#
+                teachLW# = teachLW# * teachLJump#
+            endif
+        endif
+    endif
+
+    ` and then they burst into bubbles: they swell a little, and are gone
+    teachLAlpha = 255
+    if teachLBurstAge >= 0
+        if TEACH_LINE_BUBBLED(teachL) = 0
+            TEACH_LINE_BUBBLED(teachL) = 1
+            teachBubbleWords(teachL, teachLNow)
+        endif
+        teachLBurstF# = teachLBurstAge
+        teachLBurstMs# = TEACH_BURST_MS
+        teachLBp# = teachLBurstF# / teachLBurstMs#
+        teachLH# = teachLH# * (1 + .3 * teachLBp#)
+        teachLW# = teachLW# * (1 + .3 * teachLBp#)
+        teachLAlpha = 255 - 255 * teachLBp#
+    endif
+
+    show text teachLText
+    set text alpha teachLText, teachLAlpha
+    size text max teachLText, teachLW#, teachLH#
+    rotate text teachLText, teachLTurn#
+    set text position teachLText, teachLX#, teachLY#
+
+    ` the rainbow ones go through the colors of the rainbow
+    if TEACH_COLOR(TEACH_LINE_KIND(teachL)) = 0
+        teachLHue# = teachLNow * .004 + teachL
+        teachLR = 190 + 65 * sin(teachLHue#)
+        teachLG = 190 + 65 * sin(teachLHue# + 2.1)
+        teachLB = 190 + 65 * sin(teachLHue# + 4.2)
+        color text teachLText, rgb(teachLR, teachLG, teachLB)
+    endif
+endfunction
+
+` the words of a line burst into bubbles, all the way along them, in their color
+function teachBubbleWords(teachBubL, teachBubNow)
+    teachBubText = TEACH_LINE_TEXT(teachBubL)
+    teachBubW# = get text size x(teachBubText)
+    teachBubH# = get text size y(teachBubText)
+    teachBubKind = TEACH_LINE_KIND(teachBubL)
+    for teachBubI = 0 to TEACH_BUBBLE_PUFFS - 1
+        teachBubAlong# = teachBubI
+        teachBubAlong# = (teachBubAlong# + .5) / TEACH_BUBBLE_PUFFS
+        teachBubX = TEACH_LINE_X#(teachBubL) - teachBubW# / 2 + teachBubW# * teachBubAlong#
+        teachBubY = TEACH_LINE_Y#(teachBubL)
+        teachBubColor = TEACH_COLOR(teachBubKind)
+        if teachBubColor = 0
+            teachBubHue# = teachBubNow * .004 + teachBubI * .9
+            teachBubR = 190 + 65 * sin(teachBubHue#)
+            teachBubG = 190 + 65 * sin(teachBubHue# + 2.1)
+            teachBubB = 190 + 65 * sin(teachBubHue# + 4.2)
+            teachBubColor = rgb(teachBubR, teachBubG, teachBubB)
+        endif
+        spawnBubbles(teachBubX, teachBubY, teachBubH# / 2, 4, teachBubI * 12, teachBubColor)
+    next
+endfunction
+
+` tell the screen effect how dark the corners are, where the light is, and the color of the dark. never in
+` a menu. handle_combos waits in loops of its own, which never get back to the main loop, so teachStep
+` does this too, and not only applyScreenWater.
+function teachStepCorners()
+    teachCorners# = TEACH_VIGNETTE#
+    if MENU_MODE <> MENU_MODE_CLOSED then teachCorners# = 0
+    set effect param float 1, "Vignette", teachCorners#
+    teachSpotU# = TEACH_SPOT_X# / WORLD_WIDTH
+    teachSpotV# = TEACH_SPOT_Y# / WORLD_HEIGHT
+    set effect param float2 1, "VignetteAt", teachSpotU#, teachSpotV#
+    set effect param float3 1, "VignetteTint", TEACH_TINT_R#, TEACH_TINT_G#, TEACH_TINT_B#
+endfunction
+
+
+` NEW IN THE CODEC. see fish_headers_teach.
+
+` an entry has just been unlocked, so it is new until it is looked at
+function codecMarkNew(codecNewEntry)
+    if DEMO_MODE then exitfunction
+    if codecNewEntry < 0 then exitfunction
+    if codecNewEntry > 127 then exitfunction
+    CODEC_NEW(codecNewEntry) = 1
+    set pref CODEC_NEW_PREF + codecNewEntry, 1
+    codecNewRecount()
+endfunction
+
+` and it has been looked at
+function codecMarkRead(codecReadEntry)
+    if codecReadEntry < 0 then exitfunction
+    if codecReadEntry > 127 then exitfunction
+    if CODEC_NEW(codecReadEntry) = 0 then exitfunction
+    CODEC_NEW(codecReadEntry) = 0
+    set pref CODEC_NEW_PREF + codecReadEntry, 0
+    codecNewRecount()
+endfunction
+
+` how many entries are new, and which comes first in the codec
+function codecNewRecount()
+    CODEC_NEW_COUNT = 0
+    CODEC_FIRST_NEW = -1
+    codecCountLast = CODEC_COUNT - 1
+    if codecCountLast > 127 then codecCountLast = 127
+    for codecCountI = 0 to codecCountLast
+        if CODEC_NEW(codecCountI)
+            if CODEC_SEEN(codecCountI)
+                CODEC_NEW_COUNT = CODEC_NEW_COUNT + 1
+                if CODEC_FIRST_NEW < 0 then CODEC_FIRST_NEW = codecCountI
+            endif
+        endif
+    next
+endfunction
+
+` the codec is opening. it goes straight to the first new entry, if there is one.
+function codecGoToNew()
+    if CODEC_FIRST_NEW < 0 then exitfunction
+    CODEC_SELECTED = CODEC_FIRST_NEW
+    CODEC_ON_LIST = 0
+endfunction
+
+` info mode is opening. the spot says whether there is something new.
+function codecSpotRefresh()
+    if INFO_INDEX_CODEC < 0 then exitfunction
+    INFOS(INFO_INDEX_CODEC).title$ = loc$("info.codec.title")
+    if CODEC_NEW_COUNT > 0
+        ` and under that, what is new, by name, one to a line, in the order that the codec has them.
+        ` after CODEC_NEW_LIST_MAX of them, only how many more there are.
+        cspDesc$ = loc$("info.codec.descnew")
+        cspListed = 0
+        for cspI = 0 to CODEC_ORDER_COUNT - 1
+            cspEntry = CODEC_ORDER(cspI)
+            cspNew = 0
+            if cspEntry <= 127
+                if CODEC_NEW(cspEntry)
+                    if CODEC_SEEN(cspEntry) then cspNew = 1
+                endif
+            endif
+            if cspNew
+                if cspListed < CODEC_NEW_LIST_MAX
+                    cspName$ = codecEntryName(cspEntry)
+                    cspDesc$ = cspDesc$ + chr$(10) + loc$("info.codec.newitem", "name", cspName$)
+                endif
+                cspListed = cspListed + 1
+            endif
+        next
+        if cspListed > CODEC_NEW_LIST_MAX
+            cspMore = cspListed - CODEC_NEW_LIST_MAX
+            cspDesc$ = cspDesc$ + chr$(10) + loc$("info.codec.newmore", "count", cspMore)
+        endif
+        INFOS(INFO_INDEX_CODEC).desc$ = cspDesc$
+    else
+        INFOS(INFO_INDEX_CODEC).desc$ = loc$("info.codec.desc")
+    endif
+endfunction
+
+` how far the badges are bumped on this frame: a bob, and a jump every so often. it leaves how far up or
+` down in CODEC_BUMP_Y#, and how far they turn in CODEC_BUMP_TURN#.
+function codecBump(codecBumpNow)
+    codecBumpNowF# = codecBumpNow
+    codecBump# = sin(codecBumpNowF# * .008) * 1.2
+    codecBumpPhase = codecBumpNow mod CODEC_BUMP_GAP
+    if codecBumpPhase < 320
+        codecBumpPhaseF# = codecBumpPhase
+        codecBump# = codecBump# - sin(codecBumpPhaseF# / 320.0 * 3.14159) * 5
+    endif
+    CODEC_BUMP_TURN# = 0
+    if codecBumpPhase < 480
+        codecBumpTurnF# = codecBumpPhase
+        CODEC_BUMP_TURN# = sin(codecBumpTurnF# * .04) * .18 * (1 - codecBumpTurnF# / 480.0)
+    endif
+    CODEC_BUMP_Y# = codecBump#
+endfunction
+
+` every frame: the badge over the key hint, and the spot of info mode with its badge
+function codecNewStep()
+    codecStepNow = game ms()
+    codecBump(codecStepNow)
+    codecStepY# = CODEC_BUMP_Y#
+
+    ` over the key hint for info mode, while it is there, and while there is something new
+    codecHintAlpha# = 0
+    if CODEC_NEW_COUNT > 0
+        if INFO_MODE = 0
+            if DEMO_MODE = 0
+                codecHintAlpha# = HINT_PART_ALPHA#(2) * 255 / HINT_PART_SHOWN_ALPHA
+            endif
+        endif
+    endif
+    if codecHintAlpha# > 255 then codecHintAlpha# = 255
+
+    ` THE BADGE ON THE KEY HINT. see fish_headers_teach. something new since the last frame starts the dance.
+    ` what was new before the game started is only the badge.
+    if CODEC_BADGE_KNOWN < 0
+        CODEC_BADGE_KNOWN = CODEC_NEW_COUNT
+        if CODEC_NEW_COUNT > 0 then CODEC_BADGE_MODE = CODEC_BADGE_DOT
+    endif
+    if CODEC_NEW_COUNT > CODEC_BADGE_KNOWN
+        CODEC_BADGE_MODE = CODEC_BADGE_DANCE
+        CODEC_BADGE_FROM_MS = codecStepNow
+        CODEC_BADGE_HOP = -1
+    endif
+    CODEC_BADGE_KNOWN = CODEC_NEW_COUNT
+    if CODEC_NEW_COUNT = 0 then CODEC_BADGE_MODE = CODEC_BADGE_NONE
+
+    ` where the words dance: on the same line, just after "info". the hint is anchored by its bottom left
+    ` corner. and where the badge sits: just after "info" too, up at the top of the line.
+    codecHintText = HINT_PART_TEXTS(2)
+    codecHintRight# = text x(codecHintText) + get text size x(codecHintText)
+    codecHintTop# = text y(codecHintText) - get text size y(codecHintText)
+    codecHintX# = codecHintRight# + get text size x(CODEC_HINT_BADGE_ID) / 2 + 5
+    codecHintY# = text y(codecHintText) - get text size y(codecHintText) / 2
+    codecDotX# = codecHintRight# + 5
+    codecDotY# = codecHintTop# + 4
+    codecBubX = codecHintX# `the bubbles are placed in whole pixels
+    codecBubY = codecHintY#
+    codecDotBubX = codecDotX#
+    codecDotBubY = codecDotY#
+    codecBadgeAge = codecStepNow - CODEC_BADGE_FROM_MS
+    codecBadgeAgeF# = codecBadgeAge
+    codecSeen = 0
+    if codecHintAlpha# >= 8 then codecSeen = 1
+
+    ` the dance is over, so the words set off for the corner of the key
+    if CODEC_BADGE_MODE = CODEC_BADGE_DANCE
+        if codecBadgeAge >= CODEC_DANCE_MS
+            CODEC_BADGE_MODE = CODEC_BADGE_FLY
+            CODEC_BADGE_FROM_MS = codecStepNow
+            CODEC_BADGE_FLY_X# = codecHintX#
+            CODEC_BADGE_FLY_Y# = codecHintY# + codecStepY# * .25
+            codecBadgeAgeF# = 0
+        endif
+    endif
+
+    if CODEC_BADGE_MODE = CODEC_BADGE_DANCE
+        hide sprite CODEC_BADGE_DOT_ID
+        if codecSeen = 0
+            hide text CODEC_HINT_BADGE_ID
+        else
+            ` it pops up, only a touch too big at first, and settles
+            codecPopSpan# = 260
+            codecPop# = codecBadgeAgeF# / codecPopSpan#
+            if codecPop# > 1 then codecPop# = 1
+            codecPopSize# = codecPop# + .12 * sin(codecPop# * 3.14159)
+            if codecPopSize# < .1 then codecPopSize# = .1
+            size text max CODEC_HINT_BADGE_ID, 80 * codecPopSize#, 13 * codecPopSize#
+
+            ` a small puff of bubbles when it shows up, and a bubble or two every other time that it jumps
+            codecHop = codecBadgeAge / CODEC_BUMP_GAP
+            if CODEC_BADGE_HOP < 0
+                spawnBubbles(codecBubX, codecBubY, 10, 5, 0, rgb(255, 222, 96))
+                CODEC_BADGE_HOP = codecHop
+            endif
+            if codecHop > CODEC_BADGE_HOP
+                CODEC_BADGE_HOP = codecHop
+                if codecHop mod 2 = 0
+                    spawnBubbles(codecBubX, codecBubY, 6, 2, 0, rgb(255, 222, 96))
+                endif
+            endif
+
+            ` it bobs and tilts much less than the badge on the spot of info mode does
+            set text position CODEC_HINT_BADGE_ID, codecHintX#, codecHintY# + codecStepY# * .25
+            rotate text CODEC_HINT_BADGE_ID, CODEC_BUMP_TURN# * .35
+            set text alpha CODEC_HINT_BADGE_ID, codecHintAlpha#
+            show text CODEC_HINT_BADGE_ID
+        endif
+    endif
+
+    ` the words shrink as they fly to the corner of the key, and turn into the badge when they get there
+    if CODEC_BADGE_MODE = CODEC_BADGE_FLY
+        hide sprite CODEC_BADGE_DOT_ID
+        codecFlySpan# = CODEC_FLY_MS
+        codecFly# = codecBadgeAgeF# / codecFlySpan#
+        if codecFly# >= 1
+            CODEC_BADGE_MODE = CODEC_BADGE_DOT
+            hide text CODEC_HINT_BADGE_ID
+            size text max CODEC_HINT_BADGE_ID, 80, 13
+            if codecSeen
+                spawnBubbles(codecDotBubX, codecDotBubY, 6, 5, 0, rgb(255, 222, 96))
+            endif
+        else
+            codecFlyEase# = codecFly# * codecFly# * (3 - 2 * codecFly#)
+            codecFlySize# = 1 - codecFlyEase# * .9
+            size text max CODEC_HINT_BADGE_ID, 80 * codecFlySize#, 13 * codecFlySize#
+            codecFlyX# = CODEC_BADGE_FLY_X# + (codecDotX# - CODEC_BADGE_FLY_X#) * codecFlyEase#
+            codecFlyY# = CODEC_BADGE_FLY_Y# + (codecDotY# - CODEC_BADGE_FLY_Y#) * codecFlyEase#
+            set text position CODEC_HINT_BADGE_ID, codecFlyX#, codecFlyY#
+            rotate text CODEC_HINT_BADGE_ID, codecFlyEase# * .3
+            set text alpha CODEC_HINT_BADGE_ID, codecHintAlpha#
+            if codecSeen
+                show text CODEC_HINT_BADGE_ID
+            else
+                hide text CODEC_HINT_BADGE_ID
+            endif
+        endif
+    endif
+
+    ` the badge: a little diamond that pulses, on the corner of the key
+    if CODEC_BADGE_MODE = CODEC_BADGE_DOT
+        hide text CODEC_HINT_BADGE_ID
+        if codecSeen
+            codecNowF# = codecStepNow
+            codecDotSize# = CODEC_DOT_SIZE + sin(codecNowF# * .0025) * .5
+            size sprite CODEC_BADGE_DOT_ID, codecDotSize#, codecDotSize#
+            rotate sprite CODEC_BADGE_DOT_ID, .785
+            position sprite CODEC_BADGE_DOT_ID, codecDotX#, codecDotY#
+            set sprite alpha CODEC_BADGE_DOT_ID, codecHintAlpha#
+            show sprite CODEC_BADGE_DOT_ID
+        else
+            hide sprite CODEC_BADGE_DOT_ID
+        endif
+    endif
+
+    if CODEC_BADGE_MODE = CODEC_BADGE_NONE
+        hide text CODEC_HINT_BADGE_ID
+        hide sprite CODEC_BADGE_DOT_ID
+    endif
+
+    ` the spot of info mode comes and goes with info mode
+    codecInfoAlpha# = tweenVal(INFO_FADE_TWEEN_ID) * 255
+    if codecInfoAlpha# < 8
+        hide text CODEC_SPOT_TEXT_ID
+        hide text CODEC_SPOT_BADGE_ID
+        exitfunction
+    endif
+    codecSpotColor = rgb(150, 190, 255)
+    if INFO_SELECTED = INFO_INDEX_CODEC then codecSpotColor = rgb(255, 255, 255)
+    color text CODEC_SPOT_TEXT_ID, codecSpotColor
+    set text alpha CODEC_SPOT_TEXT_ID, codecInfoAlpha#
+    show text CODEC_SPOT_TEXT_ID
+    if CODEC_NEW_COUNT > 0
+        set text position CODEC_SPOT_BADGE_ID, CODEC_SPOT_X + CODEC_SPOT_W - 10, CODEC_SPOT_Y + codecStepY#
+        rotate text CODEC_SPOT_BADGE_ID, CODEC_BUMP_TURN# + .12
+        set text alpha CODEC_SPOT_BADGE_ID, codecInfoAlpha#
+        show text CODEC_SPOT_BADGE_ID
+    else
+        hide text CODEC_SPOT_BADGE_ID
+    endif
+endfunction
+
+` the dots on the tiles of the new entries, on the page of the codec that is showing. frame_codec does this.
+function codecNewDots()
+    codecDotNow = game ms()
+    codecBump(codecDotNow)
+    codecDotY# = CODEC_BUMP_Y# * .5
+    codecDotPage = CODEC_CAT_AT / CODEC_PAGE_SIZE
+    for codecDotI = 0 to CODEC_PAGE_SIZE - 1
+        codecDotEntry = CODEC_COUNT
+        codecDotAt = codecDotPage * CODEC_PAGE_SIZE + codecDotI
+        if codecDotAt < CODEC_CAT_SIZE(CODEC_CAT)
+            codecDotEntry = CODEC_ORDER(CODEC_CAT_FIRST(CODEC_CAT) + codecDotAt)
+        endif
+        codecDotOn = 0
+        if codecDotEntry < CODEC_COUNT
+            if codecDotEntry <= 127
+                if CODEC_NEW(codecDotEntry)
+                    if CODEC_SEEN(codecDotEntry) then codecDotOn = 1
+                endif
+            endif
+        endif
+        if codecDotOn
+            position sprite CODEC_NEW_DOTS(codecDotI), getCodecTileX(codecDotI) + 11, getCodecTileY(codecDotI) - 11 + codecDotY#
+            show sprite CODEC_NEW_DOTS(codecDotI)
+        else
+            hide sprite CODEC_NEW_DOTS(codecDotI)
+        endif
+    next
+endfunction
+
+function codecNewDotsHide()
+    for codecHideI = 0 to CODEC_PAGE_SIZE - 1
+        hide sprite CODEC_NEW_DOTS(codecHideI)
+    next
+endfunction

@@ -84,6 +84,11 @@
 
         <MonoGamePlatform>DesktopGL</MonoGamePlatform>
         <FadeGenerateMain>false</FadeGenerateMain>
+        <!-- The game is also compiled to C# (FadeBasic's C# backend) and runs that by default;
+             FADE_BACKEND=vm at run time picks the bytecode VM from the same build. The Fade
+             debugger and F2 module reload only work on the VM. -p:FadeBackend=VM leaves the
+             C# out entirely. -->
+        <FadeBackend Condition="'$(FadeBackend)'==''">CSharp</FadeBackend>
 <!--        <FadeUseMtpRunner>True</FadeUseMtpRunner>-->
     </PropertyGroup>
 
@@ -393,6 +398,9 @@
         <FadeSource Include="fish_headers_entrance.fbasic" />
         <FadeSource Include="fish_headers_demo.fbasic" />
         <FadeSource Include="fish_headers_rainbow.fbasic" />
+        <FadeSource Include="fish_headers_mouse.fbasic" />
+        <FadeSource Include="fish_headers_boardinfo.fbasic" />
+        <FadeSource Include="fish_headers_teach.fbasic" />
         <FadeSource Include="fish.fbasic" />
 
         <FadeSource Include="fish_routines_ability.fbasic" />
@@ -405,7 +413,10 @@
         <FadeSource Include="fish_routines.fbasic" />
         <FadeSource Include="fish_routines_customart.fbasic" />
         <FadeSource Include="fish_routines_entrance.fbasic" />
+        <FadeSource Include="fish_routines_atlas.fbasic" />
         <FadeSource Include="fish_routines_input.fbasic" />
+        <FadeSource Include="fish_routines_mouse.fbasic" />
+        <FadeSource Include="fish_routines_boardinfo.fbasic" />
         <FadeSource Include="fish_routines_fast.fbasic" />
         <FadeSource Include="fish_routines_seed.fbasic" />
         <FadeSource Include="fish_routines_menu.fbasic" />
@@ -439,12 +450,16 @@
         <FadeSource Include="fish_quests.fbasic" />
         <FadeSource Include="fish_routines_demo.fbasic" />
         <FadeSource Include="fish_routines_rainbow.fbasic" />
+        <FadeSource Include="fish_routines_teach.fbasic" />
 
 
         <FadeSource Include="fish_funcs.fbasic" />
         <FadeSource Include="fish_types.fbasic" />
         <FadeSource Include="fish_tests.fbasic" />
         <FadeSource Include="fish_tests_tuna.fbasic" />
+        <FadeSource Include="fish_tests_keys.fbasic" />
+        <FadeSource Include="fish_tests_mouse.fbasic" />
+        <FadeSource Include="fish_tests_boardinfo.fbasic" />
         <FadeSource Include="fish_tests_morse.fbasic" />
         <FadeSource Include="fish_tests_cameo.fbasic" />
         <FadeSource Include="fish_tests_beat.fbasic" />
@@ -469,6 +484,9 @@
         <FadeSource Include="fish_tests_loc.fbasic" />
         <FadeSource Include="fish_tests_demo.fbasic" />
         <FadeSource Include="fish_tests_rainbow.fbasic" />
+        <FadeSource Include="fish_tests_tutorial.fbasic" />
+        <FadeSource Include="fish_tests_codecfish.fbasic" />
+        <FadeSource Include="fish_tests_teach.fbasic" />
         <!-- <FadeSource Include="game.fbasic" /> -->
     </ItemGroup>
     <!-- A shipped game has no tests in it. FadeBasic 0.2.6.1 compiles `test` blocks into the

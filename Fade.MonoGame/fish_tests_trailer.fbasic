@@ -326,6 +326,16 @@ abstract test trailerShot
         next
     endfunction
 
+    ` how much of the schools out there shows, from 1 (all of it) to 0. once a fish is all the way out,
+    ` stepFlock leaves its alpha alone, so this holds. a fish has to have been drawn once first.
+    function trailerSchoolsFade(tTrShow#)
+        for tTrSlot = 0 to FLOCK_MAX - 1
+            if FLOCK_ON(tTrSlot)
+                set sprite alpha FLOCK_SPRITES(tTrSlot), FLOCK_ALPHA * tTrShow#
+            endif
+        next
+    endfunction
+
     ` add a word to the title. trailerTitleLayout puts them in a row once they are all there.
     function trailerWord(tTrText$)
         trailerWordOn(tTrText$, 0)
@@ -1295,15 +1305,6 @@ test trailer_first_pop from trailerShot
     tS1BoxY# = tS1BoxY# - tS1H# / 2
     set record view tS1BoxX#, tS1BoxY#, tS1W#, tS1H#
 
-    ` schools out in the water behind: two that cross the close up, above and below the row, and one far
-    ` off to the left that the close up only shows as it eases back out. the board is all hidden until
-    ` shot 3, so they may swim where it is until then.
-    tS1PullGrid = FLOCK_PULL_GRID
-    FLOCK_PULL_GRID = 0
-    trailerSchool(TEX_GOLDFISH, 7, tS1BoxX# + 20, tS1BoxY# + 8, 1)
-    trailerSchool(TEX_CATFISH, 6, tS1BoxX# + 140, tS1BoxY# + 86, -1)
-    trailerSchool(TEX_ANGELFISH, 6, 40, 50, 1)
-
     trailerRecord("trailer_first_pop")
     ` the three rise and fade in, one after another
     for tS1F = 0 to 80
@@ -1365,6 +1366,19 @@ test trailer_first_pop from trailerShot
     trailerWordSub("great.", 1, 28)
     trailerTitleLayout(WORLD_HEIGHT / 2)
     trailerLineWait(1, 40)
+    ` schools out in the water behind, none of them there for the pop of shot 1: two that cross the close
+    ` up, above and below the row, and one far off to the left that only shows as it eases back out. they
+    ` fade in as the close up eases out. the board is all hidden until shot 3, so they may swim where it
+    ` is until then. a frame goes by first, so that stepFlock has drawn them, and leaves their alpha alone.
+    tS1PullGrid = FLOCK_PULL_GRID
+    FLOCK_PULL_GRID = 0
+    trailerSchool(TEX_GOLDFISH, 7, tS1BoxX# + 20, tS1BoxY# + 8, 1)
+    trailerSchool(TEX_CATFISH, 6, tS1BoxX# + 140, tS1BoxY# + 86, -1)
+    trailerSchool(TEX_ANGELFISH, 6, 40, 50, 1)
+    hintShow(0)
+    trailerHideBut(-1, -1, -1, -1)
+    runto update_frame
+    trailerSchoolsFade(0)
     trailerRecord("trailer_where_do_fish_live")
     for tS1F = 0 to 320
         hintShow(0)
@@ -1374,10 +1388,16 @@ test trailer_first_pop from trailerShot
         tS1Out# = 1 - tS1Out# / 70.0
         trailerZoom(tS1Out#, tS1BoxX#, tS1BoxY#, tS1W#, tS1H#)
         trailerRiseTitle(tS1F - 65, 14, 1)
+        if tS1F <= 75
+            tS1In# = tS1F - 15
+            tS1In# = tS1In# / 60.0
+            if tS1In# < 0 then tS1In# = 0
+            trailerSchoolsFade(tS1In#)
+        endif
         runto update_frame
     next
     clear record view
-    ` the words fade away
+    ` the words fade away. the schools stay, for the combo of shot 3.
     for tS1F = 0 to 24
         tS1A# = tS1F
         tS1A# = 1 - tS1A# / 24.0
@@ -1389,7 +1409,6 @@ test trailer_first_pop from trailerShot
     for tS1N = 0 to TR_WORD_COUNT - 1
         hide text TR_WORD(tS1N)
     next
-    ` the schools keep off of the board again, now that it is coming in
     FLOCK_PULL_GRID = tS1PullGrid
     ` SHOT 3, in the same video. the board of a game that is well along, on the same sea: of the boards
     ` that a few seeds deal, the one with the swap that pops the most, and that swap.

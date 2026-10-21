@@ -994,76 +994,20 @@ function coralRecount()
 endfunction
 
 
-` lay out the spots that info mode has over the board. while there is no coral, the spot that explains
-` the fish is the whole board. once there is some, the board is split down the middle: the left side
-` explains the fish, and the right side explains the coral. when there is horror coral too, the board is
-` split in three, and the horror coral has the part on the right. when all of the coral is horror coral,
-` it is back to two. they are side by side, and not one inside the other, so that the arrow keys can get
-` to all of them. resizeGrid calls this too, when the board changes size.
+` lay out the spots that info mode has over the board. the blob of the whole board is not shown any more,
+` but it still follows the board, for the angler. the coral, and the horror coral, each have an outline
+` of their own on one cell of it, the same as the other things on the board. see fish_headers_boardinfo.
+` resizeGrid calls this too, when the board changes size.
 function coralPlaceInfo()
     ` the cells are centered on their position, so the board starts half a cell early
-    coralInfoLeft = getCellX(0) - CELL_SIZE / 2
-    coralInfoTop = getCellY(0) - CELL_SIZE / 2
-
-    ` which kinds of coral there are. the spots for them are only made once the coral has been set up.
-    coralInfoHealthy = 0
-    coralInfoSick = 0
-    if INFO_INDEX_CORAL >= 0
-        if CORAL_COUNT > CORAL_SICK_COUNT then coralInfoHealthy = 1
-        if CORAL_SICK_COUNT > 0 then coralInfoSick = 1
-    endif
-    coralInfoParts = 1 + coralInfoHealthy + coralInfoSick
-
-    ` the fish come first, then the coral, then the horror coral. every split is on the edge of a cell,
-    ` and when the columns do not share out evenly, the parts on the left get the ones that are left over.
-    coralInfoFrom = 0
-    coralInfoPart = 1
-    coralInfoTo = (CELL_COLUMN_COUNT * coralInfoPart + coralInfoParts - 1) / coralInfoParts
-
     blob = INFOS(INFO_INDEX_GRID)
-    blob.topLeft.x = coralInfoLeft
-    blob.topLeft.y = coralInfoTop
-    blob.size.x = coralInfoTo * CELL_SIZE
+    blob.topLeft.x = getCellX(0) - CELL_SIZE / 2
+    blob.topLeft.y = getCellY(0) - CELL_SIZE / 2
+    blob.size.x = CELL_COLUMN_COUNT * CELL_SIZE
     blob.size.y = CELL_ROW_COUNT * CELL_SIZE
     INFOS(INFO_INDEX_GRID) = blob
 
-    if INFO_INDEX_CORAL >= 0
-        if coralInfoHealthy
-            coralInfoFrom = coralInfoTo
-            coralInfoPart = coralInfoPart + 1
-            coralInfoTo = (CELL_COLUMN_COUNT * coralInfoPart + coralInfoParts - 1) / coralInfoParts
-
-            blob = INFOS(INFO_INDEX_CORAL)
-            blob.title$ = loc$("coral.info")
-            blob.desc$ = loc$("coral.info.desc")
-            blob.topLeft.x = coralInfoLeft + coralInfoFrom * CELL_SIZE
-            blob.topLeft.y = coralInfoTop
-            blob.size.x = (coralInfoTo - coralInfoFrom) * CELL_SIZE
-            blob.size.y = CELL_ROW_COUNT * CELL_SIZE
-            blob.enabled = 1
-            INFOS(INFO_INDEX_CORAL) = blob
-        else
-            setInfoBlobEnabled(INFO_INDEX_CORAL, 0)
-        endif
-
-        if coralInfoSick
-            coralInfoFrom = coralInfoTo
-            coralInfoPart = coralInfoPart + 1
-            coralInfoTo = (CELL_COLUMN_COUNT * coralInfoPart + coralInfoParts - 1) / coralInfoParts
-
-            blob = INFOS(INFO_INDEX_CORAL_SICK)
-            blob.title$ = loc$("coral.horror")
-            blob.desc$ = loc$("coral.horror.desc")
-            blob.topLeft.x = coralInfoLeft + coralInfoFrom * CELL_SIZE
-            blob.topLeft.y = coralInfoTop
-            blob.size.x = (coralInfoTo - coralInfoFrom) * CELL_SIZE
-            blob.size.y = CELL_ROW_COUNT * CELL_SIZE
-            blob.enabled = 1
-            INFOS(INFO_INDEX_CORAL_SICK) = blob
-        else
-            setInfoBlobEnabled(INFO_INDEX_CORAL_SICK, 0)
-        endif
-    endif
+    boardInfoPlace()
 endfunction
 
 
@@ -1406,6 +1350,9 @@ function judgeCoralCast(coralComboCount)
 
             ` the music answers: praise for coral, and a lament for horror coral. see THE MUSIC OF THE CORAL in fish_headers.
             playCoralMusic(coralCastSick)
+
+            ` the first few times, the words come up over the end of the song. see THE BIG MOMENTS in fish_headers_teach.
+            teachShowCursor(TEACH_CORAL_SONG)
 
             ` a hint for it that was being drawn is for a pattern that is gone
             if CORAL_HINT_SLOT = coralCastSlot

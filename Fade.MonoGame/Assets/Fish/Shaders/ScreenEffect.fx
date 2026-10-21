@@ -95,6 +95,14 @@ float4 Cloud7;
 // x is how strong they are, from 0 to 1, and 0 when none is going, so that none of it is worked out.
 // y is how long one lasts, in seconds, and z is now, in seconds.
 float4 CloudLook;
+// THE RAINBOW FLOW. when a rainbow fish brings another, a ribbon of rainbow light flows from it to the cursor,
+// along a curve, in the ripples of light of the water, the same way that a cloud is. it has a bright head
+// and a tail that thins out behind it, and it wobbles as it goes. FlowEnds is where it sets off from (x and
+// y) and where it is going (z and w), in pixels of the game. FlowBend x and y is the point that the curve
+// bends toward, z is when it set off, in seconds on the clock of CloudLook.z, and w is how long it takes to
+// get there, in seconds, or 0 for none. see AND THEY BREED in fish_headers_rainbow.
+float4 FlowEnds;
+float4 FlowBend;
 
 // how thick a ring is, from the middle of it to either edge, and how far it pushes the picture at its
 // strongest. both are in pixels of the game. the push is small, because it is only meant to be felt.
@@ -105,6 +113,13 @@ float4 CloudLook;
 #define CLOUD_REACH 70.0
 #define CLOUD_WIDE  16.0
 #define CLOUD_LIGHT 1.3
+
+// THE RAINBOW FLOW: how much of the way along the curve its tail reaches back, how wide its head is, in
+// pixels of the game, how long its tail takes to fade once it has got there, in seconds, and how bright it is
+#define FLOW_TAIL  0.5
+#define FLOW_WIDE  7.0
+#define FLOW_FADE  0.35
+#define FLOW_LIGHT 1.4
 
 // THE SURGE: how wide its ring is, how hard it pushes, and how far its edge goes in and out, in pixels
 #define SURGE_WIDTH 24.0
@@ -124,7 +139,13 @@ float4 Wake;
 // how much of the wobble is taken away in the very middle of the patch, and how much of the ripples of
 // light. 1 is all of it, and 0 is none.
 #define WAKE_STILL 1.0
-#define WAKE_DIM 0.7
+
+// THE WATER MOTION OPTION. some players find the wobble too much, so the options page can turn it down.
+// x is how much of the wobble there is, and y how much of the push of the rings and the surge, from 0 to
+// 1. z is how much of the ripples of light the patch of calm water takes away: with less wobble there
+// is less calm to see, so it takes away more light to make up for it. see OPTION_WATER_MOTION in
+// fish_headers. the ripples of light themselves are left alone, because the rainbow is drawn in them.
+float4 Motion;
 
 // the water wobbles less over the coral, too. see CORAL in fish_headers. this is the same picture of
 // where the coral is that CoralEffect.fx is given: a white square for every cell of the board that has
@@ -150,6 +171,14 @@ float2 Cells;
 // they are all drawn in one blue, so this finds them by their color: anything that is that blue, and
 // bright, is lightened. 0 leaves them alone, and 1 is as light as they get.
 float HudGlow;
+
+// how much darker the corners are, while a big moment is being shown. 0 is as they always are, and 1 is
+// as dark as they get. see THE BIG MOMENTS in fish_headers_teach.
+float Vignette;
+// THE SPOTLIGHT. the dark also closes in around where the moment happened: VignetteAt is that spot, from
+// 0 to 1 across and down the screen. and the dark takes on the color of the moment, VignetteTint.
+float2 VignetteAt;
+float3 VignetteTint;
 #define HUD_BLUE float3(0.2182, 0.4364, 0.8729) // rgb(64, 128, 255), as a direction
 #define HUD_LIFT float3(0.42, 0.34, 0.0)        // what is added to it at the most
 
@@ -305,6 +334,59 @@ float3 rainbowClouds(float2 uv, float light)
     return saturate(hue * 0.9 + 0.25) * lit;
 }
 
+// THE RAINBOW FLOW. a point on its curve, from 0 where it sets off to 1 where it is going
+float2 flowPoint(float s)
+{
+    float u = 1.0 - s;
+    return u * u * FlowEnds.xy + 2.0 * u * s * FlowBend.xy + s * s * FlowEnds.zw;
+}
+
+// how much of the flow there is on this pixel, and in what color, for the ripples of light of the water,
+// which are `light` bright here. the tail is a few short straight pieces, so that it is one smooth ribbon.
+float3 rainbowFlow(float2 uv, float light)
+{
+    if (FlowBend.w <= 0.0)
+        return float3(0.0, 0.0, 0.0);
+    float age = CloudLook.z - FlowBend.z;
+    if (age < 0.0 || age > FlowBend.w + FLOW_FADE)
+        return float3(0.0, 0.0, 0.0);
+    float head = saturate(age / FlowBend.w);
+    float fade = saturate(1.0 - (age - FlowBend.w) / FLOW_FADE);
+    float2 px = floor(uv * max(Grid, 1.0));
+
+    float best = 0.0;
+    float bestS = 0.0;
+    float2 a = flowPoint(head);
+    for (int k = 1; k < 8; k++)
+    {
+        // from the head back along the tail
+        float backA = (k - 1) / 7.0;
+        float backB = k / 7.0;
+        float sB = max(head - backB * FLOW_TAIL, 0.0);
+        float2 b = flowPoint(sB);
+        float2 ab = b - a;
+        float h = saturate(dot(px - a, ab) / max(dot(ab, ab), 0.001));
+        float d = length(px - a - ab * h);
+        float back = lerp(backA, backB, h);
+        float s = head - back * FLOW_TAIL;
+        // thick at the head and thin at the end of the tail, and wobbling as it goes
+        float wide = FLOW_WIDE * (0.35 + 0.65 * (1.0 - back)) * (1.0 + 0.35 * sin(s * 30.0 - CloudLook.z * 9.0));
+        float one = saturate(1.0 - d / max(wide, 0.5)) * (1.0 - back) * step(0.0, s);
+        if (one > best)
+        {
+            best = one;
+            bestS = s;
+        }
+        a = b;
+    }
+    best *= fade;
+    float3 hue = 0.5 + 0.5 * cos(6.2832 * (bestS * 1.5 - CloudLook.z * 0.8 + float3(0.0, 0.33, 0.67)));
+    float checker = frac((px.x + px.y) * 0.5) * 2.0;
+    float lit = saturate(best * (0.55 + light));
+    lit = floor(lit * 6.0 + checker * 0.5) / 6.0;
+    return saturate(hue * 0.9 + 0.3) * lit;
+}
+
 // how calm the water is on this pixel, from 0 to 1. it is calmest in the middle of the patch, and it
 // goes back to how the water is everywhere else, smoothly, by the edge.
 float wake(float2 uv)
@@ -417,6 +499,9 @@ float2 uv = texCoord;
     float shade = qrShade(texCoord, result);
     p *= 1.0 - shade * QR_STILL;
 
+    // and as much of it as the player wants
+    p *= Motion.x;
+
     // how much of this pixel is under the water
     float water = lerp(Submerged, tex2D(MaskTextureSampler, uv).r, UseMask);
     water = lerp(water, step(0.012, underLine(uv)), WaterLine.w);
@@ -428,7 +513,7 @@ float2 uv = texCoord;
     float3 rings = ripple(ringUv, Ripple0) + ripple(ringUv, Ripple1) + ripple(ringUv, Ripple2) + ripple(ringUv, Ripple3)
                  + ripple(ringUv, Ripple4) + ripple(ringUv, Ripple5) + ripple(ringUv, Ripple6) + ripple(ringUv, Ripple7)
                  + surge(ringUv);
-    rings.xy *= 0.45 + 1.6 * result;
+    rings.xy *= (0.45 + 1.6 * result) * Motion.y;
 
     float2 texUv = uv + (p + rings.xy) * water;
     float4 tex = tex2D(SpriteTextureSampler, texUv);
@@ -444,7 +529,7 @@ float2 uv = texCoord;
     tex.rgb = lerp(tex.rgb, qrLit, shade);
 
     // the ripples of light fade out over the calm water too
-    float4 finalColor = float4(.45, 0.4, .8, 1.0) * result * 0.08 * water * (1.0 - calm * WAKE_DIM) + tex;
+    float4 finalColor = float4(.45, 0.4, .8, 1.0) * result * 0.08 * water * (1.0 - calm * Motion.z) + tex;
 
     // the crest of a ring catches a little light
     finalColor.rgb += float3(.35, .55, .7) * min(rings.z, 1.0) * 0.025 * water;
@@ -454,14 +539,24 @@ float2 uv = texCoord;
     float cloudWater = 1.0 - smoothstep(0.3, 0.6, max(tex.r, tex.g));
     finalColor.rgb += rainbowClouds(uv, result) * CLOUD_LIGHT * water * cloudWater;
 
+    // THE RAINBOW FLOW, the same way, though it shows a little over the fish too, so that it can be followed
+    finalColor.rgb += rainbowFlow(uv, result) * FLOW_LIGHT * water * max(cloudWater, 0.45);
+
     // the water gets darker and bluer toward the corners of the screen. it goes in steps, with a
     // checkerboard between one step and the next, on the pixels of the game.
     float2 cell = floor(uv * max(Grid, 1.0));
     float2 fromMiddle = ((cell + 0.5) / max(Grid, 1.0) - 0.5) * float2(2.3, 2.0);
+    // a big moment pulls the dark further in from the corners, and makes it darker. see THE BIG MOMENTS
+    // in fish_headers_teach.
     float corner = smoothstep(0.8, 1.6, length(fromMiddle));
+    // a big moment brings the dark in around where it happened, and the corners go darker too
+    float2 fromSpot = ((cell + 0.5) / max(Grid, 1.0) - VignetteAt) * float2(max(Grid.x, 1.0) / max(Grid.y, 1.0), 1.0);
+    float spot = smoothstep(0.14, 0.6, length(fromSpot)) * Vignette;
+    corner = max(corner, spot * 0.9);
     float checker = frac((cell.x + cell.y) * 0.5) * 2.0;
     corner = floor(corner * 12.0 + checker * 0.5) / 12.0;
-    finalColor.rgb *= lerp(float3(1.0, 1.0, 1.0), VIGNETTE_TINT, corner * water);
+    float3 darkTint = lerp(VIGNETTE_TINT, VignetteTint, 0.55 * Vignette) * (1.0 - 0.4 * Vignette);
+    finalColor.rgb *= lerp(float3(1.0, 1.0, 1.0), darkTint, corner * water);
 
    // finalColor.rg *= Example.rg;
     return finalColor;

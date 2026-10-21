@@ -26,6 +26,13 @@ remstart
     low for another, except by counting the rolls. see the stock market.
 remend
 
+` where the tests put the mouse, and whether its button went down. nobody's real mouse gets in. see THE MOUSE in fish_headers_mouse.
+global TEST_MOUSE_X = 100
+global TEST_MOUSE_Y = 100
+global TEST_MOUSE_CLICK = 0
+global TEST_ANY_INPUT = 0 `a key, as far as the mouse can tell. see mouseStep.
+global TEST_OVERLAY = 0 `the steam overlay, which is one way into the pause menu
+
 abstract test fishBoard
 
     ` go straight to the game, with no splash screen and no menu
@@ -48,11 +55,28 @@ abstract test fishBoard
     endmock 0
     mock new action down
     endmock 0
+    mock mouse x
+    endmock TEST_MOUSE_X
+    mock mouse y
+    endmock TEST_MOUSE_Y
+    mock new left click
+    endmock TEST_MOUSE_CLICK
+    mock new right click
+    endmock 0
+    mock window active
+    endmock 1
+    mock new any input
+    endmock TEST_ANY_INPUT
+    mock steam overlay open
+    endmock TEST_OVERLAY
 
     runto _loop
 
     ` the creatures that talk when a quest is taken stay quiet in the tests. see fish_headers_questtalk.
     QTALK_ENABLED = 0
+
+    ` and the big moments never hold up the pops. see fish_headers_teach.
+    TEACH_ENABLED = 0
 
     ` and there are no rainbow fish, unless a test makes some, so that no fish scores more than it should.
     ` see THE RAINBOW FISH in fish_headers_rainbow.
@@ -379,6 +403,83 @@ test think_bigger_four_pops from fishBoard
 
     assert totalComboCount = 1, "four fish are a group"
     assert CURRENT_SCORE = 100, "four fish score 10 + 20 + 30 + 40"
+    end
+endtest
+
+test think_bigger_swap_that_makes_three_is_let_off from fishBoard
+    grantPassive(ABILITY_INDEX_THINK_BIGGER)
+    SCORE_MULTIPLIER = 3
+    MULT_PROGRESS = 1
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 1, 6)
+
+    ` the fish under the cursor goes up, next to the other two
+    testCursor(2, 1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+
+    assert CELLS(testIndex(2, 0)).value = 6, "the swap put three fish together"
+    assert totalComboCount = 0, "and three are not enough to pop"
+    assert THINK_BIGGER_HELD_GROUPS > 0, "but they would have been without the card"
+    assert MULT_PROGRESS = 1, "so the bar is not emptied"
+    assert SCORE_MULTIPLIER = 3, "and the multiplier is not touched"
+    end
+endtest
+
+test think_bigger_swap_that_makes_two_is_a_miss from fishBoard
+    grantPassive(ABILITY_INDEX_THINK_BIGGER)
+    SCORE_MULTIPLIER = 3
+    MULT_PROGRESS = 1
+    testPut(1, 0, 6)
+    testPut(2, 1, 6)
+
+    testCursor(2, 1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+
+    assert CELLS(testIndex(2, 0)).value = 6, "the swap put two fish together"
+    assert THINK_BIGGER_HELD_GROUPS = 0, "which would not have popped anyway"
+    assert MULT_PROGRESS = 0, "so it is a miss, the same as without the card"
+    end
+endtest
+
+test think_bigger_three_left_on_the_board_do_not_let_off_another_swap from fishBoard
+    grantPassive(ABILITY_INDEX_THINK_BIGGER)
+    SCORE_MULTIPLIER = 3
+    MULT_PROGRESS = 1
+    ` three that are already sitting there, out of the way of the swap
+    testPut(0, 5, 7)
+    testPut(1, 5, 7)
+    testPut(2, 5, 7)
+    testPut(1, 0, 6)
+    testPut(2, 1, 6)
+
+    testCursor(2, 1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+
+    assert THINK_BIGGER_HELD_GROUPS = 0, "the three that sat there were not made by the swap"
+    assert MULT_PROGRESS = 0, "so the swap that made two is still a miss"
+    end
+endtest
+
+test think_bigger_without_the_card_lets_nothing_off from fishBoard
+    SCORE_MULTIPLIER = 3
+    MULT_PROGRESS = 1
+    testPut(1, 0, 6)
+    testPut(2, 1, 6)
+
+    testCursor(2, 1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+
+    assert THINK_BIGGER_HELD_GROUPS = 0, "nothing is held without the card"
+    assert MULT_PROGRESS = 0, "and a swap that makes two is a miss"
     end
 endtest
 
@@ -787,10 +888,9 @@ test known_fill_is_lost_when_nothing_pops from fishBoard
 endtest
 
 
-` THE MOVES THAT MAKE FISH
+` THE MOVES THAT POP FISH. see THE BOMB and LINE OUT in fish_headers.
 
 test bomb_in_the_corner_only_reaches_the_board from fishBoard
-    testPut(0, 0, 6)
     tAt as vec = { x = 0, y = 0 }
     tWay as vec = { x = 1, y = 0 }
 
@@ -798,14 +898,13 @@ test bomb_in_the_corner_only_reaches_the_board from fishBoard
     REQUEST_COMBO_CHECK = 1
     runto _combos_judged
 
-    assert totalComboCount = 1, "the fish that the bomb made are one group"
-    assert testPopCount() = 4, "a bomb in the corner only has four cells to fill"
+    assert totalComboCount = 1, "the fish that the bomb blew up are one group"
+    assert testPopCount() = 4, "a bomb in the corner only has four cells to reach"
     assert CURRENT_MOVE_COUNT = 1, "it counts as a move"
     end
 endtest
 
 test bomb_in_the_middle_pops_nine from fishBoard
-    testPut(4, 4, 6)
     tAt as vec = { x = 4, y = 4 }
     tWay as vec = { x = 1, y = 0 }
 
@@ -813,14 +912,76 @@ test bomb_in_the_middle_pops_nine from fishBoard
     REQUEST_COMBO_CHECK = 1
     runto _combos_judged
 
-    assert totalComboCount = 1, "the fish that the bomb made are one group"
+    assert totalComboCount = 1, "the fish that the bomb blew up are one group, of whatever kinds"
     assert testPopCount() = 9, "three rows of three"
     assert CURRENT_SCORE = 450, "nine fish score 10 + 20 + ... + 90"
     end
 endtest
 
-test line_out_sideways_pops_the_row from fishBoard
+test bomb_pops_out_from_the_middle from fishBoard
+    tAt as vec = { x = 4, y = 4 }
+    tWay as vec = { x = 1, y = 0 }
+
+    doBomb(tAt, tWay)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    tMiddle = STING_DELAY(testIndex(4, 4))
+    tSide = STING_DELAY(testIndex(4, 3))
+    tCorner = STING_DELAY(testIndex(3, 3))
+    assert tSide = tMiddle + BOMB_WAVE_MS, "the fish beside the middle pop one wave after it"
+    assert STING_DELAY(testIndex(5, 4)) = tSide, "all four of them at once"
+    assert tCorner = tSide + BOMB_WAVE_MS, "and the corners one wave after that"
+    assert STING_DELAY(testIndex(5, 5)) = tCorner, "all four of them at once too"
+    end
+endtest
+
+test bomb_copies_nothing from fishBoard
+    CELLS(testIndex(4, 4)).stack = 2
+    tCorner = CELLS(testIndex(3, 3)).value
+    tAt as vec = { x = 4, y = 4 }
+    tWay as vec = { x = 1, y = 0 }
+
+    doBomb(tAt, tWay)
+
+    assert CELLS(testIndex(3, 3)).value = tCorner, "the fish in the corner of the bomb is the kind that it was"
+    assert CELLS(testIndex(3, 3)).stack = 0, "and it has no stack"
+    assert CELLS(testIndex(4, 4)).stack = 2, "the fish in the middle keeps its own"
+    end
+endtest
+
+test bomb_copies_no_skeleton from fishBoard
+    CELLS(testIndex(4, 4)).bellyUp = 2
+    tAt as vec = { x = 4, y = 4 }
+    tWay as vec = { x = 1, y = 0 }
+
+    doBomb(tAt, tWay)
+
+    assert CELLS(testIndex(3, 3)).bellyUp = 0, "the fish in the corner of the bomb is not a skeleton"
+    assert CELLS(testIndex(5, 4)).bellyUp = 0, "and neither is the one next to the middle"
+    end
+endtest
+
+test bomb_leaves_the_diver from fishBoard
+    diverArrive(testIndex(5, 4))
+    tAt as vec = { x = 4, y = 4 }
+    tWay as vec = { x = 0, y = 1 }
+
+    doBomb(tAt, tWay)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert testPops(5, 4) = 0, "the diver does not pop"
+    assert testPopCount() = 8, "the other eight do"
+    assert CELLS(testIndex(5, 4)).value = TEX_DIVER, "and the diver is where it was"
+    end
+endtest
+
+test line_out_sideways_pops_its_kind_in_the_row from fishBoard
     testPut(4, 4, 6)
+    testPut(0, 4, 6)
+    testPut(CELL_COLUMN_COUNT - 1, 4, 6)
+    testPut(4, 3, 6)
     tAt as vec = { x = 4, y = 4 }
     tWay as vec = { x = 1, y = 0 }
 
@@ -828,15 +989,22 @@ test line_out_sideways_pops_the_row from fishBoard
     REQUEST_COMBO_CHECK = 1
     runto _combos_judged
 
-    assert testPopCount() = CELL_COLUMN_COUNT, "the whole row pops"
-    assert testPops(0, 4), "from one end"
-    assert testPops(CELL_COLUMN_COUNT - 1, 4), "to the other"
-    assert testPops(4, 3) = 0, "and not the row above it"
+    assert totalComboCount = 1, "the fish that it blew up are one group, though they are apart"
+    assert testPopCount() = 3, "every fish of the kind in the row pops"
+    assert testPops(4, 4), "the one under the cursor"
+    assert testPops(0, 4), "the one at one end"
+    assert testPops(CELL_COLUMN_COUNT - 1, 4), "and the one at the other"
+    assert testPops(1, 4) = 0, "but not a fish of another kind"
+    assert testPops(4, 3) = 0, "and not one of the kind in the row above"
+    assert CURRENT_MOVE_COUNT = 1, "it counts as a move"
     end
 endtest
 
-test line_out_up_or_down_pops_the_column from fishBoard
+test line_out_up_or_down_pops_its_kind_in_the_column from fishBoard
     testPut(4, 4, 6)
+    testPut(4, 0, 6)
+    testPut(4, CELL_ROW_COUNT - 1, 6)
+    testPut(3, 4, 6)
     tAt as vec = { x = 4, y = 4 }
     tWay as vec = { x = 0, y = 1 }
 
@@ -844,12 +1012,28 @@ test line_out_up_or_down_pops_the_column from fishBoard
     REQUEST_COMBO_CHECK = 1
     runto _combos_judged
 
-    assert testPopCount() = CELL_ROW_COUNT, "the whole column pops"
+    assert testPopCount() = 3, "every fish of the kind in the column pops"
     assert testPops(4, 0), "from the top"
     assert testPops(4, CELL_ROW_COUNT - 1), "to the bottom"
-    assert testPops(3, 4) = 0, "and not the column next to it"
+    assert testPops(3, 4) = 0, "and not the one in the column next to it"
     end
 endtest
+
+test line_out_copies_nothing from fishBoard
+    testPut(4, 4, 6)
+    CELLS(testIndex(4, 4)).stack = 2
+    tNext = CELLS(testIndex(5, 4)).value
+    tAt as vec = { x = 4, y = 4 }
+    tWay as vec = { x = 1, y = 0 }
+
+    doLineOut(tAt, tWay)
+
+    assert CELLS(testIndex(5, 4)).value = tNext, "the fish next to it is the kind that it was"
+    assert CELLS(testIndex(5, 4)).stack = 0, "and it has no stack"
+    end
+endtest
+
+` THE MOVES THAT MAKE FISH
 
 test clone_can_finish_a_group from fishBoard
     testPut(0, 0, 6)
@@ -1143,20 +1327,6 @@ test stacked_jelly_stings_twice from fishBoard
     end
 endtest
 
-test bomb_copies_the_stack from fishBoard
-    CELLS(testIndex(4, 4)).stack = 2
-    tAt as vec = { x = 4, y = 4 }
-    tWay as vec = { x = 1, y = 0 }
-
-    doBomb(tAt, tWay)
-
-    assert CELLS(testIndex(3, 3)).stack = 2, "the fish in the corner of the bomb has the stack too"
-    assert CELLS(testIndex(5, 4)).stack = 2, "and so does the one next to the middle"
-    assert CELLS(testIndex(4, 4)).stack = 2, "the fish in the middle keeps its own"
-    assert CELLS(testIndex(6, 4)).stack = 0, "a fish that the bomb did not reach has no stack"
-    end
-endtest
-
 test clone_copies_the_stack from fishBoard
     CELLS(1).stack = 2
     tAt as vec = { x = 1, y = 0 }
@@ -1444,8 +1614,10 @@ test coral_grows_where_a_pattern_was_walked from fishBoard
     assert CORAL_SEQ_CODE(0) <> 76, "which is not the same one"
     assert INFOS(INFO_INDEX_CORAL).enabled = 1, "and info mode has a spot for the coral now"
     assert CORAL_PRAISE_LAST >= 0, "the music answers with a phrase of praise"
-    assert INFOS(INFO_INDEX_GRID).size.x + INFOS(INFO_INDEX_CORAL).size.x = CELL_COLUMN_COUNT * CELL_SIZE, "the board is split between the fish and the coral"
-    assert INFOS(INFO_INDEX_CORAL).topLeft.x = INFOS(INFO_INDEX_GRID).topLeft.x + INFOS(INFO_INDEX_GRID).size.x, "side by side"
+    assert INFOS(INFO_INDEX_GRID).size.x = CELL_COLUMN_COUNT * CELL_SIZE, "the spot for the fish is still the whole board"
+    assert INFOS(INFO_INDEX_CORAL).size.x = CELL_SIZE, "and the coral has an outline of its own, on one cell. see fish_headers_boardinfo."
+    tCoralAt = BOARD_INFO_CELL(BOARD_INFO_CORAL)
+    assert CORAL_CELLS(tCoralAt) = 1, "a cell that has coral on it"
     end
 endtest
 
@@ -1477,7 +1649,9 @@ test coral_cast_with_a_belly_up_fish_is_horror_coral from fishBoard
     assert CORAL_SICK(testIndex(3, 4)) = 1, "and where it ended"
     assert INFOS(INFO_INDEX_CORAL_SICK).enabled = 1, "info mode has a spot for the horror coral"
     assert INFOS(INFO_INDEX_CORAL).enabled = 0, "and none for coral, because there is none that is well"
-    assert INFOS(INFO_INDEX_GRID).size.x + INFOS(INFO_INDEX_CORAL_SICK).size.x = CELL_COLUMN_COUNT * CELL_SIZE, "the board is split between the two"
+    assert INFOS(INFO_INDEX_GRID).size.x = CELL_COLUMN_COUNT * CELL_SIZE, "the spot for the fish is still the whole board"
+    tCoralAt = BOARD_INFO_CELL(BOARD_INFO_HORROR)
+    assert CORAL_SICK(tCoralAt) = 1, "and the outline of the horror coral is on a cell of it"
     end
 endtest
 
@@ -1697,19 +1871,6 @@ test skeleton_bottle_pays_double from fishBoard
     end
 endtest
 
-test bomb_copies_a_skeleton from fishBoard
-    CELLS(testIndex(4, 4)).bellyUp = 2
-    tAt as vec = { x = 4, y = 4 }
-    tWay as vec = { x = 1, y = 0 }
-
-    doBomb(tAt, tWay)
-
-    assert CELLS(testIndex(3, 3)).bellyUp = 2, "the fish in the corner of the bomb is a skeleton too"
-    assert CELLS(testIndex(5, 4)).bellyUp = 2, "and so is the one next to the middle"
-    assert CELLS(testIndex(6, 4)).bellyUp = 0, "a fish that the bomb did not reach is not"
-    end
-endtest
-
 test clone_copies_a_skeleton from fishBoard
     CELLS(1).bellyUp = 2
     tAt as vec = { x = 1, y = 0 }
@@ -1907,8 +2068,8 @@ test coral_cast_overwrites_the_kind_of_the_coral_it_crosses from fishBoard
     assert CORAL_SICK_COUNT = 1, "so there is one cell of it left"
     assert INFOS(INFO_INDEX_CORAL).enabled = 1, "info mode has a spot for the coral"
     assert INFOS(INFO_INDEX_CORAL_SICK).enabled = 1, "and one for the horror coral"
-    assert INFOS(INFO_INDEX_GRID).size.x + INFOS(INFO_INDEX_CORAL).size.x + INFOS(INFO_INDEX_CORAL_SICK).size.x = CELL_COLUMN_COUNT * CELL_SIZE, "the board is split between the three"
-    assert INFOS(INFO_INDEX_CORAL_SICK).topLeft.x = INFOS(INFO_INDEX_CORAL).topLeft.x + INFOS(INFO_INDEX_CORAL).size.x, "side by side"
+    assert INFOS(INFO_INDEX_GRID).size.x = CELL_COLUMN_COUNT * CELL_SIZE, "the spot for the fish is still the whole board"
+    assert BOARD_INFO_CELL(BOARD_INFO_CORAL) <> BOARD_INFO_CELL(BOARD_INFO_HORROR), "and the two kinds of coral have outlines on cells of their own"
     end
 endtest
 
@@ -2641,7 +2802,7 @@ endtest
 ` THE CODEC
 
 test codec_has_entries_for_coral_after_the_cards from fishBoard
-    assert CODEC_COUNT = CARD_LENGTH + 30 + QUEST_COUNT, "the usual ending, the call of the angler, the nine words that bring somebody swimming through, the night, and every card, coral, horror coral, the two endings, three special fish, four things that happen to a fish, the QR code, the crooked bar, the diver and its ending, and every quest"
+    assert CODEC_COUNT = CARD_LENGTH + 32 + QUEST_COUNT, "the usual ending, the call of the angler, the nine words that bring somebody swimming through, rainbow fish and schooling fish, the night, and every card, coral, horror coral, the two endings, three special fish, four things that happen to a fish, the QR code, the crooked bar, the diver and its ending, and every quest"
     assert CODEC_ENTRY_JELLY = CARD_LENGTH + 4, "the special fish come after the endings"
     assert CODEC_ENTRY_STACK = CARD_LENGTH + 9, "stacked comes after the other things that happen to a fish"
     assert CODEC_ENTRY_HOME = CARD_LENGTH + 10, "and heart home is last"

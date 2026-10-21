@@ -149,6 +149,23 @@ global dim ZAP_TO_Y(16)
 global dim ZAP_FLICKER(16) `which set of jogs each one is showing
 global dim ZAP_SPRITES(128)
 
+` THE BOMB. a special move that pops the fish under the cursor and the eight around it, as one group,
+` whatever kind they are. part of it can be off of the board, in a corner or along an edge. it used to
+` copy the fish under the cursor into all nine cells first, so a rainbow fish, a stack or a stingray
+` came out nine times over. it does not copy anything any more. the diver is left where it is.
+` doBomb, in fish_funcs, does it.
+` the pops go out from the middle of the bomb, in waves: the fish in the middle first, then the four
+` beside it, then the four in the corners, BOMB_WAVE_MS apart. handle_combos times them, from BOMB_AT.
+global BOMB_AT = 0 `the cell in the middle of the last bomb
+global BOMB_WAVE_MS = 90 `how long one wave of the pops waits after the one before it, in milliseconds
+
+` LINE OUT. a special move that pops every fish of the kind under the cursor in its row, when it is
+` pointed left or right, or in its column, when it is pointed up or down, as one group. a skeleton
+` is its kind, the way that it always is (see SKELETONS). it used to copy the fish under the cursor
+` along the whole line, which was a game ender with rainbow fish and stingrays, so it is a move that
+` reads the board now. on the diver it has no kind to look for, so it is not used. doLineOut, in
+` fish_funcs, does it.
+
 ` THE WASTE BUCKET. a special move that pops every belly up fish on the board at once, as one group,
 ` and they score WASTE_BUCKET_BONUS times as much. it never has to recharge, but it does count as a move.
 ` it takes every skeleton too. see SKELETONS.
@@ -167,6 +184,8 @@ global BUNCH_UP_COOLDOWN = 2 `this counts the move itself, so there is one move 
 ` 1 is a belly up fish that the cursor came to.
 global FORCE_BUCKET = 2 `the belly up fish of the waste bucket, which score more
 global FORCE_BUNCH = 3 `fish that are going into a stack. they go away without popping, and score nothing.
+global FORCE_BOMB = 5 `the fish that a bomb blew up. see THE BOMB.
+global FORCE_LINE_OUT = 6 `the fish of one kind that "line out" blew up. see LINE OUT.
 global FORCE_RAY = 10 `the fish above a stingray that popped. the column is added to this.
 global FORCE_BOTTLE = 40 `a bottle that paid out. the column is added to this too.
 global FORCE_RAY_DOWN = 70 `the fish below a belly up stingray that popped. the column is added to this too.
@@ -239,6 +258,14 @@ global MOVE_SLOTS_OPEN = 3
 
 ` which device the input icons were last set up for. -1 means that they have not been set up at all.
 global INPUT_ICON_DEVICE = -1
+
+` THE TWO HANDS OF THE KEYBOARD. the cursor moves with the arrow keys or with wasd, and both always
+` work. a player on the arrow keys has the left hand free, so the moves are z x c v b, and a player
+` on wasd has the right hand free, so the moves are y u i o p. both sets are always bound too. only
+` the icons change: they show the moves of whichever hand is free, for the direction keys pressed
+` last. 0 is the arrow keys, and 1 is wasd. see frame_input_icons.
+global INPUT_KEY_HANDS = 0
+global INPUT_KEY_HANDS_NEXT = 0
 
 ` STEAM'S PICTURES OF THE BUTTONS. the sheet in TEX_PAD is of an xbox controller. steam knows what
 ` the controller really is, and has pictures of the buttons of every kind that it knows. so the icons
@@ -335,6 +362,7 @@ global CURSOR_SHAKE_DIR_X = 0
 global CURSOR_SHAKE_DIR_Y = 0
 global CURSOR_SHAKE_SIZE = 4 `how far it goes, in pixels
 global CURSOR_SHAKE_TIME = 220 `how long it lasts, in milliseconds
+global CURSOR_SHAKE_AMOUNT = 4 `how far the shake that is going goes. the mouse's "no" goes further. see fish_headers_mouse.
 
 ` STACKS. a cell can hold more fish, stacked up behind the one that shows. the stack goes wherever the fish
 ` goes, and every fish in it scores when it pops. cards are the only way to get one.
@@ -526,6 +554,12 @@ global MULT_FIRST_REQUIRED = 2 `how many swaps in a row it takes to get from x1 
 global MULT_REQUIRED_STEP = 3 `and how many more it takes for every multiplier after that
 global MULT_PROGRESS = 0 `how many swaps in a row have popped something, since the bar was last empty
 global MULT_PENDING_SWAPS = 0 `swaps that have been made, that handle_combos has not looked at the board since
+` THINK BIGGER. with the card, a group needs 4 fish to pop. a swap that puts 3 together, which would have
+` popped without the card, is let off: the bar does not fill, and nothing is taken away. the 3 stay on the
+` board, to grow into something bigger, like a burst of the rainbow fish, or a school. thinkBiggerHeld, in
+` fish_routines_ability, counts them.
+global THINK_BIGGER_LET_OFF_SIZE = 3 `how many fish the swap has to put together to be let off
+global THINK_BIGGER_HELD_GROUPS = 0 `how many of the cells of the last swap are in a group that the card kept from popping. handle_combos counts them.
 global MULT_POS as vec = {
     x = 32,
     y = 60
@@ -850,7 +884,11 @@ global MENU_PAGE = 0
 #constant MENU_ITEM_GAME_SEED 24
 ` the language of the game, on the options page right under "Fullscreen". see OPTION_LANGUAGE.
 #constant MENU_ITEM_SET_LANGUAGE 25
-global MENU_ITEM_COUNT = 26
+` how much the water wobbles, on the options page right under the language. see OPTION_WATER_MOTION.
+#constant MENU_ITEM_SET_MOTION 26
+` and how slowly the big moments go, under the water motion. see THE BIG MOMENTS in fish_headers_teach.
+#constant MENU_ITEM_SET_POP_SPEED 27
+global MENU_ITEM_COUNT = 28
 global dim MENU_ITEMS(MENU_ITEM_COUNT) as menuItem
 
 global MENU_PAGE_FIRST = 0 `the first item on the page
@@ -982,6 +1020,25 @@ global OPTION_FULLSCREEN = 0
 ` order of the columns of the tables. applyLanguage in fish_routines_menu works it out.
 #constant PREF_LANGUAGE 17
 global OPTION_LANGUAGE = 0
+
+` THE WATER MOTION. the water of the whole screen wobbles all of the time, and the rings and the surge push
+` the picture as they pass. some players find that too much, so the options page has it at regular, low or
+` none. it only changes the look: the ripples of light are still there, and so is the rainbow in them. a
+` hint is a patch of calm water, and with less wobble there is less calm to see, so the patch takes away
+` more of the light instead. with none, a hint is harder to see. that is all right. see Motion in
+` ScreenEffect.fx. applyWaterMotion, in fish_routines_menu, tells the effect.
+#constant PREF_WATER_MOTION 18
+#constant WATER_MOTION_REGULAR 0
+#constant WATER_MOTION_LOW 1
+#constant WATER_MOTION_NONE 2
+global OPTION_WATER_MOTION = 0
+` how much of the wobble there is, how much of the push of the rings, and how much light a hint takes
+` away, for each setting. regular is how the game always was.
+global WATER_WOBBLE_LOW# = .35
+global WATER_RINGS_LOW# = .5
+global WATER_RINGS_NONE# = .3
+global WATER_HINT_DIM# = .7
+global WATER_HINT_DIM_CALMER# = 1
 
 ` how big the window was before the game filled the screen, so that it can go back to that size afterwards.
 ` the player sets the size of the window by dragging its edges.
@@ -1147,8 +1204,11 @@ global HISCORE_PREF = 3000
 
 ` THE FIRST DIVE. the very first game is a little tutorial: a few lines of text go by, and then the game
 ` comes in a piece at a time. the routines are in fish_routines_intro, and the top of that file explains it.
-` this pref is 1 once the tutorial has been started, so that it does not start by itself again
+` this pref is the INTRO_VERSION of the tutorial that was started last, so that it does not start by
+` itself again. it was 1 for the tutorial that came before the little boards.
 #constant PREF_INTRO_SEEN 7
+` raise this to show a new tutorial, once, to everyone who saw an older one
+global INTRO_VERSION = 2
 global INTRO_TEXT_ID
 global INTRO_DIM_SPRITE
 global ORDER_INTRO = 90 `on top of the board and the score text, and underneath the info screen
@@ -1157,11 +1217,46 @@ global INTRO_FADE_MS = 700 `how long a line takes to fade in, and to fade out
 global INTRO_DIM_ALPHA = 90 `how dark the water gets behind the lines, out of 255
 
 ` 0 when there is no tutorial. 1 while the lines of text are still to come, and everything is off of the
-` screen. 2 while the big info key is waiting to be pressed. 3 when the fish are in, and the next pop
-` brings in the moves and the multiplier. 4 when those are in, and the next pop brings in the bar of
-` the round and the rounds that are left.
+` screen. 2, 3 and 4 while the first, second and third of the little boards are being played. 5 while
+` the whole board is in, and the info key is waiting to be pressed. 6 while info mode is open. 7 while
+` the fish of the mystery, and the lines after it, are going.
 global TUTORIAL_STAGE = 0
 global TUTORIAL_SCORE_HOLD = 0 `1 while the fish that brought the bar in are still popping. they do not score.
+
+` THE LITTLE BOARDS. see the top of fish_routines_intro.
+global TUTORIAL_BOARD = 0 `1 while the board is one of the little boards
+global TUTORIAL_STEP_DONE = 0 `1 once the little board that is being played has popped, until the next one has come in
+global TUTORIAL_GROW_TO = 0 `the little board that tutorial_grow is to bring in: 1, 2 or 3
+global TUTORIAL_CAPTION_TEXT_ID `the words over a little board
+global TUTORIAL_CAPTION_TWEEN_ID `how much of the words can be seen, from 0 to 1
+global TUTORIAL_SUB_TEXT_ID `the line under a little board, about a swap that pops nothing
+global TUTORIAL_SUB_TWEEN_ID `how much of it can be seen, from 0 to 1
+global TUTORIAL_UPGRADE_TALK = 0 `1 in a game that had the tutorial, until the lines before its first upgrade screen have been said
+global TUTORIAL_LINES_SET = 0 `which lines tutorial_lines says
+global TUTORIAL_SHRINK_HUD = 0 `1 when tutorial_shrink_board takes the things around the board away too
+global TUTORIAL_WAIT_UNTIL = 0 `the game ms() that tutorial_wait draws frames until
+global TUTORIAL_QUIET_BUBBLES = 0 `1 while no floating bubbles are made, so that the lines of the tutorial have the water to themselves
+global INTRO_SUB_TEXT_ID `the smaller line under a line of tutorial_lines
+
+` the question marks that drift up around the fish of the mystery. see tutorialMarkSpawn in fish_routines_intro.
+global TUTORIAL_MARK_COUNT = 16
+global dim TUTORIAL_MARK_TEXTS(16)
+global dim TUTORIAL_MARK_BORN(16) `the game ms() that each one showed up, or 0 for one that is not up
+global dim TUTORIAL_MARK_X#(16) `where each one started
+global dim TUTORIAL_MARK_Y#(16)
+global TUTORIAL_MARK_NEXT = 0 `the one to use next. a new one takes the place of the oldest.
+global TUTORIAL_MARK_LIFE = 2400 `how long one is up for, in milliseconds
+global TUTORIAL_MARK_RISE = 44 `how far it drifts up in that time, in pixels
+global TUTORIAL_MARK_SWAY = 6 `and how far it sways from side to side on the way
+global dim TUTORIAL_KINDS(8) `the kind of fish for every digit of a row of a little board. see tutorialLayoutKind.
+global dim TUTORIAL_DEAL(400) `the fish that the game was dealt, which come back when the little boards are done
+global dim TUTORIAL_DEAL_FACE(400) `and the way that each of them faced. see FACING in fish_headers_school.
+global TUTORIAL_DEAL_SPAWNS = 0 `and how many fish had come in. see SCHOOL_SPAWNS.
+global dim TUTORIAL_RNG(6) `where the three streams of the seed were. see fish_headers_seed.
+global dim TUTORIAL_FACE_KEEP(400) `the way that the fish of a little board faced, while the next one comes in
+global dim TUTORIAL_SHOWN_KEEP#(400)
+global TUTORIAL_GROW_MS = 260 `how long the fish of a little board take to grow, or to shrink away, in milliseconds
+global TUTORIAL_GROW_STAGGER = 70 `how much later the fish of every ring around the board start than the ring inside it
 
 ` the hint for info mode is the first thing to show, on its own, where it always is. it waits to be pressed.
 global TUTORIAL_KEY_MS = 0 `when it showed up, or 0 when this is not going on
@@ -1178,6 +1273,7 @@ global HINT_SHAKE_MS = 220 `how long a shake lasts, in milliseconds
 global HINT_SHAKE_SIZE# = 2 `how far it goes to either side, in pixels
 global HINT_VISIBLE = 1 `0 while the hints are put away, which is while a menu is up
 global HINT_ONLY_INFO = 0 `1 while the hint for info mode is the only one of the three that shows, and it is bright
+global HINT_NO_INFO = 0 `1 while the hint for info mode is left out, which is while the little boards are played
 global dim HINT_PART_ALPHA#(3) `how see-through each one is now. they fade in and out, and this chases where it should be.
 global HINT_PART_SHOWN_ALPHA = 140 `how see-through they are when they are there, out of 255. it is the same as the text of the other screens.
 global HINT_FADE_MS# = 160 `how long one takes to fade all the way in, or out, in milliseconds
@@ -1371,10 +1467,18 @@ global CODEC_COUNT = 16 `how many entries there are: one for every card, and the
 ` and right before the usual ending, after the words, the call of the angler: HELP and INFO, which share an
 ` entry. see THE CALL in fish_headers_angler. it is remembered in the run of the words, as if it were the
 ` tenth of them, so a new word that brings somebody swimming through has to find a run of its own.
-global CODEC_EXTRA_COUNT = 30
+` and right after the night, before the words: rainbow fish and schooling fish, which came after the
+` words. they are seen on the board too: a rainbow fish once one is on a board that has settled, and a
+` school once one swims off. they have a run of preferences of their own, CODEC_PREF_FISH, and moving
+` them in here did not move the preferences of anything after them: those go by where their own run starts.
+global CODEC_EXTRA_COUNT = 32
 global CODEC_ENTRY_GOODBYE = -1
 global TEX_ENDING_GOODBYE `the picture that it has: a house. Tools/ending_home_gen.py draws it.
-global CODEC_EXTRA_PLAIN = 19 `how many of those come before the words that bring somebody swimming through
+global CODEC_EXTRA_PLAIN = 21 `how many of those come before the words that bring somebody swimming through
+global CODEC_EXTRA_FISH = 19 `which of them is the first of rainbow fish and schooling fish
+global CODEC_ENTRY_RAINBOW = -1
+global CODEC_ENTRY_SCHOOL = -1
+global TEX_CODEC_SCHOOL `the picture of schooling fish: an anchovy, a fish that schools
 global CODEC_ENTRY_CAMEO = -1 `the entry of the first of those words, once setup_codec has run
 global CODEC_ENTRY_CROOKED = -1
 global TEX_CROOKED `the picture that it has in the codec
@@ -1407,6 +1511,7 @@ global CODEC_PREF_CARD_ROOM = 32 `how many cards there is room for at CODEC_PREF
 global CODEC_PREF_LATE = 6000 `the cards after that are kept from here on, with room for a thousand. it was 2700 once, which is inside QUEST_PACK_PREF, so the two wrote over each other; what was seen there is forgotten. it must not move again.
 global CODEC_PREF_MORE = 40
 global CODEC_PREF_CAMEO = 2500 `and there is only room for ten there too. the words that bring somebody swimming through are kept from here on. it must not move.
+global CODEC_PREF_FISH = 2560 `and rainbow fish and schooling fish from here on, with room for ten. it must not move.
 
 ` where the codec goes on the screen
 global CODEC_COLUMNS = 8 `how many upgrades there are on a row of the grid

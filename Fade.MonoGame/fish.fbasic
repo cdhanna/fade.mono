@@ -68,6 +68,8 @@ global SCORE_FONT
 
 effect 1, "Fish/Shaders/ScreenEffect"
 set screen effect 1
+` the water moves as much as it always has, until setup_menu reads the option. see THE WATER MOTION.
+set effect param float4 1, "Motion", 1, 1, WATER_HINT_DIM#, 0
 
 ` the water runs on a picture three times the size of the game's, and that is stretched to the window.
 ` without this it runs once for every pixel of the window, which on a big screen is a great many more.
@@ -105,6 +107,7 @@ gosub setup_moves
 gosub setup_ability_selection
 gosub setup_move_equip
 gosub setup_quests `the spot that info mode has for the quest of the round has to be made before INFO_BASE_LENGTH is taken
+gosub setup_codec_spot `and the same goes for the spot that opens the codec. see NEW IN THE CODEC in fish_headers_teach.
 
 ` everything that can be explained in info mode from here on belongs to an upgrade, and goes away with a new game
 INFO_BASE_LENGTH = INFO_LENGTH
@@ -112,6 +115,7 @@ INFO_BASE_LENGTH = INFO_LENGTH
 gosub setup_intro
 gosub setup_seabed `before the menu, because the menu draws frames as soon as it is set up, and every frame moves the sea floor
 gosub setup_menu
+gosub setup_mouse `the mouse, for the menus. see THE MOUSE in fish_headers_mouse.
 gosub setup_upgrade_wipe `this uses the menu's effect, and the cards and rows of the upgrade screen
 gosub setup_book `the page of the upgrade screen that lays out every card. see THE BOOK in fish_headers_fast
 gosub setup_passive_drop `the page of the upgrade screen that drops a passive, which is drawn the same way
@@ -124,6 +128,7 @@ gosub setup_beat `these use the bubble effect too
 gosub setup_angler `on top of the dark of info mode, and after the hints that it puts its lights in
 gosub setup_questtalk `the creatures that talk when a quest is taken. it borrows the voices of the angler.
 gosub setup_demo `the game plays itself when the main menu is left alone. see THE DEMO in fish_headers_demo.
+gosub setup_teach `the first few times something big happens, the game slows down for it. see THE BIG MOMENTS in fish_headers_teach.
 
 
 
@@ -180,6 +185,7 @@ do
 
     ` show keys or controller buttons, depending on which one the player touched last
     gosub frame_input_icons
+    gosub frame_mouse `see THE MOUSE in fish_headers_mouse
 
     ` the bar under a steam recording of the game shows the menus in one color, and the game in another
     timelineMode = 1
@@ -197,10 +203,12 @@ do
 
     if MENU_MODE
         ` a menu is up, so the game waits underneath it.
+        gosub frame_mouse_menu
         gosub frame_menu
 
     else
         gosub frame_info_toggle
+        gosub frame_mouse_board
 
         if INFO_MODE
             ` handle info mode.
@@ -215,6 +223,7 @@ do
             gosub process_input
             perf lap 2
             gosub handle_combos
+            gosub tutorial_advance `the next little board of the tutorial, once one has popped. see THE LITTLE BOARDS in fish_routines_intro.
             perf lap 3
 
             ` the pause key brings up the pause menu. so does the steam overlay, when the player brings

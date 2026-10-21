@@ -1,0 +1,50 @@
+remstart
+    THE TESTS OF RAINBOW FISH AND SCHOOLING FISH IN THE CODEC, and of the names of the new entries
+    that info mode lists. see CODEC_EXTRA_FISH in fish_headers, and NEW IN THE CODEC in
+    fish_headers_teach. fish_tests says how the tests work.
+remend
+
+test codec_fish_entries_keep_every_other_preference from fishBoard
+    tCfRainbow = getCodecPref(CODEC_ENTRY_RAINBOW)
+    tCfSchool = getCodecPref(CODEC_ENTRY_SCHOOL)
+    assert tCfRainbow = CODEC_PREF_FISH, "rainbow fish has a run of preferences of its own"
+    assert tCfSchool = CODEC_PREF_FISH + 1, "and schooling fish is the next one"
+
+    ` what came before them, and what comes after them, is remembered where it always was
+    tCfNight = getCodecPref(CODEC_ENTRY_NIGHT)
+    assert tCfNight = CODEC_PREF_MORE + 9, "the night is where it was"
+    tCfWord = getCodecPref(CODEC_ENTRY_CAMEO)
+    assert tCfWord = CODEC_PREF_CAMEO, "the first word that brings somebody swimming through is where it was"
+    tCfCall = getCodecPref(CODEC_ENTRY_CALL)
+    assert tCfCall = CODEC_PREF_CAMEO + 9, "the call of the angler is where it was"
+    tCfQuest = getCodecPref(CODEC_ENTRY_QUEST)
+    assert tCfQuest = QUEST_PREF_SEEN + 1, "the first quest is where it was"
+    tCfHome = getCodecPref(CODEC_ENTRY_GOODBYE)
+    assert tCfHome = PREF_ENDING_HOME, "the usual ending is where it was"
+    end
+endtest
+
+test codec_rainbow_fish_is_seen_on_the_board from fishBoard
+    CODEC_SEEN(CODEC_ENTRY_RAINBOW) = 0
+    codecSeeBoard()
+    assert CODEC_SEEN(CODEC_ENTRY_RAINBOW) = 0, "a board with no rainbow fish does not unlock it"
+
+    RAINBOW_FISH(testIndex(2, 2)) = 1
+    codecSeeBoard()
+    assert CODEC_SEEN(CODEC_ENTRY_RAINBOW) = 1, "a rainbow fish on the board unlocks it"
+    assert CODEC_NEW(CODEC_ENTRY_RAINBOW) = 1, "and it is new"
+    RAINBOW_FISH(testIndex(2, 2)) = 0
+    end
+endtest
+
+test codec_every_entry_has_a_name_for_info_mode from fishBoard
+    tCfNameless = 0
+    tCfLast = CODEC_COUNT - 1
+    for tCfEntry = 0 to tCfLast
+        tCfName$ = codecEntryName(tCfEntry)
+        if tCfName$ = "" then tCfNameless = tCfNameless + 1
+    next
+    assert tCfNameless = 0, "every entry of the codec has a name that info mode can list"
+    assert CODEC_ORDER_COUNT = CODEC_COUNT, "and every entry is in a category"
+    end
+endtest

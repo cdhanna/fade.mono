@@ -1,0 +1,63 @@
+remstart
+    THE TESTS OF THE THINGS ON THE BOARD, IN INFO MODE
+    see fish_headers_boardinfo, and fish_tests for how the tests work. fishBoard deals a board of
+    plain fish, with nothing out of the way on it.
+remend
+
+test board_info_has_one_outline_for_each_kind from fishBoard
+    testCursor(0, 0)
+    CELLS(2).value = TEX_JELLY
+    CELLS(40).value = TEX_JELLY
+    CELLS(30).bellyUp = 1
+    CELLS(31).bellyUp = 1
+    boardInfoPlace()
+
+    assert BOARD_INFO_CELL(BOARD_INFO_JELLY) = 2, "the jellyfish nearest the cursor gets the outline"
+    tBiBlob = BOARD_INFO_BLOB(BOARD_INFO_JELLY)
+    assert INFOS(tBiBlob).enabled = 1, "and it shows"
+    assert INFOS(tBiBlob).size.x = CELL_SIZE, "on one cell"
+    assert BOARD_INFO_CELL(BOARD_INFO_BELLY) = 30, "one of the fish that are belly up gets one too"
+    assert BOARD_INFO_CELL(BOARD_INFO_RAINBOW) = -1, "there is no rainbow fish"
+    tBiBlob = BOARD_INFO_BLOB(BOARD_INFO_RAINBOW)
+    assert INFOS(tBiBlob).enabled = 0, "so it has no outline"
+
+    tBiFace = BOARD_INFO_CELL(BOARD_INFO_FACING)
+    assert tBiFace >= 0, "one fish gets an outline for the way that it faces"
+    assert tBiFace <> 2, "and not one that has another outline"
+    assert tBiFace <> 30, "of any kind"
+    assert INFOS(INFO_INDEX_GRID).enabled = 0, "and the board as a whole has no outline, as the tutorial has explained it"
+    end
+endtest
+
+test board_info_shares_a_cell_only_when_it_has_to from fishBoard
+    testCursor(0, 0)
+    RAINBOW_FISH_ON = 1
+    RAINBOW_FISH(40) = 1
+    CELLS(40).bellyUp = 1
+    boardInfoPlace()
+
+    assert BOARD_INFO_CELL(BOARD_INFO_RAINBOW) = 40, "the rainbow fish has the outline, as it is the rarer"
+    assert BOARD_INFO_CELL(BOARD_INFO_BELLY) = -1, "the only fish that is belly up is that one, so it has no outline of its own"
+    tBiBlob = BOARD_INFO_BLOB(BOARD_INFO_BELLY)
+    assert INFOS(tBiBlob).enabled = 0, "and none shows"
+    tBiBlob = BOARD_INFO_BLOB(BOARD_INFO_RAINBOW)
+    tBiAlone$ = loc$("info.board.rainbow.desc")
+    tBiSaid = 1
+    if INFOS(tBiBlob).desc$ = tBiAlone$ then tBiSaid = 0
+    assert tBiSaid = 1, "the outline of the rainbow fish says that it is belly up as well"
+    end
+endtest
+
+test board_info_is_under_the_mouse from fishBoard
+    testCursor(0, 0)
+    CELLS(40).value = TEX_RAY
+    boardInfoPlace()
+    INFO_MODE = 1
+    tBiBlob = BOARD_INFO_BLOB(BOARD_INFO_RAY)
+    TEST_MOUSE_X = INFOS(tBiBlob).topLeft.x + CELL_SIZE / 2
+    TEST_MOUSE_Y = INFOS(tBiBlob).topLeft.y + CELL_SIZE / 2
+    runto _loop
+    runto _loop
+    assert INFO_SELECTED = tBiBlob, "the mouse over the stingray picks its outline, and not the whole board"
+    end
+endtest

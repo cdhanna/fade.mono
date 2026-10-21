@@ -622,6 +622,8 @@ public partial class FadeMonoGameCommands
     public static int GetTextureWidth(int textureId)
     {
         TextureSystem.GetTextureIndex(textureId, out _, out var tex);
+        // a picture in an atlas is as big as its region, not as the whole page
+        if (tex.atlasPageId != 0) return TextureSystem.GetSourceRect(ref tex, 0).Width;
         return tex.texture.Width;
     }
 
@@ -666,7 +668,51 @@ public partial class FadeMonoGameCommands
     public static int GetTextureHeight(int textureId)
     {
         TextureSystem.GetTextureIndex(textureId, out _, out var tex);
+        if (tex.atlasPageId != 0) return TextureSystem.GetSourceRect(ref tex, 0).Height;
         return tex.texture.Height;
+    }
+
+    /// <summary>
+    /// <para>Says that the picture the game loads from <paramref name="path"/> is a rectangle of an
+    /// atlas page, and not a file of its own.</para>
+    /// </summary>
+    /// <remarks>
+    /// Load the page with <see cref="LoadTexture">texture</see> first, then register every picture in
+    /// it. From then on, loading one of those paths with <c>texture</c> gives a texture that draws only
+    /// its rectangle of the page, at the rectangle's size, so the code that loads it by its old path
+    /// does not change. <see cref="GetTextureWidth">texture width</see> and
+    /// <see cref="GetTextureHeight">texture height</see> give the rectangle's size.
+    ///
+    /// The path is matched without regard to case or to which way the slashes go. Register before the
+    /// pictures are loaded: a texture that was loaded already keeps its own file.
+    ///
+    /// An effect that works out its own texture coordinates, rather than using the ones the sprite
+    /// gives it, sees the whole page. Keep pictures drawn with such an effect out of the atlas.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// texture 50, "Atlas"
+    /// atlas region 50, "Cards/bomb", 8, 30, 48, 48
+    /// texture 1, "Cards/bomb"   ` this is the 48 x 48 rectangle of the atlas
+    /// sprite 1, 100, 100, 1
+    /// </code>
+    /// </example>
+    /// <param name="pageTextureId">The texture of the atlas page. It must be loaded already.</param>
+    /// <param name="path">The path that the picture would be loaded from on its own.</param>
+    /// <param name="x">The left of its rectangle on the page, in pixels.</param>
+    /// <param name="y">The top of its rectangle on the page, in pixels.</param>
+    /// <param name="width">The width of its rectangle, in pixels.</param>
+    /// <param name="height">The height of its rectangle, in pixels.</param>
+    /// <seealso cref="LoadTexture">texture</seealso>
+    /// <seealso cref="SetTextureFrameRect">set texture frame rect</seealso>
+    [FadeBasicCommand("atlas region")]
+    public static void AtlasRegion(int pageTextureId, string path, int x, int y, int width, int height)
+    {
+        TextureSystem.atlasRegions[TextureSystem.NormalizeAtlasPath(path)] = new TextureSystem.AtlasRegion
+        {
+            pageTextureId = pageTextureId,
+            rect = new Microsoft.Xna.Framework.Rectangle(x, y, width, height),
+        };
     }
 
     /// <summary>

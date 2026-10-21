@@ -423,11 +423,37 @@ equip_run:
         if new action down(ACT_DOWN) then equipDir = 1
         if new action down(ACT_UP) then equipDir = -1
 
+        ` the mouse. the outline follows it over the rows, or over the answers, and a click is the same
+        ` as the confirm key. see THE MOUSE in fish_headers_mouse.
+        equipMsAnswer = -1
+        if EQUIP_CONFIRMING
+            for equipMsI = 0 to 1
+                equipMsX = EQUIP_NO_X
+                if equipMsI = 1 then equipMsX = EQUIP_YES_X
+                equipMsX = equipMsX - EQUIP_OPTION_WIDTH / 2
+                equipMsY = getEquipRowY(EQUIP_SELECTED) - 2
+                equipMsOn = mouseHover(equipMsX, equipMsY, EQUIP_OPTION_WIDTH, EQUIP_ROW_HEIGHT + 4)
+                equipMsHit = mouseClick(equipMsX, equipMsY, EQUIP_OPTION_WIDTH, EQUIP_ROW_HEIGHT + 4)
+                if equipMsOn + equipMsHit > 0 then equipMsAnswer = equipMsI
+                if equipMsHit then equipPressConfirm = 1
+            next
+        else
+            equipMsLast = EQUIP_ROW_COUNT - 1
+            for equipMsI = 0 to equipMsLast
+                equipMsY = getEquipRowY(equipMsI)
+                equipMsOn = mouseHover(EQUIP_ROW_X, equipMsY, EQUIP_ROW_WIDTH, EQUIP_ROW_HEIGHT)
+                equipMsHit = mouseClick(EQUIP_ROW_X, equipMsY, EQUIP_ROW_WIDTH, EQUIP_ROW_HEIGHT)
+                if equipMsOn + equipMsHit > 0 then equipDir = equipMsI - EQUIP_SELECTED
+                if equipMsHit then equipPressConfirm = 1
+            next
+        endif
+
         if EQUIP_CONFIRMING
             ` the player is being asked if they are sure. the answers are side by side, and "yes" is the
             ` far one, so it takes a press of right to get to it. it cannot be picked by leaning on one button.
             if equipSide > 0 then EQUIP_CONFIRM_YES = 1
             if equipSide < 0 then EQUIP_CONFIRM_YES = 0
+            if equipMsAnswer >= 0 then EQUIP_CONFIRM_YES = equipMsAnswer
 
             equipAnswered = equipPressConfirm
 

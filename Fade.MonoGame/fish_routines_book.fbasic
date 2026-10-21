@@ -193,6 +193,7 @@ book_run:
 
     if BOOK_COUNT <= 0 then return
     showInfoBorder(ABILITY_CURSOR, 1)
+    mouseBackOn(TARGET_UPGRADE, ORDER_ABILITY_CARD) `see THE BUTTONS in fish_headers_mouse
 
     bookLeave = 0
     while bookLeave = 0
@@ -232,6 +233,19 @@ book_run:
                 endif
             endif
         endif
+
+        ` the mouse. the outline follows it over the tiles, and a click takes the card, the same as the
+        ` confirm key. see THE MOUSE in fish_headers_mouse.
+        bookMsPick = 0
+        for bookMsN = 0 to bookLastTile
+            bookMsX = getBookTileX(bookMsN) - 14
+            bookMsY = getBookTileY(bookMsN) - 14
+            bookMsOn = mouseHover(bookMsX, bookMsY, 28, 28)
+            bookMsHit = mouseClick(bookMsX, bookMsY, 28, 28)
+            if bookMsOn + bookMsHit > 0 then BOOK_SELECTED = bookMsN
+            if bookMsHit then bookMsPick = 1
+        next
+
         if BOOK_SELECTED <> bookWas
             ` the outline leaves some bubbles behind on the tile that it was around
             spawnWakeBubbles(getBookTileX(bookWas) - 14, getBookTileY(bookWas) - 14, 28, 28, 6, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
@@ -239,7 +253,11 @@ book_run:
         endif
 
         if new action down(ACT_PAUSE) then bookLeave = 1
-        if new action down(ACT_CONFIRM)
+        bookMsBack = mouseBackStep()
+        if bookMsBack then bookLeave = 1
+        bookTake = new action down(ACT_CONFIRM)
+        if bookMsPick then bookTake = 1
+        if bookTake
             BOOK_PICK = BOOK_CARDS(BOOK_SELECTED)
             bookLeave = 1
         endif
@@ -251,6 +269,7 @@ book_run:
 
     ` put the page away. when a card was taken, handle_ability_selection closes the rest of the
     ` screen after this, and the title stays until it does.
+    mouseBackOff()
     showInfoBorder(ABILITY_CURSOR, 0)
     create basic tween BOOK_FADE_TWEEN_ID, 1, 0, 200, 0
     if BOOK_PICK < 0

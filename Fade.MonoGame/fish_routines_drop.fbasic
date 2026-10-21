@@ -241,11 +241,37 @@ drop_run:
         if new action down(ACT_DOWN) then dropDir = 1
         if new action down(ACT_UP) then dropDir = -1
 
+        ` the mouse. the outline follows it over the rows, or over the answers, and a click is the same
+        ` as the confirm key. see THE MOUSE in fish_headers_mouse.
+        dropMsRow = -1
+        dropMsAnswer = -1
+        if DROP_CONFIRMING
+            for dropMsI = 0 to 1
+                dropMsX = getDropAnswerX(dropMsI) - DROP_OPTION_WIDTH / 2
+                dropMsY = getDropAnswerY() - 3
+                dropMsOn = mouseHover(dropMsX, dropMsY, DROP_OPTION_WIDTH, DROP_ROW_HEIGHT + 6)
+                dropMsHit = mouseClick(dropMsX, dropMsY, DROP_OPTION_WIDTH, DROP_ROW_HEIGHT + 6)
+                if dropMsOn + dropMsHit > 0 then dropMsAnswer = dropMsI
+                if dropMsHit then dropPressConfirm = 1
+            next
+        else
+            dropMsLast = DROP_ROW_COUNT - 1
+            for dropMsI = 0 to dropMsLast
+                dropMsX = getDropRowX(dropMsI)
+                dropMsY = getDropRowY(dropMsI)
+                dropMsOn = mouseHover(dropMsX, dropMsY, DROP_ROW_WIDTH, DROP_ROW_HEIGHT)
+                dropMsHit = mouseClick(dropMsX, dropMsY, DROP_ROW_WIDTH, DROP_ROW_HEIGHT)
+                if dropMsOn + dropMsHit > 0 then dropMsRow = dropMsI
+                if dropMsHit then dropPressConfirm = 1
+            next
+        endif
+
         if DROP_CONFIRMING
             ` the player is being asked if they are sure. the answers are side by side, and "yes" is the
             ` far one, so it takes a press of right to get to it. it cannot be picked by leaning on one button.
             if dropSide > 0 then DROP_CONFIRM_YES = 1
             if dropSide < 0 then DROP_CONFIRM_YES = 0
+            if dropMsAnswer >= 0 then DROP_CONFIRM_YES = dropMsAnswer
 
             dropAnswered = dropPressConfirm
 
@@ -298,6 +324,7 @@ drop_run:
                 endif
                 if dropJump >= 0 then DROP_SELECTED = dropJump
             endif
+            if dropMsRow >= 0 then DROP_SELECTED = dropMsRow
             if DROP_SELECTED <> dropWas
                 ` the outline leaves some bubbles behind on the row that it was around
                 spawnWakeBubbles(getDropRowX(dropWas), getDropRowY(dropWas), DROP_ROW_WIDTH, DROP_ROW_HEIGHT, 8, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)

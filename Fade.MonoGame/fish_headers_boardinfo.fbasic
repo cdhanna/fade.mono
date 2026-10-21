@@ -1,0 +1,48 @@
+remstart
+    THE THINGS ON THE BOARD, IN INFO MODE
+    info mode does not explain the board as a whole: the tutorial has done that. what is out of the way on
+    it gets an outline of its own, on a cell: a jellyfish, a rainbow fish, a fish that is belly up, the
+    coral, and so on. the words of it only say what it is, and leave what it does to be found out.
+
+    each kind of thing gets one outline, however many of it there are, on the one nearest the cursor, so
+    that the keys do not have to go through a crowd of them. the rarest are put out first, and no two share
+    a cell when that can be helped. when they have to share, the outline says what each of them is.
+
+    every fish faces one way or the other, so the way that one faces would be on half of the board. one
+    fish that can be seen to face a way gets an outline for it, picked at random.
+
+    the coral had info mode's spots of its own already, INFO_INDEX_CORAL and INFO_INDEX_CORAL_SICK, which
+    the angler knows. they are two of the kinds here, and go on a cell of coral like the rest.
+
+    boardInfoPlace, in fish_routines_boardinfo, puts them all out. info mode does it when it opens, and
+    the coral does it whenever it changes.
+remend
+
+` the kinds of thing, rarest first, which is the order that they are put out in
+#constant BOARD_INFO_DIVER 0
+#constant BOARD_INFO_RAINBOW 1
+#constant BOARD_INFO_KRILL 2
+#constant BOARD_INFO_SEAWEED 3
+#constant BOARD_INFO_DOLLAR 4
+#constant BOARD_INFO_TURTLE 5
+#constant BOARD_INFO_GLASS 6
+#constant BOARD_INFO_BOTTLE 7
+#constant BOARD_INFO_JELLY 8
+#constant BOARD_INFO_RAY 9
+#constant BOARD_INFO_MARK 10
+#constant BOARD_INFO_HORROR 11
+#constant BOARD_INFO_CORAL 12
+#constant BOARD_INFO_BONES 13
+#constant BOARD_INFO_BELLY 14
+#constant BOARD_INFO_STACK 15
+#constant BOARD_INFO_FACING 16
+global BOARD_INFO_KINDS = 17
+
+global dim BOARD_INFO_BLOB(17) `the blob of info mode for each kind. -1 until it is made.
+global dim BOARD_INFO_CELL(17) `the cell that each one is on, or -1 when there is none of it
+global dim BOARD_INFO_OWNER(400) `which kind each cell's outline is, or -1
+global BOARD_INFO_READY = 0
+
+` the words for a kind, from boardInfoWords
+global BOARD_INFO_TITLE$ = ""
+global BOARD_INFO_DESC$ = ""

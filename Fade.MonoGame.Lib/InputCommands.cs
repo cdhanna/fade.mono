@@ -604,6 +604,61 @@ public partial class FadeMonoGameCommands
         InputSystem.escapeQuits = true;
     }
 
+    /// <summary>
+    /// <para>Shows the computer's mouse pointer over the game window.</para>
+    /// <para>The pointer is shown when a program starts.</para>
+    /// </summary>
+    /// <seealso cref="HideMouse">hide mouse</seealso>
+    /// <seealso cref="IsWindowActive">window active</seealso>
+    [FadeBasicCommand("show mouse")]
+    public static void ShowMouse()
+    {
+        if (GameSystem.game != null) GameSystem.game.IsMouseVisible = true;
+    }
+
+    /// <summary>
+    /// <para>Hides the computer's mouse pointer while it is over the game window.</para>
+    /// <para>The mouse still moves, and <see cref="GetMouseX">mouse x</see> still reads it.</para>
+    /// </summary>
+    /// <remarks>
+    /// Useful for a game played with keys, which can hide the pointer while the keys are in use,
+    /// and show it again when the mouse moves.
+    /// </remarks>
+    /// <seealso cref="ShowMouse">show mouse</seealso>
+    [FadeBasicCommand("hide mouse")]
+    public static void HideMouse()
+    {
+        if (GameSystem.game != null) GameSystem.game.IsMouseVisible = false;
+    }
+
+    /// <summary>
+    /// <para>How many notches the mouse wheel turned since the last frame.</para>
+    /// <para>Turning it away from the player is more than 0, and toward the player is less than 0.</para>
+    /// </summary>
+    /// <returns>The notches turned on this frame. 0 when the wheel did not turn.</returns>
+    /// <seealso cref="GetMouseX">mouse x</seealso>
+    [FadeBasicCommand("mouse wheel")]
+    public static int GetMouseWheel()
+    {
+        // one notch of a wheel is 120. a wheel that scrolls smoothly can turn by less than that,
+        // and then it says nothing until it has turned by a notch.
+        var turned = InputSystem.mouseState.ScrollWheelValue - InputSystem.oldMouseState.ScrollWheelValue;
+        return turned / 120;
+    }
+
+    /// <summary>
+    /// <para>Is the game window the one that the player is using?</para>
+    /// <para>The mouse is read even when it moves over another window, so a game can ask this first.</para>
+    /// </summary>
+    /// <returns>1 when the game window has the focus, otherwise 0.</returns>
+    /// <seealso cref="GetMouseX">mouse x</seealso>
+    [FadeBasicCommand("window active")]
+    public static int IsWindowActive()
+    {
+        if (GameSystem.game == null) return 1;
+        return GameSystem.game.IsActive ? 1 : 0;
+    }
+
     [FadeBasicCommand("left shiftKey")]
     public static int shiftLeftKey()
     {

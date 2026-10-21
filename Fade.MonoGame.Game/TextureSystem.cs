@@ -30,6 +30,12 @@ public struct RuntimeTexture
     public WatchedAsset<Texture2D> watchedTexture;
     public TextureDescriptor descriptor;
 
+    /// <summary>
+    /// The texture id of the atlas page that this picture is a region of, or 0 for a picture of its own.
+    /// Its size is then the size of its region, not of the page. See TextureSystem.atlasRegions.
+    /// </summary>
+    public int atlasPageId;
+
     public void SetComputedTexture(Texture2D tex)
     {
         watchedTexture = new WatchedAsset<Texture2D>
@@ -70,6 +76,7 @@ public class TextureSystem
        
        fonts.Clear();
        _fontMap.Clear();
+       atlasRegions.Clear();
     }
 
     public static void RefreshTextures()
@@ -149,8 +156,66 @@ public class TextureSystem
         return new Rectangle(frame.xOffset, frame.yOffset, frame.xSize, frame.ySize);
     }
 
+    /// <summary>
+    /// A picture that lives in a rectangle of an atlas page, in place of a file of its own. Registered
+    /// with `atlas region`, by the path that the game would otherwise load it from.
+    /// </summary>
+    public struct AtlasRegion
+    {
+        public int pageTextureId;
+        public Rectangle rect;
+    }
+
+    /// <summary>
+    /// Paths that are pictures in an atlas, by the path a `texture` command would load. Matched without
+    /// regard to case or slash direction, the way content paths are.
+    /// </summary>
+    public static Dictionary<string, AtlasRegion> atlasRegions = new Dictionary<string, AtlasRegion>();
+
+    public static string NormalizeAtlasPath(string path) => path.Replace('\\', '/').Trim().ToLowerInvariant();
+
+    /// <summary>
+    /// If <paramref name="path"/> is a region of an atlas, point the texture at the atlas page with
+    /// that region as its one frame, and say so. Every sprite that uses the texture then draws only
+    /// the region, and <see cref="GetSourceRect(ref RuntimeTexture, int)"/> gives its size, so code
+    /// that loads the picture by its old path does not have to know that it moved.
+    /// </summary>
+    static bool TryLoadFromAtlas(int textureId, string path)
+    {
+        if (atlasRegions.Count == 0) return false;
+        if (!atlasRegions.TryGetValue(NormalizeAtlasPath(path), out var region)) return false;
+
+        GetTextureIndex(region.pageTextureId, out _, out var page);
+        if (page.texture == null)
+        {
+            Console.Error.WriteLine($"[fade] atlas page {region.pageTextureId} for '{path}' is not loaded");
+            return false;
+        }
+
+        GetTextureIndex(textureId, out var index, out var runtimeTex);
+        runtimeTex.watchedTexture = page.watchedTexture;
+        runtimeTex.descriptor = new TextureDescriptor
+        {
+            imageFilePath = path,
+            frames = new List<TextureFrame>
+            {
+                new TextureFrame
+                {
+                    index = 0,
+                    xOffset = region.rect.X, yOffset = region.rect.Y,
+                    xSize = region.rect.Width, ySize = region.rect.Height,
+                }
+            }
+        };
+        runtimeTex.atlasPageId = region.pageTextureId;
+        textures[index] = runtimeTex;
+        Console.WriteLine($"[fade] texture {textureId} '{path}' from atlas {region.pageTextureId} at {region.rect.X},{region.rect.Y} ({region.rect.Width} x {region.rect.Height})");
+        return true;
+    }
+
     public static void LoadTextureFromContent(int textureId, string path)
     {
+        if (TryLoadFromAtlas(textureId, path)) return;
 #if BROWSER
         // Browser: BrowserContentManager serves XNBs from an in-memory dict
         // the page fills before LoadProgram. Hot-reload (the desktop

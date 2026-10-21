@@ -1,0 +1,271 @@
+` THE THINGS ON THE BOARD, IN INFO MODE. see fish_headers_boardinfo.
+goto routines_boardinfo_exit
+
+` info_open comes here. it is in a file that comes before the board is declared, so it cannot call
+` boardInfoPlace itself.
+board_info_place:
+    boardInfoPlace()
+return
+
+routines_boardinfo_exit:
+
+
+` make the blobs of info mode for the kinds, other than the two of the coral, which make their own.
+` setup_grid comes here, right after the blob of the whole board, so that a new game keeps them.
+function boardInfoSetup()
+    biLast = BOARD_INFO_KINDS - 1
+    for biK = 0 to biLast
+        BOARD_INFO_BLOB(biK) = -1
+        BOARD_INFO_CELL(biK) = -1
+        if biK <> BOARD_INFO_CORAL
+            if biK <> BOARD_INFO_HORROR
+                biBlob = allocateInfoBlob(0, 0, CELL_SIZE, CELL_SIZE, " ", " ")
+                setInfoBlobEnabled(biBlob, 0)
+                BOARD_INFO_BLOB(biK) = biBlob
+            endif
+        endif
+    next
+    BOARD_INFO_READY = 1
+endfunction
+
+
+` does cell biCell have this kind of thing on it?
+function boardInfoHas(biKind, biCell)
+    biHas = 0
+    biValue = CELLS(biCell).value
+    if biValue > 0
+        select biKind
+            case BOARD_INFO_DIVER
+                if biValue = TEX_DIVER then biHas = 1
+            endcase
+            case BOARD_INFO_RAINBOW
+                if RAINBOW_FISH_ON
+                    if RAINBOW_FISH(biCell) <> 0 then biHas = 1
+                endif
+            endcase
+            case BOARD_INFO_KRILL
+                if biValue = TEX_KRILL then biHas = 1
+            endcase
+            case BOARD_INFO_SEAWEED
+                if biValue = TEX_SEAWEED then biHas = 1
+            endcase
+            case BOARD_INFO_DOLLAR
+                if biValue = TEX_SAND_DOLLAR then biHas = 1
+            endcase
+            case BOARD_INFO_TURTLE
+                if biValue = TEX_TURTLE then biHas = 1
+            endcase
+            case BOARD_INFO_GLASS
+                if biValue = TEX_GLASS_FISH then biHas = 1
+            endcase
+            case BOARD_INFO_BOTTLE
+                if biValue = TEX_BOTTLE then biHas = 1
+            endcase
+            case BOARD_INFO_JELLY
+                if biValue = TEX_JELLY then biHas = 1
+            endcase
+            case BOARD_INFO_RAY
+                if biValue = TEX_RAY then biHas = 1
+            endcase
+            case BOARD_INFO_MARK
+                if QUEST_MARK(biCell) > 0 then biHas = 1
+            endcase
+            case BOARD_INFO_BONES
+                if biValue <> TEX_DIVER
+                    if CELLS(biCell).bellyUp = 2 then biHas = 1
+                endif
+            endcase
+            case BOARD_INFO_BELLY
+                if biValue <> TEX_DIVER
+                    if CELLS(biCell).bellyUp = 1 then biHas = 1
+                endif
+            endcase
+            case BOARD_INFO_STACK
+                if CELLS(biCell).stack > 0 then biHas = 1
+            endcase
+            case BOARD_INFO_FACING
+                if SCHOOL_ON
+                    if biValue < TEX_DIVER
+                        if SCHOOL_ART_FACE(biValue) <> 0
+                            if SCHOOL_FACE(biCell) <> 0 then biHas = 1
+                        endif
+                    endif
+                endif
+            endcase
+        endselect
+    endif
+
+    ` the coral is the cell's, and not the fish's
+    if biKind = BOARD_INFO_CORAL
+        if CORAL_CELLS(biCell) > CORAL_SICK(biCell) then biHas = 1
+    endif
+    if biKind = BOARD_INFO_HORROR
+        if CORAL_CELLS(biCell) > 0
+            if CORAL_SICK(biCell) > 0 then biHas = 1
+        endif
+    endif
+endfunction biHas
+
+
+` the words for a kind, on cell biCell, into BOARD_INFO_TITLE$ and BOARD_INFO_DESC$
+function boardInfoWords(biKind, biCell)
+    select biKind
+        case BOARD_INFO_DIVER
+            BOARD_INFO_TITLE$ = loc$("info.board.diver")
+            BOARD_INFO_DESC$ = loc$("info.board.diver.desc")
+        endcase
+        case BOARD_INFO_RAINBOW
+            BOARD_INFO_TITLE$ = loc$("info.board.rainbow")
+            BOARD_INFO_DESC$ = loc$("info.board.rainbow.desc")
+        endcase
+        case BOARD_INFO_KRILL
+            BOARD_INFO_TITLE$ = loc$("info.board.krill")
+            BOARD_INFO_DESC$ = loc$("info.board.krill.desc")
+        endcase
+        case BOARD_INFO_SEAWEED
+            BOARD_INFO_TITLE$ = loc$("info.board.seaweed")
+            BOARD_INFO_DESC$ = loc$("info.board.seaweed.desc")
+        endcase
+        case BOARD_INFO_DOLLAR
+            BOARD_INFO_TITLE$ = loc$("info.board.dollar")
+            BOARD_INFO_DESC$ = loc$("info.board.dollar.desc")
+        endcase
+        case BOARD_INFO_TURTLE
+            BOARD_INFO_TITLE$ = loc$("info.board.turtle")
+            BOARD_INFO_DESC$ = loc$("info.board.turtle.desc")
+        endcase
+        case BOARD_INFO_GLASS
+            BOARD_INFO_TITLE$ = loc$("info.board.glass")
+            BOARD_INFO_DESC$ = loc$("info.board.glass.desc")
+        endcase
+        case BOARD_INFO_BOTTLE
+            BOARD_INFO_TITLE$ = loc$("info.board.bottle")
+            BOARD_INFO_DESC$ = loc$("info.board.bottle.desc")
+        endcase
+        case BOARD_INFO_JELLY
+            BOARD_INFO_TITLE$ = loc$("info.board.jelly")
+            BOARD_INFO_DESC$ = loc$("info.board.jelly.desc")
+        endcase
+        case BOARD_INFO_RAY
+            BOARD_INFO_TITLE$ = loc$("info.board.ray")
+            BOARD_INFO_DESC$ = loc$("info.board.ray.desc")
+        endcase
+        case BOARD_INFO_MARK
+            BOARD_INFO_TITLE$ = loc$("info.board.mark")
+            BOARD_INFO_DESC$ = loc$("info.board.mark.desc")
+        endcase
+        case BOARD_INFO_HORROR
+            BOARD_INFO_TITLE$ = loc$("coral.horror")
+            BOARD_INFO_DESC$ = loc$("coral.horror.desc")
+        endcase
+        case BOARD_INFO_CORAL
+            BOARD_INFO_TITLE$ = loc$("coral.info")
+            BOARD_INFO_DESC$ = loc$("coral.info.desc")
+        endcase
+        case BOARD_INFO_BONES
+            BOARD_INFO_TITLE$ = loc$("info.board.bones")
+            BOARD_INFO_DESC$ = loc$("info.board.bones.desc")
+        endcase
+        case BOARD_INFO_BELLY
+            BOARD_INFO_TITLE$ = loc$("info.board.belly")
+            BOARD_INFO_DESC$ = loc$("info.board.belly.desc")
+        endcase
+        case BOARD_INFO_STACK
+            BOARD_INFO_TITLE$ = loc$("info.board.stack")
+            BOARD_INFO_DESC$ = loc$("info.board.stack.desc")
+        endcase
+        case BOARD_INFO_FACING
+            if SCHOOL_FACE(biCell) < 0
+                BOARD_INFO_TITLE$ = loc$("info.board.left")
+            else
+                BOARD_INFO_TITLE$ = loc$("info.board.right")
+            endif
+            BOARD_INFO_DESC$ = loc$("info.board.facing.desc")
+        endcase
+    endselect
+endfunction
+
+
+` put the outline of every kind that is on the board on one cell of it, and hide the rest
+function boardInfoPlace()
+    if BOARD_INFO_READY = 0 then exitfunction
+    BOARD_INFO_BLOB(BOARD_INFO_CORAL) = INFO_INDEX_CORAL
+    BOARD_INFO_BLOB(BOARD_INFO_HORROR) = INFO_INDEX_CORAL_SICK
+
+    biCellLast = CELL_COUNT - 1
+    for biI = 0 to biCellLast
+        BOARD_INFO_OWNER(biI) = -1
+    next
+
+    biKindLast = BOARD_INFO_KINDS - 1
+    for biK = 0 to biKindLast
+        BOARD_INFO_CELL(biK) = -1
+        biBlob = BOARD_INFO_BLOB(biK)
+        if biBlob < 0 then skip
+
+        ` the one nearest the cursor, on a cell of its own when there is one. the way that a fish faces
+        ` is on one picked at random, which the info key picks again every time.
+        biBest = -1
+        biBestScore = 0
+        for biI = 0 to biCellLast
+            biOn = boardInfoHas(biK, biI)
+            if biOn
+                biX = biI mod CELL_COLUMN_COUNT
+                biY = biI / CELL_COLUMN_COUNT
+                biScore = abs(biX - SELECTION_POS.x) + abs(biY - SELECTION_POS.y)
+                if biK = BOARD_INFO_FACING then biScore = rnd(1000)
+                if BOARD_INFO_OWNER(biI) >= 0 then biScore = biScore + 100000
+                if biBest < 0 or biScore < biBestScore
+                    biBest = biI
+                    biBestScore = biScore
+                endif
+            endif
+        next
+
+        if biBest < 0
+            setInfoBlobEnabled(biBlob, 0)
+            skip
+        endif
+
+        boardInfoWords(biK, biBest)
+        biOwner = BOARD_INFO_OWNER(biBest)
+        if biOwner >= 0
+            ` the cell has an outline already, so that one says what this is as well
+            biOwnerBlob = BOARD_INFO_BLOB(biOwner)
+            biOwnerDesc$ = INFOS(biOwnerBlob).desc$
+            INFOS(biOwnerBlob).desc$ = biOwnerDesc$ + " " + loc$("info.board.also", "title", BOARD_INFO_TITLE$, "desc", BOARD_INFO_DESC$)
+            setInfoBlobEnabled(biBlob, 0)
+            skip
+        endif
+
+        BOARD_INFO_OWNER(biBest) = biK
+        BOARD_INFO_CELL(biK) = biBest
+        INFOS(biBlob).title$ = BOARD_INFO_TITLE$
+        INFOS(biBlob).desc$ = BOARD_INFO_DESC$
+        INFOS(biBlob).topLeft.x = getCellX(biBest mod CELL_COLUMN_COUNT) - CELL_SIZE / 2
+        INFOS(biBlob).topLeft.y = getCellY(biBest / CELL_COLUMN_COUNT) - CELL_SIZE / 2
+        INFOS(biBlob).size.x = CELL_SIZE
+        INFOS(biBlob).size.y = CELL_SIZE
+        INFOS(biBlob).enabled = 1
+    next
+endfunction
+
+
+` the outline of a kind, when it is on the board, and otherwise biOr. the angler shines its light on it.
+function boardInfoBlobOr(biOrKind, biOr)
+    boardInfoPlace()
+    biOrBlob = biOr
+    if BOARD_INFO_CELL(biOrKind) >= 0 then biOrBlob = BOARD_INFO_BLOB(biOrKind)
+endfunction biOrBlob
+
+
+` which kind of thing a blob of info mode is the outline of, or -1 for one that is not one of them
+function boardInfoKindOf(biForBlob)
+    biKindOf = -1
+    biKindLast = BOARD_INFO_KINDS - 1
+    for biK = 0 to biKindLast
+        if BOARD_INFO_BLOB(biK) = biForBlob
+            if biForBlob >= 0 then biKindOf = biK
+        endif
+    next
+endfunction biKindOf

@@ -1,0 +1,208 @@
+remstart
+    THE TESTS OF THE LITTLE BOARDS
+    the tutorial starts on little boards that are laid out by hand. see THE LITTLE BOARDS in
+    fish_routines_intro, and fish_tests for how the tests work. these play every swap of every board
+    the way that handle_combos would: the group that pops, the fish that fall, and the new fish that
+    drop in. a board that is laid out wrong pops too soon, lets the wrong swap pop, sets off another
+    pop, or leaves fish that the next board does not have.
+remend
+
+test tutorial_boards_pop_only_their_one_swap from fishBoard
+    for ttStep = 1 to 3
+        ttSize = tutorialLayoutSize(ttStep)
+        tutorialGrid(ttSize)
+        TUTORIAL_BOARD = 1
+        TUTORIAL_STAGE = ttStep + 1
+        TUTORIAL_STEP_DONE = 0
+        ttLast = CELL_COUNT - 1
+        ttLay()
+        ttBig = ttPopping()
+        assert ttBig = 0, "a little board has no group to start with"
+        ttLine = ttDiagonal()
+        assert ttLine = 0, "and no line of four corner to corner"
+
+        ` any swap is allowed, until the board has popped
+        ttA = tutorialSwapCell(ttStep, 0)
+        ttB = tutorialSwapCell(ttStep, 1)
+        ttNo = tutorialBlocksSwap(ttA, ttB)
+        assert ttNo = 0, "the swap of the board is allowed"
+        ttOther = ttA + 1
+        if CELLS(ttA).coord.x = ttSize - 1 then ttOther = ttA - 1
+        ttNo = tutorialBlocksSwap(ttA, ttOther)
+        assert ttNo = 0, "and so is any other swap"
+        TUTORIAL_STEP_DONE = 1
+        ttNo = tutorialBlocksSwap(ttA, ttB)
+        assert ttNo = 1, "but no swap is, once the board has popped"
+        TUTORIAL_STEP_DONE = 0
+
+        ` every swap there is: each cell with the one to its right, and the one under it
+        for ttFrom = 0 to ttLast
+            for ttWay = 0 to 1
+                ttTo = -1
+                if ttWay = 0
+                    if CELLS(ttFrom).coord.x < ttSize - 1 then ttTo = ttFrom + 1
+                endif
+                if ttWay = 1
+                    if CELLS(ttFrom).coord.y < ttSize - 1 then ttTo = ttFrom + ttSize
+                endif
+                if ttTo >= 0
+                    ttLay()
+                    ttKind = CELLS(ttFrom).value
+                    CELLS(ttFrom).value = CELLS(ttTo).value
+                    CELLS(ttTo).value = ttKind
+                    ttBig = ttPopping()
+                    ttIsIt = 0
+                    if ttFrom = ttA and ttTo = ttB then ttIsIt = 1
+                    if ttFrom = ttB and ttTo = ttA then ttIsIt = 1
+
+                    if ttIsIt
+                        ttLine = ttDiagonal()
+                        assert ttLine = 0, "the swap of the board makes no line of four corner to corner"
+                        ttWant = 3
+                        if ttStep = 3 then ttWant = 4
+                        assert ttBig = ttWant, "the swap of the board pops a group of the size that the board is about"
+                    else
+                        ` on the board about moving for free, any other swap pops nothing, and costs the multiplier
+                        if ttStep = 2
+                            assert ttBig = 0, "no other swap on the board pops anything"
+                        endif
+                    endif
+
+                    ` whatever pops, the fish fall, the new ones drop in, and nothing more pops
+                    if ttBig > 0
+                        ttFall()
+                        ttBig = ttPopping()
+                        assert ttBig = 0, "nothing more pops once the new fish are in"
+
+                        ` after the swap of the board, the next board has the same fish in the middle, so
+                        ` that nothing changes when it grows
+                        if ttIsIt
+                            ttNext = tutorialLayoutSize(ttStep + 1)
+                            if ttNext > 0
+                                ttShift = (ttNext - ttSize) / 2
+                                for ttI = 0 to ttLast
+                                    ttHas = tutorialLayoutKind(ttStep + 1, CELLS(ttI).coord.x + ttShift, CELLS(ttI).coord.y + ttShift)
+                                    assert ttHas = CELLS(ttI).value, "the next board has the fish that this one leaves"
+                                next
+                            endif
+                        endif
+                    endif
+                endif
+            next
+        next
+
+        ` the board of the L: the group is not in a straight line
+        if ttStep = 3
+            ttLay()
+            ttKind = CELLS(ttA).value
+            CELLS(ttA).value = CELLS(ttB).value
+            CELLS(ttB).value = ttKind
+            ttBig = ttPopping()
+            ttMinX = 99
+            ttMaxX = -1
+            ttMinY = 99
+            ttMaxY = -1
+            for ttI = 0 to ttLast
+                if CELLS(ttI).comboBlownUp
+                    if CELLS(ttI).coord.x < ttMinX then ttMinX = CELLS(ttI).coord.x
+                    if CELLS(ttI).coord.x > ttMaxX then ttMaxX = CELLS(ttI).coord.x
+                    if CELLS(ttI).coord.y < ttMinY then ttMinY = CELLS(ttI).coord.y
+                    if CELLS(ttI).coord.y > ttMaxY then ttMaxY = CELLS(ttI).coord.y
+                endif
+            next
+            assert ttMaxX > ttMinX, "the L goes across"
+            assert ttMaxY > ttMinY, "and down"
+        endif
+    next
+
+    TUTORIAL_BOARD = 0
+    TUTORIAL_STAGE = 0
+    end
+
+    ` put the fish of the board of TUTORIAL_STAGE - 1 on the board, with nothing popping
+    function ttLay()
+        ttLayStep = TUTORIAL_STAGE - 1
+        if ttLayStep < 1 then ttLayStep = 1
+        ttEnd = CELL_COUNT - 1
+        for ttCell = 0 to ttEnd
+            CELLS(ttCell).value = tutorialLayoutKind(ttLayStep, CELLS(ttCell).coord.x, CELLS(ttCell).coord.y)
+            CELLS(ttCell).comboBlownUp = 0
+        next
+    endfunction
+
+    ` mark every fish that is in a group big enough to pop, and say how many there are
+    function ttPopping()
+        ttCount = 0
+        ttEnd = CELL_COUNT - 1
+        for ttCell = 0 to ttEnd
+            CELLS(ttCell).comboBlownUp = 0
+            ttGroup = countFishGroup(ttCell, CELLS(ttCell).value, 3)
+            if ttGroup >= 3
+                CELLS(ttCell).comboBlownUp = 1
+                ttCount = ttCount + 1
+            endif
+        next
+    endfunction ttCount
+
+    ` the fish above the ones that popped fall, the way that handle_combos makes them, and the new fish
+    ` drop in, the way that handle_combos picks them on a little board
+    function ttFall()
+        ttEnd = CELL_COUNT - 1
+        ttCols = CELL_COLUMN_COUNT
+        for ttCol = 0 to ttCols - 1
+            ttDown = ttCols - 1
+            ttRow = ttCols - 1
+            while ttRow >= 0
+                ttSpot = ttCol + ttRow * ttCols
+                if CELLS(ttSpot).comboBlownUp = 0
+                    CELLS(ttCol + ttDown * ttCols).value = CELLS(ttSpot).value
+                    ttDown = ttDown - 1
+                endif
+                ttRow = ttRow - 1
+            endwhile
+            while ttDown >= 0
+                CELLS(ttCol + ttDown * ttCols).value = 0
+                ttDown = ttDown - 1
+            endwhile
+        next
+        for ttCell = 0 to ttEnd
+            CELLS(ttCell).comboBlownUp = 0
+        next
+        for ttCell = 0 to ttEnd
+            if CELLS(ttCell).value = 0
+                CELLS(ttCell).value = tutorialNewFish(ttCell)
+            endif
+        next
+    endfunction
+
+    ` how many lines of four fish of one kind, corner to corner, there are. see DIAGONALS in fish_headers.
+    function ttDiagonal()
+        ttLines = 0
+        ttEnd = CELL_COUNT - 1
+        for ttCell = 0 to ttEnd
+            ttCx = CELLS(ttCell).coord.x
+            ttCy = CELLS(ttCell).coord.y
+            ttCk = CELLS(ttCell).value
+            for ttLean = 0 to 1
+                ttDx = 1
+                if ttLean = 1 then ttDx = -1
+                ttRun = 1
+                ttGo = 1
+                while ttGo
+                    ttNx = ttCx + ttDx * ttRun
+                    ttNy = ttCy + ttRun
+                    ttGo = 0
+                    if ttNx >= 0 and ttNx < CELL_COLUMN_COUNT
+                        if ttNy < CELL_ROW_COUNT
+                            if CELLS(ttNx + ttNy * CELL_COLUMN_COUNT).value = ttCk
+                                ttRun = ttRun + 1
+                                ttGo = 1
+                            endif
+                        endif
+                    endif
+                endwhile
+                if ttRun >= DIAGONAL_LENGTH then ttLines = ttLines + 1
+            next
+        next
+    endfunction ttLines
+endtest

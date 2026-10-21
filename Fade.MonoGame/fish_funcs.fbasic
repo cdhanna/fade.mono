@@ -1188,246 +1188,86 @@ function getRandomValue()
 
 endfunction random stream(RNG_BOARD, 7)+1
 
+` THE BOMB. see fish_headers.
+
+` mark the fish under the cursor, and the eight around it, to pop as one group. handle_combos does the
+` popping, and scores them. nothing is copied. the cursor ends up one cell over, the way that it was pointed.
 function doBomb(start as vec, dir as vec)
     spawnCursorWake(start.x, start.y)
     target as vec = addCoordinates(start, dir)
-    aIndex = getCellIndex(start)
+    BOMB_AT = getCellIndex(start) `the pops go out from here. see THE BOMB in fish_headers.
 
-    duration = 150
-
-    startPosition as vec = {
-        x = getCellX(start.x),
-        y = getCellY(start.y)
-    }
-    endPosition as vec = {
-        x = getCellX(target.x),
-        y = getCellY(target.y)
-    }
-    ` start scale down tween.
-    create basic tween TWEEN_SWAP_AX, startPosition.x, endPosition.x, duration, 0
-    create basic tween TWEEN_SWAP_AY, startPosition.y, endPosition.y, duration, 0
-
-    create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, CELL_SIZE * 1.5, 150, 50
-    set tween type SELECTION_TWEEN_PUNCH_ID, 1
-
-    ` the loops below wait on the tween of the last fish that the bomb reached. part of the bomb can be
-    ` off of the board, so this is not always the last fish that the loops look at. the fish in the
-    ` middle is always on the board, so there is always one.
-    lastTweenId = cells(aIndex).shiftTweenId
-
-    for x = -1 to 1
-        for y = -1 to 1
-            offset as vec = {
-                x = x, 
-                y = y
-            }
-            position as vec = addCoordinates(start, offset)
-            if position.x >= 0 and position.x < CELL_COLUMN_COUNT
-                if position.y >= 0 and position.y < CELL_ROW_COUNT
-                    bIndex = getCellIndex(position)
-                    cells(bIndex).value = cells(aIndex).value
-                    ` the copy is a copy of the whole stack
-                    copyCellStack(aIndex, bIndex)
-                    lastTweenId = cells(bIndex).shiftTweenId
-                    create basic tween lastTweenId, 1, 0, duration * .8, 0 `scale down.
+    for bombY = start.y - 1 to start.y + 1
+        for bombX = start.x - 1 to start.x + 1
+            if bombX >= 0 and bombX < CELL_COLUMN_COUNT
+                if bombY >= 0 and bombY < CELL_ROW_COUNT
+                    bombIndex = bombX + bombY * CELL_COLUMN_COUNT
+                    ` there is only one diver, and it does not pop. see fish_headers_diver.
+                    if CELLS(bombIndex).value <> TEX_DIVER
+                        CELLS(bombIndex).comboForce = FORCE_BOMB
+                        spawnBubbles(getCellX(bombX), getCellY(bombY), CELL_SIZE / 3, 6, 0, FISH_COLORS(getFishColorIndex(CELLS(bombIndex).value)))
+                    endif
                 endif
             endif
         next
     next
 
-
-    ` scale down all the sprites...
-    while (is tween done(lastTweenId) < 1) 
-        for x = -1 to 1
-            for y = -1 to 1
-                offset = {
-                    x = x, 
-                    y = y
-                }
-                position = addCoordinates(start, offset)
-                
-                if position.x >= 0 and position.x < CELL_COLUMN_COUNT
-                    if position.y >= 0 and position.y < CELL_ROW_COUNT
-                        bIndex = getCellIndex(position)
-                        scaleVal = tweenVal(cells(bIndex).shiftTweenId)
-                        size sprite cells(bIndex).spriteId, CELL_ART_SIZE * scaleVal, CELL_ART_SIZE * scaleVal
-                    endif
-                endif
-            next 
-        next
-
-        position sprite SELECTION_SPRITE, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
-        scale sprite SELECTION_SPRITE, tweenVal(SELECTION_TWEEN_PUNCH_ID), tweenVal(SELECTION_TWEEN_PUNCH_ID)
-
-        set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
-
-        collectInput()
-        updateBubbles()
-        sync
-    endwhile
-
-    
-    ` start scale up tween.
-    for x = -1 to 1
-        for y = -1 to 1
-            offset = {
-                x = x, 
-                y = y
-            }
-            position = addCoordinates(start, offset)
-            duration = 70
-            if position.x >= 0 and position.x < CELL_COLUMN_COUNT
-                if position.y >= 0 and position.y < CELL_ROW_COUNT
-                    bIndex = getCellIndex(position)
-                    updateCell(cells(bIndex))
-                    lastTweenId = cells(bIndex).shiftTweenId
-                    create basic tween lastTweenId, 0, 1, duration*.2, 0 `scale up.
-                endif
-            endif
-        next
-    next
-
-
-    ` scale up all the sprites...
-    while (is tween done(lastTweenId) < 1) 
-        for x = -1 to 1
-            for y = -1 to 1
-                offset = {
-                    x = x, 
-                    y = y
-                }
-                position = addCoordinates(start, offset)
-                
-                if position.x >= 0 and position.x < CELL_COLUMN_COUNT
-                    if position.y >= 0 and position.y < CELL_ROW_COUNT
-                        bIndex = getCellIndex(position)
-                        scaleVal = tweenVal(cells(bIndex).shiftTweenId)
-                        size sprite cells(bIndex).spriteId, CELL_ART_SIZE * scaleVal, CELL_ART_SIZE * scaleVal
-                    endif
-                endif
-            next 
-        next
-
-        
-        position sprite SELECTION_SPRITE, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
-        scale sprite SELECTION_SPRITE, tweenVal(SELECTION_TWEEN_PUNCH_ID), tweenVal(SELECTION_TWEEN_PUNCH_ID)
-
-        set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
-
-        collectInput()
-        updateBubbles()
-        sync
-    endwhile
-
+    glideCursorOver(start, target)
     registerMove(1)
 endfunction
 
+` LINE OUT. see fish_headers.
+
+` mark every fish of the kind under the cursor, in its row when it was pointed left or right, or in its
+` column when it was pointed up or down, to pop as one group. handle_combos does the popping, and
+` scores them. the cursor ends up one cell over, the way that it was pointed.
 function doLineOut(start as vec, dir as vec)
     spawnCursorWake(start.x, start.y)
     target as vec = addCoordinates(start, dir)
-    aIndex = getCellIndex(start)
+    lineKind = CELLS(getCellIndex(start)).value
 
-    duration = 150
+    lineSize = CELL_ROW_COUNT
+    if dir.x <> 0 then lineSize = CELL_COLUMN_COUNT
 
-    startPosition as vec = {
-        x = getCellX(start.x),
-        y = getCellY(start.y)
-    }
-    endPosition as vec = {
-        x = getCellX(target.x),
-        y = getCellY(target.y)
-    }
-    ` move selection sprite toward target
-    create basic tween TWEEN_SWAP_AX, startPosition.x, endPosition.x, duration, 0
-    create basic tween TWEEN_SWAP_AY, startPosition.y, endPosition.y, duration, 0
+    for lineAt = 0 to lineSize - 1
+        lineX = start.x
+        lineY = lineAt
+        if dir.x <> 0
+            lineX = lineAt
+            lineY = start.y
+        endif
+        lineIndex = lineX + lineY * CELL_COLUMN_COUNT
+        if CELLS(lineIndex).value = lineKind
+            CELLS(lineIndex).comboForce = FORCE_LINE_OUT
+            spawnBubbles(getCellX(lineX), getCellY(lineY), CELL_SIZE / 3, 6, 0, FISH_COLORS(getFishColorIndex(lineKind)))
+        endif
+    next
 
+    glideCursorOver(start, target)
+    registerMove(1)
+endfunction
+
+` the cursor punches up, and glides one cell over, from `start` to `target`. the bomb and "line out"
+` play this while the fish that they marked wait to pop. it stops the game until it has played out.
+function glideCursorOver(start as vec, target as vec)
+    glideFromX = getCellX(start.x)
+    glideFromY = getCellY(start.y)
+    glideToX = getCellX(target.x)
+    glideToY = getCellY(target.y)
+
+    create basic tween TWEEN_SWAP_AX, 0, 1, 150, 0
     create basic tween SELECTION_TWEEN_PUNCH_ID, CELL_SIZE, CELL_SIZE * 1.5, 150, 50
     set tween type SELECTION_TWEEN_PUNCH_ID, 1
 
-    ` determine the line to blow up based on swap direction
-    ` horizontal swap: blow up the entire row
-    ` vertical swap: blow up the entire column
-    if dir.x <> 0
-        lineSize = CELL_COLUMN_COUNT
-    else
-        lineSize = CELL_ROW_COUNT
-    endif
-
-    position as vec
-    for i = 0 to lineSize - 1
-        if dir.x <> 0
-            position = { x = i, y = start.y }
-        else
-            position = { x = start.x, y = i }
-        endif
-        bIndex = getCellIndex(position)
-        cells(bIndex).value = cells(aIndex).value
-        ` the copy is a copy of the whole stack
-        copyCellStack(aIndex, bIndex)
-        lastTweenId = cells(bIndex).shiftTweenId
-        create basic tween lastTweenId, 1, 0, duration * .8, 0
-    next
-
-    ` scale down all the sprites in the line
-    while (is tween done(lastTweenId) < 1)
-        for i = 0 to lineSize - 1
-            if dir.x <> 0
-                position = { x = i, y = start.y }
-            else
-                position = { x = start.x, y = i }
-            endif
-            bIndex = getCellIndex(position)
-            scaleVal = tweenVal(cells(bIndex).shiftTweenId)
-            size sprite cells(bIndex).spriteId, CELL_ART_SIZE * scaleVal, CELL_ART_SIZE * scaleVal
-        next
-
-        position sprite SELECTION_SPRITE, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
+    while (is tween done(TWEEN_SWAP_AX) < 1) or (is tween done(SELECTION_TWEEN_PUNCH_ID) < 1)
+        glide# = tweenVal(TWEEN_SWAP_AX)
+        position sprite SELECTION_SPRITE, glideFromX + (glideToX - glideFromX) * glide#, glideFromY + (glideToY - glideFromY) * glide#
         scale sprite SELECTION_SPRITE, tweenVal(SELECTION_TWEEN_PUNCH_ID), tweenVal(SELECTION_TWEEN_PUNCH_ID)
-
-        set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
-
         collectInput()
         updateBubbles()
         sync
     endwhile
-
-    ` start scale up tween
-    for i = 0 to lineSize - 1
-        if dir.x <> 0
-            position = { x = i, y = start.y }
-        else
-            position = { x = start.x, y = i }
-        endif
-        bIndex = getCellIndex(position)
-        updateCell(cells(bIndex))
-        lastTweenId = cells(bIndex).shiftTweenId
-        create basic tween lastTweenId, 0, 1, duration * .2, 0
-    next
-
-    ` scale up all the sprites in the line
-    while (is tween done(lastTweenId) < 1)
-        for i = 0 to lineSize - 1
-            if dir.x <> 0
-                position = { x = i, y = start.y }
-            else
-                position = { x = start.x, y = i }
-            endif
-            bIndex = getCellIndex(position)
-            scaleVal = tweenVal(cells(bIndex).shiftTweenId)
-            size sprite cells(bIndex).spriteId, CELL_ART_SIZE * scaleVal, CELL_ART_SIZE * scaleVal
-        next
-
-        position sprite SELECTION_SPRITE, tweenVal(TWEEN_SWAP_AX), tweenVal(TWEEN_SWAP_AY)
-        scale sprite SELECTION_SPRITE, tweenVal(SELECTION_TWEEN_PUNCH_ID), tweenVal(SELECTION_TWEEN_PUNCH_ID)
-
-        set sfx volume SFX_SWAP, tweenVal(SWAP_TWEEN_SFX)
-
-        collectInput()
-        updateBubbles()
-        sync
-    endwhile
-
-    registerMove(1)
+    scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
 endfunction
 
 function doClone(start as vec, dir as vec)
@@ -1774,6 +1614,10 @@ function startLiveMove(dirX, dirY, wantSwap)
             ` and some of the things that a quest puts on the board cannot be swapped. see questLocksCell in fish_routines_quests.
             if questLocksCell(aIndex) then allowed = 0
             if questLocksCell(bIndex) then allowed = 0
+
+            ` a little board of the tutorial only allows the swap that it is about. see THE LITTLE BOARDS in fish_routines_intro.
+            tutorialSaysNo = tutorialBlocksSwap(aIndex, bIndex)
+            if tutorialSaysNo then allowed = 0
         endif
     endif
 
@@ -1876,6 +1720,7 @@ function startLiveMove(dirX, dirY, wantSwap)
         CURSOR_SHAKING = 1
         CURSOR_SHAKE_DIR_X = dirX
         CURSOR_SHAKE_DIR_Y = dirY
+        CURSOR_SHAKE_AMOUNT = CURSOR_SHAKE_SIZE
         create basic tween CURSOR_SHAKE_TWEEN_ID, 1, 0, CURSOR_SHAKE_TIME, 0
     endif
 endfunction started
@@ -1894,7 +1739,7 @@ function stepCursorShake()
                 position sprite SELECTION_SPRITE, cursorX, cursorY
             else
                 ` it lunges the way that it was asked to go, and wobbles back as the shake dies away
-                shakeNow# = sin(game ms() * .05) * CURSOR_SHAKE_SIZE * tweenVal(CURSOR_SHAKE_TWEEN_ID)
+                shakeNow# = sin(game ms() * .05) * CURSOR_SHAKE_AMOUNT * tweenVal(CURSOR_SHAKE_TWEEN_ID)
                 position sprite SELECTION_SPRITE, cursorX + CURSOR_SHAKE_DIR_X * shakeNow#, cursorY + CURSOR_SHAKE_DIR_Y * shakeNow#
             endif
         endif
@@ -2337,7 +2182,7 @@ endfunction
 ` 1 while the count of moves and the multiplier are not on the screen yet
 function tutorialMovesOff()
     isOff = 0
-    if TUTORIAL_STAGE > 0 and TUTORIAL_STAGE < 4 then isOff = 1
+    if TUTORIAL_STAGE > 0 and TUTORIAL_STAGE < 3 then isOff = 1
 endfunction isOff
 
 ` 1 while the bar of the round is not on the screen yet, or the fish that brought it in are still popping
