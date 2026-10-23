@@ -31,7 +31,10 @@ set render size WORLD_WIDTH, WORLD_HEIGHT
 ` 16 across, but the new fish art is 32 pixels, and at 1 it lost every other row and column of them.
 ` the text is cleaner too, because the font is made big and shrunk to fit. the old 16 pixel art looks
 ` the same as it did. this has to come before any render target is made: they are made at this scale too.
-set render scale 2
+` FISH_RENDER_SCALE draws it with more pixels still: the Steam page's art is drawn at 7 (render-capsules.ps1).
+global RENDER_SCALE = 2
+if val(env$("FISH_RENDER_SCALE")) > 0 then RENDER_SCALE = val(env$("FISH_RENDER_SCALE"))
+set render scale RENDER_SCALE
 ` set stage sampler 1 SAMPLER_STATE_POINT
 ` set background color rgb(32, 40, 64)
 set render target background color 1, rgb(32, 40, 64)

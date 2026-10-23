@@ -149,6 +149,7 @@ public static class RecordSystem
     static BlockingCollection<byte[]> _frames;
     static ConcurrentBag<byte[]> _spare = new ConcurrentBag<byte[]>();
     static RenderTarget2D _target;
+    static RenderTarget2D _sharp; // the picture at a whole number of its size, on its way to _target. see Capture.
     static string _path;
 
     // what the game had before the recording took over its pacing
@@ -483,18 +484,55 @@ public static class RecordSystem
         var shakeScale = toSource * scale;
         var shake = Matrix.CreateTranslation(RenderSystem.screenShakeOffset.X * shakeScale, RenderSystem.screenShakeOffset.Y * shakeScale, 0);
 
-        var sampler = Math.Abs(scale - MathF.Round(scale)) > 0.001f ? SamplerState.LinearClamp : SamplerState.PointClamp;
+        var whole = Math.Abs(scale - MathF.Round(scale)) <= 0.001f;
+        if (whole || scale < 1)
+        {
+            device.SetRenderTarget(_target);
+            device.Clear(Color.Black);
+            spriteBatch.Begin(
+                sortMode: SpriteSortMode.Immediate,
+                blendState: BlendState.Opaque,
+                samplerState: whole ? SamplerState.PointClamp : SamplerState.LinearClamp,
+                transformMatrix: shake,
+                effect: screenEffect);
+            spriteBatch.Draw(source, position, part, Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0);
+            spriteBatch.End();
+        }
+        else
+        {
+            // a stretch by a part of a number (1140 to 1920 is 1.68, a close up of 200 pixels is 4.8). drawn
+            // straight with a smooth sampler, every pixel of the game is blurred across its neighbours. so it
+            // is drawn first at the whole number above it, with hard pixels, and that is brought down to the
+            // recording's size smoothly: each pixel stays hard, and only its edges are shared.
+            var up = (int)MathF.Ceiling(scale);
+            var upWidth = (int)MathF.Round(partWidth * up);
+            var upHeight = (int)MathF.Round(partHeight * up);
+            if (_sharp == null || _sharp.IsDisposed || _sharp.Width != upWidth || _sharp.Height != upHeight)
+            {
+                _sharp?.Dispose();
+                _sharp = new RenderTarget2D(device, upWidth, upHeight);
+            }
+            var upShake = Matrix.CreateTranslation(RenderSystem.screenShakeOffset.X * toSource * up, RenderSystem.screenShakeOffset.Y * toSource * up, 0);
+            device.SetRenderTarget(_sharp);
+            device.Clear(Color.Black);
+            spriteBatch.Begin(
+                sortMode: SpriteSortMode.Immediate,
+                blendState: BlendState.Opaque,
+                samplerState: SamplerState.PointClamp,
+                transformMatrix: upShake,
+                effect: screenEffect);
+            spriteBatch.Draw(source, Vector2.Zero, part, Color.White, 0f, Vector2.Zero, up, SpriteEffects.None, 0);
+            spriteBatch.End();
 
-        device.SetRenderTarget(_target);
-        device.Clear(Color.Black);
-        spriteBatch.Begin(
-            sortMode: SpriteSortMode.Immediate,
-            blendState: BlendState.Opaque,
-            samplerState: sampler,
-            transformMatrix: shake,
-            effect: screenEffect);
-        spriteBatch.Draw(source, position, part, Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0);
-        spriteBatch.End();
+            device.SetRenderTarget(_target);
+            device.Clear(Color.Black);
+            spriteBatch.Begin(
+                sortMode: SpriteSortMode.Immediate,
+                blendState: BlendState.Opaque,
+                samplerState: SamplerState.LinearClamp);
+            spriteBatch.Draw(_sharp, position, null, Color.White, 0f, Vector2.Zero, scale / up, SpriteEffects.None, 0);
+            spriteBatch.End();
+        }
         device.SetRenderTarget(null);
 
         var size = width * height * 4;

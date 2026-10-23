@@ -72,7 +72,9 @@ setup_codec_spot:
     set text offset CODEC_SPOT_TEXT_ID, .5, .5
     size text max CODEC_SPOT_TEXT_ID, CODEC_SPOT_W - 8, 16
     color text CODEC_SPOT_TEXT_ID, rgb(150, 190, 255)
-    order text CODEC_SPOT_TEXT_ID, ORDER_INFO_TEXT
+    ` under the panel that a spot's words open in (ORDER_INFO_PANEL), so that a panel opened over it, like the
+    ` horror coral's at the top right of the board, is not written over
+    order text CODEC_SPOT_TEXT_ID, ORDER_INFO_CURSOR + 1
     hide text CODEC_SPOT_TEXT_ID
 
     reserve text id(CODEC_SPOT_BADGE_ID)
@@ -81,7 +83,7 @@ setup_codec_spot:
     size text max CODEC_SPOT_BADGE_ID, 90, 13
     color text CODEC_SPOT_BADGE_ID, rgb(255, 222, 96)
     enable text drop shadow CODEC_SPOT_BADGE_ID, 1, -2, rgb(150, 36, 24)
-    order text CODEC_SPOT_BADGE_ID, ORDER_INFO_TEXT + 1
+    order text CODEC_SPOT_BADGE_ID, ORDER_INFO_CURSOR + 1
     hide text CODEC_SPOT_BADGE_ID
 
     reserve text id(CODEC_HINT_BADGE_ID)
@@ -753,6 +755,7 @@ endfunction
 ` an entry has just been unlocked, so it is new until it is looked at
 function codecMarkNew(codecNewEntry)
     if DEMO_MODE then exitfunction
+    if CODEC_NEW_QUIET then exitfunction
     if codecNewEntry < 0 then exitfunction
     if codecNewEntry > 127 then exitfunction
     CODEC_NEW(codecNewEntry) = 1
@@ -836,12 +839,12 @@ function codecBump(codecBumpNow)
     codecBumpPhase = codecBumpNow mod CODEC_BUMP_GAP
     if codecBumpPhase < 320
         codecBumpPhaseF# = codecBumpPhase
-        codecBump# = codecBump# - sin(codecBumpPhaseF# / 320.0 * 3.14159) * 5
+        codecBump# = codecBump# - sin(codecBumpPhaseF# / 320.0 * 3.14159) * 2
     endif
     CODEC_BUMP_TURN# = 0
     if codecBumpPhase < 480
         codecBumpTurnF# = codecBumpPhase
-        CODEC_BUMP_TURN# = sin(codecBumpTurnF# * .04) * .18 * (1 - codecBumpTurnF# / 480.0)
+        CODEC_BUMP_TURN# = sin(codecBumpTurnF# * .04) * .06 * (1 - codecBumpTurnF# / 480.0)
     endif
     CODEC_BUMP_Y# = codecBump#
 endfunction

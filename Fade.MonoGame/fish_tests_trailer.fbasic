@@ -49,6 +49,13 @@ abstract test trailerShot
 
     runto _loop
     QTALK_ENABLED = 0
+    ` no group on the board is ever a school that swims off ("Schooling fish!"): Chris wants none of it in
+    ` the trailer (2026-10-23). the schools out in the background (trailerSchool) are still there.
+    SCHOOL_ON = 0
+    ` nor a rainbow fish out of a group of five, and nothing in the codec turns new, so "new info!" never
+    ` bounces (the horror coral shots were finding entries). Chris, 2026-10-23.
+    RAINBOW_FISH_ON = 0
+    CODEC_NEW_QUIET = 1
 
     OPTION_SOUND = 0
     OPTION_MUSIC = 0
@@ -2355,7 +2362,7 @@ test trailer_finale from trailerShot
 
     tTrDate = 0
     reserve text id(tTrDate)
-    text tTrDate, WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + 50, SCORE_FONT, "November 5th, 2026"
+    text tTrDate, WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + 50, SCORE_FONT, "December 2nd, 2026"
     size text y tTrDate, 18
     set text offset tTrDate, .5, .5
     color text tTrDate, rgb(150, 190, 255)
@@ -2384,29 +2391,8 @@ test trailer_finale from trailerShot
     next
     size sprite MORSE_STAR_HEAD, 3, 2
 
-    ` then the three words turn into three seahorses, one after another, the way three seahorses sat in a
-    ` row in the very first shot. when all three are there, they puff up and pop together, the way a row of
-    ` three does, in a sparkle, with the sound of it. then it all fades to black.
-    tTrPuffA = 0
-    reserve sprite id(tTrPuffA)
-    tTrPuffB = 0
-    reserve sprite id(tTrPuffB)
-    tTrPuffC = 0
-    reserve sprite id(tTrPuffC)
-    sprite tTrPuffA, 0, 0, TEX_BASS
-    sprite tTrPuffB, 0, 0, TEX_BASS
-    sprite tTrPuffC, 0, 0, TEX_BASS
-    set sprite offset tTrPuffA, .5, .5
-    set sprite offset tTrPuffB, .5, .5
-    set sprite offset tTrPuffC, .5, .5
-    order sprite tTrPuffA, 300
-    order sprite tTrPuffB, 300
-    order sprite tTrPuffC, 300
-    hide sprite tTrPuffA
-    hide sprite tTrPuffB
-    hide sprite tTrPuffC
-    tTrTurnAt = 120
-    tTrPopAt = 190
+    ` the title stays, with the line about Steam and the date under it, until it all fades to black. (the
+    ` words used to turn into three seahorses that popped: Chris wanted the title to stay, 2026-10-23.)
     for tTrFrame = 0 to 280
         SURFACE_PAN# = SPLASH_PAN
         trailerPopTitle(tTrFrame - 10, 12)
@@ -2418,21 +2404,6 @@ test trailer_finale from trailerShot
                 trailerTwinkleWord(tTrN, 18)
             endif
         next
-        tTrPopAge = tTrFrame - tTrPopAt
-        trailerWordToPuffer(tTrPuffA, 0, tTrFrame - tTrTurnAt, tTrPopAge)
-        trailerWordToPuffer(tTrPuffB, 1, (tTrFrame - tTrTurnAt) - 16, tTrPopAge)
-        trailerWordToPuffer(tTrPuffC, 2, (tTrFrame - tTrTurnAt) - 32, tTrPopAge)
-        if tTrPopAge = 0
-            record mark "puff"
-        endif
-        if tTrPopAge = 10
-            record mark "pop"
-            for tTrN = 0 to 2
-                trailerTwinkleWord(tTrN, 14)
-                tTrPopX# = text x(TR_WORD(tTrN))
-                playBubblePop(tTrPopX#, 1, .9)
-            next
-        endif
         tTrSubA# = tTrFrame - 50
         tTrSubA# = tTrSubA# / 25.0
         if tTrSubA# < 0 then tTrSubA# = 0
@@ -2455,9 +2426,6 @@ test trailer_finale from trailerShot
         runto frame_menu_render
     next
     record mark "black"
-    hide sprite tTrPuffA
-    hide sprite tTrPuffB
-    hide sprite tTrPuffC
     for tTrFrame = 1 to 60
         SURFACE_PAN# = SPLASH_PAN
         runto frame_menu_render

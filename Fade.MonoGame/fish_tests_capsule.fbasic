@@ -1,0 +1,198 @@
+remstart
+    THE STEAM PAGE'S ART
+    The capsules, the library's hero and the logo are frames of the game, set up by the tests here and
+    cut to Steam's sizes by build/capsule_cut.py. When the art changes, they are rendered again:
+    .\build\render-capsules.ps1.
+
+    The tests are trailer shots (trailerShot in fish_tests_trailer), so they only run when FISH_TRAILER
+    is 1, and they do nothing unless FISH_CAPSULE is 1 too: render-capsules.ps1 sets both, and
+    FISH_RENDER_SCALE=7, so the world (570 x 320) is drawn 3990 x 2240 and `screenshot` saves that.
+    A screenshot is the frame before the screen effect (the wobble of the water), so it is sharp.
+
+    Every frame goes to FISH_CAPSULE_OUT/raw/<name>.png, and the test prints a [capsule] line for it.
+    The cutter reads those lines from raw/run.log:
+        [capsule] take <name>
+        [capsule] region <name> <x> <y> <w> <h>      a box in the world's own pixels (570 x 320)
+
+    THE KEY ART is the first shot of the trailer: a seahorse, a crab and a seahorse in a row, and a fourth
+    seahorse over the crab, that the crab swaps with, so the three seahorses pop. It is taken before the
+    swap (keyart_ready) and every 3 frames through it (keyart_swap_NN). THE LOGO is the title, the way the
+    trailer shows it, over black and over white, so the cutter can work out how see-through each pixel is.
+remend
+
+
+test capsule_keyart from trailerShot
+    if val(env$("FISH_CAPSULE")) = 0 then end
+    tCaOut$ = env$("FISH_CAPSULE_OUT")
+    if tCaOut$ = "" then tCaOut$ = "capsules"
+    trailerNoUi()
+    trailerFishAway()
+    for tCaF = 1 to 120
+        trailerHideBut(-1, -1, -1, -1)
+        runto update_frame
+    next
+
+    ` stripes of kinds that never match, and none of them is a seahorse or a crab, all hidden (as in
+    ` trailer_first_pop)
+    for tCaY = 0 to CELL_ROW_COUNT - 1
+        for tCaX = 0 to CELL_COLUMN_COUNT - 1
+            tCaK = tCaX + 2 * tCaY
+            tCaK = tCaK mod 5
+            tCaKind = TEX_PUFFER
+            if tCaK = 1 then tCaKind = TEX_CATFISH
+            if tCaK = 2 then tCaKind = TEX_GOLDFISH
+            if tCaK = 3 then tCaKind = TEX_ANGELFISH
+            if tCaK = 4 then tCaKind = TEX_WORM
+            trailerPut(tCaX, tCaY, tCaKind)
+        next
+    next
+    tCaMid = CELL_COLUMN_COUNT / 2
+    tCaRow = CELL_ROW_COUNT / 2
+    tCaL = trailerIndex(tCaMid - 1, tCaRow)
+    tCaM = trailerIndex(tCaMid, tCaRow)
+    tCaR = trailerIndex(tCaMid + 1, tCaRow)
+    tCaA = trailerIndex(tCaMid, tCaRow - 1)
+    trailerPut(tCaMid - 1, tCaRow, TEX_BASS)
+    trailerPut(tCaMid, tCaRow, TEX_CRAB)
+    trailerPut(tCaMid + 1, tCaRow, TEX_BASS)
+    trailerPut(tCaMid, tCaRow - 1, TEX_BASS)
+    SCHOOL_FACE(tCaL) = 1
+    SCHOOL_FACE(tCaR) = -1
+    SCHOOL_FACE(tCaA) = 1
+    SCHOOL_SNAP = 1
+    tCaY0 = getCellY(tCaRow)
+    tCaYa = getCellY(tCaRow - 1)
+    trailerCursor(tCaMid, tCaRow)
+    hide sprite SCORE_TEXT_VIEW_SPRITE
+
+    ` the four in their places, and the cursor on the crab, held until the sea has settled
+    for tCaF = 0 to 60
+        hintShow(0)
+        trailerHideBut(tCaL, tCaM, tCaR, tCaA)
+        for tCaC = 0 to 2
+            position sprite CELLS(tCaL + tCaC).spriteId, getCellX((tCaMid - 1) + tCaC), tCaY0
+            set sprite alpha CELLS(tCaL + tCaC).spriteId, 255
+        next
+        position sprite CELLS(tCaA).spriteId, getCellX(tCaMid), tCaYa
+        set sprite alpha CELLS(tCaA).spriteId, 255
+        set sprite alpha SELECTION_SPRITE, 90
+        set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, 1
+        runto update_frame
+    next
+
+    ` where the four are: the cutter frames them
+    tCaX0 = getCellX(tCaMid - 1) - CELL_SIZE / 2
+    tCaY1 = tCaYa - CELL_SIZE / 2
+    tCaW = CELL_SIZE * 3
+    tCaH = CELL_SIZE * 2
+    print "[capsule] region fish " + str$(tCaX0) + " " + str$(tCaY1) + " " + str$(tCaW) + " " + str$(tCaH)
+    screenshot tCaOut$ + "/raw/keyart_ready"
+    print "[capsule] take keyart_ready"
+
+    ` the swap, from the middle. the crab goes up, and the row of three seahorses pops. once the fish
+    ` start to fall, every fish is hidden, so the sea stays empty.
+    trailerMove(0, -1, 1)
+    tCaGone = 0
+    for tCaF = 0 to 60
+        hintShow(0)
+        if COMBO_PHASE >= 2 then tCaGone = 1
+        if tCaGone
+            trailerHideBut(-1, -1, -1, -1)
+            set sprite alpha SELECTION_SPRITE, 0
+            set sprite all texcoord1 SELECTION_SPRITE, 0, 0, 0, 0
+        else
+            trailerHideBut(tCaL, tCaM, tCaR, tCaA)
+        endif
+        runto update_frame
+        if tCaF mod 3 = 0
+            tCaName$ = "keyart_swap_" + str$(tCaF)
+            screenshot tCaOut$ + "/raw/" + tCaName$
+            print "[capsule] take " + tCaName$
+        endif
+    next
+endtest
+
+
+` the open sea with nothing on it but schools far out, for the library's hero and the page's background
+test capsule_sea from trailerShot
+    if val(env$("FISH_CAPSULE")) = 0 then end
+    tCaOut$ = env$("FISH_CAPSULE_OUT")
+    if tCaOut$ = "" then tCaOut$ = "capsules"
+    trailerNoUi()
+    trailerFishAway()
+    hide sprite SCORE_TEXT_VIEW_SPRITE
+    FLOCK_PULL_GRID = 0
+    trailerSchool(TEX_GOLDFISH, 7, 120, 90, 1)
+    trailerSchool(TEX_CATFISH, 6, 400, 200, -1)
+    trailerSchool(TEX_ANGELFISH, 6, 260, 60, 1)
+    for tCaF = 1 to 180
+        hintShow(0)
+        trailerHideBut(-1, -1, -1, -1)
+        set sprite alpha SELECTION_SPRITE, 0
+        runto update_frame
+    next
+    screenshot tCaOut$ + "/raw/sea"
+    print "[capsule] take sea"
+endtest
+
+
+` the title, as the trailer shows it, over black and then over white; on one line, and a word to a line
+test capsule_logo from trailerShot
+    if val(env$("FISH_CAPSULE")) = 0 then end
+    tCaOut$ = env$("FISH_CAPSULE_OUT")
+    if tCaOut$ = "" then tCaOut$ = "capsules"
+    trailerNoUi()
+    trailerFishAway()
+    hide sprite SCORE_TEXT_VIEW_SPRITE
+    ` the black (or white) under the words, over everything else
+    tCaBack = 0
+    reserve sprite id(tCaBack)
+    sprite tCaBack, 0, 0, TEX_PIXEL
+    set sprite offset tCaBack, 0, 0
+    size sprite tCaBack, WORLD_WIDTH, WORLD_HEIGHT
+    order sprite tCaBack, 290
+    trailerWordOn("Fish", 0)
+    trailerWordOn("Fish", 0)
+    trailerWordOn("Pop", 0)
+    hide sprite tCaBack
+    trailerTitleLayout(WORLD_HEIGHT / 2)
+    for tCaF = 0 to 20
+        hintShow(0)
+        trailerHideBut(-1, -1, -1, -1)
+        trailerRiseTitle(400, 14, 1)
+        runto update_frame
+    next
+    print "[capsule] debug word0 " + str$(TR_WORD_X(0)) + " " + str$(TR_WORD_Y(0)) + " n " + str$(TR_WORD_COUNT)
+    screenshot tCaOut$ + "/raw/logo_sea"
+    print "[capsule] take logo_sea"
+    show sprite tCaBack
+    for tCaLay = 0 to 1
+        if tCaLay = 1
+            TR_WORD_LINE(1) = 1
+            TR_WORD_LINE(2) = 2
+        endif
+        trailerTitleLayout(WORLD_HEIGHT / 2)
+        for tCaBg = 0 to 1
+            if tCaBg = 0 then color sprite tCaBack, rgb(0, 0, 0)
+            if tCaBg = 1 then color sprite tCaBack, rgb(255, 255, 255)
+            for tCaF = 0 to 20
+                hintShow(0)
+                trailerHideBut(-1, -1, -1, -1)
+                set sprite alpha SELECTION_SPRITE, 0
+                trailerRiseTitle(400, 14, 1)
+                ` 290: over the sea's specks and bubbles, and under the words (at 299 it hid the words too)
+                order sprite tCaBack, 290
+                for tCaN = 0 to TR_WORD_COUNT - 1
+                    order text TR_WORD(tCaN), 300
+                next
+                runto update_frame
+            next
+            tCaName$ = "logo"
+            if tCaLay = 1 then tCaName$ = "logo_stack"
+            if tCaBg = 0 then tCaName$ = tCaName$ + "_black"
+            if tCaBg = 1 then tCaName$ = tCaName$ + "_white"
+            screenshot tCaOut$ + "/raw/" + tCaName$
+            print "[capsule] take " + tCaName$
+        next
+    next
+endtest
