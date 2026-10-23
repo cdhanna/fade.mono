@@ -111,6 +111,7 @@ public sealed class SteamSystem : FadeHostSystem
         OverlayOpen = false;
         SteamLeaderboards.Reset();
         SteamAchievements.Reset();
+        SteamAvatars.Reset();
         SteamInputGlyphs.Stop();
         SteamClient.Shutdown();
     }

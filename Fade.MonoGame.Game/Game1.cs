@@ -316,16 +316,17 @@ public class Game1 : Microsoft.Xna.Framework.Game
         // stuck and undraggable, and no amount of clamping or guarding the call fixed it.
         // A game program (which always runs after the window exists) therefore cannot do this;
         // it has to be handed in.
-        if (windowWidth > 0 && windowHeight > 0)
+        //
+        // The .csproj's window settings apply either way; a size handed in only takes the place
+        // of its width and height (fullscreen is still the monitor's size).
+        var sizeGiven = windowWidth > 0 && windowHeight > 0;
+        if (sizeGiven)
         {
             _graphics.PreferredBackBufferWidth = windowWidth;
             _graphics.PreferredBackBufferHeight = windowHeight;
         }
 #if !BROWSER
-        else
-        {
-            ApplyBakedWindowSettings();
-        }
+        ApplyBakedWindowSettings(keepSize: sizeGiven);
 #endif
         Content.RootDirectory = "Content";
 #if !BROWSER
@@ -368,11 +369,13 @@ public class Game1 : Microsoft.Xna.Framework.Game
     /// $(FadeWindowHeight) and $(FadeWindowResizable), baked into the entry assembly as
     /// [AssemblyMetadata] by FadeBasic.MonoGame.App.targets. Applied here, before the window
     /// exists, for the same reason as the size above. Fade code can change all of it later.
+    /// With <paramref name="keepSize"/>, the size the game handed in stands instead of
+    /// $(FadeWindowWidth) and $(FadeWindowHeight); the mode and resizing still apply.
     ///
     /// Fullscreen is the same as `set fullscreen 1`: the back buffer is the size of the
     /// monitor. A test run never goes fullscreen; it would cover the screen of whoever ran it.
     /// </summary>
-    private void ApplyBakedWindowSettings()
+    private void ApplyBakedWindowSettings(bool keepSize = false)
     {
         var entry = System.Reflection.Assembly.GetEntryAssembly();
         if (entry == null) return;
@@ -390,7 +393,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
             }
         }
 
-        if (int.TryParse(width, out var w) && int.TryParse(height, out var h) && w > 0 && h > 0)
+        if (!keepSize && int.TryParse(width, out var w) && int.TryParse(height, out var h) && w > 0 && h > 0)
         {
             _graphics.PreferredBackBufferWidth = w;
             _graphics.PreferredBackBufferHeight = h;
