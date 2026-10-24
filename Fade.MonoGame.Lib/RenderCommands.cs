@@ -1191,6 +1191,57 @@ public partial class FadeMonoGameCommands
         RenderSystem.screenEffectScale = scale < 0 ? 0 : scale;
     }
 
+    /// <summary>
+    /// <para>Sets how the game's picture is sampled when it is stretched to fit the window.</para>
+    /// <para><c>0</c> is how it starts, <c>1</c> is always hard pixels, <c>2</c> is always smoothed, and <c>3</c> smooths it only while it is shrunk to fit.</para>
+    /// </summary>
+    /// <remarks>
+    /// The picture is the render size (<see cref="SetRenderSize">set render size</see>), and it is
+    /// stretched, keeping its shape, to fit the window. Hard pixels (point sampling) give every
+    /// pixel of the window the colour of one pixel of the picture, which keeps pixel art crisp
+    /// when the picture is made bigger. But when the window is smaller than the picture, as a
+    /// 1920 by 1080 game is in a laptop's window, hard pixels drop whole rows and columns of it:
+    /// thin lines and the strokes of small text break up and vanish. Smoothing (linear sampling)
+    /// blends the pixels instead, so nothing is lost, at the cost of a softer edge.
+    ///
+    /// <c>0</c>, the default, is hard pixels, except that a screen effect's own buffer
+    /// (<see cref="SetScreenEffectScale">set screen effect scale</see>) is smoothed when it is
+    /// stretched by a fraction. <c>1</c> is hard pixels always. <c>2</c> smooths always. <c>3</c> smooths
+    /// only while the picture is being shrunk, and is hard pixels when it is shown at its own size
+    /// or bigger: the right choice for most games whose render size is bigger than some screens.
+    /// </remarks>
+    /// <example>
+    /// A 1080p game that should stay readable in a smaller window:
+    /// <code>
+    /// set render size 1920, 1080
+    /// set screen sampling 3
+    ///
+    /// DO
+    ///   sync
+    /// LOOP
+    /// </code>
+    /// </example>
+    /// <param name="mode"><c>0</c> the default, <c>1</c> hard pixels, <c>2</c> smoothed, <c>3</c> smoothed only while shrunk.</param>
+    /// <seealso cref="GetScreenSampling">screen sampling</seealso>
+    /// <seealso cref="SetRenderSize">set render size</seealso>
+    /// <seealso cref="SetScreenEffectScale">set screen effect scale</seealso>
+    [FadeBasicCommand("set screen sampling")]
+    public static void SetScreenSampling(int mode)
+    {
+        RenderSystem.screenSampling = mode < 0 || mode > RenderSystem.SCREEN_SAMPLING_AUTO ? RenderSystem.SCREEN_SAMPLING_DEFAULT : mode;
+    }
+
+    /// <summary>
+    /// <para>Returns how the game's picture is sampled on its way to the window, as <see cref="SetScreenSampling">set screen sampling</see> last set it.</para>
+    /// </summary>
+    /// <returns><c>0</c> the default, <c>1</c> hard pixels, <c>2</c> smoothed, <c>3</c> smoothed only while shrunk.</returns>
+    /// <seealso cref="SetScreenSampling">set screen sampling</seealso>
+    [FadeBasicCommand("screen sampling")]
+    public static int GetScreenSampling()
+    {
+        return RenderSystem.screenSampling;
+    }
+
     [FadeBasicCommand("set screen effect")]
     public static void SetScreenEffect(int effectId)
     {

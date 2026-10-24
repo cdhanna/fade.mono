@@ -167,6 +167,18 @@ public static class RenderSystem
     public static int renderScale = 1;
 
     /// <summary>
+    /// How the picture is sampled on its way to the window. Set by `set screen sampling`:
+    /// SCREEN_SAMPLING_DEFAULT (hard pixels, but smoothed when a screen effect buffer is
+    /// stretched by a fraction), _POINT (always hard pixels), _LINEAR (always smoothed), or
+    /// _AUTO (smoothed while the picture is shrunk to fit, hard pixels when it is not).
+    /// </summary>
+    public static int screenSampling = SCREEN_SAMPLING_DEFAULT;
+    public const int SCREEN_SAMPLING_DEFAULT = 0;
+    public const int SCREEN_SAMPLING_POINT = 1;
+    public const int SCREEN_SAMPLING_LINEAR = 2;
+    public const int SCREEN_SAMPLING_AUTO = 3;
+
+    /// <summary>
     /// The on-screen SIZE of the letterboxed main buffer, in back-buffer pixels.
     ///
     /// Stored rather than re-derived. Callers used to compute it as

@@ -1527,6 +1527,15 @@ public class Game1 : Microsoft.Xna.Framework.Game
             if (Math.Abs(screenSourceScale - MathF.Round(screenSourceScale)) > 0.001f) screenSampler = SamplerState.LinearClamp;
         }
 
+        // `set screen sampling` has the last word on how that stretch is sampled
+        switch (RenderSystem.screenSampling)
+        {
+            case RenderSystem.SCREEN_SAMPLING_POINT: screenSampler = SamplerState.PointClamp; break;
+            case RenderSystem.SCREEN_SAMPLING_LINEAR: screenSampler = SamplerState.LinearClamp; break;
+            // shrunk to fit, hard pixels would drop whole rows and columns of the picture
+            case RenderSystem.SCREEN_SAMPLING_AUTO: screenSampler = screenSourceScale < 0.999f ? SamplerState.LinearClamp : SamplerState.PointClamp; break;
+        }
+
         // the same picture, at the recording's own size, before anything that is only for the window
         RecordSystem.Capture(GraphicsDevice, _spriteBatch, screenSource, screenEffect);
 
