@@ -231,7 +231,12 @@ namespace Fade.MonoGame.Core
                 }
             }
 
-            io.DisplaySize = new System.Numerics.Vector2(_graphicsDevice.PresentationParameters.BackBufferWidth, _graphicsDevice.PresentationParameters.BackBufferHeight);
+            // Never below zero. A window that is minimised, or not shown yet, can report its back
+            // buffer as -1 for a frame (a shipped game's long first launch, alt-tabbed away), and
+            // ImGui.NewFrame asserts on a negative size: in the shipped cimgui.dll that is a
+            // native dialog over the game. Zero is valid to ImGui and draws nothing.
+            var pp = _graphicsDevice.PresentationParameters;
+            io.DisplaySize = new System.Numerics.Vector2(Math.Max(0, pp.BackBufferWidth), Math.Max(0, pp.BackBufferHeight));
             io.DisplayFramebufferScale = new System.Numerics.Vector2(1f, 1f);
         }
 
