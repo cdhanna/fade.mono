@@ -239,12 +239,15 @@ test glow_turn_goes_with_the_fish_when_it_is_swapped from fishBoard
     GLOW_TRAIL_OVERRIDE = 0
     GLOW_X = 2
     GLOW_Y = 2
-    tTurnUntil = wall ms() + 1500
-    while wall ms() < tTurnUntil
-        runto _loop
-    endwhile
+    ` a frame turns it by at most 50 ms worth, so wait for frames and not for time: on a slow machine
+    ` (the CI's software renderer) 1.5 s of wall time was too few frames to turn it.
     tTurned = 0
-    if GLOW_TURN#(testIndex(2, 2)) > .9 then tTurned = 1
+    tTurnFrames = 0
+    while tTurned = 0 and tTurnFrames < 300
+        runto _loop
+        tTurnFrames = tTurnFrames + 1
+        if GLOW_TURN#(testIndex(2, 2)) > .9 then tTurned = 1
+    endwhile
     assert tTurned = 1, "the fish in the cell that glows has turned around"
 
     ` the cursor carries the fish above it down, and the turned fish is shoved up

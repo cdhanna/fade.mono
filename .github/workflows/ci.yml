@@ -68,7 +68,7 @@ jobs:
   fish-tests:
     name: fish game tests
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 55
     env:
       GAME_PROJECT: Fade.MonoGame/Fade.MonoGame.csproj
     steps:
@@ -172,8 +172,8 @@ jobs:
           # each test's line also goes to the job's log as it comes, so that a run whose runner is
           # lost (it leaves no tests.log and no report) still shows the last test that finished.
           set +e
-          timeout --signal=KILL 25m ./Fade.MonoGame --no-banner --no-progress --no-ansi \
-            --output Detailed --timeout 20m 2>&1 \
+          timeout --signal=KILL 40m ./Fade.MonoGame --no-banner --no-progress --no-ansi \
+            --output Detailed --timeout 35m 2>&1 \
             | tee "$results/tests.log" | grep --line-buffered -E '^(passed|failed|skipped) '
           code=${PIPESTATUS[0]}
           set -e

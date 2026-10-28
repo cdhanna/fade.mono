@@ -17,6 +17,12 @@
          (NETSDK1124). Set in this file, it applies to this project's publish only. -->
     <PropertyGroup Condition="'$(FadeMonoTrim)' == 'true'">
         <PublishTrimmed>true</PublishTrimmed>
+        <!-- The trimmer's constant propagation broke the compiled game (2026-10-28). It folds
+             `FadeRt.Key(3)` into a constant, which makes the code longer, and does not widen the
+             short jumps that Roslyn wrote over it. In a long `select case` such a jump then lands
+             in the middle of an instruction, and the function dies with "Common Language Runtime
+             detected an invalid program" the first time it runs (opening the angler did it). -->
+        <_ExtraTrimmerArgs>$(_ExtraTrimmerArgs) --disable-opt ipconstprop</_ExtraTrimmerArgs>
     </PropertyGroup>
     <!-- Kept whole, because they are reached by name at run time, where the trimmer cannot see:
            MonoGame.Framework   every .xnb names the reader that loads it, and MonoGame finds
