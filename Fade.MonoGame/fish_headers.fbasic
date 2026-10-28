@@ -8,8 +8,8 @@ global SCORE_POS as vec = {
 }
 
 
-global dim CARDS(40) as ability
-global CARD_LENGTH = 40
+global dim CARDS(41) as ability
+global CARD_LENGTH = 41
 
 global CURRENT_MOVE_COUNT = 0
 global MOVE_COUNT_TEXT_ID
@@ -110,11 +110,19 @@ global RAY_SPAWN_STEP = 5 `how much every card after the first adds to that
 global RAY_MAX = 3 `how many times the card can be taken
 
 ` BOTTLES. with the "bottles" card, a group of fish that matched, and that is big enough, leaves a
-` bottle behind, in the cell of the group that is closest to the middle of it. the bottle falls like a
-` fish does, and it can be swapped like one. when it is on the bottom row, it adds to the multiplier,
-` and it is gone. handle_combos leaves the bottle, and checkBottles, in fish_funcs, pays it out.
+` bottle behind. when a swap finished the group, the bottle goes in the cell of the swapped fish that is
+` in it: the one that the cursor carried, if it is, and if not, the other one (bottleSwapCell). a group
+` that no swap finished, as the board fills back in, leaves it in the cell of the group that is closest
+` to the middle of it. the bottle falls like a fish does, and it can be swapped like one. when it is on
+` the bottom row, it adds to the multiplier, and it is gone. handle_combos leaves the bottle, and
+` checkBottles, in fish_funcs, pays it out. when the fish that the cursor carried finished the group, the
+` bottle is where the cursor is, and that look has no new rainbow fish. see WHERE THEY COME FROM in fish_headers_rainbow.
 global BOTTLE_GROUP_SIZE = 5 `how many fish a group needs to leave a bottle
 global BOTTLE_MULT_GAIN = 1 `how much a bottle adds to the multiplier
+global BOTTLE_SWAP_A = -1 `the two cells of the swap that was just made, or -1: A is where the cursor came from, and B is where it carried its fish to
+global BOTTLE_SWAP_B = -1
+global BOTTLE_LOOK_A = -1 `the same, for the look of the board that handle_combos is on. -1 when no swap set it off.
+global BOTTLE_LOOK_B = -1
 
 ` THE MESSAGE IN THE BOTTLE. a bottle that pays out on a cell that has coral on it may have a message
 ` in it: MORSE_BOTTLE_CHANCE times in a hundred, the radio taps a word out, the way that it taps its
@@ -762,6 +770,11 @@ global EQUIP_AVAILABLE_TEXT_ID `the label next to the spare row
 ` setup fish info allocations.
 global INFO_COUNT = 100 `allocate up a bunch of these things, and hope for the best. 
 global dim INFOS(INFO_COUNT) as infoBlob
+` 1 for a blob that is on a cell of the board: the things of fish_headers_boardinfo, and the coral. since
+` 2026-10-24 info mode does not outline them or go to them, so that no words sit over the board. the list
+` of what is on the board explains them instead (fish_headers_spot). they are still placed and enabled,
+` for the angler, which shines its light on them.
+global dim INFO_ON_BOARD(INFO_COUNT)
 global INFO_LENGTH = 0 `currently there are no assigned infos. 
 global INFO_MODE = 0 `info mode controls if the info screen is showing or not.
 global INFO_SELECTED = 0 `the index of the info that is highlighted in info mode.
@@ -847,6 +860,10 @@ global STEAM_TIMELINE_ROUND = 0
 #constant MENU_PAGE_OPTIONS 3
 #constant MENU_PAGE_NEW_GAME 4
 #constant MENU_PAGE_GAME_OVER 5
+` MEMENTOS. a page of its own, under the options page, for turning off what the endings have left on the
+` main menu: the reef, the ancient one, the photos and the trident. the options page has one line for it,
+` "Mementos", once any of them is there, and the page has a line for each of them that is there.
+#constant MENU_PAGE_ENDINGS 6
 global MENU_PAGE = 0
 
 ` every line that any page of the menu can show. a page shows a run of these that are next to each other.
@@ -888,7 +905,15 @@ global MENU_PAGE = 0
 #constant MENU_ITEM_SET_MOTION 26
 ` and how slowly the big moments go, under the water motion. see THE BIG MOMENTS in fish_headers_teach.
 #constant MENU_ITEM_SET_POP_SPEED 27
-global MENU_ITEM_COUNT = 28
+` and one that turns off the trident of the god in the clouds of the main menu, the same way as the reef.
+` see THE MAIN MENU REMEMBERS THE GOD in fish_headers_neptune.
+#constant MENU_ITEM_SET_TRIDENT 28
+` the line of the options page that opens the page of mementos, and the line of that page that goes back. see MEMENTOS.
+#constant MENU_ITEM_SET_ENDINGS 29
+#constant MENU_ITEM_ENDINGS_BACK 30
+` whether a demo plays when the main menu is left alone, under the pop speed. see OPTION_DEMO in fish_headers_demo.
+#constant MENU_ITEM_SET_DEMO 31
+global MENU_ITEM_COUNT = 32
 global dim MENU_ITEMS(MENU_ITEM_COUNT) as menuItem
 
 global MENU_PAGE_FIRST = 0 `the first item on the page
@@ -1169,7 +1194,7 @@ global dim HISCORE_BADGE_SPRITES(8) `one for every row of the table
 ` of the endings like that share one tile, with a question mark on it, which comes after the others.
 ` so there are three tiles when every ending is known, and one when none of them are.
 global dim HISCORE_ENDING_SHOWN(16) `by ending: one of the CORAL_ENDING constants, and 0 is the mystery ones. 1 is shown.
-global dim HISCORE_ENDING_KNOWN(4) `by ending: 1 if the player has got to it. loadKnownEndings reads it from the preferences.
+global dim HISCORE_ENDING_KNOWN(8) `by ending: 1 if the player has got to it. loadKnownEndings reads it from the preferences.
 global dim HISCORE_ENDING_TILES(8) `the block of color of every tile
 global dim HISCORE_ENDING_ICONS(8) `and the badge that is on it
 global dim HISCORE_TILE_ENDING(8) `which ending every tile is for, or 0 for the tile of the mystery ones. from HISCORE_MOD_TILE on, it is the tile of a modifier. see THE MODIFIERS ON THE TABLES in fish_headers_fast.
@@ -1238,6 +1263,18 @@ global TUTORIAL_WAIT_UNTIL = 0 `the game ms() that tutorial_wait draws frames un
 global TUTORIAL_QUIET_BUBBLES = 0 `1 while no floating bubbles are made, so that the lines of the tutorial have the water to themselves
 global INTRO_SUB_TEXT_ID `the smaller line under a line of tutorial_lines
 
+` THE BAR OF THE ROUND, in the tutorial. once the board is back for good, the bar of the round is lifted over
+` the darkened water, outlined, and filled up once and emptied, with a line under it about what it is for.
+` see tutorial_round_bar in fish_routines_intro.
+global TUTORIAL_BAR_TEXT_ID
+global TUTORIAL_BAR_SUB_TEXT_ID
+global TUTORIAL_BAR_BORDER as infoBorder
+global TUTORIAL_BAR_MS = 6000 `how long it is up for, in milliseconds, unless the confirm key moves on sooner
+global TUTORIAL_BAR_FILL_AT = 900 `when the bar starts to fill, and how long it takes
+global TUTORIAL_BAR_FILL_MS = 1500
+global TUTORIAL_BAR_EMPTY_AT = 3400 `and when it empties out again
+global TUTORIAL_BAR_DEMO = 0 `1 while it is shown, so that frame_score has the numbers follow the bar
+
 ` the question marks that drift up around the fish of the mystery. see tutorialMarkSpawn in fish_routines_intro.
 global TUTORIAL_MARK_COUNT = 16
 global dim TUTORIAL_MARK_TEXTS(16)
@@ -1279,6 +1316,14 @@ global HINT_PART_SHOWN_ALPHA = 140 `how see-through they are when they are there
 global HINT_FADE_MS# = 160 `how long one takes to fade all the way in, or out, in milliseconds
 global HINT_FADE_LAST_MS = 0
 global HINT_GAME_ON = 1 `1 while the hints are the three of the game, and 0 while some other screen has written its own
+
+` the pictures of keys in the words of the tutorial, like {swap} in "Hold {swap} and push {dir} to swap.",
+` jump when their key is pressed. each one grows from its middle and settles back. see frame_hints.
+` 0 is {swap}, 1 is {dir}, and 2 is {info}. ICON_PUNCH_IDS are their icon ids on SCORE_FONT.
+global dim ICON_PUNCH_TWEENS(3)
+global dim ICON_PUNCH_IDS(3)
+global ICON_PUNCH_MS = 260 `how long a jump takes to settle, in milliseconds
+global ICON_PUNCH_SIZE# = .6 `how much bigger it is at the start of the jump, where 1 would be twice its size
 
 ` in the very first game, info mode opens by itself, and the only hint is the one to close it again.
 ` if the player has not closed it after a while, that hint starts to bob.
@@ -1471,13 +1516,23 @@ global CODEC_COUNT = 16 `how many entries there are: one for every card, and the
 ` words. they are seen on the board too: a rainbow fish once one is on a board that has settled, and a
 ` school once one swims off. they have a run of preferences of their own, CODEC_PREF_FISH, and moving
 ` them in here did not move the preferences of anything after them: those go by where their own run starts.
-global CODEC_EXTRA_COUNT = 32
+` and after schooling fish, three of the night (2026-10-27): the squid, the shapes painted in ink, and the
+` ending that they bring, where a temple rises. they are in the run of rainbow fish and schooling fish, which
+` has room for ten. they moved the words, the call of the angler, the usual ending and the quests along by
+` three, which their own preferences do not mind, but the ones of what is new do: see CODEC_NEW_MOVED_PREF.
+` and after those, the ink of the day (2026-10-28): squeaky clean, the pot of the cells that are washed of
+` it. it moved everything after it along by one more: see CODEC_NEW_MOVED_CLEAN_PREF.
+global CODEC_EXTRA_COUNT = 36
 global CODEC_ENTRY_GOODBYE = -1
 global TEX_ENDING_GOODBYE `the picture that it has: a house. Tools/ending_home_gen.py draws it.
-global CODEC_EXTRA_PLAIN = 21 `how many of those come before the words that bring somebody swimming through
+global CODEC_EXTRA_PLAIN = 25 `how many of those come before the words that bring somebody swimming through
 global CODEC_EXTRA_FISH = 19 `which of them is the first of rainbow fish and schooling fish
 global CODEC_ENTRY_RAINBOW = -1
 global CODEC_ENTRY_SCHOOL = -1
+global CODEC_ENTRY_SQUID = -1
+global CODEC_ENTRY_STARS = -1 `the shapes of the night, painted in ink
+global CODEC_ENTRY_FAVOR = -1 `and the ending that they bring
+global CODEC_ENTRY_CLEAN = -1 `the ink of the day, and the pot of the clean cells. see CLEAN in fish_headers_squid.
 global TEX_CODEC_SCHOOL `the picture of schooling fish: an anchovy, a fish that schools
 global CODEC_ENTRY_CAMEO = -1 `the entry of the first of those words, once setup_codec has run
 global CODEC_ENTRY_CROOKED = -1
@@ -1950,9 +2005,9 @@ global CORAL_BAR_X = 32 `where the bars go. they line up with the songs, and are
 global CORAL_BAR_WIDTH = 64
 global CORAL_BAR_GAP = 3 `how far under the songs the first one is, in pixels
 global CORAL_BAR_STEP = 9 `and how far under that one the second one is
-global dim CORAL_BAR_BACKS(2)
-global dim CORAL_BAR_FILLS(2)
-global dim CORAL_BAR_SHOWN#(2) `how full each one is drawn, from 0 to 1. it chases the real thing.
+global dim CORAL_BAR_BACKS(3) `the third one is the trident. see THE BAR in fish_headers_neptune.
+global dim CORAL_BAR_FILLS(3)
+global dim CORAL_BAR_SHOWN#(3) `how full each one is drawn, from 0 to 1. it chases the real thing.
 global CORAL_BAR_DRIP_COUNT = 6 `how many drips of slime the bar of the ancient one has
 global CORAL_BAR_WISP_COUNT = 3 `and how many tentacles
 global CORAL_BAR_WISP_TALL = 3 `how many pixels tall a tentacle is

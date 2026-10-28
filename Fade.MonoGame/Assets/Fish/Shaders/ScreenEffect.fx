@@ -82,7 +82,8 @@ float4 Surge;
 // not drawn on its own: it is the ripples of light that the water already has (makeWaves), turned to the
 // colors of the rainbow and made brighter where the ring is, and only on the water, not the fish.
 // x and y of each are where it claps out from, in pixels of the game, z is when, in seconds on the clock
-// of CloudLook.z, and w is how big it gets, where 1 is CLOUD_REACH. a w of 0 is no cloud.
+// of CloudLook.z, and w is how big it gets, where 1 is CLOUD_REACH. a w of 0 is no cloud. a w below 0 is a
+// pulse of THE RAINBOW SHARES, -w big, which lasts CloudLook.w in place of CloudLook.y.
 // see THE RAINBOW CLOUDS in fish_headers_rainbow.
 float4 Cloud0;
 float4 Cloud1;
@@ -92,8 +93,16 @@ float4 Cloud4;
 float4 Cloud5;
 float4 Cloud6;
 float4 Cloud7;
+float4 Cloud8;
+float4 Cloud9;
+float4 Cloud10;
+float4 Cloud11;
+float4 Cloud12;
+float4 Cloud13;
+float4 Cloud14;
+float4 Cloud15;
 // x is how strong they are, from 0 to 1, and 0 when none is going, so that none of it is worked out.
-// y is how long one lasts, in seconds, and z is now, in seconds.
+// y is how long one lasts, in seconds, z is now, in seconds, and w is how long a pulse lasts, in seconds.
 float4 CloudLook;
 // THE RAINBOW FLOW. when a rainbow fish brings another, a ribbon of rainbow light flows from it to the cursor,
 // along a curve, in the ripples of light of the water, the same way that a cloud is. it has a bright head
@@ -113,6 +122,8 @@ float4 FlowBend;
 #define CLOUD_REACH 70.0
 #define CLOUD_WIDE  16.0
 #define CLOUD_LIGHT 1.3
+// how much brighter a pulse of THE RAINBOW SHARES is than a big cloud
+#define PULSE_LIGHT 1.8
 
 // THE RAINBOW FLOW: how much of the way along the curve its tail reaches back, how wide its head is, in
 // pixels of the game, how long its tail takes to fade once it has got there, in seconds, and how bright it is
@@ -295,35 +306,58 @@ float3 surge(float2 uv)
 
 // THE RAINBOW CLOUDS. how much of the clouds there is on this pixel, and in what color, for the ripples of
 // light of the water, which are `light` bright here (the same `result` that they are drawn with).
+// one cloud, c, at px: the brightest of them so far is kept in best, and which way it is from its middle
+// in bestAway. a pulse (c.w below 0) is -c.w big, and lasts pulseLife in place of life.
+void oneCloud(float4 c, float2 px, float life, float pulseLife, inout float best, inout float2 bestAway)
+{
+    float isPulse = step(c.w, -0.001);
+    float size = abs(c.w);
+    float age = CloudLook.z - c.z;
+    float t = age / lerp(life, pulseLife, isPulse);
+    float live = step(0.0, t) * step(t, 1.0) * step(0.001, size);
+    float2 away = px - c.xy;
+    float dist = length(away);
+    // it claps out quickly, and slows, and there is a puff in the middle at the start
+    float reach = CLOUD_REACH * size * (1.0 - (1.0 - t) * (1.0 - t));
+    float wide = CLOUD_WIDE * size * (0.6 + t);
+    float ring = saturate(1.0 - abs(dist - reach) / max(wide, 1.0));
+    float puff = saturate(1.0 - dist / (CLOUD_WIDE * 1.2)) * saturate(1.0 - t * 3.0);
+    float one = max(ring, puff) * (1.0 - t) * (1.0 - t) * live;
+    // a pulse is small and quick, so it is brighter, to be seen on the darker water too
+    one *= lerp(1.0, PULSE_LIGHT, isPulse);
+    if (one > best)
+    {
+        best = one;
+        bestAway = away;
+    }
+}
+
 float3 rainbowClouds(float2 uv, float light)
 {
     if (CloudLook.x <= 0.0)
         return float3(0.0, 0.0, 0.0);
     float2 px = floor(uv * max(Grid, 1.0));
     float life = max(CloudLook.y, 0.05);
-    float4 clouds[8] = { Cloud0, Cloud1, Cloud2, Cloud3, Cloud4, Cloud5, Cloud6, Cloud7 };
+    float pulseLife = max(CloudLook.w, 0.05);
     float best = 0.0;
     float2 bestAway = float2(1.0, 0.0);
-    for (int i = 0; i < 8; i++)
-    {
-        float4 c = clouds[i];
-        float age = CloudLook.z - c.z;
-        float t = age / life;
-        float live = step(0.0, t) * step(t, 1.0) * step(0.001, c.w);
-        float2 away = px - c.xy;
-        float dist = length(away);
-        // it claps out quickly, and slows, and there is a puff in the middle at the start
-        float reach = CLOUD_REACH * c.w * (1.0 - (1.0 - t) * (1.0 - t));
-        float wide = CLOUD_WIDE * c.w * (0.6 + t);
-        float ring = saturate(1.0 - abs(dist - reach) / max(wide, 1.0));
-        float puff = saturate(1.0 - dist / (CLOUD_WIDE * 1.2)) * saturate(1.0 - t * 3.0);
-        float one = max(ring, puff) * (1.0 - t) * (1.0 - t) * live;
-        if (one > best)
-        {
-            best = one;
-            bestAway = away;
-        }
-    }
+    // one at a time, straight from the parameters, so that no array of them takes up registers
+    oneCloud(Cloud0, px, life, pulseLife, best, bestAway);
+    oneCloud(Cloud1, px, life, pulseLife, best, bestAway);
+    oneCloud(Cloud2, px, life, pulseLife, best, bestAway);
+    oneCloud(Cloud3, px, life, pulseLife, best, bestAway);
+    oneCloud(Cloud4, px, life, pulseLife, best, bestAway);
+    oneCloud(Cloud5, px, life, pulseLife, best, bestAway);
+    oneCloud(Cloud6, px, life, pulseLife, best, bestAway);
+    oneCloud(Cloud7, px, life, pulseLife, best, bestAway);
+    oneCloud(Cloud8, px, life, pulseLife, best, bestAway);
+    oneCloud(Cloud9, px, life, pulseLife, best, bestAway);
+    oneCloud(Cloud10, px, life, pulseLife, best, bestAway);
+    oneCloud(Cloud11, px, life, pulseLife, best, bestAway);
+    oneCloud(Cloud12, px, life, pulseLife, best, bestAway);
+    oneCloud(Cloud13, px, life, pulseLife, best, bestAway);
+    oneCloud(Cloud14, px, life, pulseLife, best, bestAway);
+    oneCloud(Cloud15, px, life, pulseLife, best, bestAway);
     // its colors go around it, and turn as it goes
     float around = atan2(bestAway.y, bestAway.x);
     float3 hue = 0.5 + 0.5 * cos(6.2832 * (around / 6.2832 + CloudLook.z * 0.4 + float3(0.0, 0.33, 0.67)));

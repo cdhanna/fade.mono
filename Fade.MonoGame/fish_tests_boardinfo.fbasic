@@ -25,7 +25,30 @@ test board_info_has_one_outline_for_each_kind from fishBoard
     assert tBiFace >= 0, "one fish gets an outline for the way that it faces"
     assert tBiFace <> 2, "and not one that has another outline"
     assert tBiFace <> 30, "of any kind"
-    assert INFOS(INFO_INDEX_GRID).enabled = 0, "and the board as a whole has no outline, as the tutorial has explained it"
+    assert INFOS(INFO_INDEX_GRID).enabled = 1, "and the board as a whole has an outline, to list what is on it"
+    end
+endtest
+
+` the confirm key on the whole board lists what is on it, rarest first, with how many of each
+test board_info_lists_what_is_on_the_board from fishBoard
+    testCursor(0, 0)
+    CELLS(2).value = TEX_JELLY
+    CELLS(40).value = TEX_JELLY
+    CELLS(30).bellyUp = 1
+    boardInfoPlace()
+    spotOpen()
+    assert SPOT_ON = 1, "the list is open"
+    assert SPOT_ROW_KIND(0) = BOARD_INFO_JELLY, "the jellyfish come first"
+    assert SPOT_ROW_COUNT(0) = 2, "both of them"
+    assert SPOT_ROW_KIND(1) = BOARD_INFO_BELLY, "then the fish that is belly up"
+    assert SPOT_ROW_COUNT(1) = 1, "the one"
+    assert SPOT_MATCH_N = 2, "the jellyfish are in the spotlight"
+    assert SPOT_MATCH(0) = 2, "on their cells"
+    assert SPOT_MATCH(1) = 40, "both of them"
+    spotSelect(1)
+    assert SPOT_MATCH_N = 1, "and the next row has its own"
+    spotClose()
+    assert SPOT_ON = 0, "and the list closes"
     end
 endtest
 
@@ -58,6 +81,150 @@ test board_info_is_under_the_mouse from fishBoard
     TEST_MOUSE_Y = INFOS(tBiBlob).topLeft.y + CELL_SIZE / 2
     runto _loop
     runto _loop
-    assert INFO_SELECTED = tBiBlob, "the mouse over the stingray picks its outline, and not the whole board"
+    assert INFO_SELECTED = INFO_INDEX_GRID, "the mouse over the stingray picks the whole board: the things on it are in its list"
+    assert INFO_ON_BOARD(tBiBlob) = 1, "the stingray's own outline is kept for the angler, but info mode passes it by"
+    end
+endtest
+
+` a new entry of the codec that is out on the board has its badge there, and reading its row puts it away
+test board_info_new_badge_goes_to_the_board from fishBoard
+    testCursor(0, 0)
+    CELLS(40).value = TEX_JELLY
+    CODEC_SEEN(CODEC_ENTRY_JELLY) = 1
+    CODEC_NEW(CODEC_ENTRY_JELLY) = 1
+    codecNewRecount()
+    boardInfoPlace()
+    assert SPOT_NEW_ANCHOR = BOARD_INFO_JELLY, "the badge goes to the jellyfish"
+    assert SPOT_NEW_CELL(BOARD_INFO_JELLY) = 40, "on its cell"
+    spotOpen()
+    assert SPOT_ROW_KIND(0) = BOARD_INFO_JELLY, "its row is the first"
+    tBiNew = spotKindNew(BOARD_INFO_JELLY)
+    assert tBiNew = 1, "and it is still new while it is chosen"
+    spotClose()
+    tBiNew = spotKindNew(BOARD_INFO_JELLY)
+    assert tBiNew = 0, "closing the list reads it"
+    assert SPOT_NEW_ANCHOR = -1, "and the badge goes back to the Codec spot"
+    end
+endtest
+
+
+` LOOKING CLOSER, in fish_headers_spot. the confirm key on the board puts a cursor on a cell, and the panel has
+` a row for every thing about it: the fish's own things first, then the ground under it.
+test board_info_look_has_a_row_for_everything_on_a_cell from fishBoard
+    testCursor(0, 0)
+    tLkCell = testIndex(2, 3)
+    CELLS(tLkCell).bellyUp = 1
+    CELLS(tLkCell).stack = 1
+    CORAL_CELLS(tLkCell) = 1
+    CELLS(testIndex(5, 5)).bellyUp = 1
+    boardInfoPlace()
+    spotLookOpen(tLkCell)
+    assert SPOT_ON = 1, "the look is open"
+    assert SPOT_LOOK = 1, "and it is the look, not the list"
+    assert SPOT_LOOK_CELL = tLkCell, "on the cell"
+    tLkBelly = -1
+    tLkStack = -1
+    tLkCoral = -1
+    tLkFish = -1
+    for tLkI = 0 to SPOT_ROWS - 1
+        if SPOT_ROW_KIND(tLkI) = BOARD_INFO_BELLY then tLkBelly = tLkI
+        if SPOT_ROW_KIND(tLkI) = BOARD_INFO_STACK then tLkStack = tLkI
+        if SPOT_ROW_KIND(tLkI) = BOARD_INFO_CORAL then tLkCoral = tLkI
+        if SPOT_ROW_KIND(tLkI) = SPOT_KIND_FISH then tLkFish = tLkI
+    next
+    assert tLkBelly >= 0, "it is belly up"
+    assert tLkStack >= 0, "and stacked"
+    assert tLkCoral = SPOT_ROWS - 1, "and the coral under it comes last"
+    assert tLkFish = -1, "a fish with something to say about it has no plain row"
+    assert SPOT_ROW_COUNT(tLkBelly) = 2, "the number is how many there are on the whole board"
+    assert SPOT_MATCH_N = 1, "the hole is on the one cell"
+    spotClose()
+    assert SPOT_ON = 0, "and the look closes"
+    assert SPOT_LOOK = 0, "all of it"
+    end
+endtest
+
+test board_info_look_has_a_row_for_a_plain_fish from fishBoard
+    SCHOOL_ON = 0
+    tLkCell = testIndex(1, 1)
+    spotLookOpen(tLkCell)
+    assert SPOT_ROWS = 1, "a fish with nothing to say about it has one row"
+    assert SPOT_ROW_KIND(0) = SPOT_KIND_FISH, "for the plain fish"
+    tLkTopic = anglerKindTopic(SPOT_KIND_FISH)
+    assert tLkTopic = -1, "which asks the angler about the whole board"
+    spotClose()
+    end
+endtest
+
+test board_info_look_sees_the_squid_and_not_the_fish_under_it from fishBoard
+    tLkCell = testIndex(3, 2)
+    SQUID_CELL = tLkCell
+    CELLS(tLkCell).bellyUp = 1
+    INK(tLkCell) = 1
+    spotLookOpen(tLkCell)
+    assert SPOT_ROWS = 2, "the squid, and its ink"
+    assert SPOT_ROW_KIND(0) = SPOT_KIND_SQUID, "the squid first"
+    assert SPOT_ROW_KIND(1) = SPOT_KIND_INK, "and the ink under it"
+    tLkTopic = anglerKindTopic(SPOT_KIND_SQUID)
+    assert tLkTopic = ANGLER_T_SQUID, "the squid has a topic"
+    tLkTopic = anglerKindTopic(SPOT_KIND_INK)
+    assert tLkTopic = ANGLER_T_SQUID, "and the ink is in the squid's answer"
+    spotClose()
+    SQUID_CELL = -1
+    INK(tLkCell) = 0
+    end
+endtest
+
+` the confirm key chooses the rows of the cell: the chosen row is the spotlight on every cell that has it
+test board_info_look_chooses_a_row_and_spotlights_it from fishBoard
+    testCursor(0, 0)
+    CELLS(2).value = TEX_JELLY
+    CELLS(40).value = TEX_JELLY
+    boardInfoPlace()
+    spotLookOpen(40)
+    assert SPOT_ROW_KIND(0) = BOARD_INFO_JELLY, "the jellyfish is the first row"
+    assert SPOT_ROW_COUNT(0) = 2, "of two"
+    spotLookLock()
+    assert SPOT_LOCKED = 1, "its rows are being chosen from"
+    assert SPOT_MATCH_N = 2, "and both jellyfish are in the spotlight"
+    spotLookUnlock()
+    assert SPOT_LOCKED = 0, "back to moving the cursor"
+    assert SPOT_MATCH_N = 1, "with the one hole"
+    assert SPOT_LOOK_CELL = 40, "where it was"
+    spotClose()
+    end
+endtest
+
+test board_info_look_stops_at_the_edge_of_the_board from fishBoard
+    spotLookOpen(0)
+    tLkMoved = spotLookStep(-1, 0)
+    assert tLkMoved = 0, "there is no cell to the left of the first"
+    assert SPOT_LOOK_CELL = 0, "so it stays put"
+    tLkMoved = spotLookStep(0, -1)
+    assert tLkMoved = 0, "or above it"
+    tLkMoved = spotLookStep(1, 0)
+    assert tLkMoved = 1, "but it goes right"
+    assert SPOT_LOOK_CELL = 1, "to the next cell"
+    tLkMoved = spotLookStep(0, 1)
+    assert SPOT_LOOK_CELL = 1 + CELL_COLUMN_COUNT, "and down"
+    spotClose()
+    end
+endtest
+
+` a new thing on the cell is read when the cursor moves off it
+test board_info_look_reads_what_it_moves_off from fishBoard
+    testCursor(0, 0)
+    CELLS(40).value = TEX_JELLY
+    CODEC_SEEN(CODEC_ENTRY_JELLY) = 1
+    CODEC_NEW(CODEC_ENTRY_JELLY) = 1
+    codecNewRecount()
+    boardInfoPlace()
+    spotLookOpen(40)
+    tLkNew = spotKindNew(BOARD_INFO_JELLY)
+    assert tLkNew = 1, "it is still new while it is looked at"
+    spotLookAt(0)
+    tLkNew = spotKindNew(BOARD_INFO_JELLY)
+    assert tLkNew = 0, "and read once the cursor is off it"
+    spotClose()
     end
 endtest

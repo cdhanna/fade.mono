@@ -108,6 +108,9 @@ public struct RichTextRun
 
     public string text;
 
+    // The font's id for the icon, so that a text can scale one of its icons when it is drawn. see
+    // TextSystem.iconScales.
+    public int iconId;
     public int textureId;
     public int frame;
     public Vector2 iconSize;
@@ -408,6 +411,7 @@ public static class RichTextSystem
             _layout.runs.Add(new RichTextRun
             {
                 isIcon = true,
+                iconId = icon.id,
                 textureId = icon.textureId,
                 frame = icon.frame,
                 iconSize = iconSize,

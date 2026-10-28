@@ -171,6 +171,20 @@ return
 #constant ANGLER_T_RAINBOW 45
 #constant ANGLER_R_RAINBOW_BURST 46
 #constant ANGLER_T_ROUNDS 47
+` and everything else that can be on the board, or on the screen (2026-10-27): the five kinds of fish that a
+` quest puts on the board, the rings of a quest, the squid of the night and its secrets, and the gold bar of
+` the godly shape. see setup_angler_topics.
+#constant ANGLER_T_KRILL 48
+#constant ANGLER_T_SEAWEED 49
+#constant ANGLER_T_DOLLAR 50
+#constant ANGLER_T_TURTLE 51
+#constant ANGLER_T_GLASS 52
+#constant ANGLER_T_MARK 53
+#constant ANGLER_T_SQUID 54
+#constant ANGLER_R_SQUID_JUMP 55
+#constant ANGLER_R_STARS 56
+#constant ANGLER_T_GODLY 57
+#constant ANGLER_T_CLEAN 58
 
 setup_angler_topics:
     ANGLER_TOPIC_COUNT = 0
@@ -385,6 +399,59 @@ setup_angler_topics:
         lockey$("angler.topic.rounds.ask"),
         lockey$("angler.topic.rounds.say"),
         " ")
+
+    ` the fish that only a quest puts on the board, and the rings. each kind belongs to one quest, so they are
+    ` only asked about while they are out there. see THE QUEST KINDS in fish_headers_quests.
+    anglerTopic(ANGLER_TIER_PLAIN,
+        lockey$("angler.topic.krill.ask"),
+        lockey$("angler.topic.krill.say"),
+        " ")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        lockey$("angler.topic.seaweed.ask"),
+        lockey$("angler.topic.seaweed.say"),
+        " ")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        lockey$("angler.topic.dollar.ask"),
+        lockey$("angler.topic.dollar.say"),
+        " ")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        lockey$("angler.topic.turtle.ask"),
+        lockey$("angler.topic.turtle.say"),
+        " ")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        lockey$("angler.topic.glass.ask"),
+        lockey$("angler.topic.glass.say"),
+        " ")
+    anglerTopic(ANGLER_TIER_PLAIN,
+        lockey$("angler.topic.mark.ask"),
+        lockey$("angler.topic.mark.say"),
+        " ")
+
+    ` the squid of the night: what it does is plain, once it has been seen. where it goes is a rumor, and
+    ` the shapes in the plankton a deep one. see fish_headers_squid. and the gold bar, which only says that
+    ` the shape is godly, the same as info mode: that it is a trident is for the player to see.
+    anglerTopic(ANGLER_TIER_PLAIN,
+        lockey$("angler.topic.squid.ask"),
+        lockey$("angler.topic.squid.say"),
+        lockey$("angler.topic.squid.more5"))
+    anglerTopic(ANGLER_TIER_RUMOR,
+        lockey$("angler.topic.squidjump.ask"),
+        lockey$("angler.topic.squidjump.say"),
+        " ")
+    anglerTopic(ANGLER_TIER_DEEP,
+        lockey$("angler.topic.stars.ask"),
+        lockey$("angler.topic.stars.say"),
+        lockey$("angler.topic.stars.more2"))
+    anglerTopic(ANGLER_TIER_PLAIN,
+        lockey$("angler.topic.godly.ask"),
+        lockey$("angler.topic.godly.say2"),
+        " ")
+
+    ` the ink of the day, and its pot of clean cells. see THE INK OF THE DAY in fish_headers_squid.
+    anglerTopic(ANGLER_TIER_PLAIN,
+        lockey$("angler.topic.clean.ask"),
+        lockey$("angler.topic.clean.say"),
+        lockey$("angler.topic.clean.more"))
 return
 
 
@@ -428,6 +495,12 @@ return
 angler_from_info:
     ANGLER_FROM_CARD = 0
     anglerTopicForBlob(ANGLER_SPOT)
+    ` asked from a row of the list of what is on the board, it is about that row. see fish_headers_spot.
+    if ANGLER_SPOT_KIND >= 0
+        angRowTopic = anglerKindTopic(ANGLER_SPOT_KIND)
+        if angRowTopic >= 0 then ANGLER_FOUND = angRowTopic
+        ANGLER_SPOT_KIND = -1
+    endif
     ANGLER_ANCHOR = ANGLER_FOUND
     gosub angler_run
 return
@@ -820,16 +893,9 @@ return
 ` info mode puts the kept lights in its hint, with the key that asks. info_open comes here, after it
 ` has written the hint, with infoEnabledCount.
 angler_info_hint:
-    if ANGLER_BANKED <= 0 then return
-    angHintBulbs$ = ""
-    for angHintN = 1 to ANGLER_BANKED
-        angHintBulbs$ = angHintBulbs$ + "{bulb}"
-    next
-    if infoEnabledCount > 1
-        set text loc INFO_HINT_TEXT_ID, "angler.hint.info.look", "bulbs", angHintBulbs$
-    else
-        set text loc INFO_HINT_TEXT_ID, "angler.hint.info", "bulbs", angHintBulbs$
-    endif
+    angInfoHintLook = 0
+    if infoEnabledCount > 1 then angInfoHintLook = 1
+    anglerInfoHint(angInfoHintLook, 0)
 return
 
 
@@ -1292,6 +1358,33 @@ function anglerTopicBlob(angBlobTopic)
         case ANGLER_T_ROUNDS
             ANGLER_FOUND = INFO_INDEX_ROUNDS
         endcase
+        case ANGLER_T_KRILL
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_KRILL, INFO_INDEX_GRID)
+        endcase
+        case ANGLER_T_SEAWEED
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_SEAWEED, INFO_INDEX_GRID)
+        endcase
+        case ANGLER_T_DOLLAR
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_DOLLAR, INFO_INDEX_GRID)
+        endcase
+        case ANGLER_T_TURTLE
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_TURTLE, INFO_INDEX_GRID)
+        endcase
+        case ANGLER_T_GLASS
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_GLASS, INFO_INDEX_GRID)
+        endcase
+        case ANGLER_T_MARK
+            ANGLER_FOUND = boardInfoBlobOr(BOARD_INFO_MARK, INFO_INDEX_GRID)
+        endcase
+        case ANGLER_T_SQUID
+            ANGLER_FOUND = INFO_INDEX_GRID
+        endcase
+        case ANGLER_T_GODLY
+            ANGLER_FOUND = INFO_INDEX_TRIDENT
+        endcase
+        case ANGLER_T_CLEAN
+            ANGLER_FOUND = INFO_INDEX_GRID
+        endcase
     endselect
     if anglerBlobUp(ANGLER_FOUND) = 0 then ANGLER_FOUND = -1
 endfunction
@@ -1319,22 +1412,13 @@ function anglerTopicForBlob(angForBlob)
         if TIDE_NIGHT then ANGLER_FOUND = ANGLER_T_NIGHT
     endif
     if angForBlob = INFO_INDEX_DIVER then ANGLER_FOUND = ANGLER_T_DIVER
+    if angForBlob = INFO_INDEX_CODEC then ANGLER_FOUND = ANGLER_T_INFO
+    if angForBlob = INFO_INDEX_TRIDENT then ANGLER_FOUND = ANGLER_T_GODLY
 
-    ` an outline of a thing on the board is about that thing, when there is a topic for it. see fish_headers_boardinfo.
+    ` an outline of a thing on the board is about that thing. see fish_headers_boardinfo.
     angForKind = boardInfoKindOf(angForBlob)
-    if angForKind = BOARD_INFO_DIVER then ANGLER_FOUND = ANGLER_T_DIVER
-    if angForKind = BOARD_INFO_BOTTLE then ANGLER_FOUND = ANGLER_T_BOTTLE
-    if angForKind = BOARD_INFO_JELLY then ANGLER_FOUND = ANGLER_T_JELLY
-    if angForKind = BOARD_INFO_RAY then ANGLER_FOUND = ANGLER_T_RAY
-    if angForKind = BOARD_INFO_BONES then ANGLER_FOUND = ANGLER_T_BONES
-    if angForKind = BOARD_INFO_BELLY then ANGLER_FOUND = ANGLER_T_BELLY
-    if angForKind = BOARD_INFO_STACK then ANGLER_FOUND = ANGLER_T_STACK
-    if angForKind = BOARD_INFO_MARK then ANGLER_FOUND = ANGLER_T_QUEST
-    if angForKind >= BOARD_INFO_KRILL
-        if angForKind <= BOARD_INFO_GLASS then ANGLER_FOUND = ANGLER_T_QUEST
-    endif
-    if angForKind = BOARD_INFO_RAINBOW then ANGLER_FOUND = ANGLER_T_RAINBOW
-    if angForKind = BOARD_INFO_FACING then ANGLER_FOUND = ANGLER_T_FACING
+    angForKindTopic = anglerKindTopic(angForKind)
+    if angForKindTopic >= 0 then ANGLER_FOUND = angForKindTopic
 
     ` the passives and the moves explain themselves, one by one. asking about one that has a topic of its
     ` own is asking about that: "bottoms up" is about the belly up fish. any other is about the cards.
@@ -1353,6 +1437,8 @@ function anglerTopicForBlob(angForBlob)
         if ANGLER_SEE_JELLY then ANGLER_FOUND = ANGLER_T_JELLY
         if ANGLER_SEE_BONES then ANGLER_FOUND = ANGLER_T_BONES
         if ANGLER_SEE_BELLY then ANGLER_FOUND = ANGLER_T_BELLY
+        if SQUID_CELL >= 0 then ANGLER_FOUND = ANGLER_T_SQUID
+        if INK_DAY then ANGLER_FOUND = ANGLER_T_CLEAN
         rainbowFishCount()
         if RAINBOW_FISH_COUNT > 0 then ANGLER_FOUND = ANGLER_T_RAINBOW
         ` one that has been heard already gives way to the way that the fish face, which every board has,
@@ -1422,6 +1508,33 @@ function anglerTopicNear(angNearTopic)
             rainbowFishCount()
             if RAINBOW_FISH_COUNT > 0 then angNear = 1
         endcase
+        case ANGLER_T_KRILL
+            angNear = anglerKindOut(BOARD_INFO_KRILL)
+        endcase
+        case ANGLER_T_SEAWEED
+            angNear = anglerKindOut(BOARD_INFO_SEAWEED)
+        endcase
+        case ANGLER_T_DOLLAR
+            angNear = anglerKindOut(BOARD_INFO_DOLLAR)
+        endcase
+        case ANGLER_T_TURTLE
+            angNear = anglerKindOut(BOARD_INFO_TURTLE)
+        endcase
+        case ANGLER_T_GLASS
+            angNear = anglerKindOut(BOARD_INFO_GLASS)
+        endcase
+        case ANGLER_T_MARK
+            angNear = anglerKindOut(BOARD_INFO_MARK)
+        endcase
+        case ANGLER_T_SQUID
+            if SQUID_CELL >= 0 then angNear = 1
+        endcase
+        case ANGLER_T_GODLY
+            angNear = anglerBlobUp(INFO_INDEX_TRIDENT)
+        endcase
+        case ANGLER_T_CLEAN
+            if INK_DAY then angNear = 1
+        endcase
     endselect
 endfunction angNear
 
@@ -1485,6 +1598,39 @@ function anglerTopicOpen(angOpenTopic)
             angOpen = 0
             if TEACH_LIFE(TEACH_RAINBOW_NEW) > 0 then angOpen = 1
         endcase
+        ` the fish of a quest, and its rings, only while they are out there: each is the business of one quest
+        case ANGLER_T_KRILL
+            angOpen = 0
+        endcase
+        case ANGLER_T_SEAWEED
+            angOpen = 0
+        endcase
+        case ANGLER_T_DOLLAR
+            angOpen = 0
+        endcase
+        case ANGLER_T_TURTLE
+            angOpen = 0
+        endcase
+        case ANGLER_T_GLASS
+            angOpen = 0
+        endcase
+        case ANGLER_T_MARK
+            angOpen = 0
+        endcase
+        ` the squid comes every night, so a player who has seen the night has seen it
+        case ANGLER_T_SQUID
+            angOpen = anglerSeen(CODEC_ENTRY_NIGHT)
+        endcase
+        ` and the gold bar once a piece of the shape has been made, in this game or one that summoned him
+        case ANGLER_T_GODLY
+            angOpen = 0
+            if TRIDENT_PARTS > 0 then angOpen = 1
+            if get pref(PREF_ENDING_NEPTUNE, 0) then angOpen = 1
+        endcase
+        ` and the ink of the day once a pot has paid, or while there is some
+        case ANGLER_T_CLEAN
+            angOpen = anglerSeen(CODEC_ENTRY_CLEAN)
+        endcase
     endselect
     if anglerTopicNear(angOpenTopic) then angOpen = 1
 endfunction angOpen
@@ -1508,6 +1654,14 @@ function anglerRumorOpen(angRumorOpenTopic)
         if TEACH_LIFE(TEACH_RAINBOW_NEW) > 0 then angRumorIsOpen = 1
         rainbowFishCount()
         if RAINBOW_FISH_COUNT > 0 then angRumorIsOpen = 1
+    endif
+    ` and the secrets of the squid wait until there has been a night, so they do not give the night away
+    angRumorSquid = 0
+    if angRumorOpenTopic = ANGLER_R_SQUID_JUMP then angRumorSquid = 1
+    if angRumorOpenTopic = ANGLER_R_STARS then angRumorSquid = 1
+    if angRumorSquid
+        angRumorIsOpen = anglerSeen(CODEC_ENTRY_NIGHT)
+        if TIDE_NIGHT then angRumorIsOpen = 1
     endif
 endfunction angRumorIsOpen
 
@@ -1559,6 +1713,11 @@ function anglerRumorKnown(angKnownTopic)
             if CODEC_ENTRY_CAMEO >= 0
                 angKnown = anglerSeen(CODEC_ENTRY_CAMEO + 8)
             endif
+        endcase
+        ` a player who has made a piece of the shape knows about the stars
+        case ANGLER_R_STARS
+            if TRIDENT_PARTS > 0 then angKnown = 1
+            if get pref(PREF_ENDING_NEPTUNE, 0) then angKnown = 1
         endcase
     endselect
 endfunction angKnown
@@ -1720,6 +1879,107 @@ function anglerFlockOut()
         if FLOCK_ON(angFlockI) then angFlockOut = 1
     next
 endfunction angFlockOut
+
+` 1 when any cell of the board has one of the kinds of THE THINGS ON THE BOARD, IN INFO MODE on it
+function anglerKindOut(angOutKind)
+    angKindIsOut = 0
+    angOutLast = CELL_COUNT - 1
+    for angOutN = 0 to angOutLast
+        angOutHas = boardInfoHas(angOutKind, angOutN)
+        if angOutHas then angKindIsOut = 1
+    next
+endfunction angKindIsOut
+
+
+` the topic of a kind of thing on the board, one of the BOARD_INFO_ kinds, or the fish that face right of
+` the list of what is on the board, SPOT_KIND_RIGHT. -1 for anything else. every kind has one.
+function anglerKindTopic(angKind)
+    angKindTopic = -1
+    select angKind
+        case BOARD_INFO_DIVER
+            angKindTopic = ANGLER_T_DIVER
+        endcase
+        case BOARD_INFO_RAINBOW
+            angKindTopic = ANGLER_T_RAINBOW
+        endcase
+        case BOARD_INFO_KRILL
+            angKindTopic = ANGLER_T_KRILL
+        endcase
+        case BOARD_INFO_SEAWEED
+            angKindTopic = ANGLER_T_SEAWEED
+        endcase
+        case BOARD_INFO_DOLLAR
+            angKindTopic = ANGLER_T_DOLLAR
+        endcase
+        case BOARD_INFO_TURTLE
+            angKindTopic = ANGLER_T_TURTLE
+        endcase
+        case BOARD_INFO_GLASS
+            angKindTopic = ANGLER_T_GLASS
+        endcase
+        case BOARD_INFO_BOTTLE
+            angKindTopic = ANGLER_T_BOTTLE
+        endcase
+        case BOARD_INFO_JELLY
+            angKindTopic = ANGLER_T_JELLY
+        endcase
+        case BOARD_INFO_RAY
+            angKindTopic = ANGLER_T_RAY
+        endcase
+        case BOARD_INFO_MARK
+            angKindTopic = ANGLER_T_MARK
+        endcase
+        case BOARD_INFO_HORROR
+            angKindTopic = ANGLER_T_HORROR
+        endcase
+        case BOARD_INFO_CORAL
+            angKindTopic = ANGLER_T_CORAL
+        endcase
+        case BOARD_INFO_BONES
+            angKindTopic = ANGLER_T_BONES
+        endcase
+        case BOARD_INFO_BELLY
+            angKindTopic = ANGLER_T_BELLY
+        endcase
+        case BOARD_INFO_STACK
+            angKindTopic = ANGLER_T_STACK
+        endcase
+        case BOARD_INFO_FACING
+            angKindTopic = ANGLER_T_FACING
+        endcase
+    endselect
+    if angKind = SPOT_KIND_RIGHT then angKindTopic = ANGLER_T_FACING
+    ` the look has these too. see LOOKING CLOSER in fish_headers_spot. the squid's answer has the ink in it,
+    ` and a plain fish has no topic of its own, so it is whatever the whole board would be.
+    if angKind = SPOT_KIND_SQUID then angKindTopic = ANGLER_T_SQUID
+    if angKind = SPOT_KIND_INK
+        angKindTopic = ANGLER_T_SQUID
+        if INK_DAY then angKindTopic = ANGLER_T_CLEAN
+    endif
+    if angKind = SPOT_KIND_CLEAN then angKindTopic = ANGLER_T_CLEAN
+endfunction angKindTopic
+
+
+` the hint along the bottom of info mode, with the kept lights in it. info mode and the list of what is on
+` the board both come here. angHintLook is 1 when there is more than one thing to look around at, and
+` angHintSpot is 1 while the list is open, where {dir} chooses a row.
+function anglerInfoHint(angHintLook, angHintSpot)
+    if ANGLER_BANKED <= 0 then exitfunction
+    angHintBulbs$ = ""
+    for angHintN = 1 to ANGLER_BANKED
+        angHintBulbs$ = angHintBulbs$ + "{bulb}"
+    next
+    if angHintSpot
+        set text loc INFO_HINT_TEXT_ID, "angler.hint.spot", "bulbs", angHintBulbs$
+        exitfunction
+    endif
+    if angHintLook
+        set text loc INFO_HINT_TEXT_ID, "angler.hint.info.look", "bulbs", angHintBulbs$
+    else
+        set text loc INFO_HINT_TEXT_ID, "angler.hint.info", "bulbs", angHintBulbs$
+    endif
+endfunction
+
 
 ` the topic of the card that a passive or a move of info mode is, in ANGLER_FOUND, or -1 when the card
 ` has no topic of its own

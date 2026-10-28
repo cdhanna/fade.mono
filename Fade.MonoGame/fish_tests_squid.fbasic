@@ -1,0 +1,787 @@
+` THE SQUID, THE INK AND THE CONSTELLATIONS. see fish_headers_squid.
+
+` the board of the tests is fish 1 to 5, over and over, two columns on for every row. so a row goes
+` 1 2 3 4 5 1 2 3 4, and no fish has a fish of its own kind next to it.
+
+test squid_jumps_as_far_as_the_kinds_before_a_repeat from fishBoard
+    ` the squid is on a 6, which does not count, because it cannot be seen. right of it are a 7 and a
+    ` 1, and then a 7 again: two kinds before a repeat
+    testPut(0, 4, 6)
+    testPut(1, 4, 7)
+    testPut(2, 4, 1)
+    testPut(3, 4, 7)
+    tSqTo = squidJump(testIndex(0, 4), 1, 0)
+    assert tSqTo = testIndex(2, 4), "it goes two, and lands on the 1"
+
+    ` the kind under the squid is not a repeat: a 6 ahead of a squid that is on a 6 is a new kind
+    testPut(3, 4, 6)
+    testPut(4, 4, 7)
+    tSqTo = squidJump(testIndex(0, 4), 1, 0)
+    assert tSqTo = testIndex(3, 4), "it goes three, past the 6"
+
+    ` two of a kind right ahead of it is a repeat straight away, and it goes one
+    testPut(6, 6, 7)
+    testPut(7, 6, 7)
+    tSqTo = squidJump(testIndex(5, 6), 1, 0)
+    assert tSqTo = testIndex(6, 6), "it goes at least one"
+    end
+endtest
+
+test squid_jump_goes_around_the_edge from fishBoard
+    ` pushed left from the first column, it comes back in on the right. the row goes 1 2 3 4 5 1 2 3 4,
+    ` so to the left of the squid are a 4, a 3, a 2, a 1 and a 5, and then the 4 again
+    tSqTo = squidJump(testIndex(0, 0), -1, 0)
+    assert tSqTo = testIndex(CELL_COLUMN_COUNT - 5, 0), "five kinds, around the edge"
+
+    ` the first column goes 1 3 5 2 4 1 3, so pushed down from the top it goes five, to the 1
+    tSqTo = squidJump(testIndex(0, 0), 0, 1)
+    assert tSqTo = testIndex(0, 5), "five kinds, down the column"
+    end
+endtest
+
+test squid_push_inks_its_cell_and_nothing_trades_places from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    testPut(0, 4, 6)
+    testPut(1, 4, 7)
+    testPut(2, 4, 1)
+    testPut(3, 4, 7)
+    SQUID_CELL = testIndex(0, 4)
+    testCursor(0, 4)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+
+    assert INK(testIndex(0, 4)) = 1, "the cell that it was in is inked"
+    assert INK_COUNT = 1, "and no other"
+    assert SQUID_CELL = testIndex(2, 4), "it escaped to where its jump says"
+    assert CELLS(testIndex(0, 4)).value = 6, "the fish that it was on is back"
+    assert CELLS(testIndex(1, 4)).value = 7, "and nothing traded places"
+    assert SELECTION_POS.x = 0, "the cursor stayed where it was"
+    assert TIDE_NIGHT_LEFT = 4, "it was one of the moves of the night"
+    assert SQUID_PUSHES = 1, "and it was counted as a push"
+    end
+endtest
+
+test squid_shoved_back_goes_the_other_way from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    ` the cursor is to the left of the squid, and carries its fish right, into the squid, which shoves
+    ` the squid back the other way: left
+    testPut(3, 4, 6)
+    testPut(4, 4, 7)
+    testPut(5, 4, 1)
+    testPut(6, 4, 6)
+    SQUID_CELL = testIndex(3, 4)
+    testCursor(2, 4)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+
+    assert INK(testIndex(3, 4)) = 1, "the squid's cell is inked"
+    tSqWant = squidJump(testIndex(3, 4), -1, 0)
+    assert SQUID_CELL = tSqWant, "it went left, the way that the swap shoved it"
+    assert SELECTION_POS.x = 2, "the cursor stayed where it was"
+    end
+endtest
+
+test squid_never_matches from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(5, 2, 6)
+    SQUID_CELL = testIndex(4, 2)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert TIDE_HELD_GROUPS = 0, "the squid in the middle splits the three, so nothing is held"
+    end
+endtest
+
+test ink_spreads_with_a_swap_at_night from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    inkCell(testIndex(2, 2))
+    testCursor(2, 2)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+    assert INK(testIndex(3, 2)) = 1, "the other end of the swap is inked"
+    assert INK(testIndex(2, 2)) = 1, "and the ink stays where it was"
+    assert INK_COUNT = 2, "and that is all"
+    assert INK_FRESH_FROM = testIndex(2, 2), "it flowed out of the cell that the cursor started on"
+    end
+endtest
+
+test a_swap_into_ink_does_nothing_to_it from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    inkCell(testIndex(3, 2))
+    ` the cursor comes at the ink from the left
+    testCursor(2, 2)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+    assert INK(testIndex(2, 2)) = 0, "the cell that the cursor came from is not inked"
+    assert INK(testIndex(4, 2)) = 0, "and the ink is not pushed on ahead"
+    assert INK_COUNT = 1, "it is only where it was"
+    end
+endtest
+
+test ink_spreads_in_the_day_too from fishBoard
+    INK_DAY = 1
+    INK(testIndex(2, 2)) = 1
+    INK_COUNT = 1
+    testCursor(2, 2)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+    assert INK(testIndex(3, 2)) = 1, "the dried ink spreads with a swap the same as it does at night"
+    assert INK(testIndex(2, 2)) = 1, "and stays where it was"
+    end
+endtest
+
+test the_ink_stays_when_day_breaks from fishBoard
+    SCORE_BAR.endVal = 100000000
+    TIDE_DAWN_MS = 0
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 1
+    inkCell(testIndex(6, 6))
+    inkCell(testIndex(7, 6))
+    SQUID_CELL = testIndex(1, 1)
+    tSqKindA = CELLS(testIndex(6, 6)).value
+
+    ` the last move of the night, a swap that does not touch the ink
+    testCursor(2, 2)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+
+    tSqUntil = wall ms() + 8000
+    while TIDE_NIGHT = 1
+        runto _loop
+        if wall ms() > tSqUntil then TIDE_NIGHT = 0
+    endwhile
+    assert SQUID_ENDING = 0, "day broke on its own once the board had settled"
+    assert INK_COUNT = 2, "and the ink is still there"
+    assert INK_DAY = 1, "dried, as the ink of the day"
+    assert INK_POT = 0, "and nothing is clean yet, so the pot is empty"
+    assert CELLS(testIndex(6, 6)).value = tSqKindA, "the fish under it did not pop"
+    assert SQUID_CELL = -1, "and the squid is gone"
+    end
+endtest
+
+test the_upgrade_waits_for_the_constellation_to_pop from fishBoard
+    TIDE_DAWN_MS = 0
+    STAR_POP_WAIT = 100000
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 1
+    NEPTUNE_ENDING_HOLD = 1
+    STAR_PICK(0) = 0
+    STAR_PICK(1) = -1
+    STAR_PICK(2) = -1
+    inkCell(testIndex(2, 2))
+    inkCell(testIndex(3, 2))
+    inkCell(testIndex(4, 2))
+    inkCell(testIndex(2, 3))
+    inkCell(testIndex(4, 3))
+    inkCell(testIndex(2, 4))
+    starLook()
+    assert STAR_POP_DUE(0) = 1, "the left prong is made, and waits to pop"
+
+    ` the round is over on the last move of the night, while it shimmers
+    tideMoveMade(1)
+    SCORE_BAR_HOLD = 1
+    for tSqUpN = 1 to 10
+        runto _loop
+    next
+    assert SQUID_ENDING = 1, "the night holds on"
+    assert TIDE_NIGHT = 1, "it is still night"
+    assert REQUEST_ABILITY_SELECTION = 0, "so the upgrade screen waits"
+
+    ` once it has popped and day has broken, the upgrade screen comes
+    STAR_POP_MS(0) = 0
+    tSqUntil = wall ms() + 8000
+    while SCORE_BAR_HOLD = 1
+        runto _loop
+        if wall ms() > tSqUntil then SCORE_BAR_HOLD = 0
+    endwhile
+    assert STAR_POPPED(0) = 1, "it popped"
+    assert INK_COUNT = 0, "and its ink went with it"
+    assert TIDE_NIGHT = 0, "day has broken"
+    assert REQUEST_ABILITY_SELECTION = 1, "and then the upgrade screen is asked for"
+    REQUEST_ABILITY_SELECTION = 0
+    end
+endtest
+
+test a_constellation_pops_as_soon_as_it_is_made from fishBoard
+    SCORE_BAR.endVal = 100000000
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    NEPTUNE_ENDING_HOLD = 1
+    STAR_POP_WAIT = 0
+    SCORE_MULTIPLIER = 1
+    SCHOOL_STAKES = 1
+    STAR_PICK(0) = 0
+    STAR_PICK(1) = -1
+    STAR_PICK(2) = -1
+    ` the left prong, and a stray cell of ink well away from it
+    inkCell(testIndex(2, 2))
+    inkCell(testIndex(3, 2))
+    inkCell(testIndex(4, 2))
+    inkCell(testIndex(2, 3))
+    inkCell(testIndex(4, 3))
+    inkCell(testIndex(2, 4))
+    inkCell(testIndex(7, 7))
+    for tSqPopN = 1 to 3
+        runto _loop
+    next
+    assert STAR_MADE(0) = 1, "the left prong is made"
+    assert STAR_POPPED(0) = 1, "and popped, in the night"
+    assert STAR_LAST_SCORE = 2100, "each fish scored ten times what it would in a group of six"
+    assert INK_COUNT = 1, "its ink is gone, and the stray cell is left"
+    assert INK(testIndex(7, 7)) = 1, "where it was"
+    assert TRIDENT_DONE(0) = 1, "and the game has the left prong"
+    assert TIDE_NIGHT = 1, "and it is still night"
+    end
+endtest
+
+test a_night_with_no_ink_ends_at_once from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 1
+    tideMoveMade(1)
+    assert TIDE_NIGHT = 0, "with no ink to pop, day breaks on the last move"
+    assert SQUID_ENDING = 0, "and nothing waits"
+    end
+endtest
+
+test the_held_group_pops_when_day_breaks_on_ink from fishBoard
+    SCORE_BAR.endVal = 100000000
+    TIDE_DAWN_MS = 0
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 1
+    inkCell(testIndex(6, 6))
+    testPut(3, 8, 6)
+    testPut(4, 8, 6)
+    testPut(5, 8, 6)
+    testCursor(2, 2)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+    assert testPops(4, 8) = 0, "the night holds the group until the board has settled"
+
+    ` then the board settles, day breaks, and the next look pops what the night held
+    tSqHeldPopped = 0
+    tSqUntil = wall ms() + 8000
+    while tSqHeldPopped = 0
+        runto _combos_judged
+        if TIDE_NIGHT = 0
+            if testPops(4, 8) then tSqHeldPopped = 1
+        endif
+        if wall ms() > tSqUntil then tSqHeldPopped = 2
+    endwhile
+    assert tSqHeldPopped = 1, "the held group pops once day has broken"
+    end
+endtest
+
+test constellation_is_made_only_exactly from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    ` the left prong is the first shape: a hook of six. it is drawn here turned a quarter of the way
+    ` around: (0,0) (1,0) (2,0) (0,1) (2,1) and (0,2) go to (0,0) (0,1) (0,2) (-1,0) (-1,2) and (-2,0)
+    STAR_PICK(0) = 0
+    STAR_PICK(1) = -1
+    STAR_PICK(2) = -1
+    inkCell(testIndex(6, 3))
+    inkCell(testIndex(6, 4))
+    inkCell(testIndex(6, 5))
+    inkCell(testIndex(5, 3))
+    inkCell(testIndex(5, 5))
+    inkCell(testIndex(4, 3))
+
+    ` a sixth cell touching the tip at a side spoils it
+    inkCell(testIndex(7, 3))
+    starLook()
+    assert STAR_MADE(0) = 0, "ink touching it at a side spoils it"
+
+    ` the same cell only touching at a corner does not
+    INK(testIndex(7, 3)) = 0
+    INK_COUNT = INK_COUNT - 1
+    inkCell(testIndex(7, 2))
+    starLook()
+    assert STAR_MADE(0) = 1, "made, in a turn of its own, with ink at a corner of it"
+    assert STAR_CLAIM(testIndex(5, 5)) = 1, "the barb is the constellation's"
+    assert STAR_CLAIM(testIndex(7, 2)) = 0, "and the ink at the corner is not"
+    end
+endtest
+
+test constellation_needs_its_pieces_apart from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    STAR_PICK(0) = -1
+    STAR_PICK(1) = -1
+    STAR_PICK(2) = 4
+    ` the shaft as it is written, but with the gap between its two pieces filled in: one piece of ten, not two
+    for tSqY = 0 to 7
+        inkCell(testIndex(2, tSqY))
+    next
+    inkCell(testIndex(3, 7))
+    inkCell(testIndex(4, 7))
+    starLook()
+    assert STAR_MADE(2) = 0, "a piece that is joined up is not two pieces"
+    end
+endtest
+
+test every_needed_shape_can_be_made from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    ` the night has the left prong and the middle prong, and only the left prong is hinted at
+    STAR_PICK(0) = 0
+    STAR_PICK(1) = 2
+    STAR_PICK(2) = -1
+    ` but the player remembers the crossbar: a bar of five, turned down at either end
+    inkCell(testIndex(2, 2))
+    inkCell(testIndex(3, 2))
+    inkCell(testIndex(4, 2))
+    inkCell(testIndex(5, 2))
+    inkCell(testIndex(6, 2))
+    inkCell(testIndex(2, 3))
+    inkCell(testIndex(6, 3))
+    starLook()
+    assert STAR_MADE(1) = 1, "a middling shape that is not the night's is made all the same"
+    assert STAR_PICK(1) = 3, "and it becomes the night's"
+    assert STAR_PICK(0) = 0, "the easy one is as it was"
+    assert STAR_MADE(0) = 0, "and is not made"
+    end
+endtest
+
+test a_shape_the_game_has_cannot_be_made_again from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    TRIDENT_DONE(3) = 1
+    STAR_PICK(0) = -1
+    STAR_PICK(1) = 2
+    STAR_PICK(2) = -1
+    inkCell(testIndex(2, 2))
+    inkCell(testIndex(3, 2))
+    inkCell(testIndex(4, 2))
+    inkCell(testIndex(5, 2))
+    inkCell(testIndex(6, 2))
+    inkCell(testIndex(2, 3))
+    inkCell(testIndex(6, 3))
+    starLook()
+    assert STAR_MADE(1) = 0, "the crossbar is the game's already, so it makes nothing"
+    assert STAR_PICK(1) = 2, "and the night's shape is as it was"
+    TRIDENT_DONE(3) = 0
+    end
+endtest
+
+test constellation_scores_ten_times_over from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    NEPTUNE_ENDING_HOLD = 1
+    SCORE_MULTIPLIER = 1
+    SCHOOL_STAKES = 1
+    STAR_PICK(0) = 0
+    STAR_PICK(1) = -1
+    STAR_PICK(2) = -1
+    inkCell(testIndex(2, 2))
+    inkCell(testIndex(3, 2))
+    inkCell(testIndex(4, 2))
+    inkCell(testIndex(2, 3))
+    inkCell(testIndex(4, 3))
+    inkCell(testIndex(2, 4))
+    starLook()
+    assert STAR_MADE(0) = 1, "the left prong, as it is written"
+
+    ` six fish, scoring 10, 20, 30, 40, 50 and 60, ten times over
+    starPop(0)
+    assert STAR_LAST_SCORE = 2100, "each fish scores ten times what it would in a group of six"
+    end
+endtest
+
+test a_night_gives_one_part_of_the_trident from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    STAR_PICK(0) = 0
+    STAR_PICK(1) = 3
+    STAR_PICK(2) = -1
+    ` the left prong
+    inkCell(testIndex(2, 2))
+    inkCell(testIndex(3, 2))
+    inkCell(testIndex(4, 2))
+    inkCell(testIndex(2, 3))
+    inkCell(testIndex(4, 3))
+    inkCell(testIndex(2, 4))
+    starLook()
+    assert STAR_MADE(0) = 1, "the left prong is made"
+
+    ` and the crossbar, well away from it: a bar of five, turned down at either end
+    inkCell(testIndex(3, 6))
+    inkCell(testIndex(4, 6))
+    inkCell(testIndex(5, 6))
+    inkCell(testIndex(6, 6))
+    inkCell(testIndex(7, 6))
+    inkCell(testIndex(3, 7))
+    inkCell(testIndex(7, 7))
+    starLook()
+    assert STAR_MADE(1) = 0, "but the crossbar is not, because the night has given its part"
+    end
+endtest
+
+test squid_comes_to_a_fish_with_none_of_its_kind_beside_it from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    ` a pair, which the squid must leave alone
+    testPut(4, 4, 6)
+    testPut(5, 4, 6)
+    tSqTries = 0
+    tSqLone = 1
+    while tSqTries < 20
+        tSqTries = tSqTries + 1
+        squidArrive()
+        if SQUID_CELL = testIndex(4, 4) then tSqLone = 0
+        if SQUID_CELL = testIndex(5, 4) then tSqLone = 0
+        if SQUID_CELL < 0 then tSqLone = 0
+    endwhile
+    assert tSqLone = 1, "it is never on the pair"
+    assert STAR_PICK(STAR_EASY) >= 0, "and the sky has an easy one"
+    assert STAR_SHAPE_TIER(STAR_PICK(STAR_HARD)) = STAR_HARD, "and a hard one"
+    end
+endtest
+
+test constellation_shapes_have_the_sizes_of_their_kind from fishBoard
+    tSqBad = 0
+    for tSqS = 0 to STAR_SHAPE_COUNT - 1
+        tSqLen = STAR_SHAPE_LEN(tSqS)
+        if STAR_SHAPE_TIER(tSqS) = STAR_EASY
+            if tSqLen <> 6 then tSqBad = tSqBad + 1
+        endif
+        if STAR_SHAPE_TIER(tSqS) = STAR_MEDIUM
+            if tSqLen <> 7 then tSqBad = tSqBad + 1
+        endif
+        if STAR_SHAPE_TIER(tSqS) = STAR_HARD
+            if tSqLen < 9 then tSqBad = tSqBad + 1
+        endif
+
+        ` an easy or middling one is one piece, the hard one is in two or more, and none of its pieces is a single cell
+        tSqFirst = STAR_SHAPE_FIRST(tSqS)
+        tSqMany = 0
+        for tSqK = tSqFirst to tSqFirst + tSqLen - 1
+            if STAR_PIECE(tSqK) <> STAR_PIECE(tSqFirst) then tSqMany = 1
+            if STAR_PIECE_LEN(tSqK) < 2 then tSqBad = tSqBad + 1
+        next
+        if STAR_SHAPE_TIER(tSqS) <> STAR_HARD
+            if tSqMany = 1 then tSqBad = tSqBad + 1
+        else
+            if tSqMany = 0 then tSqBad = tSqBad + 1
+        endif
+    next
+    assert tSqBad = 0, "every shape is the size of its kind, the easy and middling ones one piece and the hard one in pieces, and no piece is a single cell"
+    assert STAR_SHAPE_COUNT = TRIDENT_PART_COUNT, "and there is one for every part of the trident"
+    end
+endtest
+
+
+` THE GOD OF THE SEA. see fish_headers_neptune.
+
+test neptune_badge_is_kept_above_the_modifiers from fishBoard
+    tNepPacked = 1234 + endingLowPart(CORAL_ENDING_NEPTUNE) * HISCORE_BADGE_STEP + MOD_OATH * HISCORE_MOD_STEP + endingHighPart(CORAL_ENDING_NEPTUNE) * HISCORE_ENDING_HIGH_STEP
+    assert getScoreBadge(tNepPacked) = CORAL_ENDING_NEPTUNE, "the god's ending comes back out"
+    assert getScoreMods(tNepPacked) = MOD_OATH, "with the modifiers of the game"
+    assert getScoreInitials(tNepPacked) = 1234, "and the initials"
+
+    ` a number from before there was a fourth ending reads the same as ever
+    tNepOld = 1234 + CORAL_ENDING_DIVER * HISCORE_BADGE_STEP + MOD_OATH * HISCORE_MOD_STEP
+    assert getScoreBadge(tNepOld) = CORAL_ENDING_DIVER, "an old diver's badge is still the diver's"
+    assert getScoreMods(tNepOld) = MOD_OATH, "and its modifiers are still its own"
+
+    assert endingUnpacked(endingLowPart(CORAL_ENDING_NEPTUNE), endingHighPart(CORAL_ENDING_NEPTUNE)) = CORAL_ENDING_NEPTUNE, "the two parts go back together"
+    assert endingUnpacked(3, 1) = 0, "and a number past the last ending is no ending"
+    end
+endtest
+
+test the_whole_trident_brings_the_god from fishBoard
+    NEPTUNE_ENDING_HOLD = 0
+    tNepN = 0
+    while tNepN < TRIDENT_PART_COUNT - 1
+        tridentPartScored(tNepN)
+        tNepN = tNepN + 1
+    endwhile
+    tridentPartScored(0)
+    assert TRIDENT_PARTS = TRIDENT_PART_COUNT - 1, "a part that the game has does not count twice"
+    assert NEPTUNE_ENDING_DUE = 0, "four parts are not enough"
+    tridentPartScored(TRIDENT_PART_COUNT - 1)
+    assert TRIDENT_PARTS = TRIDENT_PART_COUNT, "the fifth one"
+    assert NEPTUNE_ENDING_DUE = 1, "brings the god"
+    NEPTUNE_ENDING_DUE = 0
+    end
+endtest
+
+test the_sky_shows_only_the_parts_the_game_needs from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    ` the left prong is done, so the right prong is the only easy one that is left
+    TRIDENT_DONE(0) = 1
+    TRIDENT_PARTS = 1
+    tNepOk = 1
+    tNepN = 0
+    while tNepN < 10
+        tNepN = tNepN + 1
+        squidArrive()
+        if STAR_PICK(STAR_EASY) <> 1 then tNepOk = 0
+    endwhile
+    assert tNepOk = 1, "the easy one is always the part that the game does not have"
+
+    ` and once the game has both of the easy ones, there is no easy one in the sky
+    TRIDENT_DONE(1) = 1
+    squidArrive()
+    assert STAR_PICK(STAR_EASY) = -1, "there is no easy one left"
+    assert STAR_PICK(STAR_HARD) = 4, "and the shaft is still there"
+    end
+endtest
+
+test the_trident_has_a_bar_of_its_own from fishBoard
+    TRIDENT_PARTS = 3
+    assert coralBarFill(2) = 600, "three of five is three fifths full"
+    TRIDENT_PARTS = 0
+    end
+endtest
+
+test a_scored_constellation_counts_its_part from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    NEPTUNE_ENDING_HOLD = 1
+    STAR_PICK(0) = 0
+    STAR_PICK(1) = -1
+    STAR_PICK(2) = -1
+    inkCell(testIndex(2, 2))
+    inkCell(testIndex(3, 2))
+    inkCell(testIndex(4, 2))
+    inkCell(testIndex(2, 3))
+    inkCell(testIndex(4, 3))
+    inkCell(testIndex(2, 4))
+    starLook()
+    starPop(0)
+    assert TRIDENT_DONE(0) = 1, "the left prong is the game's"
+    assert TRIDENT_PARTS = 1, "one part"
+    end
+endtest
+
+
+test one_hint_at_a_time_and_the_next_fades_in from fishBoard
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 12
+    STAR_PICK(0) = 0
+    STAR_PICK(1) = 2
+    STAR_PICK(2) = 4
+    starSnowPlace()
+    tHnNow = 100000
+    STAR_SNOW_LAST_MS = tHnNow
+    starSkyDraw(tHnNow)
+    tHnOn = 0
+    tHnFirst = -1
+    for tHnI = 0 to 2
+        if STAR_SNOW_STATE(tHnI) = 1
+            tHnOn = tHnOn + 1
+            tHnFirst = tHnI
+        endif
+    next
+    assert tHnOn = 1, "one hint comes"
+
+    ` it fades in
+    for tHnK = 1 to 120
+        tHnNow = tHnNow + 16
+        starSkyDraw(tHnNow)
+    next
+    assert STAR_SKY_SHOWN#(tHnFirst) = 1, "and is all there"
+    tHnSide = STAR_SNOW_SIDE(tHnFirst)
+    tHnSlot = STAR_SNOW_SLOT(tHnFirst)
+
+    ` it rises to the top of its water
+    STAR_SNOW_CY(tHnFirst) = STAR_SNOW_CY(tHnFirst) - 200
+    tHnNow = tHnNow + 16
+    starSkyDraw(tHnNow)
+    assert STAR_SNOW_STATE(tHnFirst) = 2, "at the top, it fades out"
+    tHnOn = 0
+    tHnNew = -1
+    for tHnI = 0 to 2
+        if STAR_SNOW_STATE(tHnI) = 1
+            tHnOn = tHnOn + 1
+            tHnNew = tHnI
+        endif
+    next
+    assert tHnOn = 1, "and the next comes as it does"
+    assert tHnSlot = STAR_EASY, "the first was the easy one"
+    assert STAR_SNOW_SLOT(tHnNew) = STAR_EASY, "and so is the next: the harder ones are not hinted at while the game needs an easy one"
+    assert STAR_SNOW_SIDE(tHnNew) <> tHnSide, "on the other side of the board"
+
+    for tHnK = 1 to 120
+        tHnNow = tHnNow + 16
+        starSkyDraw(tHnNow)
+    next
+    assert STAR_SNOW_STATE(tHnFirst) = 0, "the old one is gone"
+    assert STAR_SKY_SHOWN#(tHnNew) = 1, "and the new one is all there"
+    end
+endtest
+
+
+` THE INK OF THE DAY, AND THE POT. see fish_headers_squid.
+
+test a_pop_washes_the_ink_of_the_day_off from fishBoard
+    SCORE_BAR.endVal = 100000000
+    INK_DAY = 1
+    inkCell(testIndex(4, 4))
+    testPut(3, 4, 6)
+    testPut(4, 4, 6)
+    testPut(5, 4, 6)
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert INK(testIndex(4, 4)) = 0, "the fish on it popped, and washed it off"
+    assert INK_COUNT = 0, "there is none left"
+    assert INK_CLEAN(testIndex(4, 4)) = 1, "the cell is clean"
+    assert INK_LAST_WASHED = testIndex(4, 4), "and was the last to be washed"
+    end
+endtest
+
+test ink_at_night_is_not_washed_by_a_pop from fishBoard
+    SCORE_BAR.endVal = 100000000
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    inkCell(testIndex(4, 4))
+    inkWashed(testIndex(4, 4), 0)
+    assert INK(testIndex(4, 4)) = 1, "only the dried ink of the day is washed off"
+    end
+endtest
+
+test the_pot_is_every_cell_washed_once_and_pays_when_the_ink_is_gone from fishBoard
+    SCORE_MULTIPLIER = 1
+    SCHOOL_STAKES = 1
+    INK_PAY_EVERY = 0
+    INK_PAY_LEAD = 0
+    INK_PAY_POP_LONG = 0
+    INK_DAY = 1
+    inkCell(testIndex(1, 1))
+    inkCell(testIndex(2, 1))
+
+    inkWashed(testIndex(1, 1), 0)
+    assert INK_POT = 1, "a washed cell is clean, and in the pot"
+
+    ` the ink comes back onto it, and is washed off again: it was clean already
+    inkCell(testIndex(1, 1))
+    inkWashed(testIndex(1, 1), 0)
+    assert INK_POT = 1, "washing the same cell again is worth nothing"
+
+    ` the ink is moved onto a cell that has not been washed, and washed off of it
+    inkCell(testIndex(3, 1))
+    inkWashed(testIndex(3, 1), 0)
+    inkPotStep(0)
+    assert INK_POT = 2, "a new cell is one more"
+    assert INK_DAY = 1, "and it does not pay while there is ink"
+
+    ` the last of it is washed off, and it pays: 10 + 20 + 30
+    tInkScoreWas = CURRENT_SCORE
+    inkWashed(testIndex(2, 1), 0)
+    inkPotStep(0)
+    assert INK_LAST_PAY = 60, "each clean cell is worth ten more than the one before it"
+    assert CURRENT_SCORE = tInkScoreWas + 60, "and it scored"
+    assert INK_DAY = 0, "the day's ink is done with"
+    assert INK_POT = 0, "and so is the pot"
+    assert INK_PAY_CELL(0) = testIndex(2, 1), "the cell that was washed last pops first"
+    tInkFrames = 0
+    while INK_PAYING = 1
+        runto _loop
+        tInkFrames = tInkFrames + 1
+        if tInkFrames > 20 then INK_PAYING = 2
+    endwhile
+    assert INK_PAYING = 0, "and the clean cells are done poofing"
+    assert INK_CLEAN(testIndex(1, 1)) = 0, "they are not clean any more"
+    assert INK_CLEAN(testIndex(3, 1)) = 0, "none of them"
+    end
+endtest
+
+test ink_dragged_onto_a_group_is_washed_clean from fishBoard
+    SCORE_BAR.endVal = 100000000
+    INK_DAY = 1
+    inkCell(testIndex(2, 4))
+    ` the cursor carries a 6 off of the ink, right, next to two more
+    testPut(2, 4, 6)
+    testPut(4, 4, 6)
+    testPut(5, 4, 6)
+    testCursor(2, 4)
+    testQueueMove(1, 0, 1, -1)
+    for tInkN = 1 to 40
+        runto _loop
+    next
+    assert INK(testIndex(2, 4)) = 1, "the ink stays where the swap started"
+    assert INK(testIndex(3, 4)) = 0, "the cell it was dragged to was washed off by the pop"
+    assert INK_CLEAN(testIndex(3, 4)) = 1, "and is clean"
+    assert INK_POT = 1, "which is one for the pot"
+    end
+endtest
+
+test nightfall_loses_the_pot_for_next_to_nothing from fishBoard
+    SCORE_MULTIPLIER = 1
+    SCHOOL_STAKES = 1
+    INK_DAY = 1
+    inkCell(testIndex(1, 1))
+    inkCell(testIndex(2, 1))
+    inkCell(testIndex(6, 6))
+    INK_POT = 4
+    inkBust(0)
+    assert INK_LAST_BUST = 4 * INK_BUST_POINTS, "a little for each clean cell"
+    assert INK_COUNT = 0, "and the ink is washed away"
+    assert INK_DAY = 0, "with the pot"
+    assert INK_POT = 0, "which is gone"
+    end
+endtest
+
+test a_last_move_that_washes_the_ink_pays_at_nightfall from fishBoard
+    SCORE_MULTIPLIER = 1
+    SCHOOL_STAKES = 1
+    INK_PAY_EVERY = 0
+    INK_PAY_LEAD = 0
+    INK_PAY_POP_LONG = 0
+    ` night has fallen on the move that washed off the last of it
+    INK_DAY = 1
+    INK_CLEAN(testIndex(1, 1)) = 1
+    INK_CLEAN(testIndex(2, 1)) = 1
+    INK_CLEAN(testIndex(3, 1)) = 1
+    INK_POT = 3
+    INK_LAST_BUST = -1
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 12
+    SQUID_DUE = 1
+    runto _loop
+    runto _loop
+    assert INK_LAST_PAY = 60, "the pot pays"
+    assert INK_LAST_BUST = -1, "and is not lost"
+    end
+endtest
+
+test coral_breaks_ink_up_by_day_but_not_at_night from fishBoard
+    ` at night, ink goes onto coral, and stays
+    TIDE_NIGHT = 1
+    TIDE_NIGHT_LEFT = 5
+    CORAL_CELLS(testIndex(3, 3)) = 1
+    CORAL_COUNT = CORAL_COUNT + 1
+    inkCell(testIndex(3, 3))
+    inkCell(testIndex(4, 3))
+    inkCoralWins()
+    assert INK(testIndex(3, 3)) = 1, "the night leaves ink on coral alone"
+
+    ` day breaks: the ink on the coral breaks up, and the rest is the day's
+    tideDayBreaks()
+    assert INK_DAY = 1, "the ink that is not on coral is the day's"
+    inkCoralWins()
+    assert INK(testIndex(3, 3)) = 0, "the coral broke its ink up"
+    assert INK(testIndex(4, 3)) = 1, "and left the rest"
+    assert INK_CLEAN(testIndex(3, 3)) = 0, "which is not washing it, so it is not clean"
+
+    ` by day, ink that is dragged onto coral lurches toward it, and does not go onto it
+    inkSwapStarted(testIndex(4, 3), testIndex(3, 3), 100)
+    assert INK(testIndex(3, 3)) = 0, "the coral is not inked"
+    assert INK_LURCH_FROM = testIndex(4, 3), "the ink lurched toward it"
+    assert INK_COUNT = 1, "and stayed where it was"
+
+    ` and ink that coral grows onto breaks up
+    CORAL_CELLS(testIndex(4, 3)) = 1
+    CORAL_COUNT = CORAL_COUNT + 1
+    inkCoralWins()
+    assert INK_COUNT = 0, "the coral wiped it"
+    assert INK_POT = 0, "and nothing is clean"
+    end
+endtest

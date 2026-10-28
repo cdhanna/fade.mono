@@ -63,7 +63,6 @@ frame_mouse_board:
         if MOUSE_NO_SHOWN
             mouseNoHide()
         endif
-        MOUSE_NO_TRAVEL = 0
         return
     endif
     if DEMO_MODE = 0
@@ -150,7 +149,6 @@ function mouseStep()
         if new left click() then msKeys = 0
         if msKeys
             MOUSE_TRAVEL = 0
-            MOUSE_NO_TRAVEL = 0
 
             ` the keys are what the words asked for, so the words pop, in a puff of bubbles
             if MOUSE_NO_SHOWN
@@ -296,20 +294,13 @@ endfunction mbBackHit
 function mouseNoStep()
     mouseStep()
     mnNow = game ms()
+    ` only a click on the board says no. a mouse that is only moved is let be: it is pushed out of the
+    ` way, or bumped, by players who know very well that the game is played with the keys.
     mnUsed = MOUSE_CLICKED
     MOUSE_CLICKED = 0
 
-    ` a little nudge of the mouse is let go. it has to be moved for a while, without stopping.
-    if MOUSE_MOVED
-        mnStill = mnNow - MOUSE_NO_MOVED_MS
-        if mnStill > MOUSE_NO_STILL_MS then MOUSE_NO_TRAVEL = 0
-        MOUSE_NO_MOVED_MS = mnNow
-        MOUSE_NO_TRAVEL = MOUSE_NO_TRAVEL + MOUSE_GONE
-        if MOUSE_NO_TRAVEL >= MOUSE_NO_WAKE_TRAVEL then mnUsed = 1
-    endif
-
     if mnUsed > 0
-        ` the words stay up for as long as the mouse keeps moving, and a while after
+        ` the words stay up for a while after the click, and another click keeps them up
         if MOUSE_NO_SHOWN = 0
             MOUSE_NO_SHOWN = 1
             set text MOUSE_NO_TEXT_ID, loc$("hud.mouse.keys")

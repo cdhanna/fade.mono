@@ -1,0 +1,111 @@
+
+` THE CURSOR COMES AND GOES. see fish_headers_cursorshow.
+
+` the cursor is put away, and pops in arriveDelay ms from now. a board that is coming in asks for this,
+` with the time that its last fish is in.
+function cursorArrive(arriveDelay)
+    CURSOR_ARRIVE_ON = 1
+    CURSOR_ARRIVE_AT = game ms() + arriveDelay
+    CURSOR_ARRIVE_POPPED = 0
+    hide sprite SELECTION_SPRITE
+endfunction
+
+
+` the cursor is all the way in, now, wherever it had got to. with arriveKeepSize, it is left the size that
+` it is, because a move is sizing it.
+function cursorArriveEnd(arriveKeepSize)
+    if CURSOR_ARRIVE_ON
+        CURSOR_ARRIVE_ON = 0
+        if arriveKeepSize = 0
+            scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+        endif
+        show sprite SELECTION_SPRITE
+        CURSOR_SHOW_DIRTY = 1
+    endif
+endfunction
+
+
+` how much of the cursor shows, from 0 to 1. the fill is faint at its fullest, and the outline is as thick
+` as it is faded, the same way that tunaCursor fades it. the outline is the color of coral while a song is open.
+function cursorShowLook(lookShow#)
+    set sprite alpha SELECTION_SPRITE, 90 * lookShow#
+    if CORAL_OPEN
+        set sprite all texcoord1 SELECTION_SPRITE, 255 / 255.0, 150 / 255.0, 140 / 255.0, lookShow#
+    else
+        set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, lookShow#
+    endif
+endfunction
+
+
+` every frame. update_frame comes here after stepBeatLook, so that this has the last word on the cursor
+` while it is coming in or fading. the rest of the time it leaves the cursor alone.
+function cursorShowStep()
+    csNow = game ms()
+    csElapsed# = csNow - CURSOR_SHOW_LAST_MS
+    CURSOR_SHOW_LAST_MS = csNow
+    if csElapsed# > 50 then csElapsed# = 50
+    if csElapsed# < 0 then csElapsed# = 0
+
+    ` info mode
+    csWant# = 1
+    if CURSOR_INFO_HIDE then csWant# = 0
+    csFade# = csElapsed# / CURSOR_INFO_FADE_MS#
+    if CURSOR_INFO_SHOW# < csWant#
+        CURSOR_INFO_SHOW# = CURSOR_INFO_SHOW# + csFade#
+        if CURSOR_INFO_SHOW# > csWant# then CURSOR_INFO_SHOW# = csWant#
+    endif
+    if CURSOR_INFO_SHOW# > csWant#
+        CURSOR_INFO_SHOW# = CURSOR_INFO_SHOW# - csFade#
+        if CURSOR_INFO_SHOW# < csWant# then CURSOR_INFO_SHOW# = csWant#
+    endif
+    csShow# = CURSOR_INFO_SHOW#
+
+    ` a board coming in
+    if CURSOR_ARRIVE_ON
+        if LIVE_MOVE_ACTIVE
+            cursorArriveEnd(1)
+        else
+            if csNow >= CURSOR_ARRIVE_AT
+                csX = getCellX(SELECTION_POS.x)
+                csY = getCellY(SELECTION_POS.y)
+                if CURSOR_ARRIVE_POPPED = 0
+                    CURSOR_ARRIVE_POPPED = 1
+                    show sprite SELECTION_SPRITE
+                    spawnBubbles(csX, csY, CELL_SIZE / 2, CURSOR_ARRIVE_BUBBLES, 0, rgb(170, 200, 255))
+                endif
+
+                csAge# = csNow - CURSOR_ARRIVE_AT
+                csMs# = CURSOR_ARRIVE_MS
+                csT# = csAge# / csMs#
+                if csT# >= 1
+                    cursorArriveEnd(0)
+                else
+                    ` it swells up fast, goes a little past its size, and settles back, like the fish of the entrance
+                    csU# = csT# - 1.0
+                    csEase# = 1.0 + 2.70158 * csU# * csU# * csU# + 1.70158 * csU# * csU#
+                    csSize# = CELL_SIZE * csEase#
+                    scale sprite SELECTION_SPRITE, csSize#, csSize#
+                    csIn# = csT# * 3.0
+                    if csIn# < 1 then csShow# = csShow# * csIn#
+                endif
+            endif
+        endif
+    endif
+
+    ` the code of the tuna, and the endings of the hidden game, fade the cursor their own way
+    csTheirs = TUNA_CURSOR_FADED
+    if CORAL_ENDING then csTheirs = 1
+    if csTheirs
+        exitfunction
+    endif
+
+    if csShow# < 1
+        cursorShowLook(csShow#)
+        CURSOR_SHOW_DIRTY = 1
+    else
+        if CURSOR_SHOW_DIRTY
+            CURSOR_SHOW_DIRTY = 0
+            cursorShowLook(1)
+        endif
+    endif
+endfunction

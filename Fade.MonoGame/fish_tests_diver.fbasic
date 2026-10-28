@@ -419,7 +419,7 @@ endtest
 test diver_photos_have_a_line_on_the_options_page from fishBoard
     tDvWas = DIVER_SURFACE
     DIVER_SURFACE = 0
-    setMenuPage(MENU_PAGE_OPTIONS)
+    setMenuPage(MENU_PAGE_ENDINGS)
     tDvPlain = MENU_PAGE_LENGTH
     tDvHas = 0
     for tDvLine = 0 to MENU_PAGE_LENGTH - 1
@@ -427,11 +427,12 @@ test diver_photos_have_a_line_on_the_options_page from fishBoard
     next
     assert tDvHas = 0, "no line for the photos before the album has been filled"
 
+    ` the photos are on the page of mementos, under the options. see MEMENTOS in fish_headers.
     DIVER_SURFACE = 1
-    setMenuPage(MENU_PAGE_OPTIONS)
+    setMenuPage(MENU_PAGE_ENDINGS)
     assert MENU_PAGE_LENGTH = tDvPlain + 1, "the photos get a line once they are there"
     assert MENU_PAGE_ITEMS(MENU_PAGE_LENGTH - 2) = MENU_ITEM_SET_PHOTOS, "just above Back"
-    assert MENU_PAGE_ITEMS(MENU_PAGE_LENGTH - 1) = MENU_ITEM_SET_BACK, "and Back is still last"
+    assert MENU_PAGE_ITEMS(MENU_PAGE_LENGTH - 1) = MENU_ITEM_ENDINGS_BACK, "and Back is still last"
 
     tDvOn = OPTION_MENU_PHOTOS
     changeMenuOption(MENU_ITEM_SET_PHOTOS, 1)

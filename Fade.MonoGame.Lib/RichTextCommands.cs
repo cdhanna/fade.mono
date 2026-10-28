@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Fade.MonoGame.Core;
 using FadeBasic.SourceGenerators;
 using Microsoft.Xna.Framework;
@@ -462,5 +463,59 @@ public partial class FadeMonoGameCommands
         TextSystem.GetTextSpriteIndex(textId, out var index, out var textSprite);
         textSprite.align = align;
         TextSystem.textSprites[index] = textSprite;
+    }
+
+    /// <summary>
+    /// <para>Draws one of a font's icons bigger or smaller in one text only.</para>
+    /// <para><c>1</c> is the size the font gives it. The icon grows from its own middle.</para>
+    /// </summary>
+    /// <remarks>
+    /// <see cref="SetFontIconScale">set font icon scale</see> changes an icon in every text that uses
+    /// the font. This changes it only in one text, and only when the text is drawn: the line is not
+    /// laid out again, so the words around the icon stay where they are and the icon grows over
+    /// them. That makes it cheap enough to change on every frame, which is what it is for: making
+    /// an icon jump when its button is pressed.
+    ///
+    /// Every copy of the icon in the text is scaled. Set the scale back to <c>1</c> when it is done.
+    /// </remarks>
+    /// <example>
+    /// Make the icon jump whenever space is pressed.
+    /// <code>
+    /// font 1, "font"
+    /// texture 1, "ghost"
+    /// font icon 1, 1, "ghost", 1
+    /// text 1, 400, 200, 1, "press space to {ghost}"
+    /// enable rich text 1
+    /// create basic tween 1, 1, 1, 1, 0
+    /// do
+    ///   if new key down(57) then create basic tween 1, 1.6, 1, 200, 0
+    ///   set text icon scale 1, 1, tweenVal(1)
+    ///   sync
+    /// loop
+    /// </code>
+    /// </example>
+    /// <param name="textId">The text sprite ID.</param>
+    /// <param name="iconId">The icon ID, as the font knows it.</param>
+    /// <param name="scale">How big to draw it. <c>1.0</c> = its usual size.</param>
+    /// <seealso cref="SetFontIconScale">set font icon scale</seealso>
+    /// <seealso cref="SetFontIcon">font icon</seealso>
+    [FadeBasicCommand("set text icon scale")]
+    public static void SetTextIconScale(int textId, int iconId, float scale)
+    {
+        TextSystem.GetTextSpriteIndex(textId, out var index, out _);
+        if (!TextSystem.iconScales.TryGetValue(index, out var scales))
+        {
+            if (scale == 1f) return;
+            scales = TextSystem.iconScales[index] = new Dictionary<int, float>();
+        }
+
+        if (scale == 1f)
+        {
+            scales.Remove(iconId);
+            if (scales.Count == 0) TextSystem.iconScales.Remove(index);
+            return;
+        }
+
+        scales[iconId] = scale;
     }
 }

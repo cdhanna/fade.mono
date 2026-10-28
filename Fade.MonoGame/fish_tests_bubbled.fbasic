@@ -1,0 +1,198 @@
+remstart
+    THE TESTS OF THE BUBBLED FISH. see fish_headers_bubbled.
+remend
+
+test bubbled_big_group_pushed_in_bubbles_the_fish from fishBoard
+    BUBBLED_ON = 1
+    bubbledReset()
+    testCursor(2, 5)
+    for tBubX = 0 to 4
+        testPut(tBubX, 5, 6)
+    next
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert testPops(2, 5) = 0, "the fish that the cursor pushed in does not pop"
+    assert testPops(1, 5) = 1, "the rest of the group does"
+    assert testPops(3, 5) = 1, "on both sides of it"
+    assert BUBBLED_AT(testIndex(2, 5)) = 1, "it is in a bubble"
+
+    runto _loop
+    assert BUBBLED_AT(testIndex(2, 5)) = 1, "and still is once the board has filled back in"
+    assert bubbledCount() = 1, "the only one"
+    end
+endtest
+
+test bubbled_not_made_when_the_cursor_is_not_in_the_group from fishBoard
+    BUBBLED_ON = 1
+    bubbledReset()
+    testCursor(7, 8)
+    for tBubX = 0 to 4
+        testPut(tBubX, 5, 6)
+    next
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert testPops(2, 5) = 1, "the whole group pops"
+    assert bubbledCount() = 0, "and nothing is in a bubble"
+    end
+endtest
+
+test bubbled_swap_is_free_and_what_it_puts_together_pops from fishBoard
+    BUBBLED_ON = 1
+    bubbledReset()
+    tBubMoves = CURRENT_MOVE_COUNT
+    ` the fish in the bubble is a 5, and the one above it a 6, which goes down next to two others
+    testPut(0, 1, 6)
+    testPut(1, 1, 6)
+    testPut(2, 0, 6)
+    BUBBLED_AT(testIndex(2, 1)) = 1
+    testCursor(2, 1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+    assert CELLS(testIndex(2, 1)).value = 6, "the fish in the bubble was swapped up, and the 6 came down, next to the two others"
+    assert testPops(0, 1) = 1, "the board was looked at, and the three that it put together pop"
+    assert testPops(1, 1) = 1, "all of them"
+    assert testPops(2, 1) = 1, "the one that it moved out of the way too"
+    assert testPops(2, 0) = 0, "but not the fish in the bubble, which was not in it"
+    assert BUBBLED_AT(testIndex(2, 0)) = 1, "and it still has its bubble"
+    assert CURRENT_MOVE_COUNT = tBubMoves, "and it was not a move"
+    end
+endtest
+
+test bubbled_swap_into_a_group_pops_it_right_away from fishBoard
+    BUBBLED_ON = 1
+    bubbledReset()
+    tBubMoves = CURRENT_MOVE_COUNT
+    tBubScoreWas = CURRENT_SCORE
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 1, 6)
+    BUBBLED_AT(testIndex(2, 1)) = 1
+    testCursor(2, 1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+    assert testPops(2, 0) = 1, "the fish in the bubble went into a group, so the board was looked at, and it pops"
+    assert testPops(0, 0) = 1, "with the group"
+    assert testPops(1, 0) = 1, "all of it"
+    assert CURRENT_MOVE_COUNT = tBubMoves, "the swap was still free"
+    tBubWant = tBubScoreWas + 60 + BUBBLED_POP_POINTS * SCORE_MULTIPLIER
+    assert CURRENT_SCORE = tBubWant, "and its bubble scores"
+    end
+endtest
+
+test bubbled_swaps_stay_free_for_as_long_as_the_bubble_lasts from fishBoard
+    BUBBLED_ON = 1
+    bubbledReset()
+    tBubMoves = CURRENT_MOVE_COUNT
+    BUBBLED_AT(testIndex(1, 4)) = 1
+    for tBubStep = 1 to 4
+        testCursor(tBubStep, 4)
+        testQueueMove(1, 0, 1, -1)
+        for tBubF = 0 to 30
+            runto frame_dbg
+        next
+    next
+    assert BUBBLED_AT(testIndex(5, 4)) = 1, "four swaps on, it is still in its bubble"
+    assert bubbledCount() = 1, "the only one"
+    assert BUBBLED_FREE_SWAPS = 4, "and all four swaps were free"
+    assert CURRENT_MOVE_COUNT = tBubMoves, "none of them was a move"
+    end
+endtest
+
+test bubbled_two_that_touch_come_together_and_pop from fishBoard
+    BUBBLED_ON = 1
+    bubbledReset()
+    tBubMoves = CURRENT_MOVE_COUNT
+    tBubScoreWas = CURRENT_SCORE
+    BUBBLED_AT(testIndex(2, 4)) = 1
+    BUBBLED_AT(testIndex(4, 4)) = 1
+    tBubKindA = CELLS(testIndex(2, 4)).value
+    tBubKindB = CELLS(testIndex(4, 4)).value
+    testCursor(2, 4)
+    testQueueMove(1, 0, 1, -1)
+
+    runto _combos_judged
+    assert CELLS(testIndex(3, 4)).value = tBubKindA, "the swap went through"
+    assert testPops(3, 4) = 1, "the bubble that was swapped touched the other one, and its fish pops"
+    assert testPops(4, 4) = 1, "and so does the other one, though it is a different kind"
+    assert tBubKindA <> tBubKindB, "which it is"
+    assert testPopCount() = 2, "and nothing else"
+    assert CURRENT_MOVE_COUNT = tBubMoves, "the swap was still free"
+    runto _loop
+    assert bubbledCount() = 0, "both bubbles are gone"
+    end
+endtest
+
+test bubbled_one_beside_another_after_a_look_pops_them_both from fishBoard
+    BUBBLED_ON = 1
+    bubbledReset()
+    BUBBLED_AT(testIndex(6, 2)) = 1
+    BUBBLED_AT(testIndex(6, 3)) = 1
+    BUBBLED_AT(testIndex(0, 7)) = 1
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert testPops(6, 2) = 1, "the two that touch pop"
+    assert testPops(6, 3) = 1, "both of them"
+    assert testPops(0, 7) = 0, "but not one that touches nothing"
+    assert BUBBLED_AT(testIndex(0, 7)) = 1, "which keeps its bubble"
+    end
+endtest
+
+test bubbled_lands_on_coral_and_bursts from fishBoard
+    BUBBLED_ON = 1
+    bubbledReset()
+    tBubScoreWas = CURRENT_SCORE
+    CORAL_CELLS(testIndex(5, 4)) = 1
+    BUBBLED_AT(testIndex(4, 4)) = 1
+    tBubKind = CELLS(testIndex(4, 4)).value
+    testCursor(4, 4)
+    testQueueMove(1, 0, 1, -1)
+    for tBubF = 0 to 30
+        runto frame_dbg
+    next
+    assert CELLS(testIndex(5, 4)).value = tBubKind, "the fish went onto the coral"
+    assert BUBBLED_AT(testIndex(5, 4)) = 0, "and its bubble burst there"
+    assert bubbledCount() = 0, "so there is none"
+    assert BUBBLED_FREE_SWAPS = 1, "the swap was still free"
+    assert CURRENT_SCORE = tBubScoreWas + BUBBLED_POP_POINTS * SCORE_MULTIPLIER, "and the bubble scored as it burst"
+    end
+endtest
+
+test bubbled_not_made_on_coral from fishBoard
+    BUBBLED_ON = 1
+    bubbledReset()
+    CORAL_CELLS(testIndex(2, 5)) = 1
+    testCursor(2, 5)
+    for tBubX = 0 to 4
+        testPut(tBubX, 5, 6)
+    next
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert bubbledCount() = 0, "no bubble is made on coral"
+    end
+endtest
+
+test bubbled_burst_is_a_moment_of_its_own_before_the_pops from fishBoard
+    BUBBLED_ON = 1
+    bubbledReset()
+    tBubScoreWas = CURRENT_SCORE
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 1, 6)
+    BUBBLED_AT(testIndex(2, 1)) = 1
+    testCursor(2, 1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+    assert testPops(2, 0) = 1, "the fish in the bubble is going to pop with its group"
+    assert BUBBLED_PAID(testIndex(2, 0)) = 1, "its bubble has scored ahead of the pops"
+    assert BUBBLED_AT(testIndex(2, 0)) = 1, "but has not burst yet"
+    assert CURRENT_SCORE = tBubScoreWas + 60 + BUBBLED_POP_POINTS * SCORE_MULTIPLIER, "the bubble's score is in once, with the group's"
+    runto _loop
+    assert bubbledCount() = 0, "then it bursts, and the look goes on"
+    assert CURRENT_SCORE = tBubScoreWas + 60 + BUBBLED_POP_POINTS * SCORE_MULTIPLIER, "and it was not scored twice"
+    end
+endtest

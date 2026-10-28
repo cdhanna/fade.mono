@@ -487,12 +487,13 @@ public static class RenderSystem
     /// Draw the runs of a rich text layout as if they were one string. The position, rotation, and
     /// scale belong to the whole text, so each run is drawn around the text's origin instead of
     /// its own. `reveal` is how many characters to draw, counting an icon as one, or -1 for all of
-    /// them. see TextSprite.revealOn.
+    /// them. see TextSprite.revealOn. `iconScales` is the text's own scale for some of its icons, by
+    /// icon id, or null. see TextSystem.iconScales.
     /// </summary>
     private static void DrawRichText(SpriteBatch sb, Microsoft.Xna.Framework.Graphics.Fade.SpriteFont font,
         RichTextLayout layout,
         Vector2 position, Color textColor, Color iconColor, float angle, Vector2 origin, Vector2 scale,
-        SpriteEffects effects, float order, int reveal = -1)
+        SpriteEffects effects, float order, int reveal = -1, Dictionary<int, float> iconScales = null)
     {
         var left = reveal;
         for (var i = 0; i < layout.runs.Count; i++)
@@ -524,19 +525,28 @@ public static class RenderSystem
             // the frame's pixels, so it has to be un-stretched to land in the same place.
             var stretch = new Vector2(run.iconSize.X / src.Width, run.iconSize.Y / src.Height);
 
+            // An icon that the text scales grows from its own middle, over the letters around it,
+            // so nothing else on the line moves.
+            var runOffset = run.offset;
+            if (iconScales != null && iconScales.TryGetValue(run.iconId, out var iconScale) && iconScale != 1f)
+            {
+                runOffset -= run.iconSize * ((iconScale - 1f) * .5f);
+                stretch *= iconScale;
+            }
+
             // Text is drawn with a smoothing sampler, so an icon that lands between pixels comes
             // out blurry even when it is drawn at its own size. When the text is not rotated,
             // put the icon's corner on a whole pixel instead.
             if (angle == 0f)
             {
-                var corner = position - (origin - run.offset) * scale;
+                var corner = position - (origin - runOffset) * scale;
                 corner = new Vector2(MathF.Round(corner.X), MathF.Round(corner.Y));
                 sb.Draw(tex, corner, src, iconColor, 0f, Vector2.Zero, scale * stretch, effects, order,
                     default(SpriteTexCoord1));
                 continue;
             }
 
-            var iconOrigin = (origin - run.offset) / stretch;
+            var iconOrigin = (origin - runOffset) / stretch;
             sb.Draw(tex, position, src, iconColor, angle, iconOrigin, scale * stretch, effects, order,
                 default(SpriteTexCoord1));
         }
@@ -1028,12 +1038,18 @@ public static class RenderSystem
                         var order = 1 - ((sprite.zOrder / 500f) +
                                          .001f * (sprite.id /
                                                   500f)); //TODO: Why doesn't deferred rendering work here????
+                        Dictionary<int, float> textIconScales = null;
+                        if (layout != null && TextSystem.iconScales.Count > 0)
+                        {
+                            TextSystem.iconScales.TryGetValue(item.index, out textIconScales);
+                        }
+
                         if (layout != null)
                         {
                             // Icons keep their own colors, but fade along with the text.
                             var iconColor = new Color(255, 255, 255, (int)text.sprite.color.A);
                             DrawRichText(sb, font, layout, position, text.sprite.color, iconColor, angle, origin,
-                                scale, text.sprite.effects, order, text.revealOn ? text.reveal : -1);
+                                scale, text.sprite.effects, order, text.revealOn ? text.reveal : -1, textIconScales);
                         }
                         else
                         {
@@ -1057,7 +1073,7 @@ public static class RenderSystem
                             {
                                 // The shadow of an icon is the icon's shape in the shadow color.
                                 DrawRichText(sb, font, layout, position, color, color, angle, origin, scale,
-                                    text.sprite.effects, order, text.revealOn ? text.reveal : -1);
+                                    text.sprite.effects, order, text.revealOn ? text.reveal : -1, textIconScales);
                             }
                             else
                             {

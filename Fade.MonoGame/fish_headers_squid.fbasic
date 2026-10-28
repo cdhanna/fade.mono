@@ -1,0 +1,357 @@
+remstart
+    THE SQUID
+    another hidden thing of the night. nothing in the game says that it is there, and the only way to see
+    it is its picture. the routines are in fish_routines_squid, and the tests are in fish_tests_squid.
+    see THE TIDE in fish_headers_tide for the night.
+
+    IT COMES AT NIGHTFALL. once night has fallen and the board has settled, one fish that has no fish of
+    its own kind next to it turns into a squid. it is picked with the board's own stream of numbers, so a
+    seed gets the same squid. a fish next to one of its kind is never picked, so the squid never spoils a
+    group that is nearly made. the fish is still there, under the squid: CELLS().value keeps its kind,
+    and SQUID_CELL says which cell the squid is in. while it is there, the cell is the squid, and not the
+    fish: it is drawn as the squid, and it never matches anything. findCombos leaves it out.
+
+    A PUSH. a swap that has the squid on either end of it is not a swap. it is the squid being pushed,
+    the way that the swap would have moved it: carried, when the cursor is on the squid, and shoved
+    back, when the cursor comes at it from next door. it can be pushed off of the edge of the board.
+    nothing trades places. the squid puffs away into a cloud of its ink, the cell that it was in is
+    inked, the fish that was under it grows back in, and the squid escapes along the row or the column that it was pushed down, and takes over the fish
+    of the cell that it gets to, whatever is there, growing in there. the cursor stays where it was. it is one of the
+    moves of the night, the same as a swap. startLiveMove, in fish_funcs, sends a push to squidPushed.
+
+    WHERE IT GOES. it goes the way that it was pushed, and around the edge of the board and back in on
+    the other side. how far is the number of kinds before a repeat: walking on from the squid, the kinds
+    of the cells that it passes are counted, starting with the fish right next to it, and the walk stops
+    at the first kind that has been seen already. the squid goes as many cells as there were kinds, and
+    lands on the last new one. so on a row that goes (the squid), A, B, C, A, it goes 3, and lands on the
+    C. the fish under the squid does not count, because it cannot be seen. it goes at least one, and when
+    a whole lap has no repeat, it stops one short of where it started. squidJump works it out. nothing on
+    the screen says any of this.
+
+    THE INK. a cell is inked, or it is not. ink is the cell's, and not the fish's: it stays where it is.
+    it only goes where it is dragged, by day as well as by night: a swap that starts on an inked cell inks
+    the cell that the cursor goes to, and the ink comes along with the cursor, a stroke out of the cell
+    that it was in. a swap that goes into ink from outside of it does nothing to the ink.
+    so a stroke can be drawn out from any ink that there is, a cell at a time. only a push of the squid
+    starts ink anywhere new, so ink that is in more than one piece is a sign of a squid that was pushed
+    on purpose. the ink is moved as the swap starts, and flows along with the cursor. inkSwapStarted does it.
+    CORAL WINS. at night, ink goes onto coral like anywhere else. by day, coral will not have it: ink that
+    is moved onto coral lurches toward it, and breaks up into little bubbles, and the coral is not inked.
+    ink that is on coral when day breaks, which is not the day's, and ink that coral grows onto, breaks
+    up the same way. inkCoralWins does that, whenever the coral has changed.
+    THE END OF THE NIGHT. when the last move of the night is made and there is ink, the night holds on
+    until the board has settled, since the last move may have made a constellation, and then until the
+    constellation has popped. then day breaks. a move that is made while it waits is not counted at all. squidNightEnds and squidStep do this. the squid goes when day breaks.
+
+    THE INK OF THE DAY. the ink that is left when day breaks stays, and dries: it is dark and nearly
+    solid, with a lighter edge around the whole of it. a fish that pops on an inked cell washes the ink
+    off of it (inkWashed, from handle_combos), and swaps still move it.
+    CLEAN. a cell that has been washed is clean, and it shows: a glow behind its fish, and a pale edge
+    around the clean cells, the other way around from the ink. it stays clean if ink is moved back onto
+    it, and is washed again: a cell is only ever clean once. INK_CLEAN has them.
+    THE POT is how many clean cells there are. when the last of the ink is washed off, the pot pays: a
+    the clean cells poof away in a sparkle, one after another at a steady pace, the nearest to the one
+    that was washed last first, with a glow running on ahead of them like a wave, each with a pop that
+    is higher than the last, and its score. each is worth INK_POT_STEP more than the one before it, so a pot of n pays
+    INK_POT_STEP * n * (n + 1) / 2, times the multiplier. so to make the pot bigger, the ink has to be
+    moved onto cells that have not been washed yet, and washed off of them: washing the same cell over
+    and over is worth nothing.
+    a pot that is not washed off by nightfall is lost: the ink breaks up, the clean cells fade, and it
+    is worth INK_BUST_POINTS a clean cell. the night's ink starts from nothing. inkPotStep and inkBust do this.
+    ink that goes, however it goes, goops up into bubbles that break away: see THE FIZZ.
+
+    the ink is drawn by InkEffect.fx, on one sprite over the whole board, under the fish. at night it is
+    dark and soft, with a light that runs along its edge, and a glow that spills out into the water. ink
+    in cells that touch at a side is one smear, with no seam. the cell that was inked last spreads out
+    from nothing, or flows into it along with the cursor. by day it is the dried ink: the same wobbling
+    blots, swollen, so that ink in cells that touch is one solid smear, and four that meet have no hole
+    between them, dark, with a lighter edge, and a faint, shimmering reflection of the fish over it. all
+    of it, by night and by day, has a slow cloud of dark blues and purples through it, which is fixed to
+    the screen, and not to the ink. the reflection is the
+    picture of each fish, which the coral's shadows draw to a render target of their own: see THE FISH
+    CAST SHADOWS in fish_headers. it goes from the one look to the other as day breaks. the clean cells are
+    drawn on the same sprite.
+
+    THE CONSTELLATIONS. as night falls, up to three shapes come out in the open water either side of the
+    board, made of the plankton, the little lights that drift up through the water at night: an easy one,
+    a middling one and a hard one. they ARE the plankton, so they rise and sway with it. HintSnowEffect.fx
+    lights the grains of the shape's stars, on a little grid, and SeabedEffect.fx leaves its own lights out
+    of the box of the shape. there is one in the water at a time: it fades in low beside the board, rises
+    with the plankton, and every so often lines sweep across it, joining up the lights of each piece, hold,
+    and fade, and it is plankton again. near the top it fades out, and as it does, the next shape fades in
+    low on the other side of the board. the shapes take turns. a player who does not know to look sees plankton. a player who is looking
+    sees a few lights in a neat little grid, and every so often the lines say what the shape is. see THE HINTS IN THE SNOW, and starSkyDraw. the easy ones and the middling
+    ones are one piece, and the hard one two. drawing one in ink, exactly, in any of its four turns, makes it. exactly means
+    that every piece of it is a piece of ink of its own: inked, and with no other ink touching it at a
+    side. ink that touches it only at a corner is not touching it. ink anywhere else is fine.
+    the shapes are the parts of the trident of the god. see THE TRIDENT in fish_headers_neptune, which
+    has which part is which, and ONE A NIGHT: once one is made, the others fade for the rest of the night.
+    the easy ones are 6 cells, the middling ones 7 and the hard one 9, and the night has 12 moves, and no
+    move inks more than one cell, so the hard one leaves the least room. a shape that is not needed any
+    more does not come out. THE EASY ONES FIRST: only the easiest kind that the game still needs is
+    hinted at in the water, the easy ones until both are made, then the middling ones, and the shaft
+    last. see starSkyDraw. EVERY ONE CAN BE MADE: any shape that the game does not have yet can be made on
+    any night, hinted at or not, so a player who remembers one can make it. starLook tries the shape of
+    the night of each kind first, then the others of that kind. an easy or middling one is
+    one piece: a push starts it, and swaps out of the ink grow it, so where the squid happens to jump
+    does not keep a player from it. the hard one is two pieces, neither of them a single cell, which line
+    up along a row or a column, so that a player who knows where the squid goes can get it from one to
+    the other. build/star_odds.py says how
+    often each can be made on a board as it is dealt.
+    once a constellation is made, it is kept, whatever the ink does after. its cells are the
+    constellation's, and no other constellation can be made of them. both the ink and its hint in the
+    water shimmer, and a fanfare plays. then, STAR_POP_WAIT later, it pops: every fish of it scores
+    STAR_BONUS times what it would as a fish of a group that size, and its ink goes. starPop does it.
+
+    the "Tide" window of the debug panel (FISH_DEBUG) puts the squid on the cursor, says where it would go
+    for every push, inks the cursor's cell, wipes the ink, keeps the night from ending, and says which
+    constellations are made.
+remend
+
+global TEX_SQUID `its picture. setup_squid loads it. it is not a kind of fish: the cell keeps the kind of the fish under it.
+global SQUID_CELL = -1 `the cell that the squid is in, or -1 when there is none
+global SQUID_DUE = 0 `1 when night has fallen, and the squid comes as soon as the board has settled
+global SQUID_SHOWN_CELL = -1 `the cell that is drawn as the squid, so that the fish can be put back when it goes
+global SQUID_FREE_PUSH = 0 `1 while startFreeMove is starting its swap, so that a push of the "free move" card is not counted
+global SQUID_PUSHES = 0 `how many times the squid has been pushed tonight
+global dim SQUID_SEEN(64) `scratch, for squidJump: the stamp of the walk that saw every kind
+global SQUID_SEEN_STAMP = 0
+global SQUID_ENDLESS = 0 `1 to keep the night from ending, from the debug panel
+global SQUID_ENDING = 0 `THE END OF THE NIGHT: 1 when the night is over, and day breaks once the board has settled and the constellation has popped
+
+` THE PUFF. the squid that is pushed puffs away into its ink, and the fish under it grows back in.
+global SQUID_GHOST = 0 `the sprite of the squid that puffs away, made the first time that it is needed
+global SQUID_PUFF_CELL = -1
+global SQUID_PUFF_MS = 0 `when it started, or 0 when it is over
+global SQUID_PUFF_LONG# = 420 `how long it takes, in milliseconds
+global SQUID_BACK_CELL = -1 `the cell whose fish is growing back in
+global SQUID_BACK_MS = 0 `when it starts to
+global SQUID_BACK_DELAY = 120 `how long after the push that is
+global SQUID_IN_CELL = -1 `the cell that the squid is growing in, where it landed
+global SQUID_IN_MS = 0
+global SQUID_IN_DELAY = 230
+global SQUID_GROW_LONG# = 380 `how long growing in takes
+
+` THE INK
+global dim INK(400) `1 for every cell that is inked
+global INK_COUNT = 0
+global INK_FX_ID = 0
+global INK_BOARD_SPRITE = 0 `the one sprite that all of the ink is drawn on, over the board. made the first time that it is needed.
+global INK_GONE_MS = 0 `when the ink popped, so that it fades out, or 0
+global INK_FADE_MS# = 700 `how long it takes to fade out
+global INK_FRESH_CELL = -1 `the cell that was inked last, whose ink spreads out from nothing
+global INK_FRESH_MS = 0 `and when
+global INK_FRESH_FROM = -1 `the inked cell that it spread from, which it flows out of, or -1 when it came from nothing
+global INK_SPREAD_MS = 600 `how long new ink that comes from nothing takes to spread out to the size of its cell
+global INK_FRESH_LONG = 600 `how long the fresh ink takes to get there: INK_SPREAD_MS, or as long as the cursor takes, when it flows along with it
+global INK_LAND_LONG = 280 `and how long it wobbles for, once it has landed
+global ORDER_INK = 7 `on top of the sea floor and the coral, and underneath the cursor and the fish
+global INK_DIRTY = 0 `1 when the ink has changed, and the constellations have to be looked for again
+global INK_BOARD_COLS = 0 `how many columns the board had on the last frame. when it grows, the night's ink is wiped.
+global INK_ROWS_STALE = 1 `1 when the bits below have to be worked out again
+global dim INK_ROW_BITS(20) `a number for every row, with a bit for every inked cell of it. InkEffect.fx takes them.
+global dim MADE_ROW_BITS(20) `and the same for the cells of made constellations
+global dim INK_ROW#(20) `the same numbers, as floats, the way that the effect takes them
+global dim MADE_ROW#(20)
+global dim INK_POW(20) `two to the power of every column. setup_squid fills it in.
+global dim INK_WASH_MS(400) `when the ink of a cell that was washed off goes from the screen, which is when its fish pops, or 0
+global INK_WASH_NEXT = 0 `the soonest of those that is still to come, or 0
+global INK_SHOWN_COUNT = 0 `how many cells are drawn inked, which is how many pips of the pot are lit
+global INK_CORAL_SEEN = -1 `how much coral there was when the ink was last looked at for it. see CORAL WINS.
+global INK_INK_RGB = 0 `the color of a puff of the ink. setup_squid sets it.
+
+` CORAL WINS. ink that is moved onto coral by day lurches toward it, and breaks up into bubbles at the tip.
+global INK_LURCH_FROM = -1 `the inked cell that it lurches out of, or -1
+global INK_LURCH_TO = -1 `the coral that it lurches toward
+global INK_LURCH_MS = 0 `when it started
+global INK_LURCH_LONG = 160 `how long it reaches for, which is as long as the cursor takes
+global INK_LURCH_BACK = 240 `and how long what is left of it takes to shrink back
+global INK_LURCH_BROKE = 0 `1 once its tip has broken up
+global INK_LURCH_REACH# = 0.62 `how far it gets, in cells
+
+` THE INK OF THE DAY, AND THE POT
+global INK_DAY = 0 `1 while the ink on the board is the day's, and the pot is on it
+global INK_DAY_SHOWN# = 0 `how much the ink is drawn the day's way, from 0 to 1. it chases INK_DAY.
+global INK_DAY_EASE# = 0.003 `how much of the way it goes in a millisecond
+global INK_DRAW_LAST_MS = 0 `when the ink was last drawn
+global INK_POT = 0 `how many clean cells there are, which is what the pot is. see THE POT.
+global dim INK_CLEAN(400) `1 for every cell that has been washed since day broke. see CLEAN.
+global INK_CLEAN_SHOWN = 0 `how many clean cells are drawn
+global dim INK_CLEAN_BITS(20) `the clean cells that are drawn, a number for every row, the way that INK_ROW_BITS is
+global dim INK_CLEAN_ROW#(20)
+global INK_LAST_WASHED = -1 `the cell that was washed last, which the wave of the pot starts from
+global INK_POT_STEP = 10 `how much more each clean cell of the pot is worth than the one before it, before the multiplier
+global INK_BUST_POINTS = 2 `what each clean cell of a pot that is lost at nightfall is worth, before the multiplier
+global INK_LAST_PAY = 0 `what the last pot paid, for the tests
+global INK_LAST_BUST = 0 `and what the last lost one did
+global INK_REFLECT = 0 `1 while the fish of the inked cells are drawn for their reflections. fish_routines_coral draws them.
+global INK_ART_HALF# = 8 `half of how big a fish is drawn, where its reflection starts
+
+` THE POT PAYS. the clean cells poof away one after another, the nearest to the one that was washed
+` last first, at a steady pace, so that a bigger pot takes longer, each in its own sparkle, with its
+` score. a glow runs on ahead of the next ones to go, like a wave. InkEffect.fx draws the glow, and
+` InkFizzEffect.fx the poofs. the times are in milliseconds.
+global INK_PAYING = 0 `1 while it pays
+global INK_PAY_MS = 0 `when it started
+global INK_PAY_COUNT = 0 `how many clean cells there are to poof
+global INK_PAY_POINTS = 0 `and what they are worth all together
+global dim INK_PAY_CELL(400) `the cells, nearest to where the wave starts first
+global dim INK_PAY_AT(400) `and when each poofs, from when it started
+global dim INK_PAY_FAR#(400) `and how far each is from where it starts, in cells, for the glow
+global INK_PAY_POPPED = 0 `how many of them have poofed
+global INK_PAY_FROM_X# = 0 `the cell that the wave starts from
+global INK_PAY_FROM_Y# = 0
+global INK_PAY_LEAD = 300 `how long after it starts the first one poofs, so that the swell is heard first
+global INK_PAY_EVERY = 190 `how long after one poofs the next one does
+global INK_PAY_POP_LONG = 650 `how long a cell takes to poof away
+global INK_PAY_TEXT# = 1.3 `how big the words of each score are
+
+` THE FIZZ. a cell whose ink goes, washed off, popped with its constellation, lost at nightfall, or
+` broken up by coral, goops up into bubbles that break away and pop, with a fizz. a clean cell of the pot
+` that pays poofs away the same way, in the look of a clean cell. every one is a sprite of its own, over the board's ink, with
+` InkFizzEffect.fx on it, which is told how far along it is by the sprite's texcoord2. inkFizzStart and
+` inkFizzStep do it.
+#constant INK_FIZZ_GOO 0
+#constant INK_FIZZ_POOF 1
+global INK_FIZZ_MAX = 48
+global dim INK_FIZZ_SPRITE(48)
+global dim INK_FIZZ_ON(48) `1 while the sprite is in use
+global dim INK_FIZZ_X(48) `where its middle is, in pixels
+global dim INK_FIZZ_Y(48)
+global dim INK_FIZZ_MS(48) `when it starts, on the clock of the game
+global dim INK_FIZZ_MODE(48) `INK_FIZZ_GOO, or INK_FIZZ_POOF
+global dim INK_FIZZ_SCALE#(48) `how big it is, from 0 to 1 of a cell's worth of ink
+global dim INK_FIZZ_SEED(48)
+global dim INK_FIZZ_SOUNDED(48) `1 once its sound has played
+global INK_FIZZ_NEXT = 0 `the sprite to take when none is free
+global INK_FIZZ_LIVE = 0 `how many are going
+global INK_FIZZ_LONG = 900 `how long one takes
+global INK_FIZZ_POOF_LONG = 650 `and a poof of the pot, which is INK_PAY_POP_LONG
+global INK_FIZZ_SPAN# = 3 `how many cells across its sprite is, so that the bubbles have room to rise
+global INK_FIZZ_FX = 0
+
+` THE SOUNDS OF THE INK. each of the ones that can come close together has a few voices, which take turns.
+global INK_SFX_SPREAD = 0 `a gloop, as ink flows into a cell
+global dim INK_SFX_FIZZ(4) `ink breaking up into bubbles
+global dim INK_SFX_POP(4) `a clean cell of the pot poofing away
+global INK_SFX_FIZZ_NEXT = 0
+global INK_SFX_POP_NEXT = 0
+global INK_FIZZ_SOUND_MS = 0 `when a fizz last played, so that a group of them is not a wall of noise
+global INK_VOL_SPREAD# = 0.5
+global INK_VOL_FIZZ# = 0.4
+global INK_VOL_POP# = 0.55
+
+` THE POT IS LOST. the clean cells fade.
+global INK_CRUMBLE_MS = 0 `when it was lost, or 0
+global INK_CRUMBLE_LONG = 700
+
+` the pieces of the ink. inkFindPieces works them out.
+global dim INK_PIECE(400) `the piece that every inked cell is part of, from 1, or 0
+global dim INK_PIECE_SIZE(400) `how many cells every piece has, by its number
+global dim INK_STACK(400) `scratch, for the flood
+
+` THE CONSTELLATIONS
+#constant STAR_EASY 0
+#constant STAR_MEDIUM 1
+#constant STAR_HARD 2
+global STAR_SHAPE_MAX = 16
+global STAR_CELL_MAX = 160
+global STAR_SHAPE_COUNT = 0
+global dim STAR_SHAPE_TIER(16) `which of the three each shape is
+global dim STAR_SHAPE_FIRST(16) `where its cells start in STAR_X and STAR_Y
+global dim STAR_SHAPE_LEN(16) `and how many there are
+global dim STAR_SHAPE_WIDE(16) `how many cells across it is, and down, as it is written
+global dim STAR_SHAPE_TALL(16)
+global dim STAR_X(160)
+global dim STAR_Y(160)
+global dim STAR_PIECE(160) `the piece of its shape that every cell is in, from 1. setup_stars works it out.
+global dim STAR_PIECE_LEN(160) `how many cells the piece of every cell has
+
+global dim STAR_PICK(3) `the shape that is in the sky tonight for each of the three, or -1
+global dim STAR_MADE(3) `1 when it has been made tonight
+global dim STAR_MADE_AT(3) `where it was made: the cell that its first cell is in
+global dim STAR_MADE_TURN(3) `and the turn that it was made in, from 0 to 3
+global dim STAR_CLAIM(400) `the constellation that every cell is part of, from 1, or 0
+global STAR_TURN_X = 0 `where starTurned leaves its answer
+global STAR_TURN_Y = 0
+global dim STAR_PIECE_HAS(17) `scratch, for starFits: the piece of the ink that each piece of the shape is in
+global STAR_BONUS = 10 `how many times as much as a fish of a group its size each fish of a made constellation scores
+global STAR_LAST_SCORE = 0 `what the last constellation to pop scored, for the tests
+global dim STAR_POP_DUE(3) `1 while a made constellation is waiting to pop
+global dim STAR_POP_MS(3) `when it pops, on the clock of the game
+global dim STAR_POPPED(3) `1 once it has
+global STAR_POP_WAIT = 1100 `how long a made constellation shimmers before it pops
+
+global dim STAR_SHAPE_MASK(1024) `1 for every spot of the grid of every shape that has a star in it: 64 to a shape, 8 to a row. starShapesDone fills it in.
+
+global dim STAR_SKY_X(3) `where the middle of each of the three is, from the middle of the moon
+global dim STAR_SKY_Y(3)
+global dim STAR_FLASH_MS(3) `when each was made, for its shimmer
+global STAR_FLASH_LONG = 1800 `how long the shimmer lasts
+global dim STAR_SKY_SHOWN#(3) `how much of each hint in the water is there, from 0 to 1, as it fades in and out
+
+` THE HINTS IN THE SNOW. see starSkyDraw. where each of the three is, as it drifts, and its round of lines.
+` a hint is made of the plankton, the little lights that drift up through the water at night, which are
+` on grains of 2 pixels. see SeabedEffect.fx and HintSnowEffect.fx.
+` there is one hint at a time, but while one fades out the next fades in, so there are three places for
+` them. each is a hint in the water, and not one of the three shapes of the night: STAR_SNOW_SLOT says
+` which shape it is.
+global dim STAR_SNOW_SLOT(3) `which of the three shapes of the night it is, or -1 when it is not in use
+global dim STAR_SNOW_STATE(3) `0 when it is not in use, 1 while it is the one, and 2 while it fades out
+global dim STAR_SNOW_MADE(3) `1 when its shape has been made, for the effects
+global dim STAR_SNOW_SHOWN#(3) `how much of it is there, with the night, for the effects
+global STAR_SNOW_NEXT = 0 `the shape that came last. the next to come is the one after it.
+global STAR_SNOW_LAST_SIDE = 0 `the side that the last one came on. the next comes on the other.
+global STAR_SNOW_FIRST = 1 `1 until the first of the night has come
+global STAR_SNOW_LAST_MS = 0 `when starSkyDraw last ran, for the fades
+global STAR_SNOW_COME = 1500 `how long one takes to fade in, or out, in milliseconds
+global dim STAR_SNOW_CX(3) `the grain of the top left light of each, which moves with the plankton
+global dim STAR_SNOW_CY(3)
+global dim STAR_SNOW_WIDE(3) `how many squares wide and tall it is, for the effect
+global dim STAR_SNOW_TALL(3)
+global dim STAR_SNOW_ROWS#(24) `which squares of each row of each are stars, as bits, for the effect: 8 rows to each
+global dim STAR_SNOW_LINES#(3) `how bright the lines of each are, from 0 to 1
+global dim STAR_SNOW_SWEEP#(3) `and how far across it they have swept, from 0 to 1
+global dim STAR_SNOW_FROM(3) `when it came, on the clock of the game
+global STAR_SNOW_PITCH = 5 `how far apart the lights of a hint are, in grains. it has to be the same as HINT_PITCH in HintSnowEffect.fx and SeabedEffect.fx.
+global STAR_SNOW_GRAIN = 2 `how big a grain of the plankton is, in pixels
+global STAR_SNOW_RISE# = 5 `how fast the plankton rises, in pixels a second
+global STAR_SNOW_SWAY = 6 `and how far it sways to either side
+global HINT_FX_ID = 0
+global HINT_SPRITE = 0 `the sprite that HintSnowEffect.fx draws the hints on, over the whole screen. starSnowParams makes it.
+global ORDER_HINTS = -9 `just on top of the sea floor, which the plankton is part of
+global dim STAR_SNOW_SIDE(3) `which side of the board each is on: 0 the left, 1 the right
+global STAR_AT_X = 0 `where starSnowAt leaves its answer
+global STAR_AT_Y = 0
+` the open water either side of the board, which the hints stay in: where it starts, across, and how wide it is
+global STAR_SNOW_LEFT_FROM = 6
+global STAR_SNOW_LEFT_WIDE = 150
+global STAR_SNOW_LEFT_TOP = 122 `the top of it, under the moves and the multiplier
+global STAR_SNOW_RIGHT_FROM = 438
+global STAR_SNOW_RIGHT_WIDE = 126
+global STAR_SNOW_RIGHT_TOP = 60 `under the rounds that are left
+global STAR_SNOW_BOTTOM = 34 `and how far above the bottom of the screen it stops, for the sand, which is in front of the plankton
+global STAR_SNOW_SLACK = 8 `how far below the top of it a hint starts to fade out, in pixels
+global STAR_BAND_LEFT = 0 `where starSnowBand leaves its answer
+global STAR_BAND_TOP = 0
+global STAR_BAND_WIDE = 0
+global STAR_BAND_TALL = 0
+global STAR_SNOW_ROUND = 9000 `how often the lines of a hint sweep out, in milliseconds
+global STAR_SNOW_SHOOT = 1800 `how long after it comes they first do
+global STAR_SNOW_SWEEP = 1100 `how long they take to sweep across the whole shape
+global STAR_SNOW_HOLD = 3800 `when they start to fade
+global STAR_SNOW_FADE = 1000 `how long they take to
+
+` THE FANFARE. a few notes of the music's own instruments, one after the other. squidStep plays them.
+global FANFARE_MAX = 64
+global dim FANFARE_AT(64) `when each note is due, on the clock of the game, or 0 when it has been played
+global dim FANFARE_INST(64)
+global dim FANFARE_NOTE(64)
+global dim FANFARE_LOUD#(64)
+global FANFARE_COUNT = 0
+
+` THE SAVED GAME. the squid, the ink and the constellations of a game that is saved at night.
+` 1 when the saved game has these, then the squid, then the picks and what is made, then the ink, 30 cells
+` to a number, then (at 20) the parts of the trident, (21) which made constellations have popped, and (22)
+` the ink of the day: 1 when it is, and the pot, times 2, and then (23 to 36) the clean cells, 30 to a number
+global SQUID_PREF = 5300

@@ -82,6 +82,8 @@ abstract test fishBoard
     ` see THE RAINBOW FISH in fish_headers_rainbow.
     RAINBOW_FISH_ON = 0
     rainbowFishReset()
+    BUBBLED_ON = 0 `and no bubbles, unless a test makes some. see fish_headers_bubbled.
+    bubbledReset()
 
     ` mute the sounds and the music, whatever the options said
     OPTION_SOUND = 0
@@ -2802,7 +2804,7 @@ endtest
 ` THE CODEC
 
 test codec_has_entries_for_coral_after_the_cards from fishBoard
-    assert CODEC_COUNT = CARD_LENGTH + 32 + QUEST_COUNT, "the usual ending, the call of the angler, the nine words that bring somebody swimming through, rainbow fish and schooling fish, the night, and every card, coral, horror coral, the two endings, three special fish, four things that happen to a fish, the QR code, the crooked bar, the diver and its ending, and every quest"
+    assert CODEC_COUNT = CARD_LENGTH + 36 + QUEST_COUNT, "the usual ending, the call of the angler, the nine words that bring somebody swimming through, the squid, the shapes in ink and their ending, squeaky clean, rainbow fish and schooling fish, the night, and every card, coral, horror coral, the two endings, three special fish, four things that happen to a fish, the QR code, the crooked bar, the diver and its ending, and every quest"
     assert CODEC_ENTRY_JELLY = CARD_LENGTH + 4, "the special fish come after the endings"
     assert CODEC_ENTRY_STACK = CARD_LENGTH + 9, "stacked comes after the other things that happen to a fish"
     assert CODEC_ENTRY_HOME = CARD_LENGTH + 10, "and heart home is last"
@@ -2951,29 +2953,37 @@ test options_page_only_has_what_the_menu_remembers from fishBoard
     tWasReef = SURFACE_REEF
     tWasAncient = SURFACE_ANCIENT
 
+    tWasPhotos = DIVER_SURFACE
+    tWasTemple = SURFACE_NEPTUNE
     SURFACE_REEF = 0
     SURFACE_ANCIENT = 0
+    DIVER_SURFACE = 0
+    SURFACE_NEPTUNE = 0
     setMenuPage(MENU_PAGE_OPTIONS)
     tPlain = MENU_PAGE_LENGTH
-    tHasReef = 0
-    tHasMonster = 0
+    tHasMementos = 0
     for tI = 0 to MENU_PAGE_LENGTH - 1
-        if MENU_PAGE_ITEMS(tI) = MENU_ITEM_SET_REEF then tHasReef = 1
-        if MENU_PAGE_ITEMS(tI) = MENU_ITEM_SET_MONSTER then tHasMonster = 1
+        if MENU_PAGE_ITEMS(tI) = MENU_ITEM_SET_ENDINGS then tHasMementos = 1
     next
-    assert tHasReef = 0, "no line for the reef before it has been saved"
-    assert tHasMonster = 0, "and none for the monster before it has been summoned"
+    assert tHasMementos = 0, "no line for the mementos before any ending has left one"
 
+    ` the reef is there: the options page gets one line, for the page of mementos, and that page has the reef
     SURFACE_REEF = 1
     setMenuPage(MENU_PAGE_OPTIONS)
-    assert MENU_PAGE_LENGTH = tPlain + 1, "the reef gets a line once it is there"
-    assert MENU_PAGE_ITEMS(MENU_PAGE_LENGTH - 2) = MENU_ITEM_SET_REEF, "just above Back"
+    assert MENU_PAGE_LENGTH = tPlain + 1, "the mementos get a line once there is one"
+    assert MENU_PAGE_ITEMS(MENU_PAGE_LENGTH - 2) = MENU_ITEM_SET_ENDINGS, "just above Back"
     assert MENU_PAGE_ITEMS(MENU_PAGE_LENGTH - 1) = MENU_ITEM_SET_BACK, "and Back is still last"
+    setMenuPage(MENU_PAGE_ENDINGS)
+    assert MENU_PAGE_LENGTH = 2, "the page of mementos has the reef, and Back"
+    assert MENU_PAGE_ITEMS(0) = MENU_ITEM_SET_REEF, "the reef first"
+    assert MENU_PAGE_ITEMS(1) = MENU_ITEM_ENDINGS_BACK, "and Back last"
 
     SURFACE_ANCIENT = 1
     setMenuPage(MENU_PAGE_OPTIONS)
-    assert MENU_PAGE_LENGTH = tPlain + 2, "and so does the monster"
-    assert MENU_PAGE_ITEMS(MENU_PAGE_LENGTH - 2) = MENU_ITEM_SET_MONSTER, "under the reef"
+    assert MENU_PAGE_LENGTH = tPlain + 1, "a second memento is not a second line on the options page"
+    setMenuPage(MENU_PAGE_ENDINGS)
+    assert MENU_PAGE_LENGTH = 3, "it is a line on the page of mementos"
+    assert MENU_PAGE_ITEMS(1) = MENU_ITEM_SET_MONSTER, "under the reef"
 
     tWasOn = OPTION_MENU_MONSTER
     changeMenuOption(MENU_ITEM_SET_MONSTER, 1)
@@ -2983,6 +2993,8 @@ test options_page_only_has_what_the_menu_remembers from fishBoard
 
     SURFACE_REEF = tWasReef
     SURFACE_ANCIENT = tWasAncient
+    DIVER_SURFACE = tWasPhotos
+    SURFACE_NEPTUNE = tWasTemple
     end
 endtest
 
@@ -3707,5 +3719,23 @@ test passive_drop_page_lists_what_can_be_dropped from fishBoard
     assert DROP_ROW_CARD(0) = ABILITY_INDEX_WRAP, "in the order that they were taken"
     assert DROP_ROW_CARD(2) = ABILITY_INDEX_LISTEN, "to the last of them"
     assert DROP_ROW_CARD(3) = -1, "and the row that goes back is at the end"
+    end
+endtest
+
+test bottle_goes_where_the_swap_finished_the_group from fishBoard
+    grantPassive(ABILITY_INDEX_BOTTLES)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(3, 0, 6)
+    testPut(4, 0, 6)
+    testPut(0, 1, 6)
+    testCursor(0, 1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+
+    assert totalComboCount = 1, "the swap made a group of five"
+    assert CELLS(testIndex(0, 0)).bottleDue = 1, "the bottle goes where the swapped fish finished it"
+    assert CELLS(testIndex(2, 0)).bottleDue = 0, "and not in the middle of the group"
     end
 endtest

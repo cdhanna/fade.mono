@@ -1,0 +1,113 @@
+
+remstart
+    THE LIST OF WHAT IS ON THE BOARD (a prototype, 2026-10-24)
+    in info mode, the outline on the whole board says that the confirm key lists everything that is on
+    it. the list comes up on the left: one row for each kind of thing that is out there, with how many
+    there are, like "Jellyfish 3", "Upside Down Fish 2", "Facing Left 31". the kinds are the ones of
+    THE THINGS ON THE BOARD, IN INFO MODE, in fish_headers_boardinfo, with the way that the fish face
+    split in two.
+
+    the row that is chosen is the spotlight: the dark of info mode opens up over every cell that has that
+    kind of thing on it, and only those, with a hole of its own on each cell. holes that touch run
+    together, so a patch of coral shows as one block. the holes grow in, a little past their size and
+    back, every time the row changes. and copies of a few of those fish fly out of their cells, over to
+    the number in the row, and pop there. the fish themselves never leave their cells, so the player can
+    still see where everything is.
+
+    {dir} goes up and down the list. the confirm key goes back to the board, and the info key leaves
+    info mode, the same as always. the mouse chooses a row by going over it, and a click anywhere else
+    goes back to the board.
+    ASKING THE ANGLER (2026-10-27). with a light kept, the confirm key on a row, or a click on it, spends
+    the light, and the angler's first question is about that row: every kind has a topic of its own (see
+    anglerKindTopic, in fish_routines_angler). the hint says so. without a light it goes back, as above.
+
+    LOOKING CLOSER (2026-10-27). Chris: the confirm key on the whole board no longer opens the list. it puts
+    a cursor of info mode's own on a cell, the one that the game's cursor is on, and the same panel on the
+    left has a row for every thing about that cell, each with its words under it: what is in it (a fish,
+    a jellyfish, the squid...), what is the matter with the fish (rainbow, belly up, stacked, ringed, the
+    way that it faces), and what is under it (coral, horror coral, ink). a cell with nothing to say about
+    it has a row for the plain fish. the number on a row is how many of that there are on the whole board.
+    {dir} moves the cursor from cell to cell, and the rows follow it. off the edge of the board, it goes
+    back to the rest of info mode, in that direction.
+    the confirm key on a cell chooses its rows: {dir} up and down goes from row to row, and the chosen row
+    is the spotlight of the list, on every cell of the board that has it, with the copies flying to its
+    number. the confirm key on a row asks the angler about it, with a light kept, and otherwise goes back
+    to moving the cursor. so does {dir} left and right, which moves the cursor on as well.
+    the mouse: going over a cell looks at it, a click on a cell chooses its rows, a click on a row asks,
+    and a click anywhere else goes back.
+    the list itself is still here (spotOpen), and the look is built out of it (spotLookOpen): SPOT_LOOK is
+    1 while it is the look. nothing opens the list any more.
+
+    the routines are in fish_routines_spot. info mode comes to them with gosubs, because it is in a file
+    that comes before the board is declared.
+remend
+global SPOT_ON = 0 `1 while the list is open
+global SPOT_READY = 0 `1 once the sprites have been made
+global SPOT_ROW_MAX = 20
+global dim SPOT_ROW_KIND(20) `what each row is: one of the BOARD_INFO_ kinds, or SPOT_KIND_RIGHT
+global dim SPOT_ROW_COUNT(20) `how many of it there are
+global SPOT_ROWS = 0
+global SPOT_SEL = 0 `the row that is chosen
+global SPOT_KIND_RIGHT = 17 `the fish that face right. BOARD_INFO_FACING is the ones that face left, here.
+global SPOT_KIND_SQUID = 18 `the squid. only the look has these three.
+global SPOT_KIND_INK = 19 `a cell that is inked
+global SPOT_KIND_FISH = 20 `a fish with nothing to say about it. it is only ever on the cell that is looked at.
+global SPOT_KIND_CLEAN = 21 `a cell that the ink of the day has been washed off of. see CLEAN in fish_headers_squid.
+
+` LOOKING CLOSER
+global SPOT_LOOK = 0 `1 while the panel is the look at one cell, and not the list
+global SPOT_LOCKED = 0 `1 while the rows of the cell are being chosen from, and the cursor stays put
+global SPOT_LOOK_CELL = 0 `the cell that is looked at
+global SPOT_LOOK_FROM_MOUSE = 0 `1 when a click opened the look, so that it starts on the cell under the mouse
+global SPOT_LOOK_CURSOR as infoBorder `the outline on the cell
+global dim SPOT_ROW_DESCS(20) `the words of every row, under it
+global dim SPOT_ROW_Y(20) `where every row is, up and down, and how tall, with its words
+global dim SPOT_ROW_HS(20)
+global SPOT_LOOK_ALL_WORDS = 1 `0 when the words of every row would not fit, and only the chosen row has them
+
+global dim SPOT_MATCH(400) `the cells that the chosen row is about
+global SPOT_MATCH_N = 0
+global dim SPOT_HOLES(400) `a hole in the dark for each of them
+global SPOT_HOLES_MADE = 0
+global SPOT_GROW_FROM = 0 `when the holes of the chosen row started to grow in
+global SPOT_GROW_MS = 280
+global SPOT_GROWN = 0 `1 once they have, so that they are left alone
+
+` the copies that fly to the number. each one has a cell to come from, a row to go to, and a time to set off.
+global SPOT_GHOST_MAX = 14
+global dim SPOT_GHOSTS(14)
+global dim SPOT_GHOST_CELL(14) `-1 for one that is not flying
+global dim SPOT_GHOST_AT(14) `the game ms() that it sets off
+global SPOT_GHOST_MS = 420 `how long it takes to get there
+global SPOT_GHOST_STAGGER = 35 `how much later each one sets off than the one before
+
+` the panel on the left
+global SPOT_PANEL_SPRITE = 0
+global SPOT_PANEL_BORDER as infoBorder
+global SPOT_ROW_BAR_SPRITE = 0 `the light behind the row that is chosen
+global SPOT_TITLE_TEXT_ID = 0
+global SPOT_DESC_TEXT_ID = 0
+global dim SPOT_ROW_TEXTS(20)
+global dim SPOT_COUNT_TEXTS(20)
+global SPOT_PANEL_X = 6
+global SPOT_PANEL_Y = 0
+global SPOT_PANEL_W = 150
+global SPOT_PANEL_H = 0
+global SPOT_ROW_H = 17
+global SPOT_ROWS_TOP = 0 `where the first row is
+
+remstart
+    NEW INFO ON THE BOARD (2026-10-24). when an entry of the codec is new, and the thing that it is about is
+    out on the board, the "new info!" badge of info mode goes there, instead of to the Codec spot: it dances
+    over the one of them that is nearest the cursor, and turns into the little dot on the corner of its cell.
+    every other new thing on the board just has the dot. the list has the dot too, on its row, and choosing
+    the row reads it. the Codec spot keeps a dot of its own for what is new and is not on the board.
+    the badge itself is drawn by codecNewStep, in fish_routines_teach. SPOT_NEW_ANCHOR says where.
+remend
+global dim SPOT_NEW_CELL(18) `for every kind, the cell of the one nearest the cursor while its entry is new, or -1
+global SPOT_NEW_ANCHOR = -1 `the kind that the badge goes to, or -1 for the Codec spot
+global SPOT_NEW_OFF_BOARD = 0 `how many new entries are not on the board
+global dim SPOT_NEW_DOTS(19) `a dot for every kind, and the last one is for the Codec spot
+global dim SPOT_ROW_DOTS(20)
+global SPOT_NEW_READY = 0
+global SPOT_READ_KIND = -1 `the kind of the row that is chosen, which is read when the list moves off it or closes

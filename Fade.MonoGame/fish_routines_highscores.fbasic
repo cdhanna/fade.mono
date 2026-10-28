@@ -159,6 +159,9 @@ setup_highscores:
     ` and the one for a game that ended with the album of the diver full, which is a diving mask. see THE ENDING in fish_headers_diver.
     texture reserve texture id(TEX_BADGE_MASK), "Fish/Textures/badge_mask"
 
+    ` and the god's, which is a trident. see THE BADGE in fish_headers_neptune.
+    texture reserve texture id(TEX_BADGE_TRIDENT), "Fish/Textures/badge_trident"
+
     for hsI = 0 to HISCORE_ROWS - 1
         hsRowY = HISCORE_TOP + 24 + hsI * HISCORE_ROW_HEIGHT
 
@@ -428,6 +431,9 @@ highscore_table_hint:
         endif
         if hsHintTile = CORAL_ENDING_DIVER
             hsHintEnding$ = loc$("highscores.ending.diver")
+        endif
+        if hsHintTile = CORAL_ENDING_NEPTUNE
+            hsHintEnding$ = loc$("highscores.ending.neptune")
         endif
         if HISCORE_ENDING_SHOWN(hsHintTile)
             set text MENU_HINT_TEXT_ID, loc$("highscores.hint.endings.hide", "ending", hsHintEnding$, "end", hsHintEnd$)
@@ -941,7 +947,7 @@ highscore_game_end:
     if hsEndTable >= 0
         ` a game that ended with one of the two endings of the hidden game takes its badge with it
         ` and its modifiers go with it too. see THE MODIFIERS ON THE TABLES in fish_headers_fast.
-        hsEndPlace = insertHighscore(hsEndTable, hsPacked + CORAL_ENDING * HISCORE_BADGE_STEP + GAME_MODS * HISCORE_MOD_STEP, CURRENT_MOVE_COUNT, BEST_MULTIPLIER)
+        hsEndPlace = insertHighscore(hsEndTable, hsPacked + endingLowPart(CORAL_ENDING) * HISCORE_BADGE_STEP + GAME_MODS * HISCORE_MOD_STEP + endingHighPart(CORAL_ENDING) * HISCORE_ENDING_HIGH_STEP, CURRENT_MOVE_COUNT, BEST_MULTIPLIER)
         if hsEndPlace >= 0
             ` the upgrades that were picked go onto the table with it
             takeGameLog(hsEndTable * HISCORE_ROWS + hsEndPlace)
@@ -992,6 +998,10 @@ highscore_game_end:
     if CORAL_ENDING = CORAL_ENDING_DIVER
         hsNote$ = loc$("highscores.note.album", "moves", CURRENT_MOVE_COUNT)
         hsNoteColor = rgb(255, 228, 170)
+    endif
+    if CORAL_ENDING = CORAL_ENDING_NEPTUNE
+        hsNote$ = loc$("highscores.note.favor", "moves", CURRENT_MOVE_COUNT)
+        hsNoteColor = rgb(255, 222, 130)
     endif
 
     gosub highscore_table_open
@@ -1061,11 +1071,11 @@ function getScoreBadge(packedName)
     scoreBadge = 0
 
     ` the modifiers of the game are on top of the badge. see THE MODIFIERS ON THE TABLES in fish_headers_fast.
+    ` and the fourth ending has a place of its own above them. see THE BADGE in fish_headers_neptune.
     if packedName > 0
         scoreBadgePart = packedName mod HISCORE_MOD_STEP
-        scoreBadge = scoreBadgePart / HISCORE_BADGE_STEP
+        scoreBadge = endingUnpacked(scoreBadgePart / HISCORE_BADGE_STEP, packedName / HISCORE_ENDING_HIGH_STEP)
     endif
-    if scoreBadge > CORAL_ENDING_DIVER then scoreBadge = 0
 endfunction scoreBadge
 
 ` and the initials that are in that number, without the badge, packed the way that packInitials packs them
@@ -1136,7 +1146,7 @@ endfunction
 ` that the player has not got to goes by the tile of the mystery ones.
 function isEndingShown(badge)
     endingShown = 1
-    if badge > 0 and badge <= CORAL_ENDING_DIVER
+    if badge > 0 and badge <= CORAL_ENDING_LAST
         if HISCORE_ENDING_KNOWN(badge)
             endingShown = HISCORE_ENDING_SHOWN(badge)
         else
@@ -1152,6 +1162,7 @@ function loadKnownEndings()
     HISCORE_ENDING_KNOWN(CORAL_ENDING_REEF) = get pref(PREF_ENDING_REEF, 0)
     HISCORE_ENDING_KNOWN(CORAL_ENDING_ANCIENT) = get pref(PREF_ENDING_ANCIENT, 0)
     HISCORE_ENDING_KNOWN(CORAL_ENDING_DIVER) = get pref(PREF_ENDING_DIVER, 0)
+    HISCORE_ENDING_KNOWN(CORAL_ENDING_NEPTUNE) = get pref(PREF_ENDING_NEPTUNE, 0)
     layoutEndingTiles()
 endfunction
 
@@ -1160,7 +1171,7 @@ endfunction
 function layoutEndingTiles()
     HISCORE_TILE_COUNT = 0
     tileMystery = 0
-    for i = CORAL_ENDING_REEF to CORAL_ENDING_DIVER
+    for i = CORAL_ENDING_REEF to CORAL_ENDING_LAST
         if HISCORE_ENDING_KNOWN(i)
             HISCORE_TILE_ENDING(HISCORE_TILE_COUNT) = i
             HISCORE_TILE_COUNT = HISCORE_TILE_COUNT + 1
@@ -1281,7 +1292,8 @@ function fillOnlineTable(boardId)
 
                 ` and so is one with an ending that is switched off, so that the table fills up with the rest
                 stmEnding = steam score bits(boardId, stmRow, STEAM_DETAIL_FLAGS * 32, 2)
-                if stmEnding < 0 then stmEnding = 0
+                stmEndingHigh = steam score bits(boardId, stmRow, STEAM_DETAIL_FLAGS * 32 + 8, 1)
+                stmEnding = endingUnpacked(stmEnding, stmEndingHigh)
                 if isEndingShown(stmEnding) = 0 then stmGood = 0
 
                 ` and one that had a modifier that is switched off. see THE TILES OF THE MODIFIERS in fish_headers_fast.
@@ -1311,9 +1323,10 @@ function unpackSteamScore(boardId, steamRow, scoreIndex)
     if stmMult < 0 then stmMult = 0
 
     ` which ending the game had is the first two of the flags
+    ` and the fourth ending has a flag of its own. see THE BADGE in fish_headers_neptune.
     stmBadge = steam score bits(boardId, steamRow, STEAM_DETAIL_FLAGS * 32, 2)
-    if stmBadge > CORAL_ENDING_DIVER then stmBadge = 0
-    if stmBadge < 0 then stmBadge = 0
+    stmBadgeHigh = steam score bits(boardId, steamRow, STEAM_DETAIL_FLAGS * 32 + 8, 1)
+    stmBadge = endingUnpacked(stmBadge, stmBadgeHigh)
 
     ` and its modifiers are the four flags after the one for debug. see THE MODIFIERS ON THE TABLES in fish_headers_fast.
     stmHadMods = steam score bits(boardId, steamRow, STEAM_DETAIL_FLAGS * 32 + 3, 4)
@@ -1395,6 +1408,7 @@ function isDebugEnvSet()
     if is env set("FISH_SKY") then debugSet = 1
     if is env set("FISH_MENU_REEF") then debugSet = 1
     if is env set("FISH_MENU_ANCIENT") then debugSet = 1
+    if is env set("FISH_MENU_NEPTUNE") then debugSet = 1
 endfunction debugSet
 
 
@@ -1445,7 +1459,7 @@ function sendGameToSteam(tableIndex, packedName)
     if isDebugEnvSet() then GAME_DEBUG_USED = 1
     ` and the modifiers of the game, in the four flags after that. see THE MODIFIERS ON THE TABLES in fish_headers_fast.
     ` and whether the seed was picked by the player, in the flag after those. see fish_headers_seed.
-    set steam score detail STEAM_DETAIL_FLAGS, CORAL_ENDING + GAME_DEBUG_USED * STEAM_FLAG_DEBUG + GAME_MODS * STEAM_FLAG_MODS + sendPicked * STEAM_FLAG_SEED_PICKED
+    set steam score detail STEAM_DETAIL_FLAGS, endingLowPart(CORAL_ENDING) + endingHighPart(CORAL_ENDING) * STEAM_FLAG_ENDING_HIGH + GAME_DEBUG_USED * STEAM_FLAG_DEBUG + GAME_MODS * STEAM_FLAG_MODS + sendPicked * STEAM_FLAG_SEED_PICKED
 
     sendBit = STEAM_BIT_LOG
     sendLast = 0
@@ -1986,6 +2000,11 @@ function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
                 color sprite HISCORE_BADGE_SPRITES(i), rgb(190, 130, 255)
                 show sprite HISCORE_BADGE_SPRITES(i)
             endif
+            if rowBadge = CORAL_ENDING_NEPTUNE
+                set sprite texture HISCORE_BADGE_SPRITES(i), TEX_BADGE_TRIDENT
+                color sprite HISCORE_BADGE_SPRITES(i), rgb(255, 222, 130)
+                show sprite HISCORE_BADGE_SPRITES(i)
+            endif
             firstLetter = packed / 676
             secondLetter = (packed / 26) mod 26
             thirdLetter = packed mod 26
@@ -2069,10 +2088,12 @@ function refreshHighscoreTable(tableIndex, markedRow, cursorAt)
                     tileColor = rgb(255, 140, 155)
                     if tileEnding = CORAL_ENDING_ANCIENT then tileColor = rgb(190, 130, 255)
                     if tileEnding = CORAL_ENDING_DIVER then tileColor = rgb(150, 220, 255)
+                    if tileEnding = CORAL_ENDING_NEPTUNE then tileColor = rgb(255, 222, 130)
                 endif
                 tileTex = TEX_BADGE_CORAL
                 if tileEnding = CORAL_ENDING_ANCIENT then tileTex = TEX_BADGE_TENTACLE
                 if tileEnding = CORAL_ENDING_DIVER then tileTex = TEX_BADGE_MASK
+                if tileEnding = CORAL_ENDING_NEPTUNE then tileTex = TEX_BADGE_TRIDENT
 
                 ` the tile of a modifier has the picture of the modifier, which is smaller. see THE TILES OF THE MODIFIERS in fish_headers_fast.
                 tileIconSize = 16

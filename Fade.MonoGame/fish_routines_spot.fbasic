@@ -1,0 +1,1162 @@
+
+` THE LIST OF WHAT IS ON THE BOARD. see fish_headers_spot.
+goto routines_spot_exit
+
+` info mode is in a file that comes before the board is declared, so it comes to these with gosubs
+spot_open:
+    spotOpen()
+return
+
+spot_close:
+    spotClose()
+return
+
+` the confirm key on the whole board, in info mode: the look, on the cell of the game's cursor, or on the
+` cell that was clicked. see LOOKING CLOSER in fish_headers_spot.
+spot_look_open:
+    spotLookOpenCell = getCellIndex(SELECTION_POS)
+    if SPOT_LOOK_FROM_MOUSE
+        spotLookMouseCell = spotMouseCell()
+        if spotLookMouseCell >= 0 then spotLookOpenCell = spotLookMouseCell
+    endif
+    SPOT_LOOK_FROM_MOUSE = 0
+    spotLookOpen(spotLookOpenCell)
+return
+
+` the keys, and the mouse, while the look is open. spot_input comes here.
+spot_look_input:
+    spotLkDx = 0
+    spotLkDy = 0
+    if new action down(ACT_RIGHT) then spotLkDx = 1
+    if new action down(ACT_LEFT) then spotLkDx = -1
+    if new action down(ACT_UP) then spotLkDy = -1
+    if new action down(ACT_DOWN) then spotLkDy = 1
+    spotLkConfirm = new action down(ACT_CONFIRM)
+
+    ` the mouse. the cell under it, and whether it is over the panel at all.
+    spotLkCell = -1
+    spotLkRow = -1
+    if MOUSE_MOVED + MOUSE_CLICKED > 0
+        spotLkCell = spotMouseCell()
+        for spotI = 0 to SPOT_ROWS - 1
+            spotLkOver = mouseOver(SPOT_PANEL_X, SPOT_ROW_Y(spotI), SPOT_PANEL_W, SPOT_ROW_HS(spotI))
+            if spotLkOver then spotLkRow = spotI
+        next
+    endif
+    spotLkClick = 0
+    spotLkOnPanel = 0
+    if MOUSE_CLICKED
+        spotLkOnPanel = mouseOver(SPOT_PANEL_X, SPOT_PANEL_Y, SPOT_PANEL_W, SPOT_PANEL_H)
+        spotLkClick = mouseClickAnywhere()
+    endif
+
+    if SPOT_LOCKED = 0
+        ` the cursor goes from cell to cell, and off the edge of the board, back to the rest of info mode
+        spotLkAny = abs(spotLkDx) + abs(spotLkDy)
+        if spotLkAny > 0
+            spotLkMoved = spotLookStep(spotLkDx, spotLkDy)
+            if spotLkMoved = 0
+                spotClose()
+                spotLkNext = findInfoInDirection(spotLkDx, spotLkDy)
+                if spotLkNext >= 0
+                    selectInfo(spotLkNext, 180)
+                endif
+            endif
+            return
+        endif
+        if MOUSE_MOVED
+            if spotLkCell >= 0
+                if spotLkCell <> SPOT_LOOK_CELL
+                    spotLookAt(spotLkCell)
+                endif
+            endif
+        endif
+        if spotLkClick
+            if spotLkCell >= 0
+                spotLookAt(spotLkCell)
+                spotLkConfirm = 1
+            else
+                if spotLkOnPanel = 0
+                    spotClose()
+                    return
+                endif
+            endif
+        endif
+        if spotLkConfirm
+            spotLookLock()
+        endif
+        return
+    endif
+
+    ` the rows of the cell are being chosen from
+    if spotLkDy <> 0
+        spotTo = SPOT_SEL + spotLkDy
+        if spotTo < 0 then spotTo = SPOT_ROWS - 1
+        if spotTo >= SPOT_ROWS then spotTo = 0
+        spotSelect(spotTo)
+    endif
+    if spotLkDx <> 0
+        spotLookUnlock()
+        spotLkMoved = spotLookStep(spotLkDx, 0)
+        return
+    endif
+    if spotLkRow >= 0
+        if spotLkRow <> SPOT_SEL
+            spotSelect(spotLkRow)
+        endif
+    endif
+    if spotLkClick
+        ` a click on a row asks, with a light kept. a click on a cell looks at that one, and a click anywhere
+        ` else goes back to moving the cursor.
+        if spotLkRow >= 0
+            if ANGLER_BANKED > 0 then spotLkConfirm = 1
+        else
+            if spotLkCell >= 0
+                spotLookUnlock()
+                spotLookAt(spotLkCell)
+                return
+            endif
+            if spotLkOnPanel = 0
+                spotLookUnlock()
+                return
+            endif
+        endif
+    endif
+    if spotLkConfirm
+        if ANGLER_BANKED > 0
+            ` the angler comes, and its first question is about the row. info mode goes first.
+            ANGLER_SPOT = INFO_INDEX_GRID
+            ANGLER_SPOT_KIND = SPOT_ROW_KIND(SPOT_SEL)
+            gosub info_close
+            gosub angler_from_info
+            return
+        endif
+        spotLookUnlock()
+    endif
+return
+
+` the keys, and the mouse, while the list is open. handle_info_input comes here instead of doing its own.
+` with a light kept, the confirm key on a row asks the angler about it, and spends the light. without one,
+` it goes back to the board. see KEEPING THE LIGHT in fish_headers_angler.
+spot_input:
+    if SPOT_LOOK
+        gosub spot_look_input
+        return
+    endif
+    spotConfirm = new action down(ACT_CONFIRM)
+    spotBack = 0
+
+    spotMove = 0
+    if new action down(ACT_UP) then spotMove = -1
+    if new action down(ACT_DOWN) then spotMove = 1
+    if spotMove <> 0
+        spotTo = SPOT_SEL + spotMove
+        if spotTo < 0 then spotTo = SPOT_ROWS - 1
+        if spotTo >= SPOT_ROWS then spotTo = 0
+        spotSelect(spotTo)
+    endif
+
+    ` the mouse chooses a row by going over it. a click on a row is the confirm key there, a click on the
+    ` rest of the panel is nothing, and anywhere else goes back.
+    for spotI = 0 to SPOT_ROWS - 1
+        spotOver = mouseHover(SPOT_PANEL_X, SPOT_ROW_Y(spotI), SPOT_PANEL_W, SPOT_ROW_HS(spotI))
+        if spotOver
+            if spotI <> SPOT_SEL
+                spotSelect(spotI)
+            endif
+        endif
+    next
+    if MOUSE_CLICKED
+        spotOnPanel = mouseOver(SPOT_PANEL_X, SPOT_PANEL_Y, SPOT_PANEL_W, SPOT_PANEL_H)
+        spotRowsH = SPOT_ROWS * SPOT_ROW_H
+        spotOnRow = mouseOver(SPOT_PANEL_X, SPOT_ROWS_TOP, SPOT_PANEL_W, spotRowsH)
+        spotClick = mouseClickAnywhere()
+        if spotOnPanel = 0 then spotBack = 1
+        ` without a light, a click on a row is nothing, the same as on the rest of the panel
+        if ANGLER_BANKED > 0
+            if spotOnRow then spotConfirm = 1
+        endif
+    endif
+
+    if spotConfirm
+        if ANGLER_BANKED > 0
+            ` the angler comes, and its first question is about the row. info mode goes first.
+            ANGLER_SPOT = INFO_INDEX_GRID
+            ANGLER_SPOT_KIND = SPOT_ROW_KIND(SPOT_SEL)
+            gosub info_close
+            gosub angler_from_info
+            return
+        endif
+        spotBack = 1
+    endif
+
+    if spotBack
+        spotClose()
+    endif
+return
+
+
+` every frame. update_frame comes here, after info mode has drawn its own, so that this has the last word.
+frame_spot:
+    if SPOT_ON = 0 then return
+    spotNow = game ms()
+    spotFade# = tweenVal(INFO_FADE_TWEEN_ID)
+
+    ` the holes grow in, a little past their size, and back
+    spotFull# = CELL_SIZE + INFO_HOLE_PADDING * 2
+    spotSize# = spotFull#
+    if SPOT_GROWN = 0
+        spotAge# = spotNow - SPOT_GROW_FROM
+        spotSpan# = SPOT_GROW_MS
+        spotT# = spotAge# / spotSpan#
+        if spotT# >= 1
+            SPOT_GROWN = 1
+        else
+            if spotT# < 0 then spotT# = 0
+            spotU# = spotT# - 1.0
+            spotEase# = 1.0 + 2.70158 * spotU# * spotU# * spotU# + 1.70158 * spotU# * spotU#
+            spotSize# = spotFull# * spotEase#
+            if spotSize# < 1 then spotSize# = 1
+        endif
+        for spotI = 0 to SPOT_MATCH_N - 1
+            size sprite SPOT_HOLES(spotI), spotSize#, spotSize#
+        next
+    endif
+    ` the shape of a hole is worked out from this, and info mode sets it for its own hole on every frame
+    set effect param float2 INFO_MASK_FX_ID, "Size", spotSize#, spotSize#
+
+    ` the copies fly to the number of their row, shrinking, and pop there
+    spotToX# = SPOT_PANEL_X + SPOT_PANEL_W - 14
+    spotToY# = SPOT_ROW_Y(SPOT_SEL) + 7
+    for spotI = 0 to SPOT_GHOST_MAX - 1
+        spotCell = SPOT_GHOST_CELL(spotI)
+        if spotCell >= 0
+            spotGhostAge = spotNow - SPOT_GHOST_AT(spotI)
+            if spotGhostAge < 0
+                hide sprite SPOT_GHOSTS(spotI)
+            else
+                if spotGhostAge >= SPOT_GHOST_MS
+                    hide sprite SPOT_GHOSTS(spotI)
+                    SPOT_GHOST_CELL(spotI) = -1
+                    spawnBubblesOnLayer(spotToX#, spotToY#, 4, 2, 0, rgb(255, 255, 255), ORDER_INFO_TEXT + 12, FLOAT_BUBBLE_WAKE_LOUD_ODDS, 255, 1)
+                else
+                    spotGhostAge# = spotGhostAge
+                    spotGhostSpan# = SPOT_GHOST_MS
+                    spotP# = spotGhostAge# / spotGhostSpan#
+                    spotP# = spotP# * spotP# * (3 - 2 * spotP#)
+                    spotFromX# = getCellX(spotCell mod CELL_COLUMN_COUNT)
+                    spotFromY# = getCellY(spotCell / CELL_COLUMN_COUNT)
+                    ` it rises a little on the way, so that it arcs over to the list
+                    spotArc# = sin(spotP# * 3.14159) * 18
+                    spotGX# = spotFromX# + (spotToX# - spotFromX#) * spotP#
+                    spotGY# = spotFromY# + (spotToY# - spotFromY#) * spotP#
+                    spotGY# = spotGY# - spotArc#
+                    spotGSize# = CELL_ART_SIZE + (6 - CELL_ART_SIZE) * spotP#
+                    position sprite SPOT_GHOSTS(spotI), spotGX#, spotGY#
+                    size sprite SPOT_GHOSTS(spotI), spotGSize#, spotGSize#
+                    set sprite alpha SPOT_GHOSTS(spotI), 255 * spotFade#
+                    show sprite SPOT_GHOSTS(spotI)
+                endif
+            endif
+        endif
+    next
+
+    ` the panel fades with info mode
+    color sprite SPOT_PANEL_SPRITE, rgb(10, 14, 30, 235 * spotFade#)
+    colorInfoBorder(SPOT_PANEL_BORDER, rgb(64, 128, 255, 200 * spotFade#))
+    spotPulse# = .8 + .2 * sin(spotNow * .006)
+    color sprite SPOT_ROW_BAR_SPRITE, rgb(64, 128, 255, 90 * spotFade# * spotPulse#)
+    set text alpha SPOT_TITLE_TEXT_ID, 255 * spotFade#
+    set text alpha SPOT_DESC_TEXT_ID, 255 * spotFade#
+    for spotI = 0 to SPOT_ROWS - 1
+        set text alpha SPOT_ROW_TEXTS(spotI), 255 * spotFade#
+        set text alpha SPOT_COUNT_TEXTS(spotI), 255 * spotFade#
+        set text alpha SPOT_ROW_DESCS(spotI), 255 * spotFade#
+    next
+
+    ` the outline on the cell that is looked at pulses, the same as info mode's own
+    if SPOT_LOOK
+        colorInfoBorder(SPOT_LOOK_CURSOR, rgb(255, 255, 255, 255 * spotFade# * spotPulse#))
+    endif
+return
+
+routines_spot_exit:
+
+
+` does cell spotCell have the thing of a row of the list on it? the way the fish face is split in two.
+function spotHas(spotKind, spotCell)
+    spotHasIt = 0
+    if spotKind >= SPOT_KIND_SQUID
+        if spotKind = SPOT_KIND_SQUID
+            if SQUID_CELL = spotCell then spotHasIt = 1
+        endif
+        if spotKind = SPOT_KIND_INK
+            if INK(spotCell) > 0 then spotHasIt = 1
+        endif
+        if spotKind = SPOT_KIND_FISH
+            if SPOT_LOOK_CELL = spotCell then spotHasIt = 1
+        endif
+        if spotKind = SPOT_KIND_CLEAN
+            if INK_CLEAN(spotCell) > 0
+                if INK(spotCell) = 0 then spotHasIt = 1
+            endif
+        endif
+        exitfunction spotHasIt
+    endif
+    if spotKind = SPOT_KIND_RIGHT
+        spotHasIt = boardInfoHas(BOARD_INFO_FACING, spotCell)
+        if spotHasIt
+            if SCHOOL_FACE(spotCell) < 0 then spotHasIt = 0
+        endif
+    else
+        spotHasIt = boardInfoHas(spotKind, spotCell)
+        if spotKind = BOARD_INFO_FACING
+            if spotHasIt
+                if SCHOOL_FACE(spotCell) > 0 then spotHasIt = 0
+            endif
+        endif
+    endif
+endfunction spotHasIt
+
+
+` the words of a row of the list, into BOARD_INFO_TITLE$ and BOARD_INFO_DESC$
+function spotKindWords(spotWordsKind)
+    if spotWordsKind = SPOT_KIND_SQUID
+        BOARD_INFO_TITLE$ = loc$("info.board.squid")
+        BOARD_INFO_DESC$ = loc$("info.board.squid.desc")
+        exitfunction
+    endif
+    if spotWordsKind = SPOT_KIND_INK
+        BOARD_INFO_TITLE$ = loc$("info.board.ink")
+        BOARD_INFO_DESC$ = loc$("info.board.ink.desc")
+        exitfunction
+    endif
+    if spotWordsKind = SPOT_KIND_CLEAN
+        BOARD_INFO_TITLE$ = loc$("info.board.clean")
+        BOARD_INFO_DESC$ = loc$("info.board.clean.desc")
+        exitfunction
+    endif
+    if spotWordsKind = SPOT_KIND_FISH
+        BOARD_INFO_TITLE$ = loc$("info.look.fish")
+        BOARD_INFO_DESC$ = loc$("info.look.fish.desc")
+        exitfunction
+    endif
+    if spotWordsKind = SPOT_KIND_RIGHT
+        BOARD_INFO_TITLE$ = loc$("info.board.right")
+        BOARD_INFO_DESC$ = loc$("info.board.facing.desc")
+        exitfunction
+    endif
+    if spotWordsKind = BOARD_INFO_FACING
+        BOARD_INFO_TITLE$ = loc$("info.board.left")
+        BOARD_INFO_DESC$ = loc$("info.board.facing.desc")
+        exitfunction
+    endif
+    boardInfoWords(spotWordsKind, 0)
+endfunction
+
+
+` what is on the board, and how many of each, into the rows of the list. rarest first, the same as the outlines.
+function spotCountRows()
+    SPOT_ROWS = 0
+    spotCellLast = CELL_COUNT - 1
+    spotKindLast = SPOT_KIND_RIGHT
+    for spotK = 0 to spotKindLast
+        spotN = 0
+        for spotC = 0 to spotCellLast
+            spotIn = spotHas(spotK, spotC)
+            if spotIn then spotN = spotN + 1
+        next
+        if spotN > 0
+            if SPOT_ROWS < SPOT_ROW_MAX
+                SPOT_ROW_KIND(SPOT_ROWS) = spotK
+                SPOT_ROW_COUNT(SPOT_ROWS) = spotN
+                SPOT_ROWS = SPOT_ROWS + 1
+            endif
+        endif
+    next
+endfunction
+
+
+` the faint outlines that info mode puts on the cells of the board: put away while the list is open
+function spotKindBorders(spotShow)
+    spotKLast = BOARD_INFO_KINDS - 1
+    for spotK = 0 to spotKLast
+        spotBlob = BOARD_INFO_BLOB(spotK)
+        if spotBlob >= 0
+            if INFOS(spotBlob).enabled
+                showInfoBorder(INFOS(spotBlob).border, spotShow)
+            endif
+        endif
+    next
+endfunction
+
+
+` choose a row: its cells get the holes, a few of its fish fly over, and its words go under the list
+function spotSelect(spotRow)
+    ` the row that was chosen until now has been read. see NEW INFO ON THE BOARD in fish_headers_spot.
+    if SPOT_READ_KIND >= 0
+        spotNewRead(SPOT_READ_KIND)
+    endif
+    SPOT_SEL = spotRow
+    SPOT_READ_KIND = SPOT_ROW_KIND(spotRow)
+    spotKind = SPOT_ROW_KIND(spotRow)
+
+    SPOT_MATCH_N = 0
+    spotCellLast = CELL_COUNT - 1
+    for spotC = 0 to spotCellLast
+        spotIn = spotHas(spotKind, spotC)
+        if spotIn
+            SPOT_MATCH(SPOT_MATCH_N) = spotC
+            SPOT_MATCH_N = SPOT_MATCH_N + 1
+        endif
+    next
+
+    for spotI = 0 to SPOT_HOLES_MADE - 1
+        if spotI < SPOT_MATCH_N
+            spotC = SPOT_MATCH(spotI)
+            position sprite SPOT_HOLES(spotI), getCellX(spotC mod CELL_COLUMN_COUNT), getCellY(spotC / CELL_COLUMN_COUNT)
+            size sprite SPOT_HOLES(spotI), 1, 1
+            show sprite SPOT_HOLES(spotI)
+        else
+            hide sprite SPOT_HOLES(spotI)
+        endif
+    next
+    SPOT_GROW_FROM = game ms()
+    SPOT_GROWN = 0
+
+    ` the copies set off one after another. with a lot of them, they are taken from all over the board.
+    spotGhostStep = SPOT_MATCH_N / SPOT_GHOST_MAX
+    if spotGhostStep < 1 then spotGhostStep = 1
+    spotNowMs = game ms()
+    for spotI = 0 to SPOT_GHOST_MAX - 1
+        SPOT_GHOST_CELL(spotI) = -1
+        hide sprite SPOT_GHOSTS(spotI)
+        spotPick = spotI * spotGhostStep
+        if spotPick < SPOT_MATCH_N
+            spotC = SPOT_MATCH(spotPick)
+            ` the ink is not a thing that can fly, and the squid is not the fish under it
+            spotFlies = 0
+            if CELLS(spotC).value > 0 then spotFlies = 1
+            if spotKind = SPOT_KIND_INK then spotFlies = 0
+            if spotKind = SPOT_KIND_CLEAN then spotFlies = 0
+            if spotFlies
+                SPOT_GHOST_CELL(spotI) = spotC
+                SPOT_GHOST_AT(spotI) = spotNowMs + 120 + spotI * SPOT_GHOST_STAGGER
+                if spotKind = SPOT_KIND_SQUID
+                    set sprite texture SPOT_GHOSTS(spotI), TEX_SQUID
+                else
+                    set sprite texture SPOT_GHOSTS(spotI), fishPicture(CELLS(spotC).value, CELLS(spotC).bellyUp)
+                endif
+            endif
+        endif
+    next
+
+    if SPOT_LOOK
+        spotLookLayout()
+        exitfunction
+    endif
+    spotKindWords(spotKind)
+    set text SPOT_DESC_TEXT_ID, BOARD_INFO_DESC$
+    spotLayout()
+endfunction
+
+
+` the panel on the left: the title, a row for each kind, and the words of the chosen one. it sits in the
+` middle of the screen, up and down.
+function spotLayout()
+    spotPad = 6
+    spotTitleH = 22
+    spotDescH = get text size y(SPOT_DESC_TEXT_ID)
+    spotH = spotPad + spotTitleH + SPOT_ROWS * SPOT_ROW_H + spotPad + spotDescH + spotPad
+    SPOT_PANEL_Y = (WORLD_HEIGHT - spotH) / 2
+    if SPOT_PANEL_Y < 4 then SPOT_PANEL_Y = 4
+    SPOT_PANEL_H = spotH
+
+    position sprite SPOT_PANEL_SPRITE, SPOT_PANEL_X, SPOT_PANEL_Y
+    size sprite SPOT_PANEL_SPRITE, SPOT_PANEL_W, spotH
+    layoutInfoBorder(SPOT_PANEL_BORDER, SPOT_PANEL_X, SPOT_PANEL_Y, SPOT_PANEL_W, spotH)
+    set text position SPOT_TITLE_TEXT_ID, SPOT_PANEL_X + spotPad, SPOT_PANEL_Y + spotPad - 3
+
+    SPOT_ROWS_TOP = SPOT_PANEL_Y + spotPad + spotTitleH
+    for spotI = 0 to SPOT_ROWS - 1
+        spotRowY = SPOT_ROWS_TOP + spotI * SPOT_ROW_H
+        SPOT_ROW_Y(spotI) = spotRowY
+        SPOT_ROW_HS(spotI) = SPOT_ROW_H
+        set text position SPOT_ROW_TEXTS(spotI), SPOT_PANEL_X + spotPad + 2, spotRowY + 1
+        set text position SPOT_COUNT_TEXTS(spotI), SPOT_PANEL_X + SPOT_PANEL_W - spotPad - 2, spotRowY + 1
+        spotRowColor = rgb(150, 190, 255)
+        if spotI = SPOT_SEL then spotRowColor = rgb(255, 255, 255)
+        color text SPOT_ROW_TEXTS(spotI), spotRowColor
+        color text SPOT_COUNT_TEXTS(spotI), spotRowColor
+    next
+
+    position sprite SPOT_ROW_BAR_SPRITE, SPOT_PANEL_X + 2, SPOT_ROWS_TOP + SPOT_SEL * SPOT_ROW_H
+    size sprite SPOT_ROW_BAR_SPRITE, SPOT_PANEL_W - 4, SPOT_ROW_H
+
+    spotDescY = SPOT_ROWS_TOP + SPOT_ROWS * SPOT_ROW_H + spotPad
+    set text position SPOT_DESC_TEXT_ID, SPOT_PANEL_X + spotPad, spotDescY
+endfunction
+
+
+` the panel, its words, and the copies that fly. the holes are made when they are first needed, because
+` the board can grow.
+function spotSetup()
+    SPOT_READY = 1
+
+    reserve sprite id(SPOT_PANEL_SPRITE)
+    sprite SPOT_PANEL_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset SPOT_PANEL_SPRITE, 0, 0
+    order sprite SPOT_PANEL_SPRITE, ORDER_INFO_PANEL
+    hide sprite SPOT_PANEL_SPRITE
+    SPOT_PANEL_BORDER = createInfoBorder(ORDER_INFO_PANEL + 1)
+
+    reserve sprite id(SPOT_ROW_BAR_SPRITE)
+    sprite SPOT_ROW_BAR_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset SPOT_ROW_BAR_SPRITE, 0, 0
+    order sprite SPOT_ROW_BAR_SPRITE, ORDER_INFO_PANEL + 1
+    hide sprite SPOT_ROW_BAR_SPRITE
+
+    reserve text id(SPOT_TITLE_TEXT_ID)
+    text loc SPOT_TITLE_TEXT_ID, 0, 0, SCORE_FONT, "info.spot.title"
+    set text offset SPOT_TITLE_TEXT_ID, 0, 0
+    size text max SPOT_TITLE_TEXT_ID, SPOT_PANEL_W - 12, 20
+    color text SPOT_TITLE_TEXT_ID, rgb(255, 255, 255)
+    order text SPOT_TITLE_TEXT_ID, ORDER_INFO_TEXT + 8
+    hide text SPOT_TITLE_TEXT_ID
+
+    ` the words of the row that is chosen, under the list. they wrap, so the size is set first.
+    reserve text id(SPOT_DESC_TEXT_ID)
+    text SPOT_DESC_TEXT_ID, 0, 0, SCORE_FONT, "desc"
+    set text offset SPOT_DESC_TEXT_ID, 0, 0
+    size text y SPOT_DESC_TEXT_ID, 14
+    set text wrap SPOT_DESC_TEXT_ID, SPOT_PANEL_W - 12
+    color text SPOT_DESC_TEXT_ID, rgb(150, 190, 255)
+    order text SPOT_DESC_TEXT_ID, ORDER_INFO_TEXT + 8
+    hide text SPOT_DESC_TEXT_ID
+
+    for spotI = 0 to SPOT_ROW_MAX - 1
+        reserve text id(SPOT_ROW_TEXTS(spotI))
+        text SPOT_ROW_TEXTS(spotI), 0, 0, SCORE_FONT, "row"
+        set text offset SPOT_ROW_TEXTS(spotI), 0, 0
+        size text y SPOT_ROW_TEXTS(spotI), 14
+        order text SPOT_ROW_TEXTS(spotI), ORDER_INFO_TEXT + 8
+        hide text SPOT_ROW_TEXTS(spotI)
+
+        reserve text id(SPOT_COUNT_TEXTS(spotI))
+        text SPOT_COUNT_TEXTS(spotI), 0, 0, SCORE_FONT, "0"
+        set text offset SPOT_COUNT_TEXTS(spotI), 1, 0
+        size text y SPOT_COUNT_TEXTS(spotI), 14
+        order text SPOT_COUNT_TEXTS(spotI), ORDER_INFO_TEXT + 8
+        hide text SPOT_COUNT_TEXTS(spotI)
+
+        ` the words under a row, in the look. see LOOKING CLOSER in fish_headers_spot.
+        reserve text id(SPOT_ROW_DESCS(spotI))
+        text SPOT_ROW_DESCS(spotI), 0, 0, SCORE_FONT, "desc"
+        set text offset SPOT_ROW_DESCS(spotI), 0, 0
+        size text y SPOT_ROW_DESCS(spotI), 12
+        set text wrap SPOT_ROW_DESCS(spotI), SPOT_PANEL_W - 16
+        enable rich text SPOT_ROW_DESCS(spotI)
+        color text SPOT_ROW_DESCS(spotI), rgb(150, 190, 255)
+        order text SPOT_ROW_DESCS(spotI), ORDER_INFO_TEXT + 8
+        hide text SPOT_ROW_DESCS(spotI)
+    next
+    SPOT_LOOK_CURSOR = createInfoBorder(ORDER_INFO_CURSOR)
+
+    for spotI = 0 to SPOT_GHOST_MAX - 1
+        reserve sprite id(SPOT_GHOSTS(spotI))
+        sprite SPOT_GHOSTS(spotI), 0, 0, TEX_PIXEL
+        set sprite offset SPOT_GHOSTS(spotI), .5, .5
+        order sprite SPOT_GHOSTS(spotI), ORDER_INFO_TEXT + 12
+        hide sprite SPOT_GHOSTS(spotI)
+        SPOT_GHOST_CELL(spotI) = -1
+    next
+endfunction
+
+
+` the confirm key on the whole board, in info mode. the list comes up, if there is anything to list.
+function spotOpen()
+    if SPOT_READY = 0
+        spotSetup()
+    endif
+
+    spotMakeHoles()
+
+    spotCountRows()
+    if SPOT_ROWS = 0 then exitfunction
+    SPOT_ON = 1
+    SPOT_LOOK = 0
+
+    ` the outline on the board, and its hole, and its words, make way for the list
+    spotInfoAway()
+    set text INFO_HINT_TEXT_ID, loc$("info.spot.hint")
+    anglerInfoHint(1, 1) `with a light kept, the confirm key asks about the row
+
+    show sprite SPOT_PANEL_SPRITE
+    showInfoBorder(SPOT_PANEL_BORDER, 1)
+    show sprite SPOT_ROW_BAR_SPRITE
+    show text SPOT_TITLE_TEXT_ID
+    show text SPOT_DESC_TEXT_ID
+    for spotI = 0 to SPOT_ROW_MAX - 1
+        hide text SPOT_ROW_TEXTS(spotI)
+        hide text SPOT_COUNT_TEXTS(spotI)
+    next
+    for spotI = 0 to SPOT_ROWS - 1
+        spotKindWords(SPOT_ROW_KIND(spotI))
+        set text SPOT_ROW_TEXTS(spotI), BOARD_INFO_TITLE$
+        size text max SPOT_ROW_TEXTS(spotI), SPOT_PANEL_W - 40, 14
+        set text SPOT_COUNT_TEXTS(spotI), str$(SPOT_ROW_COUNT(spotI))
+        show text SPOT_ROW_TEXTS(spotI)
+        show text SPOT_COUNT_TEXTS(spotI)
+    next
+    spotSelect(0)
+    spawnWakeBubbles(INFOS(INFO_INDEX_GRID).topLeft.x, INFOS(INFO_INDEX_GRID).topLeft.y, INFOS(INFO_INDEX_GRID).size.x, INFOS(INFO_INDEX_GRID).size.y, 10, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
+endfunction
+
+
+` back to the board. info_close comes here too, before info mode fades away.
+function spotClose()
+    if SPOT_ON = 0 then exitfunction
+    SPOT_ON = 0
+    if SPOT_READ_KIND >= 0
+        spotNewRead(SPOT_READ_KIND)
+    endif
+    SPOT_READ_KIND = -1
+    if SPOT_LOOK
+        spotLookRead()
+        showInfoBorder(SPOT_LOOK_CURSOR, 0)
+    endif
+    SPOT_LOOK = 0
+    SPOT_LOCKED = 0
+    for spotI = 0 to SPOT_ROW_MAX - 1
+        hide text SPOT_ROW_DESCS(spotI)
+    next
+    for spotI = 0 to SPOT_HOLES_MADE - 1
+        hide sprite SPOT_HOLES(spotI)
+    next
+    for spotI = 0 to SPOT_GHOST_MAX - 1
+        hide sprite SPOT_GHOSTS(spotI)
+        SPOT_GHOST_CELL(spotI) = -1
+    next
+    hide sprite SPOT_PANEL_SPRITE
+    showInfoBorder(SPOT_PANEL_BORDER, 0)
+    hide sprite SPOT_ROW_BAR_SPRITE
+    hide text SPOT_TITLE_TEXT_ID
+    hide text SPOT_DESC_TEXT_ID
+    for spotI = 0 to SPOT_ROW_MAX - 1
+        hide text SPOT_ROW_TEXTS(spotI)
+        hide text SPOT_COUNT_TEXTS(spotI)
+    next
+
+    show sprite INFO_HOLE_SPRITE
+    showInfoBorder(INFO_CURSOR, 1)
+    show sprite INFO_PANEL_SPRITE
+    showInfoBorder(INFO_PANEL_BORDER, 1)
+    show text INFO_TITLE_TEXT_ID
+    show text INFO_DESC_TEXT_ID
+    spotKindBorders(1)
+    set text INFO_HINT_TEXT_ID, loc$("info.hint.look")
+    anglerInfoHint(1, 0) `and the kept lights, as info mode had them
+    selectInfo(INFO_SELECTED, 0)
+endfunction
+
+
+` LOOKING CLOSER. see fish_headers_spot.
+
+` the cell of the board that the mouse is over, or -1
+function spotMouseCell()
+    smcCell = -1
+    smcLeft = GRID_POS.x - CELL_SIZE / 2
+    smcTop = GRID_POS.y - CELL_SIZE / 2
+    smcW = CELL_COLUMN_COUNT * CELL_SIZE
+    smcH = CELL_ROW_COUNT * CELL_SIZE
+    smcIn = mouseOver(smcLeft, smcTop, smcW, smcH)
+    if smcIn
+        smcX = (MOUSE_X - smcLeft) / CELL_SIZE
+        smcY = (MOUSE_Y - smcTop) / CELL_SIZE
+        smcCell = smcY * CELL_COLUMN_COUNT + smcX
+    endif
+endfunction smcCell
+
+
+` the things about one cell, into the rows: what is in it first, then what is the matter with the fish,
+` then what is under it. the number of each is how many of it there are on the whole board.
+function spotLookRows(slrCell)
+    SPOT_ROWS = 0
+    slrSquid = 0
+    if SQUID_CELL = slrCell then slrSquid = 1
+    slrPiece = 0
+    if slrSquid
+        SPOT_ROW_KIND(0) = SPOT_KIND_SQUID
+        SPOT_ROWS = 1
+        slrPiece = 1
+    endif
+    ` the fish's own things the first time around, and the ground under it the second
+    for slrPass = 0 to 1
+        for slrK = 0 to SPOT_KIND_RIGHT
+            slrGround = 0
+            if slrK = BOARD_INFO_CORAL then slrGround = 1
+            if slrK = BOARD_INFO_HORROR then slrGround = 1
+            slrWanted = 0
+            if slrGround = slrPass then slrWanted = 1
+            ` the squid sits on a fish, which is not to be seen until it goes
+            if slrSquid
+                if slrGround = 0 then slrWanted = 0
+            endif
+            if slrWanted
+                slrHas = spotHas(slrK, slrCell)
+                if slrHas
+                    SPOT_ROW_KIND(SPOT_ROWS) = slrK
+                    SPOT_ROWS = SPOT_ROWS + 1
+                    if slrGround = 0 then slrPiece = 1
+                endif
+            endif
+        next
+    next
+    slrInk = spotHas(SPOT_KIND_INK, slrCell)
+    if slrInk
+        SPOT_ROW_KIND(SPOT_ROWS) = SPOT_KIND_INK
+        SPOT_ROWS = SPOT_ROWS + 1
+    endif
+    slrClean = spotHas(SPOT_KIND_CLEAN, slrCell)
+    if slrClean
+        SPOT_ROW_KIND(SPOT_ROWS) = SPOT_KIND_CLEAN
+        SPOT_ROWS = SPOT_ROWS + 1
+    endif
+
+    ` a fish with nothing to say about it still has a row, and it goes first
+    if slrPiece = 0
+        ` a while, because a for that steps down from 0 to 1 still goes around once
+        slrI = SPOT_ROWS
+        while slrI > 0
+            SPOT_ROW_KIND(slrI) = SPOT_ROW_KIND(slrI - 1)
+            slrI = slrI - 1
+        endwhile
+        SPOT_ROW_KIND(0) = SPOT_KIND_FISH
+        SPOT_ROWS = SPOT_ROWS + 1
+    endif
+
+    slrCellLast = CELL_COUNT - 1
+    for slrI = 0 to SPOT_ROWS - 1
+        slrN = 0
+        slrKind = SPOT_ROW_KIND(slrI)
+        for slrC = 0 to slrCellLast
+            slrIn = spotHas(slrKind, slrC)
+            if slrIn then slrN = slrN + 1
+        next
+        SPOT_ROW_COUNT(slrI) = slrN
+    next
+endfunction
+
+
+` the things of the cell that is looked at have been seen, so the new ones among them have been read
+function spotLookRead()
+    for slrdI = 0 to SPOT_ROWS - 1
+        spotNewRead(SPOT_ROW_KIND(slrdI))
+    next
+endfunction
+
+
+` the hint along the bottom, for moving the cursor or for choosing a row
+function spotLookHint()
+    if SPOT_LOCKED
+        set text INFO_HINT_TEXT_ID, loc$("info.spot.hint")
+        anglerInfoHint(1, 1) `with a light kept, the confirm key asks about the row
+    else
+        set text INFO_HINT_TEXT_ID, loc$("info.look.hint")
+    endif
+endfunction
+
+
+` the confirm key on the whole board: the look, on cell sloCell
+function spotLookOpen(sloCell)
+    if SPOT_READY = 0
+        spotSetup()
+    endif
+    spotMakeHoles()
+    SPOT_ON = 1
+    SPOT_LOOK = 1
+    SPOT_LOCKED = 0
+    SPOT_READ_KIND = -1
+    SPOT_ROWS = 0
+    SPOT_LOOK_CELL = -1
+
+    spotInfoAway()
+    show sprite SPOT_PANEL_SPRITE
+    showInfoBorder(SPOT_PANEL_BORDER, 1)
+    hide sprite SPOT_ROW_BAR_SPRITE
+    hide text SPOT_TITLE_TEXT_ID
+    hide text SPOT_DESC_TEXT_ID
+    showInfoBorder(SPOT_LOOK_CURSOR, 1)
+    spotLookAt(sloCell)
+endfunction
+
+
+` look at cell slaCell: its rows, its words, the hole on it, and the outline around it
+function spotLookAt(slaCell)
+    if slaCell <> SPOT_LOOK_CELL
+        spotLookRead()
+    endif
+    SPOT_LOOK_CELL = slaCell
+    spotLookRows(slaCell)
+
+    for slaI = 0 to SPOT_ROW_MAX - 1
+        slaShow = 0
+        if slaI < SPOT_ROWS then slaShow = 1
+        if slaShow
+            slaKind = SPOT_ROW_KIND(slaI)
+            spotKindWords(slaKind)
+            set text SPOT_ROW_TEXTS(slaI), BOARD_INFO_TITLE$
+            size text max SPOT_ROW_TEXTS(slaI), SPOT_PANEL_W - 40, 14
+            set text SPOT_ROW_DESCS(slaI), BOARD_INFO_DESC$
+            if slaKind = SPOT_KIND_FISH
+                set text SPOT_COUNT_TEXTS(slaI), " "
+            else
+                set text SPOT_COUNT_TEXTS(slaI), str$(SPOT_ROW_COUNT(slaI))
+            endif
+            show text SPOT_ROW_TEXTS(slaI)
+            show text SPOT_COUNT_TEXTS(slaI)
+        else
+            hide text SPOT_ROW_TEXTS(slaI)
+            hide text SPOT_COUNT_TEXTS(slaI)
+            hide text SPOT_ROW_DESCS(slaI)
+        endif
+    next
+    SPOT_SEL = 0
+
+    ` the one hole, on the cell, and no copies flying
+    SPOT_MATCH(0) = slaCell
+    SPOT_MATCH_N = 1
+    slaX = getCellX(slaCell mod CELL_COLUMN_COUNT)
+    slaY = getCellY(slaCell / CELL_COLUMN_COUNT)
+    slaFull = CELL_SIZE + INFO_HOLE_PADDING * 2
+    for slaI = 0 to SPOT_HOLES_MADE - 1
+        if slaI = 0
+            position sprite SPOT_HOLES(0), slaX, slaY
+            size sprite SPOT_HOLES(0), slaFull, slaFull
+            show sprite SPOT_HOLES(0)
+        else
+            hide sprite SPOT_HOLES(slaI)
+        endif
+    next
+    SPOT_GROWN = 1
+    for slaI = 0 to SPOT_GHOST_MAX - 1
+        hide sprite SPOT_GHOSTS(slaI)
+        SPOT_GHOST_CELL(slaI) = -1
+    next
+
+    slaHalf = CELL_SIZE / 2
+    slaLeft = slaX - slaHalf
+    slaTop = slaY - slaHalf
+    layoutInfoBorder(SPOT_LOOK_CURSOR, slaLeft, slaTop, CELL_SIZE, CELL_SIZE)
+
+    spotLookLayout()
+    spotLookHint()
+endfunction
+
+
+` move the cursor of the look by a cell. 0 when that is off the edge of the board, and it stays put.
+function spotLookStep(slsDx, slsDy)
+    slsX = SPOT_LOOK_CELL mod CELL_COLUMN_COUNT
+    slsY = SPOT_LOOK_CELL / CELL_COLUMN_COUNT
+    slsX = slsX + slsDx
+    slsY = slsY + slsDy
+    slsOk = 1
+    if slsX < 0 then slsOk = 0
+    if slsY < 0 then slsOk = 0
+    if slsX >= CELL_COLUMN_COUNT then slsOk = 0
+    if slsY >= CELL_ROW_COUNT then slsOk = 0
+    if slsOk
+        slsHalf = CELL_SIZE / 2
+        slsOldX = getCellX(SPOT_LOOK_CELL mod CELL_COLUMN_COUNT)
+        slsOldY = getCellY(SPOT_LOOK_CELL / CELL_COLUMN_COUNT)
+        spawnWakeBubbles(slsOldX - slsHalf, slsOldY - slsHalf, CELL_SIZE, CELL_SIZE, 4, rgb(255, 255, 255), ORDER_OVERLAY_BUBBLES)
+        spotLookAt(slsY * CELL_COLUMN_COUNT + slsX)
+    endif
+endfunction slsOk
+
+
+` the confirm key on a cell: its rows are chosen from, and the first is the spotlight
+function spotLookLock()
+    SPOT_LOCKED = 1
+    show sprite SPOT_ROW_BAR_SPRITE
+    spotSelect(0)
+    spotLookHint()
+endfunction
+
+
+` back to moving the cursor
+function spotLookUnlock()
+    if SPOT_READ_KIND >= 0
+        spotNewRead(SPOT_READ_KIND)
+    endif
+    SPOT_READ_KIND = -1
+    SPOT_LOCKED = 0
+    hide sprite SPOT_ROW_BAR_SPRITE
+    spotLookAt(SPOT_LOOK_CELL)
+endfunction
+
+
+` the panel of the look: a row for every thing, with its words under it, when they all fit. when they do
+` not, only the chosen row has its words. it sits in the middle of the screen, up and down.
+function spotLookLayout()
+    sllPad = 6
+    sllTitleH = 16
+    SPOT_LOOK_ALL_WORDS = 1
+    sllAll = sllPad
+    for sllI = 0 to SPOT_ROWS - 1
+        sllAll = sllAll + sllTitleH + get text size y(SPOT_ROW_DESCS(sllI)) + 4
+    next
+    sllAll = sllAll + sllPad
+    if sllAll > WORLD_HEIGHT - 70 then SPOT_LOOK_ALL_WORDS = 0
+
+    ` how tall every row is, and so the panel
+    sllH = sllPad
+    for sllI = 0 to SPOT_ROWS - 1
+        sllRowH = sllTitleH + 2
+        sllWords = SPOT_LOOK_ALL_WORDS
+        if sllI = SPOT_SEL then sllWords = 1
+        if sllWords
+            sllRowH = sllTitleH + get text size y(SPOT_ROW_DESCS(sllI)) + 4
+        endif
+        SPOT_ROW_HS(sllI) = sllRowH
+        sllH = sllH + sllRowH
+    next
+    sllH = sllH + sllPad
+    SPOT_PANEL_Y = (WORLD_HEIGHT - sllH) / 2
+    if SPOT_PANEL_Y < 4 then SPOT_PANEL_Y = 4
+    SPOT_PANEL_H = sllH
+    position sprite SPOT_PANEL_SPRITE, SPOT_PANEL_X, SPOT_PANEL_Y
+    size sprite SPOT_PANEL_SPRITE, SPOT_PANEL_W, sllH
+    layoutInfoBorder(SPOT_PANEL_BORDER, SPOT_PANEL_X, SPOT_PANEL_Y, SPOT_PANEL_W, sllH)
+
+    sllY = SPOT_PANEL_Y + sllPad
+    SPOT_ROWS_TOP = sllY
+    for sllI = 0 to SPOT_ROWS - 1
+        SPOT_ROW_Y(sllI) = sllY
+        set text position SPOT_ROW_TEXTS(sllI), SPOT_PANEL_X + sllPad + 2, sllY + 1
+        set text position SPOT_COUNT_TEXTS(sllI), SPOT_PANEL_X + SPOT_PANEL_W - sllPad - 2, sllY + 1
+        set text position SPOT_ROW_DESCS(sllI), SPOT_PANEL_X + sllPad + 2, sllY + sllTitleH
+        sllWords = SPOT_LOOK_ALL_WORDS
+        if sllI = SPOT_SEL then sllWords = 1
+        if sllWords
+            show text SPOT_ROW_DESCS(sllI)
+        else
+            hide text SPOT_ROW_DESCS(sllI)
+        endif
+        ` choosing, the chosen row is bright and the rest are not. moving the cursor, they all are.
+        sllColor = rgb(255, 255, 255)
+        if SPOT_LOCKED
+            if sllI <> SPOT_SEL then sllColor = rgb(150, 190, 255)
+        endif
+        color text SPOT_ROW_TEXTS(sllI), sllColor
+        color text SPOT_COUNT_TEXTS(sllI), sllColor
+        sllY = sllY + SPOT_ROW_HS(sllI)
+    next
+
+    position sprite SPOT_ROW_BAR_SPRITE, SPOT_PANEL_X + 2, SPOT_ROW_Y(SPOT_SEL)
+    size sprite SPOT_ROW_BAR_SPRITE, SPOT_PANEL_W - 4, SPOT_ROW_HS(SPOT_SEL)
+endfunction
+
+
+` a hole for every cell of the board, as big as it is now
+function spotMakeHoles()
+    while SPOT_HOLES_MADE < CELL_COUNT
+        reserve sprite id(SPOT_HOLES(SPOT_HOLES_MADE))
+        sprite SPOT_HOLES(SPOT_HOLES_MADE), 0, 0, TEX_PIXEL
+        set sprite offset SPOT_HOLES(SPOT_HOLES_MADE), .5, .5
+        set sprite effect SPOT_HOLES(SPOT_HOLES_MADE), INFO_MASK_FX_ID
+        set sprite render target SPOT_HOLES(SPOT_HOLES_MADE), TARGET_INFO
+        hide sprite SPOT_HOLES(SPOT_HOLES_MADE)
+        SPOT_HOLES_MADE = SPOT_HOLES_MADE + 1
+    endwhile
+endfunction
+
+
+` the outline on the board, and its hole, and its words, make way for the panel
+function spotInfoAway()
+    hide sprite INFO_HOLE_SPRITE
+    hide sprite INFO_HOLE2_SPRITE
+    showInfoBorder(INFO_CURSOR, 0)
+    showInfoBorder(INFO_L_CURSOR, 0)
+    hide sprite INFO_PANEL_SPRITE
+    showInfoBorder(INFO_PANEL_BORDER, 0)
+    hide text INFO_TITLE_TEXT_ID
+    hide text INFO_DESC_TEXT_ID
+    spotKindBorders(0)
+endfunction
+
+
+` NEW INFO ON THE BOARD. see fish_headers_spot.
+
+` the entry of the codec that a kind of thing on the board is, or -1 for one that has none of its own
+function spotCodecEntry(sceKind)
+    sceEntry = -1
+    if sceKind = BOARD_INFO_DIVER then sceEntry = CODEC_ENTRY_DIVER
+    if sceKind = BOARD_INFO_RAINBOW then sceEntry = CODEC_ENTRY_RAINBOW
+    if sceKind = BOARD_INFO_BOTTLE then sceEntry = CODEC_ENTRY_BOTTLE
+    if sceKind = BOARD_INFO_JELLY then sceEntry = CODEC_ENTRY_JELLY
+    if sceKind = BOARD_INFO_RAY then sceEntry = CODEC_ENTRY_RAY
+    if sceKind = BOARD_INFO_HORROR then sceEntry = CODEC_ENTRY_HORROR
+    if sceKind = BOARD_INFO_CORAL then sceEntry = CODEC_ENTRY_CORAL
+    if sceKind = BOARD_INFO_BONES then sceEntry = CODEC_ENTRY_SKELETON
+    if sceKind = BOARD_INFO_BELLY then sceEntry = CODEC_ENTRY_BELLY
+    if sceKind = BOARD_INFO_STACK then sceEntry = CODEC_ENTRY_STACK
+    if sceKind = SPOT_KIND_SQUID then sceEntry = CODEC_ENTRY_SQUID
+    if sceKind = SPOT_KIND_CLEAN then sceEntry = CODEC_ENTRY_CLEAN
+endfunction sceEntry
+
+
+` 1 when the entry of a kind is new, and so it has the dot
+function spotKindNew(sknKind)
+    sknNew = 0
+    sknEntry = spotCodecEntry(sknKind)
+    if sknEntry >= 0
+        if sknEntry <= 127
+            if CODEC_NEW(sknEntry)
+                if CODEC_SEEN(sknEntry) then sknNew = 1
+            endif
+        endif
+    endif
+endfunction sknNew
+
+
+` where the new things on the board are, and which of them the badge goes to. boardInfoPlace calls this,
+` so it is right whenever info mode opens. the board does not change while info mode is open.
+function spotNewPlace()
+    SPOT_NEW_ANCHOR = -1
+    spnOnBoard = 0
+    spnCellLast = CELL_COUNT - 1
+    for spnK = 0 to SPOT_KIND_RIGHT
+        SPOT_NEW_CELL(spnK) = -1
+        spnIsNew = spotKindNew(spnK)
+        if spnIsNew
+            spnBest = -1
+            spnBestScore = 0
+            for spnC = 0 to spnCellLast
+                spnHas = boardInfoHas(spnK, spnC)
+                if spnHas
+                    spnX = spnC mod CELL_COLUMN_COUNT
+                    spnY = spnC / CELL_COLUMN_COUNT
+                    spnScore = abs(spnX - SELECTION_POS.x) + abs(spnY - SELECTION_POS.y)
+                    if spnBest < 0 or spnScore < spnBestScore
+                        spnBest = spnC
+                        spnBestScore = spnScore
+                    endif
+                endif
+            next
+            SPOT_NEW_CELL(spnK) = spnBest
+            if spnBest >= 0
+                spnOnBoard = spnOnBoard + 1
+                if SPOT_NEW_ANCHOR < 0 then SPOT_NEW_ANCHOR = spnK
+            endif
+        endif
+    next
+    SPOT_NEW_OFF_BOARD = CODEC_NEW_COUNT - spnOnBoard
+    if SPOT_NEW_OFF_BOARD < 0 then SPOT_NEW_OFF_BOARD = 0
+endfunction
+
+
+` a row of the list has been chosen, so what it says has been read
+function spotNewRead(snrKind)
+    snrNew = spotKindNew(snrKind)
+    if snrNew = 0 then exitfunction
+    codecMarkRead(spotCodecEntry(snrKind))
+    spotNewPlace()
+endfunction
+
+
+` the corner of a cell that the dot of a new thing sits on
+function spotNewDotX(sndCell)
+    sndX = getCellX(sndCell mod CELL_COLUMN_COUNT)
+    sndX = sndX + CELL_SIZE / 2
+    sndX = sndX - 3
+endfunction sndX
+
+function spotNewDotY(sndCellY)
+    sndY = getCellY(sndCellY / CELL_COLUMN_COUNT)
+    sndY = sndY - CELL_SIZE / 2
+    sndY = sndY + 3
+endfunction sndY
+
+
+` the dots, on every frame that info mode can be seen: on the cells of the new things, but the one that the
+` badge is on (codecNewStep draws that one), on the rows of the list, and on the Codec spot when there is
+` news that is not on the board. snShow# is how much info mode shows, out of 255, and snSize# how big a dot is.
+function spotNewDots(snShow#, snSize#)
+    if SPOT_NEW_READY = 0
+        SPOT_NEW_READY = 1
+        for snI = 0 to 18
+            reserve sprite id(SPOT_NEW_DOTS(snI))
+            sprite SPOT_NEW_DOTS(snI), 0, 0, TEX_PIXEL
+            set sprite offset SPOT_NEW_DOTS(snI), .5, .5
+            color sprite SPOT_NEW_DOTS(snI), rgb(255, 222, 96)
+            order sprite SPOT_NEW_DOTS(snI), ORDER_INFO_TEXT + 12
+            hide sprite SPOT_NEW_DOTS(snI)
+        next
+        for snI = 0 to SPOT_ROW_MAX - 1
+            reserve sprite id(SPOT_ROW_DOTS(snI))
+            sprite SPOT_ROW_DOTS(snI), 0, 0, TEX_PIXEL
+            set sprite offset SPOT_ROW_DOTS(snI), .5, .5
+            color sprite SPOT_ROW_DOTS(snI), rgb(255, 222, 96)
+            order sprite SPOT_ROW_DOTS(snI), ORDER_INFO_TEXT + 12
+            hide sprite SPOT_ROW_DOTS(snI)
+        next
+    endif
+
+    for snI = 0 to SPOT_KIND_RIGHT
+        snCell = SPOT_NEW_CELL(snI)
+        snOn = 0
+        if snShow# >= 8
+            if snCell >= 0 then snOn = 1
+            ` the one that the badge is on has its dot drawn with the badge, once the badge has got there
+            if snI = SPOT_NEW_ANCHOR then snOn = 0
+        endif
+        if snOn
+            position sprite SPOT_NEW_DOTS(snI), spotNewDotX(snCell), spotNewDotY(snCell)
+            size sprite SPOT_NEW_DOTS(snI), snSize#, snSize#
+            rotate sprite SPOT_NEW_DOTS(snI), .785
+            set sprite alpha SPOT_NEW_DOTS(snI), snShow#
+            show sprite SPOT_NEW_DOTS(snI)
+        else
+            hide sprite SPOT_NEW_DOTS(snI)
+        endif
+    next
+
+    ` the Codec spot has a dot only while the badge is out on the board, and there is other news
+    snCodecOn = 0
+    if snShow# >= 8
+        if SPOT_NEW_ANCHOR >= 0
+            if SPOT_NEW_OFF_BOARD > 0 then snCodecOn = 1
+        endif
+    endif
+    if snCodecOn
+        position sprite SPOT_NEW_DOTS(18), CODEC_SPOT_X + CODEC_SPOT_W - 3, CODEC_SPOT_Y + 3
+        size sprite SPOT_NEW_DOTS(18), snSize#, snSize#
+        rotate sprite SPOT_NEW_DOTS(18), .785
+        set sprite alpha SPOT_NEW_DOTS(18), snShow#
+        show sprite SPOT_NEW_DOTS(18)
+    else
+        hide sprite SPOT_NEW_DOTS(18)
+    endif
+
+    ` and the rows of the list, just after the name
+    for snI = 0 to SPOT_ROW_MAX - 1
+        snRowOn = 0
+        if SPOT_ON
+            if snI < SPOT_ROWS
+                snRowOn = spotKindNew(SPOT_ROW_KIND(snI))
+            endif
+        endif
+        if snRowOn
+            snRowX# = text x(SPOT_ROW_TEXTS(snI)) + get text size x(SPOT_ROW_TEXTS(snI)) + 5
+            snRowY# = text y(SPOT_ROW_TEXTS(snI)) + 3
+            position sprite SPOT_ROW_DOTS(snI), snRowX#, snRowY#
+            size sprite SPOT_ROW_DOTS(snI), snSize#, snSize#
+            rotate sprite SPOT_ROW_DOTS(snI), .785
+            set sprite alpha SPOT_ROW_DOTS(snI), snShow#
+            show sprite SPOT_ROW_DOTS(snI)
+        else
+            hide sprite SPOT_ROW_DOTS(snI)
+        endif
+    next
+endfunction

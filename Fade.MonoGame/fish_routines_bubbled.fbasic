@@ -1,0 +1,432 @@
+remstart
+    THE BUBBLED FISH. see fish_headers_bubbled.
+    - bubbledReset() starts them over, for a new game.
+    - bubbledAhead is called by handle_combos as it finds what pops, and bubbledPop for every fish that pops.
+    - bubbledSwapMade is called by stepLiveMove, in fish_funcs, when a swap is done.
+    - bubbledSettle is called by handle_combos as it starts to look at the board, and bubbledMomentAhead
+      before it pops anything.
+    - bubbledTradeFish, bubbledCopyFish and bubbledNewFish keep the bubble with its fish, the way that a
+      rainbow fish is kept.
+    - stepBubbled() runs on every frame of the game, from update_frame.
+remend
+
+function bubbledReset()
+    for bubbledResetI = 0 to 399
+        BUBBLED_AT(bubbledResetI) = 0
+        BUBBLED_PAID(bubbledResetI) = 0
+        BUBBLED_BORN_AT(bubbledResetI) = 0
+    next
+    for bubbledResetI = 0 to BUBBLED_BURST_MAX - 1
+        BUBBLED_BURST_AT(bubbledResetI) = 0
+    next
+    for bubbledResetI = 0 to BUBBLED_MOMENT_MAX - 1
+        BUBBLED_MOMENT_CELL(bubbledResetI) = 0
+    next
+    BUBBLED_GROUP = -1
+endfunction
+
+` a fish swapped places with another, or fell into its place: its bubble goes with it
+function bubbledTradeFish(tradeA, tradeB)
+    bubbledTradeWas = BUBBLED_AT(tradeA)
+    BUBBLED_AT(tradeA) = BUBBLED_AT(tradeB)
+    BUBBLED_AT(tradeB) = bubbledTradeWas
+    bubbledTradeWas = BUBBLED_PAID(tradeA)
+    BUBBLED_PAID(tradeA) = BUBBLED_PAID(tradeB)
+    BUBBLED_PAID(tradeB) = bubbledTradeWas
+    bubbledTradeWas = BUBBLED_BORN_AT(tradeA)
+    BUBBLED_BORN_AT(tradeA) = BUBBLED_BORN_AT(tradeB)
+    BUBBLED_BORN_AT(tradeB) = bubbledTradeWas
+endfunction
+
+function bubbledCopyFish(copyFrom, copyTo)
+    BUBBLED_AT(copyTo) = BUBBLED_AT(copyFrom)
+    BUBBLED_PAID(copyTo) = BUBBLED_PAID(copyFrom)
+    BUBBLED_BORN_AT(copyTo) = BUBBLED_BORN_AT(copyFrom)
+endfunction
+
+` a fish has come in to fill this cell, with no bubble
+function bubbledNewFish(newCell)
+    BUBBLED_AT(newCell) = 0
+    BUBBLED_PAID(newCell) = 0
+endfunction
+
+` how many bubbles there are on the board, for the debug window and the tests
+function bubbledCount()
+    countBubbled = 0
+    for countBubbledI = 0 to CELL_COUNT - 1
+        if BUBBLED_AT(countBubbledI) then countBubbled = countBubbled + 1
+    next
+endfunction countBubbled
+
+` a bubble closes around the fish in this cell
+function bubbledMake(makeCell)
+    BUBBLED_AT(makeCell) = 1
+    BUBBLED_BORN_AT(makeCell) = game ms()
+    BUBBLED_COUNT = BUBBLED_COUNT + 1
+    makeX = getCellX(makeCell mod CELL_COLUMN_COUNT)
+    makeY = getCellY(makeCell / CELL_COLUMN_COUNT)
+    spawnBubbles(makeX, makeY, CELL_SIZE / 2, 10, 0, rgb(200, 240, 255))
+endfunction
+
+` WHERE IT COMES FROM. handle_combos has found its groups. when a big group that matched has the fish that
+` the cursor is on in it, that fish is taken out of the group, into a group of its own that is too small to
+` pop (aheadLast, the last number that there is, the way that the rainbow fish used to be), and it gets a
+` bubble, unless it is on coral. aheadLast is the last number of a group.
+function bubbledAhead(aheadLast)
+    BUBBLED_GROUP = -1
+    if BUBBLED_ON = 0 then exitfunction
+    if TIDE_NIGHT then exitfunction
+    if aheadLast >= COMBO_GROUP_ROOM then exitfunction
+    aheadCursor = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+    if aheadCursor < 0 then exitfunction
+    if aheadCursor >= CELL_COUNT then exitfunction
+    comboCountGroups(aheadLast)
+    aheadGroup = CELLS(aheadCursor).comboFillId
+    if aheadGroup < 0 then exitfunction
+    if aheadGroup > aheadLast then exitfunction
+    if COMBO_GROUP_FORCED(aheadGroup) then exitfunction
+    if COMBO_GROUP_SIZE(aheadGroup) < BUBBLED_GROUP_SIZE then exitfunction
+    if CORAL_CELLS(aheadCursor) > 0 then exitfunction
+    CELLS(aheadCursor).comboFillId = aheadLast
+    COMBO_GROUPS_STALE = 1
+    BUBBLED_GROUP = aheadGroup
+    bubbledMake(aheadCursor)
+endfunction
+
+` IT MOVES FOR FREE. a swap of the fish in these two cells is done. this is 1 when either of them is in a
+` bubble, so that the swap is not a move. a bubble that it put on coral bursts. see HOW IT ENDS in
+` fish_headers_bubbled.
+function bubbledSwapMade(swapA, swapB)
+    swapFree = 0
+    if BUBBLED_AT(swapA)
+        swapFree = 1
+        if CORAL_CELLS(swapA) > 0 then bubbledOnCoral(swapA)
+    endif
+    if BUBBLED_AT(swapB)
+        swapFree = 1
+        if CORAL_CELLS(swapB) > 0 then bubbledOnCoral(swapB)
+    endif
+    if swapFree then BUBBLED_FREE_SWAPS = BUBBLED_FREE_SWAPS + 1
+endfunction swapFree
+
+
+` 1 when the fish in this cell is in a bubble, and so is a fish beside it, side by side
+function bubbledTouches(touchCell)
+    touchIt = 0
+    if BUBBLED_AT(touchCell)
+        touchX = touchCell mod CELL_COLUMN_COUNT
+        touchY = touchCell / CELL_COLUMN_COUNT
+        if touchX > 0
+            if BUBBLED_AT(touchCell - 1) then touchIt = 1
+        endif
+        if touchX < CELL_COLUMN_COUNT - 1
+            if BUBBLED_AT(touchCell + 1) then touchIt = 1
+        endif
+        if touchY > 0
+            if BUBBLED_AT(touchCell - CELL_COLUMN_COUNT) then touchIt = 1
+        endif
+        if touchY < CELL_ROW_COUNT - 1
+            if BUBBLED_AT(touchCell + CELL_COLUMN_COUNT) then touchIt = 1
+        endif
+    endif
+endfunction touchIt
+
+` the bubble in this cell is on coral, and bursts. its fish stays, an ordinary fish.
+function bubbledOnCoral(coralCell)
+    BUBBLED_AT(coralCell) = 0
+    bubbledScore(coralCell, BUBBLED_POP_POINTS, 0)
+endfunction
+
+` HOW IT ENDS. handle_combos is about to look at the board. a bubble on coral bursts, and bubbles that
+` touch come together: their fish are a forced group, which pops in this look, whatever kinds they are.
+function bubbledSettle()
+    for settleCell = 0 to CELL_COUNT - 1
+        if BUBBLED_AT(settleCell)
+            if CORAL_CELLS(settleCell) > 0 then bubbledOnCoral(settleCell)
+        endif
+    next
+    for settleCell = 0 to CELL_COUNT - 1
+        if bubbledTouches(settleCell)
+            if CELLS(settleCell).comboForce = 0
+                CELLS(settleCell).comboForce = FORCE_BUBBLED
+                ` bubbles come up between it and the ones it touches
+                settleX = getCellX(settleCell mod CELL_COLUMN_COUNT)
+                settleY = getCellY(settleCell / CELL_COLUMN_COUNT)
+                spawnBubbles(settleX, settleY, CELL_SIZE * .7, 8, 0, rgb(200, 240, 255))
+            endif
+        endif
+    next
+endfunction
+
+` HOW IT ENDS. the fish in this cell pops popDelay from now. if it is in a bubble, the bubble bursts, and
+` scores, unless it has burst already, as a moment of its own (bubbledMomentAhead).
+function bubbledPop(popCell, popDelay)
+    if BUBBLED_AT(popCell) = 0 then exitfunction
+    if BUBBLED_PAID(popCell) then exitfunction
+    BUBBLED_AT(popCell) = 0
+    bubbledScore(popCell, BUBBLED_POP_POINTS, popDelay)
+endfunction
+
+` THE BURST IS A MOMENT OF ITS OWN. handle_combos has found its groups, and the forced ones, and is about to
+` pop them, after momentWait. every bubble whose fish is going to pop bursts first, one after another, and
+` scores now. this is how long the pops wait, with the bursts in it. momentLast is the last number of a group.
+function bubbledMomentAhead(momentLast, momentWait)
+    momentAt = momentWait
+    momentN = 0
+    if momentLast < COMBO_GROUP_ROOM
+        comboCountGroups(momentLast)
+        momentNeed = getRequiredComboCount()
+        for momentCell = 0 to CELL_COUNT - 1
+            if BUBBLED_AT(momentCell)
+                if BUBBLED_PAID(momentCell) = 0
+                    if bubbledWillPop(momentCell, momentNeed)
+                        bubbledMomentQueue(momentCell, momentAt, momentN)
+                        momentN = momentN + 1
+                        momentAt = momentAt + BUBBLED_MOMENT_EVERY
+                    endif
+                endif
+            endif
+        next
+    endif
+    if momentN > 0
+        momentAt = momentAt - BUBBLED_MOMENT_EVERY
+        momentAt = momentAt + BUBBLED_MOMENT_MS
+    endif
+endfunction momentAt
+
+` 1 when the fish in this cell is in a group that this look is going to pop: a forced one, or one of fish
+` that matched that is big enough, in the day. what a quest or a song holds back is not looked for, so a
+` bubble can burst for a group that then stays, which is rare.
+function bubbledWillPop(willCell, willNeed)
+    willPop = 0
+    willGroup = CELLS(willCell).comboFillId
+    if willGroup >= 0
+        if COMBO_GROUP_FORCED(willGroup)
+            willPop = 1
+        else
+            if TIDE_NIGHT = 0
+                willGroupNeed = willNeed
+                if CORAL_GROUP_EXTRA > 0
+                    for willI = 0 to CELL_COUNT - 1
+                        if CELLS(willI).comboFillId = willGroup
+                            if CORAL_CELLS(willI) then willGroupNeed = willNeed + CORAL_GROUP_EXTRA
+                        endif
+                    next
+                endif
+                if COMBO_GROUP_SIZE(willGroup) >= willGroupNeed then willPop = 1
+            endif
+        endif
+    endif
+endfunction willPop
+
+` the bubble in this cell bursts queueDelay from now, as a moment of its own. it scores now, and its words
+` and its sound wait in a slot for stepBubbled.
+function bubbledMomentQueue(queueCell, queueDelay, queueNth)
+    BUBBLED_PAID(queueCell) = 1
+    queuePoints = BUBBLED_POP_POINTS * SCORE_MULTIPLIER
+    queueScore(queuePoints, queueDelay)
+    queueSlot = -1
+    for queueI = 0 to BUBBLED_MOMENT_MAX - 1
+        if queueSlot < 0
+            if BUBBLED_MOMENT_CELL(queueI) = 0 then queueSlot = queueI
+        endif
+    next
+    if queueSlot >= 0
+        BUBBLED_MOMENT_CELL(queueSlot) = queueCell + 1
+        BUBBLED_MOMENT_AT(queueSlot) = game ms() + queueDelay
+        BUBBLED_MOMENT_POINTS(queueSlot) = queuePoints
+        BUBBLED_MOMENT_NTH(queueSlot) = queueNth
+    else
+        BUBBLED_AT(queueCell) = 0
+    endif
+endfunction
+
+` a burst that has come due: the bubble goes, with a pop that is a little higher for each one of the look,
+` a big score, and a spray of bubbles
+function bubbledMomentNow(nowSlot)
+    nowCell = BUBBLED_MOMENT_CELL(nowSlot) - 1
+    BUBBLED_MOMENT_CELL(nowSlot) = 0
+    BUBBLED_AT(nowCell) = 0
+    BUBBLED_PAID(nowCell) = 0
+    nowPos as vec = {
+        x = getCellX(nowCell mod CELL_COLUMN_COUNT),
+        y = getCellY(nowCell / CELL_COLUMN_COUNT)
+    }
+    nowY# = nowPos.y
+    nowPos.y = nowPos.y - CELL_SIZE / 2
+    nowScale# = getBoardBubbleScale() * BUBBLED_MOMENT_TEXT#
+    nowTxt = spawnScoreTextScaled(nowPos, "+" + str$(BUBBLED_MOMENT_POINTS(nowSlot)), 0, 1000, nowScale#)
+    color text nowTxt, rgb(190, 235, 255)
+    spawnBubbles(nowPos.x, nowY#, CELL_SIZE * .7, 18, 0, rgb(200, 240, 255))
+    bubbledBurst(nowPos.x, nowY#, 0)
+    nowPitch# = BUBBLED_MOMENT_NTH(nowSlot) * .12
+    if nowPitch# > .6 then nowPitch# = .6
+    tidePlaySound(BUBBLED_SFX(nowSlot), BUBBLED_VOL#, nowPitch#)
+endfunction
+
+` a bubble bursts in this cell, burstDelay from now, and scores these points, with the multiplier
+function bubbledScore(scoreCell, scoreBase, scoreDelay)
+    scorePoints = scoreBase * SCORE_MULTIPLIER
+    scorePos as vec = {
+        x = getCellX(scoreCell mod CELL_COLUMN_COUNT),
+        y = getCellY(scoreCell / CELL_COLUMN_COUNT)
+    }
+    scorePos.y = scorePos.y - CELL_SIZE / 2
+    scoreTxt = spawnBoardScoreText(scorePos, "+" + str$(scorePoints), scoreDelay, 900)
+    color text scoreTxt, rgb(190, 235, 255)
+    queueScore(scorePoints, scoreDelay)
+    spawnBubbles(scorePos.x, scorePos.y + CELL_SIZE / 2, CELL_SIZE / 2, 12, scoreDelay, rgb(200, 240, 255))
+    bubbledBurst(scorePos.x, scorePos.y + CELL_SIZE / 2, scoreDelay)
+endfunction
+
+` a bubble at this place bursts burstDelay ms from now. until then a whole bubble is drawn there.
+function bubbledBurst(burstX#, burstY#, burstDelay)
+    burstSlot = -1
+    burstOldest = -1
+    for burstI = 0 to BUBBLED_BURST_MAX - 1
+        if burstSlot < 0
+            if BUBBLED_BURST_AT(burstI) = 0 then burstSlot = burstI
+        endif
+        if burstOldest < 0
+            burstOldest = burstI
+        else
+            if BUBBLED_BURST_AT(burstI) < BUBBLED_BURST_AT(burstOldest) then burstOldest = burstI
+        endif
+    next
+    if burstSlot < 0 then burstSlot = burstOldest
+    BUBBLED_BURST_X#(burstSlot) = burstX#
+    BUBBLED_BURST_Y#(burstSlot) = burstY#
+    BUBBLED_BURST_AT(burstSlot) = game ms() + burstDelay
+endfunction
+
+` how far the bubble of the fish in this cell has grown in, from 0 when it was just made to 1 once it
+` has settled. the fish loop of update_frame eases the float of the fish in with it.
+function bubbledGrown(grownCell)
+    grownAge# = game ms() - BUBBLED_BORN_AT(grownCell)
+    grownBy# = grownAge# / BUBBLED_GROW_MS
+    if grownBy# > 1 then grownBy# = 1
+    if grownBy# < 0 then grownBy# = 0
+endfunction grownBy#
+
+` puts one bubble sprite at a place. grow is how far it has grown in, from 0 to 1, and burst is how far it
+` has burst, from 0 to 1.
+function bubbledDraw(drawSprite, drawX#, drawY#, drawGrow#, drawBurst#, drawSeed#)
+    ` it grows in with a boing: it overshoots, and squashes and stretches, before it settles
+    drawFade# = 1 - drawGrow#
+    if drawFade# < 0 then drawFade# = 0
+    drawFade3# = drawFade# * drawFade# * drawFade#
+    drawScale# = 1 - drawFade3# * drawFade# * cos(drawGrow# * 9.5)
+    if drawGrow# >= 1 then drawScale# = 1
+    drawSquash# = drawFade3# * sin(drawGrow# * 14) * .18
+    drawSwell# = 1 + drawBurst# * .45
+    drawSize# = CELL_SIZE * BUBBLED_SPRITE_CELLS# * drawSwell#
+    show sprite drawSprite
+    position sprite drawSprite, drawX#, drawY#
+    size sprite drawSprite, drawSize# * drawScale# * (1 + drawSquash#), drawSize# * drawScale# * (1 - drawSquash#)
+    drawBody# = BUBBLED_SIZE# / (BUBBLED_SPRITE_CELLS# * drawSwell#)
+    drawShake# = 1 + 5 * drawFade3#
+    set sprite all texcoord1 drawSprite, drawSize# * drawScale#, BUBBLED_RIM#, game ms() * .001 + drawSeed#, drawBody#
+    set sprite all texcoord2 drawSprite, drawShake#, drawBurst#, 0, 0
+    set sprite alpha drawSprite, BUBBLED_ALPHA
+endfunction
+
+` HOW IT LOOKS. every frame, a bubble is drawn around each fish that has one, wherever its sprite is, and
+` every bubble that is bursting is drawn where it was. the fish wobbles inside it in the fish loop of
+` update_frame, which is also what tells FishEffect to show it through the bubble.
+function stepBubbled()
+    if BUBBLED_SPRITES_MADE = 0
+        BUBBLED_SPRITES_MADE = 1
+        reserve effect id(BUBBLED_FX_ID)
+        effect BUBBLED_FX_ID, "Fish/Shaders/BubbledEffect"
+        for madeI = 0 to BUBBLED_SHOWN_MAX - 1
+            reserve sprite id(BUBBLED_SPRITE(madeI))
+            sprite BUBBLED_SPRITE(madeI), 0, 0, TEX_PIXEL
+            set sprite effect BUBBLED_SPRITE(madeI), BUBBLED_FX_ID
+            order sprite BUBBLED_SPRITE(madeI), ORDER_BUBBLED
+            hide sprite BUBBLED_SPRITE(madeI)
+        next
+        for madeI = 0 to BUBBLED_MOMENT_MAX - 1
+            BUBBLED_SFX(madeI) = tideLoadSound("Fish/Audio/bubble-pop-2", SFX_GROUP_SFX, 0)
+        next
+        for madeI = 0 to BUBBLED_BURST_MAX - 1
+            reserve sprite id(BUBBLED_BURST_SPRITE(madeI))
+            sprite BUBBLED_BURST_SPRITE(madeI), 0, 0, TEX_PIXEL
+            set sprite effect BUBBLED_BURST_SPRITE(madeI), BUBBLED_FX_ID
+            order sprite BUBBLED_BURST_SPRITE(madeI), ORDER_BUBBLED
+            hide sprite BUBBLED_BURST_SPRITE(madeI)
+        next
+    endif
+
+    ` the lens of FishEffect is measured in the size of a fish
+    stepLensR# = (CELL_SIZE * BUBBLED_SIZE# * .5) / CELL_ART_SIZE
+    set effect param float4 FISH_FX_ID, "Bubbled", stepLensR#, BUBBLED_LENS#, BUBBLED_LENS_SHADE#, BUBBLED_LENS_BLUE#
+
+    stepShown = 0
+    stepLast = CELL_COUNT - 1
+    for stepCell = 0 to stepLast
+        if BUBBLED_AT(stepCell)
+            if stepShown < BUBBLED_SHOWN_MAX
+                stepFish = CELLS(stepCell).spriteId
+                stepGrow# = bubbledGrown(stepCell)
+                bubbledDraw(BUBBLED_SPRITE(stepShown), sprite x(stepFish), sprite y(stepFish), stepGrow#, 0, stepCell * 1.7)
+                stepShown = stepShown + 1
+            endif
+        endif
+    next
+    ` the rest are not needed
+    while stepShown < BUBBLED_SHOWN_MAX
+        hide sprite BUBBLED_SPRITE(stepShown)
+        stepShown = stepShown + 1
+    endwhile
+
+    ` the bursts that are moments of their own, that have come due. see THE BURST IS A MOMENT OF ITS OWN.
+    stepNow = game ms()
+    for stepMoment = 0 to BUBBLED_MOMENT_MAX - 1
+        if BUBBLED_MOMENT_CELL(stepMoment) > 0
+            if stepNow >= BUBBLED_MOMENT_AT(stepMoment) then bubbledMomentNow(stepMoment)
+        endif
+    next
+
+    ` and the ones that are bursting
+    for stepBurst = 0 to BUBBLED_BURST_MAX - 1
+        stepBurstSprite = BUBBLED_BURST_SPRITE(stepBurst)
+        if BUBBLED_BURST_AT(stepBurst) = 0
+            hide sprite stepBurstSprite
+        else
+            stepBurstAge# = stepNow - BUBBLED_BURST_AT(stepBurst)
+            stepBurstBy# = stepBurstAge# / BUBBLED_BURST_MS
+            if stepBurstBy# < 0 then stepBurstBy# = 0
+            if stepBurstBy# >= 1
+                BUBBLED_BURST_AT(stepBurst) = 0
+                hide sprite stepBurstSprite
+            else
+                bubbledDraw(stepBurstSprite, BUBBLED_BURST_X#(stepBurst), BUBBLED_BURST_Y#(stepBurst), 1, stepBurstBy#, stepBurst * 2.9)
+            endif
+        endif
+    next
+endfunction
+
+` THE DEBUG WINDOW. frame_debug_rainbow comes here.
+function bubbledDebug()
+    debugBubbledChanged = debug toggle("bubbles on", BUBBLED_ON)
+    debugBubbledShown = bubbledCount()
+    debug text "bubbles on the board: " + str$(debugBubbledShown) + ", free swaps: " + str$(BUBBLED_FREE_SWAPS)
+    if debug button("bubble the fish under the cursor") = 1
+        bubbledMake(SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT)
+    endif
+    debugBubbledChanged = debug int slider("bubble: its pop scores", BUBBLED_POP_POINTS, 0, 500)
+    debugBubbledChanged = debug int slider("bubble: the pops wait ms", BUBBLED_MOMENT_MS, 0, 1500)
+    debugBubbledChanged = debug int slider("bubble: each after the first ms", BUBBLED_MOMENT_EVERY, 0, 800)
+    debugBubbledChanged = debug float slider("bubble: words size", BUBBLED_MOMENT_TEXT#, .5, 3)
+    debugBubbledChanged = debug float slider("bubble: fish wobble", BUBBLED_WOBBLE#, 0, .3)
+    debugBubbledChanged = debug float slider("bubble: fish rock", BUBBLED_WOBBLE_TURN#, 0, 1)
+    debugBubbledChanged = debug float slider("bubble: wobble speed", BUBBLED_WOBBLE_SPEED#, 0, 4)
+    debugBubbledChanged = debug float slider("bubble: size", BUBBLED_SIZE#, .6, 1.4)
+    debugBubbledChanged = debug float slider("bubble: rim pixels", BUBBLED_RIM#, .5, 4)
+    debugBubbledChanged = debug float slider("bubble: lens", BUBBLED_LENS#, 0, .6)
+    debugBubbledChanged = debug float slider("bubble: lens shade", BUBBLED_LENS_SHADE#, 0, 1)
+    debugBubbledChanged = debug float slider("bubble: lens blue", BUBBLED_LENS_BLUE#, 0, 1)
+    debugBubbledChanged = debug int slider("bubble: alpha", BUBBLED_ALPHA, 0, 255)
+    debugBubbledChanged = debug int slider("bubble: grow in ms", BUBBLED_GROW_MS, 50, 2000)
+    debugBubbledChanged = debug int slider("bubble: burst ms", BUBBLED_BURST_MS, 50, 1500)
+endfunction

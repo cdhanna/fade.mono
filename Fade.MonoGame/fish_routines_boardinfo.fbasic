@@ -21,6 +21,7 @@ function boardInfoSetup()
             if biK <> BOARD_INFO_HORROR
                 biBlob = allocateInfoBlob(0, 0, CELL_SIZE, CELL_SIZE, " ", " ")
                 setInfoBlobEnabled(biBlob, 0)
+                INFO_ON_BOARD(biBlob) = 1
                 BOARD_INFO_BLOB(biK) = biBlob
             endif
         endif
@@ -191,12 +192,15 @@ function boardInfoPlace()
     if BOARD_INFO_READY = 0 then exitfunction
     BOARD_INFO_BLOB(BOARD_INFO_CORAL) = INFO_INDEX_CORAL
     BOARD_INFO_BLOB(BOARD_INFO_HORROR) = INFO_INDEX_CORAL_SICK
+    if INFO_INDEX_CORAL >= 0 then INFO_ON_BOARD(INFO_INDEX_CORAL) = 1
+    if INFO_INDEX_CORAL_SICK >= 0 then INFO_ON_BOARD(INFO_INDEX_CORAL_SICK) = 1
 
     biCellLast = CELL_COUNT - 1
     for biI = 0 to biCellLast
         BOARD_INFO_OWNER(biI) = -1
     next
 
+    biAny = 0
     biKindLast = BOARD_INFO_KINDS - 1
     for biK = 0 to biKindLast
         BOARD_INFO_CELL(biK) = -1
@@ -226,6 +230,7 @@ function boardInfoPlace()
             setInfoBlobEnabled(biBlob, 0)
             skip
         endif
+        biAny = 1
 
         boardInfoWords(biK, biBest)
         biOwner = BOARD_INFO_OWNER(biBest)
@@ -248,6 +253,16 @@ function boardInfoPlace()
         INFOS(biBlob).size.y = CELL_SIZE
         INFOS(biBlob).enabled = 1
     next
+
+    ` the whole board has an outline again (2026-10-24) while there is something on it to look at: it does
+    ` not explain the game, which the tutorial has done. it only says that the confirm key looks closer, cell
+    ` by cell. see LOOKING CLOSER in fish_headers_spot.
+    INFOS(INFO_INDEX_GRID).title$ = loc$("info.spot.title")
+    INFOS(INFO_INDEX_GRID).desc$ = loc$("info.look.open")
+    setInfoBlobEnabled(INFO_INDEX_GRID, biAny)
+
+    ` and where the new things are, for the badge. see NEW INFO ON THE BOARD in fish_headers_spot.
+    spotNewPlace()
 endfunction
 
 

@@ -13,6 +13,7 @@ remend
 frame_debug_rainbow:
     begin debug window("Rainbow fish")
     debugRainbowChanged = debug toggle("on", RAINBOW_FISH_ON)
+    bubbledDebug() `the bubbled fish share this window. see fish_headers_bubbled.
     rainbowFishCount()
     debug text "rainbow fish on the board: " + str$(RAINBOW_FISH_COUNT) + ", bursts: " + str$(RAINBOW_BURST_COUNT)
     if debug button("make the fish under the cursor one") = 1
@@ -23,6 +24,11 @@ frame_debug_rainbow:
         rainbowFishReset()
     endif
     debugRainbowChanged = debug int slider("a rainbow fish scores more by", RAINBOW_FISH_BONUS, 0, 50)
+    debugRainbowChanged = debug int slider("every one on the board adds this to each pop (0 is off)", RAINBOW_SHARE_BONUS, 0, 50)
+    debugRainbowChanged = debug float slider("shares: pulse cloud size", RAINBOW_PULSE_CLOUD#, .1, 2)
+    debugRainbowChanged = debug int slider("shares: pulse cloud lasts (ms)", RAINBOW_PULSE_CLOUD_LIFE, 100, 1500)
+    debugRainbowChanged = debug float slider("shares: pulse swells to", RAINBOW_PULSE_SWELL#, 1, 2)
+    debugRainbowChanged = debug float slider("shares: glow reaches (px)", RAINBOW_TEXT_GLOW#, 0, 6)
     debugRainbowChanged = debug int slider("a group this big bursts them", RAINBOW_BURST_SIZE, 3, 9)
     debugRainbowChanged = debug float slider("burst: surge speed (px/ms)", RAINBOW_SURGE_SPEED#, .05, 1.5)
     debugRainbowChanged = debug int slider("burst: what it takes along pops after (ms)", RAINBOW_BURST_ALONG, 0, 500)
@@ -85,6 +91,7 @@ function rainbowFishReset()
     next
     RAINBOW_FISH_COUNT = 0
     RAINBOW_FISH_SPAWN = -1
+    RAINBOW_PULSE_DUE_COUNT = 0
     RAINBOW_BURST_GROUP = -1
     RAINBOW_BURST_LIVE = 0
     RAINBOW_BURST_UNTIL = 0
@@ -96,7 +103,7 @@ function rainbowFishReset()
     RAINBOW_PULSE_LOOK = 0
     RAINBOW_FLOW_MS = 0
     RAINBOW_SEED_WAIT_CELL = -1
-    for resetRainbowI = 0 to 7
+    for resetRainbowI = 0 to 15
         RAINBOW_CLOUD_SIZE#(resetRainbowI) = 0
     next
     RAINBOW_CLOUD_UNTIL = 1 `so that the next frame hides any cloud that was still going
@@ -142,10 +149,12 @@ function rainbowLoad()
         rainbowLoadBits = get pref(RAINBOW_PREF + 1 + rainbowLoadP, 0)
         rainbowLoadNumber(rainbowLoadP, rainbowLoadBits)
     next
-    ` a cell with no fish in it has no rainbow fish either
+    ` a cell with no fish in it has no rainbow fish either, and neither does a bottle (a game saved before
+    ` A BOTTLE IS NEVER ONE could have one)
     rainbowLoadLast = CELL_COUNT - 1
     for rainbowLoadCell = 0 to rainbowLoadLast
         if CELLS(rainbowLoadCell).value <= 0 then RAINBOW_FISH(rainbowLoadCell) = 0
+        if CELLS(rainbowLoadCell).value = TEX_BOTTLE then RAINBOW_FISH(rainbowLoadCell) = 0
     next
     for rainbowLoadCell = CELL_COUNT to 399
         RAINBOW_FISH(rainbowLoadCell) = 0
@@ -157,7 +166,7 @@ endfunction
 function rainbowCloud(cloudX#, cloudY#, waitMs, cloudSize#)
     cloudSlot = RAINBOW_CLOUD_NEXT
     RAINBOW_CLOUD_NEXT = RAINBOW_CLOUD_NEXT + 1
-    if RAINBOW_CLOUD_NEXT >= 8 then RAINBOW_CLOUD_NEXT = 0
+    if RAINBOW_CLOUD_NEXT >= 16 then RAINBOW_CLOUD_NEXT = 0
     RAINBOW_CLOUD_X#(cloudSlot) = cloudX#
     RAINBOW_CLOUD_Y#(cloudSlot) = cloudY#
     RAINBOW_CLOUD_AT(cloudSlot) = game ms() + waitMs
@@ -311,12 +320,200 @@ endfunction
 ` the fish in this cell turns into a rainbow fish, and shimmers with all of the rainbow, from atMs on
 function rainbowSeedTurn(turnCell, atMs)
     RAINBOW_SEED_WAIT_CELL = -1
-    if turnCell >= CELL_COUNT then exitfunction
-    if CELLS(turnCell).value <= 0 then exitfunction
-    RAINBOW_FISH(turnCell) = 1
-    RAINBOW_LIT_FROM(turnCell) = atMs
-    RAINBOW_LIT_UNTIL(turnCell) = atMs + RAINBOW_SEED_SHIMMER
+    turnAt = rainbowCellNear(turnCell)
+    if turnAt < 0 then exitfunction
+    RAINBOW_FISH(turnAt) = 1
+    RAINBOW_LIT_FROM(turnAt) = atMs
+    RAINBOW_LIT_UNTIL(turnAt) = atMs + RAINBOW_SEED_SHIMMER
 endfunction
+
+` THE RAINBOW SHARES. handle_combos has found its groups, burst and all, and is about to pop them:
+` shareLast is the last number of a group, and shareCounted is 1 when comboCountGroups could count them.
+` the rainbow fish that are in no group that pops stay through the look, and share in every pop of it.
+function rainbowShareAhead(shareLast, shareCounted)
+    RAINBOW_SHARE_COUNT = 0
+    if RAINBOW_FISH_ON = 0 then exitfunction
+    if RAINBOW_SHARE_BONUS <= 0 then exitfunction
+    if shareCounted = 0 then exitfunction
+    if shareLast >= COMBO_GROUP_ROOM then exitfunction
+    comboCountGroups(shareLast)
+    shareNeed = getRequiredComboCount()
+    shareLastCell = CELL_COUNT - 1
+    for shareCell = 0 to shareLastCell
+        shareStays = 0
+        if RAINBOW_FISH(shareCell)
+            if CELLS(shareCell).value > 0 then shareStays = 1
+        endif
+        if shareStays
+            if RAINBOW_BURST_LIVE
+                if RAINBOW_BURST_CELLS(shareCell) > 0 then shareStays = 0
+            endif
+            shareGroup = CELLS(shareCell).comboFillId
+            if shareGroup > shareLast
+                ` a forced group of its own, which pops
+                shareStays = 0
+            else
+                if shareGroup >= 0
+                    if COMBO_GROUP_FORCED(shareGroup) then shareStays = 0
+                    if COMBO_GROUP_SIZE(shareGroup) >= shareNeed then shareStays = 0
+                endif
+            endif
+        endif
+        if shareStays
+            RAINBOW_SHARE_CELLS(RAINBOW_SHARE_COUNT) = shareCell
+            RAINBOW_SHARE_COUNT = RAINBOW_SHARE_COUNT + 1
+        endif
+    next
+endfunction
+
+` the fish in popCell pops shareDelay from now, and every rainbow fish that stays adds shareEach to the score.
+` one number in the rainbow comes out of the fish that pops, with all of it, just under its own number, and
+` every rainbow fish gives a short pulse as it does.
+function rainbowSharePop(shareEach, shareDelay, popCell)
+    if RAINBOW_SHARE_COUNT <= 0 then exitfunction
+    shareAll = shareEach * RAINBOW_SHARE_COUNT
+    sharePos as vec = {
+        x = 0,
+        y = 0
+    }
+    shareScale# = getBoardBubbleScale()
+    sharePos.x = getCellX(popCell mod CELL_COLUMN_COUNT)
+    sharePos.y = getCellY(popCell / CELL_COLUMN_COUNT) + CELL_SIZE * RAINBOW_SHARE_BELOW# * shareScale#
+    shareScale# = shareScale# * RAINBOW_SHARE_TEXT_SCALE#
+    shareAt = shareDelay + RAINBOW_SHARE_AFTER
+    shareTxt = spawnScoreTextScaled(sharePos, "+" + str$(shareAll), shareAt, RAINBOW_SHARE_LIFE, shareScale#)
+    ` it is white, on the render target that turns it to the rainbow
+    set text render target shareTxt, TARGET_RAINBOW_TEXT
+    color text shareTxt, rgb(255, 255, 255)
+    queueScore(shareAll, shareAt)
+
+    shareLastI = RAINBOW_SHARE_COUNT - 1
+    for shareI = 0 to shareLastI
+        rainbowPulseQueue(RAINBOW_SHARE_CELLS(shareI), shareAt)
+    next
+endfunction
+
+` the rainbow fish in this cell gives a short pulse, waitMs from now: a small rainbow cloud that claps out
+` of it and is soon gone. stepRainbowFish gives it when the time comes, so that the clouds are only taken
+` up while they are going, since one fish can have a pulse due for every fish of a group that pops.
+function rainbowPulseQueue(pulseCell, waitMs)
+    if RAINBOW_PULSE_DUE_COUNT >= 256 then exitfunction
+    RAINBOW_PULSE_DUE_CELL(RAINBOW_PULSE_DUE_COUNT) = pulseCell
+    RAINBOW_PULSE_DUE_AT(RAINBOW_PULSE_DUE_COUNT) = game ms() + waitMs
+    RAINBOW_PULSE_DUE_COUNT = RAINBOW_PULSE_DUE_COUNT + 1
+endfunction
+
+` the cloud of a pulse, at cloudX#, cloudY#, from now. every rainbow fish has to get one, so it takes, in
+` this order: the cloud of an earlier pulse of the same fish, a cloud that is over, the oldest of the big
+` clouds that is past half of its life, and the oldest pulse of some other fish. a big cloud that is
+` still young, or still to come, is never taken. its size is kept below 0, which is how the shader knows
+` to make it short. see THE RAINBOW CLOUDS.
+function rainbowPulseCloud(cloudX#, cloudY#, cloudNow)
+    cloudPick = -1
+    cloudOwn = -1
+    cloudOldest = -1
+    cloudFading = -1
+    for cloudI = 0 to 15
+        cloudSize# = RAINBOW_CLOUD_SIZE#(cloudI)
+        cloudOver = RAINBOW_CLOUD_AT(cloudI) + RAINBOW_CLOUD_LIFE
+        if cloudSize# < 0
+            cloudOver = RAINBOW_CLOUD_AT(cloudI) + RAINBOW_PULSE_CLOUD_LIFE
+            ` a pulse of this same fish takes its place, so that every rainbow fish needs one cloud at most
+            if RAINBOW_CLOUD_X#(cloudI) = cloudX#
+                if RAINBOW_CLOUD_Y#(cloudI) = cloudY# then cloudOwn = cloudI
+            endif
+        endif
+        if cloudPick < 0
+            if cloudOver <= cloudNow then cloudPick = cloudI
+            if cloudSize# = 0 then cloudPick = cloudI
+        endif
+        if cloudSize# < 0
+            if cloudOldest < 0
+                cloudOldest = cloudI
+            else
+                if RAINBOW_CLOUD_AT(cloudI) < RAINBOW_CLOUD_AT(cloudOldest) then cloudOldest = cloudI
+            endif
+        endif
+        if cloudSize# > 0
+            cloudHalf = RAINBOW_CLOUD_AT(cloudI) + RAINBOW_CLOUD_LIFE / 2
+            if cloudHalf <= cloudNow
+                if cloudFading < 0
+                    cloudFading = cloudI
+                else
+                    if RAINBOW_CLOUD_AT(cloudI) < RAINBOW_CLOUD_AT(cloudFading) then cloudFading = cloudI
+                endif
+            endif
+        endif
+    next
+    if cloudOwn >= 0 then cloudPick = cloudOwn
+    if cloudPick < 0 then cloudPick = cloudFading
+    if cloudPick < 0 then cloudPick = cloudOldest
+    if cloudPick < 0 then exitfunction
+    RAINBOW_CLOUD_X#(cloudPick) = cloudX#
+    RAINBOW_CLOUD_Y#(cloudPick) = cloudY#
+    RAINBOW_CLOUD_AT(cloudPick) = cloudNow
+    RAINBOW_CLOUD_SIZE#(cloudPick) = 0 - RAINBOW_PULSE_CLOUD#
+    cloudEnds = cloudNow + RAINBOW_PULSE_CLOUD_LIFE
+    if cloudEnds > RAINBOW_CLOUD_UNTIL then RAINBOW_CLOUD_UNTIL = cloudEnds
+endfunction
+
+` the pulses that are due now. stepRainbowFish calls this on every frame.
+function rainbowPulseStep(pulseNow)
+    pulseI = 0
+    while pulseI < RAINBOW_PULSE_DUE_COUNT
+        if RAINBOW_PULSE_DUE_AT(pulseI) <= pulseNow
+            pulseCell = RAINBOW_PULSE_DUE_CELL(pulseI)
+            if RAINBOW_FISH(pulseCell)
+                pulseX# = getCellX(pulseCell mod CELL_COLUMN_COUNT)
+                pulseY# = getCellY(pulseCell / CELL_COLUMN_COUNT)
+                rainbowPulseCloud(pulseX#, pulseY#, pulseNow)
+                ` and the fish itself gives a little swell
+                create basic tween CELLS(pulseCell).scaleWaveTweenId, RAINBOW_PULSE_SWELL#, 1, RAINBOW_PULSE_SWELL_MS, 0
+            endif
+            ` the last one in the list takes its place, and gets looked at next
+            RAINBOW_PULSE_DUE_COUNT = RAINBOW_PULSE_DUE_COUNT - 1
+            RAINBOW_PULSE_DUE_CELL(pulseI) = RAINBOW_PULSE_DUE_CELL(RAINBOW_PULSE_DUE_COUNT)
+            RAINBOW_PULSE_DUE_AT(pulseI) = RAINBOW_PULSE_DUE_AT(RAINBOW_PULSE_DUE_COUNT)
+        else
+            pulseI = pulseI + 1
+        endif
+    endwhile
+endfunction
+
+` A BOTTLE IS NEVER ONE. the cell that a new rainbow fish turns up in, when it is due in nearCell: that cell,
+` when there is a fish in it. when there is a bottle in it, the first fish beside it, across or down. -1 when
+` there is no fish for it.
+function rainbowCellNear(nearCell)
+    nearAt = -1
+    if nearCell < 0 then exitfunction nearAt
+    if nearCell >= CELL_COUNT then exitfunction nearAt
+    if CELLS(nearCell).value <= 0 then exitfunction nearAt
+    if CELLS(nearCell).value <> TEX_BOTTLE then exitfunction nearCell
+    nearColumn = nearCell mod CELL_COLUMN_COUNT
+    nearRow = nearCell / CELL_COLUMN_COUNT
+    for nearSide = 0 to 3
+        nearTry = -1
+        if nearSide = 0
+            if nearColumn > 0 then nearTry = nearCell - 1
+        endif
+        if nearSide = 1
+            if nearColumn < CELL_COLUMN_COUNT - 1 then nearTry = nearCell + 1
+        endif
+        if nearSide = 2
+            if nearRow > 0 then nearTry = nearCell - CELL_COLUMN_COUNT
+        endif
+        if nearSide = 3
+            if nearRow < CELL_ROW_COUNT - 1 then nearTry = nearCell + CELL_COLUMN_COUNT
+        endif
+        if nearAt < 0
+            if nearTry >= 0
+                if CELLS(nearTry).value > 0
+                    if CELLS(nearTry).value <> TEX_BOTTLE then nearAt = nearTry
+                endif
+            endif
+        endif
+    next
+endfunction nearAt
 
 ` 1 when the fish in this cell is a rainbow fish, and not one of the group
 function rainbowFishBeside(besideCell, besideGroup)
@@ -329,9 +526,8 @@ endfunction besideYes
 ` the board has filled back in, after a big group: the fish in the cell that the cursor was on is a rainbow fish
 function rainbowSpawnNow()
     if RAINBOW_FISH_SPAWN < 0 then exitfunction
-    if RAINBOW_FISH_SPAWN < CELL_COUNT
-        if CELLS(RAINBOW_FISH_SPAWN).value > 0 then RAINBOW_FISH(RAINBOW_FISH_SPAWN) = 1
-    endif
+    spawnAt = rainbowCellNear(RAINBOW_FISH_SPAWN)
+    if spawnAt >= 0 then RAINBOW_FISH(spawnAt) = 1
     RAINBOW_FISH_SPAWN = -1
 endfunction
 
@@ -434,8 +630,7 @@ function rainbowBurstAhead(burstLast, burstBase)
 
     ` WHERE THEY COME FROM. the fish that the cursor is on stays, and turns into a rainbow fish, unless it is
     ` a rainbow fish that bursts, or in some other group that pops: then the fish that fills its cell is one.
-    ` a fish of the big group is taken out of it, into a group of its own that is too small to pop: the last
-    ` number that there is, which no other group has.
+    ` when it is a fish of the big group, it pops with it, and there is no new rainbow fish at all.
     burstCursor = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
     if burstCursor >= 0
         if burstCursor < CELL_COUNT
@@ -454,11 +649,10 @@ function rainbowBurstAhead(burstLast, burstBase)
                     endif
                 endif
             endif
-            if burstCursorBig
-                CELLS(burstCursor).comboFillId = burstLast
-                COMBO_GROUPS_STALE = 1
-                RAINBOW_CURSOR_KEEP = burstCursor
-            else
+            if burstCursorBig = 0
+                ` the cursor is on a bottle: the fish beside it is the new one, once the board has filled
+                ` back in. see A BOTTLE IS NEVER ONE.
+                if CELLS(burstCursor).value = TEX_BOTTLE then burstCursorPops = 1
                 if burstCursorPops
                     RAINBOW_FISH_SPAWN = burstCursor
                 else
@@ -758,6 +952,11 @@ function stepRainbowFish()
     ` to the other. the rest of the time, the rainbow lights up all of a fish that is flooded, for a burst.
     stepNow = game ms()
 
+    ` the short pulses of THE RAINBOW SHARES that are due
+    if RAINBOW_PULSE_DUE_COUNT > 0
+        rainbowPulseStep(stepNow)
+    endif
+
     ` the rainbow fish out in the schools pop when the surge gets to them. see IN A SCHOOL.
     if RAINBOW_FLOCK_DUE > 0
         RAINBOW_FLOCK_DUE = 0
@@ -819,6 +1018,13 @@ function stepRainbowFish()
     set effect param float4 FISH_FX_ID, "RainbowRim", RAINBOW_RIM#, RAINBOW_RIM_SPEED#, RAINBOW_RIM_LINE#, RAINBOW_RIM_PALE#
     set effect param float4 FISH_FX_ID, "RainbowWave", RAINBOW_WAVE_ANGLE#, RAINBOW_WAVE_LONG#, RAINBOW_WAVE_STEPS#, RAINBOW_WAVE_SWIRL#
 
+    ` and so do the numbers of THE RAINBOW SHARES, in the same waves
+    set effect param float4 RAINBOW_TEXT_FX_ID, "RainbowRim", RAINBOW_RIM#, RAINBOW_RIM_SPEED#, RAINBOW_RIM_LINE#, RAINBOW_RIM_PALE#
+    set effect param float4 RAINBOW_TEXT_FX_ID, "RainbowWave", RAINBOW_WAVE_ANGLE#, RAINBOW_WAVE_LONG#, RAINBOW_WAVE_STEPS#, RAINBOW_WAVE_SWIRL#
+    stepTextTime# = stepNow * .001
+    set effect param float2 RAINBOW_TEXT_FX_ID, "Time", stepTextTime#, RAINBOW_TEXT_GLOW#
+    set effect param float2 RAINBOW_TEXT_FX_ID, "Screen", WORLD_WIDTH, WORLD_HEIGHT
+
     ` THE SURGE, in the water of the whole screen. it is strong until it has got to the last rainbow fish,
     ` and then it fades out.
     stepSurgeR# = 0
@@ -850,7 +1056,8 @@ function stepRainbowFish()
     stepCloudNow# = stepNow * .001
     if stepNow < RAINBOW_CLOUD_UNTIL
         stepLife# = RAINBOW_CLOUD_LIFE * .001
-        set effect param float4 1, "CloudLook", RAINBOW_CLOUD_STRENGTH#, stepLife#, stepCloudNow#, 0
+        stepPulseLife# = RAINBOW_PULSE_CLOUD_LIFE * .001
+        set effect param float4 1, "CloudLook", RAINBOW_CLOUD_STRENGTH#, stepLife#, stepCloudNow#, stepPulseLife#
         ` one line each, so that no name is put together on every frame
         set effect param float4 1, "Cloud0", RAINBOW_CLOUD_X#(0), RAINBOW_CLOUD_Y#(0), RAINBOW_CLOUD_AT(0) * .001, RAINBOW_CLOUD_SIZE#(0)
         set effect param float4 1, "Cloud1", RAINBOW_CLOUD_X#(1), RAINBOW_CLOUD_Y#(1), RAINBOW_CLOUD_AT(1) * .001, RAINBOW_CLOUD_SIZE#(1)
@@ -860,6 +1067,14 @@ function stepRainbowFish()
         set effect param float4 1, "Cloud5", RAINBOW_CLOUD_X#(5), RAINBOW_CLOUD_Y#(5), RAINBOW_CLOUD_AT(5) * .001, RAINBOW_CLOUD_SIZE#(5)
         set effect param float4 1, "Cloud6", RAINBOW_CLOUD_X#(6), RAINBOW_CLOUD_Y#(6), RAINBOW_CLOUD_AT(6) * .001, RAINBOW_CLOUD_SIZE#(6)
         set effect param float4 1, "Cloud7", RAINBOW_CLOUD_X#(7), RAINBOW_CLOUD_Y#(7), RAINBOW_CLOUD_AT(7) * .001, RAINBOW_CLOUD_SIZE#(7)
+        set effect param float4 1, "Cloud8", RAINBOW_CLOUD_X#(8), RAINBOW_CLOUD_Y#(8), RAINBOW_CLOUD_AT(8) * .001, RAINBOW_CLOUD_SIZE#(8)
+        set effect param float4 1, "Cloud9", RAINBOW_CLOUD_X#(9), RAINBOW_CLOUD_Y#(9), RAINBOW_CLOUD_AT(9) * .001, RAINBOW_CLOUD_SIZE#(9)
+        set effect param float4 1, "Cloud10", RAINBOW_CLOUD_X#(10), RAINBOW_CLOUD_Y#(10), RAINBOW_CLOUD_AT(10) * .001, RAINBOW_CLOUD_SIZE#(10)
+        set effect param float4 1, "Cloud11", RAINBOW_CLOUD_X#(11), RAINBOW_CLOUD_Y#(11), RAINBOW_CLOUD_AT(11) * .001, RAINBOW_CLOUD_SIZE#(11)
+        set effect param float4 1, "Cloud12", RAINBOW_CLOUD_X#(12), RAINBOW_CLOUD_Y#(12), RAINBOW_CLOUD_AT(12) * .001, RAINBOW_CLOUD_SIZE#(12)
+        set effect param float4 1, "Cloud13", RAINBOW_CLOUD_X#(13), RAINBOW_CLOUD_Y#(13), RAINBOW_CLOUD_AT(13) * .001, RAINBOW_CLOUD_SIZE#(13)
+        set effect param float4 1, "Cloud14", RAINBOW_CLOUD_X#(14), RAINBOW_CLOUD_Y#(14), RAINBOW_CLOUD_AT(14) * .001, RAINBOW_CLOUD_SIZE#(14)
+        set effect param float4 1, "Cloud15", RAINBOW_CLOUD_X#(15), RAINBOW_CLOUD_Y#(15), RAINBOW_CLOUD_AT(15) * .001, RAINBOW_CLOUD_SIZE#(15)
     else
         set effect param float4 1, "CloudLook", 0, 1, stepCloudNow#, 0
     endif

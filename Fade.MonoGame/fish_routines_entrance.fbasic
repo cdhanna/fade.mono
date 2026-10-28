@@ -121,9 +121,11 @@ endfunction
 
 ` a new game started some other way puts everything back the way it was. reset_game comes here.
 function entranceCancel()
+    cursorArriveEnd(0) `a cursor that was still to pop in, after this or after a little board of the tutorial
     if ENTRANCE_ON
         ENTRANCE_ON = 0
         ENTRANCE_FLOCK# = 1.0
+        cursorArriveEnd(0)
         show sprite SELECTION_SPRITE
         entranceHudHome()
     endif
@@ -163,6 +165,12 @@ frame_entrance:
     if ENTRANCE_START = 0
         ENTRANCE_START = entNow
         gosub entrance_deal_cards
+
+        ` the cursor pops in once the last fish, at the top right, has landed. see fish_headers_cursorshow.
+        entLastWait = CELL_COLUMN_COUNT + CELL_ROW_COUNT
+        entLastWait = entLastWait - 2
+        entLastLand = entLastWait * ENTRANCE_STEP_MS + ENTRANCE_FALL_MS
+        cursorArrive(entLastLand)
     endif
     entPast = entNow - ENTRANCE_START
 
@@ -234,14 +242,14 @@ frame_entrance:
     if entAllIn = 0 then return
     if ENTRANCE_FLOCK# < 1 then return
 
-    ` all in. every fish is put exactly in its place, the cursor comes back, and the schools are told to
-    ` look at themselves once more, at full strength. see FLOCK_DRAWN in fish_headers_school.
+    ` all in. every fish is put exactly in its place, and the schools are told to look at themselves once
+    ` more, at full strength. see FLOCK_DRAWN in fish_headers_school. the cursor popped in already, when
+    ` the last fish landed, and the schools take a little longer than that.
     ENTRANCE_ON = 0
     for entI = 0 to CELL_COUNT - 1
         updateCell(CELLS(entI))
         set sprite alpha CELLS(entI).spriteId, 255
     next
-    show sprite SELECTION_SPRITE
     for entI = 0 to FLOCK_MAX - 1
         if FLOCK_DRAWN(entI) = 2 then FLOCK_DRAWN(entI) = 1
     next

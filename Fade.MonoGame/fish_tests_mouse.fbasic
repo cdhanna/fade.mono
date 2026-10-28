@@ -26,23 +26,23 @@ test mouse_wakes_when_it_moves_far_enough from fishBoard
     end
 endtest
 
-test mouse_nudged_over_the_board_says_nothing from fishBoard
-    for tMsI = 1 to 6
+test mouse_moved_over_the_board_says_nothing from fishBoard
+    for tMsI = 1 to 30
         TEST_MOUSE_X = TEST_MOUSE_X + 10
         runto _loop
     next
     assert MOUSE_ON = 1, "the mouse is in use"
-    assert MOUSE_NO_SHOWN = 0, "but a little way is not enough for the board to say no"
+    assert MOUSE_NO_SHOWN = 0, "but moving it, even a long way, is not enough for the board to say no"
     assert CURSOR_SHAKING = 0, "and the cursor stays still"
     end
 endtest
 
-test mouse_over_the_board_shakes_its_head from fishBoard
+test mouse_clicked_on_the_board_shakes_its_head from fishBoard
     tMsWas as vec = SELECTION_POS
-    for tMsI = 1 to 15
-        TEST_MOUSE_X = TEST_MOUSE_X + 10
-        runto _loop
-    next
+    TEST_MOUSE_X = TEST_MOUSE_X + 10
+    TEST_MOUSE_CLICK = 1
+    runto _loop
+    TEST_MOUSE_CLICK = 0
     assert MOUSE_NO_SHOWN = 1, "the words say that the game is played with the keys"
     assert CURSOR_SHAKING = 1, "and the cursor shakes"
     assert CURSOR_SHAKE_DIR_X = 1, "from side to side"
@@ -50,19 +50,14 @@ test mouse_over_the_board_shakes_its_head from fishBoard
     assert CURSOR_SHAKE_AMOUNT = MOUSE_NO_SHAKE_SIZE, "and further than for a move that cannot be made"
     assert SELECTION_POS.x = tMsWas.x, "the mouse does not move the cursor"
     assert SELECTION_POS.y = tMsWas.y, "not up or down either"
-
-    TEST_MOUSE_CLICK = 1
-    runto _loop
-    TEST_MOUSE_CLICK = 0
-    assert SELECTION_POS.x = tMsWas.x, "and a click does not either"
     end
 endtest
 
 test mouse_words_go_as_soon_as_a_key_is_pressed from fishBoard
-    for tMsI = 1 to 15
-        TEST_MOUSE_X = TEST_MOUSE_X + 10
-        runto _loop
-    next
+    TEST_MOUSE_X = TEST_MOUSE_X + 10
+    TEST_MOUSE_CLICK = 1
+    runto _loop
+    TEST_MOUSE_CLICK = 0
     assert MOUSE_NO_SHOWN = 1, "the board says that the game is played with the keys"
 
     TEST_ANY_INPUT = 1

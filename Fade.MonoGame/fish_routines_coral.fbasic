@@ -158,6 +158,10 @@ handle_coral_ending:
     if CORAL_ENDING_DUE = 0
         if DIVER_ENDING_DUE then CORAL_ENDING_DUE = CORAL_ENDING_DIVER
     endif
+    ` and the god of the sea, when the game has the whole trident. see fish_headers_neptune.
+    if CORAL_ENDING_DUE = 0
+        if NEPTUNE_ENDING_DUE then CORAL_ENDING_DUE = CORAL_ENDING_NEPTUNE
+    endif
     if CORAL_ENDING_DUE = 0 then return
 
     ` nor has a demo an ending. frame_demo stops it instead. see THE DEMO in fish_headers_demo.
@@ -172,6 +176,7 @@ handle_coral_ending:
     CORAL_ENDING = CORAL_ENDING_DUE
     CORAL_ENDING_DUE = 0
     DIVER_ENDING_DUE = 0
+    NEPTUNE_ENDING_DUE = 0
     gosub clear_queued_moves
 
     coralEndingRemember(CORAL_ENDING)
@@ -184,6 +189,9 @@ handle_coral_ending:
     endif
     if CORAL_ENDING = CORAL_ENDING_DIVER
         gosub diver_finale
+    endif
+    if CORAL_ENDING = CORAL_ENDING_NEPTUNE
+        gosub neptune_finale
     endif
 
     ` and then the game ends the way that every game does, with the initials and the table of high scores
@@ -1851,14 +1859,21 @@ function stepCoral()
     ` or a fall has it at the moment. a fish that is popping, or a new one that is dropping in, has none.
     ` none of this is kept up while there is no coral for a shadow to fall on. and only the fish that are
     ` on coral, or right next to some, have one, because the rest have nothing for it to fall on.
+    ` the dried ink of the day shows the fish over it reflected, from the same pictures, so the fish of
+    ` inked cells are drawn too while there is some. see THE INK OF THE DAY in fish_headers_squid.
     coralShadowsWanted = 0
     if CORAL_COUNT > 0 then coralShadowsWanted = 1
+    if INK_REFLECT then coralShadowsWanted = 1
     if coralShadowsWanted
         CORAL_SHADOWS_ON = 1
         for coralDrawI = 0 to CORAL_SPRITE_COUNT - 1
             coralShadowShow = 0
             if coralDrawI < CELL_COUNT
-                if CORAL_NEAR(coralDrawI)
+                coralShadowNear = CORAL_NEAR(coralDrawI)
+                if INK_REFLECT
+                    if INK(coralDrawI) then coralShadowNear = 1
+                endif
+                if coralShadowNear
                     if CELLS(coralDrawI).value > 0
                         if CELLS(coralDrawI).comboBlownUp = 0 then coralShadowShow = 1
                     endif
@@ -2675,6 +2690,15 @@ function coralEndingRemember(ending)
     ` the ending of the diver has its own. see THE ENDING in fish_headers_diver.
     if ending = CORAL_ENDING_DIVER
         diverEndingRemember()
+        exitfunction
+    endif
+
+    ` and so does the god's: his trident is in the clouds of the main menu from now on, and the codec has
+    ` an entry for the ending. see CODEC_ENTRY_FAVOR in fish_headers.
+    if ending = CORAL_ENDING_NEPTUNE
+        set pref PREF_ENDING_NEPTUNE, 1
+        codecSeeCard(CODEC_ENTRY_FAVOR)
+        SURFACE_NEPTUNE = 1
         exitfunction
     endif
 

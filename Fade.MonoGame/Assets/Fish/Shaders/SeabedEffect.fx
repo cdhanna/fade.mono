@@ -35,6 +35,28 @@ float4 Tide;     // w is how many of the marks under the moon are filled in, in 
 // the little lights that drift in the water at night
 #define PlanktonColor float3(0.200, 0.950, 0.820)
 
+// THE HINTS IN THE SNOW. the constellations of the night are hidden in the plankton: a few more of its
+// lights, on a little grid, which rise and sway with the rest of it because they are it. none of the
+// plankton of its own is in the box of one, so that none of it is read as part of it. the lines that join
+// them up now and then are drawn by HintSnowEffect.fx. HintAt is the grain of the top left light of each,
+// and how many squares of the shape wide and tall it is. HintRowsA is which squares of its first four rows
+// are stars, as bits, the first square being 1, and HintRowsB is the next four. HintShown is how much each
+// is there, from 0 to 1. see fish_headers_squid.
+float4 HintAt0;
+float4 HintAt1;
+float4 HintAt2;
+float4 HintRowsA0;
+float4 HintRowsA1;
+float4 HintRowsA2;
+float4 HintRowsB0;
+float4 HintRowsB1;
+float4 HintRowsB2;
+float4 HintShown;
+#define HINT_PITCH 5.0
+// plankton twinkles all the way out, and a light of a hint that went out would break up the shape. this
+// is as dim as one gets.
+#define HINT_DIMMEST 0.3
+
 // THE SURFACE. the underside of the surface of the water, along the top of the screen. it is this many
 // pixels down the screen at high water, and this many at low water.
 #define SURFACE_HIGH 1.0
@@ -182,6 +204,25 @@ float3 stars(float2 px)
 	return color;
 }
 
+// how much of the plankton on this grain is left out, for the hints, from 0 to 1
+float hintNear(float4 at, float2 grain)
+{
+	float2 rel = grain - at.xy;
+	float2 far = (at.zw - 1.0) * HINT_PITCH;
+	return step(-1.0, rel.x) * step(-1.0, rel.y) * step(rel.x, far.x + 1.0) * step(rel.y, far.y + 1.0);
+}
+
+// 1 if this square of a hint is a star, from its rows, or 0. rel is the square, from the top left.
+float hintBit(float4 rowsA, float4 rowsB, float4 at, float2 rel)
+{
+	float inside = step(0.0, rel.x) * step(0.0, rel.y) * step(rel.x, at.z - 1.0) * step(rel.y, at.w - 1.0);
+	float4 near0 = 1.0 - saturate(abs(rel.y - float4(0.0, 1.0, 2.0, 3.0)) * 2.0);
+	float4 near1 = 1.0 - saturate(abs(rel.y - float4(4.0, 5.0, 6.0, 7.0)) * 2.0);
+	float row = dot(rowsA, near0) + dot(rowsB, near1);
+	float bit = fmod(floor(row / exp2(max(rel.x, 0.0)) + 0.01), 2.0);
+	return inside * step(0.5, bit);
+}
+
 float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 {
 	// whole pixels, so that everything is as blocky as the rest of the game
@@ -231,8 +272,22 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 	// THE NIGHT. little lights drift up through the water, and twinkle. see fish_headers_tide.
 	float2 grain = floor((px + float2(sin(Time * 0.2 + px.y * 0.02) * 6.0, Time * 5.0)) / 2.0);
 	float plankton = step(0.988, hash(grain + 57.0));
+
+	// THE HINTS IN THE SNOW: the box of a hint has none of the plankton of its own, only the lights of its shape
+	float in0 = hintNear(HintAt0, grain);
+	float in1 = hintNear(HintAt1, grain) * (1.0 - in0);
+	float in2 = hintNear(HintAt2, grain) * (1.0 - in0) * (1.0 - in1);
+	float hintShown = saturate(in0 * HintShown.x + in1 * HintShown.y + in2 * HintShown.z);
+	float4 hintAt = HintAt0 * in0 + HintAt1 * in1 + HintAt2 * in2;
+	float2 hintRel = grain - hintAt.xy;
+	float2 hintSquare = floor(hintRel / HINT_PITCH + 0.0001);
+	float2 hintSub = hintRel - hintSquare * HINT_PITCH;
+	float hintLight = step(abs(hintSub.x), 0.1) * step(abs(hintSub.y), 0.1);
+	hintLight *= hintBit(HintRowsA0 * in0 + HintRowsA1 * in1 + HintRowsA2 * in2, HintRowsB0 * in0 + HintRowsB1 * in1 + HintRowsB2 * in2, hintAt, hintSquare);
+	plankton = lerp(plankton, hintLight, hintShown);
 	float twinkle = 0.5 + 0.5 * sin(Time * 1.7 + hash(grain + 3.0) * 40.0);
-	color += PlanktonColor * plankton * twinkle * twinkle * 0.55 * night;
+	float hintTwinkle = lerp(twinkle * twinkle, max(twinkle * twinkle, HINT_DIMMEST), hintShown);
+	color += PlanktonColor * plankton * hintTwinkle * 0.55 * night;
 
 	// THE MOON, seen through the water, so it wobbles. it is faint in the day, and at night it is bright,
 	// with a glow around it, and a shaft of its light comes down under it.

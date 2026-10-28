@@ -25,7 +25,7 @@ function testAnglerHearTier(tAngTier)
 endfunction
 
 test angler_card_is_a_dealt_instant_after_the_fast from fishBoard
-    assert CARD_LENGTH = 40, "there is one more card, and then the cards of the schools after it"
+    assert CARD_LENGTH = 41, "there is one more card, and then the cards of the schools and moonlight after it"
     assert ABILITY_INDEX_ANGLER = 35, "and it comes after the cards of the fast"
     assert CARDS(ABILITY_INDEX_ANGLER).abilityType = ABILITY_TYPE_INSTANT, "it is an instant"
     assert CARDS(ABILITY_INDEX_ANGLER).stackable = 1, "and it can be taken again"
@@ -55,7 +55,7 @@ test angler_keeps_no_more_than_four_lights from fishBoard
 endtest
 
 test angler_topics_are_all_there from fishBoard
-    assert ANGLER_TOPIC_COUNT = 48, "every topic was made"
+    assert ANGLER_TOPIC_COUNT = 59, "every topic was made"
     assert ANGLER_TOPIC_COUNT <= ANGLER_TOPIC_ROOM, "and they fit"
     tAngBadPages = 0
     tAngLast = ANGLER_TOPIC_COUNT - 1
@@ -361,5 +361,64 @@ test angler_new_topics_wait_until_they_have_been_seen from fishBoard
     assert anglerTopicOpen(ANGLER_T_FLOCK) = 1, "the fish out there, once a school has swum off"
     TEACH_LIFE(TEACH_SCHOOL) = 0
     TEACH_LIFE(TEACH_RAINBOW_NEW) = 0
+    end
+endtest
+
+
+` EVERYTHING ELSE ON THE BOARD, AND THE ROWS OF THE LIST (2026-10-27)
+
+test angler_every_row_of_the_list_has_a_topic from fishBoard
+    tAngNone = 0
+    for tAngK = 0 to SPOT_KIND_RIGHT
+        if anglerKindTopic(tAngK) < 0 then tAngNone = tAngNone + 1
+    next
+    assert tAngNone = 0, "every kind of thing on the board can be asked about"
+    assert anglerKindTopic(SPOT_KIND_RIGHT) = ANGLER_T_FACING, "the fish that face right are about facing"
+    assert anglerKindTopic(BOARD_INFO_FACING) = ANGLER_T_FACING, "and so are the ones that face left"
+    assert anglerKindTopic(BOARD_INFO_KRILL) = ANGLER_T_KRILL, "the krill have a topic of their own"
+    assert anglerKindTopic(BOARD_INFO_MARK) = ANGLER_T_MARK, "and so do the rings"
+    assert anglerKindTopic(-1) = -1, "and nothing is about nothing"
+    end
+endtest
+
+test angler_quest_fish_wait_until_they_are_out from fishBoard
+    assert anglerTopicOpen(ANGLER_T_TURTLE) = 0, "a turtle is not asked about with none on the board"
+    tAngWas = CELLS(0).value
+    CELLS(0).value = TEX_TURTLE
+    tAngOpen = anglerTopicOpen(ANGLER_T_TURTLE)
+    tAngNear = anglerTopicNear(ANGLER_T_TURTLE)
+    CELLS(0).value = tAngWas
+    assert tAngOpen = 1, "with one out there, it can be"
+    assert tAngNear = 1, "and it is near"
+    end
+endtest
+
+test angler_squid_waits_for_the_night from fishBoard
+    tAngWasSeen = CODEC_SEEN(CODEC_ENTRY_NIGHT)
+    CODEC_SEEN(CODEC_ENTRY_NIGHT) = 0
+    TIDE_NIGHT = 0
+    SQUID_CELL = -1
+    tAngTopic = anglerTopicOpen(ANGLER_T_SQUID)
+    tAngJump = anglerRumorOpen(ANGLER_R_SQUID_JUMP)
+    tAngStars = anglerRumorOpen(ANGLER_R_STARS)
+    CODEC_SEEN(CODEC_ENTRY_NIGHT) = 1
+    tAngTopicSeen = anglerTopicOpen(ANGLER_T_SQUID)
+    tAngStarsSeen = anglerRumorOpen(ANGLER_R_STARS)
+    CODEC_SEEN(CODEC_ENTRY_NIGHT) = tAngWasSeen
+    assert tAngTopic = 0, "the squid is not told of before there has been a night"
+    assert tAngJump = 0, "nor where it goes"
+    assert tAngStars = 0, "nor the shapes in the plankton"
+    assert tAngTopicSeen = 1, "once there has been a night, it is"
+    assert tAngStarsSeen = 1, "and the shapes can be told"
+    assert ANGLER_TIER(ANGLER_R_SQUID_JUMP) = ANGLER_TIER_RUMOR, "where it goes is a rumor"
+    assert ANGLER_TIER(ANGLER_R_STARS) = ANGLER_TIER_DEEP, "and the shapes a deep one"
+    end
+endtest
+
+test angler_codec_and_gold_bar_spots_have_topics from fishBoard
+    anglerTopicForBlob(INFO_INDEX_CODEC)
+    assert ANGLER_FOUND = ANGLER_T_INFO, "the codec spot is about finding things out"
+    anglerTopicForBlob(INFO_INDEX_TRIDENT)
+    assert ANGLER_FOUND = ANGLER_T_GODLY, "and the gold bar is about the godly shape"
     end
 endtest

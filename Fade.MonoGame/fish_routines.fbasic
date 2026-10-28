@@ -111,6 +111,22 @@ load_fonts:
         `hide text SCORE_TEXTS(i).textId
     next
 
+    ` the numbers of THE RAINBOW SHARES are drawn to a render target of their own, which RainbowTextEffect
+    ` turns to the rainbow. see fish_headers_rainbow.
+    reserve render target id(TARGET_RAINBOW_TEXT)
+    render target TARGET_RAINBOW_TEXT
+    set render target background color TARGET_RAINBOW_TEXT, rgb(0, 0, 0, 0)
+
+    reserve effect id(RAINBOW_TEXT_FX_ID)
+    effect RAINBOW_TEXT_FX_ID, "Fish/Shaders/RainbowTextEffect"
+
+    reserve sprite id(RAINBOW_TEXT_VIEW_SPRITE)
+    sprite RAINBOW_TEXT_VIEW_SPRITE, 0, 0, render target texture(TARGET_RAINBOW_TEXT)
+    set sprite offset RAINBOW_TEXT_VIEW_SPRITE, 0, 0
+    size sprite RAINBOW_TEXT_VIEW_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    order sprite RAINBOW_TEXT_VIEW_SPRITE, ORDER_SCORE_TEXT + 1 `over the other numbers, so that it is not lost under them
+    set sprite effect RAINBOW_TEXT_VIEW_SPRITE, RAINBOW_TEXT_FX_ID
+
 return
 
 
@@ -284,6 +300,8 @@ load_textures:
     texture reserve texture id(CARDS(ABILITY_INDEX_FLIPPER).artTexId), "Fish/Textures/Cards/flipper"
     texture reserve texture id(CARDS(ABILITY_INDEX_HIGH_STAKES).artTexId), "Fish/Textures/Cards/high_stakes"
     texture reserve texture id(CARDS(ABILITY_INDEX_TOLERANCE).artTexId), "Fish/Textures/Cards/tolerance"
+    ` "moonlight" has the picture of the night for now, the same as the codec's entry for the night
+    texture reserve texture id(CARDS(ABILITY_INDEX_MOONLIGHT).artTexId), "Fish/Textures/Cards/night_dive"
 
 return
 
@@ -595,12 +613,15 @@ update_frame:
     stepGlow() `see fish_headers_glow
     stepSchool() `see fish_headers_school
     stepRainbowFish() `see fish_headers_rainbow
+    stepBubbled() `see fish_headers_bubbled
     perf lap 18
     stepSkeletonGhosts()
     perf lap 19
     stepTuna()
     perf lap 20
     stepBeatLook()
+    cursorShowStep() `the cursor pops in after a board, and fades in info mode. see fish_headers_cursorshow.
+    gosub frame_spot `the list of what is on the board, in info mode. see fish_headers_spot.
     rotateDrawBox() `the outline of the box of a "rotate". see fish_headers_fast.
     perf lap 21
     gosub frame_hints
@@ -844,6 +865,24 @@ frame_fish_fx:
         if bellyRock# > 3.14159 then bellyRock# = 6.28318 - bellyRock#
         yaw# = yaw# + (sin(shockNow * .003 + i) * BELLY_UP_ROCK# * bellyRock# * tunaCalm#) / 3.14159
 
+        ` a fish in a bubble floats around inside it, and rocks, and is seen through it. the effect takes
+        ` 4000 more for that, further down. see HOW IT LOOKS in fish_headers_bubbled.
+        bubbledHere = 0
+        if BUBBLED_AT(i)
+            if c.value > 0 then bubbledHere = 1
+        endif
+        if bubbledHere
+            ` it starts to float as its bubble grows in, and it is seen through the bubble once that is
+            ` most of the way there
+            bubbledEase# = bubbledGrown(i)
+            if bubbledEase# < .4 then bubbledHere = 0
+            bubbledT# = shockNow * .001 * BUBBLED_WOBBLE_SPEED# + i * 2.3
+            pushX# = pushX# + sin(bubbledT# * 1.3) * BUBBLED_WOBBLE# * bubbledEase#
+            pushY# = pushY# + sin(bubbledT# * 1.9 + 1) * BUBBLED_WOBBLE# * .8 * bubbledEase#
+            yaw# = yaw# + sin(bubbledT# * 1.1 + .5) * BUBBLED_WOBBLE_TURN# * bubbledEase#
+            pitch# = pitch# + sin(bubbledT# * .8 + 2) * BUBBLED_WOBBLE_TURN# * .5 * bubbledEase#
+        endif
+
         ` and it is drawn as its bones from the moment that it is edge on, so the fish goes over and the
         ` skeleton comes around. see SKELETONS in fish_headers. whatever else sets the picture of a fish
         ` only knows about its kind, so this puts the bones back on every frame, and takes them off
@@ -854,6 +893,7 @@ frame_fish_fx:
                 if bellyShown# > 4.71 then skeletonWant = 1
             endif
         endif
+        if i = SQUID_CELL then skeletonWant = 0
         if skeletonWant
             setFishTexture(c.spriteId, SKELETON_TEX(c.value))
             SKELETON_SHOWN(i) = 1
@@ -864,6 +904,14 @@ frame_fish_fx:
                     setFishTexture(c.spriteId, c.value)
                 endif
             endif
+        endif
+
+        ` the squid of the night is drawn over the fish that it took. squidStep puts the fish back when
+        ` it goes. see fish_headers_squid.
+        if i = SQUID_CELL
+            squidUnshow()
+            setFishTexture(c.spriteId, TEX_SQUID)
+            SQUID_SHOWN_CELL = i
         endif
 
         ` the count that is drawn chases the real one, so that a new fish slides out from behind
@@ -939,6 +987,12 @@ frame_fish_fx:
         if skeletonWant
             customOutline = CUSTOM_ART_OUTLINE(CUSTOM_ART_BONES_SLOT)
         endif
+        ` the squid glows the way that any fish does at night, whatever it took over, and its picture is
+        ` one of the new ones, which have the thick line. see fish_headers_squid.
+        if i = SQUID_CELL
+            nightGlow# = 0
+            customOutline = NEW_ART_THICK * 2
+        endif
         if customOutline = 1 then nightGlow# = nightGlow# + 100
         if customOutline = 2 then nightGlow# = nightGlow# + 200
 
@@ -961,6 +1015,13 @@ frame_fish_fx:
             if shockNow >= RAINBOW_LIT_FROM(i) then cellFlooded = 1
         endif
         if cellFlooded then nightGlow# = nightGlow# + 1000
+        if bubbledHere then nightGlow# = nightGlow# + 4000
+
+        ` the fish that the squid was on grows back in, and the squid grows in where it lands. see A PUSH in fish_headers_squid.
+        if i = SQUID_BACK_CELL or i = SQUID_IN_CELL
+            squidShrink = squidShrinkAt(i, shockNow)
+            lift# = lift# - squidShrink * .001
+        endif
 
         set sprite all texcoord2 c.spriteId, pushX# * fishSize# + tunaPushX#, pushY# * fishSize# + tunaPushY#, lift# + TUNA_SHRINK#, nightGlow#
     next
@@ -1035,6 +1096,7 @@ frame_dbg:
                 if new key down(scancode("B"))
                     dbgBottleIndex = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
                     CELLS(dbgBottleIndex).value = TEX_BOTTLE
+                    RAINBOW_FISH(dbgBottleIndex) = 0
                     clearCellStack(dbgBottleIndex)
                     updateCell(CELLS(dbgBottleIndex))
                 endif
@@ -1165,8 +1227,11 @@ frame_score:
         ` show ability upgrade! but not while fish are still popping. it waits for the board to settle,
         ` and for the points of the last fish to get onto the bar, so that none of the overflow is missed.
         ` and for a quest that the round ended on to go off in its bubbles. see A QUEST THAT THE ROUND ENDS ON in fish_headers_quests.
+        ` and, at the end of a night, for the constellation to pop and day to break, and for the pot of the
+        ` day to pay, so that none of it is missed behind the upgrade screen. see THE END OF THE NIGHT and
+        ` THE POT in fish_headers_squid.
         questLeaving = questHoldsRound()
-        if SCORE_BAR_HOLD = 1 and REQUEST_COMBO_CHECK = 0 and LIVE_MOVE_ACTIVE = 0 and SCORE_TICK_COUNT = 0 and questLeaving = 0
+        if SCORE_BAR_HOLD = 1 and REQUEST_COMBO_CHECK = 0 and LIVE_MOVE_ACTIVE = 0 and SCORE_TICK_COUNT = 0 and questLeaving = 0 and SQUID_ENDING = 0 and INK_PAYING = 0
             roundWasLast = 0
             if getRoundsLeft() <= 0
                 ` a game that was won already, and is being carried on with, has no last round. see KEEP PLAYING in fish_headers.
@@ -1244,6 +1309,8 @@ frame_score:
         ` a bar that is being held full says that it is full, and not how far past the end the score went
         shownInRound = SCORE_SHOWN - SCORE_BAR.startVal
         if SCORE_BAR_HOLD and shownInRound > span then shownInRound = span
+        ` while the tutorial shows what the bar is, the numbers follow the bar. see tutorial_round_bar.
+        if TUTORIAL_BAR_DEMO then shownInRound = span * barFill#
         y$ = str$(shownInRound)
 
         ` and once there are points past the end, it counts them toward the next bonus multiplier
@@ -1394,6 +1461,16 @@ handle_combos:
         TIDE_DAWN_UNTIL = 0
     endif
 
+    ` the swap that set this look off, if one did. a big group that it finished leaves its bottle in the
+    ` cell of the swap. the looks after it, as the board fills back in, have none. see BOTTLES in fish_headers.
+    BOTTLE_LOOK_A = BOTTLE_SWAP_A
+    BOTTLE_LOOK_B = BOTTLE_SWAP_B
+    BOTTLE_SWAP_A = -1
+    BOTTLE_SWAP_B = -1
+
+    ` bubbles that touch come together and pop, and one on coral bursts. see HOW IT ENDS in fish_headers_bubbled.
+    bubbledSettle()
+
     ` a bottle that has got to the bottom row pays out, and is popped along with whatever else pops
     checkBottles()
 
@@ -1432,6 +1509,7 @@ handle_combos:
 
     ` the groups have been found, so the skeletons that were taken into one are the kinds of fish that they were again
     skeletonsAfterCombos()
+
 
     ` handle forced explosions...
     maxComboForce = 0
@@ -1489,6 +1567,10 @@ handle_combos:
     ` surge has got to the last of them. then the fish that the cursor is on swells up into a new rainbow
     ` fish, as the big group pops. see THE BURST in fish_headers_rainbow.
     rainbowBurstAhead(groupId, forceBase)
+
+    ` a big group that the cursor pushed a fish into leaves that fish out, in a bubble. see fish_headers_bubbled.
+    bubbledAhead(groupId)
+
     if RAINBOW_BURST_LIVE
         RAINBOW_BURST_WAIT = ghostWait
         rainbowBurstLight(ghostWait)
@@ -1519,6 +1601,10 @@ handle_combos:
         rainbowWildLight(ghostWait)
     endif
 
+    ` a bubble whose fish is going to pop bursts first, as a moment of its own, and scores, and the pops
+    ` wait for it. see THE BURST IS A MOMENT OF ITS OWN in fish_headers_bubbled.
+    ghostWait = bubbledMomentAhead(groupId, ghostWait)
+
     totalComboCount = 0
     QUEST_BUNCH_GROUPS = 0
     CORAL_HELD_GROUPS = 0
@@ -1535,6 +1621,10 @@ handle_combos:
     if groupId < COMBO_GROUP_ROOM then groupsCounted = 1
     COMBO_GROUPS_STALE = 1
     COMBO_GROUP_WALKS = 0
+
+    ` the rainbow fish that stay through this look share in every pop of it. see THE RAINBOW SHARES in fish_headers_rainbow.
+    rainbowShareAhead(groupId, groupsCounted)
+
     for g = 0 to groupId
 
         groupIdle = 0
@@ -1905,6 +1995,9 @@ handle_combos:
                 explodePitch# -= .02
             endif
 
+            ` by day, the ink under it is washed off as it pops. see THE INK OF THE DAY in fish_headers_squid.
+            inkWashed(i - 1, delay)
+
             ` a puff of bubbles, in the color of the fish
             spawnBubbles(getCellX(cell.coord.x), getCellY(cell.coord.y), CELL_SIZE / 4, 5, delay, FISH_COLORS(getFishColorIndex(cell.value)))
 
@@ -1943,6 +2036,15 @@ handle_combos:
             ` the bar gets these when the fish pops, and not before. see THE SCORE THAT SHOWS in fish_headers.
             queueScore(scorePoints, delay)
 
+            ` and every rainbow fish that stays on the board adds to it, with a number of its own. see THE RAINBOW SHARES in fish_headers_rainbow.
+            if RAINBOW_SHARE_COUNT > 0
+                cellShare = RAINBOW_SHARE_BONUS * SCORE_MULTIPLIER * SCHOOL_STAKES * groupBonus * coralScore
+                rainbowSharePop(cellShare, delay, i - 1)
+            endif
+
+            ` a fish in a bubble bursts it, and it scores. see HOW IT ENDS in fish_headers_bubbled.
+            bubbledPop(i - 1, delay)
+
         next
 
         if groupSize# > 0
@@ -1966,11 +2068,19 @@ handle_combos:
             ` with the "bottles" card, a big group of fish that matched leaves a bottle behind, in the
             ` cell of the group that is closest to the middle of it. see BOTTLES in fish_headers.
             bottleOk = isAbility_Bottles()
-            if groupSize# < BOTTLE_GROUP_SIZE then bottleOk = 0
+            ` a fish that the group left out, in a bubble, still counts. see fish_headers_bubbled.
+            bottleGroupSize# = groupSize#
+            if g = BUBBLED_GROUP then bottleGroupSize# = groupSize# + 1
+            if bottleGroupSize# < BOTTLE_GROUP_SIZE then bottleOk = 0
             if groupForce > 0 then bottleOk = 0
             if bottleOk
-                bottleBest = -1
+                ` a group that a swap finished leaves it in the cell of the swap, if that fish pops
+                bottleBest = bottleSwapCell(g)
                 bottleBestDist# = 9999
+                if bottleBest >= 0
+                    if CELLS(bottleBest).comboBlownUp then bottleBestDist# = -1
+                    if CELLS(bottleBest).comboBlownUp = 0 then bottleBest = -1
+                endif
                 for i = 0 to CELL_COUNT - 1
                     if CELLS(i).comboFillId <> g then skip
                     if CELLS(i).comboBlownUp = 0 then skip `a fish that sang on coral is still there, so there is no room for a bottle
@@ -2181,6 +2291,7 @@ handle_combos:
             CELLS(i).bottleDue = 0
             CELLS(i).comboBlownUp = 0
             CELLS(i).value = TEX_BOTTLE
+            RAINBOW_FISH(i) = 0 `a bottle is never a rainbow fish, even where one popped. see A BOTTLE IS NEVER ONE.
             updateCell(CELLS(i))
             set sprite alpha CELLS(i).spriteId, 255
             create basic tween CELLS(i).scaleWaveTweenId, 1.6, 1, 250, 0
@@ -2343,6 +2454,7 @@ handle_combos:
             ` and it faces one way or the other. see FACING in fish_headers_school.
             schoolNewFish(i - 1)
             rainbowNewFish(i - 1) `an ordinary fish. see fish_headers_rainbow.
+            bubbledNewFish(i - 1) `with no bubble. see fish_headers_bubbled.
             setFishTexture(cell.spriteId, CELLS(i-1).value)
             targetY = y - CELL_SIZE * 2
             startAlpha = 0
@@ -2456,6 +2568,8 @@ handle_board_expansion:
 
     ` the coral stays with the cells that it was on
     coralBoardGrew(oldColumns, rowShift)
+    ` and so do the ink and the squid. see fish_headers_squid.
+    inkBoardGrew(oldColumns, rowShift)
 
     ` the fish that were already on the board keep their kind. a new row pushes them all down by one.
     ` comboBlownUp marks the cells that need a new fish, the same as it does after a combo.

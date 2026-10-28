@@ -182,6 +182,20 @@ test codec_new_entry_until_it_is_read from fishBoard
     end
 endtest
 
+` a card is unlocked when it is offered, or given, but it is read right there, so it is never new
+test codec_new_not_for_a_card from fishBoard
+    tCard = 3
+    CODEC_SEEN(tCard) = 0
+    CODEC_NEW(tCard) = 0
+    codecNewRecount()
+    tBefore = CODEC_NEW_COUNT
+    codecSeeCard(tCard)
+    assert CODEC_SEEN(tCard) = 1, "the card is unlocked"
+    assert CODEC_NEW(tCard) = 0, "but it is not new"
+    assert CODEC_NEW_COUNT = tBefore, "and nothing more is counted"
+    end
+endtest
+
 ` a demo unlocks nothing, so nothing is new
 test codec_new_not_in_a_demo from fishBoard
     CODEC_SEEN(CODEC_ENTRY_RAY) = 0

@@ -36,6 +36,9 @@ float Sick;      // 1 when the sea is green, which it is in the day once the anc
 #define SeaMid      PICK(float3(0.130, 0.150, 0.330), float3(0.090, 0.400, 0.680))
 #define SeaNear     PICK(float3(0.063, 0.086, 0.204), float3(0.040, 0.230, 0.500))
 #define SeaGlint    PICK(float3(1.000, 0.740, 0.470), float3(1.000, 1.000, 1.000))
+
+// how much of the path of the sun's light there is on the water over the reef, next to the open water
+#define REEF_PATH 0.0
 #define FoamColor   PICK(float3(0.560, 0.700, 1.000), float3(0.880, 0.960, 1.000))
 #define SICK_SKY 0.92
 
@@ -336,7 +339,10 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 	float wx = (px.x - Size.x * 0.5) / rowScale;
 	float row = 13.0 * log(1.0 + max(dy, 0.0) * 0.16);
 	float ripple = sin(wx * 0.10 + 2.4 * sin(row * 1.3 + Time * 0.7)) * sin(row * 2.3 - Time * 1.0);
-	float path = saturate(1.0 - abs(px.x - SunX) / (10.0 + dy * 0.55));
+	// the path of the sun's light does not cross the reef: the water over the rocks is shallow and broken,
+	// and a bright path of glitter over them reads as light shining through them. so over the reef there
+	// are only the plain ripples, and the path picks up again on either side of it.
+	float path = saturate(1.0 - abs(px.x - SunX) / (10.0 + dy * 0.55)) * REEF_PATH;
 	float glint = step(0.82 - path * 0.75, ripple);
 	float3 glintColor = lerp(color + 0.07, SeaGlint, saturate(path * 1.6) * (1.0 - depth * 0.45));
 	float under = step(0.5, rocks.a) * step(rocks.a, 1.5);

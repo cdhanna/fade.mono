@@ -1,0 +1,132 @@
+remstart
+    THE GOD OF THE SEA
+    an ending of the hidden game, the fourth one, and the last of the secrets of the night. the routines
+    are in fish_routines_neptune, and the tests are in fish_tests_squid. see THE CONSTELLATIONS in
+    fish_headers_squid for how a constellation is made.
+
+    THE TRIDENT. the god shows his favor once his trident has been drawn in the stars. it has five parts,
+    and each is a constellation: the left prong and the right prong (easy), the middle prong and the
+    crossbar (middling), and the shaft (hard). the number of a shape is the number of its part. a part
+    counts once its constellation has been scored, at the end of a night, and it counts for the rest
+    of the game. the sky of a night shows, for each of its three kinds, one of the parts of that kind
+    that the game does not have yet, and nothing for a kind that has none left. TRIDENT_DONE keeps which
+    parts the game has, and TRIDENT_PARTS how many.
+    ONE A NIGHT. a night gives one part, and no more: once a constellation is made, the others fade
+    from the snow for the rest of the night, and are not looked for. so the trident takes five nights at
+    the least, and one of them has to be spent on the shaft, which leaves the least room of any.
+    THE BAR. from the first part of the trident on, a third bar is under the two bars of the coral, gold, and it
+    fills up a fifth at a time. see fish_routines_coralbars. info mode has a spot for it, which says how
+    many "pieces of a godly shape" the game has, and that all of them bring something. it does not say
+    that the shape is a trident: that is for the player to see. neptuneStep keeps it up.
+
+    THE FAVOR OF THE GOD. the fifth part of the trident brings it. once the board has settled, the night is
+    over at once, and the fish all wake up. the fish over the middle of the board make way, up and down,
+    from the middle out, and the ones under it swim off to the sides. THE WAY IN opens there: a blot of the
+    ink of the night, which is not ink but the sky, full of stars, with the edge and the glow of the squid's
+    ink (PortalEffect.fx). his temple comes through it, a few pixels at a time, with starlight on it as it
+    comes (TempleEffect.fx): the steps, then the columns, three on either side, from the middle out, and
+    then the roof, with the trident in it. THEY WORSHIP IT: while it comes, the fish that are left lunge
+    toward it all together, over and over, and ease back, with a soft voice of the choir every time. the
+    way in closes, and the fish swim around the temple, in three rings, in front of the columns on the
+    near side and behind them on the far side. the words come: "Neptune favors you". he is never seen.
+    neptune_finale does all of that, and the game ends the way that it does for the other endings, with
+    CORAL_ENDING_NEPTUNE.
+
+    THE MAIN MENU REMEMBERS THE GOD. once a game has summoned him, a cloud in the sky of the main menu,
+    over the boat, draws itself together into his trident, from then on. it comes together out of wisps
+    that drift in, holds a while, thins back out into wisps, and is gone, and after a while it does it
+    all again, for as long as the main menu is up. it starts over whenever the main menu comes up. it is
+    made of the stuff of the other clouds, with their colors, and in the day there are faint rays of light
+    down from behind it, and in the evening its edge catches the gold of the sun going down. it fades away
+    as the camera goes under, the same as the reef. the page of mementos has a line to turn it off, once it
+    is there. TridentCloudEffect.fx draws it, and neptuneSurfaceStep, which frame_surface calls, moves it.
+    the FISH_MENU_NEPTUNE environment variable puts it there, for working on the game.
+
+    THE BADGE. the ending is kept on the tables and on Steam, with a trident for its badge. the ending
+    was given only enough room for the first three, so its fourth value has a place of its own, above
+    the others, where an older game has a 0: HISCORE_ENDING_HIGH_STEP in the number of the initials,
+    above the modifiers, and STEAM_FLAG_ENDING_HIGH in the flags on Steam. see endingPacked and
+    endingUnpacked in fish_routines_neptune.
+
+    the "Tide" window of the debug panel (FISH_DEBUG) can give the game the next part of the trident, or
+    every part, which brings the god.
+remend
+
+#constant CORAL_ENDING_NEPTUNE 4
+#constant CORAL_ENDING_LAST 4
+#constant PREF_ENDING_NEPTUNE 20
+#constant PREF_MENU_TRIDENT 21
+
+global TRIDENT_PART_COUNT = 5
+global dim TRIDENT_DONE(10) `1 for every part of the trident whose constellation has been scored in this game
+global TRIDENT_PARTS = 0 `how many there are
+global NEPTUNE_ENDING_DUE = 0 `1 when the fifth part has come, and the god comes once the board has settled
+
+global NEPTUNE_ENDING_HOLD = 0 `1 to keep him from coming, for the tests
+
+` the badge. HISCORE_ENDING_HIGH_STEP is HISCORE_MOD_STEP times 16, which is more than the modifiers come to.
+global HISCORE_ENDING_HIGH_STEP = 1280000
+global STEAM_FLAG_ENDING_HIGH = 256 `the flag after STEAM_FLAG_SEED_PICKED, which was always 0 before
+global TEX_BADGE_TRIDENT
+
+` the pictures. setup_neptune loads them.
+global TEX_PILLAR
+global TEX_PILLAR_B
+global TEX_PILLAR_C
+global TEX_TEMPLE
+global TEX_STEPS
+
+` THE BAR
+global INFO_INDEX_TRIDENT = -1 `the spot that info mode has for it
+global NEP_INFO_SAID = -1 `what the spot was last told, so that it is only touched when that changes
+
+` THE SUMMONING. the sprites are made the first time that they are needed.
+global NEP_PORTAL_SPRITE = 0
+global NEP_PORTAL_FX = 0
+global NEP_TEMPLE_FX = 0
+global NEP_PORTAL_W = 330 `how big the way in is, at the most, in pixels
+global NEP_PORTAL_H = 220
+global NEP_TEMPLE_SPRITE = 0
+global NEP_STEPS_SPRITE = 0
+global NEP_PILLAR_COUNT = 6
+global NEP_PILLAR_OUT = 100 `how far out from the middle the outermost columns are, in pixels
+global NEP_PILLAR_STEP = 25 `and how far in from that each of the next ones is
+global dim NEP_PILLAR_SPRITE(6)
+global NEP_SHOWN = 0 `1 while the temple and the god are on the screen
+global NEP_PART_AT = 600 `when the fish over the middle of the board start to make way, in milliseconds from the start
+global NEP_PART_MS# = 700 `how long each takes to
+global NEP_LEAVE_AT = 1500 `when the fish under the middle start to swim off to the sides
+global NEP_LEAVE_MS# = 1300 `and how long they take to
+global NEP_PULSE_EVERY = 640 `THEY WORSHIP IT: how long a lunge toward the temple and back takes, in milliseconds
+global NEP_PULSE# = 5 `and how far they lunge, in pixels
+global NEP_PORTAL_AT = 2400 `when the way in starts to open
+global NEP_PORTAL_MS# = 900 `how long it takes to open, and to close
+global NEP_STEPS_AT = 3000 `when the steps start to come through
+global NEP_PILLARS_AT = 3400 `when the first column does
+global NEP_PILLAR_GAP = 220 `how long each one after it waits
+global NEP_COME_MS# = 900 `how long a piece of the temple takes to come all the way through
+global NEP_ROOF_AT = 5400 `when the roof starts to come through
+global NEP_PORTAL_SHUT = 6400 `when the way in starts to close
+global NEP_ORBIT_AT = 6700 `when the fish start to swim around the temple
+global NEP_ORBIT_IN_MS# = 1800 `how long they take to get into their rings
+global NEP_ORBIT_RX# = 150 `how wide the smallest ring is, either side of the middle, and how tall, in pixels
+global NEP_ORBIT_RY# = 52
+global NEP_WORDS_AT = 7400 `when the words come
+global NEP_MAX_MS = 30000 `when it moves on by itself
+global NEP_PART# = 58 `how far either side of the middle the fish make room for him, in pixels
+global dim NEP_FISH_Y#(400) `where every fish was, when it started, so that it can be moved from there
+
+` THE MAIN MENU REMEMBERS THE GOD
+global SURFACE_NEPTUNE = 0 `1 once the god has been summoned in some game
+global OPTION_MENU_TRIDENT = 1 `1 while his trident is wanted in the clouds of the main menu
+global SURFACE_TRIDENT_FX = 0
+global SURFACE_TRIDENT_SPRITE = 0 `made the first time that it is needed
+global SURFACE_TRIDENT_X = 512 `where the middle of it is, across the screen
+global SURFACE_TRIDENT_UP = 70 `and how far over the horizon the middle of its sprite is
+global SURFACE_TRIDENT_START_MS = 0 `when it started this time
+global SURFACE_TRIDENT_SEEN_MS = 0 `the last frame that the main menu was drawn, to tell when it has come up again
+global SURFACE_TRIDENT_WAIT = 1500 `how long the main menu has been up before it first starts to come together
+global SURFACE_TRIDENT_FORM = 6000 `how long it takes to come together
+global SURFACE_TRIDENT_HOLD = 14000 `how long it holds
+global SURFACE_TRIDENT_THIN = 4500 `how long it takes to thin back out
+global SURFACE_TRIDENT_GAP = 7000 `and how long the sky is without it, before it comes together again

@@ -67,26 +67,28 @@ test rainbow_no_burst_without_a_big_group from fishBoard
     end
 endtest
 
-test rainbow_big_group_turns_the_fish_at_the_cursor from fishBoard
+test rainbow_big_group_with_the_cursor_in_it_brings_none from fishBoard
     rainbowFishReset()
     RAINBOW_FISH_ON = 1
+    tRainbowBefore = RAINBOW_BURST_COUNT
     testCursor(2, 0)
     for tRainbowX = 0 to 4
         testPut(tRainbowX, 0, 6)
     next
+    RAINBOW_FISH(testIndex(6, 4)) = 1
 
     REQUEST_COMBO_CHECK = 1
     runto _combos_judged
 
-    assert testPops(2, 0) = 0, "the fish of the big group that the cursor is on does not pop"
-    assert testPops(1, 0) = 1, "the rest of the group does"
-    assert testPops(3, 0) = 1, "on both sides of it"
-    assert RAINBOW_CURSOR_KEEP = testIndex(2, 0), "it is due to turn into a rainbow fish"
+    assert testPops(2, 0) = 1, "the fish of the big group that the cursor is on pops with the rest"
+    assert RAINBOW_CURSOR_KEEP = -1, "so it does not turn into a rainbow fish"
+    assert RAINBOW_FISH_SPAWN = -1, "and none is due anywhere"
+    assert RAINBOW_BURST_COUNT = tRainbowBefore + 1, "but the big group still bursts the rainbow fish"
+    assert testPops(6, 4) = 1, "so the one on the board pops"
 
     runto _loop
-    assert RAINBOW_FISH(testIndex(2, 0)) = 1, "once the group has popped, it is a rainbow fish"
     rainbowFishCount()
-    assert RAINBOW_FISH_COUNT = 1, "and it is the only one"
+    assert RAINBOW_FISH_COUNT = 0, "and there are none left"
     end
 endtest
 
@@ -346,5 +348,222 @@ test rainbow_two_rainbow_fish_are_not_enough from fishBoard
 
     assert RAINBOW_WILD_COUNT = tRainbowBefore, "two rainbow fish do not match on their own"
     assert testPops(3, 4) = 0, "so they stay"
+    end
+endtest
+
+` A BOTTLE IS NEVER ONE. see fish_headers_rainbow.
+
+test rainbow_bottle_where_a_rainbow_fish_popped_is_not_one from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    grantPassive(ABILITY_INDEX_BOTTLES)
+    testCursor(4, 6)
+    for tRainbowX = 0 to 4
+        testPut(tRainbowX, 0, 6)
+    next
+    RAINBOW_FISH(testIndex(2, 0)) = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert CELLS(testIndex(2, 0)).bottleDue = 1, "the rainbow fish in the middle of the big group is where the bottle goes"
+
+    runto _loop
+    assert CELLS(testIndex(2, 0)).value = TEX_BOTTLE, "the bottle is there"
+    assert RAINBOW_FISH(testIndex(2, 0)) = 0, "and it is not a rainbow fish"
+    assert RAINBOW_FISH(testIndex(4, 6)) = 1, "the fish where the cursor is still turns into one"
+    rainbowFishCount()
+    assert RAINBOW_FISH_COUNT = 1, "and it is the only one"
+    end
+endtest
+
+test rainbow_cursor_on_a_bottle_turns_the_fish_beside_it from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    testCursor(4, 3)
+    testPut(4, 3, TEX_BOTTLE)
+    for tRainbowX = 0 to 4
+        testPut(tRainbowX, 0, 6)
+    next
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert RAINBOW_CURSOR_KEEP = -1, "the bottle at the cursor does not swell up into a rainbow fish"
+
+    runto _loop
+    assert RAINBOW_FISH(testIndex(4, 3)) = 0, "the bottle is not a rainbow fish"
+    assert RAINBOW_FISH(testIndex(3, 3)) = 1, "the fish beside it is"
+    rainbowFishCount()
+    assert RAINBOW_FISH_COUNT = 1, "and it is the only one"
+    end
+endtest
+
+test rainbow_flow_to_a_bottle_turns_the_fish_beside_it from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    tRainbowBefore = RAINBOW_BREED_COUNT
+    testCursor(5, 3)
+    testPut(5, 3, TEX_BOTTLE)
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    RAINBOW_FISH(testIndex(1, 1)) = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert RAINBOW_BREED_COUNT = tRainbowBefore + 1, "the rainbow fish beside the group sends a flow to the bottle"
+
+    runto _loop
+    runto _loop
+    assert RAINBOW_FISH(testIndex(5, 3)) = 0, "the bottle is not a rainbow fish"
+    assert RAINBOW_FISH(testIndex(4, 3)) = 1, "the fish beside it is"
+    rainbowFishCount()
+    assert RAINBOW_FISH_COUNT = 2, "so there is one more, and only one"
+    end
+endtest
+
+` BOTTLES AND RAINBOW FISH. see WHERE THEY COME FROM in fish_headers_rainbow, and BOTTLES in fish_headers.
+
+test rainbow_bottle_at_the_cursor_and_no_new_rainbow from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    grantPassive(ABILITY_INDEX_BOTTLES)
+    tRainbowBefore = RAINBOW_BURST_COUNT
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(3, 0, 6)
+    testPut(4, 0, 6)
+    testPut(2, 1, 6)
+    RAINBOW_FISH(testIndex(6, 4)) = 1
+    testCursor(2, 1)
+    testQueueMove(0, -1, 1, -1)
+
+    runto _combos_judged
+    assert testPops(2, 0) = 1, "the fish that the cursor carried up finished a group of five, and pops with it"
+    assert CELLS(testIndex(2, 0)).bottleDue = 1, "it leaves its bottle where the cursor is"
+    assert RAINBOW_CURSOR_KEEP = -1, "the cursor fish was part of the big group, so no new one is due at the cursor"
+    assert RAINBOW_FISH_SPAWN = -1, "or anywhere"
+    assert RAINBOW_BURST_COUNT = tRainbowBefore + 1, "the rainbow fish still burst, the same as without the card"
+    assert testPops(6, 4) = 1, "so the one on the board pops"
+
+    runto _loop
+    assert CELLS(testIndex(2, 0)).value = TEX_BOTTLE, "the bottle is there"
+    rainbowFishCount()
+    assert RAINBOW_FISH_COUNT = 0, "and no rainbow fish"
+    end
+endtest
+
+test rainbow_and_bottle_when_the_other_fish_finished_the_group from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    grantPassive(ABILITY_INDEX_BOTTLES)
+    tRainbowBefore = RAINBOW_BURST_COUNT
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(3, 0, 6)
+    testPut(4, 0, 6)
+    testPut(2, 1, 6)
+    testCursor(2, 0)
+    testQueueMove(0, 1, 1, -1)
+
+    runto _combos_judged
+    assert totalComboCount = 1, "the fish that came up the other way finished a group of five"
+    assert CELLS(testIndex(2, 0)).bottleDue = 1, "it leaves its bottle where that fish is"
+    assert RAINBOW_BURST_COUNT = tRainbowBefore + 1, "and the rainbow goes as well"
+    assert RAINBOW_CURSOR_KEEP = testIndex(2, 1), "with a new one where the cursor is"
+
+    runto _loop
+    assert CELLS(testIndex(2, 0)).value = TEX_BOTTLE, "so there is a bottle"
+    assert RAINBOW_FISH(testIndex(2, 1)) = 1, "and a rainbow fish"
+    end
+endtest
+
+` THE RAINBOW SHARES. see fish_headers_rainbow.
+
+test rainbow_fish_on_the_board_share_in_every_pop from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    RAINBOW_FISH(testIndex(6, 4)) = 1
+    RAINBOW_FISH(testIndex(8, 6)) = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert RAINBOW_SHARE_COUNT = 2, "both rainbow fish stay on the board"
+    tRainbowWant = 60 + 3 * 2 * RAINBOW_SHARE_BONUS
+    assert CURRENT_SCORE = tRainbowWant, "three fish score 10 + 20 + 30, and each rainbow fish adds to each of them"
+    end
+endtest
+
+test rainbow_burst_uses_the_shares_up from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    testCursor(4, 6)
+    for tRainbowX = 0 to 4
+        testPut(tRainbowX, 0, 6)
+    next
+    RAINBOW_FISH(testIndex(6, 4)) = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+
+    assert testPops(6, 4) = 1, "the big group bursts the rainbow fish"
+    assert RAINBOW_SHARE_COUNT = 0, "so it shares in none of the pops"
+    end
+endtest
+
+test rainbow_every_rainbow_fish_gets_a_pulse from fishBoard
+    rainbowFishReset()
+    RAINBOW_FISH_ON = 1
+    ` fourteen big clouds from a while ago, past half of their lives, take up most of the room
+    tRainbowNow = game ms()
+    for tRainbowC = 0 to 13
+        RAINBOW_CLOUD_X#(tRainbowC) = -500
+        RAINBOW_CLOUD_Y#(tRainbowC) = -500
+        RAINBOW_CLOUD_AT(tRainbowC) = tRainbowNow - 1000
+        RAINBOW_CLOUD_SIZE#(tRainbowC) = 1
+    next
+    testPut(0, 2, 6)
+    testPut(1, 2, 6)
+    testPut(2, 2, 6)
+    RAINBOW_FISH(testIndex(5, 4)) = 1
+    RAINBOW_FISH(testIndex(7, 4)) = 1
+    RAINBOW_FISH(testIndex(5, 6)) = 1
+    RAINBOW_FISH(testIndex(7, 6)) = 1
+    RAINBOW_FISH(testIndex(6, 0)) = 1
+    RAINBOW_FISH(testIndex(8, 0)) = 1
+
+    REQUEST_COMBO_CHECK = 1
+    runto _combos_judged
+    assert RAINBOW_SHARE_COUNT = 6, "all six rainbow fish stay through the look"
+    assert RAINBOW_PULSE_DUE_COUNT = 18, "and each pulses for each of the three pops"
+    tRainbowF = 0
+    while RAINBOW_PULSE_DUE_COUNT > 0
+        runto frame_dbg
+        tRainbowF = tRainbowF + 1
+        if tRainbowF > 200 then exit
+    endwhile
+    assert RAINBOW_PULSE_DUE_COUNT = 0, "the pulses have all gone out"
+
+    ` every one of them has a pulse cloud of its own
+    tRainbowCovered = 0
+    for tRainbowCell = 0 to CELL_COUNT - 1
+        if RAINBOW_FISH(tRainbowCell)
+            tRainbowX# = getCellX(tRainbowCell mod CELL_COLUMN_COUNT)
+            tRainbowY# = getCellY(tRainbowCell / CELL_COLUMN_COUNT)
+            tRainbowHas = 0
+            for tRainbowC = 0 to 15
+                if RAINBOW_CLOUD_SIZE#(tRainbowC) < 0
+                    if RAINBOW_CLOUD_X#(tRainbowC) = tRainbowX#
+                        if RAINBOW_CLOUD_Y#(tRainbowC) = tRainbowY# then tRainbowHas = 1
+                    endif
+                endif
+            next
+            tRainbowCovered = tRainbowCovered + tRainbowHas
+        endif
+    next
+    assert tRainbowCovered = 6, "every rainbow fish got a pulse cloud, though the room was nearly all taken"
     end
 endtest

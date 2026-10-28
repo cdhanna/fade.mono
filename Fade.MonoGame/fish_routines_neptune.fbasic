@@ -1,0 +1,585 @@
+goto routines_neptune_exit
+
+remstart
+    THE GOD OF THE SEA. see fish_headers_neptune for what it is.
+
+    the rest of the game only has to do these things:
+    - gosub setup_neptune once. setup_squid does.
+    - call tridentPartScored() for every constellation that scores. starScore does.
+    - call neptuneStep() on every frame. squidStep does.
+    - call neptuneReset() for a new game. squidReset does. squidSave and squidLoad keep the parts of the trident.
+    - turn NEPTUNE_ENDING_DUE into CORAL_ENDING_NEPTUNE, and gosub neptune_finale. handle_coral_ending does.
+    - pack the ending with endingLowPart and endingHighPart, and read it back with endingUnpacked, on the
+      tables and on Steam.
+remend
+
+setup_neptune:
+    texture reserve texture id(TEX_PILLAR), "Fish/Textures/Neptune/Pillar0"
+    texture reserve texture id(TEX_PILLAR_B), "Fish/Textures/Neptune/Pillar1"
+    texture reserve texture id(TEX_PILLAR_C), "Fish/Textures/Neptune/Pillar2"
+    texture reserve texture id(TEX_TEMPLE), "Fish/Textures/Neptune/Temple"
+    texture reserve texture id(TEX_STEPS), "Fish/Textures/Neptune/Steps"
+    reserve effect id(SURFACE_TRIDENT_FX)
+    effect SURFACE_TRIDENT_FX, "Fish/Shaders/TridentCloudEffect"
+    reserve effect id(NEP_PORTAL_FX)
+    effect NEP_PORTAL_FX, "Fish/Shaders/PortalEffect"
+    reserve effect id(NEP_TEMPLE_FX)
+    effect NEP_TEMPLE_FX, "Fish/Shaders/TempleEffect"
+
+    ` the spot that info mode has for the bar. it is not there until the game has a piece. it does not
+    ` say what the pieces are of.
+    INFO_INDEX_TRIDENT = allocateInfoBlob(CORAL_BAR_X - 4, 0, CORAL_BAR_WIDTH + 8, 9, loc$("tide.godly"), loc$("tide.godly.ink", "parts", 0, "all", TRIDENT_PART_COUNT))
+    setInfoBlobEnabled(INFO_INDEX_TRIDENT, 0)
+return
+
+
+` THE FAVOR OF THE GOD, on the board. see fish_headers_neptune. handle_coral_ending, in fish_routines_coral,
+` comes here. like the other endings, it draws frames of its own, with update_frame, so everything in it
+` has a name of its own, which starts with "nep".
+neptune_finale:
+    set text loc CORAL_END_TEXT_ID, "coral.end.favor"
+    color text CORAL_END_TEXT_ID, rgb(255, 232, 160)
+    set text loc CORAL_END_SUB_TEXT_ID, "coral.end.moves", "moves", CURRENT_MOVE_COUNT
+    color text CORAL_END_SUB_TEXT_ID, rgb(150, 210, 255)
+
+    ` the key hints go, and the full bar stops fizzing
+    hintShow(0)
+    SCORE_BAR_FIZZ_MS = game ms() + 10000000
+
+    ` the night is over at once, and the fish all wake up. see THE FAVOR OF THE GOD.
+    TIDE_NIGHT = 0
+    TIDE_NIGHT_LEFT = 0
+    TIDE_CYCLES = 0
+    TIDE_HELD_GROUPS = 0
+    tideClearBank()
+    tideNightMusic(0)
+    tidePlaySound(TIDE_SFX_DAWN, TIDE_VOL_DAWN#, 0)
+    SQUID_ENDING = 0
+    SQUID_CELL = -1
+    SQUID_DUE = 0
+    inkFadesAway()
+    for nepWakeI = 0 to CELL_COUNT - 1
+        create basic tween CELLS(nepWakeI).scaleWaveTweenId, 1.5, 1, 260, 200 + rnd(700)
+        NEP_FISH_Y#(nepWakeI) = getCellY(nepWakeI / CELL_COLUMN_COUNT)
+    next
+
+    ` the board: where its edges are, and the middle of it
+    nepCell# = CELL_SIZE
+    nepLeft# = getCellX(0)
+    nepLeft# = nepLeft# - nepCell# / 2
+    nepTop# = getCellY(0)
+    nepBottom# = getCellY(CELL_ROW_COUNT - 1)
+    nepWide# = CELL_COLUMN_COUNT * CELL_SIZE
+    nepMidX# = nepLeft# + nepWide# / 2
+    nepMidY# = (nepTop# + nepBottom#) / 2
+    nepEdge# = nepBottom# + nepCell# / 2
+
+    ` where the temple goes: the steps along the bottom of the board, the columns on them, and the roof on those
+    nepStepsY# = nepEdge# - 8
+    nepStepsTop# = nepEdge# - 15
+    nepPillarY# = nepStepsTop# - 52
+    nepRoofY# = (nepStepsTop# - 104) - 18
+    nepTempleMid# = ((nepRoofY# - 32) + nepEdge#) / 2
+
+    neptuneMakeSprites()
+    NEP_SHOWN = 1
+    hide sprite NEP_STEPS_SPRITE
+    hide sprite NEP_TEMPLE_SPRITE
+    for nepK = 0 to NEP_PILLAR_COUNT - 1
+        hide sprite NEP_PILLAR_SPRITE(nepK)
+    next
+
+    ` the way in, over where the temple goes
+    position sprite NEP_PORTAL_SPRITE, nepMidX#, nepTempleMid#
+    size sprite NEP_PORTAL_SPRITE, NEP_PORTAL_W, NEP_PORTAL_H
+    hide sprite NEP_PORTAL_SPRITE
+
+    nepStart = game ms()
+    nepOpened = 0
+    nepCame = 0
+    nepPulsed = -1
+    nepShake# = 0
+    nepWords# = CORAL_END_WORDS_MS
+    nepHud# = GOODBYE_HUD_MS
+    nepDone = 0
+    repeat
+        ` the things around the board fade away, the same way that they do for the other endings
+        nepAge# = game ms() - nepStart
+        HUD_KEEP# = 1 - nepAge# / nepHud#
+        if HUD_KEEP# < 0 then HUD_KEEP# = 0
+
+        gosub update_frame
+
+        nepNow = game ms()
+        nepAge# = nepNow - nepStart
+        nepAge = nepNow - nepStart
+        nepTime# = nepNow * .001
+        nepBob# = sin(nepAge# * .004) * 2.5
+
+        ` the cursor fades away
+        nepCursor# = 1 - nepAge# / CORAL_END_CURSOR_MS
+        if nepCursor# < 0 then nepCursor# = 0
+        set sprite alpha SELECTION_SPRITE, 90 * nepCursor#
+        set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, nepCursor#
+
+        ` THEY WORSHIP IT. while the temple comes through, the fish lunge toward it, all together, again
+        ` and again, and ease back. each lunge has a soft bell, and a few bubbles go up from the fish.
+        nepPulse# = 0
+        if nepAge >= NEP_STEPS_AT
+            if nepAge < NEP_PORTAL_SHUT
+                nepIn = (nepAge - NEP_STEPS_AT) mod NEP_PULSE_EVERY
+                nepIn# = nepIn
+                nepEvery# = NEP_PULSE_EVERY
+                nepPulse# = 1 - nepIn# / nepEvery#
+                nepPulse# = nepPulse# * nepPulse# * nepPulse#
+                nepBeat = (nepAge - NEP_STEPS_AT) / NEP_PULSE_EVERY
+                if nepBeat <> nepPulsed
+                    nepPulsed = nepBeat
+                    playMusicNote(INSTRUMENT_CHOIR, F4, .25)
+                    nepBubbleAt = rnd(CELL_COUNT)
+                    spawnBubbles(sprite x(CELLS(nepBubbleAt).spriteId), sprite y(CELLS(nepBubbleAt).spriteId), 6, 3, 0, rgb(255, 232, 160))
+                endif
+            endif
+        endif
+
+        ` THE FISH MAKE WAY, worship it, and then swim around it. see fish_headers_neptune.
+        nepFishStep(nepAge#, nepLeft#, nepTop#, nepBottom#, nepMidX#, nepMidY#, nepTempleMid#, nepPulse#)
+
+        ` THE WAY IN opens, a blot of the sky, and closes again once the temple is through
+        nepOpen# = (nepAge# - NEP_PORTAL_AT) / NEP_PORTAL_MS#
+        if nepAge >= NEP_PORTAL_SHUT
+            nepOpen# = 1 - (nepAge# - NEP_PORTAL_SHUT) / NEP_PORTAL_MS#
+        endif
+        if nepOpen# > 1 then nepOpen# = 1
+        if nepOpen# > 0
+            if nepOpened = 0
+                nepOpened = 1
+                nepShake# = 3
+                playMusicNote(INSTRUMENT_CHOIR, F5, .6)
+                playMusicNote(INSTRUMENT_CHOIR, A5, .55)
+                playMusicNote(INSTRUMENT_BELL, C6, .5)
+                spawnShockwave(CELL_COLUMN_COUNT * .5, CELL_ROW_COUNT * .5, 1, 0)
+            endif
+            set effect param float4 NEP_PORTAL_FX, "Portal", nepTime#, nepOpen#, NEP_PORTAL_W, NEP_PORTAL_H
+            show sprite NEP_PORTAL_SPRITE
+        else
+            hide sprite NEP_PORTAL_SPRITE
+        endif
+
+        ` THE TEMPLE COMES THROUGH: the steps, then the columns from the middle out, then the roof. each
+        ` comes a few pixels at a time, with starlight on it as it does. see TempleEffect.fx.
+        set effect param float4 NEP_TEMPLE_FX, "Temple", nepTime#, 1, 0, 0
+        nepCome# = (nepAge# - NEP_STEPS_AT) / NEP_COME_MS#
+        neptuneCome(NEP_STEPS_SPRITE, nepCome#, 120, 7, nepMidX#, nepStepsY#)
+        for nepK = 0 to NEP_PILLAR_COUNT - 1
+            ` the order that they come in: the middle two, then the two beside those, then the ends
+            nepTurn = 0
+            if nepK = 3 then nepTurn = 1
+            if nepK = 1 then nepTurn = 2
+            if nepK = 4 then nepTurn = 3
+            if nepK = 0 then nepTurn = 4
+            if nepK = 5 then nepTurn = 5
+            ` three on either side, close in under the roof
+            nepColX# = nepMidX# - (NEP_PILLAR_OUT - nepK * NEP_PILLAR_STEP)
+            if nepK >= 3 then nepColX# = nepMidX# + (NEP_PILLAR_OUT - (5 - nepK) * NEP_PILLAR_STEP)
+            nepCome# = (nepAge# - (NEP_PILLARS_AT + nepTurn * NEP_PILLAR_GAP)) / NEP_COME_MS#
+            neptuneCome(NEP_PILLAR_SPRITE(nepK), nepCome#, 9, 52, nepColX#, nepPillarY#)
+            if nepCome# > 0
+                if nepTurn >= nepCame
+                    nepCame = nepTurn + 1
+                    nepPillarNote = D4
+                    if nepTurn = 1 then nepPillarNote = F4
+                    if nepTurn = 2 then nepPillarNote = A4
+                    if nepTurn = 3 then nepPillarNote = C5
+                    if nepTurn = 4 then nepPillarNote = D5
+                    if nepTurn = 5 then nepPillarNote = F5
+                    playMusicNote(INSTRUMENT_BELL, nepPillarNote, .45)
+                    playMusicNote(INSTRUMENT_SWELL, nepPillarNote, .4)
+                    starSparkles(nepColX#, nepPillarY#, 12, 6)
+                endif
+            endif
+        next
+        nepCome# = (nepAge# - NEP_ROOF_AT) / NEP_COME_MS#
+        neptuneCome(NEP_TEMPLE_SPRITE, nepCome#, 116, 32, nepMidX#, nepRoofY#)
+        if nepCome# >= 1
+            if nepCame < 99
+                nepCame = 99
+                nepShake# = 3
+                playMusicNote(INSTRUMENT_BELL, F5, .6)
+                playMusicNote(INSTRUMENT_CHOIR, F5, .6)
+                playMusicNote(INSTRUMENT_CHOIR, C6, .5)
+                playMusicNote(INSTRUMENT_SWELL, F4, .6)
+                starSparkles(nepMidX#, nepRoofY#, 110, 24)
+            endif
+        endif
+
+        ` the screen shakes when the way in opens, and when the temple is whole, and settles
+        set screen shake amount nepShake#
+        nepShake# = nepShake# * .9
+        if nepShake# < .05 then nepShake# = 0
+
+        ` the words fade in, over the top of the board, where the score and the rounds were
+        nepShown# = (nepAge# - NEP_WORDS_AT) / nepWords#
+        if nepShown# < 0 then nepShown# = 0
+        if nepShown# > 1 then nepShown# = 1
+        set text alpha CORAL_END_TEXT_ID, 255 * nepShown#
+        set text alpha CORAL_END_SUB_TEXT_ID, 255 * nepShown#
+        set text position CORAL_END_TEXT_ID, WORLD_WIDTH / 2 + 16, 18 + nepBob#
+        set text position CORAL_END_SUB_TEXT_ID, WORLD_WIDTH / 2 + 16, 42 + nepBob#
+
+        sync
+
+        ` the player can move on once they have had a look, and it moves on by itself after a while
+        if nepAge > NEP_WORDS_AT + CORAL_END_WORDS_MS + CORAL_END_HOLD_MS
+            if new action down(ACT_CONFIRM) then nepDone = 1
+        endif
+        if nepAge > NEP_MAX_MS then nepDone = 1
+    until nepDone
+
+    set screen shake amount 0
+    set text alpha CORAL_END_TEXT_ID, 0
+    set text alpha CORAL_END_SUB_TEXT_ID, 0
+
+    ` and the things around the board are gone for good, however early the player moved on
+    HUD_KEEP# = 0
+    applyHudFade()
+return
+
+routines_neptune_exit:
+
+
+` a piece of the temple comes through the way in. `comeAt#` is how far along it is, from 0 to 1, and the
+` picture is `comeHalfW` by `comeHalfH` pairs of pixels. TempleEffect.fx reads those from its color.
+function neptuneCome(comeSprite, comeAt#, comeHalfW, comeHalfH, comeX#, comeY#)
+    if comeAt# <= 0
+        hide sprite comeSprite
+    else
+        if comeAt# > 1 then comeAt# = 1
+        position sprite comeSprite, comeX#, comeY#
+        color sprite comeSprite, rgb(255 * comeAt#, comeHalfW, comeHalfH, 255)
+        show sprite comeSprite
+    endif
+endfunction
+
+
+` THE FISH MAKE WAY. the ones over the middle of the board move away from it, up or down, from the
+` middle out, and the ones under it swim off to the sides, out of the way of the temple. while it comes
+` through, the ones that are left lunge toward it with every pulse, and ease back. once it is whole,
+` every one of them swims around it, in three rings: in front of the columns on the near side of a ring,
+` and behind them on the far side, facing the way that it swims.
+function nepFishStep(fishAge#, fishLeft#, fishTop#, fishBottom#, fishMidX#, fishMidY#, fishTempleY#, fishPulse#)
+    fishUpper# = (fishMidY# - NEP_PART#) - fishTop#
+    fishUpper# = fishUpper# / (fishMidY# - fishTop#)
+    fishLower# = fishBottom# - (fishMidY# + NEP_PART#)
+    fishLower# = fishLower# / (fishBottom# - fishMidY#)
+    fishLeave# = (fishAge# - NEP_LEAVE_AT) / NEP_LEAVE_MS#
+    if fishLeave# < 0 then fishLeave# = 0
+    if fishLeave# > 1 then fishLeave# = 1
+    fishLeave# = fishLeave# * fishLeave# * 340
+
+    ` how far they are on their way into the rings
+    fishRing# = (fishAge# - NEP_ORBIT_AT) / NEP_ORBIT_IN_MS#
+    if fishRing# < 0 then fishRing# = 0
+    if fishRing# > 1 then fishRing# = 1
+    fishRing# = fishRing# * fishRing# * (3 - 2 * fishRing#)
+    fishSpin# = (fishAge# - NEP_ORBIT_AT) * .001
+    if fishSpin# < 0 then fishSpin# = 0
+
+    fishCell# = CELL_SIZE
+    fishLast = CELL_COUNT - 1
+    fishInRing = (CELL_COUNT + 2) / 3
+    fishMidCol# = (CELL_COLUMN_COUNT - 1) * .5
+    for fishI = 0 to fishLast
+        fishCol = fishI mod CELL_COLUMN_COUNT
+        fishX# = fishLeft# + (fishCol * fishCell#) + fishCell# / 2
+
+        ` they make way from the middle out, a column after a column
+        fishFromMid# = abs(fishCol - fishMidCol#)
+        fishWay# = (fishAge# - (NEP_PART_AT + fishFromMid# * 90)) / NEP_PART_MS#
+        if fishWay# < 0 then fishWay# = 0
+        if fishWay# > 1 then fishWay# = 1
+        fishWay# = fishWay# * fishWay# * (3 - 2 * fishWay#)
+        fishFrom# = NEP_FISH_Y#(fishI)
+        fishTo# = fishFrom#
+        if fishFrom# < fishMidY# - 1
+            fishTo# = fishTop# + (fishFrom# - fishTop#) * fishUpper#
+        endif
+        if fishFrom# > fishMidY# + 1
+            fishTo# = fishBottom# - (fishBottom# - fishFrom#) * fishLower#
+        endif
+        if abs(fishFrom# - fishMidY#) <= 1
+            fishTo# = fishMidY# - NEP_PART#
+            if fishCol mod 2 = 1 then fishTo# = fishMidY# + NEP_PART#
+        endif
+        fishOff# = 0
+        if fishTo# > fishMidY#
+            fishOff# = fishLeave#
+            if fishX# < fishMidX# then fishOff# = 0 - fishLeave#
+        endif
+        fishPartX# = fishX# + fishOff#
+        fishPartY# = fishFrom# + (fishTo# - fishFrom#) * fishWay#
+
+        ` THEY WORSHIP IT: a lunge toward the middle of the temple, with every pulse
+        if fishPulse# > 0
+            fishToX# = fishMidX# - fishPartX#
+            fishToY# = fishTempleY# - fishPartY#
+            fishFar# = sqrt(fishToX# * fishToX# + fishToY# * fishToY#)
+            if fishFar# > 1
+                fishPartX# = fishPartX# + (fishToX# / fishFar#) * NEP_PULSE# * fishPulse#
+                fishPartY# = fishPartY# + (fishToY# / fishFar#) * NEP_PULSE# * fishPulse#
+            endif
+        endif
+
+        if fishRing# <= 0
+            position sprite CELLS(fishI).spriteId, fishPartX#, fishPartY#
+        else
+            ` its ring, and where it is on it
+            fishLane = fishI mod 3
+            fishSlot = fishI / 3
+            fishAngle# = (fishSlot * 6.28318) / fishInRing + fishLane * .7
+            fishAngle# = fishAngle# + fishSpin# * (.42 - fishLane * .05)
+            fishRx# = NEP_ORBIT_RX# + fishLane * 18
+            fishRy# = NEP_ORBIT_RY# + fishLane * 12
+            fishRingX# = fishMidX# + cos(fishAngle#) * fishRx#
+            fishRingY# = fishTempleY# + sin(fishAngle#) * fishRy# + sin(fishAge# * .003 + fishI) * 2
+            position sprite CELLS(fishI).spriteId, fishPartX# + (fishRingX# - fishPartX#) * fishRing#, fishPartY# + (fishRingY# - fishPartY#) * fishRing#
+
+            ` the near side of a ring is the bottom half of it, in front of the temple, and that is where
+            ` the fish swim to the left. on the far side, behind the temple, they swim to the right.
+            if sin(fishAngle#) > 0
+                order sprite CELLS(fishI).spriteId, ORDER_FISH + 5
+                SCHOOL_FACE(fishI) = -1
+            else
+                order sprite CELLS(fishI).spriteId, ORDER_FISH
+                SCHOOL_FACE(fishI) = 1
+            endif
+        endif
+    next
+endfunction
+
+
+` the sprites of the summoning, the first time that they are needed. the temple is in front of the way
+` in, and the way in is in front of the fish.
+function neptuneMakeSprites()
+    if NEP_PORTAL_SPRITE = 0
+        nepMakeId = 0
+        reserve sprite id(nepMakeId)
+        sprite nepMakeId, -500, -500, TEX_PIXEL
+        set sprite effect nepMakeId, NEP_PORTAL_FX
+        order sprite nepMakeId, ORDER_FISH + 2
+        hide sprite nepMakeId
+        NEP_PORTAL_SPRITE = nepMakeId
+
+        nepMakeId = 0
+        reserve sprite id(nepMakeId)
+        sprite nepMakeId, -500, -500, TEX_STEPS
+        size sprite nepMakeId, 240, 15
+        set sprite effect nepMakeId, NEP_TEMPLE_FX
+        order sprite nepMakeId, ORDER_FISH + 3
+        hide sprite nepMakeId
+        NEP_STEPS_SPRITE = nepMakeId
+
+        nepMakeId = 0
+        reserve sprite id(nepMakeId)
+        sprite nepMakeId, -500, -500, TEX_TEMPLE
+        size sprite nepMakeId, 232, 64
+        set sprite effect nepMakeId, NEP_TEMPLE_FX
+        order sprite nepMakeId, ORDER_FISH + 4
+        hide sprite nepMakeId
+        NEP_TEMPLE_SPRITE = nepMakeId
+
+        for nepMakeK = 0 to NEP_PILLAR_COUNT - 1
+            nepMakeId = 0
+            reserve sprite id(nepMakeId)
+            ` three columns, each grown over in a way of its own, so that no two that are side by side match
+            nepMakeTex = TEX_PILLAR
+            if nepMakeK mod 3 = 1 then nepMakeTex = TEX_PILLAR_B
+            if nepMakeK mod 3 = 2 then nepMakeTex = TEX_PILLAR_C
+            sprite nepMakeId, -500, -500, nepMakeTex
+            size sprite nepMakeId, 18, 104
+            set sprite effect nepMakeId, NEP_TEMPLE_FX
+            order sprite nepMakeId, ORDER_FISH + 3
+            hide sprite nepMakeId
+            NEP_PILLAR_SPRITE(nepMakeK) = nepMakeId
+        next
+    endif
+endfunction
+
+
+` a new game. it has no part of the trident, and nothing of the god is on the screen. the fish that swam
+` around the temple are back in their place in the order of drawing.
+function neptuneReset()
+    for nepResetI = 0 to TRIDENT_PART_COUNT - 1
+        TRIDENT_DONE(nepResetI) = 0
+    next
+    TRIDENT_PARTS = 0
+    NEPTUNE_ENDING_DUE = 0
+    NEP_INFO_SAID = -1
+    if NEP_SHOWN
+        NEP_SHOWN = 0
+        hide sprite NEP_PORTAL_SPRITE
+        hide sprite NEP_STEPS_SPRITE
+        hide sprite NEP_TEMPLE_SPRITE
+        for nepResetI = 0 to NEP_PILLAR_COUNT - 1
+            hide sprite NEP_PILLAR_SPRITE(nepResetI)
+        next
+        for nepResetI = 0 to CELL_COUNT - 1
+            if CELLS(nepResetI).spriteId > 0
+                order sprite CELLS(nepResetI).spriteId, ORDER_FISH
+            endif
+        next
+    endif
+endfunction
+
+
+` THE TRIDENT. the constellation of a part of the trident has been scored. the game has that part from
+` now on, and the fifth one brings the favor of the god. see fish_headers_neptune.
+function tridentPartScored(partShape)
+    if partShape >= 0
+        if partShape < TRIDENT_PART_COUNT
+            if TRIDENT_DONE(partShape) = 0
+                TRIDENT_DONE(partShape) = 1
+                TRIDENT_PARTS = TRIDENT_PARTS + 1
+            endif
+        endif
+    endif
+    if TRIDENT_PARTS >= TRIDENT_PART_COUNT
+        if NEPTUNE_ENDING_HOLD = 0 then NEPTUNE_ENDING_DUE = 1
+    endif
+endfunction
+
+
+` every frame: the spot that info mode has for the bar goes where the bar is, and says how many pieces
+` the game has, without saying what they are pieces of. it is only there once there is one. see THE BAR
+` in fish_headers_neptune.
+function neptuneStep(nepStepNow)
+    if INFO_INDEX_TRIDENT >= 0
+        nepInfoRows = (CORAL_USED_COUNT + CORAL_RUNE_COLUMNS - 1) / CORAL_RUNE_COLUMNS
+        if nepInfoRows < 1 then nepInfoRows = 1
+        nepInfoTop = CORAL_RUNE_Y + nepInfoRows * CORAL_RUNE_HEIGHT + CORAL_BAR_GAP + CORAL_BAR_STEP * 2
+        nepInfoSay = TRIDENT_PARTS * 10000 + nepInfoTop
+        if nepInfoSay <> NEP_INFO_SAID
+            NEP_INFO_SAID = nepInfoSay
+            if TRIDENT_PARTS > 0
+                nepInfoBlob = INFOS(INFO_INDEX_TRIDENT)
+                nepInfoBlob.title$ = loc$("tide.godly")
+                nepInfoBlob.desc$ = loc$("tide.godly.ink", "parts", TRIDENT_PARTS, "all", TRIDENT_PART_COUNT)
+                nepInfoBlob.topLeft.y = nepInfoTop - 3
+                nepInfoBlob.enabled = 1
+                INFOS(INFO_INDEX_TRIDENT) = nepInfoBlob
+            else
+                setInfoBlobEnabled(INFO_INDEX_TRIDENT, 0)
+            endif
+        endif
+    endif
+endfunction
+
+
+` THE BADGE. the ending as it is kept, in two parts: the low part, from 0 to 3, which is where the
+` endings have always been kept, and the high part, which is a place of its own, where a game from
+` before there was a fourth ending has a 0. see fish_headers_neptune.
+function endingLowPart(endingWhole)
+endfunction endingWhole mod 4
+
+function endingHighPart(endingWhole)
+endfunction endingWhole / 4
+
+` the two parts, put back together. an ending past the last one that there is, is no ending.
+function endingUnpacked(endingLow, endingHigh)
+    endingBack = endingLow + endingHigh * 4
+    if endingBack > CORAL_ENDING_LAST then endingBack = 0
+    if endingBack < 0 then endingBack = 0
+endfunction endingBack
+
+
+` the god comes, from the debug panel: the game has every part of the trident
+function neptuneDebugAll()
+    for nepDebugI = 0 to TRIDENT_PART_COUNT - 1
+        TRIDENT_DONE(nepDebugI) = 1
+    next
+    TRIDENT_PARTS = TRIDENT_PART_COUNT
+    NEPTUNE_ENDING_DUE = 1
+endfunction
+
+
+
+
+
+
+` THE MAIN MENU REMEMBERS THE GOD. frame_surface calls this on every frame that the main menu is drawn,
+` with where the horizon is, how far the menu's camera has moved, and how far under the camera is. the
+` trident comes together in the clouds, holds, thins out and comes together again, and it starts over
+` whenever the main menu has been away. see fish_headers_neptune.
+function neptuneSurfaceStep(farHorizon#, farShift, farSink#)
+    farNow = game ms()
+    if farNow - SURFACE_TRIDENT_SEEN_MS > 1500 then SURFACE_TRIDENT_START_MS = farNow
+    SURFACE_TRIDENT_SEEN_MS = farNow
+
+    farOn = SURFACE_NEPTUNE * OPTION_MENU_TRIDENT
+    if farOn = 0
+        neptuneSurfaceHide()
+        exitfunction
+    endif
+
+    if SURFACE_TRIDENT_SPRITE = 0
+        farNewId = 0
+        reserve sprite id(farNewId)
+        sprite farNewId, 0, 0, TEX_PIXEL
+        size sprite farNewId, 150, 124
+        set sprite effect farNewId, SURFACE_TRIDENT_FX
+        order sprite farNewId, ORDER_MENU_SURFACE
+        set sprite render target farNewId, TARGET_MENU
+        SURFACE_TRIDENT_SPRITE = farNewId
+    endif
+
+    ` where it is in its round: coming together, holding, thinning out, and gone for a while
+    farAge = farNow - SURFACE_TRIDENT_START_MS
+    farAge = farAge - SURFACE_TRIDENT_WAIT
+    farForm# = 0
+    if farAge > 0
+        farRound = SURFACE_TRIDENT_FORM + SURFACE_TRIDENT_HOLD + SURFACE_TRIDENT_THIN + SURFACE_TRIDENT_GAP
+        farIn = farAge mod farRound
+        farIn# = farIn
+        farFormMs# = SURFACE_TRIDENT_FORM
+        farThinMs# = SURFACE_TRIDENT_THIN
+        if farIn < SURFACE_TRIDENT_FORM
+            farForm# = farIn# / farFormMs#
+        else
+            farIn# = farIn# - SURFACE_TRIDENT_FORM
+            if farIn# < SURFACE_TRIDENT_HOLD
+                farForm# = 1
+            else
+                farIn# = farIn# - SURFACE_TRIDENT_HOLD
+                if farIn# < SURFACE_TRIDENT_THIN
+                    farForm# = 1 - farIn# / farThinMs#
+                endif
+            endif
+        endif
+    endif
+
+    ` it fades away as the camera goes under, the same as the reef
+    farSeen# = 1 - farSink# * SURFACE_REEF_FADE#
+    if farSeen# < 0 then farSeen# = 0
+
+    ` the clouds are green in the day once the ancient one has come, and so is this
+    farSick# = SURFACE_ANCIENT * OPTION_MENU_MONSTER
+    farTime# = farNow * .001
+    farDay# = SURFACE_DAY
+    ` it is made of the sky's own clouds, so it is told where it is in the sky: where its top left is,
+    ` and where the horizon is. see TridentCloudEffect.fx.
+    ` the sprite is 150 by 124, and its bottom edge is a little over the horizon
+    farMidY# = farHorizon# - SURFACE_TRIDENT_UP
+    farLeft# = SURFACE_TRIDENT_X - 75
+    farTop# = farMidY# - 62
+    set effect param float4 SURFACE_TRIDENT_FX, "Cloud", farTime#, farForm#, farDay#, farSick#
+    set effect param float4 SURFACE_TRIDENT_FX, "Place", farLeft#, farTop#, farHorizon#, farSeen#
+    position sprite SURFACE_TRIDENT_SPRITE, SURFACE_TRIDENT_X, farMidY# + farShift
+    show sprite SURFACE_TRIDENT_SPRITE
+endfunction
+
+` the trident goes when the surface does, or when it is not wanted. neptuneSurfaceStep brings it back.
+function neptuneSurfaceHide()
+    if SURFACE_TRIDENT_SPRITE > 0
+        hide sprite SURFACE_TRIDENT_SPRITE
+    endif
+endfunction

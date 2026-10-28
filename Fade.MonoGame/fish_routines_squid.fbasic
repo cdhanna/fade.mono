@@ -1,0 +1,2439 @@
+goto routines_squid_exit
+
+remstart
+    THE SQUID, THE INK AND THE CONSTELLATIONS
+    a hidden thing of the night. see fish_headers_squid for the rules.
+
+    the rest of the game only has to do these things:
+    - gosub setup_squid once. setup_tide does.
+    - call squidNightFalls() when night falls, and squidDayBreaks() when day breaks, and ask
+      squidNightEnds() when the last move of the night is made. the tide does.
+    - call squidStep() on every frame. stepTideSleep does.
+    - leave the squid's cell out of every group. findCombos does.
+    - send a swap that has the squid on either end of it to squidPushAsked. startLiveMove does.
+    - call inkSwapStarted() for every swap, as it starts. startLiveMove does.
+    - draw the squid's cell as the squid. frame_fish_fx does.
+    - call squidReset() for a new game, and squidSave() and squidLoad() with the saved game. the tide's do.
+remend
+
+setup_squid:
+    texture reserve texture id(TEX_SQUID), "Fish/Textures/Art32/Squid"
+    squidPow = 1
+    squidPowN = 0
+    while squidPowN < 20
+        INK_POW(squidPowN) = squidPow
+        squidPow = squidPow * 2
+        squidPowN = squidPowN + 1
+    endwhile
+    reserve effect id(INK_FX_ID)
+    effect INK_FX_ID, "Fish/Shaders/InkEffect"
+    INK_INK_RGB = rgb(70, 90, 190)
+    gosub setup_stars
+
+    ` THE FIZZ: a sprite for every cell whose ink can be fizzling away at once
+    reserve effect id(INK_FIZZ_FX)
+    effect INK_FIZZ_FX, "Fish/Shaders/InkFizzEffect"
+    for squidFizzI = 0 to INK_FIZZ_MAX - 1
+        reserve sprite id(squidFizzId)
+        sprite squidFizzId, 0, 0, TEX_PIXEL
+        set sprite effect squidFizzId, INK_FIZZ_FX
+        order sprite squidFizzId, ORDER_INK + 1
+        hide sprite squidFizzId
+        INK_FIZZ_SPRITE(squidFizzI) = squidFizzId
+        INK_FIZZ_ON(squidFizzI) = 0
+    next
+
+    ` THE SOUNDS OF THE INK. see fish_headers_squid.
+    INK_SFX_SPREAD = tideLoadSound("Fish/Audio/ink-spread", SFX_GROUP_SFX, 0)
+    for squidSfxI = 0 to 3
+        INK_SFX_FIZZ(squidSfxI) = tideLoadSound("Fish/Audio/ink-fizz", SFX_GROUP_SFX, 0)
+        INK_SFX_POP(squidSfxI) = tideLoadSound("Fish/Audio/bubble-pop-4", SFX_GROUP_SFX, 0)
+    next
+
+    ` the god of the sea, and his chariot. see fish_headers_neptune.
+    gosub setup_neptune
+return
+
+` THE CONSTELLATIONS. every shape is written as the cells that it has, across and down, as it is shown in
+` the sky. its pieces are worked out from that: cells that touch at a side are one piece. see fish_headers_squid.
+setup_stars:
+    STAR_SHAPE_COUNT = 0
+
+    ` THE TRIDENT. there are five constellations, one for every part of the trident of the god, and the
+    ` number of a shape is the number of its part. see THE TRIDENT in fish_headers_neptune. the easy ones
+    ` and the middling ones are a single piece, so that one push of the squid starts them, and swaps out
+    ` of the ink grow the rest: no luck of where the squid jumps is in it. only the hard one is in two
+    ` pieces, and neither is a single cell, and the two line up along a row or a column, one cell apart,
+    ` so that the squid can be pushed from one to the other.
+    ` build/star_shapes.py has the same table, drawn out, and build/star_odds.py says how often each one
+    ` can be made on a board as it is dealt.
+
+    ` the easy ones: 6 cells, in 1 piece, which bend: up, up, right, right, down
+    ` 0, THE LEFT PRONG: its point, which hooks over into the barb
+    `     AAA
+    `     A.A
+    `     A..
+    starShape(STAR_EASY)
+    starCell(0, 0)
+    starCell(1, 0)
+    starCell(2, 0)
+    starCell(0, 1)
+    starCell(2, 1)
+    starCell(0, 2)
+    ` 1, THE RIGHT PRONG: the left one the other way around
+    `     AAA
+    `     A.A
+    `     ..A
+    starShape(STAR_EASY)
+    starCell(0, 0)
+    starCell(1, 0)
+    starCell(2, 0)
+    starCell(0, 1)
+    starCell(2, 1)
+    starCell(2, 2)
+
+    ` the middling ones: 7 cells, in 1 piece
+    ` 2, THE MIDDLE PRONG: the long point, with a barb out to either side of it
+    `     A.A
+    `     AAA
+    `     .A.
+    `     .A.
+    starShape(STAR_MEDIUM)
+    starCell(0, 0)
+    starCell(2, 0)
+    starCell(0, 1)
+    starCell(1, 1)
+    starCell(2, 1)
+    starCell(1, 2)
+    starCell(1, 3)
+    ` 3, THE CROSSBAR: the bar that the prongs come up off of, turned down at either end
+    `     AAAAA
+    `     A...A
+    starShape(STAR_MEDIUM)
+    starCell(0, 0)
+    starCell(1, 0)
+    starCell(2, 0)
+    starCell(3, 0)
+    starCell(4, 0)
+    starCell(0, 1)
+    starCell(4, 1)
+
+    ` the hard one: 9 cells, in 2 pieces
+    ` 4, THE SHAFT: the long shaft, and its butt
+    `     A..
+    `     A..
+    `     A..
+    `     A..
+    `     A..
+    `     ...
+    `     B..
+    `     BBB
+    starShape(STAR_HARD)
+    starCell(0, 0)
+    starCell(0, 1)
+    starCell(0, 2)
+    starCell(0, 3)
+    starCell(0, 4)
+    starCell(0, 6)
+    starCell(0, 7)
+    starCell(1, 7)
+    starCell(2, 7)
+
+    starShapesDone()
+
+    ` where each of the three is in the sky, from the middle of the moon, in pixels. they are off to
+    ` the right of it and under the count of the rounds, where there is open water, with the easy one
+    ` and the middling one side by side and the hard one under them.
+    STAR_SKY_X(STAR_EASY) = 44
+    STAR_SKY_Y(STAR_EASY) = 34
+    STAR_SKY_X(STAR_MEDIUM) = 96
+    STAR_SKY_Y(STAR_MEDIUM) = 34
+    STAR_SKY_X(STAR_HARD) = 70
+    STAR_SKY_Y(STAR_HARD) = 84
+    for starSetupS = 0 to 2
+        STAR_PICK(starSetupS) = -1
+    next
+return
+
+` the squid's part of the "Tide" window of the debug panel. frame_debug_tide comes here.
+frame_debug_squid:
+    debug separator
+    debug text "squid in " + str$(SQUID_CELL) + ", ink on " + str$(INK_COUNT) + ", pushed " + str$(SQUID_PUSHES) + ", endless " + str$(SQUID_ENDLESS)
+    if SQUID_CELL >= 0
+        for dbgSquidWay = 0 to 3
+            dbgSquidDx = 0
+            dbgSquidDy = 0
+            if dbgSquidWay = 0 then dbgSquidDy = -1
+            if dbgSquidWay = 1 then dbgSquidDx = 1
+            if dbgSquidWay = 2 then dbgSquidDy = 1
+            if dbgSquidWay = 3 then dbgSquidDx = -1
+            dbgSquidTo = squidJump(SQUID_CELL, dbgSquidDx, dbgSquidDy)
+            dbgSquidName$ = "up"
+            if dbgSquidWay = 1 then dbgSquidName$ = "right"
+            if dbgSquidWay = 2 then dbgSquidName$ = "down"
+            if dbgSquidWay = 3 then dbgSquidName$ = "left"
+            debug text "  push " + dbgSquidName$ + ": lands at column " + str$(dbgSquidTo mod CELL_COLUMN_COUNT) + ", row " + str$(dbgSquidTo / CELL_COLUMN_COUNT)
+        next
+    endif
+    for dbgSquidS = 0 to 2
+        dbgSquidName$ = "easy"
+        if dbgSquidS = 1 then dbgSquidName$ = "middling"
+        if dbgSquidS = 2 then dbgSquidName$ = "hard"
+        debug text dbgSquidName$ + ": shape " + str$(STAR_PICK(dbgSquidS)) + ", made " + str$(STAR_MADE(dbgSquidS))
+    next
+    dbgSquidCursor = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+    if debug button("squid here") = 1
+        SQUID_DUE = 0
+        SQUID_CELL = dbgSquidCursor
+    endif
+    if debug button("ink here") = 1
+        inkCell(dbgSquidCursor)
+    endif
+    if debug button("wipe the ink") = 1
+        inkWipe()
+        for dbgSquidS = 0 to 2
+            STAR_MADE(dbgSquidS) = 0
+        next
+    endif
+    if debug button("endless night on / off") = 1
+        SQUID_ENDLESS = 1 - SQUID_ENDLESS
+    endif
+    debug text "trident " + str$(TRIDENT_PARTS) + " of " + str$(TRIDENT_PART_COUNT)
+    if debug button("one more part of the trident") = 1
+        for dbgSquidS = 0 to TRIDENT_PART_COUNT - 1
+            if dbgSquidS >= 0
+                if TRIDENT_DONE(dbgSquidS) = 0
+                    tridentPartScored(dbgSquidS)
+                    dbgSquidS = -100
+                endif
+            endif
+        next
+    endif
+    if debug button("the whole trident: the god comes") = 1
+        neptuneDebugAll()
+    endif
+    if debug button("next constellations") = 1
+        for dbgSquidS = 0 to 2
+            dbgSquidNext = STAR_PICK(dbgSquidS)
+            dbgSquidTries = 0
+            while dbgSquidTries < STAR_SHAPE_COUNT
+                dbgSquidTries = dbgSquidTries + 1
+                dbgSquidNext = (dbgSquidNext + 1) mod STAR_SHAPE_COUNT
+                if STAR_SHAPE_TIER(dbgSquidNext) = dbgSquidS then dbgSquidTries = STAR_SHAPE_COUNT
+            endwhile
+            STAR_PICK(dbgSquidS) = dbgSquidNext
+            STAR_MADE(dbgSquidS) = 0
+        next
+        for dbgSquidS = 0 to 399
+            STAR_CLAIM(dbgSquidS) = 0
+        next
+        INK_DIRTY = 1
+    endif
+return
+
+routines_squid_exit:
+
+
+` a new shape, of one of the three kinds. the cells that come after it are its own.
+function starShape(starNewTier)
+    STAR_SHAPE_TIER(STAR_SHAPE_COUNT) = starNewTier
+    STAR_SHAPE_LEN(STAR_SHAPE_COUNT) = 0
+    starNewFirst = 0
+    if STAR_SHAPE_COUNT > 0
+        starNewFirst = STAR_SHAPE_FIRST(STAR_SHAPE_COUNT - 1) + STAR_SHAPE_LEN(STAR_SHAPE_COUNT - 1)
+    endif
+    STAR_SHAPE_FIRST(STAR_SHAPE_COUNT) = starNewFirst
+    STAR_SHAPE_COUNT = STAR_SHAPE_COUNT + 1
+endfunction
+
+` a cell of the shape that was started last
+function starCell(starCellX, starCellY)
+    starCellShape = STAR_SHAPE_COUNT - 1
+    starCellAt = STAR_SHAPE_FIRST(starCellShape) + STAR_SHAPE_LEN(starCellShape)
+    STAR_X(starCellAt) = starCellX
+    STAR_Y(starCellAt) = starCellY
+    STAR_SHAPE_LEN(starCellShape) = STAR_SHAPE_LEN(starCellShape) + 1
+endfunction
+
+` every shape is written down. this works out how big each one is, and its pieces: two cells of a shape
+` that touch at a side are in the same piece. the shapes are small, so every cell is held up against
+` every other one, over and over, until no piece changes.
+function starShapesDone()
+    for starDoneS = 0 to STAR_SHAPE_COUNT - 1
+        starDoneFirst = STAR_SHAPE_FIRST(starDoneS)
+        starDoneLast = starDoneFirst + STAR_SHAPE_LEN(starDoneS) - 1
+        STAR_SHAPE_WIDE(starDoneS) = 0
+        STAR_SHAPE_TALL(starDoneS) = 0
+        for starDoneI = 0 to 63
+            STAR_SHAPE_MASK(starDoneS * 64 + starDoneI) = 0
+        next
+        for starDoneI = starDoneFirst to starDoneLast
+            STAR_SHAPE_MASK(starDoneS * 64 + STAR_Y(starDoneI) * 8 + STAR_X(starDoneI)) = 1
+        next
+        for starDoneI = starDoneFirst to starDoneLast
+            STAR_PIECE(starDoneI) = starDoneI - starDoneFirst + 1
+            if STAR_X(starDoneI) + 1 > STAR_SHAPE_WIDE(starDoneS) then STAR_SHAPE_WIDE(starDoneS) = STAR_X(starDoneI) + 1
+            if STAR_Y(starDoneI) + 1 > STAR_SHAPE_TALL(starDoneS) then STAR_SHAPE_TALL(starDoneS) = STAR_Y(starDoneI) + 1
+        next
+
+        starDoneChanged = 1
+        while starDoneChanged
+            starDoneChanged = 0
+            for starDoneI = starDoneFirst to starDoneLast
+                for starDoneJ = starDoneFirst to starDoneLast
+                    starDoneGap = abs(STAR_X(starDoneI) - STAR_X(starDoneJ)) + abs(STAR_Y(starDoneI) - STAR_Y(starDoneJ))
+                    if starDoneGap = 1
+                        if STAR_PIECE(starDoneJ) < STAR_PIECE(starDoneI)
+                            STAR_PIECE(starDoneI) = STAR_PIECE(starDoneJ)
+                            starDoneChanged = 1
+                        endif
+                    endif
+                next
+            next
+        endwhile
+
+        for starDoneI = starDoneFirst to starDoneLast
+            starDoneCount = 0
+            for starDoneJ = starDoneFirst to starDoneLast
+                if STAR_PIECE(starDoneJ) = STAR_PIECE(starDoneI) then starDoneCount = starDoneCount + 1
+            next
+            STAR_PIECE_LEN(starDoneI) = starDoneCount
+        next
+    next
+endfunction
+
+
+` a new game. there is no squid, no ink, and nothing in the sky.
+function squidReset()
+    SQUID_CELL = -1
+    SQUID_DUE = 0
+    SQUID_PUSHES = 0
+    SQUID_ENDING = 0
+    SQUID_PUFF_MS = 0
+    SQUID_BACK_CELL = -1
+    SQUID_IN_CELL = -1
+    inkWipe()
+    INK_DAY = 0
+    INK_DAY_SHOWN# = 0
+    INK_POT = 0
+    INK_PAYING = 0
+    INK_PAY_COUNT = 0
+    INK_CRUMBLE_MS = 0
+    INK_FRESH_CELL = -1
+    INK_FRESH_FROM = -1
+    INK_LURCH_FROM = -1
+    for squidResetS = 0 to INK_FIZZ_MAX - 1
+        if INK_FIZZ_ON(squidResetS)
+            INK_FIZZ_ON(squidResetS) = 0
+            hide sprite INK_FIZZ_SPRITE(squidResetS)
+        endif
+    next
+    INK_FIZZ_LIVE = 0
+    for squidResetS = 0 to 2
+        STAR_PICK(squidResetS) = -1
+        STAR_MADE(squidResetS) = 0
+        STAR_FLASH_MS(squidResetS) = 0
+        STAR_POP_DUE(squidResetS) = 0
+        STAR_POPPED(squidResetS) = 0
+    next
+    starSnowPlace()
+    FANFARE_COUNT = 0
+    neptuneReset()
+endfunction
+
+
+` no cell is inked, and no cell is part of a constellation. it is gone at once, without fading.
+function inkWipe()
+    for inkWipeI = 0 to 399
+        INK(inkWipeI) = 0
+        STAR_CLAIM(inkWipeI) = 0
+        INK_PIECE(inkWipeI) = 0
+        INK_WASH_MS(inkWipeI) = 0
+        INK_CLEAN(inkWipeI) = 0
+    next
+    INK_WASH_NEXT = 0
+    INK_COUNT = 0
+    INK_DIRTY = 0
+    INK_GONE_MS = 0
+    INK_LAST_WASHED = -1
+    INK_ROWS_STALE = 1
+endfunction
+
+
+` night has fallen. the squid comes once the board has settled, and the sky is picked then too.
+` the tide calls this, from places that come before the size of the board is known, so it only says so.
+function squidNightFalls()
+    SQUID_DUE = 1
+    SQUID_PUSHES = 0
+    INK_GONE_MS = 0
+    for squidFallS = 0 to 2
+        STAR_MADE(squidFallS) = 0
+        STAR_FLASH_MS(squidFallS) = 0
+        STAR_POP_DUE(squidFallS) = 0
+        STAR_POPPED(squidFallS) = 0
+    next
+endfunction
+
+
+` day has broken, and the squid goes. the ink that is left dries, and is the ink of the day, all but the
+` ink on coral, which breaks up straight away. nothing is clean yet. a constellation popped before this, so none of
+` it is a constellation's, unless the debug panel broke the day, and then it is let go of. see THE INK
+` OF THE DAY in fish_headers_squid. the tide calls this, from places that come before the size of the
+` board is known, so it only touches the flags.
+function squidDayBreaks()
+    SQUID_CELL = -1
+    SQUID_DUE = 0
+    SQUID_ENDING = 0
+    for squidDayS = 0 to 2
+        STAR_POP_DUE(squidDayS) = 0
+    next
+    INK_DAY = 0
+    INK_POT = 0
+    INK_LAST_WASHED = -1
+    for squidDayI = 0 to 399
+        INK_CLEAN(squidDayI) = 0
+    next
+    if INK_COUNT > 0
+        squidDayLeft = 0
+        for squidDayI = 0 to 399
+            STAR_CLAIM(squidDayI) = 0
+            if INK(squidDayI)
+                if CORAL_CELLS(squidDayI) = 0 then squidDayLeft = squidDayLeft + 1
+            endif
+        next
+        if squidDayLeft > 0 then INK_DAY = 1
+        INK_CORAL_SEEN = -1
+        INK_ROWS_STALE = 1
+    endif
+endfunction
+
+
+` the board has settled, and night has fallen: one fish that has no fish of its own kind next to it
+` turns into the squid, and the three constellations of the night come out. see IT COMES AT NIGHTFALL.
+` the candidates go into INK_STACK, which is free while nothing is being flooded.
+function squidArrive()
+    SQUID_DUE = 0
+    squidCands = 0
+    squidLast = CELL_COUNT - 1
+    for squidI = 0 to squidLast
+        squidKind = CELLS(squidI).value
+        squidOk = 1
+        if squidKind < 1 then squidOk = 0
+        if squidKind > TEX_RAY then squidOk = 0
+        if CELLS(squidI).bellyUp > 0 then squidOk = 0
+        if CELLS(squidI).stack > 0 then squidOk = 0
+        if TIDE_BANKED(squidI) then squidOk = 0
+        if squidOk
+            squidX = squidI mod CELL_COLUMN_COUNT
+            squidY = squidI / CELL_COLUMN_COUNT
+            if squidX > 0
+                if CELLS(squidI - 1).value = squidKind then squidOk = 0
+            endif
+            if squidX < CELL_COLUMN_COUNT - 1
+                if CELLS(squidI + 1).value = squidKind then squidOk = 0
+            endif
+            if squidY > 0
+                if CELLS(squidI - CELL_COLUMN_COUNT).value = squidKind then squidOk = 0
+            endif
+            if squidY < CELL_ROW_COUNT - 1
+                if CELLS(squidI + CELL_COLUMN_COUNT).value = squidKind then squidOk = 0
+            endif
+        endif
+        if squidOk
+            INK_STACK(squidCands) = squidI
+            squidCands = squidCands + 1
+        endif
+    next
+
+    if squidCands > 0
+        squidPick = random stream(RNG_BOARD, squidCands)
+        SQUID_CELL = INK_STACK(squidPick)
+        squidAt = SQUID_CELL
+        squidArriveX = squidAt mod CELL_COLUMN_COUNT
+        squidArriveY = squidAt / CELL_COLUMN_COUNT
+        spawnBubbles(getCellX(squidArriveX), getCellY(squidArriveY), CELL_SIZE / 3, 4, 0, rgb(150, 110, 230))
+    endif
+
+    ` one shape of each of the three kinds: one of the parts of the trident of that kind that the game does
+    ` not have yet. a kind that has none left has nothing in the sky. see THE TRIDENT in fish_headers_neptune.
+    for squidTier = 0 to 2
+        squidTierCount = 0
+        for squidS = 0 to STAR_SHAPE_COUNT - 1
+            if STAR_SHAPE_TIER(squidS) = squidTier
+                squidSOk = 1
+                if TRIDENT_DONE(squidS) then squidSOk = 0
+                if squidSOk then squidTierCount = squidTierCount + 1
+            endif
+        next
+        STAR_PICK(squidTier) = -1
+        if squidTierCount > 0
+            squidTierPick = random stream(RNG_BOARD, squidTierCount)
+            for squidS = 0 to STAR_SHAPE_COUNT - 1
+                if STAR_SHAPE_TIER(squidS) = squidTier
+                    squidSOk = 1
+                    if TRIDENT_DONE(squidS) then squidSOk = 0
+                    if squidSOk
+                        if squidTierPick = 0 then STAR_PICK(squidTier) = squidS
+                        squidTierPick = squidTierPick - 1
+                    endif
+                endif
+            next
+        endif
+    next
+
+    ` the hints of the night come out in the snow. see THE HINTS IN THE SNOW.
+    starSnowPlace()
+endfunction
+
+
+` WHERE IT GOES. the cell that the squid gets to, from this cell, pushed this way. see fish_headers_squid.
+function squidJump(jumpFrom, jumpDx, jumpDy)
+    jumpCols = CELL_COLUMN_COUNT
+    jumpRows = CELL_ROW_COUNT
+    jumpX = jumpFrom mod jumpCols
+    jumpY = jumpFrom / jumpCols
+    jumpLap = jumpCols
+    if jumpDx = 0 then jumpLap = jumpRows
+
+    ` the fish under the squid cannot be seen, so it does not count. the walk starts with the fish next to it.
+    SQUID_SEEN_STAMP = SQUID_SEEN_STAMP + 1
+
+    jumpSteps = 0
+    jumpWalked = 0
+    jumpGoing = 1
+    while jumpGoing
+        jumpWalked = jumpWalked + 1
+        if jumpWalked >= jumpLap
+            jumpGoing = 0
+        else
+            jumpX = (jumpX + jumpDx + jumpCols) mod jumpCols
+            jumpY = (jumpY + jumpDy + jumpRows) mod jumpRows
+            jumpKind = squidKindAt(jumpX + jumpY * jumpCols)
+            if SQUID_SEEN(jumpKind) = SQUID_SEEN_STAMP
+                jumpGoing = 0
+            else
+                SQUID_SEEN(jumpKind) = SQUID_SEEN_STAMP
+                jumpSteps = jumpSteps + 1
+            endif
+        endif
+    endwhile
+    if jumpSteps < 1 then jumpSteps = 1
+
+    jumpX = jumpFrom mod jumpCols
+    jumpY = jumpFrom / jumpCols
+    jumpX = (jumpX + jumpDx * jumpSteps + jumpCols * jumpSteps) mod jumpCols
+    jumpY = (jumpY + jumpDy * jumpSteps + jumpRows * jumpSteps) mod jumpRows
+    jumpTo = jumpX + jumpY * jumpCols
+endfunction jumpTo
+
+` the kind of the fish in a cell, as squidJump counts them, from 0 to 63
+function squidKindAt(kindCell)
+    kindIs = CELLS(kindCell).value
+    if kindIs < 0 then kindIs = 0
+    if kindIs > 63 then kindIs = 63
+endfunction kindIs
+
+
+` A PUSH. startLiveMove asks about every swap. this says 0 when the squid is not on either end of it, 1
+` when it was a push and the squid has gone, and 2 when the squid cannot be pushed right now, because a
+` pop is busy with its cell. see A PUSH in fish_headers_squid.
+function squidPushAsked(askDx, askDy)
+    askSays = 0
+    if TIDE_NIGHT
+        if SQUID_CELL >= 0
+            askA = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+            askBx = SELECTION_POS.x + askDx
+            askBy = SELECTION_POS.y + askDy
+            askB = -1
+            if askBx >= 0
+                if askBx < CELL_COLUMN_COUNT
+                    if askBy >= 0
+                        if askBy < CELL_ROW_COUNT then askB = askBx + askBy * CELL_COLUMN_COUNT
+                    endif
+                endif
+            endif
+
+            ` carried, when the cursor is on it, and shoved back, when the cursor comes at it
+            askWayX = 0
+            askWayY = 0
+            if askA = SQUID_CELL
+                askSays = 1
+                askWayX = askDx
+                askWayY = askDy
+            endif
+            if askB = SQUID_CELL
+                askSays = 1
+                askWayX = 0 - askDx
+                askWayY = 0 - askDy
+            endif
+
+            if askSays = 1
+                if isCellLocked(SQUID_CELL) then askSays = 2
+            endif
+            if askSays = 1
+                squidPushed(SQUID_CELL, askWayX, askWayY)
+            endif
+        endif
+    endif
+endfunction askSays
+
+
+` the squid is pushed this way. it puffs away into a cloud of its ink, its cell is inked, the fish that
+` was under it grows back in, and the squid turns up in the cell that squidJump says, and grows in
+` there. this is one of the moves of the night, unless the "free move" card made it.
+function squidPushed(pushFrom, pushDx, pushDy)
+    inkCell(pushFrom)
+    pushTo = squidJump(pushFrom, pushDx, pushDy)
+    SQUID_CELL = pushTo
+    SQUID_PUSHES = SQUID_PUSHES + 1
+
+    pushNow = game ms()
+    SQUID_PUFF_CELL = pushFrom
+    SQUID_PUFF_MS = pushNow
+    SQUID_BACK_CELL = pushFrom
+    SQUID_BACK_MS = pushNow + SQUID_BACK_DELAY
+    SQUID_IN_CELL = pushTo
+    SQUID_IN_MS = pushNow + SQUID_IN_DELAY
+
+    ` the cloud of ink, where it was, and a few bubbles where it went
+    pushFromX = pushFrom mod CELL_COLUMN_COUNT
+    pushFromY = pushFrom / CELL_COLUMN_COUNT
+    pushToX = pushTo mod CELL_COLUMN_COUNT
+    pushToY = pushTo / CELL_COLUMN_COUNT
+    spawnBubbles(getCellX(pushFromX), getCellY(pushFromY), CELL_SIZE / 2, 10, 0, rgb(70, 80, 190))
+    spawnBubbles(getCellX(pushToX), getCellY(pushToY), CELL_SIZE / 4, 4, SQUID_IN_DELAY, rgb(150, 110, 230))
+    spawnShockwaveToward(pushFromX, pushFromY, pushDx, pushDy, SHOCK_SWAP_STRENGTH#, 0, SHOCK_LIFE)
+    tidePlaySound(TIDE_SFX_PULSE, TIDE_VOL_PULSE#, .5)
+
+    ` it is not a step of a hidden pattern
+    coralTrailClear()
+
+    ` the fish that is back may make a group, and the ink is new
+    REQUEST_COMBO_CHECK = 1
+    INK_DIRTY = 1
+
+    if SQUID_FREE_PUSH = 0
+        registerMove(1)
+    endif
+endfunction
+
+
+` a cell is inked. its blot spreads out from nothing. ink can go onto coral at night, but by day the coral
+` breaks it up at once: inkCoralWins does, on the next frame. see CORAL WINS.
+function inkCell(inkAt)
+    if INK(inkAt) = 0
+        INK(inkAt) = 1
+        INK_COUNT = INK_COUNT + 1
+        INK_FRESH_CELL = inkAt
+        INK_FRESH_FROM = -1
+        INK_FRESH_MS = game ms()
+        INK_FRESH_LONG = INK_SPREAD_MS
+        INK_DIRTY = 1
+        INK_ROWS_STALE = 1
+        INK_GONE_MS = 0
+        INK_WASH_MS(inkAt) = 0
+        if TIDE_NIGHT = 0
+            if CORAL_CELLS(inkAt) then INK_CORAL_SEEN = -1
+        endif
+    endif
+endfunction
+
+
+` a swap starts, from the cursor's cell swapA to swapB, and the cursor takes swapLong milliseconds to get
+` there. ink that the cursor starts on is dragged along to swapB, by night or by day. see THE INK. it
+` happens now, and not once the swap is over, so that the ink flows into its new cell along with the
+` cursor, with a gloop.
+function inkSwapStarted(swapA, swapB, swapLong)
+    swapFrom = -1
+    swapTo = -1
+
+    ` dragged: the cursor starts on ink, and takes it along
+    if INK(swapA) = 1
+        if INK(swapB) = 0
+            swapFrom = swapA
+            swapTo = swapB
+        endif
+    endif
+
+    if swapTo < 0 then exitfunction
+
+    swapLongMs = swapLong
+    if swapLongMs < 60 then swapLongMs = 60
+
+    ` by day, coral will not have it. see CORAL WINS.
+    if TIDE_NIGHT = 0
+        if CORAL_CELLS(swapTo)
+            inkLurch(swapFrom, swapTo, swapLongMs)
+            exitfunction
+        endif
+    endif
+
+    inkCell(swapTo)
+    INK_FRESH_FROM = swapFrom
+    INK_FRESH_LONG = swapLongMs
+    inkSpreadFx(swapFrom, swapTo, swapLongMs)
+endfunction
+
+
+` CORAL WINS. ink that is moved onto coral by day reaches for it, as far as INK_LURCH_REACH#, while the
+` cursor goes, and then its tip breaks up into bubbles, and what is left shrinks back. inkDraw draws it.
+function inkLurch(lurchFrom, lurchTo, lurchLong)
+    INK_LURCH_FROM = lurchFrom
+    INK_LURCH_TO = lurchTo
+    INK_LURCH_MS = game ms()
+    INK_LURCH_LONG = lurchLong
+    INK_LURCH_BROKE = 0
+    lurchPitch# = (rnd(21) - 10) * .01
+    lurchPitch# = lurchPitch# - .15
+    tidePlaySound(INK_SFX_SPREAD, INK_VOL_SPREAD# * .7, lurchPitch#)
+endfunction
+
+
+` the tip of the ink that lurched breaks up into little bubbles, where it got to
+function inkLurchBreaks()
+    breakFromX = getCellX(INK_LURCH_FROM mod CELL_COLUMN_COUNT)
+    breakFromY = getCellY(INK_LURCH_FROM / CELL_COLUMN_COUNT)
+    breakToX = getCellX(INK_LURCH_TO mod CELL_COLUMN_COUNT)
+    breakToY = getCellY(INK_LURCH_TO / CELL_COLUMN_COUNT)
+    breakK# = INK_LURCH_REACH# * .8
+    breakX# = breakToX - breakFromX
+    breakY# = breakToY - breakFromY
+    breakX# = breakFromX + breakX# * breakK#
+    breakY# = breakFromY + breakY# * breakK#
+    breakAtX = breakX#
+    breakAtY = breakY#
+    inkFizzAt(breakAtX, breakAtY, 0, INK_FIZZ_GOO, .55)
+endfunction
+
+
+` the ink flows from one cell into the one next to it, in `spreadLong` milliseconds: a gloop, and a few
+` bubbles along the way
+function inkSpreadFx(spreadFrom, spreadTo, spreadLong)
+    spreadFromX = getCellX(spreadFrom mod CELL_COLUMN_COUNT)
+    spreadFromY = getCellY(spreadFrom / CELL_COLUMN_COUNT)
+    spreadToX = getCellX(spreadTo mod CELL_COLUMN_COUNT)
+    spreadToY = getCellY(spreadTo / CELL_COLUMN_COUNT)
+    spreadMidX = (spreadFromX + spreadToX) / 2
+    spreadMidY = (spreadFromY + spreadToY) / 2
+    spawnBubbles(spreadMidX, spreadMidY, CELL_SIZE / 4, 3, spreadLong / 2, INK_INK_RGB)
+    spawnBubbles(spreadToX, spreadToY, CELL_SIZE / 3, 5, spreadLong, INK_INK_RGB)
+    spreadPitch# = (rnd(21) - 10) * .01
+    tidePlaySound(INK_SFX_SPREAD, INK_VOL_SPREAD#, spreadPitch#)
+endfunction
+
+
+` the ink of a cell goes: it is not inked from now on, but it is drawn until `goneDelay` milliseconds
+` from now, and then it goops up into bubbles that break away. a washed cell goes when its fish pops, and
+` a constellation's cells go one after another. see THE FIZZ.
+function inkGone(goneAt, goneDelay)
+    if INK(goneAt) = 0 then exitfunction
+    INK(goneAt) = 0
+    INK_COUNT = INK_COUNT - 1
+    INK_PIECE(goneAt) = 0
+    goneWhen = game ms() + goneDelay
+    INK_WASH_MS(goneAt) = goneWhen
+    if goneDelay > 0
+        if INK_WASH_NEXT = 0 then INK_WASH_NEXT = goneWhen
+        if goneWhen < INK_WASH_NEXT then INK_WASH_NEXT = goneWhen
+    endif
+    INK_ROWS_STALE = 1
+    inkFizzStart(goneAt, goneDelay, INK_FIZZ_GOO)
+endfunction
+
+
+` THE FIZZ. a cell's ink goops up into bubbles that break away, `fizzDelay` milliseconds from now, on a
+` sprite of its own. with INK_FIZZ_POOF, it is a clean cell of the pot poofing away.
+function inkFizzStart(fizzAt, fizzDelay, fizzMode)
+    fizzCellX = getCellX(fizzAt mod CELL_COLUMN_COUNT)
+    fizzCellY = getCellY(fizzAt / CELL_COLUMN_COUNT)
+    inkFizzAt(fizzCellX, fizzCellY, fizzDelay, fizzMode, 1)
+endfunction
+
+
+` and the same, anywhere: its middle is at fizzX, fizzY, in pixels, and fizzScale# is how much ink it is,
+` from 0 to 1 of a cell's worth
+function inkFizzAt(fizzX, fizzY, fizzDelay, fizzMode, fizzScale#)
+    if INK_FIZZ_FX = 0 then exitfunction
+    fizzSlot = -1
+    for fizzK = 0 to INK_FIZZ_MAX - 1
+        if fizzSlot < 0
+            if INK_FIZZ_ON(fizzK) = 0 then fizzSlot = fizzK
+        endif
+    next
+    if fizzSlot < 0
+        fizzSlot = INK_FIZZ_NEXT
+        INK_FIZZ_NEXT = (INK_FIZZ_NEXT + 1) mod INK_FIZZ_MAX
+    else
+        INK_FIZZ_LIVE = INK_FIZZ_LIVE + 1
+    endif
+    INK_FIZZ_ON(fizzSlot) = 1
+    INK_FIZZ_X(fizzSlot) = fizzX
+    INK_FIZZ_Y(fizzSlot) = fizzY
+    INK_FIZZ_MS(fizzSlot) = game ms() + fizzDelay
+    INK_FIZZ_MODE(fizzSlot) = fizzMode
+    INK_FIZZ_SCALE#(fizzSlot) = fizzScale#
+    INK_FIZZ_SEED(fizzSlot) = rnd(1000)
+    INK_FIZZ_SOUNDED(fizzSlot) = 0
+
+    ` bubbles: the ink's own as it goops up, and pale ones that rise off of it as it breaks away
+    fizzReach# = CELL_SIZE
+    fizzReach# = fizzReach# * fizzScale# * .4
+    fizzReach = fizzReach#
+    fizzUpY = fizzY - CELL_SIZE / 3
+    if fizzMode = INK_FIZZ_POOF
+        spawnBubbles(fizzX, fizzY, CELL_SIZE / 3, 5, fizzDelay + 80, rgb(210, 245, 255))
+    else
+        spawnBubbles(fizzX, fizzY, fizzReach, 7, fizzDelay + 120, INK_INK_RGB)
+        spawnBubbles(fizzX, fizzUpY, fizzReach, 5, fizzDelay + INK_FIZZ_LONG / 2, rgb(160, 200, 255))
+    endif
+endfunction
+
+
+` every frame: each fizz that is going is drawn, and sounds as it starts. the shader is told how far
+` along it is, its own number, its mode and how big it is (as mode * 10 + scale), and how much it is the day's
+function inkFizzStep(fizzNow)
+    if INK_FIZZ_LIVE <= 0 then exitfunction
+    fizzSize# = CELL_SIZE
+    fizzSize# = fizzSize# * INK_FIZZ_SPAN#
+    set effect param float INK_FIZZ_FX, "Size", fizzSize#
+    fizzLive = 0
+    for fizzK = 0 to INK_FIZZ_MAX - 1
+        if INK_FIZZ_ON(fizzK)
+            fizzLive = fizzLive + 1
+            fizzLong# = INK_FIZZ_LONG
+            if INK_FIZZ_MODE(fizzK) = INK_FIZZ_POOF then fizzLong# = INK_FIZZ_POOF_LONG
+            fizzT# = fizzNow - INK_FIZZ_MS(fizzK)
+            fizzT# = fizzT# / fizzLong#
+            if fizzT# >= 1
+                INK_FIZZ_ON(fizzK) = 0
+                hide sprite INK_FIZZ_SPRITE(fizzK)
+            else
+                if fizzT# < 0
+                    hide sprite INK_FIZZ_SPRITE(fizzK)
+                else
+                    fizzSprite = INK_FIZZ_SPRITE(fizzK)
+                    fizzHow# = INK_FIZZ_MODE(fizzK) * 10
+                    fizzHow# = fizzHow# + INK_FIZZ_SCALE#(fizzK)
+                    position sprite fizzSprite, INK_FIZZ_X(fizzK), INK_FIZZ_Y(fizzK)
+                    size sprite fizzSprite, fizzSize#, fizzSize#
+                    set sprite all texcoord2 fizzSprite, fizzT#, INK_FIZZ_SEED(fizzK), fizzHow#, INK_DAY_SHOWN#
+                    show sprite fizzSprite
+
+                    ` a fizz as it goops up. a poof has a pop of its own.
+                    if INK_FIZZ_SOUNDED(fizzK) = 0
+                        INK_FIZZ_SOUNDED(fizzK) = 1
+                        if INK_FIZZ_MODE(fizzK) = INK_FIZZ_GOO
+                            if fizzNow - INK_FIZZ_SOUND_MS > 70
+                                INK_FIZZ_SOUND_MS = fizzNow
+                                fizzPitch# = (rnd(31) - 10) * .01
+                                if INK_FIZZ_SCALE#(fizzK) < .9 then fizzPitch# = fizzPitch# + .3
+                                tidePlaySound(INK_SFX_FIZZ(INK_SFX_FIZZ_NEXT), INK_VOL_FIZZ#, fizzPitch#)
+                                INK_SFX_FIZZ_NEXT = (INK_SFX_FIZZ_NEXT + 1) mod 4
+                            endif
+                        endif
+                    endif
+                endif
+            endif
+        endif
+    next
+    INK_FIZZ_LIVE = fizzLive
+endfunction
+
+
+` a fish has popped, `washDelay` milliseconds from now. by day, the ink under it is washed off, and the
+` cell is clean, which is one more for the pot, if it was not clean already. see CLEAN and THE POT.
+` handle_combos calls this for every fish that pops.
+function inkWashed(washAt, washDelay)
+    if INK_DAY
+        if INK(washAt)
+            inkGone(washAt, washDelay)
+            INK_LAST_WASHED = washAt
+            if INK_CLEAN(washAt) = 0
+                INK_CLEAN(washAt) = 1
+                INK_POT = INK_POT + 1
+            endif
+        endif
+    endif
+endfunction
+
+
+` CORAL WINS. by day, any ink that is on coral breaks up into bubbles: ink that was on it when day broke,
+` and ink that it grows onto. it is not washed, so the cell is not clean. at night it leaves the ink
+` alone. this only looks when there is more coral than there was, or when INK_CORAL_SEEN has been set to -1.
+function inkCoralWins()
+    if TIDE_NIGHT then exitfunction
+    if INK_COUNT = 0 then exitfunction
+    if INK_CORAL_SEEN = CORAL_COUNT then exitfunction
+    INK_CORAL_SEEN = CORAL_COUNT
+    coralWinLast = CELL_COUNT - 1
+    for coralWinI = 0 to coralWinLast
+        if INK(coralWinI)
+            if CORAL_CELLS(coralWinI)
+                inkGone(coralWinI, 0)
+                STAR_CLAIM(coralWinI) = 0
+                INK_DIRTY = 1
+            endif
+        endif
+    next
+endfunction
+
+
+
+
+` THE PIECES OF THE INK. every inked cell gets the number of its piece in INK_PIECE, from 1, and every
+` piece has its size in INK_PIECE_SIZE. two inked cells that touch at a side are in the same piece.
+function inkFindPieces()
+    inkPieceLast = CELL_COUNT - 1
+    for inkPieceI = 0 to inkPieceLast
+        INK_PIECE(inkPieceI) = 0
+    next
+    inkPieceCount = 0
+    for inkPieceI = 0 to inkPieceLast
+        if INK(inkPieceI)
+            if INK_PIECE(inkPieceI) = 0
+                inkPieceCount = inkPieceCount + 1
+                INK_PIECE_SIZE(inkPieceCount) = 0
+                INK_PIECE(inkPieceI) = inkPieceCount
+                INK_STACK(0) = inkPieceI
+                inkPieceTop = 1
+                while inkPieceTop > 0
+                    inkPieceTop = inkPieceTop - 1
+                    inkPieceAt = INK_STACK(inkPieceTop)
+                    INK_PIECE_SIZE(inkPieceCount) = INK_PIECE_SIZE(inkPieceCount) + 1
+                    inkPieceX = inkPieceAt mod CELL_COLUMN_COUNT
+                    inkPieceY = inkPieceAt / CELL_COLUMN_COUNT
+                    for inkPieceWay = 0 to 3
+                        inkPieceNx = inkPieceX
+                        inkPieceNy = inkPieceY
+                        if inkPieceWay = 0 then inkPieceNy = inkPieceY - 1
+                        if inkPieceWay = 1 then inkPieceNx = inkPieceX + 1
+                        if inkPieceWay = 2 then inkPieceNy = inkPieceY + 1
+                        if inkPieceWay = 3 then inkPieceNx = inkPieceX - 1
+                        inkPieceOn = 1
+                        if inkPieceNx < 0 then inkPieceOn = 0
+                        if inkPieceNx >= CELL_COLUMN_COUNT then inkPieceOn = 0
+                        if inkPieceNy < 0 then inkPieceOn = 0
+                        if inkPieceNy >= CELL_ROW_COUNT then inkPieceOn = 0
+                        if inkPieceOn
+                            inkPieceN = inkPieceNx + inkPieceNy * CELL_COLUMN_COUNT
+                            if INK(inkPieceN)
+                                if INK_PIECE(inkPieceN) = 0
+                                    INK_PIECE(inkPieceN) = inkPieceCount
+                                    INK_STACK(inkPieceTop) = inkPieceN
+                                    inkPieceTop = inkPieceTop + 1
+                                endif
+                            endif
+                        endif
+                    next
+                endwhile
+            endif
+        endif
+    next
+endfunction
+
+
+` where a cell of a shape is, turned, from the shape's first cell, which is put at 0, 0. the answer is
+` left in STAR_TURN_X and STAR_TURN_Y. the turns are a quarter of the way around at a time.
+function starTurned(turnShapeCell, turnFirstCell, turnBy)
+    turnDx = STAR_X(turnShapeCell) - STAR_X(turnFirstCell)
+    turnDy = STAR_Y(turnShapeCell) - STAR_Y(turnFirstCell)
+    STAR_TURN_X = turnDx
+    STAR_TURN_Y = turnDy
+    if turnBy = 1
+        STAR_TURN_X = 0 - turnDy
+        STAR_TURN_Y = turnDx
+    endif
+    if turnBy = 2
+        STAR_TURN_X = 0 - turnDx
+        STAR_TURN_Y = 0 - turnDy
+    endif
+    if turnBy = 3
+        STAR_TURN_X = turnDy
+        STAR_TURN_Y = 0 - turnDx
+    endif
+endfunction
+
+
+` is the constellation in this slot drawn in the ink, with its first cell in this cell, turned this
+` way? exactly: every piece of it is a piece of the ink on its own, and none of it is part of another
+` constellation. see THE CONSTELLATIONS in fish_headers_squid. inkFindPieces has to have run.
+function starFits(fitSlot, fitAt, fitTurn)
+    fitShape = STAR_PICK(fitSlot)
+    fitFirst = STAR_SHAPE_FIRST(fitShape)
+    fitLast = fitFirst + STAR_SHAPE_LEN(fitShape) - 1
+    for fitP = 0 to 16
+        STAR_PIECE_HAS(fitP) = 0
+    next
+    fitAtX = fitAt mod CELL_COLUMN_COUNT
+    fitAtY = fitAt / CELL_COLUMN_COUNT
+    fitOk = 1
+    for fitK = fitFirst to fitLast
+        if fitOk
+            starTurned(fitK, fitFirst, fitTurn)
+            fitX = fitAtX + STAR_TURN_X
+            fitY = fitAtY + STAR_TURN_Y
+            if fitX < 0 then fitOk = 0
+            if fitX >= CELL_COLUMN_COUNT then fitOk = 0
+            if fitY < 0 then fitOk = 0
+            if fitY >= CELL_ROW_COUNT then fitOk = 0
+            if fitOk
+                fitCell = fitX + fitY * CELL_COLUMN_COUNT
+                if INK(fitCell) = 0 then fitOk = 0
+                if STAR_CLAIM(fitCell) > 0 then fitOk = 0
+            endif
+            if fitOk
+                fitPiece = INK_PIECE(fitCell)
+                if INK_PIECE_SIZE(fitPiece) <> STAR_PIECE_LEN(fitK) then fitOk = 0
+                fitMine = STAR_PIECE(fitK)
+                if STAR_PIECE_HAS(fitMine) = 0
+                    STAR_PIECE_HAS(fitMine) = fitPiece
+                else
+                    if STAR_PIECE_HAS(fitMine) <> fitPiece then fitOk = 0
+                endif
+            endif
+        endif
+    next
+endfunction fitOk
+
+
+` the cells of a made constellation are its own, from now on. see THE CONSTELLATIONS.
+function starClaim(claimSlot, claimAt, claimTurn)
+    claimShape = STAR_PICK(claimSlot)
+    claimFirst = STAR_SHAPE_FIRST(claimShape)
+    claimLast = claimFirst + STAR_SHAPE_LEN(claimShape) - 1
+    claimAtX = claimAt mod CELL_COLUMN_COUNT
+    claimAtY = claimAt / CELL_COLUMN_COUNT
+    for claimK = claimFirst to claimLast
+        starTurned(claimK, claimFirst, claimTurn)
+        claimX = claimAtX + STAR_TURN_X
+        claimY = claimAtY + STAR_TURN_Y
+        if claimX >= 0
+            if claimX < CELL_COLUMN_COUNT
+                if claimY >= 0
+                    if claimY < CELL_ROW_COUNT then STAR_CLAIM(claimX + claimY * CELL_COLUMN_COUNT) = claimSlot + 1
+                endif
+            endif
+        endif
+    next
+    STAR_MADE(claimSlot) = 1
+    STAR_MADE_AT(claimSlot) = claimAt
+    STAR_MADE_TURN(claimSlot) = claimTurn
+    INK_ROWS_STALE = 1
+endfunction
+
+
+` the ink has changed. every constellation that is not made yet is looked for in it, at every inked
+` cell and in every turn. the shapes are small and there is not much ink, so this is quick.
+function starLook()
+    INK_DIRTY = 0
+    if TIDE_NIGHT = 0 then exitfunction
+
+    ` a night gives one part of the trident, and no more. once one is made, the rest are not looked for.
+    ` see ONE A NIGHT in fish_headers_neptune.
+    for starLookS = 0 to 2
+        if STAR_MADE(starLookS) then exitfunction
+    next
+    inkFindPieces()
+    starLookLast = CELL_COUNT - 1
+    for starLookS = 0 to 2
+        if STAR_PICK(starLookS) >= 0
+            if STAR_MADE(starLookS) = 0
+                ` the shape of the night of this kind, and then any other of the kind that the game does not
+                ` have yet. whichever is made becomes the shape of the night. see EVERY ONE CAN BE MADE.
+                starLookPicked = STAR_PICK(starLookS)
+                for starLookK = -1 to STAR_SHAPE_COUNT - 1
+                    starLookTry = 0
+                    if starLookK < 0
+                        starLookTry = 1
+                    else
+                        if starLookK <> starLookPicked
+                            if STAR_SHAPE_TIER(starLookK) = starLookS
+                                if TRIDENT_DONE(starLookK) = 0 then starLookTry = 1
+                            endif
+                        endif
+                    endif
+                    ` once one is made, the shape of the night is the one that was, and is left alone
+                    if STAR_MADE(starLookS) then starLookTry = 0
+                    if starLookTry
+                        STAR_PICK(starLookS) = starLookPicked
+                        if starLookK >= 0 then STAR_PICK(starLookS) = starLookK
+                        for starLookI = 0 to starLookLast
+                            if STAR_MADE(starLookS) = 0
+                                if INK(starLookI)
+                                    for starLookT = 0 to 3
+                                        if STAR_MADE(starLookS) = 0
+                                            starLookFits = starFits(starLookS, starLookI, starLookT)
+                                            if starLookFits
+                                                starClaim(starLookS, starLookI, starLookT)
+                                                starMade(starLookS)
+                                            endif
+                                        endif
+                                    next
+                                endif
+                            endif
+                        next
+                    endif
+                next
+                if STAR_MADE(starLookS) = 0 then STAR_PICK(starLookS) = starLookPicked
+            endif
+        endif
+    next
+endfunction
+
+
+` a constellation has just been made. the ink and the stars shimmer, sparkles go up from both, and the
+` fanfare plays. it pops STAR_POP_WAIT from now.
+function starMade(madeSlot)
+    STAR_FLASH_MS(madeSlot) = game ms()
+    STAR_POP_DUE(madeSlot) = 1
+    STAR_POP_MS(madeSlot) = game ms() + STAR_POP_WAIT
+    codecSeeCard(CODEC_ENTRY_STARS) `the codec has an entry for them, from the first that is made
+    madeLast = CELL_COUNT - 1
+    for madeI = 0 to madeLast
+        if STAR_CLAIM(madeI) = madeSlot + 1
+            madeX = madeI mod CELL_COLUMN_COUNT
+            madeY = madeI / CELL_COLUMN_COUNT
+            starSparkles(getCellX(madeX), getCellY(madeY), CELL_SIZE / 2, 3)
+        endif
+    next
+    madeShape = STAR_PICK(madeSlot)
+    ` and from its hint in the plankton, if it is in the water
+    for madeH = 0 to 2
+        if STAR_SNOW_STATE(madeH) = 1
+            if STAR_SNOW_SLOT(madeH) = madeSlot
+                starSnowAt(madeH)
+                madeMidX = STAR_AT_X + ((STAR_SHAPE_WIDE(madeShape) - 1) * STAR_SNOW_PITCH * STAR_SNOW_GRAIN) / 2
+                madeMidY = STAR_AT_Y + ((STAR_SHAPE_TALL(madeShape) - 1) * STAR_SNOW_PITCH * STAR_SNOW_GRAIN) / 2
+                starSparkles(madeMidX, madeMidY, 14, 8)
+            endif
+        endif
+    next
+    starFanfare(madeSlot)
+endfunction
+
+
+` a few little stars that twinkle once, without a sound, around a spot on the screen. they are bubbles,
+` drawn as stars, the same as the sparkles of the glow. see glowSparkle in fish_routines_glow.
+function starSparkles(sparkX, sparkY, sparkReach, sparkCount)
+    for sparkN = 1 to sparkCount
+        sparkI = FLOAT_BUBBLE_NEXT
+        FLOAT_BUBBLE_NEXT = (FLOAT_BUBBLE_NEXT + 1) mod FLOAT_BUBBLE_COUNT
+        sparkB = FLOAT_BUBBLES(sparkI)
+        sparkB.active = 1
+        sparkB.star = 1
+        sparkB.heart = 0
+        sparkB.loud = 0
+        sparkB.age = 0
+        sparkB.alpha = 230
+        sparkB.delay = 1 + rnd(500)
+        sparkB.life = 500 + rnd(700)
+        sparkB.phase = rnd(628)
+        sparkB.size = 5 + rnd(2) * 2
+        sparkB.x# = sparkX + rnd(sparkReach * 2 + 1) - sparkReach
+        sparkB.y# = sparkY + rnd(sparkReach * 2 + 1) - sparkReach
+        sparkB.vx# = 0
+        sparkB.vy# = 0
+        sparkB.rise = 4
+        color sprite sparkB.spriteId, rgb(255, 232, 170)
+        order sprite sparkB.spriteId, ORDER_FLOAT_BUBBLES
+        reset sprite render target sparkB.spriteId
+        hide sprite sparkB.spriteId
+        FLOAT_BUBBLES(sparkI) = sparkB
+        FLOAT_BUBBLE_LIVE = FLOAT_BUBBLE_LIVE + 1
+    next
+endfunction
+
+
+` THE FANFARE. a run up the harp, a bell over it, and the choir holding the chord. the harder the
+` constellation, the higher the run goes. it is in F, the key that the music is in.
+function starFanfare(fanSlot)
+    FANFARE_COUNT = 0
+    fanNow = game ms()
+    fanStep = 85
+    starNote(fanNow, INSTRUMENT_SWELL, F4, .45)
+    starNote(fanNow, INSTRUMENT_PLUCK, C5, .55)
+    starNote(fanNow + fanStep, INSTRUMENT_PLUCK, F5, .55)
+    starNote(fanNow + fanStep * 2, INSTRUMENT_PLUCK, A5, .55)
+    starNote(fanNow + fanStep * 3, INSTRUMENT_PLUCK, C6, .6)
+    if fanSlot >= STAR_MEDIUM
+        starNote(fanNow + fanStep * 4, INSTRUMENT_PLUCK, A5, .5)
+        starNote(fanNow + fanStep * 5, INSTRUMENT_PLUCK, C6, .6)
+    endif
+    fanHold = fanNow + fanStep * 4
+    if fanSlot >= STAR_MEDIUM then fanHold = fanNow + fanStep * 6
+    starNote(fanHold, INSTRUMENT_BELL, C6, .5)
+    starNote(fanHold, INSTRUMENT_CHOIR, F5, .55)
+    starNote(fanHold, INSTRUMENT_CHOIR, A5, .5)
+    if fanSlot = STAR_HARD
+        starNote(fanHold + 600, INSTRUMENT_BELL, F5, .4)
+        starNote(fanHold + 600, INSTRUMENT_CHOIR, C6, .45)
+    endif
+endfunction
+
+function starNote(noteAt, noteInst, noteIs, noteLoud#)
+    if FANFARE_COUNT < FANFARE_MAX
+        FANFARE_AT(FANFARE_COUNT) = noteAt
+        FANFARE_INST(FANFARE_COUNT) = noteInst
+        FANFARE_NOTE(FANFARE_COUNT) = noteIs
+        FANFARE_LOUD#(FANFARE_COUNT) = noteLoud#
+        FANFARE_COUNT = FANFARE_COUNT + 1
+    endif
+endfunction
+
+
+` a made constellation pops, once it has shimmered for STAR_POP_WAIT: each fish of it scores STAR_BONUS
+` times what it would as a fish of a group of that size, one after another, and the ink of each goes as
+` it does. see THE CONSTELLATIONS. the fish do not pop: only the ink goes.
+function starPop(scoreS)
+    STAR_POP_DUE(scoreS) = 0
+    STAR_POPPED(scoreS) = 1
+    STAR_LAST_SCORE = 0
+    scoreLast = CELL_COUNT - 1
+    scoreDelay = 0
+    scorePos as vec = {
+        x = 0,
+        y = 0
+    }
+    scoreAddUp = 0
+    for scoreI = 0 to scoreLast
+        if STAR_CLAIM(scoreI) = scoreS + 1
+            scoreAddUp = scoreAddUp + 10
+            scorePts = scoreAddUp * SCORE_MULTIPLIER * SCHOOL_STAKES * STAR_BONUS
+            STAR_LAST_SCORE = STAR_LAST_SCORE + scorePts
+            scoreDelay = scoreDelay + 60
+            scorePos.x = getCellX(scoreI mod CELL_COLUMN_COUNT)
+            scorePos.y = getCellY(scoreI / CELL_COLUMN_COUNT)
+            scoreTxt = spawnBoardScoreText(scorePos, "+" + str$(scorePts), scoreDelay, 900)
+            color text scoreTxt, rgb(255, 228, 150)
+            queueScore(scorePts, scoreDelay)
+            STAR_CLAIM(scoreI) = 0
+            inkGone(scoreI, scoreDelay)
+            starSparkles(scorePos.x, scorePos.y, CELL_SIZE / 3, 2)
+        endif
+    next
+    tidePlaySound(TIDE_SFX_PULSE, TIDE_VOL_PULSE#, .8)
+
+    ` the game has that part of the trident now. see fish_headers_neptune.
+    tridentPartScored(STAR_PICK(scoreS))
+endfunction
+
+
+` every frame. the squid comes when it is due, the constellations are looked for when the ink has
+` changed, and pop when it is time, the day breaks once the night is over, the pot of the day pays, or
+` is lost, the fanfare plays on, and the squid's puff, the ink and the sky are drawn.
+function squidStep()
+    squidNow = game ms()
+
+    ` the board is not the size that it was, and inkBoardGrew did not move the ink. whatever the night had is gone.
+    if INK_COUNT > 0
+        if INK_BOARD_COLS <> CELL_COLUMN_COUNT
+            inkWipe()
+            SQUID_CELL = -1
+            INK_DAY = 0
+            INK_POT = 0
+        endif
+    endif
+    INK_BOARD_COLS = CELL_COLUMN_COUNT
+    if SQUID_CELL >= CELL_COUNT then SQUID_CELL = -1
+
+    squidSettled = 1
+    if REQUEST_COMBO_CHECK then squidSettled = 0
+    if LIVE_MOVE_ACTIVE then squidSettled = 0
+    if COMBO_PHASE > 0 then squidSettled = 0
+
+    ` coral that has grown onto ink wipes it. see CORAL WINS.
+    inkCoralWins()
+
+    if TIDE_NIGHT
+        if SQUID_ENDLESS
+            if SQUID_ENDING = 0 then TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
+        endif
+
+        if SQUID_DUE
+            if squidSettled
+                ` the pot of the day is settled first: washed off by the last move of the day, it pays,
+                ` and otherwise it is lost. see THE POT in fish_headers_squid.
+                inkPotStep(squidNow)
+                if INK_DAY
+                    inkBust(squidNow)
+                endif
+                squidArrive()
+            endif
+        endif
+
+        ` a forced pop took the squid's cell, and it has fled for the night
+        if SQUID_CELL >= 0
+            if CELLS(SQUID_CELL).comboBlownUp then SQUID_CELL = -1
+        endif
+
+        if INK_DIRTY
+            starLook()
+        endif
+
+        ` a made constellation pops once it has shimmered. see THE CONSTELLATIONS.
+        squidPopsDue = 0
+        for squidPopS = 0 to 2
+            if STAR_POP_DUE(squidPopS)
+                if squidNow >= STAR_POP_MS(squidPopS)
+                    starPop(squidPopS)
+                else
+                    squidPopsDue = 1
+                endif
+            endif
+        next
+
+        ` THE END OF THE NIGHT. once the board has settled after the last move, and the constellation
+        ` has popped, day breaks. see fish_headers_squid.
+        if SQUID_ENDING = 1
+            if squidSettled
+                if squidPopsDue = 0
+                    SQUID_ENDING = 0
+                    tideDayBreaks()
+                endif
+            endif
+        endif
+    else
+        ` THE POT. it pays when the ink is all washed off, once the board has settled.
+        if squidSettled
+            inkPotStep(squidNow)
+        endif
+    endif
+    inkPayStep(squidNow)
+
+    ` the fanfare
+    if FANFARE_COUNT > 0
+        squidFanLeft = 0
+        for squidFan = 0 to FANFARE_COUNT - 1
+            if FANFARE_AT(squidFan) > 0
+                if squidNow >= FANFARE_AT(squidFan)
+                    FANFARE_AT(squidFan) = 0
+                    playMusicNote(FANFARE_INST(squidFan), FANFARE_NOTE(squidFan), FANFARE_LOUD#(squidFan))
+                else
+                    squidFanLeft = squidFanLeft + 1
+                endif
+            endif
+        next
+        if squidFanLeft = 0 then FANFARE_COUNT = 0
+    endif
+
+    squidUnshow()
+
+    squidPuffStep(squidNow)
+    neptuneStep(squidNow)
+    inkDraw(squidNow)
+    inkFizzStep(squidNow)
+    starSkyDraw(squidNow)
+endfunction
+
+
+` THE INK, as it is drawn. all of it is one sprite over the board, a cell bigger than it all around, so
+` that the glow can spill out past the edge. InkEffect.fx draws on it, from the bits of each row, so
+` that ink in cells that touch is one smear. it fades away once it has popped, keeping its shape.
+function inkDraw(inkDrawNow)
+    ` a cell that was washed off is drawn until its fish pops
+    if INK_WASH_NEXT > 0
+        if inkDrawNow >= INK_WASH_NEXT then INK_ROWS_STALE = 1
+    endif
+    if INK_ROWS_STALE
+        if INK_GONE_MS = 0
+            inkRowsUpdate()
+        endif
+    endif
+
+    ` by day, it dries. see THE INK OF THE DAY.
+    inkDrawStep# = inkDrawNow - INK_DRAW_LAST_MS
+    if inkDrawStep# < 0 then inkDrawStep# = 0
+    if inkDrawStep# > 100 then inkDrawStep# = 100
+    INK_DRAW_LAST_MS = inkDrawNow
+    inkDrawDayWant# = INK_DAY
+    inkDrawK# = inkDrawStep# * INK_DAY_EASE#
+    if inkDrawK# > 1 then inkDrawK# = 1
+    INK_DAY_SHOWN# = INK_DAY_SHOWN# + (inkDrawDayWant# - INK_DAY_SHOWN#) * inkDrawK#
+    inkDrawOff# = abs(inkDrawDayWant# - INK_DAY_SHOWN#)
+    if inkDrawOff# < .002 then INK_DAY_SHOWN# = inkDrawDayWant#
+
+    ` CORAL WINS: ink that lurched toward coral reaches for it, breaks up at the tip, and shrinks back
+    inkDrawLurch# = 0
+    inkDrawLurchOn# = 0
+    if INK_LURCH_FROM >= 0
+        inkDrawLurchAge# = inkDrawNow - INK_LURCH_MS
+        inkDrawLurchLong# = INK_LURCH_LONG
+        if inkDrawLurchAge# < inkDrawLurchLong#
+            inkDrawLurchF# = inkDrawLurchAge# / inkDrawLurchLong#
+            if inkDrawLurchF# < 0 then inkDrawLurchF# = 0
+            inkDrawLurch# = INK_LURCH_REACH# * inkDrawLurchF# * (2 - inkDrawLurchF#)
+        else
+            if INK_LURCH_BROKE = 0
+                INK_LURCH_BROKE = 1
+                inkLurchBreaks()
+            endif
+            inkDrawLurchBack# = inkDrawLurchAge# - inkDrawLurchLong#
+            inkDrawLurchBack# = inkDrawLurchBack# / INK_LURCH_BACK
+            if inkDrawLurchBack# >= 1
+                INK_LURCH_FROM = -1
+            else
+                inkDrawLurchBack# = 1 - inkDrawLurchBack#
+                inkDrawLurch# = INK_LURCH_REACH# * .5 * inkDrawLurchBack# * inkDrawLurchBack#
+            endif
+        endif
+        if INK_LURCH_FROM >= 0
+            if INK(INK_LURCH_FROM) then inkDrawLurchOn# = 1
+        endif
+    endif
+
+    ` the clean cells of a pot that was lost fade, and then they are not clean any more
+    inkDrawCleanAlpha# = 1
+    if INK_CRUMBLE_MS > 0
+        inkDrawCleanAlpha# = inkDrawNow - INK_CRUMBLE_MS
+        inkDrawCleanAlpha# = 1 - inkDrawCleanAlpha# / INK_CRUMBLE_LONG
+        if inkDrawCleanAlpha# <= 0
+            inkDrawCleanAlpha# = 0
+            INK_CRUMBLE_MS = 0
+            for inkDrawI = 0 to 399
+                INK_CLEAN(inkDrawI) = 0
+            next
+            INK_ROWS_STALE = 1
+            inkRowsUpdate()
+        endif
+    endif
+
+    ` the fish over it are drawn for their reflections while there is ink of the day to see them in
+    INK_REFLECT = 0
+    if INK_DAY_SHOWN# > 0
+        if INK_SHOWN_COUNT > 0 then INK_REFLECT = 1
+    endif
+
+    inkDrawFade# = 1
+    if INK_GONE_MS > 0
+        inkDrawGone# = inkDrawNow - INK_GONE_MS
+        inkDrawFade# = 1 - inkDrawGone# / INK_FADE_MS#
+        if inkDrawFade# <= 0
+            INK_GONE_MS = 0
+            INK_ROWS_STALE = 1
+            if INK_BOARD_SPRITE > 0
+                hide sprite INK_BOARD_SPRITE
+            endif
+            exitfunction
+        endif
+    endif
+    inkDrawAny = INK_COUNT + INK_SHOWN_COUNT
+    inkDrawAny = inkDrawAny + INK_CLEAN_SHOWN
+    if inkDrawAny = 0
+        if INK_GONE_MS = 0
+            if INK_BOARD_SPRITE > 0
+                hide sprite INK_BOARD_SPRITE
+            endif
+            exitfunction
+        endif
+    endif
+
+    if INK_BOARD_SPRITE = 0
+        inkNewSprite = 0
+        reserve sprite id(inkNewSprite)
+        sprite inkNewSprite, 0, 0, TEX_PIXEL
+        set sprite offset inkNewSprite, 0, 0
+        set sprite effect inkNewSprite, INK_FX_ID
+        order sprite inkNewSprite, ORDER_INK
+        INK_BOARD_SPRITE = inkNewSprite
+    endif
+
+    ` the board, with a cell of room all around it
+    inkDrawCell = CELL_SIZE
+    inkDrawLeft = getCellX(0) - inkDrawCell / 2
+    inkDrawLeft = inkDrawLeft - inkDrawCell
+    inkDrawTop = getCellY(0) - inkDrawCell / 2
+    inkDrawTop = inkDrawTop - inkDrawCell
+    inkDrawWide = (CELL_COLUMN_COUNT + 2) * inkDrawCell
+    inkDrawTall = (CELL_ROW_COUNT + 2) * inkDrawCell
+    position sprite INK_BOARD_SPRITE, inkDrawLeft, inkDrawTop
+    size sprite INK_BOARD_SPRITE, inkDrawWide, inkDrawTall
+
+    ` how much a made constellation is shimmering: the one that was made last
+    inkDrawFlash# = 0
+    for inkDrawS = 0 to 2
+        if STAR_FLASH_MS(inkDrawS) > 0
+            inkDrawSince# = inkDrawNow - STAR_FLASH_MS(inkDrawS)
+            if inkDrawSince# < STAR_FLASH_LONG
+                inkDrawFlashOf# = 1 - inkDrawSince# / STAR_FLASH_LONG
+                if inkDrawFlashOf# > inkDrawFlash# then inkDrawFlash# = inkDrawFlashOf#
+            endif
+        endif
+    next
+
+    ` the cell that was inked last, how far its ink has got, and how far along the wobble of it landing is
+    inkDrawFreshX# = -10
+    inkDrawFreshY# = -10
+    inkDrawSpread# = 1
+    inkDrawLand# = 1
+    if INK_FRESH_CELL >= 0
+        inkDrawFreshX# = INK_FRESH_CELL mod CELL_COLUMN_COUNT
+        inkDrawFreshY# = INK_FRESH_CELL / CELL_COLUMN_COUNT
+        inkDrawAge# = inkDrawNow - INK_FRESH_MS
+        inkDrawSpread# = inkDrawAge# / INK_FRESH_LONG
+        if inkDrawSpread# > 1 then inkDrawSpread# = 1
+        if inkDrawSpread# < 0 then inkDrawSpread# = 0
+        inkDrawLand# = inkDrawAge# - INK_FRESH_LONG
+        inkDrawLand# = inkDrawLand# / INK_LAND_LONG
+        if inkDrawLand# > 1 then inkDrawLand# = 1
+        if inkDrawLand# < 0 then inkDrawLand# = 0
+    endif
+
+    inkDrawTime# = inkDrawNow * .001
+    inkDrawCols# = CELL_COLUMN_COUNT
+    inkDrawRows# = CELL_ROW_COUNT
+    inkDrawCell# = inkDrawCell
+    set effect param float4 INK_FX_ID, "Ink", inkDrawTime#, TIDE_NIGHT_SHOWN#, inkDrawFade#, inkDrawFlash#
+    set effect param float4 INK_FX_ID, "Board", inkDrawCols#, inkDrawRows#, inkDrawCell#, inkDrawCell#
+    set effect param float4 INK_FX_ID, "Fresh", inkDrawFreshX#, inkDrawFreshY#, inkDrawSpread#, inkDrawLand#
+
+    ` and the cell that it spread from, which it flows out of
+    inkDrawFromX# = -10
+    inkDrawFromY# = -10
+    inkDrawFromHas# = 0
+    if INK_FRESH_FROM >= 0
+        if INK_FRESH_CELL >= 0
+            inkDrawFromX# = INK_FRESH_FROM mod CELL_COLUMN_COUNT
+            inkDrawFromY# = INK_FRESH_FROM / CELL_COLUMN_COUNT
+            inkDrawFromHas# = 1
+        endif
+    endif
+    set effect param float4 INK_FX_ID, "FreshFrom", inkDrawFromX#, inkDrawFromY#, inkDrawFromHas#, 0
+    set effect param float4 INK_FX_ID, "Rows0", INK_ROW#(0), INK_ROW#(1), INK_ROW#(2), INK_ROW#(3)
+    set effect param float4 INK_FX_ID, "Rows1", INK_ROW#(4), INK_ROW#(5), INK_ROW#(6), INK_ROW#(7)
+    set effect param float4 INK_FX_ID, "Rows2", INK_ROW#(8), INK_ROW#(9), INK_ROW#(10), INK_ROW#(11)
+    set effect param float4 INK_FX_ID, "Rows3", INK_ROW#(12), INK_ROW#(13), INK_ROW#(14), INK_ROW#(15)
+    set effect param float4 INK_FX_ID, "Rows4", INK_ROW#(16), INK_ROW#(17), INK_ROW#(18), INK_ROW#(19)
+    set effect param float4 INK_FX_ID, "Made0", MADE_ROW#(0), MADE_ROW#(1), MADE_ROW#(2), MADE_ROW#(3)
+    set effect param float4 INK_FX_ID, "Made1", MADE_ROW#(4), MADE_ROW#(5), MADE_ROW#(6), MADE_ROW#(7)
+    set effect param float4 INK_FX_ID, "Made2", MADE_ROW#(8), MADE_ROW#(9), MADE_ROW#(10), MADE_ROW#(11)
+    set effect param float4 INK_FX_ID, "Made3", MADE_ROW#(12), MADE_ROW#(13), MADE_ROW#(14), MADE_ROW#(15)
+    set effect param float4 INK_FX_ID, "Made4", MADE_ROW#(16), MADE_ROW#(17), MADE_ROW#(18), MADE_ROW#(19)
+    set effect param float4 INK_FX_ID, "Clean0", INK_CLEAN_ROW#(0), INK_CLEAN_ROW#(1), INK_CLEAN_ROW#(2), INK_CLEAN_ROW#(3)
+    set effect param float4 INK_FX_ID, "Clean1", INK_CLEAN_ROW#(4), INK_CLEAN_ROW#(5), INK_CLEAN_ROW#(6), INK_CLEAN_ROW#(7)
+    set effect param float4 INK_FX_ID, "Clean2", INK_CLEAN_ROW#(8), INK_CLEAN_ROW#(9), INK_CLEAN_ROW#(10), INK_CLEAN_ROW#(11)
+    set effect param float4 INK_FX_ID, "Clean3", INK_CLEAN_ROW#(12), INK_CLEAN_ROW#(13), INK_CLEAN_ROW#(14), INK_CLEAN_ROW#(15)
+    set effect param float4 INK_FX_ID, "Clean4", INK_CLEAN_ROW#(16), INK_CLEAN_ROW#(17), INK_CLEAN_ROW#(18), INK_CLEAN_ROW#(19)
+
+    ` the wave of the pot that pays, out from the cell that was washed last, in cells
+    inkDrawWave# = -100
+    if INK_PAYING
+        inkDrawWave# = 100
+        if INK_PAY_EVERY > 0
+            inkDrawK# = inkDrawNow - INK_PAY_MS
+            inkDrawK# = inkDrawK# - INK_PAY_LEAD
+            inkDrawK# = inkDrawK# / INK_PAY_EVERY
+            if inkDrawK# < 0 then inkDrawK# = 0
+            inkDrawKi = inkDrawK#
+            if inkDrawKi >= INK_PAY_COUNT - 1
+                inkDrawWave# = INK_PAY_FAR#(INK_PAY_COUNT - 1) + 1
+            else
+                inkDrawKf# = inkDrawK# - inkDrawKi
+                inkDrawWave# = INK_PAY_FAR#(inkDrawKi + 1) - INK_PAY_FAR#(inkDrawKi)
+                inkDrawWave# = INK_PAY_FAR#(inkDrawKi) + inkDrawWave# * inkDrawKf#
+            endif
+        endif
+    endif
+    set effect param float4 INK_FX_ID, "Wave", INK_PAY_FROM_X#, INK_PAY_FROM_Y#, inkDrawWave#, inkDrawCleanAlpha#
+
+    ` and the ink that lurched toward coral
+    inkDrawLurchAX# = -10
+    inkDrawLurchAY# = -10
+    inkDrawLurchBX# = -10
+    inkDrawLurchBY# = -10
+    if inkDrawLurchOn# > 0
+        inkDrawLurchAX# = INK_LURCH_FROM mod CELL_COLUMN_COUNT
+        inkDrawLurchAY# = INK_LURCH_FROM / CELL_COLUMN_COUNT
+        inkDrawLurchBX# = INK_LURCH_TO mod CELL_COLUMN_COUNT
+        inkDrawLurchBY# = INK_LURCH_TO / CELL_COLUMN_COUNT
+    endif
+    set effect param float4 INK_FX_ID, "Lurch", inkDrawLurchAX#, inkDrawLurchAY#, inkDrawLurchBX#, inkDrawLurchBY#
+    set effect param float4 INK_FX_ID, "LurchAt", inkDrawLurch#, inkDrawLurchOn#, 0, 0
+
+    ` by day, the dried look, and the reflections of the fish, from the picture of them that the coral's
+    ` shadows draw. see THE INK OF THE DAY in fish_headers_squid.
+    INK_ART_HALF# = CELL_ART_SIZE
+    INK_ART_HALF# = INK_ART_HALF# / 2
+    inkDrawLeft# = inkDrawLeft
+    inkDrawTop# = inkDrawTop
+    set effect param float4 INK_FX_ID, "Day", INK_DAY_SHOWN#, INK_ART_HALF#, INK_REFLECT, 0
+    set effect param float4 INK_FX_ID, "Area", inkDrawLeft#, inkDrawTop#, WORLD_WIDTH, WORLD_HEIGHT
+    set effect param texture INK_FX_ID, "ShadowTexture", render target texture(TARGET_CORAL_SHADOW)
+    show sprite INK_BOARD_SPRITE
+endfunction
+
+
+` THE HINTS IN THE SNOW. the constellations of the night are hidden in the plankton, the little lights
+` that drift up through the water at night, so they move the way that it moves, because they are it.
+` SeabedEffect.fx draws their lights and HintSnowEffect.fx their lines: this says where each is, which
+` shape it is, and how its lines are doing. there is one at a time. it fades in low in the water beside the
+` board, rises with the plankton, and every so often lines sweep across it, joining up the lights of each
+` piece, hold, and fade. when it gets near the top, it fades out, and as it does, the next shape fades in
+` low on the other side of the board. the shapes take turns. a made one stays joined up, in gold, and once
+` one is made it is the only one that comes. see fish_headers_squid.
+function starSkyDraw(skyNow)
+    skyStep# = skyNow - STAR_SNOW_LAST_MS
+    STAR_SNOW_LAST_MS = skyNow
+    if skyStep# < 0 then skyStep# = 0
+    if skyStep# > 50 then skyStep# = 50
+    skyFadeLong# = STAR_SNOW_COME
+    skyStep# = skyStep# / skyFadeLong#
+
+    ` once one is made, it is the only one that comes
+    skyAnyMade = 0
+    for skyK = 0 to 2
+        if STAR_PICK(skyK) >= 0
+            if STAR_MADE(skyK) then skyAnyMade = 1
+        endif
+    next
+
+    ` THE EASY ONES FIRST. only the easiest kind that the game still needs is hinted at: the easy ones
+    ` until both are made, then the middling ones, and the shaft last. the others can be made all the
+    ` same, by a player who remembers them. see THE CONSTELLATIONS in fish_headers_squid.
+    skyFirstTier = -1
+    for skyK = 0 to 2
+        if skyFirstTier < 0
+            if STAR_PICK(skyK) >= 0 then skyFirstTier = skyK
+        endif
+    next
+
+    skyActive = -1
+    for skyI = 0 to 2
+        skySlot = STAR_SNOW_SLOT(skyI)
+        if STAR_SNOW_STATE(skyI) = 1
+            ` it goes when the night does, when its shape is no longer wanted, and when it has risen to the
+            ` top of its water
+            skyLeave = 0
+            if TIDE_NIGHT = 0 then skyLeave = 1
+            if skySlot < 0
+                skyLeave = 1
+            else
+                if STAR_PICK(skySlot) < 0 then skyLeave = 1
+                if skyAnyMade
+                    if STAR_MADE(skySlot) = 0 then skyLeave = 1
+                else
+                    if skySlot <> skyFirstTier then skyLeave = 1
+                endif
+            endif
+            starSnowAt(skyI)
+            starSnowBand(STAR_SNOW_SIDE(skyI))
+            if STAR_AT_Y < STAR_BAND_TOP + STAR_SNOW_SLACK then skyLeave = 1
+            if skyLeave
+                STAR_SNOW_STATE(skyI) = 2
+            else
+                skyActive = skyI
+            endif
+        endif
+
+        ` it fades in while it is the one, and out once it is going
+        if STAR_SNOW_STATE(skyI) = 1
+            STAR_SKY_SHOWN#(skyI) = STAR_SKY_SHOWN#(skyI) + skyStep#
+            if STAR_SKY_SHOWN#(skyI) > 1 then STAR_SKY_SHOWN#(skyI) = 1
+        else
+            STAR_SKY_SHOWN#(skyI) = STAR_SKY_SHOWN#(skyI) - skyStep#
+            if STAR_SKY_SHOWN#(skyI) <= 0
+                STAR_SKY_SHOWN#(skyI) = 0
+                STAR_SNOW_STATE(skyI) = 0
+                STAR_SNOW_SLOT(skyI) = -1
+            endif
+        endif
+    next
+
+    ` when none is the one, the next shape comes, on the other side of the board from the last
+    if skyActive < 0
+        if TIDE_NIGHT
+            skyNext = -1
+            for skyK = 1 to 3
+                if skyNext < 0
+                    skyCand = (STAR_SNOW_NEXT + skyK) mod 3
+                    skyOk = 0
+                    if skyCand = skyFirstTier then skyOk = 1
+                    if skyAnyMade
+                        skyOk = 0
+                        if STAR_PICK(skyCand) >= 0
+                            if STAR_MADE(skyCand) then skyOk = 1
+                        endif
+                    endif
+                    if skyOk then skyNext = skyCand
+                endif
+            next
+            skyFree = -1
+            for skyI = 0 to 2
+                if skyFree < 0
+                    if STAR_SNOW_STATE(skyI) = 0 then skyFree = skyI
+                endif
+            next
+            if skyNext >= 0
+                if skyFree >= 0
+                    STAR_SNOW_NEXT = skyNext
+                    STAR_SNOW_SLOT(skyFree) = skyNext
+                    STAR_SNOW_SIDE(skyFree) = 1 - STAR_SNOW_LAST_SIDE
+                    STAR_SNOW_LAST_SIDE = STAR_SNOW_SIDE(skyFree)
+                    starSnowPut(skyFree, STAR_SNOW_FIRST)
+                    STAR_SNOW_FIRST = 0
+                    STAR_SNOW_FROM(skyFree) = skyNow
+                    STAR_SNOW_STATE(skyFree) = 1
+                    STAR_SKY_SHOWN#(skyFree) = 0
+                endif
+            endif
+        endif
+    endif
+
+    ` its lines: a while after it comes, and every so often after that, they sweep out, hold, and fade
+    for skyI = 0 to 2
+        skyLines# = 0
+        skySweep# = 0
+        skyAge = skyNow - STAR_SNOW_FROM(skyI) - STAR_SNOW_SHOOT
+        if STAR_SNOW_SLOT(skyI) >= 0
+            if skyAge >= 0
+                skyAge = skyAge mod STAR_SNOW_ROUND
+                if skyAge < STAR_SNOW_HOLD + STAR_SNOW_FADE
+                    skySweep# = skyAge
+                    skySweepLong# = STAR_SNOW_SWEEP
+                    skySweep# = skySweep# / skySweepLong#
+                    if skySweep# > 1 then skySweep# = 1
+                    skyLines# = 1
+                    if skyAge > STAR_SNOW_HOLD
+                        skyLines# = skyAge - STAR_SNOW_HOLD
+                        skyLinesLong# = STAR_SNOW_FADE
+                        skyLines# = 1 - skyLines# / skyLinesLong#
+                    endif
+                endif
+            endif
+            if STAR_MADE(STAR_SNOW_SLOT(skyI))
+                skyLines# = 1
+                skySweep# = 1
+            endif
+        endif
+        STAR_SNOW_LINES#(skyI) = skyLines#
+        STAR_SNOW_SWEEP#(skyI) = skySweep#
+    next
+endfunction
+
+
+` THE SAVED GAME. see SQUID_PREF in fish_headers_squid. tideSave and tideLoad call these.
+function squidSave()
+    set pref SQUID_PREF, 1
+    set pref SQUID_PREF + 1, SQUID_CELL + 1
+    set pref SQUID_PREF + 2, SQUID_DUE + SQUID_PUSHES * 2
+    for squidSaveS = 0 to 2
+        squidSaveMade = 0
+        if STAR_MADE(squidSaveS)
+            squidSaveMade = 1 + STAR_MADE_TURN(squidSaveS) + STAR_MADE_AT(squidSaveS) * 4
+        endif
+        set pref SQUID_PREF + 3 + squidSaveS, STAR_PICK(squidSaveS) + 1 + squidSaveMade * 100
+    next
+    for squidSaveP = 0 to 13
+        squidSaveBits = 0
+        squidSaveBit = 1
+        for squidSaveK = 0 to 29
+            squidSaveI = squidSaveP * 30 + squidSaveK
+            if squidSaveI < 400
+                if INK(squidSaveI) then squidSaveBits = squidSaveBits + squidSaveBit
+            endif
+            squidSaveBit = squidSaveBit * 2
+        next
+        set pref SQUID_PREF + 6 + squidSaveP, squidSaveBits
+    next
+
+    ` and the parts of the trident that the game has. see THE TRIDENT in fish_headers_neptune.
+    squidSaveBits = 0
+    squidSaveBit = 1
+    for squidSaveK = 0 to TRIDENT_PART_COUNT - 1
+        if TRIDENT_DONE(squidSaveK) then squidSaveBits = squidSaveBits + squidSaveBit
+        squidSaveBit = squidSaveBit * 2
+    next
+    set pref SQUID_PREF + 20, squidSaveBits
+
+    ` which made constellations have popped, and the ink of the day, with its pot. see THE POT.
+    squidSaveBits = 0
+    squidSaveBit = 1
+    for squidSaveS = 0 to 2
+        if STAR_POPPED(squidSaveS) then squidSaveBits = squidSaveBits + squidSaveBit
+        squidSaveBit = squidSaveBit * 2
+    next
+    set pref SQUID_PREF + 21, squidSaveBits
+    set pref SQUID_PREF + 22, INK_DAY + INK_POT * 2
+    for squidSaveP = 0 to 13
+        squidSaveBits = 0
+        squidSaveBit = 1
+        for squidSaveK = 0 to 29
+            squidSaveI = squidSaveP * 30 + squidSaveK
+            if squidSaveI < 400
+                if INK_CLEAN(squidSaveI) then squidSaveBits = squidSaveBits + squidSaveBit
+            endif
+            squidSaveBit = squidSaveBit * 2
+        next
+        set pref SQUID_PREF + 23 + squidSaveP, squidSaveBits
+    next
+endfunction
+
+` a game that was saved before there was a squid has none of this
+function squidLoad()
+    squidReset()
+    if get pref(SQUID_PREF, 0) = 1
+        SQUID_CELL = get pref(SQUID_PREF + 1, 0) - 1
+        squidLoadFlags = get pref(SQUID_PREF + 2, 0)
+        SQUID_DUE = squidLoadFlags mod 2
+        SQUID_PUSHES = squidLoadFlags / 2
+        for squidLoadP = 0 to 13
+            squidLoadBits = get pref(SQUID_PREF + 6 + squidLoadP, 0)
+            for squidLoadK = 0 to 29
+                squidLoadI = squidLoadP * 30 + squidLoadK
+                if squidLoadI < 400
+                    if squidLoadBits mod 2
+                        INK(squidLoadI) = 1
+                        INK_COUNT = INK_COUNT + 1
+                    endif
+                endif
+                squidLoadBits = squidLoadBits / 2
+            next
+        next
+        ` a made constellation that had popped has no cells any more, and one that had not pops soon
+        squidLoadPopped = get pref(SQUID_PREF + 21, 0)
+        for squidLoadS = 0 to 2
+            squidLoadPick = get pref(SQUID_PREF + 3 + squidLoadS, 0)
+            STAR_PICK(squidLoadS) = (squidLoadPick mod 100) - 1
+            squidLoadMade = squidLoadPick / 100
+            if squidLoadMade > 0
+                if STAR_PICK(squidLoadS) >= 0
+                    if squidLoadPopped mod 2
+                        STAR_MADE(squidLoadS) = 1
+                        STAR_POPPED(squidLoadS) = 1
+                    else
+                        squidLoadMade = squidLoadMade - 1
+                        starClaim(squidLoadS, squidLoadMade / 4, squidLoadMade mod 4)
+                        STAR_POP_DUE(squidLoadS) = 1
+                        STAR_POP_MS(squidLoadS) = game ms() + STAR_POP_WAIT
+                    endif
+                endif
+            endif
+            squidLoadPopped = squidLoadPopped / 2
+        next
+        INK_BOARD_COLS = CELL_COLUMN_COUNT
+        starSnowPlace()
+
+        squidLoadBits = get pref(SQUID_PREF + 20, 0)
+        for squidLoadK = 0 to TRIDENT_PART_COUNT - 1
+            if squidLoadBits mod 2
+                TRIDENT_DONE(squidLoadK) = 1
+                TRIDENT_PARTS = TRIDENT_PARTS + 1
+            endif
+            squidLoadBits = squidLoadBits / 2
+        next
+    endif
+    if TIDE_NIGHT = 0
+        SQUID_CELL = -1
+        SQUID_DUE = 0
+        ` the ink of the day stays, with its pot
+        squidLoadDay = get pref(SQUID_PREF + 22, 0)
+        if squidLoadDay mod 2
+            for squidLoadS = 0 to 2
+                STAR_POP_DUE(squidLoadS) = 0
+            next
+            for squidLoadI = 0 to 399
+                STAR_CLAIM(squidLoadI) = 0
+            next
+            INK_DAY = 1
+            INK_DAY_SHOWN# = 1
+            INK_POT = 0
+            for squidLoadP = 0 to 13
+                squidLoadBits = get pref(SQUID_PREF + 23 + squidLoadP, 0)
+                for squidLoadK = 0 to 29
+                    squidLoadI = squidLoadP * 30 + squidLoadK
+                    if squidLoadI < 400
+                        if squidLoadBits mod 2
+                            INK_CLEAN(squidLoadI) = 1
+                            INK_POT = INK_POT + 1
+                        endif
+                    endif
+                    squidLoadBits = squidLoadBits / 2
+                next
+            next
+            INK_ROWS_STALE = 1
+            INK_CORAL_SEEN = -1
+        else
+            inkWipe()
+        endif
+        if INK_COUNT = 0
+            INK_DAY = 0
+            INK_POT = 0
+            for squidLoadI = 0 to 399
+                INK_CLEAN(squidLoadI) = 0
+            next
+        endif
+    endif
+endfunction
+
+
+` THE END OF THE NIGHT. the last move of the night has been made. when there is ink, the night holds on
+` until the board has settled, because the last move may have made a constellation, and then until any
+` constellation that is waiting to pop has. day breaks after that. this says 1 when the night holds on.
+` tideMoveMade asks, from places that come before the size of the board is known, so it only says what
+` is to happen: squidStep does the rest.
+function squidNightEnds()
+    endsHolds = 0
+    if SQUID_ENDING > 0 then endsHolds = 1
+    if SQUID_ENDING = 0
+        endsWait = 0
+        if INK_COUNT > 0 then endsWait = 1
+        for endsS = 0 to 2
+            if STAR_POP_DUE(endsS) then endsWait = 1
+        next
+        if endsWait
+            SQUID_ENDING = 1
+            endsHolds = 1
+        endif
+    endif
+endfunction endsHolds
+
+
+
+
+` the squid that was pushed puffs away: a copy of it, where it was, swells up and fades into the cloud
+` of its ink. it is a plain sprite, on top of the fish, tinted the way that the night tints things.
+function squidPuffStep(puffNow)
+    if SQUID_PUFF_MS > 0
+        if SQUID_GHOST = 0
+            puffNewId = 0
+            reserve sprite id(puffNewId)
+            sprite puffNewId, 0, 0, TEX_SQUID
+            order sprite puffNewId, ORDER_FISH + 1
+            SQUID_GHOST = puffNewId
+        endif
+        puffGone# = puffNow - SQUID_PUFF_MS
+        puffT# = puffGone# / SQUID_PUFF_LONG#
+        if puffT# >= 1
+            hide sprite SQUID_GHOST
+            SQUID_PUFF_MS = 0
+        else
+            if puffT# < 0 then puffT# = 0
+            puffX = getCellX(SQUID_PUFF_CELL mod CELL_COLUMN_COUNT)
+            puffY = getCellY(SQUID_PUFF_CELL / CELL_COLUMN_COUNT)
+            puffCell# = CELL_SIZE
+            puffSize# = puffCell# * .8 * (1 + puffT# * .8)
+            puffAlpha = 230 * (1 - puffT#) * (1 - puffT#)
+            position sprite SQUID_GHOST, puffX, puffY
+            size sprite SQUID_GHOST, puffSize#, puffSize#
+            color sprite SQUID_GHOST, rgb(150, 115, 215, puffAlpha)
+            show sprite SQUID_GHOST
+        endif
+    endif
+endfunction
+
+
+` how much smaller a fish is drawn, in thousandths, while it grows back in after the squid has left it,
+` or while the squid grows in where it lands. it starts out nearly gone, and it overshoots its size a
+` little before it settles. frame_fish_fx asks, only for those two cells.
+function squidShrinkAt(shrinkCell, shrinkNow)
+    shrinkStart = 0
+    if shrinkCell = SQUID_BACK_CELL then shrinkStart = SQUID_BACK_MS
+    if shrinkCell = SQUID_IN_CELL then shrinkStart = SQUID_IN_MS
+    shrinkBy = 0
+    if shrinkStart > 0
+        shrinkGone# = shrinkNow - shrinkStart
+        shrinkT# = shrinkGone# / SQUID_GROW_LONG#
+        if shrinkT# < 0
+            shrinkBy = 900
+        else
+            if shrinkT# < 1
+                shrinkU# = shrinkT# - 1
+                shrinkEase# = 1 + 2.7 * shrinkU# * shrinkU# * shrinkU# + 1.7 * shrinkU# * shrinkU#
+                shrinkBy = (1 - shrinkEase#) * 900
+            endif
+        endif
+    endif
+endfunction shrinkBy
+
+
+` the bits of which cells are inked, and which are part of a made constellation, row by row, for InkEffect.fx
+function inkRowsUpdate()
+    INK_ROWS_STALE = 0
+    for rowsR = 0 to 19
+        INK_ROW_BITS(rowsR) = 0
+        MADE_ROW_BITS(rowsR) = 0
+        INK_CLEAN_BITS(rowsR) = 0
+    next
+    ` a cell that was washed off is drawn until its fish pops. the soonest of those that is still to
+    ` come is kept, so that inkDraw knows when to come back here.
+    rowsNow = game ms()
+    INK_WASH_NEXT = 0
+    INK_SHOWN_COUNT = 0
+    INK_CLEAN_SHOWN = 0
+    rowsLast = CELL_COUNT - 1
+    for rowsI = 0 to rowsLast
+        rowsShown = INK(rowsI)
+        if INK_WASH_MS(rowsI) > 0
+            if INK_WASH_MS(rowsI) > rowsNow
+                rowsShown = 1
+                if INK_WASH_NEXT = 0 then INK_WASH_NEXT = INK_WASH_MS(rowsI)
+                if INK_WASH_MS(rowsI) < INK_WASH_NEXT then INK_WASH_NEXT = INK_WASH_MS(rowsI)
+            else
+                INK_WASH_MS(rowsI) = 0
+            endif
+        endif
+        ` a clean cell is drawn clean while there is no ink on it
+        rowsClean = 0
+        if INK_CLEAN(rowsI)
+            if rowsShown = 0 then rowsClean = 1
+        endif
+        rowsAny = rowsShown + STAR_CLAIM(rowsI)
+        rowsAny = rowsAny + rowsClean
+        if rowsAny > 0
+            rowsX = rowsI mod CELL_COLUMN_COUNT
+            rowsY = rowsI / CELL_COLUMN_COUNT
+            if rowsX < 20
+                if rowsY < 20
+                    if rowsShown
+                        INK_ROW_BITS(rowsY) = INK_ROW_BITS(rowsY) + INK_POW(rowsX)
+                        INK_SHOWN_COUNT = INK_SHOWN_COUNT + 1
+                    endif
+                    if STAR_CLAIM(rowsI) > 0 then MADE_ROW_BITS(rowsY) = MADE_ROW_BITS(rowsY) + INK_POW(rowsX)
+                    if rowsClean
+                        INK_CLEAN_BITS(rowsY) = INK_CLEAN_BITS(rowsY) + INK_POW(rowsX)
+                        INK_CLEAN_SHOWN = INK_CLEAN_SHOWN + 1
+                    endif
+                endif
+            endif
+        endif
+    next
+    for rowsR = 0 to 19
+        INK_ROW#(rowsR) = INK_ROW_BITS(rowsR)
+        MADE_ROW#(rowsR) = MADE_ROW_BITS(rowsR)
+        INK_CLEAN_ROW#(rowsR) = INK_CLEAN_BITS(rowsR)
+    next
+endfunction
+
+
+` the fish that the squid left is drawn as itself again. squidStep calls this on every frame, and so
+` does frame_fish_fx, before it draws the squid in a new cell, because it gets there first.
+function squidUnshow()
+    if SQUID_SHOWN_CELL >= 0
+        if SQUID_SHOWN_CELL <> SQUID_CELL
+            if SQUID_SHOWN_CELL < CELL_COUNT
+                squidBack = CELLS(SQUID_SHOWN_CELL)
+                squidBackTex = fishPicture(squidBack.value, squidBack.bellyUp)
+                setFishTexture(squidBack.spriteId, squidBackTex)
+            endif
+            SQUID_SHOWN_CELL = -1
+        endif
+    endif
+endfunction
+
+
+
+
+` the hints start over for a night: none is in the water yet, and the first to come can be anywhere in it,
+` so that it is not a long wait. which shape comes first, and on which side, is rolled with rnd: it is only
+` to look at. squidArrive calls this when the sky is picked, and squidLoad for a game that was saved at night.
+function starSnowPlace()
+    for snowS = 0 to 2
+        STAR_SNOW_STATE(snowS) = 0
+        STAR_SNOW_SLOT(snowS) = -1
+        STAR_SKY_SHOWN#(snowS) = 0
+        STAR_SNOW_LINES#(snowS) = 0
+    next
+    STAR_SNOW_NEXT = rnd(3)
+    STAR_SNOW_LAST_SIDE = rnd(2)
+    STAR_SNOW_FIRST = 1
+endfunction
+
+
+
+
+` WHERE A HINT IS, on the screen: its top left light, which drifts up with the plankton. SeabedEffect.fx
+` moves the plankton up by the time, and sways each row of it a little from side to side, which this
+` leaves out. the answer is in STAR_AT_X and STAR_AT_Y.
+function starSnowAt(atS)
+    atRise# = (game ms() * .001) * STAR_SNOW_RISE#
+    STAR_AT_X = STAR_SNOW_CX(atS) * STAR_SNOW_GRAIN
+    STAR_AT_Y = STAR_SNOW_CY(atS) * STAR_SNOW_GRAIN - atRise#
+endfunction
+
+
+` THE POT. once the board has settled, and the ink of the day is all washed off, it pays. see THE POT in
+` fish_headers_squid. the clean cells are counted as they are washed, by inkWashed.
+function inkPotStep(potNow)
+    if INK_DAY = 0 then exitfunction
+    if INK_COUNT = 0
+        inkPotPays(potNow)
+    endif
+endfunction
+
+
+` THE POT PAYS. each clean cell is worth INK_POT_STEP more than the one before it, the nearest to the cell
+` that was washed last first. they poof away one after another, INK_PAY_EVERY apart, each with its
+` score and a pop that is higher each time. the scores and the notes are all set going now, and wait:
+` InkEffect.fx draws the glow that runs on ahead, and inkPayStep starts the poofs, with their words. the
+` words are made as each poofs, and not all now with a wait, because a text that waits can show for a
+` frame before its wait starts.
+function inkPotPays(payNow)
+    INK_DAY = 0
+    INK_POT = 0
+
+    ` the clean cells, nearest to the one that was washed last first. INK_STACK is free for their distances.
+    payFrom = INK_LAST_WASHED
+    if payFrom < 0 then payFrom = 0
+    if payFrom >= CELL_COUNT then payFrom = 0
+    payFromX = payFrom mod CELL_COLUMN_COUNT
+    payFromY = payFrom / CELL_COLUMN_COUNT
+    payN = 0
+    payFar = 0
+    payLast = CELL_COUNT - 1
+    for payI = 0 to payLast
+        if INK_CLEAN(payI)
+            payDx = payI mod CELL_COLUMN_COUNT
+            payDx = payDx - payFromX
+            payDy = payI / CELL_COLUMN_COUNT
+            payDy = payDy - payFromY
+            payD2 = payDx * payDx + payDy * payDy
+            if payD2 > payFar then payFar = payD2
+            payJ = payN
+            payMoving = 1
+            while payMoving
+                payMoving = 0
+                if payJ > 0
+                    if INK_STACK(payJ - 1) > payD2
+                        INK_STACK(payJ) = INK_STACK(payJ - 1)
+                        INK_PAY_CELL(payJ) = INK_PAY_CELL(payJ - 1)
+                        payJ = payJ - 1
+                        payMoving = 1
+                    endif
+                endif
+            endwhile
+            INK_STACK(payJ) = payD2
+            INK_PAY_CELL(payJ) = payI
+            payN = payN + 1
+        endif
+    next
+    if payN <= 0 then exitfunction
+    codecSeeCard(CODEC_ENTRY_CLEAN) `the codec has an entry for it, from the first pot that pays
+
+    payTri = payN * (payN + 1)
+    payTri = payTri / 2
+    payPoints = INK_POT_STEP * payTri
+    payPoints = payPoints * SCORE_MULTIPLIER * SCHOOL_STAKES
+    INK_LAST_PAY = payPoints
+
+    INK_PAYING = 1
+    INK_PAY_MS = payNow
+    INK_PAY_COUNT = payN
+    INK_PAY_POPPED = 0
+    INK_PAY_POINTS = payPoints
+    INK_PAY_FROM_X# = payFromX
+    INK_PAY_FROM_Y# = payFromY
+
+    ` when each poofs, and how far it is, for the glow
+    for payK = 0 to payN - 1
+        payFar# = INK_STACK(payK)
+        INK_PAY_FAR#(payK) = sqrt(payFar#)
+        INK_PAY_AT(payK) = INK_PAY_LEAD + payK * INK_PAY_EVERY
+    next
+
+    ` the wave: a swell under it
+    FANFARE_COUNT = 0
+    starNote(payNow + 1, INSTRUMENT_SWELL, F4, .4)
+    starNote(payNow + 1, INSTRUMENT_SWELL, C5, .3)
+
+    payPaid = 0
+    for payK = 0 to payN - 1
+        payCell = INK_PAY_CELL(payK)
+        payDelay = INK_PAY_AT(payK)
+        payPts = INK_POT_STEP * (payK + 1)
+        payPts = payPts * SCORE_MULTIPLIER * SCHOOL_STAKES
+        payPaid = payPaid + payPts
+
+        queueScore(payPts, payDelay)
+
+        payNote = F4 + payK
+        while payNote > C6
+            payNote = payNote - 7
+        endwhile
+        starNote(payNow + payDelay, INSTRUMENT_PLUCK, payNote, .45)
+    next
+
+    ` and as the last one goes, a low chord that comes in slowly, a note at a time
+    payLand = INK_PAY_AT(payN - 1) + 250
+    starNote(payNow + payLand, INSTRUMENT_SWELL, D4, .5)
+    starNote(payNow + payLand, INSTRUMENT_CHOIR, D4, .5)
+    starNote(payNow + payLand + 450, INSTRUMENT_CHOIR, F4, .45)
+    starNote(payNow + payLand + 900, INSTRUMENT_CHOIR, A4, .42)
+endfunction
+
+
+` the clean cells of the pot that pays poof away when it is their time, each with a pop that is higher
+` than the last. the pot is over once the last of them has.
+function inkPayStep(payStepNow)
+    if INK_PAYING = 0 then exitfunction
+    payStepSince = payStepNow - INK_PAY_MS
+    payStepGoing = 1
+    while payStepGoing
+        payStepGoing = 0
+        if INK_PAY_POPPED < INK_PAY_COUNT
+            if payStepSince >= INK_PAY_AT(INK_PAY_POPPED)
+                payStepCell = INK_PAY_CELL(INK_PAY_POPPED)
+                INK_CLEAN(payStepCell) = 0
+                INK_ROWS_STALE = 1
+                inkFizzStart(payStepCell, 0, INK_FIZZ_POOF)
+
+                ` its words come up out of it
+                payStepPts = INK_POT_STEP * (INK_PAY_POPPED + 1)
+                payStepPts = payStepPts * SCORE_MULTIPLIER * SCHOOL_STAKES
+                payStepPos as vec = {
+                    x = getCellX(payStepCell mod CELL_COLUMN_COUNT),
+                    y = getCellY(payStepCell / CELL_COLUMN_COUNT)
+                }
+                payStepPos.y = payStepPos.y - 4 - INK_PAY_TEXT# * 6
+                payStepTxt = spawnScoreTextScaled(payStepPos, "+" + str$(payStepPts), 0, 800, INK_PAY_TEXT#)
+                color text payStepTxt, rgb(225, 248, 255)
+                payStepPitch# = INK_PAY_POPPED * .045
+                payStepPitch# = payStepPitch# - .2
+                if payStepPitch# > .8 then payStepPitch# = .8
+                tidePlaySound(INK_SFX_POP(INK_SFX_POP_NEXT), INK_VOL_POP#, payStepPitch#)
+                INK_SFX_POP_NEXT = (INK_SFX_POP_NEXT + 1) mod 4
+                INK_PAY_POPPED = INK_PAY_POPPED + 1
+                payStepGoing = 1
+            endif
+        endif
+    endwhile
+    if INK_PAY_POPPED >= INK_PAY_COUNT
+        payStepLand = INK_PAY_AT(INK_PAY_COUNT - 1) + INK_PAY_POP_LONG
+        if payStepSince >= payStepLand then INK_PAYING = 0
+    endif
+endfunction
+
+
+` THE POT IS LOST. night has fallen on ink that was never all washed off. it breaks up now, a cell at a
+` time, for INK_BUST_POINTS a clean cell, with a sigh, and the clean cells fade. see THE POT in fish_headers_squid.
+function inkBust(bustNow)
+    bustPot = INK_POT
+    INK_DAY = 0
+    INK_POT = 0
+    bustPoints = INK_BUST_POINTS * bustPot * SCORE_MULTIPLIER * SCHOOL_STAKES
+    INK_LAST_BUST = bustPoints
+    bustDelay = 0
+    bustLast = CELL_COUNT - 1
+    for bustI = 0 to bustLast
+        if INK(bustI)
+            inkGone(bustI, bustDelay)
+            bustDelay = bustDelay + 35
+        endif
+    next
+    if bustPoints > 0
+        bustPos as vec = {
+            x = getCellX(0) + getCellX(CELL_COLUMN_COUNT - 1),
+            y = getCellY(0) + getCellY(CELL_ROW_COUNT - 1)
+        }
+        bustPos.x = bustPos.x / 2
+        bustPos.y = bustPos.y / 2
+        bustTxt = spawnBoardScoreText(bustPos, "+" + str$(bustPoints), bustDelay, 900)
+        color text bustTxt, rgb(120, 130, 170)
+        queueScore(bustPoints, bustDelay)
+    endif
+    tidePlaySound(TIDE_SFX_PULSE, TIDE_VOL_PULSE# * .6, -.45)
+    tidePlaySound(INK_SFX_FIZZ(INK_SFX_FIZZ_NEXT), INK_VOL_FIZZ#, -.6)
+    INK_SFX_FIZZ_NEXT = (INK_SFX_FIZZ_NEXT + 1) mod 4
+    FANFARE_COUNT = 0
+    starNote(bustNow + 120, INSTRUMENT_PLUCK, C5, .3)
+    starNote(bustNow + 300, INSTRUMENT_PLUCK, A4, .28)
+    starNote(bustNow + 520, INSTRUMENT_PLUCK, F4, .26)
+    INK_CRUMBLE_MS = bustNow
+endfunction
+
+
+
+
+` the board has grown. it used to have `inkOldColumns` columns, and `inkRowShift` is 1 if it got a new row
+` on the top, which pushes everything down by one. the ink, the clean cells, the constellations and the
+` squid stay with the cells that they were on. handle the board growing, in fish_routines, calls this.
+function inkBoardGrew(inkOldColumns, inkRowShift)
+    inkOldRows = CELL_ROW_COUNT - inkRowShift
+    inkOldCount = inkOldColumns * inkOldRows
+    for inkGrewI = 0 to inkOldCount - 1
+        INK_STACK(inkGrewI) = INK(inkGrewI) + STAR_CLAIM(inkGrewI) * 2
+        INK_STACK(inkGrewI) = INK_STACK(inkGrewI) + INK_CLEAN(inkGrewI) * 8
+    next
+    INK_COUNT = 0
+    for inkGrewI = 0 to CELL_COUNT - 1
+        inkGrewX = inkGrewI mod CELL_COLUMN_COUNT
+        inkGrewOldY = inkGrewI / CELL_COLUMN_COUNT
+        inkGrewOldY = inkGrewOldY - inkRowShift
+        inkGrewHas = 0
+        if inkGrewX < inkOldColumns
+            if inkGrewOldY >= 0
+                inkGrewHas = INK_STACK(inkGrewX + inkGrewOldY * inkOldColumns)
+            endif
+        endif
+        INK_CLEAN(inkGrewI) = inkGrewHas / 8
+        inkGrewHas = inkGrewHas mod 8
+        INK(inkGrewI) = inkGrewHas mod 2
+        STAR_CLAIM(inkGrewI) = inkGrewHas / 2
+        INK_WASH_MS(inkGrewI) = 0
+        INK_PIECE(inkGrewI) = 0
+        INK_COUNT = INK_COUNT + INK(inkGrewI)
+    next
+    INK_WASH_NEXT = 0
+    if SQUID_CELL >= 0
+        inkGrewX = SQUID_CELL mod inkOldColumns
+        inkGrewOldY = SQUID_CELL / inkOldColumns
+        SQUID_CELL = inkGrewX + (inkGrewOldY + inkRowShift) * CELL_COLUMN_COUNT
+    endif
+    SQUID_SHOWN_CELL = -1
+    SQUID_BACK_CELL = -1
+    SQUID_IN_CELL = -1
+    INK_FRESH_CELL = -1
+    for inkGrewS = 0 to 2
+        if STAR_MADE(inkGrewS)
+            inkGrewX = STAR_MADE_AT(inkGrewS) mod inkOldColumns
+            inkGrewOldY = STAR_MADE_AT(inkGrewS) / inkOldColumns
+            STAR_MADE_AT(inkGrewS) = inkGrewX + (inkGrewOldY + inkRowShift) * CELL_COLUMN_COUNT
+        endif
+    next
+    INK_BOARD_COLS = CELL_COLUMN_COUNT
+    INK_ROWS_STALE = 1
+    INK_CORAL_SEEN = -1
+endfunction
+
+
+` the night ends at once, for the favor of the god. the ink fades away where it is, and there is no pot.
+function inkFadesAway()
+    for fadeAwayS = 0 to 2
+        STAR_POP_DUE(fadeAwayS) = 0
+    next
+    INK_DAY = 0
+    INK_POT = 0
+    if INK_COUNT > 0
+        for fadeAwayI = 0 to 399
+            INK(fadeAwayI) = 0
+            STAR_CLAIM(fadeAwayI) = 0
+            INK_WASH_MS(fadeAwayI) = 0
+            INK_CLEAN(fadeAwayI) = 0
+        next
+        INK_COUNT = 0
+        INK_GONE_MS = game ms()
+    endif
+endfunction
+
+
+` a hint goes into the water on its side of the board, on the grains of the plankton as they are right now.
+` the first of the night, with `putAnywhere` 1, can be at any height. the others come in low, so that they
+` have the whole of the water to rise through.
+function starSnowPut(putI, putAnywhere)
+    putSlot = STAR_SNOW_SLOT(putI)
+    if putSlot < 0 then exitfunction
+    putShape = STAR_PICK(putSlot)
+    if putShape < 0 then exitfunction
+    putPitch = STAR_SNOW_PITCH
+    putWide# = ((STAR_SHAPE_WIDE(putShape) - 1) * putPitch + 1) * STAR_SNOW_GRAIN
+    putTall# = ((STAR_SHAPE_TALL(putShape) - 1) * putPitch + 1) * STAR_SNOW_GRAIN
+    putRise# = (game ms() * .001) * STAR_SNOW_RISE#
+    starSnowBand(STAR_SNOW_SIDE(putI))
+
+    ` the plankton sways from side to side, so it keeps that far in from the sides of the water
+    putRoomX = STAR_BAND_WIDE - putWide# - STAR_SNOW_SWAY * 2
+    if putRoomX < 1 then putRoomX = 1
+    putRoomY = STAR_BAND_TALL - putTall# - 4
+    if putRoomY < 1 then putRoomY = 1
+    putX# = STAR_BAND_LEFT + STAR_SNOW_SWAY + rnd(putRoomX)
+    putY# = STAR_BAND_TOP + putRoomY - rnd(6)
+    if putAnywhere then putY# = STAR_BAND_TOP + putRoomY / 3 + rnd(putRoomY - putRoomY / 3)
+
+    ` the grain that is there, rounded up
+    putGX# = putX# / STAR_SNOW_GRAIN
+    putGY# = (putY# + putRise#) / STAR_SNOW_GRAIN
+    putGX = putGX#
+    if putGX < putGX# then putGX = putGX + 1
+    putGY = putGY#
+    if putGY < putGY# then putGY = putGY + 1
+    STAR_SNOW_CX(putI) = putGX
+    STAR_SNOW_CY(putI) = putGY
+endfunction
+
+
+` the hints, for HintSnowEffect.fx, and for SeabedEffect.fx, on every frame. seabedStep calls this, so that
+` it is set even when there is no night, and the hints are not there at all. the sprite that the lines are
+` drawn on is made the first time. each of the three is one that is in the water, coming or going, and not
+` one of the three shapes of the night: STAR_SNOW_SLOT says which shape it is.
+function starSnowParams()
+    if HINT_SPRITE = 0
+        reserve effect id(HINT_FX_ID)
+        effect HINT_FX_ID, "Fish/Shaders/HintSnowEffect"
+        reserve sprite id(HINT_SPRITE)
+        sprite HINT_SPRITE, 0, 0, TEX_PIXEL
+        set sprite offset HINT_SPRITE, 0, 0
+        size sprite HINT_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+        order sprite HINT_SPRITE, ORDER_HINTS
+        set sprite effect HINT_SPRITE, HINT_FX_ID
+    endif
+
+    for paramS = 0 to 2
+        for paramR = 0 to 7
+            STAR_SNOW_ROWS#(paramS * 8 + paramR) = 0
+        next
+        STAR_SNOW_WIDE(paramS) = 0
+        STAR_SNOW_TALL(paramS) = 0
+        STAR_SNOW_MADE(paramS) = 0
+        STAR_SNOW_SHOWN#(paramS) = 0
+        paramSlot = STAR_SNOW_SLOT(paramS)
+        paramShape = -1
+        if paramSlot >= 0 then paramShape = STAR_PICK(paramSlot)
+        if paramShape >= 0
+            STAR_SNOW_MADE(paramS) = STAR_MADE(paramSlot)
+            STAR_SNOW_SHOWN#(paramS) = STAR_SKY_SHOWN#(paramS) * TIDE_NIGHT_SHOWN#
+            STAR_SNOW_WIDE(paramS) = STAR_SHAPE_WIDE(paramShape)
+            STAR_SNOW_TALL(paramS) = STAR_SHAPE_TALL(paramShape)
+            paramFirst = STAR_SHAPE_FIRST(paramShape)
+            paramLast = paramFirst + STAR_SHAPE_LEN(paramShape) - 1
+            for paramK = paramFirst to paramLast
+                paramRow = paramS * 8 + STAR_Y(paramK)
+                paramBit = 1
+                for paramB = 1 to STAR_X(paramK)
+                    paramBit = paramBit * 2
+                next
+                if STAR_X(paramK) = 0 then paramBit = 1
+                STAR_SNOW_ROWS#(paramRow) = STAR_SNOW_ROWS#(paramRow) + paramBit
+            next
+        endif
+    next
+    paramTime# = game ms() * .001
+    set effect param float HINT_FX_ID, "Time", paramTime#
+    set effect param float2 HINT_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT
+    set effect param float4 HINT_FX_ID, "HintAt0", STAR_SNOW_CX(0), STAR_SNOW_CY(0), STAR_SNOW_WIDE(0), STAR_SNOW_TALL(0)
+    set effect param float4 HINT_FX_ID, "HintAt1", STAR_SNOW_CX(1), STAR_SNOW_CY(1), STAR_SNOW_WIDE(1), STAR_SNOW_TALL(1)
+    set effect param float4 HINT_FX_ID, "HintAt2", STAR_SNOW_CX(2), STAR_SNOW_CY(2), STAR_SNOW_WIDE(2), STAR_SNOW_TALL(2)
+    set effect param float4 HINT_FX_ID, "HintRowsA0", STAR_SNOW_ROWS#(0), STAR_SNOW_ROWS#(1), STAR_SNOW_ROWS#(2), STAR_SNOW_ROWS#(3)
+    set effect param float4 HINT_FX_ID, "HintRowsB0", STAR_SNOW_ROWS#(4), STAR_SNOW_ROWS#(5), STAR_SNOW_ROWS#(6), STAR_SNOW_ROWS#(7)
+    set effect param float4 HINT_FX_ID, "HintRowsA1", STAR_SNOW_ROWS#(8), STAR_SNOW_ROWS#(9), STAR_SNOW_ROWS#(10), STAR_SNOW_ROWS#(11)
+    set effect param float4 HINT_FX_ID, "HintRowsB1", STAR_SNOW_ROWS#(12), STAR_SNOW_ROWS#(13), STAR_SNOW_ROWS#(14), STAR_SNOW_ROWS#(15)
+    set effect param float4 HINT_FX_ID, "HintRowsA2", STAR_SNOW_ROWS#(16), STAR_SNOW_ROWS#(17), STAR_SNOW_ROWS#(18), STAR_SNOW_ROWS#(19)
+    set effect param float4 HINT_FX_ID, "HintRowsB2", STAR_SNOW_ROWS#(20), STAR_SNOW_ROWS#(21), STAR_SNOW_ROWS#(22), STAR_SNOW_ROWS#(23)
+    set effect param float4 HINT_FX_ID, "HintShown", STAR_SNOW_SHOWN#(0), STAR_SNOW_SHOWN#(1), STAR_SNOW_SHOWN#(2), 0
+    set effect param float4 HINT_FX_ID, "HintLines", STAR_SNOW_LINES#(0), STAR_SNOW_LINES#(1), STAR_SNOW_LINES#(2), 0
+    set effect param float4 HINT_FX_ID, "HintSweep", STAR_SNOW_SWEEP#(0), STAR_SNOW_SWEEP#(1), STAR_SNOW_SWEEP#(2), 0
+    set effect param float4 HINT_FX_ID, "HintMade", STAR_SNOW_MADE(0), STAR_SNOW_MADE(1), STAR_SNOW_MADE(2), 0
+
+    set effect param float4 SEABED_FX_ID, "HintAt0", STAR_SNOW_CX(0), STAR_SNOW_CY(0), STAR_SNOW_WIDE(0), STAR_SNOW_TALL(0)
+    set effect param float4 SEABED_FX_ID, "HintAt1", STAR_SNOW_CX(1), STAR_SNOW_CY(1), STAR_SNOW_WIDE(1), STAR_SNOW_TALL(1)
+    set effect param float4 SEABED_FX_ID, "HintAt2", STAR_SNOW_CX(2), STAR_SNOW_CY(2), STAR_SNOW_WIDE(2), STAR_SNOW_TALL(2)
+    set effect param float4 SEABED_FX_ID, "HintShown", STAR_SNOW_SHOWN#(0), STAR_SNOW_SHOWN#(1), STAR_SNOW_SHOWN#(2), 0
+    set effect param float4 SEABED_FX_ID, "HintRowsA0", STAR_SNOW_ROWS#(0), STAR_SNOW_ROWS#(1), STAR_SNOW_ROWS#(2), STAR_SNOW_ROWS#(3)
+    set effect param float4 SEABED_FX_ID, "HintRowsB0", STAR_SNOW_ROWS#(4), STAR_SNOW_ROWS#(5), STAR_SNOW_ROWS#(6), STAR_SNOW_ROWS#(7)
+    set effect param float4 SEABED_FX_ID, "HintRowsA1", STAR_SNOW_ROWS#(8), STAR_SNOW_ROWS#(9), STAR_SNOW_ROWS#(10), STAR_SNOW_ROWS#(11)
+    set effect param float4 SEABED_FX_ID, "HintRowsB1", STAR_SNOW_ROWS#(12), STAR_SNOW_ROWS#(13), STAR_SNOW_ROWS#(14), STAR_SNOW_ROWS#(15)
+    set effect param float4 SEABED_FX_ID, "HintRowsA2", STAR_SNOW_ROWS#(16), STAR_SNOW_ROWS#(17), STAR_SNOW_ROWS#(18), STAR_SNOW_ROWS#(19)
+    set effect param float4 SEABED_FX_ID, "HintRowsB2", STAR_SNOW_ROWS#(20), STAR_SNOW_ROWS#(21), STAR_SNOW_ROWS#(22), STAR_SNOW_ROWS#(23)
+endfunction
+
+
+` the water on a side of the board that the hints stay in: 0 is the left, and 1 the right. the answer is
+` in STAR_BAND_LEFT, STAR_BAND_TOP, STAR_BAND_WIDE and STAR_BAND_TALL, in pixels.
+function starSnowBand(bandSide)
+    STAR_BAND_LEFT = STAR_SNOW_LEFT_FROM
+    STAR_BAND_WIDE = STAR_SNOW_LEFT_WIDE
+    STAR_BAND_TOP = STAR_SNOW_LEFT_TOP
+    if bandSide = 1
+        STAR_BAND_LEFT = STAR_SNOW_RIGHT_FROM
+        STAR_BAND_WIDE = STAR_SNOW_RIGHT_WIDE
+        STAR_BAND_TOP = STAR_SNOW_RIGHT_TOP
+    endif
+    STAR_BAND_TALL = WORLD_HEIGHT - STAR_SNOW_BOTTOM - STAR_BAND_TOP
+endfunction

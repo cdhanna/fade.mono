@@ -45,6 +45,7 @@ frame_demo:
     if REQUEST_GAME_END then dmStop = 1
     if CORAL_ENDING_DUE then dmStop = 1
     if DIVER_ENDING_DUE then dmStop = 1
+    if NEPTUNE_ENDING_DUE then dmStop = 1
 
     if dmStop
         gosub demo_stop
@@ -97,6 +98,8 @@ demo_idle:
 
     dmTouched = 0
     if dmOnMain = 0 then dmTouched = 1
+    ` the options page can turn the demo off, and then the menu is never left alone for long enough
+    if OPTION_DEMO = 0 then dmTouched = 1
     if dmGap <> 1 then dmTouched = 1
     if new any input() then dmTouched = 1
     if MOUSE_MOVED then dmTouched = 1
@@ -204,6 +207,7 @@ demo_stop:
     REQUEST_GAME_END = 0
     CORAL_ENDING_DUE = 0
     DIVER_ENDING_DUE = 0
+    NEPTUNE_ENDING_DUE = 0
 
     ` the same way out as a game that is quit from the pause menu
     MENU_MODE = MENU_MODE_PAUSE
@@ -244,6 +248,7 @@ return
 demo_set_diver:
     dmBottleCell = CELL_COLUMN_COUNT / 2 + CELL_COLUMN_COUNT
     CELLS(dmBottleCell).value = TEX_BOTTLE
+    RAINBOW_FISH(dmBottleCell) = 0
     clearCellStack(dmBottleCell)
     updateCell(CELLS(dmBottleCell))
 

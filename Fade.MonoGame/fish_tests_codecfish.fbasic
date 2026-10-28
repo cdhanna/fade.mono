@@ -48,3 +48,61 @@ test codec_every_entry_has_a_name_for_info_mode from fishBoard
     assert CODEC_ORDER_COUNT = CODEC_COUNT, "and every entry is in a category"
     end
 endtest
+
+
+` THE THREE OF THE NIGHT (2026-10-27): the squid, the shapes painted in ink, and the ending that they bring.
+` they are in the run of rainbow fish and schooling fish, and the entries after them moved along by three.
+test codec_has_the_three_of_the_night from fishBoard
+    assert CODEC_ENTRY_SQUID = CODEC_ENTRY_SCHOOL + 1, "the squid comes after schooling fish"
+    assert CODEC_ENTRY_STARS = CODEC_ENTRY_SQUID + 1, "then the shapes in ink"
+    assert CODEC_ENTRY_FAVOR = CODEC_ENTRY_STARS + 1, "then their ending"
+    assert getCodecPref(CODEC_ENTRY_SQUID) = CODEC_PREF_FISH + 2, "they are remembered in the run of the fish"
+    assert getCodecPref(CODEC_ENTRY_FAVOR) = CODEC_PREF_FISH + 4, "all three"
+    assert getCodecPref(CODEC_ENTRY_CAMEO) = CODEC_PREF_CAMEO, "and the words are remembered where they always were"
+    assert getCodecPref(CODEC_ENTRY_GOODBYE) = PREF_ENDING_HOME, "and so is the usual ending"
+
+    assert CODEC_SEEN(CODEC_ENTRY_SQUID) = 0, "the squid is locked to begin with"
+    SQUID_CELL = testIndex(2, 2)
+    codecSeeBoard()
+    assert CODEC_SEEN(CODEC_ENTRY_SQUID) = 1, "and a squid on the board unlocks it"
+    SQUID_CELL = -1
+    tCfKind = spotCodecEntry(SPOT_KIND_SQUID)
+    assert tCfKind = CODEC_ENTRY_SQUID, "and its row in the look of info mode has the dot while it is new"
+
+    assert CODEC_SEEN(CODEC_ENTRY_STARS) = 0, "the shapes are locked to begin with"
+    starMade(0)
+    assert CODEC_SEEN(CODEC_ENTRY_STARS) = 1, "and making one unlocks them"
+
+    codecFindSelected()
+    CODEC_SELECTED = CODEC_ENTRY_FAVOR
+    codecFindSelected()
+    assert CODEC_CAT = 4, "the god's favor is with the endings"
+    end
+endtest
+
+` SQUEAKY CLEAN (2026-10-28): the ink of the day, after the ending of the night, in the run of the fish
+test codec_has_squeaky_clean from fishBoard
+    assert CODEC_ENTRY_CLEAN = CODEC_ENTRY_FAVOR + 1, "squeaky clean comes after the ending of the night"
+    assert getCodecPref(CODEC_ENTRY_CLEAN) = CODEC_PREF_FISH + 5, "and is remembered in the run of the fish"
+    assert getCodecPref(CODEC_ENTRY_CAMEO) = CODEC_PREF_CAMEO, "the words are remembered where they always were"
+    assert CODEC_SEEN(CODEC_ENTRY_CLEAN) = 0, "it is locked to begin with"
+    tCfTopic = anglerTopicOpen(ANGLER_T_CLEAN)
+    assert tCfTopic = 0, "and the angler does not talk about it yet"
+
+    ` a pot pays
+    INK_DAY = 1
+    INK_CLEAN(testIndex(2, 2)) = 1
+    INK_POT = 1
+    INK_LAST_WASHED = testIndex(2, 2)
+    inkPotPays(0)
+    assert CODEC_SEEN(CODEC_ENTRY_CLEAN) = 1, "the first pot that pays unlocks it"
+    tCfTopic = anglerTopicOpen(ANGLER_T_CLEAN)
+    assert tCfTopic = 1, "and the angler can be asked about it"
+    tCfKind = spotCodecEntry(SPOT_KIND_CLEAN)
+    assert tCfKind = CODEC_ENTRY_CLEAN, "and the look of a clean cell has its dot while it is new"
+
+    CODEC_SELECTED = CODEC_ENTRY_CLEAN
+    codecFindSelected()
+    assert CODEC_CAT = 2, "it is one of the secrets"
+    end
+endtest

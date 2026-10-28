@@ -37,6 +37,9 @@
 //                100 more than all of that is a fish with a black line drawn around it, one pixel wide,
 //                just outside its picture. that is for art from the CustomArt folder that has no line
 //                of its own. see fish_headers_customart.
+//                4000 more than everything else is a fish in a bubble: it is seen through the bubble, the way
+//                that it would be through a ball of glass, and lit as if it were round. the middle of the
+//                bubble is where the fish would be without its push. see Bubbled, and fish_headers_bubbled.
 
 Texture2D SpriteTexture;
 float4x4 MatrixTransform;
@@ -54,6 +57,11 @@ float2 Night;
 // near and far ends of the group. z is how far through its one sweep it has got, from 0 to 1, and w is how
 // wide the band is, along the wave. the game works these out, in fish_routines_rainbow.
 float4 Rainbow;
+// A FISH IN A BUBBLE, set by the game every frame. x is how big the bubble is, from its middle to its edge,
+// where the fish is 1 across. y is how much bigger the middle of it shows the fish, so .25 is a quarter
+// bigger. z is how much darker the side of it away from the light is, from 0 to 1. w is how much bluer the
+// fish is close to the edge of it.
+float4 Bubbled;
 // A RAINBOW FISH, and how it looks, set by the game every frame so that it can be played with in the debug window.
 // x is how strongly the edge outside of its line shimmers, from 0 to 1. y is how many times a second the
 // colors go around it. z is how much of its line is the rainbow in place of its dark color, from 0 to 1.
@@ -163,6 +171,9 @@ struct VertexShaderOutput
 
 	// where the middle of the fish is on the screen, in pixels, for the waves of a rainbow fish
 	float2 Screen : TEXCOORD6;
+
+	// xy is where the middle of the bubble is, on the quad, and z is 1 for a fish in a bubble
+	float4 Lens : TEXCOORD7;
 };
 
 VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
@@ -202,6 +213,9 @@ VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
 	float wave = 0.5 + 0.5 * sin(Night.y * NIGHT_WAVE_SPEED - dot(middle, NIGHT_WAVE));
 	// 200 more says that it has the thick line of the 32 pixel art around it, and 100 more the line of
 	// a 16 pixel picture. the rest is read from what is left. see THE LINE AROUND IT.
+	float inBubble = step(3500.0, custom2.w);
+	custom2.w -= 4000.0 * inBubble;
+	output.Lens = float4(-custom2.xy / max(custom.w, 1.0), inBubble, 0);
 	float rainbowFish = step(1500.0, custom2.w);
 	custom2.w -= 2000.0 * rainbowFish;
 	float dayShimmer = step(500.0, custom2.w);
@@ -353,11 +367,19 @@ float3 tasteOf(float2 spot)
 
 float4 MainPS(VertexShaderOutput input) : COLOR
 {
+	// A FISH IN A BUBBLE is seen through it: the middle of the bubble shows the fish bigger, and that
+	// eases off to nothing at its edge, the way that a ball of glass does. lens is 0 for any other fish.
+	float2 fromLens = input.Quad - input.Lens.xy;
+	float lensR = length(fromLens) / max(Bubbled.x, .01);
+	float lens = input.Lens.z * step(lensR, 1.0);
+	VertexShaderOutput seen = input;
+	seen.Quad = lerp(input.Quad, input.Lens.xy + fromLens * (1.0 - Bubbled.y * (1.0 - lensR * lensR)), lens);
+
 	// back to front
 	float4 result = float4(0, 0, 0, 0);
 	for (int i = MAX_STACK - 1; i >= 0; i--)
 	{
-		float4 layer = SampleLayer(input, i);
+		float4 layer = SampleLayer(seen, i);
 		float alpha = layer.a + result.a * (1.0 - layer.a);
 		result.rgb = (layer.rgb * layer.a + result.rgb * result.a * (1.0 - layer.a)) / max(alpha, .001);
 		result.a = alpha;
@@ -366,6 +388,15 @@ float4 MainPS(VertexShaderOutput input) : COLOR
 	// a fish that is told to glow gets brighter. nothing else here changes its colors, until it is night.
 	// at night most of that goes into its light, further down, so that the fish itself is not washed out.
 	result.rgb *= 1.0 + input.CountGlow.y * (1.0 - 0.8 * input.CountGlow.z);
+
+	// and it is lit as if it were round, from the top left, where the shine of the bubble is, and it is
+	// bluer close to the edge of the bubble, where the water is seen through more of it
+	float2 roundAt = fromLens / max(Bubbled.x, .01);
+	float3 roundFace = float3(roundAt, sqrt(saturate(1.0 - dot(roundAt, roundAt))));
+	float roundLight = saturate(dot(roundFace, normalize(float3(-0.5, -0.6, 0.65))));
+	float3 roundLit = result.rgb * (1.0 - Bubbled.z + Bubbled.z * 1.35 * roundLight);
+	roundLit = lerp(roundLit, roundLit * float3(0.75, 0.9, 1.1) + float3(0.0, 0.03, 0.08), Bubbled.w * lensR * lensR * lensR);
+	result.rgb = lerp(result.rgb, roundLit, lens);
 
 	// THE NIGHT. the color of the light of this fish is the color of the fish as a whole, which is
 	// looked up in a few spots of its picture.

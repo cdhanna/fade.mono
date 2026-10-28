@@ -153,6 +153,25 @@ setup_intro:
     enable text drop shadow INTRO_SUB_TEXT_ID, 2, -2, rgb(0,0,0)
     hide text INTRO_SUB_TEXT_ID
 
+    ` the lines under the bar of the round, and the outline around it. see tutorial_round_bar.
+    reserve text id(TUTORIAL_BAR_TEXT_ID)
+    text loc TUTORIAL_BAR_TEXT_ID, WORLD_WIDTH / 2, 60, SCORE_FONT, "intro.tut.bar"
+    size text max TUTORIAL_BAR_TEXT_ID, 400, 20
+    set text offset TUTORIAL_BAR_TEXT_ID, .5, 0
+    color text TUTORIAL_BAR_TEXT_ID, rgb(255, 255, 255, 255)
+    order text TUTORIAL_BAR_TEXT_ID, ORDER_INTRO + 4
+    enable text drop shadow TUTORIAL_BAR_TEXT_ID, 2, -2, rgb(0,0,0)
+    hide text TUTORIAL_BAR_TEXT_ID
+    reserve text id(TUTORIAL_BAR_SUB_TEXT_ID)
+    text loc TUTORIAL_BAR_SUB_TEXT_ID, WORLD_WIDTH / 2, 84, SCORE_FONT, "intro.tut.bar.sub"
+    size text max TUTORIAL_BAR_SUB_TEXT_ID, 400, 16
+    set text offset TUTORIAL_BAR_SUB_TEXT_ID, .5, 0
+    color text TUTORIAL_BAR_SUB_TEXT_ID, rgb(255, 230, 150, 255)
+    order text TUTORIAL_BAR_SUB_TEXT_ID, ORDER_INTRO + 4
+    enable text drop shadow TUTORIAL_BAR_SUB_TEXT_ID, 2, -2, rgb(0,0,0)
+    hide text TUTORIAL_BAR_SUB_TEXT_ID
+    TUTORIAL_BAR_BORDER = createInfoBorder(ORDER_INTRO + 3)
+
     ` the question marks of the mystery. a question mark is not a word, so it is the same in every language.
     for markI = 0 to TUTORIAL_MARK_COUNT - 1
         reserve text id(TUTORIAL_MARK_TEXTS(markI))
@@ -193,6 +212,16 @@ setup_intro:
     set text loc HINT_PART_TEXTS(0), "intro.hint.move"
     set text loc HINT_PART_TEXTS(1), "intro.hint.swap"
     set text loc HINT_PART_TEXTS(2), "intro.hint.info"
+
+    ` the jumps of the pictures of keys in the words of the tutorial. see ICON_PUNCH_TWEENS in fish_headers.
+    ` the ids are the ones that frame_input_icons gives them, whatever is being played with.
+    ICON_PUNCH_IDS(0) = 6 `{swap}
+    ICON_PUNCH_IDS(1) = 7 `{dir}
+    ICON_PUNCH_IDS(2) = 5 `{info}
+    for iconI = 0 to 2
+        reserve tween id(ICON_PUNCH_TWEENS(iconI))
+        create basic tween ICON_PUNCH_TWEENS(iconI), 0, 0, 1, 0
+    next
 return
 
 
@@ -445,7 +474,7 @@ tutorial_grow:
     endif
     scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
     gosub update_selection_position
-    show sprite SELECTION_SPRITE
+    cursorArrive(tgLongest + TUTORIAL_GROW_MS) `once the last fish has grown in. see fish_headers_cursorshow.
 
     TUTORIAL_BOARD = 1
     TUTORIAL_STEP_DONE = 0
@@ -535,7 +564,7 @@ tutorial_regrow_board:
             show sprite CELLS(trI).spriteId
         endif
     next
-    show sprite SELECTION_SPRITE
+    cursorArrive(trLongest + TUTORIAL_FISH_GROW)
     gosub tutorial_show_moves
     gosub tutorial_show_score
     applyHudFade() `with HUD_KEEP# at 1, this puts back what the fade took
@@ -585,7 +614,7 @@ tutorial_deal_in:
     SELECTION_POS.y = CELL_ROW_COUNT / 2
     scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
     gosub update_selection_position
-    show sprite SELECTION_SPRITE
+    cursorArrive(tdLongest + TUTORIAL_FISH_GROW)
 
     CURRENT_MOVE_COUNT = 0
     set text MOVE_COUNT_TEXT_ID, "0"
@@ -700,7 +729,7 @@ tutorial_mystery:
     SELECTION_POS.y = 1
     scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
     gosub update_selection_position
-    show sprite SELECTION_SPRITE
+    cursorArrive(TUTORIAL_FISH_GROW)
 
     ` "Remember," over the fish, and the rest of it under the fish, on the line that is under a
     ` little board. it is white here, and bigger, because it is the point of the whole thing.
@@ -847,7 +876,124 @@ tutorial_mystery:
     applyHudFade() `with HUD_KEEP# at 1, this puts back what the fade took
     hintShow(1)
     gosub tutorial_wait
+
+    ` and what a round is: the bar that fills up
+    gosub tutorial_round_bar
     TUTORIAL_STAGE = 0
+return
+
+
+` THE BAR OF THE ROUND. see fish_headers. the water darkens, and the bar, its name and its numbers are
+` lifted over the dark, with an outline that pulses around them. the bar fills up once, fizzing at the
+` top, and empties out again, while the lines under it say that filling it finishes the round. the
+` score is 0 all the while, so the bar only shows what its tween is told. the confirm key moves on.
+tutorial_round_bar:
+    trbX = SCORE_POS.x - 6
+    trbY = SCORE_POS.y - 19
+    trbW = SCORE_SIZE.x + 12
+    trbH = 39
+    layoutInfoBorder(TUTORIAL_BAR_BORDER, trbX, trbY, trbW, trbH)
+    set text position TUTORIAL_BAR_TEXT_ID, WORLD_WIDTH / 2, trbY + trbH + 8
+    set text position TUTORIAL_BAR_SUB_TEXT_ID, WORLD_WIDTH / 2, trbY + trbH + 32
+
+    ` over the dark, which is at ORDER_INTRO
+    order sprite SCORE_BAR.backgroundSpriteId, ORDER_INTRO + 2
+    order sprite SCORE_BAR.foregroundSpriteId, ORDER_INTRO + 2
+    order text SCORE_BAR.textNumId, ORDER_INTRO + 2
+    order text SCORE_BAR.textTitleId, ORDER_INTRO + 2
+
+    color sprite INTRO_DIM_SPRITE, rgb(4, 8, 24, 0)
+    show sprite INTRO_DIM_SPRITE
+    show text TUTORIAL_BAR_TEXT_ID
+    show text TUTORIAL_BAR_SUB_TEXT_ID
+    showInfoBorder(TUTORIAL_BAR_BORDER, 1)
+    spawnBubbles(WORLD_WIDTH / 2, SCORE_POS.y, 40, 10, 0, rgb(255, 230, 150))
+
+    TUTORIAL_BAR_DEMO = 1
+    trbStart = game ms()
+    trbFilled = 0
+    trbEmptied = 0
+    trbFizz = 0
+    trbDone = 0
+    trbFade# = 400
+    while trbDone = 0
+        trbAge = game ms() - trbStart
+
+        ` the bar fills, and empties again
+        if trbAge >= TUTORIAL_BAR_FILL_AT
+            if trbFilled = 0
+                trbFilled = 1
+                create basic tween SCORE_BAR.progressTweenId, 0, 1, TUTORIAL_BAR_FILL_MS, 0
+            endif
+        endif
+        if trbAge >= TUTORIAL_BAR_EMPTY_AT
+            if trbEmptied = 0
+                trbEmptied = 1
+                create basic tween SCORE_BAR.progressTweenId, tweenVal(SCORE_BAR.progressTweenId), 0, 500, 0
+            endif
+        endif
+
+        ` it fizzes while it is full, the way a full bar does in the game
+        trbFull = 0
+        if trbFilled
+            if trbEmptied = 0
+                if tweenVal(SCORE_BAR.progressTweenId) >= 1 then trbFull = 1
+            endif
+        endif
+        if trbFull
+            if game ms() >= trbFizz
+                trbFizz = game ms() + 60
+                spawnBubblesOnLayer(SCORE_BAR.pos.x + rnd(SCORE_BAR.size.x), SCORE_BAR.pos.y + 2, 2, 1, 0, rgb(190, 225, 255), ORDER_INTRO + 3, 40, 255, 1)
+            endif
+        endif
+
+        ` everything fades in, and out at the end
+        trbIn# = trbAge
+        trbLeft# = TUTORIAL_BAR_MS - trbAge
+        trbAlpha# = 1
+        if trbIn# < trbFade# then trbAlpha# = trbIn# / trbFade#
+        if trbLeft# < trbFade# then trbAlpha# = trbLeft# / trbFade#
+        if trbAlpha# < 0 then trbAlpha# = 0
+        color sprite INTRO_DIM_SPRITE, rgb(4, 8, 24, INTRO_DIM_ALPHA * 1.6 * trbAlpha#)
+        set text alpha TUTORIAL_BAR_TEXT_ID, 255 * trbAlpha#
+        trbSubIn# = trbIn# - 500
+        trbSubAlpha# = 1
+        if trbSubIn# < trbFade# then trbSubAlpha# = trbSubIn# / trbFade#
+        if trbSubAlpha# < 0 then trbSubAlpha# = 0
+        if trbAlpha# < trbSubAlpha# then trbSubAlpha# = trbAlpha#
+        set text alpha TUTORIAL_BAR_SUB_TEXT_ID, 255 * trbSubAlpha#
+
+        ` the outline pulses gently
+        trbNow# = game ms()
+        trbPulse# = .75 + sin(trbNow# * .006) * .25
+        colorInfoBorder(TUTORIAL_BAR_BORDER, rgb(255, 222, 96, 255 * trbAlpha# * trbPulse#))
+
+        ` the confirm key, or a click, goes on: the rest of it fades out
+        trbSkip = 0
+        if new action down(ACT_CONFIRM) then trbSkip = 1
+        trbClicked = mouseClickAnywhere()
+        if trbClicked then trbSkip = 1
+        if trbSkip
+            trbSkipTo = TUTORIAL_BAR_MS - trbFade#
+            if trbAge < trbSkipTo then trbStart = game ms() - trbSkipTo
+        endif
+        if trbAge >= TUTORIAL_BAR_MS then trbDone = 1
+
+        gosub update_frame
+        sync
+    endwhile
+
+    ` everything back the way it is in the game, with an empty bar
+    TUTORIAL_BAR_DEMO = 0
+    create basic tween SCORE_BAR.progressTweenId, 0, 0, 1, 0
+    order sprite SCORE_BAR.backgroundSpriteId, 0
+    order sprite SCORE_BAR.foregroundSpriteId, 0
+    order text SCORE_BAR.textNumId, ORDER_HUD_TEXT
+    order text SCORE_BAR.textTitleId, ORDER_HUD_TEXT
+    hide sprite INTRO_DIM_SPRITE
+    hide text TUTORIAL_BAR_TEXT_ID
+    hide text TUTORIAL_BAR_SUB_TEXT_ID
+    showInfoBorder(TUTORIAL_BAR_BORDER, 0)
 return
 
 
@@ -990,6 +1136,7 @@ tutorial_end:
         create basic tween CELLS(tutI).scaleWaveTweenId, 1, 1, 1, 0
         show sprite CELLS(tutI).spriteId
     next
+    cursorArriveEnd(0)
     show sprite SELECTION_SPRITE
     hintShow(1)
 
@@ -1071,6 +1218,25 @@ frame_hints:
     if new action down(ACT_INFO)
         create basic tween HINT_SHAKE_TWEENS(2), 1, 0, HINT_SHAKE_MS, 0
     endif
+
+    ` the pictures of keys in the words of the tutorial jump when their key is pressed, the swap
+    ` button on its own, and the direction whether or not the swap button is held
+    hintIconHit0 = new action down(ACT_SWAP)
+    hintIconHit2 = new action down(ACT_INFO)
+    if hintIconHit0
+        iconPunch(0)
+    endif
+    if hintDir
+        iconPunch(1)
+    endif
+    if hintIconHit2
+        iconPunch(2)
+    endif
+    for hintIconI = 0 to 2
+        hintIconScale# = 1 + tweenVal(ICON_PUNCH_TWEENS(hintIconI)) * ICON_PUNCH_SIZE#
+        set text icon scale TUTORIAL_CAPTION_TEXT_ID, ICON_PUNCH_IDS(hintIconI), hintIconScale#
+        set text icon scale INTRO_TEXT_ID, ICON_PUNCH_IDS(hintIconI), hintIconScale#
+    next
 
     ` they sit in a row, in the middle of the screen. the pictures of the keys are not the same width
     ` as the pictures of the controller buttons, so the row is measured again on every frame.
@@ -1154,6 +1320,14 @@ routines_intro_exit:
 function hintMode(isGame)
     HINT_GAME_ON = isGame
     applyHints()
+endfunction
+
+
+` make a picture of a key in the words of the tutorial jump: 0 is {swap}, 1 is {dir}, and 2 is {info}.
+` it grows and comes back, the same way the cursor punches. see ICON_PUNCH_TWEENS in fish_headers.
+function iconPunch(punchWhich)
+    create basic tween ICON_PUNCH_TWEENS(punchWhich), 0, 1, ICON_PUNCH_MS, 0
+    set tween type ICON_PUNCH_TWEENS(punchWhich), 1
 endfunction
 
 

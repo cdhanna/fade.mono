@@ -78,6 +78,11 @@ public static class TextSystem
     public static readonly List<string> texts = new List<string>();
     public static readonly List<RichTextLayout> layouts = new List<RichTextLayout>();
 
+    // Icons that one text draws bigger or smaller than its font says, by the text's index, and then
+    // by the font's icon id. Only a handful of texts ever have one, so it is kept out here instead of
+    // on TextSprite. It is applied when the text is drawn, so the line is never laid out again for it.
+    public static readonly Dictionary<int, Dictionary<int, float>> iconScales = new Dictionary<int, Dictionary<int, float>>();
+
 
     public static void Reset()
     {
@@ -87,6 +92,7 @@ public static class TextSystem
         _textSpriteMap.Clear();
         texts.Clear();
         layouts.Clear();
+        iconScales.Clear();
     }
     
     public static void GetTextSpriteIndex(int textId, out int index, out TextSprite text)

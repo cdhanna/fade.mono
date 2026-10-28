@@ -67,6 +67,10 @@ setup_codec:
     CODEC_ENTRY_NIGHT = CARD_LENGTH + 18
     CODEC_ENTRY_RAINBOW = CARD_LENGTH + CODEC_EXTRA_FISH
     CODEC_ENTRY_SCHOOL = CARD_LENGTH + CODEC_EXTRA_FISH + 1
+    CODEC_ENTRY_SQUID = CARD_LENGTH + CODEC_EXTRA_FISH + 2 `see THE SQUID in fish_headers_squid
+    CODEC_ENTRY_STARS = CARD_LENGTH + CODEC_EXTRA_FISH + 3 `THE CONSTELLATIONS, there too
+    CODEC_ENTRY_FAVOR = CARD_LENGTH + CODEC_EXTRA_FISH + 4 `and the ending that they bring. see fish_headers_neptune.
+    CODEC_ENTRY_CLEAN = CARD_LENGTH + CODEC_EXTRA_FISH + 5 `the ink of the day. see CLEAN in fish_headers_squid.
     CODEC_ENTRY_CAMEO = CARD_LENGTH + CODEC_EXTRA_PLAIN
 
     ` and the usual ending is the last of the entries that are not cards, after the last of the words
@@ -90,12 +94,14 @@ setup_codec:
     codecFile(0, CARD_LENGTH)
     codecStartCategory(lockey$("codec.cat.fish"))
     codecFile(CODEC_ENTRY_JELLY, 7)
-    codecFile(CODEC_ENTRY_RAINBOW, 2)
+    codecFile(CODEC_ENTRY_RAINBOW, 3) `rainbow fish, schooling fish and the squid
     codecStartCategory(lockey$("codec.cat.secrets"))
     codecFile(CODEC_ENTRY_CORAL, 2)
     codecFile(CODEC_ENTRY_TUNA, 3)
     codecFile(CODEC_ENTRY_RADIO, 1)
     codecFile(CODEC_ENTRY_NIGHT, 1)
+    codecFile(CODEC_ENTRY_STARS, 1)
+    codecFile(CODEC_ENTRY_CLEAN, 1)
     codecStartCategory(lockey$("codec.cat.signals"))
     codecFile(CODEC_ENTRY_SING, 2)
     codecFile(CODEC_ENTRY_CAMEO, CODEC_ENTRY_GOODBYE - CODEC_ENTRY_CAMEO)
@@ -103,6 +109,7 @@ setup_codec:
     codecFile(CODEC_ENTRY_GOODBYE, 1)
     codecFile(CODEC_ENTRY_REEF, 2)
     codecFile(CODEC_ENTRY_ALBUM, 1)
+    codecFile(CODEC_ENTRY_FAVOR, 1)
     codecStartCategory(lockey$("codec.cat.quests"))
     codecFile(CODEC_ENTRY_QUEST, QUEST_COUNT)
 
@@ -129,6 +136,9 @@ setup_codec:
     endif
     if get pref(PREF_ENDING_DIVER, 0)
         codecSeeCard(CODEC_ENTRY_ALBUM)
+    endif
+    if get pref(PREF_ENDING_NEPTUNE, 0)
+        codecSeeCard(CODEC_ENTRY_FAVOR)
     endif
 
     texture reserve texture id(TEX_ENDING_GOODBYE), "Fish/Textures/ending_home"
@@ -479,6 +489,11 @@ function codecSeeBoard()
         endif
         codecSeeCard(seeEntry)
 
+        ` the squid, at night. see fish_headers_squid.
+        if SQUID_CELL = seeI
+            codecSeeCard(CODEC_ENTRY_SQUID)
+        endif
+
         ` a fish that is sitting on coral that is well
         seeEntry = -1
         if CORAL_CELLS(seeI) > CORAL_SICK(seeI)
@@ -516,6 +531,10 @@ function getCodecEntryTex(entryIndex)
     if entryIndex = CODEC_ENTRY_NIGHT then entryTex = TEX_CODEC_NIGHT
     if entryIndex = CODEC_ENTRY_RAINBOW then entryTex = CODEC_FISH_TEX `the goldfish, in every color. see codecRainbowTint.
     if entryIndex = CODEC_ENTRY_SCHOOL then entryTex = TEX_CODEC_SCHOOL
+    if entryIndex = CODEC_ENTRY_SQUID then entryTex = TEX_SQUID
+    if entryIndex = CODEC_ENTRY_STARS then entryTex = TEX_CODEC_NIGHT `the shapes are of the night. they have no picture of their own yet.
+    if entryIndex = CODEC_ENTRY_FAVOR then entryTex = TEX_BADGE_TRIDENT `the badge that the table of high scores gives the ending
+    if entryIndex = CODEC_ENTRY_CLEAN then entryTex = TEX_SQUID `its ink. it has no picture of its own yet, so it is the squid, pale.
 
     ` a word that brings somebody swimming through has the picture of whoever it brings
     entryCameo = entryIndex - CODEC_ENTRY_CAMEO
@@ -906,6 +925,14 @@ function refreshCodec()
                 if shownEntry = CODEC_ENTRY_GOODBYE and shownEntry <> CODEC_SELECTED
                     tileColor = rgb(150, 190, 255)
                 endif
+                ` and so are the shapes of the night, which have the picture of the night
+                if shownEntry = CODEC_ENTRY_STARS and shownEntry <> CODEC_SELECTED
+                    tileColor = rgb(150, 190, 255)
+                endif
+                ` and squeaky clean is the squid, washed pale
+                if shownEntry = CODEC_ENTRY_CLEAN and shownEntry <> CODEC_SELECTED
+                    tileColor = rgb(190, 240, 255)
+                endif
                 color sprite CODEC_ICON_SPRITES(i), tileColor
 
                 ` a belly up fish is upside down
@@ -1026,6 +1053,17 @@ function refreshCodec()
         ` the usual ending is there for whoever gets to the end of a game
         if CODEC_SELECTED = CODEC_ENTRY_GOODBYE
             set text CODEC_DESC_TEXT_ID, loc$("codec.locked.goodbye")
+        endif
+
+        ` the shapes of the night are for whoever watches the water at night, and their ending is a secret
+        if CODEC_SELECTED = CODEC_ENTRY_STARS
+            set text CODEC_DESC_TEXT_ID, loc$("codec.locked.stars")
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_FAVOR
+            set text CODEC_DESC_TEXT_ID, loc$("codec.locked.none")
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_CLEAN
+            set text CODEC_DESC_TEXT_ID, loc$("codec.locked.clean")
         endif
     else
         ` the size is set again, because it is worked out from the size of the texture
@@ -1186,6 +1224,33 @@ function refreshCodec()
             set text CODEC_NAME_TEXT_ID, loc$("codec.school.name")
             set text CODEC_DESC_TEXT_ID, loc$("codec.school.about")
             set text CODEC_KIND_TEXT_ID, loc$("codec.kind.status")
+            exitfunction
+        endif
+
+        ` the squid says as little as rainbow fish do. the shapes of the night say how they are made, like the
+        ` night does, once one has been. see fish_headers_squid, and fish_headers_neptune for the ending.
+        if CODEC_SELECTED = CODEC_ENTRY_SQUID
+            set text CODEC_NAME_TEXT_ID, loc$("codec.squid.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.squid.desc")
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.special")
+            exitfunction
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_STARS
+            set text CODEC_NAME_TEXT_ID, loc$("codec.stars.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.stars.desc2", "times", STAR_BONUS)
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.secret")
+            exitfunction
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_FAVOR
+            set text CODEC_NAME_TEXT_ID, loc$("codec.favor.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.favor.desc")
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.ending")
+            exitfunction
+        endif
+        if CODEC_SELECTED = CODEC_ENTRY_CLEAN
+            set text CODEC_NAME_TEXT_ID, loc$("codec.clean.name")
+            set text CODEC_DESC_TEXT_ID, loc$("codec.clean.desc")
+            set text CODEC_KIND_TEXT_ID, loc$("codec.kind.secret")
             exitfunction
         endif
 
@@ -1371,6 +1436,18 @@ function codecEntryName(cenEntry)
     endif
     if cenEntry = CODEC_ENTRY_CALL
         cenName$ = loc$("codec.call.name")
+    endif
+    if cenEntry = CODEC_ENTRY_SQUID
+        cenName$ = loc$("codec.squid.name")
+    endif
+    if cenEntry = CODEC_ENTRY_STARS
+        cenName$ = loc$("codec.stars.name")
+    endif
+    if cenEntry = CODEC_ENTRY_FAVOR
+        cenName$ = loc$("codec.favor.name")
+    endif
+    if cenEntry = CODEC_ENTRY_CLEAN
+        cenName$ = loc$("codec.clean.name")
     endif
     cenCameo = cenEntry - CODEC_ENTRY_CAMEO
     if cenCameo >= 0

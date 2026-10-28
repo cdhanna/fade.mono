@@ -1363,12 +1363,13 @@ endtest
 test highscore_endings_can_be_left_out from fishBoard
     HISCORE_SCOPE = HISCORE_SCOPE_LOCAL
     showAllEndings()
-    for tEndKnown = CORAL_ENDING_REEF to CORAL_ENDING_DIVER
+    for tEndKnown = CORAL_ENDING_REEF to CORAL_ENDING_LAST
         HISCORE_ENDING_KNOWN(tEndKnown) = 1
     next
     layoutEndingTiles()
-    assert HISCORE_TILE_COUNT = 3, "with every ending known, each has a tile of its own"
+    assert HISCORE_TILE_COUNT = 4, "with every ending known, each has a tile of its own"
     assert HISCORE_TILE_ENDING(2) = CORAL_ENDING_DIVER, "and none is for mystery endings"
+    assert HISCORE_TILE_ENDING(3) = CORAL_ENDING_NEPTUNE, "the god's is last"
     tEndReef = insertHighscore(0, 5 + CORAL_ENDING_REEF * HISCORE_BADGE_STEP, 3, 9)
     tEndDiver = insertHighscore(0, 6 + CORAL_ENDING_DIVER * HISCORE_BADGE_STEP, 2, 9)
     assert tEndDiver = 0, "the game with the diver's ending is at the top"
@@ -1414,9 +1415,10 @@ test highscore_endings_that_are_not_known_are_a_mystery from fishBoard
     HISCORE_ENDING_KNOWN(CORAL_ENDING_REEF) = 1
     HISCORE_ENDING_KNOWN(CORAL_ENDING_ANCIENT) = 0
     HISCORE_ENDING_KNOWN(CORAL_ENDING_DIVER) = 0
+    HISCORE_ENDING_KNOWN(CORAL_ENDING_NEPTUNE) = 0
     HISCORE_ENDING_AT = 2
     layoutEndingTiles()
-    assert HISCORE_TILE_COUNT = 2, "the two endings that are not known share one tile"
+    assert HISCORE_TILE_COUNT = 2, "the endings that are not known share one tile"
     assert HISCORE_TILE_ENDING(0) = CORAL_ENDING_REEF, "the one that is known has its own"
     assert HISCORE_TILE_ENDING(1) = 0, "and the tile of the mystery ones comes after it"
     assert HISCORE_ENDING_AT = 1, "the outline does not stay on a tile that is gone"

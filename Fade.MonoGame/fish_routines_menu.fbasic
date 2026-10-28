@@ -178,6 +178,15 @@ setup_menu:
     MENU_ITEMS(MENU_ITEM_SET_PHOTOS) = {
         ready = 1
     }
+    MENU_ITEMS(MENU_ITEM_SET_TRIDENT) = {
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_SET_ENDINGS) = {
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_ENDINGS_BACK) = {
+        ready = 1
+    }
 
     ` the lines of the page that "New Game" opens. refreshOptionLines writes the choice onto the end of the
     ` first three, and gives them a description of whatever is chosen.
@@ -217,6 +226,9 @@ setup_menu:
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_SET_MOTION) = {
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_SET_DEMO) = {
         ready = 1
     }
     MENU_ITEMS(MENU_ITEM_SET_POP_SPEED) = {
@@ -274,6 +286,8 @@ setup_menu:
     applyWaterMotion()
 
     ` see THE BIG MOMENTS in fish_headers_teach
+    OPTION_DEMO = get pref(PREF_DEMO, 1)
+    if OPTION_DEMO <> 0 then OPTION_DEMO = 1
     OPTION_POP_SPEED = get pref(PREF_POP_SPEED, POP_SPEED_REGULAR)
     if OPTION_POP_SPEED <> POP_SPEED_FAST then OPTION_POP_SPEED = POP_SPEED_REGULAR
 
@@ -284,6 +298,8 @@ setup_menu:
     if OPTION_MENU_MONSTER <> 0 then OPTION_MENU_MONSTER = 1
     OPTION_MENU_PHOTOS = get pref(PREF_MENU_PHOTOS, 1)
     if OPTION_MENU_PHOTOS <> 0 then OPTION_MENU_PHOTOS = 1
+    OPTION_MENU_TRIDENT = get pref(PREF_MENU_TRIDENT, 1)
+    if OPTION_MENU_TRIDENT <> 0 then OPTION_MENU_TRIDENT = 1
 
     ` the kind of game that was picked the last time is what "New Game" starts out on
     OPTION_GAME_LENGTH = get pref(PREF_GAME_LENGTH, GAME_LENGTH_REGULAR)
@@ -426,6 +442,7 @@ frame_menu:
     menuChange = 0
     menuSettingsPage = 0
     if MENU_PAGE = MENU_PAGE_OPTIONS or MENU_PAGE = MENU_PAGE_NEW_GAME then menuSettingsPage = 1
+    if MENU_PAGE = MENU_PAGE_ENDINGS then menuSettingsPage = 1
     if menuSettingsPage
         menuStep = 0
         if new action down(ACT_DOWN) then menuStep = 1
@@ -508,6 +525,12 @@ frame_menu:
     if MENU_PAGE = MENU_PAGE_OPTIONS
         if new action down(ACT_PAUSE)
             menuPicked = MENU_ITEM_SET_BACK
+        endif
+    endif
+    ` and out of the page of mementos, to the options page. see MEMENTOS in fish_headers.
+    if MENU_PAGE = MENU_PAGE_ENDINGS
+        if new action down(ACT_PAUSE)
+            menuPicked = MENU_ITEM_ENDINGS_BACK
         endif
     endif
     if MENU_PAGE = MENU_PAGE_NEW_GAME
@@ -703,6 +726,9 @@ menu_pick:
         case MENU_ITEM_SET_MOTION
             changeMenuOption(MENU_ITEM_SET_MOTION, 1)
         endcase
+        case MENU_ITEM_SET_DEMO
+            changeMenuOption(MENU_ITEM_SET_DEMO, 1)
+        endcase
         case MENU_ITEM_SET_POP_SPEED
             changeMenuOption(MENU_ITEM_SET_POP_SPEED, 1)
         endcase
@@ -714,6 +740,21 @@ menu_pick:
         endcase
         case MENU_ITEM_SET_PHOTOS
             changeMenuOption(MENU_ITEM_SET_PHOTOS, 1)
+        endcase
+        case MENU_ITEM_SET_TRIDENT
+            changeMenuOption(MENU_ITEM_SET_TRIDENT, 1)
+        endcase
+
+        ` the page of mementos, and back out of it to the options, with "Mementos" highlighted. see MEMENTOS in fish_headers.
+        case MENU_ITEM_SET_ENDINGS
+            setMenuPage(MENU_PAGE_ENDINGS)
+            refreshOptionLines()
+            selectMenuItem(0, 0)
+        endcase
+        case MENU_ITEM_ENDINGS_BACK
+            setMenuPage(MENU_PAGE_OPTIONS)
+            refreshOptionLines()
+            selectMenuItem(getMenuRow(MENU_ITEM_SET_ENDINGS), 0)
         endcase
 
         case MENU_ITEM_SET_BACK
@@ -836,6 +877,9 @@ handle_game_end:
     endif
     if CORAL_ENDING = CORAL_ENDING_DIVER
         MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = loc$("menu.over.done.album", "moves", CURRENT_MOVE_COUNT)
+    endif
+    if CORAL_ENDING = CORAL_ENDING_NEPTUNE
+        MENU_ITEMS(MENU_ITEM_OVER_DONE).desc$ = loc$("menu.over.done.favor", "moves", CURRENT_MOVE_COUNT)
     endif
     setMenuPage(MENU_PAGE_GAME_OVER)
     selectMenuItem(0, 0)
@@ -1448,6 +1492,7 @@ reset_game:
     glowReset() `the glow. see fish_headers_glow.
     schoolReset() `which way the fish face. see fish_headers_school.
     rainbowFishReset() `the rainbow fish. see fish_headers_rainbow.
+    bubbledReset() `the bubbled fish. see fish_headers_bubbled.
 
     ` any score that was still floating up off of the fish
     for resetI = 0 to SCORE_TEXT_COUNT - 1
@@ -1508,6 +1553,16 @@ function setMenuPage(page)
         hint$ = loc$("menu.hint.options")
         first = MENU_ITEM_SET_SOUND
         last = MENU_ITEM_SET_BACK
+        MENU_WIDTH = 260
+    endif
+
+    ` the page of mementos, under the options. it is built a line at a time, further down. see MEMENTOS in fish_headers.
+    if page = MENU_PAGE_ENDINGS
+        title$ = loc$("menu.title.endings")
+        titleSize = 36
+        hint$ = loc$("menu.hint.options")
+        first = MENU_ITEM_COUNT
+        last = -1
         MENU_WIDTH = 260
     endif
 
@@ -1579,29 +1634,11 @@ function setMenuPage(page)
             if page = MENU_PAGE_GAME_OVER then skip
         endif
 
-        ` and the options page has the reef and the monster of the main menu right under "Fullscreen",
-        ` each of them only once it is there to be turned off
-        if i = MENU_ITEM_SET_REEF
+        ` the reef, the monster, the photos and the temple of the main menu are on the page of mementos,
+        ` and the options page has one line for that page. see MEMENTOS in fish_headers.
+        if i = MENU_ITEM_SET_REEF or i = MENU_ITEM_SET_MONSTER or i = MENU_ITEM_SET_PHOTOS or i = MENU_ITEM_SET_TRIDENT
             if page = MENU_PAGE_OPTIONS
-                if SURFACE_REEF = 0
-                    hideMenuItemText(i)
-                endif
-                skip
-            endif
-        endif
-        if i = MENU_ITEM_SET_MONSTER
-            if page = MENU_PAGE_OPTIONS
-                if SURFACE_ANCIENT = 0
-                    hideMenuItemText(i)
-                endif
-                skip
-            endif
-        endif
-        if i = MENU_ITEM_SET_PHOTOS
-            if page = MENU_PAGE_OPTIONS
-                if DIVER_SURFACE = 0
-                    hideMenuItemText(i)
-                endif
+                hideMenuItemText(i)
                 skip
             endif
         endif
@@ -1614,6 +1651,12 @@ function setMenuPage(page)
             if page = MENU_PAGE_OPTIONS then skip
         endif
         if i = MENU_ITEM_SET_POP_SPEED
+            if page = MENU_PAGE_OPTIONS then skip
+        endif
+        if i = MENU_ITEM_SET_ENDINGS
+            if page = MENU_PAGE_OPTIONS then skip
+        endif
+        if i = MENU_ITEM_SET_DEMO
             if page = MENU_PAGE_OPTIONS then skip
         endif
 
@@ -1654,20 +1697,14 @@ function setMenuPage(page)
                     MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_POP_SPEED
                     MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
                     showMenuItemText(MENU_ITEM_SET_POP_SPEED)
-                    if SURFACE_REEF
-                        MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_REEF
+                    MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_DEMO
+                    MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+                    showMenuItemText(MENU_ITEM_SET_DEMO)
+                    menuMementos = menuHasMementos()
+                    if menuMementos
+                        MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_ENDINGS
                         MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
-                        showMenuItemText(MENU_ITEM_SET_REEF)
-                    endif
-                    if SURFACE_ANCIENT
-                        MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_MONSTER
-                        MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
-                        showMenuItemText(MENU_ITEM_SET_MONSTER)
-                    endif
-                    if DIVER_SURFACE
-                        MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_PHOTOS
-                        MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
-                        showMenuItemText(MENU_ITEM_SET_PHOTOS)
+                        showMenuItemText(MENU_ITEM_SET_ENDINGS)
                     endif
                 endif
             endif
@@ -1675,6 +1712,33 @@ function setMenuPage(page)
             hideMenuItemText(i)
         endif
     next
+
+    ` the page of mementos: a line for each thing that an ending has left on the main menu, and "Back"
+    if page = MENU_PAGE_ENDINGS
+        if SURFACE_REEF
+            MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_REEF
+            MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+            showMenuItemText(MENU_ITEM_SET_REEF)
+        endif
+        if SURFACE_ANCIENT
+            MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_MONSTER
+            MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+            showMenuItemText(MENU_ITEM_SET_MONSTER)
+        endif
+        if DIVER_SURFACE
+            MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_PHOTOS
+            MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+            showMenuItemText(MENU_ITEM_SET_PHOTOS)
+        endif
+        if SURFACE_NEPTUNE
+            MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_TRIDENT
+            MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+            showMenuItemText(MENU_ITEM_SET_TRIDENT)
+        endif
+        MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_ENDINGS_BACK
+        MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+        showMenuItemText(MENU_ITEM_ENDINGS_BACK)
+    endif
 
     ` the list is centered on the same spot no matter how long it is
     MENU_LIST_TOP = 184 - MENU_PAGE_LENGTH * MENU_ROW_HEIGHT / 2
@@ -1820,6 +1884,11 @@ function refreshOptionLines()
         popSpeedName$ = loc$("menu.popspeed.fast")
     endif
     setMenuItemValue(MENU_ITEM_SET_POP_SPEED, loc$("menu.popspeed"), popSpeedName$)
+    if OPTION_DEMO
+        setMenuItemValue(MENU_ITEM_SET_DEMO, loc$("menu.demo"), on$)
+    else
+        setMenuItemValue(MENU_ITEM_SET_DEMO, loc$("menu.demo"), off$)
+    endif
 
     if OPTION_MENU_REEF
         setMenuItemValue(MENU_ITEM_SET_REEF, loc$("menu.reef"), on$)
@@ -1835,6 +1904,11 @@ function refreshOptionLines()
         setMenuItemValue(MENU_ITEM_SET_PHOTOS, loc$("menu.photos"), on$)
     else
         setMenuItemValue(MENU_ITEM_SET_PHOTOS, loc$("menu.photos"), off$)
+    endif
+    if OPTION_MENU_TRIDENT
+        setMenuItemValue(MENU_ITEM_SET_TRIDENT, loc$("menu.trident"), on$)
+    else
+        setMenuItemValue(MENU_ITEM_SET_TRIDENT, loc$("menu.trident"), off$)
     endif
 
     ` and the kind of game onto the lines of the page that "New Game" opens
@@ -1936,6 +2010,8 @@ function loadMenuStrings()
     MENU_ITEMS(MENU_ITEM_SET_MOTION).desc$ = loc$("menu.motion.desc")
     MENU_ITEMS(MENU_ITEM_SET_POP_SPEED).name$ = loc$("menu.popspeed")
     MENU_ITEMS(MENU_ITEM_SET_POP_SPEED).desc$ = loc$("menu.popspeed.desc")
+    MENU_ITEMS(MENU_ITEM_SET_DEMO).name$ = loc$("menu.demo")
+    MENU_ITEMS(MENU_ITEM_SET_DEMO).desc$ = loc$("menu.demo.desc")
     MENU_ITEMS(MENU_ITEM_SET_BACK).name$ = loc$("menu.back")
     MENU_ITEMS(MENU_ITEM_SET_BACK).desc$ = loc$("menu.back.desc")
     MENU_ITEMS(MENU_ITEM_SET_REEF).name$ = loc$("menu.reef")
@@ -1944,6 +2020,12 @@ function loadMenuStrings()
     MENU_ITEMS(MENU_ITEM_SET_MONSTER).desc$ = loc$("menu.monster.desc")
     MENU_ITEMS(MENU_ITEM_SET_PHOTOS).name$ = loc$("menu.photos")
     MENU_ITEMS(MENU_ITEM_SET_PHOTOS).desc$ = loc$("menu.photos.desc")
+    MENU_ITEMS(MENU_ITEM_SET_TRIDENT).name$ = loc$("menu.trident")
+    MENU_ITEMS(MENU_ITEM_SET_TRIDENT).desc$ = loc$("menu.trident.desc")
+    MENU_ITEMS(MENU_ITEM_SET_ENDINGS).name$ = loc$("menu.endings")
+    MENU_ITEMS(MENU_ITEM_SET_ENDINGS).desc$ = loc$("menu.endings.desc")
+    MENU_ITEMS(MENU_ITEM_ENDINGS_BACK).name$ = loc$("menu.back")
+    MENU_ITEMS(MENU_ITEM_ENDINGS_BACK).desc$ = loc$("menu.endings.back.desc")
 
     MENU_ITEMS(MENU_ITEM_GAME_LENGTH).name$ = loc$("menu.length")
     MENU_ITEMS(MENU_ITEM_GAME_LENGTH).desc$ = loc$("menu.length.desc")
@@ -2044,6 +2126,10 @@ function changeMenuOption(item, change)
         endcase
 
         ` regular or fast. see THE BIG MOMENTS in fish_headers_teach.
+        ` on or off. see OPTION_DEMO in fish_headers_demo.
+        case MENU_ITEM_SET_DEMO
+            OPTION_DEMO = 1 - OPTION_DEMO
+        endcase
         case MENU_ITEM_SET_POP_SPEED
             OPTION_POP_SPEED = 1 - OPTION_POP_SPEED
         endcase
@@ -2057,6 +2143,9 @@ function changeMenuOption(item, change)
         endcase
         case MENU_ITEM_SET_PHOTOS
             OPTION_MENU_PHOTOS = 1 - OPTION_MENU_PHOTOS
+        endcase
+        case MENU_ITEM_SET_TRIDENT
+            OPTION_MENU_TRIDENT = 1 - OPTION_MENU_TRIDENT
         endcase
 
         ` the lengths go around: short, regular, long, and back to short
@@ -2090,9 +2179,11 @@ function changeMenuOption(item, change)
     set pref PREF_MENU_REEF, OPTION_MENU_REEF
     set pref PREF_MENU_MONSTER, OPTION_MENU_MONSTER
     set pref PREF_MENU_PHOTOS, OPTION_MENU_PHOTOS
+    set pref PREF_MENU_TRIDENT, OPTION_MENU_TRIDENT
     set pref PREF_LANGUAGE, OPTION_LANGUAGE
     set pref PREF_WATER_MOTION, OPTION_WATER_MOTION
     set pref PREF_POP_SPEED, OPTION_POP_SPEED
+    set pref PREF_DEMO, OPTION_DEMO
 
     ` the lines have changed, so write them again. selecting the line again colors it and fills in its description.
     refreshOptionLines()
@@ -2128,3 +2219,10 @@ function createMenuBorder(drawOrder)
     set sprite render target b.rightId, TARGET_MENU
     showInfoBorder(b, 1)
 endfunction b
+
+
+` MEMENTOS. has any ending left something on the main menu, to be turned off? see fish_headers.
+function menuHasMementos()
+    mementos = SURFACE_REEF + SURFACE_ANCIENT + DIVER_SURFACE + SURFACE_NEPTUNE
+    if mementos > 1 then mementos = 1
+endfunction mementos

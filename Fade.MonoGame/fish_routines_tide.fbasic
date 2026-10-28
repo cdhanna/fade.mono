@@ -40,6 +40,9 @@ setup_tide:
     TIDE_SFX_DAWN = tideLoadSound("Fish/Audio/dawn-swell", SFX_GROUP_MUSIC, 0)
     TIDE_SFX_BREATH = tideLoadSound("Fish/Audio/night-breath", SFX_GROUP_MUSIC, 1)
     TIDE_SFX_HUM = tideLoadSound("Fish/Audio/jelly-hum", SFX_GROUP_MUSIC, 1)
+
+    ` the squid of the night, its ink, and the constellations. see fish_headers_squid.
+    gosub setup_squid
 return
 
 ` a window in the debug panel. frame_dbg, in fish_routines, comes here on every frame, with FISH_DEBUG.
@@ -70,6 +73,7 @@ frame_debug_tide:
             endwhile
         endif
     endif
+    gosub frame_debug_squid
     end debug window
 return
 
@@ -227,6 +231,7 @@ function tideReset()
     TIDE_HUM_SHOWN# = 0
     tideNightMusic(0)
     tideClearBank()
+    squidReset()
     for tideResetI = 0 to 399
         TIDE_PULSE_UNTIL(tideResetI) = 0
     next
@@ -377,7 +382,15 @@ function tideCycleDone()
             TIDE_NIGHT = 1
             TIDE_SEEN = 1
             TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
-            tideGrowCoral()
+
+            ` with the "moonlight" card, the coral spawns. see WHEN NIGHT FALLS, THE CORAL SPAWNS in fish_headers_tide.
+            TIDE_GREW = 0
+            if CARDS(ABILITY_INDEX_MOONLIGHT).obtained > 0
+                tideGrowCoral()
+                if TIDE_GREW > 0
+                    showPassiveUsed(ABILITY_INDEX_MOONLIGHT)
+                endif
+            endif
 
             ` the codec has an entry for it, from the first night on
             codecSeeCard(CODEC_ENTRY_NIGHT)
@@ -386,6 +399,9 @@ function tideCycleDone()
             ` the low bell of nightfall, and the music goes down to the deep. see THE SOUNDS OF THE TIDE in fish_headers_tide.
             tidePlaySound(TIDE_SFX_NIGHT, TIDE_VOL_NIGHT#, 0)
             tideNightMusic(1)
+
+            ` and the squid comes, once the board has settled. see fish_headers_squid.
+            squidNightFalls()
         else
             ` the wave that comes back in
             tidePlayWave(1)
@@ -398,10 +414,19 @@ endfunction
 ` registerMove, in fish_funcs, calls this. a move that is given back does not make the night longer.
 function tideMoveMade(tideMoves)
     if TIDE_NIGHT
+        ` the night is over already, and holding on while the ink pops. see THE END OF THE NIGHT in fish_headers_squid.
+        if SQUID_ENDING > 0 then exitfunction
+
         if tideMoves > 0
             TIDE_NIGHT_LEFT = TIDE_NIGHT_LEFT - tideMoves
             if TIDE_NIGHT_LEFT <= 0
-                tideDayBreaks()
+                TIDE_NIGHT_LEFT = 0
+
+                ` when there is ink, it pops first, in the dark, and day breaks after
+                tideInkHolds = squidNightEnds()
+                if tideInkHolds = 0
+                    tideDayBreaks()
+                endif
             endif
         endif
     endif
@@ -424,6 +449,9 @@ function tideDayBreaks()
     ` and every group that it pops can be a school, not only one that a swap made. see THE DAWN in fish_headers_school.
     SCHOOL_DAWN = 1
 
+    ` the squid goes, the made constellations score, and the ink pops. see fish_headers_squid.
+    squidDayBreaks()
+
     ` the rush that builds while the light comes back, and the music comes back up
     tidePlaySound(TIDE_SFX_DAWN, TIDE_VOL_DAWN#, 0)
     tideNightMusic(0)
@@ -437,6 +465,9 @@ endfunction
 ` THE FISH SLEEP. every so often in the night, a little Z floats up from a fish that is picked at
 ` random. update_frame, in fish_routines, calls this on every frame of the game.
 function stepTideSleep()
+    ` the squid, its ink and the constellations. see fish_headers_squid.
+    squidStep()
+
     if TIDE_NIGHT
         tideSleepNow = game ms()
 
@@ -806,6 +837,7 @@ function tideSave()
     set pref SAVE_PREF + SAVE_PREF_TIDE, TIDE_LEVEL + 1
     set pref SAVE_PREF + SAVE_PREF_TIDE + 1, TIDE_CYCLES
     set pref SAVE_PREF + SAVE_PREF_TIDE + 2, TIDE_EBBED + TIDE_SEEN * 2 + TIDE_NIGHT_LEFT * 4
+    squidSave()
 endfunction
 
 ` a game that was saved before there was a tide has none of this, and starts at high water with a new moon
@@ -831,4 +863,5 @@ function tideLoad()
     endif
     tideNightMusic(TIDE_NIGHT)
     tideSnap()
+    squidLoad()
 endfunction

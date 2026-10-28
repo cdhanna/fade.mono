@@ -18,7 +18,7 @@ remend
 
 setup_coral_bars:
 
-    for barSetupI = 0 to 1
+    for barSetupI = 0 to 2
         barSetupId = 0
         reserve sprite id(barSetupId)
         sprite barSetupId, 0, 0, TEX_PIXEL
@@ -37,6 +37,7 @@ setup_coral_bars:
     next
     color sprite CORAL_BAR_BACKS(0), rgb(32, 64, 128, 128)
     color sprite CORAL_BAR_BACKS(1), rgb(22, 52, 30, 170)
+    color sprite CORAL_BAR_BACKS(2), rgb(60, 52, 24, 170)
 
     ` the slime, and the tentacles, of the bar of the ancient one. a tentacle is a few pixels, one on top of the other.
     for barSetupI = 0 to CORAL_BAR_DRIP_COUNT - 1
@@ -77,6 +78,9 @@ function coralBarFill(barWhich)
     barHave = CORAL_COUNT - CORAL_SICK_COUNT
     if barWhich = 1 then barHave = CORAL_SICK_COUNT
     barFill = (barHave * 1000) / coralEndNeed()
+
+    ` bar 2 is the trident: a fifth at a time. see THE BAR in fish_headers_neptune.
+    if barWhich = 2 then barFill = (TRIDENT_PARTS * 1000) / TRIDENT_PART_COUNT
     if barFill > 1000 then barFill = 1000
     if barFill < 0 then barFill = 0
 endfunction barFill
@@ -100,10 +104,11 @@ function coralStepBars()
 
     barSlimeWide = 0
     barSlimeY = 0
-    for barI = 0 to 1
+    for barI = 0 to 2
         barOn = 0
         if barI = 0 and CORAL_COUNT > 0 then barOn = 1
         if barI = 1 and CORAL_SICK_COUNT > 0 then barOn = 1
+        if barI = 2 and TRIDENT_PARTS > 0 then barOn = 1
 
         if barOn = 0
             hide sprite CORAL_BAR_BACKS(barI)
@@ -130,9 +135,18 @@ function coralStepBars()
 
         barTint = rgb(255, 150, 150, 225)
         if barI = 1 then barTint = rgb(120, 190, 70, 225)
+        if barI = 2 then barTint = rgb(255, 222, 130, 235)
 
         ` a bar that is full, with its ending on the way, fizzes. see CORAL_ENDING_DUE in fish_headers.
-        if CORAL_ENDING_DUE = barI + 1
+        ` the ending of the bar of the trident is the god's.
+        barDue = 0
+        if barI < 2
+            if CORAL_ENDING_DUE = barI + 1 then barDue = 1
+        else
+            if NEPTUNE_ENDING_DUE then barDue = 1
+            if CORAL_ENDING_DUE = CORAL_ENDING_NEPTUNE then barDue = 1
+        endif
+        if barDue
             if (barNow / 60) mod 2 = 0 then barTint = rgb(255, 255, 255, 255)
             if barFizzNow
                 ` small ones, and mostly quiet, the way that the bar of the round fizzes when it is full

@@ -54,6 +54,11 @@ setup_surface:
     if is env set("FISH_MENU_REEF")
         SURFACE_REEF = 1
     endif
+    ` and the god's trident, in the clouds. see THE MAIN MENU REMEMBERS THE GOD in fish_headers_neptune.
+    SURFACE_NEPTUNE = get pref(PREF_ENDING_NEPTUNE, 0)
+    if is env set("FISH_MENU_NEPTUNE")
+        SURFACE_NEPTUNE = 1
+    endif
     if is env set("FISH_MENU_ANCIENT")
         SURFACE_ANCIENT = 1
     endif
@@ -272,6 +277,9 @@ frame_surface:
     surfaceBoatMid# = surfaceBoatY# + surfaceShift
     surfaceBoatMid# = surfaceBoatMid# - 37
     diverSurfaceStep(SURFACE_BOAT_X, surfaceBoatMid#)
+
+    ` and the god's trident, coming together in the clouds. see fish_headers_neptune.
+    neptuneSurfaceStep(surfaceHorizon#, surfaceShift, surfaceSink#)
 return
 
 
@@ -291,6 +299,7 @@ function showSurface(isVisible)
     ` the reefs and their fish go when the surface does. frame_surface brings them back.
     if isVisible = 0
         diverSurfaceHide()
+        neptuneSurfaceHide()
         hide sprite SURFACE_REEF_SPRITES(0)
         hide sprite SURFACE_REEF_SPRITES(1)
         for i = 0 to SURFACE_FISH_COUNT - 1

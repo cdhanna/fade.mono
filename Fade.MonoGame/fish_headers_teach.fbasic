@@ -169,6 +169,8 @@ remstart
     the routines are in fish_routines_teach.
 remend
 global CODEC_NEW_PREF = 7100 `it must not move. there is room for 128 entries.
+global CODEC_NEW_MOVED_PREF = 7099 `1 once what was new has been moved along for the three entries of the night. see setup_codec_spot.
+global CODEC_NEW_MOVED_CLEAN_PREF = 7098 `and 1 once it has been moved along by one more, for squeaky clean
 global dim CODEC_NEW(128) `1 while an entry has been unlocked and not looked at
 global CODEC_NEW_COUNT = 0
 global CODEC_NEW_QUIET = 0 `1 keeps anything from turning new, so no "new info!" ever shows: the trailer (trailerShot) does it
@@ -208,5 +210,17 @@ global CODEC_BADGE_FLY_X# = 0 `where the words were when they set off
 global CODEC_BADGE_FLY_Y# = 0
 global CODEC_DANCE_MS = 5000 `how long "new info!" dances, before it turns into the badge
 global CODEC_FLY_MS = 450 `how long it takes to fly to the key
-global CODEC_DOT_SIZE = 7 `how big the dot is, in pixels
+global CODEC_DOT_SIZE = 5 `how big the dot is, in pixels. it was 7: a bit big for something that only waits (2026-10-24)
+
+` THE BADGE ON THE SPOT OF INFO MODE does the same, on the "Codec" spot: "new info!" dances there the
+` first time that info mode is open after something new has turned up, then flies to the top right corner
+` of the spot and is the same little dot. its time only runs while info mode is open, so a quick look
+` does not miss it. CODEC_SPOT_KNOWN is how many new entries the spot has danced for.
+global CODEC_SPOT_MODE = 0 `one of the CODEC_BADGE_ ones
+global CODEC_SPOT_AGE = 0 `how long the dance, or the flight, has been seen for, in ms
+global CODEC_SPOT_KNOWN = -1
+global CODEC_SPOT_DOT_ID = 0
+global CODEC_SPOT_PUFFED = 0 `1 once the dance has had its puff of bubbles
+global CODEC_SPOT_DANCE_MS = 2200 `shorter than on the key hint, because info mode is not open for long
+global CODEC_SPOT_LAST_MS = 0 `the last frame that the spot was seen, so that its clock stops while it is not
 global CODEC_NEW_LIST_MAX = 6 `info mode lists this many of the new entries by name, and says how many more there are

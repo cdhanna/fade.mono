@@ -231,6 +231,7 @@ function swapCellStacks(aIndex, bIndex)
     ` and a fish faces the way that it did. see FACING in fish_headers_school.
     schoolTradeFace(aIndex, bIndex)
     rainbowTradeFish(aIndex, bIndex) `see THE RAINBOW FISH in fish_headers_rainbow
+    bubbledTradeFish(aIndex, bIndex) `see THE BUBBLED FISH in fish_headers_bubbled
 endfunction
 
 ` one fish takes the place of another
@@ -238,6 +239,7 @@ function copyCellStack(fromIndex, toIndex)
     glowCopyTurn(fromIndex, toIndex) `see WHAT SHOWS in fish_headers_glow
     schoolCopyFace(fromIndex, toIndex) `see FACING in fish_headers_school
     rainbowCopyFish(fromIndex, toIndex) `see THE RAINBOW FISH in fish_headers_rainbow
+    bubbledCopyFish(fromIndex, toIndex) `see THE BUBBLED FISH in fish_headers_bubbled
     CELLS(toIndex).stack = CELLS(fromIndex).stack
     CELLS(toIndex).stackShown# = CELLS(fromIndex).stackShown#
     CELLS(toIndex).bellyUp = CELLS(fromIndex).bellyUp
@@ -445,6 +447,18 @@ endfunction 1
 
 ` every bottle that is on the bottom row adds to the multiplier, and is marked to pop. handle_combos
 ` calls this every time that it looks at the board, before it finds the groups.
+` the cell of this group that a swap moved a fish into, on the look that handle_combos is on: the one that
+` the cursor carried, if it is in the group, and if not, the other one. -1 when no swapped fish is in it.
+function bottleSwapCell(swapGroup)
+    swapCell = -1
+    if BOTTLE_LOOK_A >= 0
+        if CELLS(BOTTLE_LOOK_A).comboFillId = swapGroup then swapCell = BOTTLE_LOOK_A
+    endif
+    if BOTTLE_LOOK_B >= 0
+        if CELLS(BOTTLE_LOOK_B).comboFillId = swapGroup then swapCell = BOTTLE_LOOK_B
+    endif
+endfunction swapCell
+
 function checkBottles()
     bottomStart = CELL_COUNT - CELL_COLUMN_COUNT
     lastColumn = CELL_COLUMN_COUNT - 1
@@ -668,6 +682,7 @@ function spawnScoreTextScaled(pos as vec, score$, delay, life, textScale#)
     textDrift# = (rnd(10) - 5) * textScale#
 
     set text txt.textId, score$
+    set text render target txt.textId, TARGET_SCORE_TEXT `the last one in this slot may have been a rainbow one
     set text position txt.textId, pos.x, pos.y
     set text alpha txt.textId, 0
     size text y txt.textId, textHeight#
@@ -1011,11 +1026,19 @@ function findCombos(cIndex, groupId)
     ` some of the things that a quest puts on the board never match. see THE QUEST KINDS in fish_headers_quests.
     if cell.value >= QUEST_SOLID_FROM then exitfunction
 
+    ` and neither does the squid of the night, which is a group of one. see fish_headers_squid.
+    if cIndex = SQUID_CELL then exitfunction
+
     hasLeft = cell.coord.x > 0
     hasRight = cell.coord.x < CELL_COLUMN_COUNT - 1
     hasTop = cell.coord.y > 0
     hasLow = cell.coord.y < CELL_ROW_COUNT - 1
-
+    if SQUID_CELL >= 0
+        if leftIndex = SQUID_CELL then hasLeft = 0
+        if rightIndex = SQUID_CELL then hasRight = 0
+        if topIndex = SQUID_CELL then hasTop = 0
+        if lowIndex = SQUID_CELL then hasLow = 0
+    endif
 
     if hasLeft
         left = CELLS(leftIndex)
@@ -1598,6 +1621,25 @@ function startLiveMove(dirX, dirY, wantSwap)
         exitfunction 0
     endif
 
+    ` a swap with the squid of the night on either end of it is a push, and not a swap. nothing trades
+    ` places, and the cursor stays where it is. it can push the squid off of the edge of the board.
+    ` see A PUSH in fish_headers_squid.
+    if wantSwap
+        squidSays = squidPushAsked(dirX, dirY)
+        if squidSays = 1
+            spawnCursorWake(SELECTION_POS.x, SELECTION_POS.y)
+            exitfunction 1
+        endif
+        if squidSays = 2
+            CURSOR_SHAKING = 1
+            CURSOR_SHAKE_DIR_X = dirX
+            CURSOR_SHAKE_DIR_Y = dirY
+            CURSOR_SHAKE_AMOUNT = CURSOR_SHAKE_SIZE
+            create basic tween CURSOR_SHAKE_TWEEN_ID, 1, 0, CURSOR_SHAKE_TIME, 0
+            exitfunction 0
+        endif
+    endif
+
     allowed = 1
     if liveTarget.x < 0 then allowed = 0
     if liveTarget.x >= CELL_COLUMN_COUNT then allowed = 0
@@ -1711,6 +1753,10 @@ function startLiveMove(dirX, dirY, wantSwap)
             ` and a swap that goes down calls on the schools for the new fish, and one that goes up does
             ` not. see THE FISH COME HOME in fish_headers_school.
             schoolDrawWay(dirY)
+
+            ` the ink that the cursor starts on comes along with it, as the cursor goes. see THE INK in
+            ` fish_headers_squid.
+            inkSwapStarted(aIndex, bIndex, duration)
         endif
 
         ` a shake that was still going is over. the cursor is on its way somewhere now.
@@ -1771,12 +1817,16 @@ function stepLiveMove()
         if finished
             result = 2
             LIVE_MOVE_ACTIVE = 0
+            liveBubbled = 0
 
             if LIVE_MOVE_IS_SWAP
                 t = CELLS(LIVE_MOVE_B).value
                 CELLS(LIVE_MOVE_B).value = CELLS(LIVE_MOVE_A).value
                 CELLS(LIVE_MOVE_A).value = t
                 swapCellStacks(LIVE_MOVE_A, LIVE_MOVE_B)
+
+                ` a swap of a fish in a bubble is free: it is not a move. see IT MOVES FOR FREE in fish_headers_bubbled.
+                liveBubbled = bubbledSwapMade(LIVE_MOVE_A, LIVE_MOVE_B)
 
                 ` the cursor carried a fish, and the school of its kind waits on the swap. see THE CURSOR
                 ` CALLS ON THE SCHOOLS in fish_headers_school.
@@ -1785,6 +1835,7 @@ function stepLiveMove()
                 updateCell(CELLS(LIVE_MOVE_A))
                 updateCell(CELLS(LIVE_MOVE_B))
 
+
                 ` the quest of the round hears about every swap
                 questSwapDone(LIVE_MOVE_A, LIVE_MOVE_B)
 
@@ -1792,12 +1843,19 @@ function stepLiveMove()
                 SKELETON_WILD_A = LIVE_MOVE_A
                 SKELETON_WILD_B = LIVE_MOVE_B
 
+                ` and a big group that one of them finishes leaves its bottle where it is. see BOTTLES in fish_headers.
+                BOTTLE_SWAP_A = LIVE_MOVE_A
+                BOTTLE_SWAP_B = LIVE_MOVE_B
+
                 ` a fish that gets swapped down to the bottom row did not land there, so it gets no chance
                 ` at a stack from the "bottom feeder" card
 
                 ` the swap of the "free move" card is not counted as a move, and the multiplier does not
-                ` care if it pops anything
-                if LIVE_MOVE_FREE = 0
+                ` care if it pops anything. neither is a swap of a bubble.
+                liveCounted = 1
+                if LIVE_MOVE_FREE then liveCounted = 0
+                if liveBubbled then liveCounted = 0
+                if liveCounted
                     liveSwapNight = TIDE_NIGHT
                     registerMove(1)
 
@@ -1825,7 +1883,9 @@ function stepLiveMove()
                 diverBottleRose(LIVE_MOVE_A, LIVE_MOVE_B)
 
                 ` a swap may turn a fish belly up, once the board has settled
-                BELLY_UP_ROLL_DUE = 1
+                if liveBubbled = 0
+                    BELLY_UP_ROLL_DUE = 1
+                endif
 
                 ` and it sends out a shockwave from where it started, headed the way that it went
                 spawnShockwaveToward(LIVE_MOVE_FROM_X, LIVE_MOVE_FROM_Y, LIVE_MOVE_DIR_X, LIVE_MOVE_DIR_Y, SHOCK_SWAP_STRENGTH#, 0, SHOCK_LIFE)
@@ -1864,7 +1924,10 @@ endfunction result
 ` counted as a move, and the multiplier does not care if it pops anything.
 ` this says 1 if the swap started. if it could not, the move is not used up.
 function startFreeMove(slot, dirX, dirY)
+    ` a push of the squid that this makes is not counted either. see A PUSH in fish_headers_squid.
+    SQUID_FREE_PUSH = 1
     freeStarted = startLiveMove(dirX, dirY, 1)
+    SQUID_FREE_PUSH = 0
     if freeStarted
         LIVE_MOVE_FREE = 1
 

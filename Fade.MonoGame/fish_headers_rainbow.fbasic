@@ -12,10 +12,13 @@ remstart
     place in its group were worth that much more. a fish that comes in to fill the board is never one.
 
     WHERE THEY COME FROM. a group of RAINBOW_BURST_SIZE fish or more, that matched, and pops, leaves a
-    rainbow fish behind, where the cursor is: the fish in that cell does not pop with the group, and as the
-    group pops, it swells up and turns into a rainbow fish (rainbowCursorPunch). if the cursor is on a
-    rainbow fish that bursts, or on a fish of some other group that pops, the fish that comes in to fill
-    the cell is the rainbow fish, once the board has filled back in. there are none when a game starts.
+    rainbow fish behind, where the cursor is, but only when the fish there is NOT one of the big group (Chris,
+    2026-10-27: it keeps the bottle rule simple, and finding one a little harder). that fish swells up as the
+    group pops, and turns into a rainbow fish (rainbowCursorPunch). if the cursor is on a rainbow fish that
+    bursts, or on a fish of some other group that pops, the fish that comes in to fill the cell is the
+    rainbow fish, once the board has filled back in. when the cursor is on a fish of the big group, which it
+    is when the fish that it carried finished the group, that fish pops with it and there is no new one,
+    though the rainbow fish there are still burst. there are none when a game starts.
     AND THEY BREED. a group of fish that matched, and pops, beside a rainbow fish, with none in it, pops the
     way that any group does. once its fish are gone, the rainbow fish lights up, and a ribbon of rainbow
     light flows from it, along a curve, to the cell that the cursor is on (THE RAINBOW FLOW in
@@ -31,6 +34,18 @@ remstart
     they pop, a band of the rainbow sweeps across them, along the wave across the screen, and all of each
     fish turns to the rainbow as it goes over it (THE RAINBOW FLOOD in FishEffect.fx). their pops wait until
     it has gone all the way over them (rainbowWildLight). the other groups of the look do not wait.
+
+    THE RAINBOW SHARES. a PROTOTYPE. every rainbow fish that stays on the board through a look, because it is
+    in no group that pops, adds RAINBOW_SHARE_BONUS to each fish that pops on that look, as if its place in
+    its group were worth that much more. as each fish pops, one more number comes out of it, just under its
+    own, with all that the rainbow fish added, glowing in the rainbow, with a glint that runs along it
+    (RainbowTextEffect.fx, on a render target of their own), and every rainbow fish gives a short pulse: a
+    small rainbow cloud claps out of it (a pulse cloud, see THE RAINBOW CLOUDS), and it swells a little
+    (RAINBOW_PULSE_SWELL#). each rainbow fish keeps one cloud, which the next pulse starts over. so a group of three gives
+    three pulses.
+    rainbowShareAhead, rainbowSharePop and rainbowPulseStep do it. so a board
+    with rainbow fish held apart on it pays more for everything, and a burst, which pops all of them, uses
+    that up. a fish that sings on coral gets none of it yet, and neither does a school that pops.
 
     THE BURST. a group of RAINBOW_BURST_SIZE or more, that matched, also sets off every rainbow fish that
     there is. each one counts as one more fish of any group that it touches, so a pair of fish beside it,
@@ -49,8 +64,10 @@ remstart
     THE RAINBOW CLOUDS. a cloud of rainbow light that claps out of a fish into the water behind the board.
     it is not drawn on its own: ScreenEffect.fx turns the ripples of light that the water already has to
     the colors of the rainbow, and makes them brighter, where its ring is, on the water and not the fish
-    (THE RAINBOW CLOUDS in ScreenEffect.fx). there are 8 of them, and none of it is worked out while none
-    is going.
+    (THE RAINBOW CLOUDS in ScreenEffect.fx). there are 16 of them, and none of it is worked out while none
+    is going. a pulse of THE RAINBOW SHARES is a small one that lasts RAINBOW_PULSE_CLOUD_LIFE, and it only
+    takes the cloud of its own fish, or one that is over, or the oldest pulse, never one of anything else
+    (rainbowPulseCloud).
 
     THE SAVED GAME. which cells have a rainbow fish is saved with the rest of the game, 30 cells to a number,
     from RAINBOW_PREF on (rainbowSave and rainbowLoad, which fish_routines_save calls). a game that was
@@ -64,6 +81,11 @@ remstart
     too (FLOCK_RAINBOW): its edge shimmers in the rainbow (FlockEffect.fx). a burst pops it too, when the
     surge gets to it, with a cloud, the way that the tide's flush pops one (schoolFlushPop). one that swims
     back onto the board is an ordinary fish again. it is saved with the school.
+
+    A BOTTLE IS NEVER ONE. a bottle that a big group leaves (see BOTTLES in fish_headers) is never a rainbow
+    fish, even in the cell where a rainbow fish of the group popped. when a new rainbow fish is due in a cell
+    that has a bottle in it, at the cursor or where a flow goes, the first fish beside the bottle is the new
+    one in its place (rainbowCellNear).
 
     STILL TO DO. a rainbow fish from a bottle. a whole board of them, which may be an ending. the board
     growing, and a shift that wraps a fish around, do not carry what is rainbow yet. a fish that a quest or
@@ -82,6 +104,25 @@ global RAINBOW_FLOCK_LATEST = 1500 `the latest that one pops after the surge set
 ` 1 from the look that a big group pops on until the board settles: no group brings rainbow fish then, so
 ` that after a burst, the only rainbow fish is the new one where the cursor was
 global RAINBOW_NO_BREED = 0
+
+` THE RAINBOW SHARES. every rainbow fish that stays on the board through a look adds this to each fish that
+` pops on it, the way that the 10 of each fish in a group is, and a number of its own floats up off of it.
+global RAINBOW_SHARE_BONUS = 2 `and the multiplier goes on it, the way that it goes on the rest of the pop
+global RAINBOW_SHARE_TEXT_SCALE# = 1 `how big its number is, next to the one of the fish that pops
+global RAINBOW_SHARE_BELOW# = .5 `how far under the number of the fish that pops its rainbow number starts, in cells
+global RAINBOW_SHARE_AFTER = 60 `and how many ms after it
+global RAINBOW_SHARE_LIFE = 800 `how long the number is up for, the same as the number of the fish
+` the pulses that are due, in cells and times. see rainbowPulseQueue.
+global RAINBOW_PULSE_DUE_COUNT = 0
+global dim RAINBOW_PULSE_DUE_CELL(256)
+global dim RAINBOW_PULSE_DUE_AT(256)
+global RAINBOW_TEXT_GLOW# = 2 `how many pixels the glow of the rainbow reaches around the number
+` the numbers are drawn white to a render target of their own, and RainbowTextEffect turns them to the rainbow
+global TARGET_RAINBOW_TEXT
+global RAINBOW_TEXT_FX_ID
+global RAINBOW_TEXT_VIEW_SPRITE
+global RAINBOW_SHARE_COUNT = 0 `how many rainbow fish stay through the look that handle_combos is on
+global dim RAINBOW_SHARE_CELLS(400) `and their cells
 
 ` THE RAINBOW FISH. 1 for each cell that has one. it goes with the fish.
 global RAINBOW_FISH_ON = 1 `0 turns them off, for the debug window and the tests
@@ -183,12 +224,16 @@ global dim RAINBOW_BURST_BY(400)
 ` THE RAINBOW CLOUDS. the effect and the sprite, and for each of the 8: where it claps out from, in pixels,
 ` when, on the clock of the game, and how big it gets, where 1 is about two cells. how long one lasts, in
 ` milliseconds, how strong they are, from 0 to 1, and how big the one at the cursor is.
-global dim RAINBOW_CLOUD_X#(8)
-global dim RAINBOW_CLOUD_Y#(8)
-global dim RAINBOW_CLOUD_AT(8)
-global dim RAINBOW_CLOUD_SIZE#(8)
+global dim RAINBOW_CLOUD_X#(16)
+global dim RAINBOW_CLOUD_Y#(16)
+global dim RAINBOW_CLOUD_AT(16)
+global dim RAINBOW_CLOUD_SIZE#(16)
 global RAINBOW_CLOUD_NEXT = 0
 global RAINBOW_CLOUD_LIFE = 1800
+global RAINBOW_PULSE_CLOUD_LIFE = 450 `how long the cloud of a pulse of THE RAINBOW SHARES lasts. its size is kept below 0, so that the shader knows it.
+global RAINBOW_PULSE_CLOUD# = .45 `and how big it is
+global RAINBOW_PULSE_SWELL# = 1.15 `how big a rainbow fish swells, with each pulse
+global RAINBOW_PULSE_SWELL_MS = 180 `and how long it takes to settle back
 global RAINBOW_CLOUD_STRENGTH# = .85
 global RAINBOW_CLOUD_CURSOR# = 1.6
 global RAINBOW_CLOUD_UNTIL = 0 `when the last of them is over

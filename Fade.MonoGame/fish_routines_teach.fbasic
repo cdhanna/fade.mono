@@ -65,6 +65,47 @@ setup_codec_spot:
     for codecSpotI = 0 to 127
         CODEC_NEW(codecSpotI) = get pref(CODEC_NEW_PREF + codecSpotI, 0)
     next
+
+    ` three entries of the night came in after schooling fish (2026-10-27), and every entry after them moved
+    ` along by three. what was new there moves with them, once. see CODEC_NEW_MOVED_PREF.
+    if get pref(CODEC_NEW_MOVED_PREF, 0) = 0
+        set pref CODEC_NEW_MOVED_PREF, 1
+        codecMovedFrom = CARD_LENGTH + CODEC_EXTRA_FISH + 2
+        codecSpotI = 127
+        while codecSpotI >= codecMovedFrom
+            codecMovedNew = 0
+            if codecSpotI >= codecMovedFrom + 3 then codecMovedNew = CODEC_NEW(codecSpotI - 3)
+            if codecMovedNew <> CODEC_NEW(codecSpotI)
+                CODEC_NEW(codecSpotI) = codecMovedNew
+                set pref CODEC_NEW_PREF + codecSpotI, codecMovedNew
+            endif
+            codecSpotI = codecSpotI - 1
+        endwhile
+    endif
+
+    ` and squeaky clean came in after those (2026-10-28), which moved every entry after it along by one more
+    if get pref(CODEC_NEW_MOVED_CLEAN_PREF, 0) = 0
+        set pref CODEC_NEW_MOVED_CLEAN_PREF, 1
+        codecMovedFrom = CARD_LENGTH + CODEC_EXTRA_FISH + 5
+        codecSpotI = 127
+        while codecSpotI >= codecMovedFrom
+            codecMovedNew = 0
+            if codecSpotI >= codecMovedFrom + 1 then codecMovedNew = CODEC_NEW(codecSpotI - 1)
+            if codecMovedNew <> CODEC_NEW(codecSpotI)
+                CODEC_NEW(codecSpotI) = codecMovedNew
+                set pref CODEC_NEW_PREF + codecSpotI, codecMovedNew
+            endif
+            codecSpotI = codecSpotI - 1
+        endwhile
+    endif
+
+    ` cards stopped being news (2026-10-24). a card that a saved game still has as new is not, now.
+    for codecSpotI = 0 to CARD_LENGTH - 1
+        if CODEC_NEW(codecSpotI)
+            CODEC_NEW(codecSpotI) = 0
+            set pref CODEC_NEW_PREF + codecSpotI, 0
+        endif
+    next
     codecNewRecount()
 
     reserve text id(CODEC_SPOT_TEXT_ID)
@@ -103,6 +144,15 @@ setup_codec_spot:
     color sprite CODEC_BADGE_DOT_ID, rgb(255, 222, 96)
     order sprite CODEC_BADGE_DOT_ID, ORDER_HUD_TEXT + 2
     hide sprite CODEC_BADGE_DOT_ID
+
+    ` and the one on the corner of the spot of info mode. see THE BADGE ON THE SPOT OF INFO MODE.
+    reserve sprite id(CODEC_SPOT_DOT_ID)
+    sprite CODEC_SPOT_DOT_ID, 0, 0, TEX_PIXEL
+    set sprite offset CODEC_SPOT_DOT_ID, .5, .5
+    size sprite CODEC_SPOT_DOT_ID, CODEC_DOT_SIZE, CODEC_DOT_SIZE
+    color sprite CODEC_SPOT_DOT_ID, rgb(255, 222, 96)
+    order sprite CODEC_SPOT_DOT_ID, ORDER_INFO_CURSOR + 2
+    hide sprite CODEC_SPOT_DOT_ID
 return
 
 ` the confirm key on the "Codec" spot of info mode. the codec opens over the game, the way that the pause
@@ -756,7 +806,9 @@ endfunction
 function codecMarkNew(codecNewEntry)
     if DEMO_MODE then exitfunction
     if CODEC_NEW_QUIET then exitfunction
-    if codecNewEntry < 0 then exitfunction
+    ` a card is read where it is met, on the upgrade screen or when it is given, so it is never news.
+    ` the cards are the first CARD_LENGTH entries.
+    if codecNewEntry < CARD_LENGTH then exitfunction
     if codecNewEntry > 127 then exitfunction
     CODEC_NEW(codecNewEntry) = 1
     set pref CODEC_NEW_PREF + codecNewEntry, 1
@@ -998,6 +1050,8 @@ function codecNewStep()
     if codecInfoAlpha# < 8
         hide text CODEC_SPOT_TEXT_ID
         hide text CODEC_SPOT_BADGE_ID
+        hide sprite CODEC_SPOT_DOT_ID
+        spotNewDots(0, CODEC_DOT_SIZE)
         exitfunction
     endif
     codecSpotColor = rgb(150, 190, 255)
@@ -1005,14 +1059,110 @@ function codecNewStep()
     color text CODEC_SPOT_TEXT_ID, codecSpotColor
     set text alpha CODEC_SPOT_TEXT_ID, codecInfoAlpha#
     show text CODEC_SPOT_TEXT_ID
-    if CODEC_NEW_COUNT > 0
-        set text position CODEC_SPOT_BADGE_ID, CODEC_SPOT_X + CODEC_SPOT_W - 10, CODEC_SPOT_Y + codecStepY#
+
+    ` THE BADGE ON THE SPOT OF INFO MODE. see fish_headers_teach. its clock only runs while it is seen.
+    codecSpotStep = codecStepNow - CODEC_SPOT_LAST_MS
+    CODEC_SPOT_LAST_MS = codecStepNow
+    if codecSpotStep > 50 then codecSpotStep = 50
+    if codecSpotStep < 0 then codecSpotStep = 0
+    CODEC_SPOT_AGE = CODEC_SPOT_AGE + codecSpotStep
+
+    ` what was new before the game started is only the dot, the same as on the key hint
+    if CODEC_SPOT_KNOWN < 0
+        CODEC_SPOT_KNOWN = CODEC_NEW_COUNT
+        if CODEC_NEW_COUNT > 0 then CODEC_SPOT_MODE = CODEC_BADGE_DOT
+    endif
+    if CODEC_NEW_COUNT > CODEC_SPOT_KNOWN
+        CODEC_SPOT_MODE = CODEC_BADGE_DANCE
+        CODEC_SPOT_AGE = 0
+        CODEC_SPOT_PUFFED = 0
+    endif
+    CODEC_SPOT_KNOWN = CODEC_NEW_COUNT
+    if CODEC_NEW_COUNT = 0 then CODEC_SPOT_MODE = CODEC_BADGE_NONE
+
+    ` where it dances, over the right end of the spot, and where the dot sits, on its top right corner
+    codecSpotX# = CODEC_SPOT_X + CODEC_SPOT_W - 10
+    codecSpotY# = CODEC_SPOT_Y
+    codecSpotDotX# = CODEC_SPOT_X + CODEC_SPOT_W - 3
+    codecSpotDotY# = CODEC_SPOT_Y + 3
+
+    ` but when what is new is out on the board, it goes there instead. see NEW INFO ON THE BOARD in fish_headers_spot.
+    if SPOT_NEW_ANCHOR >= 0
+        codecAnchor = SPOT_NEW_CELL(SPOT_NEW_ANCHOR)
+        codecSpotX# = getCellX(codecAnchor mod CELL_COLUMN_COUNT)
+        codecSpotY# = getCellY(codecAnchor / CELL_COLUMN_COUNT)
+        codecSpotY# = codecSpotY# - CELL_SIZE / 2
+        codecSpotY# = codecSpotY# - 8
+        codecSpotDotX# = spotNewDotX(codecAnchor)
+        codecSpotDotY# = spotNewDotY(codecAnchor)
+    endif
+    codecSpotAgeF# = CODEC_SPOT_AGE
+
+    if CODEC_SPOT_MODE = CODEC_BADGE_DANCE
+        if CODEC_SPOT_AGE >= CODEC_SPOT_DANCE_MS
+            CODEC_SPOT_MODE = CODEC_BADGE_FLY
+            CODEC_SPOT_AGE = 0
+            codecSpotAgeF# = 0
+        endif
+    endif
+
+    if CODEC_SPOT_MODE = CODEC_BADGE_DANCE
+        hide sprite CODEC_SPOT_DOT_ID
+        if CODEC_SPOT_PUFFED = 0
+            CODEC_SPOT_PUFFED = 1
+            spawnBubbles(codecSpotX#, codecSpotY#, 10, 5, 0, rgb(255, 222, 96))
+        endif
+        size text max CODEC_SPOT_BADGE_ID, 90, 13
+        set text position CODEC_SPOT_BADGE_ID, codecSpotX#, codecSpotY# + codecStepY#
         rotate text CODEC_SPOT_BADGE_ID, CODEC_BUMP_TURN# + .12
         set text alpha CODEC_SPOT_BADGE_ID, codecInfoAlpha#
         show text CODEC_SPOT_BADGE_ID
-    else
-        hide text CODEC_SPOT_BADGE_ID
     endif
+
+    ` it shrinks as it flies to the corner of the spot, and turns into the dot when it gets there
+    if CODEC_SPOT_MODE = CODEC_BADGE_FLY
+        hide sprite CODEC_SPOT_DOT_ID
+        codecSpotFlySpan# = CODEC_FLY_MS
+        codecSpotFly# = codecSpotAgeF# / codecSpotFlySpan#
+        if codecSpotFly# >= 1
+            CODEC_SPOT_MODE = CODEC_BADGE_DOT
+            hide text CODEC_SPOT_BADGE_ID
+            size text max CODEC_SPOT_BADGE_ID, 90, 13
+            spawnBubbles(codecSpotDotX#, codecSpotDotY#, 6, 5, 0, rgb(255, 222, 96))
+        else
+            codecSpotEase# = codecSpotFly# * codecSpotFly# * (3 - 2 * codecSpotFly#)
+            codecSpotSize# = 1 - codecSpotEase# * .9
+            size text max CODEC_SPOT_BADGE_ID, 90 * codecSpotSize#, 13 * codecSpotSize#
+            codecSpotFlyX# = codecSpotX# + (codecSpotDotX# - codecSpotX#) * codecSpotEase#
+            codecSpotFlyY# = codecSpotY# + (codecSpotDotY# - codecSpotY#) * codecSpotEase#
+            set text position CODEC_SPOT_BADGE_ID, codecSpotFlyX#, codecSpotFlyY#
+            rotate text CODEC_SPOT_BADGE_ID, .12 + codecSpotEase# * .3
+            set text alpha CODEC_SPOT_BADGE_ID, codecInfoAlpha#
+            show text CODEC_SPOT_BADGE_ID
+        endif
+    endif
+
+    ` the dot: a little diamond that pulses, the same as the one on the key hint
+    if CODEC_SPOT_MODE = CODEC_BADGE_DOT
+        hide text CODEC_SPOT_BADGE_ID
+        codecSpotNowF# = codecStepNow
+        codecSpotDotSize# = CODEC_DOT_SIZE + sin(codecSpotNowF# * .0025) * .5
+        size sprite CODEC_SPOT_DOT_ID, codecSpotDotSize#, codecSpotDotSize#
+        rotate sprite CODEC_SPOT_DOT_ID, .785
+        position sprite CODEC_SPOT_DOT_ID, codecSpotDotX#, codecSpotDotY#
+        set sprite alpha CODEC_SPOT_DOT_ID, codecInfoAlpha#
+        show sprite CODEC_SPOT_DOT_ID
+    endif
+
+    if CODEC_SPOT_MODE = CODEC_BADGE_NONE
+        hide text CODEC_SPOT_BADGE_ID
+        hide sprite CODEC_SPOT_DOT_ID
+    endif
+
+    ` the dots of the other new things on the board, of the rows of the list, and of the Codec spot
+    codecSpotDotNowF# = codecStepNow
+    codecSpotDotsSize# = CODEC_DOT_SIZE + sin(codecSpotDotNowF# * .0025) * .5
+    spotNewDots(codecInfoAlpha#, codecSpotDotsSize#)
 endfunction
 
 ` the dots on the tiles of the new entries, on the page of the codec that is showing. frame_codec does this.

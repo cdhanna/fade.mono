@@ -108,13 +108,20 @@ setup_infos:
 return
 
 
-` the info key opens and closes info mode
+` the info key opens and closes info mode. the pause key closes it too, the same as the info key: it
+` backs out of everything else, and info mode is no different.
 frame_info_toggle:
     if new action down(ACT_INFO)
         if INFO_MODE
             gosub info_close
         else
             gosub info_open
+        endif
+        return
+    endif
+    if INFO_MODE
+        if new action down(ACT_PAUSE)
+            gosub info_close
         endif
     endif
 return
@@ -131,6 +138,7 @@ info_open:
 
     ` the selected blob may have been disabled since the last time
     if INFOS(INFO_SELECTED).enabled = 0 then INFO_SELECTED = findFirstEnabledInfo()
+    if INFO_ON_BOARD(INFO_SELECTED) then INFO_SELECTED = findFirstEnabledInfo() `the things on the board are in the list now. see INFO_ON_BOARD.
     if INFO_SELECTED < 0
         INFO_SELECTED = 0
         return
@@ -140,7 +148,9 @@ info_open:
 
     for i = 0 to INFO_LENGTH - 1
         infoItem = INFOS(i)
-        if infoItem.enabled
+        infoShown = infoItem.enabled
+        if INFO_ON_BOARD(i) then infoShown = 0
+        if infoShown
             if i = INFO_L_INDEX
                 ` the one with a leg has an outline in the shape of an L
                 layoutInfoL(infoItem.border, INFO_L_FAINT, infoItem.topLeft.x, infoItem.topLeft.y, infoItem.size.x, infoItem.size.y, INFO_L_W, INFO_L_H)
@@ -191,6 +201,10 @@ info_open:
     ` the mouse goes back to the game with a button. it is drawn on the screen, over the panel.
     mouseBackOn(0, ORDER_INFO_PANEL)
 
+    ` the cursor fades away with the panel coming in, because nothing in info mode is picked with it.
+    ` see fish_headers_cursorshow.
+    CURSOR_INFO_HIDE = 1
+
     create basic tween INFO_FADE_TWEEN_ID, 0, 1, 150, 0
     while is tween done(INFO_FADE_TWEEN_ID) < 1
         gosub frame_info_render
@@ -202,7 +216,9 @@ return
 
 
 info_close:
+    gosub spot_close `the list of what is on the board goes first
     mouseBackOff()
+    CURSOR_INFO_HIDE = 0 `and back, with the panel going
     create basic tween INFO_FADE_TWEEN_ID, 1, 0, 150, 0
     while is tween done(INFO_FADE_TWEEN_ID) < 1
         gosub frame_info_render
@@ -246,6 +262,12 @@ handle_info_input:
         gosub info_close
         return
     endif
+
+    ` the list of what is on the board has the keys while it is open. see fish_headers_spot.
+    if SPOT_ON
+        gosub spot_input
+        return
+    endif
     infoMsConfirm = 0
     if MOUSE_MOVED + MOUSE_CLICKED > 0
         infoMsAt = findInfoAtMouse()
@@ -274,6 +296,14 @@ handle_info_input:
         if INFO_SELECTED = INFO_INDEX_CODEC
             gosub info_open_codec
             return
+        endif
+
+        ` on the whole board, it looks closer, cell by cell: on the cell of the game's cursor, or on the one
+        ` that was clicked. see LOOKING CLOSER in fish_headers_spot.
+        if INFO_SELECTED = INFO_INDEX_GRID
+            SPOT_LOOK_FROM_MOUSE = infoMsConfirm
+            gosub spot_look_open
+            if SPOT_ON then return
         endif
 
         ` anywhere else, it spends a light that was kept, and the angler comes to answer a question
@@ -419,6 +449,7 @@ endfunction
 function findFirstEnabledInfo()
     found = -1
     for i = 0 to INFO_LENGTH - 1
+        if INFO_ON_BOARD(i) then skip
         if found < 0 and INFOS(i).enabled then found = i
     next
 endfunction found
@@ -431,7 +462,9 @@ function findInfoAtMouse()
     imFoundArea = 0
     imLast = INFO_LENGTH - 1
     for imI = 0 to imLast
-        if INFOS(imI).enabled
+        imShown = INFOS(imI).enabled
+        if INFO_ON_BOARD(imI) then imShown = 0
+        if imShown
             imX = INFOS(imI).topLeft.x
             imY = INFOS(imI).topLeft.y
             imW = INFOS(imI).size.x
@@ -471,6 +504,7 @@ function findInfoInDirection(dx, dy)
 
         other = INFOS(i)
         if other.enabled = 0 then skip
+        if INFO_ON_BOARD(i) then skip
 
         vx = (other.topLeft.x + other.size.x / 2) - curX
         vy = (other.topLeft.y + other.size.y / 2) - curY
@@ -550,7 +584,13 @@ function layoutInfoPanel(index)
     size text y INFO_TITLE_TEXT_ID, 22
     color text INFO_TITLE_TEXT_ID, rgb(255, 255, 255)
 
-    ` the description wraps itself, so all that is left to do is to measure it
+    ` the description wraps itself, so all that is left to do is to measure it. the words about the whole
+    ` board go beside it, where there is less room, so that they are not over the board.
+    if index = INFO_INDEX_GRID
+        set text wrap INFO_DESC_TEXT_ID, 138
+    else
+        set text wrap INFO_DESC_TEXT_ID, 300
+    endif
     set text INFO_DESC_TEXT_ID, blob.desc$
 
     ` the panel is as wide as the widest line of text
@@ -572,6 +612,14 @@ function layoutInfoPanel(index)
     if index = INFO_L2_INDEX then panelY = panelY + INFO_L2_H
     if panelY + panelH > WORLD_HEIGHT - 16 then panelY = blob.topLeft.y - panelH - 6
     if panelY < 4 then panelY = blob.topLeft.y + blob.size.y - panelH - 6
+
+    ` the whole board has its words beside it, on the left, in the middle, up and down. nothing of info mode
+    ` is written over the board. see INFO_ON_BOARD in fish_headers.
+    if index = INFO_INDEX_GRID
+        panelX = blob.topLeft.x - panelW - 8
+        if panelX < 6 then panelX = 6
+        panelY = blob.topLeft.y + blob.size.y / 2 - panelH / 2
+    endif
 
     position sprite INFO_PANEL_SPRITE, panelX, panelY
     size sprite INFO_PANEL_SPRITE, panelW, panelH

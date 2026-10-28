@@ -102,6 +102,8 @@ test tide_cycle_is_all_the_way_out_and_back_in from fishBoard
 endtest
 
 test tide_night_falls_when_the_moon_is_full_and_the_coral_spreads from fishBoard
+    ` the coral only spawns with the "moonlight" card. see WHEN NIGHT FALLS, THE CORAL SPAWNS in fish_headers_tide.
+    grantPassive(ABILITY_INDEX_MOONLIGHT)
     CORAL_CELLS(testIndex(3, 3)) = 1
     coralRecount()
 
@@ -121,6 +123,29 @@ test tide_night_falls_when_the_moon_is_full_and_the_coral_spreads from fishBoard
     end
 endtest
 
+test tide_moonlight_is_a_dealt_passive from fishBoard
+    assert ABILITY_INDEX_MOONLIGHT = CARD_LENGTH - 1, "moonlight is the last card"
+    assert ABILITY_INDEX_MOONLIGHT > ABILITY_INDEX_ANGLER, "it comes after the cards of the fast, so it is dealt"
+    assert CARDS(ABILITY_INDEX_MOONLIGHT).abilityType = ABILITY_TYPE_PASSIVE, "it is a passive"
+    assert CARDS(ABILITY_INDEX_MOONLIGHT).stackable = 0, "taken once"
+    assert len(CARDS(ABILITY_INDEX_MOONLIGHT).name$) > 0, "and it has a name"
+    end
+endtest
+
+test tide_coral_does_not_spawn_at_night_without_moonlight from fishBoard
+    CORAL_CELLS(testIndex(3, 3)) = 1
+    coralRecount()
+    tTideNoN = 0
+    while tTideNoN < TIDE_CYCLES_TO_TURN
+        tTideNoN = tTideNoN + 1
+        tideDebugCycle()
+    endwhile
+    assert TIDE_NIGHT = 1, "night falls"
+    assert TIDE_GREW = 0, "but without the card, nothing grows"
+    assert CORAL_COUNT = 1, "and the coral is as it was"
+    end
+endtest
+
 test tide_horror_coral_spreads_as_horror_coral from fishBoard
     CORAL_CELLS(testIndex(3, 3)) = 1
     CORAL_SICK(testIndex(3, 3)) = 1
@@ -133,6 +158,7 @@ test tide_horror_coral_spreads_as_horror_coral from fishBoard
 endtest
 
 test tide_day_breaks_when_the_moves_of_the_night_are_used_up from fishBoard
+    grantPassive(ABILITY_INDEX_MOONLIGHT)
     CORAL_CELLS(testIndex(3, 3)) = 1
     coralRecount()
 

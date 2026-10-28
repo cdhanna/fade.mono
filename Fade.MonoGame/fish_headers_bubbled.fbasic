@@ -1,0 +1,97 @@
+remstart
+    THE BUBBLED FISH. a PROTOTYPE (Chris, 2026-10-27). the routines are in fish_routines_bubbled, and the
+    tests in fish_tests_bubbled. a big group pushed out brings a rainbow fish (see fish_headers_rainbow),
+    and a big group pushed in brings a bubble, so every big group is a choice of which one the player wants.
+
+    WHERE IT COMES FROM. a group of BUBBLED_GROUP_SIZE fish or more, that matched, and pops, with the fish
+    that the cursor is on IN it (the cursor carried a fish into the group, and finished it): that fish does
+    not pop with the group. it is taken out of it, and a bubble closes around it (bubbledAhead). the group
+    still counts it, for a bottle. one bubble for every such group, so there can be many on the board. no
+    bubble is made on coral, though: that fish pops with its group.
+
+    IT MOVES FOR FREE. a swap that moves a fish in a bubble, whichever end of the swap it is on, is not a
+    move, for as long as the bubble lasts: there are no charges to use up (Chris, 2026-10-28). it is not
+    counted, and the multiplier does not hear of it (bubbledSwapMade, from stepLiveMove in fish_funcs). but
+    the board is looked at after it, the same as after any swap, so whatever it puts together pops: the
+    fish that it moved out of the way, and the fish in the bubble too, which bursts with its group
+    (Chris, 2026-10-28).
+
+    HOW IT ENDS. a bubble lasts until one of these (Chris, 2026-10-28):
+    - its fish is in a group that pops. the bubble bursts with it, and scores BUBBLED_POP_POINTS, with the
+      multiplier.
+    - it touches another bubble, side by side. the two come together, and both fish pop, as a group of
+      their own, whatever kinds they are, and each bubble scores. so too many bubbles get in each other's
+      way: a free swap has to keep them apart. they are found when handle_combos looks at the board
+      (bubbledSettle), which it does after every swap: one swapped next to another, one made next to
+      another, or one that falls next to another.
+    - it lands on coral. the bubble bursts, and scores, and its fish is an ordinary fish again, where it
+      is. it is looked at for that as soon as a swap puts it there, and on every look at the board, for one
+      that fell there.
+
+    THE BURST IS A MOMENT OF ITS OWN (Chris, 2026-10-28). when a look at the board finds bubbles whose fish
+    are going to pop, they burst first, one after another, each with a pop, a big score of its own and a
+    spray of bubbles, and every pop of that look waits for them (bubbledMomentAhead, from handle_combos,
+    which puts it in ghostWait). then the look goes on, and the fish pop with their groups. the scores go
+    in as the look is judged, but the words and the sounds wait for their time (BUBBLED_MOMENT_*, played by
+    stepBubbled), because a score text that waits can show for a frame before its wait starts.
+
+    HOW IT LOOKS. a cartoon bubble around the fish, the kind that floats out of a bubble wand: clear in the
+    middle, one thin rim that wobbles and shimmers pink and blue, and a curved white shine (stepBubbled, and
+    BubbledEffect.fx). the fish floats around inside it, and rocks, and is seen through it as through a
+    ball of glass, bigger in the middle, and lit as if it were round (the fish loop of update_frame, and A
+    FISH IN A BUBBLE in FishEffect.fx). the charges left are NOT shown: the player has to remember them
+    (Chris, 2026-10-28). a little bubble floats off with every swap. a new bubble grows in with a boing: it
+    overshoots, squashes and stretches, and its rim wobbles hard before it settles, while the fish starts to
+    float. when it goes, used up or popped, it swells, its rim breaks up into pieces that fly off, and it
+    fades (BUBBLED_BURST, which keeps going after the cell has forgotten the bubble). two that come
+    together burst, with bubbles between them.
+
+    STILL TO DO. a bubble is not saved with the game. a quest that counts moves sees a free swap the same
+    way that it sees the swap of the "free move" card.
+remend
+
+global BUBBLED_ON = 1 `0 turns them off, for the debug window and the tests
+global BUBBLED_GROUP_SIZE = 5 `how big a group the cursor has to push a fish into, for a bubble
+global BUBBLED_POP_POINTS = 50 `what a bubble scores when it bursts, before the multiplier
+global dim BUBBLED_AT(400) `1 when the fish in each cell is in a bubble. it goes with the fish.
+global dim BUBBLED_PAID(400) `1 when the bubble of the fish in each cell has burst ahead of its pop, as a moment of its own, and scored. it goes with the fish.
+global BUBBLED_MOMENT_MS = 520 `how long the pops of a look wait for the first bubble that bursts in it, in milliseconds
+global BUBBLED_MOMENT_EVERY = 200 `and how long after it each of the others bursts
+global BUBBLED_MOMENT_TEXT# = 1.5 `how big the words of a burst are, against the usual ones
+#constant BUBBLED_MOMENT_MAX 8
+global dim BUBBLED_MOMENT_CELL(BUBBLED_MOMENT_MAX) `the cell of each burst that is still to come, plus 1, or 0 for a free slot
+global dim BUBBLED_MOMENT_AT(BUBBLED_MOMENT_MAX) `when it bursts, in game ms
+global dim BUBBLED_MOMENT_POINTS(BUBBLED_MOMENT_MAX) `what it scored
+global dim BUBBLED_MOMENT_NTH(BUBBLED_MOMENT_MAX) `which burst of its look it is, from 0, so that each pops a little higher
+global dim BUBBLED_SFX(BUBBLED_MOMENT_MAX)
+global BUBBLED_SFX_LOADED = 0
+global BUBBLED_VOL# = .9
+global FORCE_BUBBLED = 7 `the forced group of the bubbles that came together. see FORCED POPS in fish_headers.
+global BUBBLED_GROUP = -1 `the group of this look that a fish was taken out of, for a bubble, or -1
+global BUBBLED_COUNT = 0 `how many bubbles have been made, for the tests
+global BUBBLED_FREE_SWAPS = 0 `how many free swaps there have been, for the tests
+
+` HOW IT LOOKS
+#constant BUBBLED_SHOWN_MAX 8
+global dim BUBBLED_SPRITE(BUBBLED_SHOWN_MAX) `the bubbles
+global BUBBLED_SPRITES_MADE = 0
+global BUBBLED_FX_ID
+global BUBBLED_SIZE# = .95 `how big a bubble is, in cells, across
+global BUBBLED_SPRITE_CELLS# = 1.1 `how big its sprite is, in cells, so that its rim has room to wobble
+global BUBBLED_RIM# = 1 `how thick its rim is, in pixels of the screen
+global BUBBLED_ALPHA = 235
+global BUBBLED_WOBBLE# = .06 `how far the fish floats around inside, in its own size
+global BUBBLED_WOBBLE_TURN# = .35 `and how far it rocks, in radians
+global BUBBLED_WOBBLE_SPEED# = 1 `how fast it does
+global BUBBLED_LENS# = .45 `how much bigger the middle of the bubble shows the fish
+global BUBBLED_LENS_SHADE# = .45 `how much darker the fish is on the side of it away from the light
+global BUBBLED_LENS_BLUE# = .8 `how much bluer it is close to the edge of the bubble
+global dim BUBBLED_BORN_AT(400) `when the bubble of the fish in each cell was made, in game ms. it goes with the fish.
+global BUBBLED_GROW_MS = 560 `how long a new bubble takes to grow in and settle
+global BUBBLED_BURST_MS = 300 `how long a bubble takes to burst
+#constant BUBBLED_BURST_MAX 8
+global dim BUBBLED_BURST_SPRITE(BUBBLED_BURST_MAX)
+global dim BUBBLED_BURST_X#(BUBBLED_BURST_MAX) `where each burst is
+global dim BUBBLED_BURST_Y#(BUBBLED_BURST_MAX)
+global dim BUBBLED_BURST_AT(BUBBLED_BURST_MAX) `when it bursts, in game ms. until then it is a whole bubble. 0 is a free slot.
+global ORDER_BUBBLED = 21 `on top of the fish, and underneath the icons of the quests
