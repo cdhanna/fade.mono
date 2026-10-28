@@ -1845,12 +1845,12 @@ public partial class FadeMonoGameCommands
             }
             else
             {
-                output.targets[i] = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
+                output.targets[i] = TextureSystem.Own(new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
                     width: (int)(RenderSystem.mainBuffer.Width),
                     height: (int)(RenderSystem.mainBuffer.Height),
                     mipMap: false,
                     preferredFormat: SurfaceFormat.Color,
-                    preferredDepthFormat: DepthFormat.None);
+                    preferredDepthFormat: DepthFormat.None));
             }
 
             output.bindingTextureIds[i] = textureIds[i];

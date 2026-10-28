@@ -129,7 +129,7 @@ public static class FontSheetSystem
 
         // The font keeps pixels of its own, so that it does not care what happens to the texture
         // afterwards. Run the command again to pick up a change to the picture.
-        var sheet = new Texture2D(GameSystem.game.GraphicsDevice, width, height, false, SurfaceFormat.Color);
+        var sheet = TextureSystem.Own(new Texture2D(GameSystem.game.GraphicsDevice, width, height, false, SurfaceFormat.Color));
         sheet.SetData(pixels);
 
         var font = new SpriteFont(sheet, bounds, cropping, characters, cellHeight, letterSpacing, kernings,

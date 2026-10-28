@@ -432,6 +432,7 @@ public static class RenderSystem
     public static void Reset()
     {
         backgroundColor = Color.CornflowerBlue;
+        mainBuffer?.Dispose();
         mainBuffer = null;
         mainBufferPosition = default;
         mainBufferScale = default;
@@ -662,6 +663,7 @@ public static class RenderSystem
     {
         renderWidth = width;
         renderHeight = height;
+        mainBuffer?.Dispose();
         mainBuffer = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
             width * renderScale, height * renderScale);
         ResetRenderPositioning();

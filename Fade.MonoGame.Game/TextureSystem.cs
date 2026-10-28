@@ -68,8 +68,30 @@ public class TextureSystem
     public static List<RuntimeFont> fonts = new List<RuntimeFont>();
     private static Dictionary<int, int> _fontMap = new Dictionary<int, int>();
 
+    // Textures that the engine made itself, rather than loaded from content: render targets, and
+    // textures made from pixels, files and font sheets. Nothing else owns them, so Reset disposes
+    // them. Clearing the lists alone left their GPU memory behind for the GC, which hardly ever
+    // runs for objects this small, and a run of tests (a reset for every test) grew by gigabytes.
+    private static readonly List<Texture2D> _owned = new List<Texture2D>();
+
+    /// <summary>
+    /// Mark a texture that the engine made as the engine's, so that it is disposed when the
+    /// program is reset. Never pass a texture from the content manager; it shares those.
+    /// </summary>
+    public static T Own<T>(T texture) where T : Texture2D
+    {
+        _owned.Add(texture);
+        return texture;
+    }
+
     public static void Reset()
     {
+       foreach (var texture in _owned)
+       {
+           texture.Dispose();
+       }
+       _owned.Clear();
+
        textures.Clear();
        _map.Clear();
        highestTextureId = 0;
@@ -279,7 +301,7 @@ public class TextureSystem
             return false;
         }
 
-        var texture = new Texture2D(GameSystem.game.GraphicsDevice, width, height, false, SurfaceFormat.Color);
+        var texture = Own(new Texture2D(GameSystem.game.GraphicsDevice, width, height, false, SurfaceFormat.Color));
         texture.SetData(rgba, 0, width * height * 4);
 
         GetTextureIndex(textureId, out var index, out var runtimeTex);
@@ -311,7 +333,7 @@ public class TextureSystem
         try
         {
             using var stream = File.OpenRead(fullPath);
-            texture = Texture2D.FromStream(GameSystem.game.GraphicsDevice, stream);
+            texture = Own(Texture2D.FromStream(GameSystem.game.GraphicsDevice, stream));
         }
         catch (Exception ex)
         {

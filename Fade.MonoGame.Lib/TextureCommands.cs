@@ -945,12 +945,12 @@ public partial class FadeMonoGameCommands
         }
         
         TextureSystem.GetTextureIndex(textureId, out var index, out var tex);
-        var target = new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
+        var target = TextureSystem.Own(new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
             width: width,
             height: height,
             mipMap: false,
             preferredFormat: surfaceFormat,
-            preferredDepthFormat: depthFormat);
+            preferredDepthFormat: depthFormat));
 
         tex.SetComputedTexture(target);
 
