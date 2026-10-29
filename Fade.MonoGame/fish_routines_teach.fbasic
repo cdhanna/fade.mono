@@ -537,9 +537,9 @@ function teachColorOf(teachColorKind, teachHueSeed)
     TEACH_COLOR_B# = TEACH_COLOR_PART#(teachColorKind * 3 + 2)
 endfunction
 
-` every frame: the words pop up, sit, and slide into the list; the screen knocks; the light follows the
-` moments, in their colors; the corners stay dark for the whole moment; and once the board has settled
-` and everything has been read, the list folds into the score of the run, which flies up into the bar.
+` every frame: the words pop up, sit, and burst into bubbles; the screen knocks; the light follows the
+` moments, in their colors; the corners are dark while words are up and lift once they have burst, even
+` mid-cascade; and once the board has settled and everything has been read, the moment is over.
 function teachStep()
     teachStepNow = game ms()
     teachDarkWant# = 0
@@ -578,8 +578,10 @@ function teachStep()
             for teachStepI = 0 to TEACH_LINE_COUNT - 1
                 teachStepLine(teachStepI, teachStepNow)
                 if teachStepNow >= TEACH_LINE_AT(teachStepI)
-                    ` how dark the lines that are up want the corners
-                    if TEACH_FADE_MS < 0
+                    ` how dark the lines that are up want the corners. only while their words are up: once
+                    ` they have burst the dark lifts, even if the board is still popping.
+                    teachLineGone = TEACH_LINE_SLIDE(teachStepI) + TEACH_BURST_MS
+                    if TEACH_FADE_MS < 0 and teachStepNow < teachLineGone
                         teachLineDark# = 0
                         if TEACH_LINE_LEVEL(teachStepI) = TEACH_FULL then teachLineDark# = TEACH_DARK_FULL#
                         if TEACH_LINE_LEVEL(teachStepI) = TEACH_SHORT then teachLineDark# = TEACH_DARK_SHORT#

@@ -1,0 +1,28 @@
+remstart
+    when a game is won, what a quest draws fades away with the rest of the hud. see THE FISH GO HOME
+    in fish_headers, and questKeepColor in fish_routines_quests.
+remend
+
+test winfade_quest_colors_keep_their_alpha_while_the_hud_is_up from fishBoard
+    HUD_KEEP# = 1
+    tWfColor = rgb(10, 20, 30, 200)
+    tWfKept = questKeepColor(tWfColor)
+    assert tWfKept = tWfColor, "nothing changes"
+    end
+endtest
+
+test winfade_quest_colors_fade_with_the_hud from fishBoard
+    HUD_KEEP# = .5
+    tWfKept = questKeepColor(rgb(10, 20, 30, 200))
+    tWfWant = rgb(10, 20, 30, 100)
+    assert tWfKept = tWfWant, "a bright one is half as bright"
+    tWfKept = questKeepColor(rgb(255, 220, 64, 44))
+    tWfWant = rgb(255, 220, 64, 22)
+    assert tWfKept = tWfWant, "and so is a faint one"
+    HUD_KEEP# = 0
+    tWfKept = questKeepColor(rgb(255, 255, 255, 255))
+    tWfWant = rgb(255, 255, 255, 0)
+    assert tWfKept = tWfWant, "and with the hud gone, they are gone"
+    HUD_KEEP# = 1
+    end
+endtest

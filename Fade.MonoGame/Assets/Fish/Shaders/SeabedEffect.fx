@@ -19,6 +19,7 @@ float Time;      // in seconds
 float2 Size;     // how big the screen is, in pixels
 float Void;      // 0 for the sea. toward 1, the sea fades away, and what is there in place of it is the stars, seen through a black hole. see THE TWO ENDINGS in fish_headers.
 float Mood;      // how long the run of pops that is going on is, from 0 to 1. the water is brighter, and the shafts of light are stronger.
+float TideShow;  // how much of the moon and the marks are there, from 1 down to 0 as they fade away with the rest of the hud when a game is won. see THE FISH GO HOME in fish_headers.
 float4 Tide;     // w is how many of the marks under the moon are filled in, in halves, or less than 0 for no marks. x is where the water is, from 0 for low water to 1 for high water. y is how much it is night, from 0 to 1. z is how much of the moon is lit, from 0 for a new moon to 1 for a full one. see fish_headers_tide.
 
 // the water, at the top of the screen and at the bottom of it
@@ -296,8 +297,8 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 	float moonLit = moon(bent, moonAt);
 	float moonGlow = saturate(1.0 - length(px - moonAt) / (MOON_SIZE * 3.2));
 	float moonFall = saturate(1.0 - abs(px.x - moonAt.x - (px.y - moonAt.y) * 0.12) / (MOON_SIZE * 1.6)) * saturate(1.0 - (px.y - moonAt.y) / (Size.y * 0.8)) * step(moonAt.y, px.y);
-	color += MoonRay * bands(saturate(moonGlow * moonGlow * 0.5 + moonFall * 0.22), 8.0, px) * night * saturate(Tide.z * 1.5);
-	color = lerp(color, MoonColor, moonLit * lerp(0.30, 0.95, night));
+	color += MoonRay * bands(saturate(moonGlow * moonGlow * 0.5 + moonFall * 0.22), 8.0, px) * night * saturate(Tide.z * 1.5) * TideShow;
+	color = lerp(color, MoonColor, moonLit * lerp(0.30, 0.95, night) * TideShow);
 
 	// THE SURFACE. the underside of the surface of the water, which comes down the screen as the tide goes
 	// out. over it is the sky, and the line of it is bright, with a little light under it.
@@ -324,7 +325,7 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 		float edge = inside * step(2.5, size);
 		float filled = saturate(Tide.w * 0.5 - m);
 		float full = step(0.75, filled) + step(0.25, filled) * (1.0 - step(0.75, filled)) * step(off.x, 0.0);
-		color = lerp(color, markColor, saturate(edge * 0.45 + inside * full * 0.95) * step(0.0, Tide.w));
+		color = lerp(color, markColor, saturate(edge * 0.45 + inside * full * 0.95) * step(0.0, Tide.w) * TideShow);
 	}
 
 	// the specks that drift down through all of this are drawn by SpecksEffect.fx, on a sprite of their

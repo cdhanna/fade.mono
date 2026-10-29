@@ -1407,6 +1407,11 @@ frame_texts:
             `x+= (rnd(6)-3) * 5
             y -= rnd(2) * 4 * scoreTxt.scale#
 
+            ` one that falls goes as far down instead. see THE TIDE PAYS in fish_headers_tide.
+            if scoreTxt.falls
+                y = tweenVal(scoreTxt.floatTweenIdY) + 50 * scoreTxt.scale#
+            endif
+
             ` TODO: BUG: float division seems broken? These always come out to zero. 
             flip# = 1.0 / (WORLD_HEIGHT + 1.0)
             r# = tweenVal(scoreTxt.floatTweenIdY)/(WORLD_HEIGHT*1.0)
@@ -1604,6 +1609,11 @@ handle_combos:
     ` a bubble whose fish is going to pop bursts first, as a moment of its own, and scores, and the pops
     ` wait for it. see THE BURST IS A MOMENT OF ITS OWN in fish_headers_bubbled.
     ghostWait = bubbledMomentAhead(groupId, ghostWait)
+
+    ` a swap that went with the tide pays one more fish, out of the cursor, and the pops wait for it.
+    ` see THE TIDE PAYS in fish_headers_tide.
+    tidePaysAhead(ghostWait)
+    ghostWait = ghostWait + TIDE_PAY_WAIT
 
     totalComboCount = 0
     QUEST_BUNCH_GROUPS = 0

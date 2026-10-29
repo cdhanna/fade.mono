@@ -719,6 +719,23 @@ global DEBUG_MOVE_SLOT = 1 `the slot that the debug window puts a move in, count
 global moveAbility as moveDisplay
 global dim MOVE_ABILITY_BINDINGS(MOVE_ABILITY_BINDINGS_LENGTH) as moveDisplay
 
+` HOLDING A MOVE. while the button of a move that is ready is held down, its name and its key swell and
+` brighten, so the player can see which move the next swap will be. when the move gets used they punch
+` back down, a little under their size and back; when the button is just let go, they ease back.
+` frame_move_ability_render does it all, by slot. a move gets used whenever its useShakeTweenId starts
+` again, so that is how the punch knows, and none of the places that use a move have to tell it.
+global MOVE_HOLD_SWELL# = .16 `how much bigger the name gets, all the way swelled
+global MOVE_HOLD_KEY_SWELL# = .3 `and the key
+global MOVE_HOLD_IN_MS = 110 `how long it takes to swell
+global MOVE_HOLD_OUT_MS = 260 `and to ease back when the button is let go
+global MOVE_HOLD_PUNCH_MS = 220 `how long the punch takes
+global dim MOVE_HOLD#(MOVE_ABILITY_BINDINGS_LENGTH) `how swelled it is, from 0 to 1
+global dim MOVE_HOLD_PUNCH_AT(MOVE_ABILITY_BINDINGS_LENGTH) `when the punch started, or -1
+global dim MOVE_HOLD_PUNCH_FROM#(MOVE_ABILITY_BINDINGS_LENGTH) `how swelled it was when the punch started
+global dim MOVE_HOLD_USE_SEEN#(MOVE_ABILITY_BINDINGS_LENGTH) `useShakeTweenId on the last frame
+global dim MOVE_HOLD_DRAWN#(MOVE_ABILITY_BINDINGS_LENGTH) `the size the name was last given, so it is only sized again when it changes
+global MOVE_HOLD_LAST_MS = 0
+
 ` EQUIPPING A MOVE. there are more moves than there are buttons, so a move has to be put in a slot to
 ` be used. one screen does all of it. it lists the slots that are open, each with its button and the
 ` move that is in it, all greyed out. the player picks a row up, and then picks another row, and the

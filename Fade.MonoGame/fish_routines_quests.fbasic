@@ -2233,7 +2233,8 @@ function questZone(qZoneX, qZoneY, qZoneW, qZoneH, qZoneColor, qZoneSolid)
         qZoneSprite = QUEST_GLOW_SPRITES(QUEST_GLOW_N)
         position sprite qZoneSprite, qZoneX, qZoneY
         size sprite qZoneSprite, qZoneW, qZoneH
-        color sprite qZoneSprite, qZoneColor
+        qZoneKept = questKeepColor(qZoneColor)
+        color sprite qZoneSprite, qZoneKept
         show sprite qZoneSprite
 
         if qZoneSolid
@@ -2406,7 +2407,8 @@ function questTrailDraw(qTrailColor)
     set effect param float4 QUEST_TRAIL_FX_ID, "Trail3", QUEST_TRAIL#(12), QUEST_TRAIL#(13), QUEST_TRAIL#(14), QUEST_TRAIL#(15)
     set effect param float4 QUEST_TRAIL_FX_ID, "Trail4", QUEST_TRAIL#(16), QUEST_TRAIL#(17), QUEST_TRAIL#(18), QUEST_TRAIL#(19)
     set effect param float4 QUEST_TRAIL_FX_ID, "Trail5", QUEST_TRAIL#(20), QUEST_TRAIL#(21), QUEST_TRAIL#(22), QUEST_TRAIL#(23)
-    color sprite QUEST_TRAIL_SPRITE, qTrailColor
+    qTrailKept = questKeepColor(qTrailColor)
+    color sprite QUEST_TRAIL_SPRITE, qTrailKept
     show sprite QUEST_TRAIL_SPRITE
     QUEST_TRAIL_ON = 1
 endfunction
@@ -2419,7 +2421,8 @@ function questIconAt(qIconTex, qIconX#, qIconY#, qIconSize, qIconColor)
         set sprite texture qIconSprite, qIconTex
         position sprite qIconSprite, qIconX#, qIconY#
         size sprite qIconSprite, qIconSize, qIconSize
-        color sprite qIconSprite, qIconColor
+        qIconKept = questKeepColor(qIconColor)
+        color sprite qIconSprite, qIconKept
         show sprite qIconSprite
     endif
 endfunction
@@ -2438,6 +2441,27 @@ function questIconOnCell(qSitCell, qSitTex, qSitDX#, qSitDY#, qSitSize, qSitColo
     questIconAt(qSitTex, qSitX#, qSitY#, qSitSize, qSitColor)
 endfunction
 
+` a color, with its alpha taken down by HUD_KEEP#, so that what a quest draws fades away with the rest
+` of the hud when the game is won. see THE FISH GO HOME in fish_headers. a color is packed as alpha,
+` blue, green and red, a byte each from the top, in a signed number: so the alpha is the top byte,
+` and an alpha of 128 or more makes it negative.
+function questKeepColor(qKeepColor)
+    qKeepOut = qKeepColor
+    if HUD_KEEP# < 1
+        qKeepByte = 16777216
+        qKeepA = qKeepColor / qKeepByte
+        qKeepLow = qKeepColor - qKeepA * qKeepByte
+        if qKeepLow < 0
+            qKeepLow = qKeepLow + qKeepByte
+            qKeepA = qKeepA - 1
+        endif
+        if qKeepA < 0 then qKeepA = qKeepA + 256
+        qKeepA = qKeepA * HUD_KEEP#
+        if qKeepA >= 128 then qKeepA = qKeepA - 256
+        qKeepOut = qKeepLow + qKeepA * qKeepByte
+    endif
+endfunction qKeepOut
+
 ` a word on top of everything that a quest draws. the place is the middle of it, in pixels.
 function questWordAt(qWordX#, qWordY#, qWord$, qWordColor)
     if QUEST_NUM_N < QUEST_NUM_MAX
@@ -2445,7 +2469,8 @@ function questWordAt(qWordX#, qWordY#, qWord$, qWordColor)
         QUEST_NUM_N = QUEST_NUM_N + 1
         set text qWordText, qWord$
         set text position qWordText, qWordX#, qWordY#
-        color text qWordText, qWordColor
+        qWordKept = questKeepColor(qWordColor)
+        color text qWordText, qWordKept
         show text qWordText
     endif
 endfunction

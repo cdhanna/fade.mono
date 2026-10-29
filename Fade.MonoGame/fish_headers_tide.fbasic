@@ -147,7 +147,23 @@ remstart
     the two loops are quiet while a menu is up.
 
     the "Tide" window of the debug panel (FISH_DEBUG) pushes and pulls, and turns night on and off.
+
+    THE TIDE PAYS. a swap that goes with the tide, a pull while it wants a pull or a push while it wants
+    a push (see THE DRIFT), scores one more fish of its group: as much as one more fish in the group that
+    the swap popped would have. it is a moment of its own, before anything pops: the points come out of
+    the cursor, rising for a push and falling for a pull, with a few bubbles, and the pops wait for them.
+    a swap that is both does not pay, and neither does anything at night, since the water does not move.
+    tidePaysAhead does it, at the start of a look, from the groups as they were found, so it only goes by
+    their sizes. judgeTide decides where the water goes later, from what really popped, and in a rare
+    case the two disagree (a quest holding the group, or fish on coral that have all sung).
 remend
+
+global TIDE_PAYS_ON = 1 `0 turns THE TIDE PAYS off
+global TIDE_PAY_FISH = 1 `how many more fish of the group it is worth
+global TIDE_PAY_HOLD_MS = 450 `how long the pops wait for the points
+global TIDE_PAY_WAIT = 0 `how long the pops wait for them on this look, or 0
+global TIDE_PAID = 0 `the points that the last swap was paid, for the tests
+global TIDE_PAY_SLOT = -1 `and the slot in SCORE_TEXTS of their text
 
 global TIDE_RANGE = 3 `how many levels the water has above low water. it is this many pulls from high water to low water.
 global TIDE_CYCLES_TO_TURN = 3 `how many cycles it takes for night to fall. SeabedEffect.fx draws this many marks: see MARK_COUNT there, which has to be kept the same by hand.

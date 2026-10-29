@@ -1,0 +1,70 @@
+remstart
+    THE TESTS OF THE TIDE PAYS. see THE TIDE PAYS in fish_headers_tide. the boards are the ones of
+    fish_tests_tide: a row of three kind 6 is made by trading (2, 2) and (2, 3), a push from (2, 3) and a
+    pull from (2, 2).
+remend
+
+test tidepay_a_pull_while_the_tide_wants_a_pull_pays from fishBoard
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    TIDE_FLOW = -1
+    testCursor(2, 2)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+
+    assert TIDE_LAST_SWAP = TIDE_SWAP_PULL, "it is a pull"
+    tPayWant = 4 * 10 * SCORE_MULTIPLIER
+    assert TIDE_PAID = tPayWant, "it pays a fourth fish of the row"
+    assert SCORE_TEXTS(TIDE_PAY_SLOT).falls = 1, "and its points fall"
+    end
+endtest
+
+test tidepay_a_push_while_the_tide_wants_a_push_pays from fishBoard
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    TIDE_LEVEL = 1
+    TIDE_FLOW = 1
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert TIDE_LAST_SWAP = TIDE_SWAP_PUSH, "it is a push"
+    tPayWant = 4 * 10 * SCORE_MULTIPLIER
+    assert TIDE_PAID = tPayWant, "it pays a fourth fish of the row"
+    assert SCORE_TEXTS(TIDE_PAY_SLOT).falls = 0, "and its points rise"
+    end
+endtest
+
+test tidepay_a_push_while_the_tide_wants_a_pull_pays_nothing from fishBoard
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    TIDE_LEVEL = 1
+    TIDE_FLOW = -1
+    testCursor(2, 3)
+    testQueueMove(0, -1, 1, -1)
+    runto _combos_judged
+
+    assert TIDE_LAST_SWAP = TIDE_SWAP_PUSH, "it is a push"
+    assert TIDE_PAID = 0, "against the tide, so it pays nothing"
+    end
+endtest
+
+test tidepay_a_swap_that_is_both_pays_nothing from fishBoard
+    testPut(3, 2, 6)
+    testPut(4, 2, 6)
+    testPut(2, 3, 6)
+    testPut(2, 2, 7)
+    testPut(3, 3, 7)
+    testPut(4, 3, 7)
+    TIDE_FLOW = -1
+    testCursor(2, 2)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+
+    assert TIDE_LAST_SWAP = TIDE_SWAP_BOTH, "it is both"
+    assert TIDE_PAID = 0, "so it pays nothing"
+    end
+endtest

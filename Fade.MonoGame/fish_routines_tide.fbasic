@@ -307,6 +307,91 @@ function tideSawGroup(tideGroup)
 endfunction
 
 
+` THE TIDE PAYS. see fish_headers_tide. handle_combos has found the groups, and has not scored any of
+` them. tidePayAt is how long the pops already wait, so the points come after whatever came first.
+` it leaves how much longer they wait in TIDE_PAY_WAIT.
+function tidePaysAhead(tidePayAt)
+    TIDE_PAY_WAIT = 0
+    TIDE_PAID = 0
+    if TIDE_PAYS_ON = 0 then exitfunction
+    if TIDE_NIGHT then exitfunction
+    if MULT_PENDING_SWAPS <= 0 then exitfunction
+    if CORAL_SWAP_A < 0 then exitfunction
+    if CELLS(CORAL_SWAP_A).value = CELLS(CORAL_SWAP_B).value then exitfunction
+
+    ` how big the groups of the two fish of the swap are, and whether they are on coral, where a group
+    ` has to be bigger, or forced, which does not count
+    tidePayGroupA = CELLS(CORAL_SWAP_A).comboFillId
+    tidePayGroupB = CELLS(CORAL_SWAP_B).comboFillId
+    tidePaySizeA = 0
+    tidePaySizeB = 0
+    tidePayNeedA = getRequiredComboCount()
+    tidePayNeedB = tidePayNeedA
+    tidePayLast = CELL_COUNT - 1
+    for tidePayI = 0 to tidePayLast
+        tidePayG = CELLS(tidePayI).comboFillId
+        if tidePayG = tidePayGroupA
+            tidePaySizeA = tidePaySizeA + 1
+            if CELLS(tidePayI).comboForce > 0 then tidePaySizeA = -999
+            if CORAL_CELLS(tidePayI) then tidePayNeedA = getRequiredComboCount() + CORAL_GROUP_EXTRA
+        endif
+        if tidePayG = tidePayGroupB
+            tidePaySizeB = tidePaySizeB + 1
+            if CELLS(tidePayI).comboForce > 0 then tidePaySizeB = -999
+            if CORAL_CELLS(tidePayI) then tidePayNeedB = getRequiredComboCount() + CORAL_GROUP_EXTRA
+        endif
+    next
+
+    ` the carried fish popping is a push, and the one shoved back popping is a pull
+    tidePayPush = 0
+    tidePayPull = 0
+    if tidePaySizeB >= tidePayNeedB then tidePayPush = 1
+    if tidePaySizeA >= tidePayNeedA then tidePayPull = 1
+    tidePayWay = 0
+    tidePaySize = 0
+    if tidePayPush = 1 and tidePayPull = 0
+        if TIDE_FLOW > 0
+            tidePayWay = -1
+            tidePaySize = tidePaySizeB
+        endif
+    endif
+    if tidePayPull = 1 and tidePayPush = 0
+        if TIDE_FLOW < 0
+            tidePayWay = 1
+            tidePaySize = tidePaySizeA
+        endif
+    endif
+    if tidePayWay = 0 then exitfunction
+
+    ` one more fish of the group, scored the way the fish of a group are: the next one is worth 10 more
+    tidePayFish = tidePaySize + TIDE_PAY_FISH
+    tidePayPoints = tidePayFish * 10 * SCORE_MULTIPLIER
+    TIDE_PAID = tidePayPoints
+
+    tidePayPos as vec = {
+        x = getCellX(CORAL_SWAP_B mod CELL_COLUMN_COUNT),
+        y = getCellY(CORAL_SWAP_B / CELL_COLUMN_COUNT)
+    }
+    tidePayColor = rgb(150, 235, 220)
+    tidePayTxt = spawnScoreTextScaled(tidePayPos, "+" + str$(tidePayPoints), tidePayAt, 900, getBoardBubbleScale() * 1.3)
+    color text tidePayTxt, tidePayColor
+
+    ` a pull's points fall. the text that was just made is the one before SCORE_TEXT_NUM.
+    tidePaySlot = SCORE_TEXT_NUM - 1
+    if tidePaySlot < 0 then tidePaySlot = SCORE_TEXT_COUNT - 1
+    TIDE_PAY_SLOT = tidePaySlot
+    if tidePayWay > 0
+        SCORE_TEXTS(tidePaySlot).falls = 1
+        tidePayFall# = 20 * getBoardBubbleScale()
+        create basic tween SCORE_TEXTS(tidePaySlot).floatTweenIdY, tidePayPos.y, tidePayPos.y + tidePayFall#, 260, tidePayAt + 50
+    endif
+
+    spawnBubbles(tidePayPos.x, tidePayPos.y, CELL_SIZE / 3, 8, tidePayAt, tidePayColor)
+    queueScore(tidePayPoints, tidePayAt)
+    TIDE_PAY_WAIT = TIDE_PAY_HOLD_MS
+endfunction
+
+
 ` handle_combos has been through the groups. if a swap was made since the last look at the board, this
 ` is where the water moves for it. the fish that keep popping afterwards, as the board fills back in,
 ` are not swaps, so they do nothing. this has to come before judgeMultiplierSwaps, which forgets the swap.
@@ -824,6 +909,8 @@ function stepTide()
         tideMarksNow# = tideMarks()
     endif
     set effect param float4 SEABED_FX_ID, "Tide", TIDE_LEVEL_SHOWN#, TIDE_NIGHT_SHOWN#, TIDE_MOON_SHOWN#, tideMarksNow#
+    ` the moon and the marks fade away with the rest of the hud when the game is won. see THE FISH GO HOME in fish_headers.
+    set effect param float SEABED_FX_ID, "TideShow", HUD_KEEP#
     set effect param float2 FISH_FX_ID, "Night", TIDE_NIGHT_SHOWN#, tideTime#
     set effect param float CORAL_FX_ID, "Night", TIDE_NIGHT_SHOWN#
 

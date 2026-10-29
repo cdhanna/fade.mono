@@ -321,8 +321,9 @@ setup_ability_selection:
     reserve tween id(ABILITY_SELECTION_INDICATOR_TWEEN_ID)
     create basic tween ABILITY_SELECTION_INDICATOR_TWEEN_ID, 0, 0, 0, 0
 
-    ` THE PIPS. a card says how much of something is left with little squares, not words, the same as
-    ` the air of the diver does. a bright one is one that is left, and a dim one is one that is gone.
+    ` THE PIPS. a card says how much of something is left with little bubbles, not words. a full,
+    ` bright bubble is one that is left, and a popped one, only bits of its rim, is one that is gone.
+    ` they are drawn with the bubble effect, which is loaded after this, so layCardPips sets it.
     ` a card that can only be taken so many times has a row along the bottom of it: one for every time
     ` that it can be taken, and the bright ones are the times that are left. a move card has a row just
     ` above it: one for every slot that is open, and the bright ones are the empty slots. when none of
@@ -330,15 +331,15 @@ setup_ability_selection:
     ` CARD_PIP_MAX is how many there are on a row, at most, and the pips of card i are at
     ` i * CARD_PIP_MAX in the lists. bind_ability_choices lays them out.
     global CARD_PIP_MAX = 5
-    global CARD_PIP_SIZE = 8
-    global CARD_PIP_GAP = 12
+    global CARD_PIP_SIZE = 11
+    global CARD_PIP_GAP = 15
     global dim CARD_USE_PIPS(ABILITY_CHOICE_LENGTH * CARD_PIP_MAX)
     global dim CARD_SLOT_PIPS(ABILITY_CHOICE_LENGTH * CARD_PIP_MAX)
     global CARD_PIP_LIT = 0
     global CARD_PIP_DIM = 0
     global CARD_PIP_FULL = 0
     CARD_PIP_LIT = rgb(170, 220, 255, 235)
-    CARD_PIP_DIM = rgb(70, 95, 150, 230) `bright enough to see over the board too, above a move card
+    CARD_PIP_DIM = rgb(135, 170, 230, 245) `a popped bubble is only a thin broken rim, so it is brighter than a dim square was
     CARD_PIP_FULL = rgb(255, 190, 90, 200)
 
     ` selections
@@ -527,6 +528,8 @@ setup_moves:
         set text alpha moveAbility.timerTextId, 0
 
         MOVE_ABILITY_BINDINGS(i) = moveAbility
+        MOVE_HOLD_PUNCH_AT(i) = -1
+        MOVE_HOLD_DRAWN#(i) = 1
        ` hide text PASSIVE_BINDINGS(index).titleTextId
 
     next
@@ -725,8 +728,10 @@ bind_ability_choices:
         size text x a.titleTextId, CARD_WIDTH - 16, .1, .33
 
         ` a card that runs out shows how many of it are left, with pips along its bottom. see THE PIPS in setup_ability_selection.
-        set text a.descTextId, CARDS(a.abilityIndex).desc$
         cardTakesLeft = CARDS(a.abilityIndex).maxUses - CARDS(a.abilityIndex).uses
+        cardHasPips = 0
+        if CARDS(a.abilityIndex).maxUses > 0 then cardHasPips = 1
+        fitCardDesc(a.descTextId, CARDS(a.abilityIndex).desc$, cardHasPips)
         layCardPips(i, 0, CARDS(a.abilityIndex).maxUses, cardTakesLeft, CARD_HEIGHT - 8, CARD_PIP_LIT, CARD_PIP_DIM)
         set transform position a.transformId, startX + i * (CARD_WIDTH + cardPadding), CARD_TOP
 
@@ -1336,6 +1341,15 @@ return
 
 frame_move_ability_render:
     anyRecharging = 0
+
+    ` how much time has gone by, for HOLDING A MOVE. see fish_headers.
+    moveHoldNow = game ms()
+    moveHoldMs = moveHoldNow - MOVE_HOLD_LAST_MS
+    MOVE_HOLD_LAST_MS = moveHoldNow
+    if moveHoldMs < 0 then moveHoldMs = 0
+    if moveHoldMs > 100 then moveHoldMs = 100
+    moveHoldMs# = moveHoldMs
+
     if MOVE_ABILITY_COUNT > 0
         ` the moves are listed in the order of their slots, packed together, so a slot that is
         ` empty does not leave a gap. moveRow is the row that the move is on, counted from the bottom.
@@ -1346,6 +1360,67 @@ frame_move_ability_render:
             moveRow = moveRow + 1
             moveFade# = tweenVal(moveAbility.fadeTweenId)
             if moveAbility.movesLeft > 0 then anyRecharging = 1
+
+            ` HOLDING A MOVE. the move was just used, so the punch starts from however swelled it was.
+            moveUseNow# = tweenVal(moveAbility.useShakeTweenId)
+            if moveUseNow# > MOVE_HOLD_USE_SEEN#(n) + .01
+                MOVE_HOLD_PUNCH_AT(n) = moveHoldNow
+                MOVE_HOLD_PUNCH_FROM#(n) = MOVE_HOLD#(n)
+                MOVE_HOLD#(n) = 0
+            endif
+            MOVE_HOLD_USE_SEEN#(n) = moveUseNow#
+            movePunching = 0
+            movePunchAge = moveHoldNow - MOVE_HOLD_PUNCH_AT(n)
+            if MOVE_HOLD_PUNCH_AT(n) >= 0
+                if movePunchAge < MOVE_HOLD_PUNCH_MS then movePunching = 1
+            endif
+
+            ` it swells while the button is held, if the move is ready, and eases back when it is not
+            moveHoldWant = action down(moveAbility.actionId)
+            if moveAbility.movesLeft > 0 then moveHoldWant = 0
+            if movePunching then moveHoldWant = 0
+            if moveHoldWant
+                moveHoldIn# = MOVE_HOLD_IN_MS
+                MOVE_HOLD#(n) = MOVE_HOLD#(n) + moveHoldMs# / moveHoldIn#
+                if MOVE_HOLD#(n) > 1 then MOVE_HOLD#(n) = 1
+            else
+                moveHoldOut# = MOVE_HOLD_OUT_MS
+                MOVE_HOLD#(n) = MOVE_HOLD#(n) - moveHoldMs# / moveHoldOut#
+                if MOVE_HOLD#(n) < 0 then MOVE_HOLD#(n) = 0
+            endif
+            moveSwellH# = MOVE_HOLD#(n)
+            moveSwellT# = moveSwellH# * moveSwellH# * (3 - 2 * moveSwellH#)
+
+            ` the punch: it drops from where it was to a little under its size, and comes back
+            moveDip# = 0
+            if movePunching
+                movePunchAgeF# = movePunchAge
+                movePunchMsF# = MOVE_HOLD_PUNCH_MS
+                movePunchP# = movePunchAgeF# / movePunchMsF#
+                movePunchDrop# = 1 - movePunchP# / .3
+                if movePunchDrop# < 0 then movePunchDrop# = 0
+                moveSwellT# = moveSwellT# + MOVE_HOLD_PUNCH_FROM#(n) * movePunchDrop#
+                moveDip# = sin(movePunchP# * 3.14159) * .12
+            endif
+            moveScale# = 1 + MOVE_HOLD_SWELL# * moveSwellT#
+            moveScale# = moveScale# - moveDip#
+            moveKeyScale# = 1 + MOVE_HOLD_KEY_SWELL# * moveSwellT#
+            moveKeyScale# = moveKeyScale# - moveDip# * 1.5
+
+            ` and it brightens as it swells
+            moveLightR = 64 + 140 * moveSwellT#
+            moveLightG = 128 + 104 * moveSwellT#
+            color text moveAbility.titleTextId, rgb(moveLightR, moveLightG, 255)
+
+            ` the name is fitted to the column, so it is fitted again to a bigger one. only when it changes.
+            moveSizeDiff# = moveScale# - MOVE_HOLD_DRAWN#(n)
+            if moveSizeDiff# > .002 or moveSizeDiff# < -.002
+                size text x moveAbility.titleTextId, HUD_LIST_WIDTH * moveScale#, .1, HUD_LIST_SCALE# * moveScale#
+                MOVE_HOLD_DRAWN#(n) = moveScale#
+            endif
+            ` it swells from the middle of its line, not from the top
+            moveTitleH# = get text size y(moveAbility.titleTextId)
+            moveTitleLift# = (moveTitleH# - moveTitleH# / moveScale#) / 2
 
             set text alpha moveAbility.titleTextId, moveFade# * 255
 
@@ -1359,14 +1434,14 @@ frame_move_ability_render:
                 set text alpha moveAbility.timerTextId, 0
             endif
 
-            size text y moveAbility.keyTextId, 16 * tweenVal(moveAbility.readyTweenId)
+            size text y moveAbility.keyTextId, 16 * tweenVal(moveAbility.readyTweenId) * moveKeyScale#
 
             ` text sits on whole pixels, and the position gets cut down to one, not rounded. the extra half 
             ` pixel makes that the same as rounding, so that a tiny shake does not flicker the text by a pixel.
 
             ` the whole row shakes from side to side when the move gets used
             rowShake# = sin(game ms() * .045) * 4 * tweenVal(moveAbility.useShakeTweenId)
-            set text position moveAbility.titleTextId, 16.5 + rowShake#, ABILITY_ROWS_Y - moveRow*18
+            set text position moveAbility.titleTextId, 16.5 + rowShake#, ABILITY_ROWS_Y - (moveRow*18 + moveTitleLift#)
             set text position moveAbility.keyTextId, 126.5 + rowShake#, ABILITY_ROWS_Y + 10 - moveRow*18
 
             ` and only the number shakes when the move gets used before it is ready
@@ -1472,6 +1547,24 @@ endfunction CARDS(ABILITY_INDEX_BOTTLES).obtained > 0
 ` lay out one row of the pips of a card, centered on it, at `pipY` down from its top. the first
 ` `pipLit` of the `pipCount` are bright, and the rest are dim. `pipSlots` is 1 for the row above a
 ` move card, and 0 for the row at the bottom. a count of 0 hides the row. see THE PIPS in setup_ability_selection.
+` the description of a card, in lines 16 pixels high if it fits, and smaller, a pixel at a time, if it
+` does not: a long one, or a long translation, must not run into the pips along the bottom of the card
+` or off of it. the line height is set on a placeholder of one line, because `size text y` sizes the
+` whole block, and `set text` keeps the scale.
+function fitCardDesc(fitDescId, fitDesc$, fitHasPips)
+    fitDescRoom# = CARD_HEIGHT - 60
+    if fitHasPips then fitDescRoom# = CARD_HEIGHT - (68 + CARD_PIP_SIZE / 2)
+    fitDescLine = 16
+    while fitDescLine >= 10
+        set text fitDescId, "desc"
+        size text y fitDescId, fitDescLine
+        set text fitDescId, fitDesc$
+        fitDescH# = get text size y(fitDescId)
+        if fitDescH# <= fitDescRoom# then exitfunction
+        fitDescLine = fitDescLine - 1
+    endwhile
+endfunction
+
 function layCardPips(pipCard, pipSlots, pipCount, pipLit, pipY, pipLitColor, pipDimColor)
     if pipCount > CARD_PIP_MAX then pipCount = CARD_PIP_MAX
     for pipN = 0 to CARD_PIP_MAX - 1
@@ -1485,10 +1578,15 @@ function layCardPips(pipCard, pipSlots, pipCount, pipLit, pipY, pipLitColor, pip
             pipX = pipX - pipCount
             pipX = pipX * CARD_PIP_GAP / 2
             position sprite pipId, pipX, pipY
+            set sprite effect pipId, BUBBLE_FX_ID
             if pipN < pipLit
+                ` a full bubble: the fill is half way to solid
                 color sprite pipId, pipLitColor
+                set sprite all texcoord1 pipId, CARD_PIP_SIZE, .45, 0, 0
             else
+                ` a popped one
                 color sprite pipId, pipDimColor
+                set sprite all texcoord1 pipId, CARD_PIP_SIZE, 0, 0, 4
             endif
             show sprite pipId
         else

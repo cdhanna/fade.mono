@@ -104,6 +104,12 @@ float4 MainPS(VertexShaderOutput input) : COLOR
 	float zed = max(max(step(zAt.y, 0.5), step(3.5, zAt.y)), step(abs(zAt.x + zAt.y - 4.0), 0.5));
 	alpha = lerp(alpha, zed, step(2.5, input.Custom.w));
 
+	// and when w is 4 it is a bubble that has popped, for the pips of a card that are used up: only
+	// six bits of its rim are left, with gaps between them, and nothing inside.
+	float around6 = atan2(p.y, p.x) * 0.95493;
+	float popped = step(1.0 - pixel * 1.5, d) * inside * step(0.45, frac(around6 + 0.25));
+	alpha = lerp(alpha, popped, step(3.5, input.Custom.w));
+
 	return float4(color, see * alpha);
 }
 
