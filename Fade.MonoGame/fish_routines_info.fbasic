@@ -111,6 +111,19 @@ return
 ` the info key opens and closes info mode. the pause key closes it too, the same as the info key: it
 ` backs out of everything else, and info mode is no different.
 frame_info_toggle:
+    ` a puzzle has no info mode. the key puts the board back. see STUCK in fish_headers_puzzle.
+    if PUZZLE_ON
+        if new action down(ACT_INFO) then PUZZLE_AGAIN = 1
+        return
+    endif
+
+    ` the angler brings info mode in when the little boards are done, and it says so
+    if TUTORIAL_BOARD
+        if new action down(ACT_INFO)
+            tutorialTooSoon()
+        endif
+        return
+    endif
     if new action down(ACT_INFO)
         if INFO_MODE
             gosub info_close
@@ -619,6 +632,15 @@ function layoutInfoPanel(index)
         panelX = blob.topLeft.x - panelW - 8
         if panelX < 6 then panelX = 6
         panelY = blob.topLeft.y + blob.size.y / 2 - panelH / 2
+    endif
+
+    ` the angler is in the column under these while it is the guide, so it does not get covered up. see fish_headers_guide.
+    if GUIDE_SIDE
+        if blob.topLeft.x >= GUIDE_SIDE_BOX_X
+            panelX = blob.topLeft.x - panelW - 8
+            if panelX < 6 then panelX = 6
+            panelY = blob.topLeft.y
+        endif
     endif
 
     position sprite INFO_PANEL_SPRITE, panelX, panelY

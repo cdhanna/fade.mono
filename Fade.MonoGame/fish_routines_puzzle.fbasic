@@ -1,0 +1,2164 @@
+goto routines_puzzle_exit
+
+` THE LONG VISIT, AND ITS PUZZLES. see fish_headers_puzzle.
+
+setup_puzzle:
+    gosub setup_puzzle_list
+    puzzleTalkPicks()
+    gosub setup_puzzle_talk
+    reserve text id(PUZZLE_GONE_TEXT_ID)
+    text PUZZLE_GONE_TEXT_ID, WORLD_WIDTH / 2, 130, SCORE_FONT, " "
+    size text y PUZZLE_GONE_TEXT_ID, PUZZLE_GONE_TALL
+    set text offset PUZZLE_GONE_TEXT_ID, .5, .5
+    set text wrap PUZZLE_GONE_TEXT_ID, PUZZLE_GONE_WIDE
+    set text align PUZZLE_GONE_TEXT_ID, .5
+    enable text drop shadow PUZZLE_GONE_TEXT_ID, 2, -2, rgb(0,0,0)
+    order text PUZZLE_GONE_TEXT_ID, ORDER_INTRO + 2
+    set text alpha PUZZLE_GONE_TEXT_ID, 0
+    for spI = 0 to PUZZLE_WORD_SLOTS - 1
+        reserve text id(PUZZLE_WORDS(spI))
+        text PUZZLE_WORDS(spI), -500, -500, SCORE_FONT, "words"
+        set text offset PUZZLE_WORDS(spI), .5, .5 `so that it leans around its middle
+        size text y PUZZLE_WORDS(spI), 16
+        enable rich text PUZZLE_WORDS(spI) `so that one can be a picture of a key, like {info}
+        color text PUZZLE_WORDS(spI), rgb(150, 208, 250)
+        enable text drop shadow PUZZLE_WORDS(spI), 2, -2, rgb(0,0,0)
+        order text PUZZLE_WORDS(spI), PUZZLE_ORDER_WORDS
+        hide text PUZZLE_WORDS(spI)
+    next
+return
+
+
+` a new game is about to start, and it is a puzzle. tutorial_prepare comes here. everything goes before
+` the wave of bubbles, so that it uncovers nothing but the water.
+puzzle_prepare:
+    PUZZLE_ON = 1
+    PUZZLE_AFTER = 0
+    PUZZLE_ASKED = 0
+    PUZZLE_ALONE_MS = 0
+    PUZZLE_RAN_OUT = 0
+    puzzleWhere()
+    OPTION_GAME_INTRO = 0
+    for pzI = 0 to CELL_COUNT - 1
+        hide sprite CELLS(pzI).spriteId
+    next
+    hide sprite SELECTION_SPRITE
+    hintShow(0)
+    gosub tutorial_hide_moves
+    gosub tutorial_hide_score
+    HUD_KEEP# = 0
+    applyHudFade()
+return
+
+
+` Ava comes up beside the board, and the first puzzle comes in. a new game comes here when the wave
+` of bubbles has gone.
+puzzle_enter:
+    PUZZLE_SWIM_X# = -60
+    PUZZLE_SWIM_Y# = 110
+    if PUZZLE_ASK
+        PUZZLE_ASK = 0
+        gosub puzzle_ask
+        if PUZZLE_LEFT then return
+        PUZZLE_SWIM_X# = 12 + ANGLER_SHIFT_X
+        PUZZLE_SWIM_Y# = 218
+    endif
+
+    ` the player has stayed, and the game remembers that from now on
+    set pref PUZZLE_PREF + 2, 1
+    guideShow()
+    create basic tween GUIDE_GLOW_TWEEN_ID, 0, 1, GUIDE_LIGHT_MS, 0
+    create basic tween ANGLER_SWIM_TWEEN_ID, 1, 1, 1, 0
+    puzzleSwimOn()
+    set text loc HINT_PART_TEXTS(2), "angler.puzzle.hint2"
+    hintShow(1)
+    gosub puzzle_scores
+
+    ` a player who comes back to nothing finds nothing, and she looks up
+    if PUZZLE_RAN_OUT
+        puzzleEmpty()
+        hintShow(0)
+        PUZZLE_ALONE_MS = game ms() + PUZZLE_BACK_MS
+        return
+    endif
+
+    gosub puzzle_deal
+    if PUZZLE_AFTER
+        guideSay(lockey$("angler.puzzle.another"))
+    else
+        puzzleOpening(PUZZLE_NOW)
+    endif
+return
+
+
+` the highest multiplier in the tables
+puzzle_scores:
+    PUZZLE_BEST_SCORE = 0
+    for psI = 0 to 55
+        if HISCORE_MULTS(psI) > PUZZLE_BEST_SCORE then PUZZLE_BEST_SCORE = HISCORE_MULTS(psI)
+    next
+return
+
+
+` lay out the board. the fish grow in from the sea floor up.
+puzzle_deal:
+    gosub clear_queued_moves
+    puzzleBoard()
+    PUZZLE_AGAIN = 0
+    PUZZLE_UNDO_WANT = 0
+    puzzleHintOff()
+    PUZZLE_STUCK_SAID = 0
+    PUZZLE_LOST = 0
+    PUZZLE_NO_MOVE = 0
+    PUZZLE_CLEARED_MS = 0
+    PUZZLE_FISH_WAS = puzzleFishLeft()
+    pdLongest = 0
+    for pdI = 0 to CELL_COUNT - 1
+        if CELLS(pdI).value > 0
+            pdDelay = (PUZZLE_TALL - CELLS(pdI).coord.y) * 70 + CELLS(pdI).coord.x * 18
+            if pdDelay > pdLongest then pdLongest = pdDelay
+            create basic tween CELLS(pdI).scaleWaveTweenId, 0, 1, TUTORIAL_GROW_MS, pdDelay
+            size sprite CELLS(pdI).spriteId, 0, 0
+            spawnBubbles(getCellX(CELLS(pdI).coord.x), getCellY(CELLS(pdI).coord.y), CELL_SIZE / 4, 3, pdDelay + 100, FISH_COLORS(getFishColorIndex(CELLS(pdI).value)))
+        endif
+    next
+
+    pzCursorAt = puzzleLowestFish()
+    SELECTION_POS.x = pzCursorAt mod PUZZLE_SIDE
+    SELECTION_POS.y = pzCursorAt / PUZZLE_SIDE
+    scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+    gosub update_selection_position
+    show sprite SELECTION_SPRITE
+    cursorArrive(pdLongest + TUTORIAL_GROW_MS)
+
+    TUTORIAL_WAIT_UNTIL = game ms() + pdLongest + TUTORIAL_GROW_MS
+    gosub tutorial_wait
+return
+
+
+` the main loop comes here on every frame of the game, through tutorial_advance. it looks at the board once it
+` has settled.
+puzzle_advance:
+    paBack = puzzleWantsBack()
+    if paBack then gosub puzzle_stop_move
+    if REQUEST_COMBO_CHECK then return
+    if LIVE_MOVE_ACTIVE then return
+
+    if new action down(ACT_CONFIRM)
+        guideHurry()
+    endif
+
+    ` she is on her way to her picture, and the talk comes up around her when she gets there
+    if PUZZLE_RUSH_TALK > 0
+        paThere = puzzleAtPicture()
+        if paThere
+            PUZZLE_RUSH_TALK = 0
+            gosub puzzle_talk
+            gosub puzzle_next
+        endif
+        return
+    endif
+
+    ` the sea stays empty for a while, and then the next board comes in. the last board has no next one.
+    if PUZZLE_CLEARED_MS > 0
+        paReady = guideReady()
+        if paReady = 0 then return
+        if game ms() < PUZZLE_CLEARED_MS then return
+        PUZZLE_CLEARED_MS = 0
+        if PUZZLE_AFTER = 0
+            if PUZZLE_NOW = PUZZLE_COUNT - 1
+                PUZZLE_ALONE_MS = game ms() + PUZZLE_STAY_MS
+                PUZZLE_RAN_OUT = 1
+                set pref PUZZLE_PREF + 1, 1
+                hintShow(0)
+                return
+            endif
+
+            ` a board that has a talk after it
+            paTalk = puzzleTalkAfter(PUZZLE_NOW)
+            if paTalk > 0
+                PUZZLE_TALK_NOW = paTalk
+                PUZZLE_RUSH_TALK = paTalk
+                PUZZLE_CLEARED_MS = 0
+                return
+            endif
+        endif
+        gosub puzzle_next
+        return
+    endif
+
+    ` there is nothing left, and the player has not gone. see WHY THERE ARE PUZZLES in fish_headers_puzzle.
+    if PUZZLE_ALONE_MS > 0
+        if game ms() < PUZZLE_ALONE_MS then return
+        PUZZLE_ALONE_MS = 0
+        PUZZLE_ASKED = 1
+        guideSay(lockey$("angler.shop.still"))
+        return
+    endif
+
+    if PUZZLE_ASKED
+        paReady = guideReady()
+        if paReady = 0 then return
+        PUZZLE_ASKED = 0
+        PUZZLE_AFTER = 1
+        PUZZLE_RAN_OUT = 0
+        PUZZLE_NOW = 0
+        set pref PUZZLE_PREF, 0
+        set pref PUZZLE_PREF + 1, 2
+        hintShow(1)
+        gosub puzzle_deal
+        guideSay(lockey$("angler.puzzle.another"))
+        return
+    endif
+
+    if PUZZLE_AGAIN
+        gosub puzzle_deal
+        guideSay(lockey$("angler.puzzle.again"))
+        return
+    endif
+
+    if PUZZLE_CURSOR_MOVED
+        PUZZLE_CURSOR_MOVED = 0
+        gosub update_selection_position
+    endif
+
+    ` take the last swaps back, as many as were asked for while the fish were still falling. see UNDO
+    ` in fish_headers_puzzle.
+    if PUZZLE_UNDO_WANT > 0
+        while PUZZLE_UNDO_WANT > 0
+            PUZZLE_UNDO_WANT = PUZZLE_UNDO_WANT - 1
+            puzzleUndo()
+        endwhile
+        PUZZLE_FISH_WAS = puzzleFishLeft()
+        puzzleLostLook()
+        gosub update_selection_position
+        PUZZLE_CURSOR_MOVED = 0
+        return
+    endif
+
+    ` see HINTS in fish_headers_puzzle
+    if PUZZLE_HINT_WANT
+        PUZZLE_HINT_WANT = 0
+        puzzleHint()
+    endif
+    puzzleHintHop()
+
+    ` see THE SNOW STOPS in fish_headers_puzzle
+    if PUZZLE_NO_MOVE
+        if PUZZLE_STUCK_SAID = 0 and PUZZLE_STILL# >= 1
+            PUZZLE_STUCK_SAID = 1
+            puzzleSayLost()
+        endif
+    endif
+
+    paFish = puzzleFishLeft()
+    if paFish = PUZZLE_FISH_WAS then return
+    PUZZLE_FISH_WAS = paFish
+
+    if paFish = 0
+        PUZZLE_CLEARED_MS = game ms() + PUZZLE_CLEAR_HOLD_MS
+        hide sprite SELECTION_SPRITE
+        if PUZZLE_AFTER = 0
+            puzzleCleared(PUZZLE_NOW)
+        endif
+        return
+    endif
+
+    puzzleLostLook()
+return
+
+
+` the intro of a game with nobody in it. see LEAVING in fish_headers_puzzle.
+puzzle_gone_intro:
+    PUZZLE_GONE_TALK = 0
+    for pgiLine = 0 to 4
+        pgiHold = puzzleGoneLine(pgiLine)
+        pgiStart = game ms()
+        pgiEnd = pgiStart + pgiHold + PUZZLE_GONE_FADE_MS * 2
+        pgiNow = pgiStart
+        while pgiNow < pgiEnd
+            if new action down(ACT_CONFIRM)
+                pgiSkip = pgiNow + PUZZLE_GONE_FADE_MS
+                if pgiSkip < pgiEnd then pgiEnd = pgiSkip
+            endif
+            pgiIn# = pgiNow - pgiStart
+            pgiOut# = pgiEnd - pgiNow
+            pgiFade# = PUZZLE_GONE_FADE_MS
+            pgiAlpha# = pgiIn# / pgiFade#
+            if pgiOut# / pgiFade# < pgiAlpha# then pgiAlpha# = pgiOut# / pgiFade#
+            if pgiAlpha# > 1 then pgiAlpha# = 1
+            set text alpha PUZZLE_GONE_TEXT_ID, 255 * pgiAlpha#
+            set text position PUZZLE_GONE_TEXT_ID, WORLD_WIDTH / 2 + sin(pgiIn# * .0009) * 5, 130 + sin(pgiIn# * .0013) * 7
+            gosub update_frame
+            sync
+            pgiNow = game ms()
+        endwhile
+        set text alpha PUZZLE_GONE_TEXT_ID, 0
+    next
+return
+
+
+` the swap and the combo stop where they are. see UNDO AND START OVER CUT THROUGH EVERYTHING in fish_headers_puzzle.
+puzzle_stop_move:
+    gosub clear_queued_moves
+    LIVE_MOVE_ACTIVE = 0
+    LIVE_MOVE_HOLD = 0
+    COMBO_PHASE = 0
+    REQUEST_COMBO_CHECK = 0
+    SEABED_COMBO = 0
+    PUZZLE_UNDO_ALL = 1
+    for psmI = 0 to BUBBLED_MOMENT_MAX - 1
+        BUBBLED_MOMENT_CELL(psmI) = 0
+    next
+    set screen shake amount 0
+    set sfx volume SFX_SWAP, 0
+    set sfx volume SFX_DROP, 0
+    scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+return
+
+
+` on to the next board
+puzzle_next:
+    PUZZLE_NOW = (PUZZLE_NOW + 1) mod PUZZLE_COUNT
+    set pref PUZZLE_PREF, PUZZLE_NOW
+    hintShow(1)
+    gosub puzzle_deal
+    if PUZZLE_AFTER
+        guideSay(lockey$("angler.puzzle.another"))
+    else
+        puzzleOpening(PUZZLE_NOW)
+    endif
+return
+
+
+` a talk, in the scene that she always talks in. see THE TALKS in fish_headers_puzzle. this is what
+` angler_run does, with the words of a talk, and it holds the game the same way.
+puzzle_talk:
+    gosub puzzle_scene_open
+
+    puzzleTalkSay(PUZZLE_TALK_NOW, 1)
+    gosub angler_wait
+    puzzleTalkSay(PUZZLE_TALK_NOW, 2)
+    gosub angler_wait
+
+    ` the replies are the usual list. what she said stays over them when it is one line, the same as her
+    ` greeting does over the questions, and when it is longer than that the list would go over it.
+    puzzleReplyWords(ANGLER_LINE_TEXTS(0), PUZZLE_REPLY_OF((PUZZLE_TALK_NOW - 1) * 2))
+    puzzleReplyWords(ANGLER_LINE_TEXTS(1), PUZZLE_REPLY_OF((PUZZLE_TALK_NOW - 1) * 2 + 1))
+    gosub puzzle_scene_pick
+
+    puzzleTalkSay(PUZZLE_TALK_NOW, 3 + angChosen)
+    gosub angler_wait
+    puzzleTalkSay(PUZZLE_TALK_NOW, 5)
+    gosub angler_wait
+
+    gosub puzzle_scene_close
+
+    ` and she goes back to wandering around
+    guideShow()
+    create basic tween ANGLER_SWIM_TWEEN_ID, 1, 1, 1, 0
+    create basic tween GUIDE_GLOW_TWEEN_ID, 1, 1, 1, 0
+    puzzleSwimOn()
+    _puzzle_talked:
+return
+
+
+` New Game, and the player had stayed. she comes up in the empty sea, and asks. see LEAVING in fish_headers_puzzle.
+puzzle_ask:
+    gosub puzzle_scene_open
+    create basic tween ANGLER_SWIM_TWEEN_ID, 0, 1, ANGLER_SWIM_MS, 0
+    puzzleSay(lockey$("angler.puzzle.leave.a"))
+    gosub angler_wait
+    puzzleSay(lockey$("angler.puzzle.leave.b"))
+    gosub angler_wait
+
+    set text loc ANGLER_LINE_TEXTS(0), "angler.puzzle.reply.stay"
+    set text loc ANGLER_LINE_TEXTS(1), "angler.puzzle.reply.go"
+    gosub puzzle_scene_pick
+
+    if angChosen = 0
+        puzzleSay(lockey$("angler.puzzle.stay.a"))
+        gosub angler_wait
+    else
+        puzzleSay(lockey$("angler.puzzle.go.a"))
+        gosub angler_wait
+        puzzleSay(lockey$("angler.puzzle.go.b"))
+        gosub angler_wait
+        puzzleSay(lockey$("angler.puzzle.go.c"))
+        gosub angler_wait
+        puzzleSay(lockey$("angler.puzzle.go.d"))
+        gosub angler_wait
+        set pref PUZZLE_PREF + 2, 0
+        set pref PUZZLE_GONE_PREF, 1
+        PUZZLE_LEFT = 1
+    endif
+    gosub puzzle_scene_close
+    _puzzle_asked:
+return
+
+
+` the usual scene comes up around her, the same as asking her a question
+puzzle_scene_open:
+    puzzleSwimOff()
+    guideOff()
+    ANGLER_SPOT = -1
+    ANGLER_FRAME_DONE = 0
+    create basic tween ANGLER_UP_TWEEN_ID, 0, 0, 1, 0
+    create basic tween ANGLER_SWIM_TWEEN_ID, 1, 1, 1, 0
+    create basic tween INFO_FADE_TWEEN_ID, 0, 1, 300, 0
+    show sprite INFO_MASK_SPRITE
+    show sprite INFO_HOLE_SPRITE
+    hide sprite INFO_HOLE2_SPRITE
+    show sprite ANGLER_SPRITE
+    show sprite ANGLER_BULB_SPRITE
+    show sprite ANGLER_GLOW_SPRITE
+    show sprite ANGLER_BOX_SPRITE
+    showInfoBorder(ANGLER_BOX_BORDER, 1)
+    hintMode(0)
+    size text y INFO_HINT_TEXT_ID, 16
+    order text INFO_HINT_TEXT_ID, ORDER_INFO_TEXT
+    set text loc INFO_HINT_TEXT_ID, "angler.hint.goon"
+return
+
+
+` the player picks one of the two replies that are on the lines
+puzzle_scene_pick:
+    ptTall# = get text size y(ANGLER_SAY_TEXT_ID)
+    if ptTall# > 20
+        anglerSay(" ")
+        anglerSpeakAll()
+    endif
+    ANGLER_LINE_LAST = 1
+    set text loc INFO_HINT_TEXT_ID, "angler.hint.pick"
+    gosub angler_choose
+    set text loc INFO_HINT_TEXT_ID, "angler.hint.goon"
+return
+
+
+` the scene goes away again
+puzzle_scene_close:
+    ` the dark goes, and she stays where she is. she will swim off from there.
+    create basic tween INFO_FADE_TWEEN_ID, 1, 0, 300, 0
+    create basic tween ANGLER_SAY_FADE_TWEEN_ID, tweenVal(ANGLER_SAY_FADE_TWEEN_ID), 0, 250, 0
+    while is tween done(INFO_FADE_TWEEN_ID) < 1
+        gosub angler_frame
+    endwhile
+    hide sprite INFO_MASK_SPRITE
+    hide sprite INFO_HOLE_SPRITE
+    hide sprite ANGLER_SPRITE
+    hide sprite ANGLER_BULB_SPRITE
+    hide sprite ANGLER_GLOW_SPRITE
+    hide sprite ANGLER_BOX_SPRITE
+    showInfoBorder(ANGLER_BOX_BORDER, 0)
+    hide text ANGLER_SAY_TEXT_ID
+    create basic tween INFO_FADE_TWEEN_ID, 0, 0, 1, 0
+    set effect param float INFO_FX_ID, "Fade", 0
+    set text INFO_HINT_TEXT_ID, GAME_HINT$
+    hintMode(1)
+    size text y INFO_HINT_TEXT_ID, 16
+    order text INFO_HINT_TEXT_ID, ORDER_HUD_TEXT
+    set text alpha INFO_HINT_TEXT_ID, 140
+return
+
+
+` the puzzle is put away. tutorial_end comes here, and goes on to put back everything that the tutorial would.
+puzzle_end:
+    PUZZLE_ON = 0
+    PUZZLE_CLEARED_MS = 0
+    PUZZLE_ALONE_MS = 0
+    PUZZLE_RUSH_TALK = 0
+    puzzleSwimOff()
+    set text loc HINT_PART_TEXTS(2), "intro.hint.info"
+    TUTORIAL_STAGE = 1
+return
+
+` Ava on every frame while a puzzle is up. frame_guide comes here, and the words are drawn here too. see
+` WHERE SHE IS in fish_headers_puzzle.
+frame_puzzle_swim:
+    fsNow = game ms()
+    fsGap = fsNow - PUZZLE_SWIM_MS
+    if fsGap > 50 then fsGap = 50
+    fsMs# = fsGap
+    PUZZLE_SWIM_MS = fsNow
+
+    guideQueueStep()
+
+    ` something new to say
+    if ANGLER_SAYS <> PUZZLE_SAY_SEEN
+        PUZZLE_SAY_SEEN = ANGLER_SAYS
+        PUZZLE_SAY_DONE_MS = 0
+        PUZZLE_SAY_PUSHED = 0
+
+        ` the words of the line before go right away
+        puzzleWordsClear(fsNow)
+        puzzleWordsLayOut()
+    endif
+    if PUZZLE_SAY_HOLD
+        ANGLER_SAY_NEXT_MS = fsNow
+    else
+        if PUZZLE_SAY_PUSHED then ANGLER_SAY_NEXT_MS = ANGLER_SAY_NEXT_MS - fsGap
+        anglerSpeakStep()
+    endif
+    fsTalking = 0
+    if ANGLER_SPEAKING + GUIDE_QUEUED > 0 then fsTalking = 1
+    if fsTalking = 0
+        if PUZZLE_SAY_DONE_MS = 0 then PUZZLE_SAY_DONE_MS = fsNow
+    else
+        PUZZLE_SAY_DONE_MS = 0
+    endif
+
+    ` where she is going
+    fsSpeed# = PUZZLE_SWIM_SPEED#
+
+    ` words to come out. she turns to the right, where she is, and they come out as she gets to them. see WHERE SHE
+    ` IS in fish_headers_puzzle.
+    fsMore = 0
+    if PUZZLE_SAY_OUT < PUZZLE_SAY_COUNT then fsMore = 1
+    fsStart = 0
+    if fsMore
+        fsSpeed# = PUZZLE_SAY_SPEED#
+        fsMouth# = ANGLER_ART_W * ANGLER_SCALE * (PUZZLE_SIZE_FAR# + (PUZZLE_SIZE_NEAR# - PUZZLE_SIZE_FAR#) * PUZZLE_NEAR#) * .92
+        fsAt# = PUZZLE_SWIM_X# + fsMouth#
+        fsSlot = (PUZZLE_SAY_FIRST + PUZZLE_SAY_OUT) mod PUZZLE_WORD_SLOTS
+        PUZZLE_GO_X# = WORLD_WIDTH - fsMouth#
+        PUZZLE_GO_Y# = PUZZLE_LANE_Y#
+        fsStart = 1
+        if PUZZLE_RUSH_TALK = 0
+            ` her mouth has to be in the water that can be seen
+            if fsAt# < PUZZLE_SAY_EDGE
+                fsStart = 0
+                fsSpeed# = PUZZLE_SAY_CATCH#
+            endif
+            if fsAt# > WORLD_WIDTH - PUZZLE_SAY_EDGE
+                fsStart = 0
+                fsSpeed# = PUZZLE_SAY_CATCH#
+                PUZZLE_GO_X# = WORLD_WIDTH - (fsMouth# + 24)
+            else
+                shopFace(0)
+                if PUZZLE_GO_X# < PUZZLE_SWIM_X#
+                    PUZZLE_GO_X# = PUZZLE_SWIM_X#
+                endif
+
+                ` she stays out from behind the fish, so she gets to the height of her lane before she goes along it
+                fsOff# = abs(PUZZLE_LANE_Y# - PUZZLE_SWIM_Y#)
+                if fsOff# > 6
+                    PUZZLE_GO_X# = PUZZLE_SWIM_X#
+                    fsSpeed# = PUZZLE_SAY_CATCH#
+                endif
+            endif
+        endif
+
+        ` the words of the line before have to be gone first, and under the fish, so does the row before
+        if PUZZLE_SAY_OUT = 0
+            fsBefore = puzzleOldWordsUp()
+            if fsBefore then fsStart = 0
+        else
+            if PUZZLE_WORD_IN#(fsSlot) = 0 and PUZZLE_SAY_FADES
+                fsBefore = puzzleRowBeforeIsUp(PUZZLE_WORD_ROW(fsSlot))
+                if fsBefore then fsStart = 0
+            endif
+        endif
+    endif
+
+    if PUZZLE_RUSH_TALK > 0
+        fsSpeed# = PUZZLE_RUSH_SPEED#
+        PUZZLE_GO_X# = 12 + ANGLER_SHIFT_X
+        PUZZLE_GO_Y# = 218
+        PUZZLE_WANT_FRONT = 1
+    endif
+    fsDx# = PUZZLE_GO_X# - PUZZLE_SWIM_X#
+    fsDy# = PUZZLE_GO_Y# - PUZZLE_SWIM_Y#
+    fsAway# = sqrt(fsDx# * fsDx# + fsDy# * fsDy#)
+    fsStep# = fsSpeed# * fsMs# / 1000
+    if fsAway# <= fsStep#
+        PUZZLE_SWIM_X# = PUZZLE_GO_X#
+        PUZZLE_SWIM_Y# = PUZZLE_GO_Y#
+        if fsMore = 0
+            if PUZZLE_RUSH_TALK = 0
+                puzzleSwimNext()
+            endif
+        endif
+    else
+        PUZZLE_SWIM_X# = PUZZLE_SWIM_X# + fsDx# * fsStep# / fsAway#
+        PUZZLE_SWIM_Y# = PUZZLE_SWIM_Y# + fsDy# * fsStep# / fsAway#
+        if fsDx# < -2
+            shopFace(1)
+        endif
+        if fsDx# > 2
+            shopFace(0)
+        endif
+    endif
+
+    ` she changes sides out past the edge of the board, and the fish are never in the way of it
+    fsClear = puzzleOffBoard()
+    if fsClear
+        if PUZZLE_IN_FRONT <> PUZZLE_WANT_FRONT
+            PUZZLE_IN_FRONT = PUZZLE_WANT_FRONT
+            puzzleSwimOrder()
+        endif
+    endif
+    fsNear# = 0
+    if PUZZLE_IN_FRONT
+        fsNear# = 1
+    endif
+    PUZZLE_NEAR# = PUZZLE_NEAR# + (fsNear# - PUZZLE_NEAR#) * .02
+
+    ` smaller than her picture, so that she does not hide much of the board, and smaller and dimmer behind
+    fsScale# = PUZZLE_SIZE_FAR# + (PUZZLE_SIZE_NEAR# - PUZZLE_SIZE_FAR#) * PUZZLE_NEAR#
+    if PUZZLE_RUSH_TALK > 0
+        fsLeft# = fsAway# / 200
+        if fsLeft# > 1
+            fsLeft# = 1
+        endif
+        fsScale# = 1 + (fsScale# - 1) * fsLeft#
+    endif
+    fsBob# = sin(fsNow * .002) * 2
+    fsY# = PUZZLE_SWIM_Y# + fsBob#
+    anglerPlace(PUZZLE_SWIM_X#, fsY#, fsScale#)
+    fsW# = ANGLER_ART_W * ANGLER_SCALE * fsScale#
+    fsH# = ANGLER_ART_H * ANGLER_SCALE * fsScale#
+    size sprite ANGLER_SPRITE, fsW#, fsH#
+    fsDim = 115 + 140 * PUZZLE_NEAR#
+    color sprite ANGLER_SPRITE, rgb(fsDim, fsDim, fsDim + (255 - fsDim) / 2, 255)
+    if TEX_ANGLER_HAPPY > 0
+        fsFace = TEX_ANGLER
+        if ANGLER_SPEAKING - PUZZLE_SAY_HOLD > 0 then fsFace = TEX_ANGLER_HAPPY
+        set sprite texture ANGLER_SPRITE, fsFace
+    endif
+
+    ` her light
+    fsGlow# = tweenVal(GUIDE_GLOW_TWEEN_ID)
+    fsTip# = ANGLER_TIP_X
+    if SHOP_FACE_LEFT
+        fsTip# = ANGLER_ART_W - ANGLER_TIP_X
+    endif
+    fsTipX# = PUZZLE_SWIM_X# + fsTip# * ANGLER_SCALE * fsScale#
+    fsTipY# = fsY# + ANGLER_TIP_Y * ANGLER_SCALE * fsScale#
+    fsGlowSize# = (84 + sin(fsNow * .004) * 6) * fsScale# * fsGlow#
+    position sprite ANGLER_GLOW_SPRITE, fsTipX#, fsTipY# + ANGLER_GLOW_DROP
+    size sprite ANGLER_GLOW_SPRITE, fsGlowSize#, fsGlowSize#
+    color sprite ANGLER_GLOW_SPRITE, rgb(ANGLER_GLOW_R, ANGLER_GLOW_G, ANGLER_GLOW_B, 150 * fsGlow#)
+
+    ` her voice follows the line, which is out of sight. what can be seen is its words. see WHERE SHE IS
+    ` in fish_headers_puzzle.
+    set text alpha ANGLER_SAY_TEXT_ID, 0
+    fsMouthX# = PUZZLE_SWIM_X# + fsW# * .92
+    if SHOP_FACE_LEFT
+        fsMouthX# = PUZZLE_SWIM_X# + fsW# * .08
+    endif
+    fsMouthY# = fsY# + fsH# * .62
+
+    ` the next word comes out when her voice gets to it, and she has swum far enough for it to fit behind her
+    PUZZLE_SAY_HOLD = 0
+    fsMore = 0
+    if PUZZLE_SAY_OUT < PUZZLE_SAY_COUNT then fsMore = 1
+    if fsMore
+        if ANGLER_SPEAKING = 0
+            puzzleWordsRest(fsNow, fsMouthX#, fsMouthY#)
+        else
+            fsSlot = (PUZZLE_SAY_FIRST + PUZZLE_SAY_OUT) mod PUZZLE_WORD_SLOTS
+            if ANGLER_SAID >= PUZZLE_WORD_AT(fsSlot)
+                fsFree = fsStart
+                if SHOP_FACE_LEFT then fsFree = 0
+                if PUZZLE_RUSH_TALK > 0 then fsFree = 0
+                if fsFree
+                    puzzleWordOut(fsSlot, fsNow, fsMouthX#, fsMouthY#)
+                else
+                    PUZZLE_SAY_HOLD = 1
+                endif
+            endif
+        endif
+    endif
+
+    if PUZZLE_SAY_DONE_MS > 0
+        puzzleWordsFinish(PUZZLE_SAY_DONE_MS + PUZZLE_SAY_STAY_MS)
+    endif
+
+    ` a row that she has finished drifts up, and once she has finished the line, all of it keeps going until the
+    ` whole paragraph is out of the fish. under the fish it stops at the sea floor.
+    fsMore = 0
+    if PUZZLE_SAY_OUT < PUZZLE_SAY_COUNT then fsMore = 1
+    fsNowRow = -1
+    if fsMore
+        fsNowRow = PUZZLE_WORD_ROW((PUZZLE_SAY_FIRST + PUZZLE_SAY_OUT) mod PUZZLE_WORD_SLOTS)
+    endif
+    fsHigh# = 9999
+    fsLow# = -9999
+    for fsI = 0 to PUZZLE_WORD_SLOTS - 1
+        if PUZZLE_WORD_STATE(fsI) < 2 then skip
+        if PUZZLE_WORD_LINE(fsI) <> ANGLER_SAYS then skip
+        fsY# = PUZZLE_WORD_FROM_Y#(fsI) - (PUZZLE_WORD_LIFT#(fsI) + PUZZLE_WORD_UP#(fsI))
+        if fsY# < fsHigh#
+            fsHigh# = fsY#
+        endif
+        if fsY# > fsLow#
+            fsLow# = fsY#
+        endif
+    next
+    fsCeiling# = PUZZLE_SAY_CEILING
+    if PUZZLE_SAY_LANE = 1
+        fsCeiling# = getCellY(CELL_ROW_COUNT - 1) + CELL_SIZE / 2 + PUZZLE_SAY_ROW / 2
+    endif
+    fsOutOf# = puzzleFishTop()
+    fsOutOf# = fsOutOf# - PUZZLE_SAY_ROW / 2
+    fsClimb = 1
+    if fsHigh# <= fsCeiling# then fsClimb = 0
+    if fsMore
+        ` there has to be room over her for the rows that are still to come
+        if PUZZLE_SAY_FADES then fsClimb = 0
+        if fsHigh# - (PUZZLE_SAY_ROWS - 1 - fsNowRow) * PUZZLE_SAY_ROW <= fsCeiling# then fsClimb = 0
+    else
+        if fsLow# <= fsOutOf# then fsClimb = 0
+        if PUZZLE_SAY_LANE = 1 then fsClimb = 0
+    endif
+
+    fsLiftBy# = fsMs# * PUZZLE_SAY_LIFT#
+    if fsLiftBy# > 1
+        fsLiftBy# = 1
+    endif
+
+    ` all of the words sway as one, so that they cannot sway into each other
+    fsSwayX# = sin(fsNow * .0014) * PUZZLE_SAY_SWAY#
+    fsSwayY# = cos(fsNow * .001) * PUZZLE_SAY_SWAY# * .5
+    for fsI = 0 to PUZZLE_WORD_SLOTS - 1
+        if PUZZLE_WORD_STATE(fsI) < 2 then skip
+
+        fsAge# = fsNow - PUZZLE_WORD_BORN(fsI)
+        fsOutMs# = PUZZLE_SAY_OUT_MS
+        fsOut# = fsAge# / fsOutMs#
+        if fsOut# > 1
+            fsOut# = 1
+        endif
+        fsOut# = fsOut# * (2 - fsOut#)
+
+        ` the rows of a line are kept apart by moving up a row at a time, and every word of it drifts the same
+        fsDrift = 1
+        if PUZZLE_WORD_LINE(fsI) = ANGLER_SAYS
+            fsDrift = fsClimb
+            if fsMore
+                if PUZZLE_WORD_ROW(fsI) >= fsNowRow then fsDrift = 0
+            endif
+        endif
+        if PUZZLE_WORD_FROM_Y#(fsI) - (PUZZLE_WORD_LIFT#(fsI) + PUZZLE_WORD_UP#(fsI)) <= PUZZLE_SAY_CEILING then fsDrift = 0
+        if fsDrift
+            PUZZLE_WORD_UP#(fsI) = PUZZLE_WORD_UP#(fsI) + fsMs# * PUZZLE_SAY_RISE#
+        endif
+        PUZZLE_WORD_LIFT#(fsI) = PUZZLE_WORD_LIFT#(fsI) + (PUZZLE_WORD_TO_LIFT#(fsI) - PUZZLE_WORD_LIFT#(fsI)) * fsLiftBy#
+
+        ` it stays where it is, and sways a little around that, once it has come up from her mouth
+        fsSway# = PUZZLE_WORD_SWAY#(fsI) + fsAge# * .0014
+        fsWordX# = PUZZLE_WORD_X#(fsI) + PUZZLE_WORD_W#(fsI) / 2 + fsSwayX#
+        fsWordY# = PUZZLE_WORD_FROM_Y#(fsI) - (PUZZLE_WORD_LIFT#(fsI) + PUZZLE_WORD_UP#(fsI))
+        fsWordY# = fsWordY# + fsSwayY# + sin(fsSway# * .7) * .8
+        if PUZZLE_WORD_SMALL(fsI)
+            fsWordX# = PUZZLE_WORD_BORN_X#(fsI) + (fsWordX# - PUZZLE_WORD_BORN_X#(fsI)) * fsOut#
+            fsWordY# = PUZZLE_WORD_BORN_Y#(fsI) + (fsWordY# - PUZZLE_WORD_BORN_Y#(fsI)) * fsOut#
+            size text y PUZZLE_WORDS(fsI), PUZZLE_SAY_SIZE * (.3 + .7 * fsOut#)
+            if fsOut# >= 1
+                PUZZLE_WORD_SMALL(fsI) = 0
+            endif
+        endif
+        set text position PUZZLE_WORDS(fsI), fsWordX#, fsWordY#
+        PUZZLE_WORD_SHOWN_X#(fsI) = fsWordX#
+        PUZZLE_WORD_SHOWN_Y#(fsI) = fsWordY#
+        PUZZLE_WORD_SHOWN_TILT#(fsI) = PUZZLE_WORD_TILT#(fsI) + sin(fsSway# * .8) * .02
+        rotate text PUZZLE_WORDS(fsI), PUZZLE_WORD_SHOWN_TILT#(fsI)
+
+        fsAlpha# = fsOut#
+        if PUZZLE_WORD_END(fsI) > 0
+            fsGone# = fsNow - PUZZLE_WORD_END(fsI)
+            fsFadeMs# = PUZZLE_SAY_FADE_MS
+            if PUZZLE_WORD_QUICK(fsI)
+                fsFadeMs# = PUZZLE_SAY_GONE_MS
+            endif
+            if fsGone# > 0
+                fsAlpha# = fsAlpha# - fsGone# / fsFadeMs#
+                if fsAlpha# <= 0
+                    fsAlpha# = 0
+                    PUZZLE_WORD_STATE(fsI) = 0
+                    hide text PUZZLE_WORDS(fsI)
+                endif
+            endif
+        endif
+        set text alpha PUZZLE_WORDS(fsI), 255 * fsAlpha#
+    next
+return
+
+
+` the words of Ava, to tune by eye, while a puzzle is up. frame_dbg, in fish_routines, comes here on every frame, with
+` FISH_DEBUG. the numbers that are settled on have to be written into fish_headers_puzzle by hand, because these are
+` gone with the game.
+frame_debug_puzzle:
+    if PUZZLE_ON
+        begin debug window("Puzzle lab")
+        debug text "board " + str$(PUZZLE_NOW + 1) + " of " + str$(PUZZLE_COUNT)
+        if debug button("the board before") = 1
+            PUZZLE_NOW = (PUZZLE_NOW + PUZZLE_COUNT - 1) mod PUZZLE_COUNT
+            PUZZLE_AGAIN = 1
+        endif
+        if debug button("the next board") = 1
+            PUZZLE_NOW = (PUZZLE_NOW + 1) mod PUZZLE_COUNT
+            PUZZLE_AGAIN = 1
+        endif
+        if debug button("hint") = 1
+            PUZZLE_HINT_WANT = 1
+        endif
+        debug text PUZZLE_HINT_SAID$
+        dbgPzMoved = debug float slider("how dark", PUZZLE_DEEP#, 0.0, 1.0)
+        if PUZZLE_LOST = 1
+            debug text "this board is lost"
+        endif
+        dbgPzMoved = debug float slider("seconds the snow takes to stop", PUZZLE_STILL_SECS#, 0.5, 30.0)
+        dbgPzMoved = debug float slider("seconds the snow takes to start again", PUZZLE_STILL_BACK_SECS#, 0.1, 10.0)
+        end debug window
+
+        begin debug window("Ava's words")
+        if debug button("say a short line") = 1
+            puzzleDebugSay(lockey$("angler.puzzle.d1.a"))
+        endif
+        if debug button("say a paragraph") = 1
+            puzzleDebugSay(lockey$("angler.puzzle.d4.a"))
+        endif
+        if debug button("say a long paragraph") = 1
+            puzzleDebugSay(lockey$("angler.puzzle.d7.b"))
+        endif
+
+        debug separator
+        dbgPzMoved = debug int slider("voice (ms a letter)", ANGLER_LETTER_MS, 10, 80)
+        dbgPzMoved = debug int slider("row that fades stays (ms)", PUZZLE_SAY_ROW_STAY_MS, 200, 3000)
+        dbgPzMoved = debug float slider("her size, behind the fish", PUZZLE_SIZE_FAR#, 0.2, 1.0)
+        dbgPzMoved = debug float slider("her size, in front", PUZZLE_SIZE_NEAR#, 0.2, 1.0)
+        dbgPzMoved = debug float slider("swim while talking", PUZZLE_SAY_SPEED#, 10.0, 240.0)
+        dbgPzValue# = PUZZLE_SAY_RISE# * 1000
+        if debug float slider("drift x1000", dbgPzValue#, 0.0, 40.0) = 1
+            PUZZLE_SAY_RISE# = dbgPzValue# / 1000
+        endif
+        dbgPzValue# = PUZZLE_SAY_LIFT# * 1000
+        if debug float slider("row lift x1000", dbgPzValue#, 1.0, 20.0) = 1
+            PUZZLE_SAY_LIFT# = dbgPzValue# / 1000
+        endif
+        dbgPzMoved = debug int slider("out of her mouth (ms)", PUZZLE_SAY_OUT_MS, 60, 1000)
+        dbgPzMoved = debug float slider("sway (px)", PUZZLE_SAY_SWAY#, 0.0, 8.0)
+        dbgPzMoved = debug int slider("row width", PUZZLE_SAY_ROW_WIDE, 60, 300)
+        dbgPzMoved = debug int slider("row height", PUZZLE_SAY_ROW, 14, 32)
+        dbgPzMoved = debug int slider("gap between words", PUZZLE_SAY_GAP, 2, 24)
+        dbgPzMoved = debug int slider("stay (ms)", PUZZLE_SAY_STAY_MS, 0, 20000)
+        end debug window
+    endif
+return
+
+
+` where Ava and the game have got to, to put them anywhere. it works from the main menu too, and a state
+` that changes what a game is takes the player back there. see fish_headers_puzzle.
+frame_debug_ava:
+    begin debug window("Ava")
+    dbgAvaGone = puzzleGone()
+    dbgAvaStaying = puzzleStaying()
+    if dbgAvaGone
+        debug text "she has gone"
+    else
+        if dbgAvaStaying
+            debug text "the player is staying with her"
+        else
+            debug text "the player has not stayed"
+        endif
+    endif
+    debug text "board " + str$(get pref(PUZZLE_PREF, 0) + 1) + ", stage " + str$(get pref(PUZZLE_PREF + 1, 0))
+    debug separator
+    dbgAvaPicked = -1
+    if debug button("a first game (forgets the saved game)") = 1 then dbgAvaPicked = 0
+    if debug button("a usual player, who has not stayed") = 1 then dbgAvaPicked = 1
+    dbgPzMoved = debug int slider("board", PUZZLE_DBG_BOARD, 1, PUZZLE_COUNT)
+    if debug button("staying, on that board") = 1 then dbgAvaPicked = 2
+    if debug button("staying, out of boards") = 1 then dbgAvaPicked = 3
+    if debug button("staying, after she asked") = 1 then dbgAvaPicked = 4
+    if debug button("she has gone") = 1 then dbgAvaPicked = 5
+    end debug window
+
+    if dbgAvaPicked >= 0
+        puzzleDebugState(dbgAvaPicked)
+        if MENU_MODE = 0
+            PUZZLE_DBG_TITLE = 1
+        else
+            if MENU_MODE = MENU_MODE_MAIN and MENU_PAGE = MENU_PAGE_MAIN
+                setMenuPage(MENU_PAGE_MAIN)
+            endif
+        endif
+    endif
+return
+
+
+routines_puzzle_exit:
+
+
+` a line has started. every word of it gets a slot, a row, its place in the row, and a way of swaying, and nothing
+` can be seen until she says it.
+function puzzleWordsLayOut()
+    PUZZLE_SAY_COUNT = word count(ANGLER_LAST$)
+    if PUZZLE_SAY_COUNT > PUZZLE_WORD_SLOTS / 2 then PUZZLE_SAY_COUNT = PUZZLE_WORD_SLOTS / 2
+    PUZZLE_SAY_FIRST = PUZZLE_WORD_NEXT
+    PUZZLE_SAY_OUT = 0
+    PUZZLE_SAY_NEED# = 0
+    PUZZLE_SAY_ROWS = 0
+    PUZZLE_SAY_HOLD = 0
+    pwlLast = PUZZLE_SAY_COUNT - 1
+    if pwlLast < 0 then exitfunction
+    PUZZLE_SAY_HOLD = 1
+    PUZZLE_SAY_ROWS = 1
+    PUZZLE_SAY_LANE = PUZZLE_LANE
+    PUZZLE_SAY_FADES = 0
+    pwlWide# = 0
+    for pwlN = 0 to pwlLast
+        pwlSlot = (PUZZLE_SAY_FIRST + pwlN) mod PUZZLE_WORD_SLOTS
+        set text PUZZLE_WORDS(pwlSlot), word of$(ANGLER_LAST$, pwlN)
+        size text y PUZZLE_WORDS(pwlSlot), PUZZLE_SAY_SIZE
+        rotate text PUZZLE_WORDS(pwlSlot), 0
+        PUZZLE_WORD_W#(pwlSlot) = get text size x(PUZZLE_WORDS(pwlSlot))
+        pwlWide# = pwlWide# + PUZZLE_WORD_W#(pwlSlot) + PUZZLE_SAY_GAP
+    next
+
+    ` she says it from as low in her lane as she can, and the rows go over her head. they are short, unless
+    ` there are not enough of them over her to hold the line
+    pwlTall# = ANGLER_ART_H * ANGLER_SCALE * PUZZLE_SIZE_NEAR#
+    pwlRoom = 3
+    if PUZZLE_LANE <> 1
+        pwlTop# = puzzleFishTop()
+        PUZZLE_LANE_Y# = pwlTop# - (pwlTall# + 4)
+        if PUZZLE_LANE_Y# < 6
+            PUZZLE_LANE_Y# = 6
+        endif
+        pwlRoom = (PUZZLE_LANE_Y# - (PUZZLE_SAY_ROW / 2 + PUZZLE_SAY_CEILING)) / PUZZLE_SAY_ROW + 1
+        if pwlRoom < 1 then pwlRoom = 1
+    endif
+    pwlWrap# = pwlWide# / pwlRoom
+    pwlWrap# = pwlWrap# + 40
+    if pwlWrap# < PUZZLE_SAY_ROW_WIDE
+        pwlWrap# = PUZZLE_SAY_ROW_WIDE
+    endif
+    pwlMost# = WORLD_WIDTH - PUZZLE_SAY_EDGE * 2
+    if pwlWrap# > pwlMost#
+        pwlWrap# = pwlMost#
+    endif
+
+    pwlRow = 0
+    pwlX# = 0
+    pwlPhrase = 0
+    for pwlN = 0 to pwlLast
+        pwlSlot = (PUZZLE_SAY_FIRST + pwlN) mod PUZZLE_WORD_SLOTS
+        pwlW# = PUZZLE_WORD_W#(pwlSlot)
+        if pwlX# > 0
+            ` a row ends at the end of a phrase, if it has got long enough and there are rows to spare
+            pwlBreak = 0
+            if pwlPhrase and PUZZLE_SAY_ROWS < pwlRoom
+                if pwlX# >= pwlWrap# / 2 then pwlBreak = 1
+            endif
+            if pwlX# + pwlW# > pwlWrap# then pwlBreak = 1
+            if pwlBreak
+                pwlRow = pwlRow + 1
+                PUZZLE_SAY_ROWS = PUZZLE_SAY_ROWS + 1
+                pwlX# = 0
+            endif
+        endif
+        PUZZLE_WORD_ROW(pwlSlot) = pwlRow
+        PUZZLE_WORD_IN#(pwlSlot) = pwlX#
+        pwlX# = pwlX# + pwlW#
+        if pwlX# > PUZZLE_SAY_NEED#
+            PUZZLE_SAY_NEED# = pwlX#
+        endif
+        pwlX# = pwlX# + PUZZLE_SAY_GAP
+        pwlPhrase = puzzleWordEndsPhrase(word of$(ANGLER_LAST$, pwlN))
+        PUZZLE_WORD_AT(pwlSlot) = word start(ANGLER_LAST$, pwlN)
+        PUZZLE_WORD_STATE(pwlSlot) = 1
+        PUZZLE_WORD_END(pwlSlot) = 0
+        PUZZLE_WORD_QUICK(pwlSlot) = 0
+        pwlSwayIn = rnd(628)
+        pwlSway# = pwlSwayIn
+        PUZZLE_WORD_SWAY#(pwlSlot) = pwlSway# / 100
+        pwlTiltIn = rnd(24)
+        pwlTilt# = pwlTiltIn
+        PUZZLE_WORD_TILT#(pwlSlot) = (pwlTilt# - 12) / 12 * PUZZLE_SAY_LEAN# / (pwlW# + 12)
+        set text alpha PUZZLE_WORDS(pwlSlot), 0
+    next
+    PUZZLE_WORD_NEXT = (PUZZLE_SAY_FIRST + PUZZLE_SAY_COUNT) mod PUZZLE_WORD_SLOTS
+
+    ` a word never goes off the top of the screen, so if the rows do not fit, they fade one at a time
+    if PUZZLE_SAY_ROWS > pwlRoom then PUZZLE_SAY_FADES = 1
+
+    ` under the fish there is room for one row, between her head and the sea floor
+    if PUZZLE_LANE = 1
+        PUZZLE_SAY_FADES = 1
+        PUZZLE_LANE_Y# = getCellY(CELL_ROW_COUNT - 1) + CELL_SIZE / 2 + PUZZLE_SAY_ROW + 6
+    endif
+endfunction
+
+
+` 1 when this word is the end of a phrase: a comma, a colon, or the end of a sentence
+function puzzleWordEndsPhrase(pweWord$)
+    pweChar = asc(right$(pweWord$, 1))
+    pweEnds = 0
+    if pweChar = 44 or pweChar = 46 then pweEnds = 1
+    if pweChar = 63 or pweChar = 33 then pweEnds = 1
+    if pweChar = 58 or pweChar = 59 then pweEnds = 1
+endfunction pweEnds
+
+
+` the word comes out of her mouth and up to its place over her head, and it stays there. the first one says where
+` the paragraph is: over her, and every other word has its place from there. when a row is finished, the rows up to
+` it move up to make room for the next one.
+function puzzleWordOut(pwoSlot, pwoNow, pwoX#, pwoMouthY#)
+    if PUZZLE_SAY_OUT = 0
+        pwoLeft# = pwoX# - PUZZLE_SAY_NEED# / 2
+        pwoMost# = WORLD_WIDTH - (PUZZLE_SAY_EDGE + PUZZLE_SAY_NEED#)
+        if pwoLeft# > pwoMost#
+            pwoLeft# = pwoMost#
+        endif
+        if pwoLeft# < PUZZLE_SAY_EDGE
+            pwoLeft# = PUZZLE_SAY_EDGE
+        endif
+        PUZZLE_SAY_LEFT# = pwoLeft#
+        PUZZLE_SAY_Y# = PUZZLE_LANE_Y# - PUZZLE_SAY_ROW / 2
+        if PUZZLE_SAY_Y# < PUZZLE_SAY_CEILING
+            PUZZLE_SAY_Y# = PUZZLE_SAY_CEILING
+        endif
+    endif
+    PUZZLE_WORD_STATE(pwoSlot) = 2
+    PUZZLE_WORD_BORN(pwoSlot) = pwoNow
+    PUZZLE_WORD_LINE(pwoSlot) = ANGLER_SAYS
+    PUZZLE_WORD_X#(pwoSlot) = PUZZLE_SAY_LEFT# + PUZZLE_WORD_IN#(pwoSlot)
+    PUZZLE_WORD_FROM_Y#(pwoSlot) = PUZZLE_SAY_Y#
+    PUZZLE_WORD_TO_LIFT#(pwoSlot) = 0
+    PUZZLE_WORD_LIFT#(pwoSlot) = 0
+    PUZZLE_WORD_UP#(pwoSlot) = 0
+    PUZZLE_WORD_BORN_X#(pwoSlot) = pwoX#
+    PUZZLE_WORD_BORN_Y#(pwoSlot) = pwoMouthY#
+    PUZZLE_WORD_SMALL(pwoSlot) = 1
+    size text y PUZZLE_WORDS(pwoSlot), PUZZLE_SAY_SIZE * .3
+    set text position PUZZLE_WORDS(pwoSlot), pwoX#, pwoMouthY#
+    show text PUZZLE_WORDS(pwoSlot)
+
+    pwoRow = PUZZLE_WORD_ROW(pwoSlot)
+    PUZZLE_SAY_OUT = PUZZLE_SAY_OUT + 1
+    if PUZZLE_SAY_OUT >= PUZZLE_SAY_COUNT
+        puzzleSwimNext()
+    else
+        pwoNext = (PUZZLE_SAY_FIRST + PUZZLE_SAY_OUT) mod PUZZLE_WORD_SLOTS
+        if PUZZLE_WORD_ROW(pwoNext) <> pwoRow
+            ` if the player has hurried her, the whole line comes out at once, and there is no time to wait for a
+            ` row to fade, so the rows go up out of each other's way, even under the fish
+            pwoFades = 0
+            if PUZZLE_SAY_FADES and ANGLER_SPEAKING > 0 then pwoFades = 1
+            if pwoFades
+                puzzleWordsGo(PUZZLE_SAY_OUT - 1, pwoNow + PUZZLE_SAY_ROW_STAY_MS)
+            else
+                puzzleWordsUp(PUZZLE_SAY_OUT - 1)
+            endif
+        endif
+    endif
+endfunction
+
+
+` a row is finished, so every word from this one back goes up a row
+function puzzleWordsUp(pwuN)
+    while pwuN >= 0
+        pwuSlot = (PUZZLE_SAY_FIRST + pwuN) mod PUZZLE_WORD_SLOTS
+        PUZZLE_WORD_TO_LIFT#(pwuSlot) = PUZZLE_WORD_TO_LIFT#(pwuSlot) + PUZZLE_SAY_ROW
+        pwuN = pwuN - 1
+    endwhile
+endfunction
+
+
+` 1 when a word of a row before this one, of the line that she is saying, can still be seen
+function puzzleRowBeforeIsUp(prbRow)
+    prbLast = PUZZLE_WORD_SLOTS - 1
+    for prbI = 0 to prbLast
+        if PUZZLE_WORD_STATE(prbI) = 2
+            if PUZZLE_WORD_LINE(prbI) = ANGLER_SAYS and PUZZLE_WORD_ROW(prbI) < prbRow then exitfunction 1
+        endif
+    next
+endfunction 0
+
+
+` 1 when a word of a line before this one can still be seen
+function puzzleOldWordsUp()
+    pouLast = PUZZLE_WORD_SLOTS - 1
+    for pouI = 0 to pouLast
+        if PUZZLE_WORD_STATE(pouI) = 2
+            if PUZZLE_WORD_LINE(pouI) <> ANGLER_SAYS then exitfunction 1
+        endif
+    next
+endfunction 0
+
+
+` she has something new to say, so everything that is left of the last line goes at once
+function puzzleWordsClear(pwcNow)
+    pwcLast = PUZZLE_WORD_SLOTS - 1
+    for pwcI = 0 to pwcLast
+        if PUZZLE_WORD_STATE(pwcI) = 1
+            PUZZLE_WORD_STATE(pwcI) = 0
+        endif
+        if PUZZLE_WORD_STATE(pwcI) = 2
+            PUZZLE_WORD_END(pwcI) = pwcNow
+            PUZZLE_WORD_QUICK(pwcI) = 1
+        endif
+    next
+endfunction
+
+
+` a row is finished under the fish, where there is no room to move it up, so it fades before the next one starts
+function puzzleWordsGo(pwgN, pwgFrom)
+    while pwgN >= 0
+        pwgSlot = (PUZZLE_SAY_FIRST + pwgN) mod PUZZLE_WORD_SLOTS
+        if PUZZLE_WORD_END(pwgSlot) = 0
+            PUZZLE_WORD_END(pwgSlot) = pwgFrom
+            PUZZLE_WORD_QUICK(pwgSlot) = 1
+        endif
+        pwgN = pwgN - 1
+    endwhile
+endfunction
+
+
+` the player does not want to wait, so the rest of the line comes out at once
+function puzzleWordsRest(pwrNow, pwrX#, pwrMouthY#)
+    while PUZZLE_SAY_OUT < PUZZLE_SAY_COUNT
+        pwrSlot = (PUZZLE_SAY_FIRST + PUZZLE_SAY_OUT) mod PUZZLE_WORD_SLOTS
+        puzzleWordOut(pwrSlot, pwrNow, pwrX#, pwrMouthY#)
+    endwhile
+
+    ` every row is in its place right away, or they would come out on top of each other and only then move apart.
+    ` it goes by the row, because a row under the fish that was already fading has not been moved up.
+    pwrLast = PUZZLE_SAY_COUNT - 1
+    pwrTop = PUZZLE_SAY_ROWS - 1
+
+    ` and the top row has to be on the screen, so if there is no room over her, all of them come down
+    pwrDown# = PUZZLE_SAY_CEILING - (PUZZLE_SAY_Y# - pwrTop * PUZZLE_SAY_ROW)
+    if pwrDown# < 0
+        pwrDown# = 0
+    endif
+    PUZZLE_SAY_Y# = PUZZLE_SAY_Y# + pwrDown#
+    for pwrN = 0 to pwrLast
+        pwrSlot = (PUZZLE_SAY_FIRST + pwrN) mod PUZZLE_WORD_SLOTS
+        PUZZLE_WORD_TO_LIFT#(pwrSlot) = (pwrTop - PUZZLE_WORD_ROW(pwrSlot)) * PUZZLE_SAY_ROW
+        PUZZLE_WORD_LIFT#(pwrSlot) = PUZZLE_WORD_TO_LIFT#(pwrSlot)
+        PUZZLE_WORD_FROM_Y#(pwrSlot) = PUZZLE_WORD_FROM_Y#(pwrSlot) + pwrDown#
+    next
+endfunction
+
+
+` the buttons of the debug window. she says this line right now, with nothing left of the line before to get in its
+` way: she is put at the height of the line, far enough along, and looking right, so that nothing has to wait.
+function puzzleDebugSay(pdsKey$)
+    if PUZZLE_RUSH_TALK > 0 then exitfunction
+    pdsLast = PUZZLE_WORD_SLOTS - 1
+    for pdsI = 0 to pdsLast
+        if PUZZLE_WORD_STATE(pdsI) > 0
+            PUZZLE_WORD_STATE(pdsI) = 0
+            hide text PUZZLE_WORDS(pdsI)
+        endif
+    next
+    GUIDE_QUEUED = 0
+    GUIDE_NEXT_MS = 0
+    anglerSay(loc$(pdsKey$))
+    PUZZLE_SAY_SEEN = ANGLER_SAYS
+    PUZZLE_SAY_DONE_MS = 0
+    puzzleWordsLayOut()
+
+    pdsMouth# = ANGLER_ART_W * ANGLER_SCALE * (PUZZLE_SIZE_FAR# + (PUZZLE_SIZE_NEAR# - PUZZLE_SIZE_FAR#) * PUZZLE_NEAR#) * .92
+    pdsFirst# = PUZZLE_WORD_W#(PUZZLE_SAY_FIRST)
+    pdsAt# = WORLD_WIDTH / 2 `the debug windows are over the left of the screen
+    pdsMost# = WORLD_WIDTH - (PUZZLE_SAY_EDGE + PUZZLE_SAY_NEED#)
+    pdsMost# = pdsMost# + pdsFirst#
+    if pdsAt# > pdsMost#
+        pdsAt# = pdsMost#
+    endif
+    PUZZLE_SWIM_X# = pdsAt# - pdsMouth#
+    PUZZLE_SWIM_Y# = PUZZLE_LANE_Y#
+    shopFace(0)
+endfunction
+
+
+` every word that has not been told when to fade is told now: one after the other, from this time on
+function puzzleWordsFinish(pwfFrom)
+    pwfTurn = 0
+    pwfLast = PUZZLE_WORD_SLOTS - 1
+    for pwfN = 0 to pwfLast
+        pwfSlot = (PUZZLE_WORD_NEXT + pwfN) mod PUZZLE_WORD_SLOTS
+        if PUZZLE_WORD_STATE(pwfSlot) > 0
+            if PUZZLE_WORD_END(pwfSlot) = 0
+                PUZZLE_WORD_END(pwfSlot) = pwfFrom + pwfTurn * PUZZLE_WORD_STAGGER_MS
+                pwfTurn = pwfTurn + 1
+            endif
+        endif
+    next
+endfunction
+
+
+` she comes up to wander around. the box goes, and the words go out into the water.
+function puzzleSwimOn()
+    hide sprite ANGLER_BOX_SPRITE
+    showInfoBorder(ANGLER_BOX_BORDER, 0)
+    set text alpha ANGLER_SAY_TEXT_ID, 0
+    PUZZLE_SWIM_MS = game ms()
+    PUZZLE_SAY_SEEN = ANGLER_SAYS
+    PUZZLE_NEAR# = 0
+    PUZZLE_IN_FRONT = 0
+    PUZZLE_WANT_FRONT = 0
+    PUZZLE_LANE = -1 `she is in neither lane yet
+    puzzleSwimOrder()
+    puzzleSwimNext()
+endfunction
+
+
+` everything goes back to how the usual scene wants it
+function puzzleSwimOff()
+    PUZZLE_SAY_COUNT = 0
+    PUZZLE_SAY_OUT = 0
+    PUZZLE_SAY_HOLD = 0
+    pswLast = PUZZLE_WORD_SLOTS - 1
+    for pswI = 0 to pswLast
+        PUZZLE_WORD_STATE(pswI) = 0
+        hide text PUZZLE_WORDS(pswI)
+    next
+    order sprite ANGLER_GLOW_SPRITE, ORDER_INFO_PANEL
+    order sprite ANGLER_SPRITE, ORDER_INFO_PANEL + 2
+    color sprite ANGLER_SPRITE, rgb(255, 255, 255, 255)
+    size sprite ANGLER_SPRITE, ANGLER_ART_W * ANGLER_SCALE, ANGLER_ART_H * ANGLER_SCALE
+endfunction
+
+
+` the side of the fish that she is on
+function puzzleSwimOrder()
+    psoOrder = PUZZLE_ORDER_BACK
+    if PUZZLE_IN_FRONT then psoOrder = PUZZLE_ORDER_FRONT
+    order sprite ANGLER_SPRITE, psoOrder
+    order sprite ANGLER_GLOW_SPRITE, psoOrder - 1
+endfunction
+
+
+` somewhere new to swim to. she goes across the board along the top of the fish, or under them, and she only
+` changes from one to the other out past the side of the board. see WHERE SHE IS in fish_headers_puzzle.
+function puzzleSwimNext()
+    PUZZLE_WANT_FRONT = rnd(2)
+    psnOff = puzzleOffBoard()
+    psnSide = 0
+    if PUZZLE_SWIM_X# >= WORLD_WIDTH / 2
+        psnSide = 1
+    endif
+
+    if psnOff
+        psnLane = rnd(2)
+        psnMove = 0
+        if psnLane <> PUZZLE_LANE then psnMove = 1
+
+        ` an undo can put fish back into the lane over them
+        if psnLane = 0
+            psnTop# = puzzleFishTop()
+            if PUZZLE_SWIM_Y# + ANGLER_ART_H * ANGLER_SCALE * PUZZLE_SIZE_NEAR# > psnTop# then psnMove = 1
+        endif
+        if psnMove
+            PUZZLE_LANE = psnLane
+            PUZZLE_LANE_Y# = puzzleLaneY(PUZZLE_LANE)
+            PUZZLE_GO_X# = puzzleSideX(psnSide)
+            PUZZLE_GO_Y# = PUZZLE_LANE_Y#
+            exitfunction
+        endif
+        PUZZLE_LANE_Y# = PUZZLE_SWIM_Y#
+    else
+        PUZZLE_LANE_Y# = puzzleLaneY(PUZZLE_LANE)
+    endif
+
+    PUZZLE_GO_X# = puzzleSideX(1 - psnSide)
+    PUZZLE_GO_Y# = PUZZLE_LANE_Y#
+endfunction
+
+
+` somewhere out past the side of the board. 0 is the left, and 1 is the right.
+function puzzleSideX(psxSide)
+    psxW# = ANGLER_ART_W * ANGLER_SCALE
+    if psxSide
+        psxLeast# = getCellX(CELL_COLUMN_COUNT - 1) + CELL_SIZE / 2 + 4
+        psxRoom = 510 - psxLeast#
+        psxAt# = psxLeast# + rnd(psxRoom)
+    else
+        psxMost# = getCellX(0) - CELL_SIZE / 2
+        psxMost# = psxMost# - psxW# * 1.2
+        psxMost# = psxMost# - 4
+        psxRoom = psxMost# - 10
+        psxAt# = 10 + rnd(psxRoom)
+    endif
+endfunction psxAt#
+
+
+` how high she swims in a lane: 0 over the fish, as they are now, and 1 under the sea floor
+function puzzleLaneY(plnLane)
+    plnFloor# = getCellY(CELL_ROW_COUNT - 1) + CELL_SIZE / 2
+    if plnLane
+        plnY# = plnFloor# + 4 + rnd(14)
+    else
+        plnTop# = puzzleFishTop()
+        plnY# = plnTop# - (ANGLER_ART_H * ANGLER_SCALE * PUZZLE_SIZE_NEAR# + 6 + rnd(40))
+        if plnY# < 6
+            plnY# = 6
+        endif
+    endif
+endfunction plnY#
+
+
+` how high the highest fish reaches, or the sea floor if there are none
+function puzzleFishTop()
+    pftRow = CELL_ROW_COUNT
+    pftLast = CELL_COUNT - 1
+    for pftI = 0 to pftLast
+        if CELLS(pftI).value > 0
+            if CELLS(pftI).coord.y < pftRow
+                pftRow = CELLS(pftI).coord.y
+            endif
+        endif
+    next
+    pftTop# = getCellY(pftRow) - CELL_SIZE / 2
+endfunction pftTop#
+
+
+` 1 when all of her is out past the sides of the board
+function puzzleOffBoard()
+    pobOff = 0
+    pobW# = ANGLER_ART_W * ANGLER_SCALE
+    pobLeft# = getCellX(0) - CELL_SIZE / 2
+    pobRight# = getCellX(CELL_COLUMN_COUNT - 1) + CELL_SIZE / 2
+    if PUZZLE_SWIM_X# + pobW# * 1.2 < pobLeft#
+        pobOff = 1
+    endif
+    if PUZZLE_SWIM_X# > pobRight#
+        pobOff = 1
+    endif
+endfunction pobOff
+
+
+` 1 when she has got to where her picture goes
+function puzzleAtPicture()
+    papThere = 0
+    papDx# = PUZZLE_SWIM_X# - (12 + ANGLER_SHIFT_X)
+    papDy# = PUZZLE_SWIM_Y# - 218
+    if abs(papDx#) + abs(papDy#) < 1
+        papThere = 1
+    endif
+endfunction papThere
+
+
+` puts a row of a board in. fish_puzzles comes here.
+function puzzleRow(prBoard, prY, prCells)
+    PUZZLE_ROWS(prBoard * PUZZLE_SIDE + prY) = prCells
+endfunction
+
+
+` and a swap of the list that clears it
+function puzzleSwap(psBoard, psN, psA, psB)
+    PUZZLE_SWAP_A(psBoard * PUZZLE_SWAP_ROOM + psN) = psA
+    PUZZLE_SWAP_B(psBoard * PUZZLE_SWAP_ROOM + psN) = psB
+    if psN + 1 > PUZZLE_SWAPS(psBoard) then PUZZLE_SWAPS(psBoard) = psN + 1
+endfunction
+
+
+` the digit of a cell of a board. 0 is no fish.
+function puzzleDigit(pdgBoard, pdgX, pdgY)
+    pdgRow = PUZZLE_ROWS(pdgBoard * PUZZLE_SIDE + pdgY)
+    pdgAt = PUZZLE_SIDE - 1 - pdgX
+    while pdgAt > 0
+        pdgRow = pdgRow / 10
+        pdgAt = pdgAt - 1
+    endwhile
+endfunction pdgRow mod 10
+
+
+` the grid of a puzzle: nine across and seven down, with the sea floor over the box that she talks in
+function puzzleGrid()
+    resizeGrid(PUZZLE_SIDE, PUZZLE_TALL)
+    CELL_SIZE = CELL_START_SIZE
+    CELL_ART_SIZE = CELL_START_ART_SIZE
+    GRID_POS.y = PUZZLE_FLOOR_Y - (PUZZLE_TALL - 1) * CELL_SIZE
+    pgLast = CELL_MAX_COUNT - 1
+    for pgFx = 0 to pgLast
+        scale sprite CELLS(pgFx).fxSpriteId, 1, 1
+        if pgFx >= CELL_COUNT
+            hide sprite CELLS(pgFx).spriteId
+            hide sprite CELLS(pgFx).fxSpriteId
+        endif
+    next
+    TUTORIAL_BOARD = 1
+    coralPlaceInfo()
+endfunction
+
+
+` this kind of fish in this cell, or no fish, with nothing animated
+function puzzlePut(ppCell, ppKind)
+    hide sprite CELLS(ppCell).fxSpriteId
+    CELLS(ppCell).value = ppKind
+    CELLS(ppCell).bellyUp = 0
+    CELLS(ppCell).bellyShown# = 0
+    CELLS(ppCell).comboForce = 0
+    CELLS(ppCell).comboBlownUp = 0
+    CELLS(ppCell).comboDownShift = 0
+    clearCellStack(ppCell)
+    GLOW_TURN#(ppCell) = 0
+    RAINBOW_FISH(ppCell) = 0
+    BUBBLED_AT(ppCell) = 0
+    BUBBLED_PAID(ppCell) = 0
+
+    if ppKind = 0
+        SCHOOL_FACE(ppCell) = 0
+        SCHOOL_SHOWN#(ppCell) = 0
+        hide sprite CELLS(ppCell).spriteId
+        hide sprite CELLS(ppCell).fxSpriteId
+        exitfunction
+    endif
+
+    schoolNewFish(ppCell)
+    tutorialFaceRight(ppCell)
+    create basic tween CELLS(ppCell).scaleWaveTweenId, 1, 1, 1, 0
+    updateCell(CELLS(ppCell))
+    set sprite alpha CELLS(ppCell).spriteId, 255
+    show sprite CELLS(ppCell).spriteId
+    hide sprite CELLS(ppCell).fxSpriteId
+endfunction
+
+
+` puts the fish of the board on the grid, with nothing animated. puzzle_deal grows them in from here. the
+` tests start from here too. what is here is the same in both.
+function puzzleBoard()
+    puzzleGrid()
+    PUZZLE_UNDO_COUNT = 0
+    bubbledReset()
+    pbLast = CELL_COUNT - 1
+    for pbI = 0 to pbLast
+        pbX = CELLS(pbI).coord.x
+        pbRow = PUZZLE_NOW * PUZZLE_SIDE + CELLS(pbI).coord.y
+        pbDigit = puzzleDigit(PUZZLE_NOW, pbX, CELLS(pbI).coord.y)
+        pbKind = 0
+        if pbDigit > 0 then pbKind = TUTORIAL_KINDS(pbDigit)
+        puzzlePut(pbI, pbKind)
+        pbFlags = puzzleBit(PUZZLE_BELLIES(pbRow), pbX)
+        pbFlags = pbFlags + puzzleBit(PUZZLE_BUBBLES(pbRow), pbX) * 2
+        pbFlags = pbFlags + puzzleBit(PUZZLE_RAINBOWS(pbRow), pbX) * 4
+        puzzleFishSet(pbI, pbFlags)
+    next
+endfunction
+
+
+` what is special about the fish in this cell: 1 if it is belly up, 2 if it is in a bubble, and 4 if it is a rainbow fish.
+` a fish is only ever one of them. build/make_puzzle_boards.py has this too.
+function puzzleFishFlags(pffCell)
+    pffFlags = CELLS(pffCell).bellyUp
+    if BUBBLED_AT(pffCell) then pffFlags = pffFlags + 2
+    if RAINBOW_FISH(pffCell) then pffFlags = pffFlags + 4
+endfunction pffFlags
+
+
+` and this makes it so, with nothing animated
+function puzzleFishSet(pfsCell, pfsFlags)
+    if pfsFlags = 1 then puzzleTurn(pfsCell)
+    if pfsFlags = 2 then BUBBLED_AT(pfsCell) = 1
+    if pfsFlags = 4 then RAINBOW_FISH(pfsCell) = 1
+endfunction
+
+
+` a swap is starting. keep the board as it is, to come back to. startLiveMove comes here.
+function puzzleUndoPush()
+    puAt = PUZZLE_UNDO_NEXT * CELL_COUNT
+    puLast = CELL_COUNT - 1
+    for puI = 0 to puLast
+        PUZZLE_UNDO(puAt + puI) = CELLS(puI).value + puzzleFishFlags(puI) * PUZZLE_UNDO_TURNED
+    next
+    PUZZLE_UNDO_CURSOR(PUZZLE_UNDO_NEXT) = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+    PUZZLE_UNDO_NEXT = (PUZZLE_UNDO_NEXT + 1) mod PUZZLE_UNDO_MAX
+    if PUZZLE_UNDO_COUNT < PUZZLE_UNDO_MAX then PUZZLE_UNDO_COUNT = PUZZLE_UNDO_COUNT + 1
+endfunction
+
+
+` the last swap never happened. the fish that come back grow in where they were.
+function puzzleUndo()
+    if PUZZLE_UNDO_COUNT = 0 then exitfunction
+    PUZZLE_UNDO_COUNT = PUZZLE_UNDO_COUNT - 1
+    PUZZLE_UNDO_NEXT = (PUZZLE_UNDO_NEXT + PUZZLE_UNDO_MAX - 1) mod PUZZLE_UNDO_MAX
+    pxAt = PUZZLE_UNDO_NEXT * CELL_COUNT
+    pxLast = CELL_COUNT - 1
+    for pxI = 0 to pxLast
+        pxKept = PUZZLE_UNDO(pxAt + pxI)
+        pxKind = pxKept mod PUZZLE_UNDO_TURNED
+        pxWas = CELLS(pxI).value + puzzleFishFlags(pxI) * PUZZLE_UNDO_TURNED
+        if PUZZLE_UNDO_ALL then pxWas = -1
+        if pxKept <> pxWas
+            puzzlePut(pxI, pxKind)
+            puzzleFishSet(pxI, pxKept / PUZZLE_UNDO_TURNED)
+            if pxKind > 0
+                create basic tween CELLS(pxI).scaleWaveTweenId, .7, 1, PUZZLE_UNDO_GROW_MS, 0
+            endif
+        endif
+    next
+    pxCursor = PUZZLE_UNDO_CURSOR(PUZZLE_UNDO_NEXT)
+    SELECTION_POS.x = pxCursor mod CELL_COLUMN_COUNT
+    SELECTION_POS.y = pxCursor / CELL_COLUMN_COUNT
+    show sprite SELECTION_SPRITE
+    PUZZLE_CURSOR_MOVED = 1
+    PUZZLE_STUCK_SAID = 0
+    PUZZLE_UNDO_ALL = 0
+endfunction
+
+
+` 1 when the player wants the board back, and it is not there yet. see UNDO AND START OVER CUT THROUGH EVERYTHING
+` in fish_headers_puzzle.
+function puzzleWantsBack()
+    if PUZZLE_ON = 0 then exitfunction 0
+    if PUZZLE_CLEARED_MS > 0 then exitfunction 0
+    if PUZZLE_RUSH_TALK > 0 then exitfunction 0
+    pwbBusy = REQUEST_COMBO_CHECK + LIVE_MOVE_ACTIVE + COMBO_PHASE
+    if pwbBusy = 0 then exitfunction 0
+    if PUZZLE_AGAIN then exitfunction 1
+    if PUZZLE_UNDO_WANT > 0 and PUZZLE_UNDO_COUNT > 0 then exitfunction 1
+endfunction 0
+
+
+` the sea with nothing in it
+function puzzleEmpty()
+    puzzleGrid()
+    hide sprite SELECTION_SPRITE
+    peLast = CELL_COUNT - 1
+    for peI = 0 to peLast
+        CELLS(peI).value = 0
+        RAINBOW_FISH(peI) = 0
+        hide sprite CELLS(peI).spriteId
+        hide sprite CELLS(peI).fxSpriteId
+    next
+    bubbledReset()
+    PUZZLE_FISH_WAS = 0
+endfunction
+
+
+` 1 when the player went down to stay with her, and has not said that they are leaving
+function puzzleGone()
+    pgnGone = get pref(PUZZLE_GONE_PREF, 0)
+endfunction pgnGone
+
+
+` shows a line of the intro with nobody in it, and says how long it stays
+function puzzleGoneLine(pglLine)
+    pglHold = 1600
+    select pglLine
+        case 0
+            set text loc PUZZLE_GONE_TEXT_ID, "intro.gone.match"
+        endcase
+        case 1
+            set text loc PUZZLE_GONE_TEXT_ID, "intro.gone.dots"
+            pglHold = 1200
+        endcase
+        case 2
+            set text loc PUZZLE_GONE_TEXT_ID, "intro.gone.nobody"
+            pglHold = 3400
+        endcase
+        case 3
+            set text loc PUZZLE_GONE_TEXT_ID, "intro.gone.well"
+            pglHold = 1200
+        endcase
+        case 4
+            set text loc PUZZLE_GONE_TEXT_ID, "intro.gone.luck"
+        endcase
+    endselect
+endfunction pglHold
+
+
+` puts Ava and the game in one of the states of the Ava window: 0 a first game, 1 a usual player, 2 staying on
+` PUZZLE_DBG_BOARD, 3 staying and out of boards, 4 staying after she asked, 5 she has gone
+function puzzleDebugState(pdtState)
+    PUZZLE_ENV_SPENT = 1
+    pdtStaying = 0
+    if pdtState >= 2 and pdtState <= 4 then pdtStaying = 1
+    pdtGone = 0
+    if pdtState = 5 then pdtGone = 1
+    pdtStage = 0
+    if pdtState = 3 then pdtStage = 1
+    if pdtState = 4 then pdtStage = 2
+    pdtBoard = 0
+    if pdtState = 2 then pdtBoard = PUZZLE_DBG_BOARD - 1
+    set pref PUZZLE_PREF, pdtBoard
+    set pref PUZZLE_PREF + 1, pdtStage
+    set pref PUZZLE_PREF + 2, pdtStaying
+    set pref PUZZLE_GONE_PREF, pdtGone
+    pdtSeen = INTRO_VERSION
+    if pdtState = 0
+        pdtSeen = 0
+        set pref SAVE_PREF + 1, 0
+        SAVE_SIGNATURE = -1
+    endif
+    set pref PREF_INTRO_SEEN, pdtSeen
+endfunction
+
+
+function puzzleStaying()
+    pstStaying = get pref(PUZZLE_PREF + 2, 0)
+endfunction pstStaying
+
+
+` 1 when a new game is a puzzle
+function puzzleWanted()
+    pwnWanted = puzzleStaying()
+    if PUZZLE_ENV_SPENT = 0
+        if is env set("FISH_PUZZLE") then pwnWanted = 1
+    endif
+
+    ` the player asked for the intro of the usual game, or has left her
+    if OPTION_GAME_INTRO then pwnWanted = 0
+    pwnGone = puzzleGone()
+    if pwnGone then pwnWanted = 0
+    if PUZZLE_LEFT > 0 then pwnWanted = 0
+endfunction pwnWanted
+
+
+` where a new puzzle game goes, and if she has to ask first. a player who stayed is asked if they are leaving, unless they came back in with Resume
+function puzzleWhere()
+    PUZZLE_ASK = puzzleStaying()
+    if PUZZLE_RESUMED
+        PUZZLE_ASK = 0
+    endif
+    PUZZLE_RESUMED = 0
+
+    ` the player picks up where they got to. a number only says where to start from when there is nothing
+    ` to pick up, and FISH_PUZZLE_BOARD says where to go, whatever there is. see fish_headers_puzzle.
+    pwhAt = get pref(PUZZLE_PREF, 0)
+    pwhStage = get pref(PUZZLE_PREF + 1, 0)
+    pwhAsked = 0
+    if PUZZLE_ENV_SPENT = 0
+        if pwhAt + pwhStage = 0
+            pwhAsked = val(env$("FISH_PUZZLE"))
+        endif
+        if is env set("FISH_PUZZLE_BOARD")
+            pwhAsked = val(env$("FISH_PUZZLE_BOARD"))
+            PUZZLE_ASK = 0
+        endif
+    endif
+    if pwhAsked > 0
+        PUZZLE_NOW = pwhAsked - 1
+        if PUZZLE_NOW >= PUZZLE_COUNT then PUZZLE_NOW = 0
+    else
+        puzzleResume(pwhAt, pwhStage)
+    endif
+endfunction
+
+
+` picks up where the preferences say that the player got to
+function puzzleResume(prAt, prStage)
+    PUZZLE_NOW = prAt
+    if PUZZLE_NOW < 0 then PUZZLE_NOW = 0
+    if PUZZLE_NOW >= PUZZLE_COUNT then PUZZLE_NOW = 0
+    if prStage = 1 then PUZZLE_RAN_OUT = 1
+    if prStage = 2 then PUZZLE_AFTER = 1
+endfunction
+
+
+` which talk comes after this board, from 1, or 0 for none. the last board has an ending, and no talk.
+function puzzleTalkAfter(ptaBoard)
+    ptaTalk = 0
+    if (ptaBoard + 1) mod PUZZLE_TALK_EVERY = 0
+        ptaSlot = (ptaBoard + 1) / PUZZLE_TALK_EVERY
+        if ptaSlot <= PUZZLE_TALK_LAST then ptaTalk = PUZZLE_TALK_PICK(ptaSlot)
+    endif
+endfunction ptaTalk
+
+
+` which talks are used. see THE TALKS in fish_headers_puzzle. the fifth says that it is half of them.
+function puzzleTalkPicks()
+    PUZZLE_TALK_PICK(1) = 1
+    PUZZLE_TALK_PICK(2) = 2
+    PUZZLE_TALK_PICK(3) = 6
+    PUZZLE_TALK_PICK(4) = 7
+    PUZZLE_TALK_PICK(5) = 10
+    PUZZLE_TALK_PICK(6) = 12
+    PUZZLE_TALK_PICK(7) = 15
+    PUZZLE_TALK_PICK(8) = 16
+    PUZZLE_TALK_PICK(9) = 19
+endfunction
+
+
+` she says this in the scene of a talk. the words come from fish_puzzle_talk.
+function puzzleSay(psyKey$)
+    anglerSay(loc$(psyKey$))
+endfunction
+
+
+` a few words for a board that has none of its own, by how far along the player is
+function puzzleRemark(prkBoard)
+    prkWhich = prkBoard mod 3
+    if prkBoard < 6
+        if prkWhich = 0 then guideSay(lockey$("angler.remark.g1"))
+        if prkWhich = 1 then guideSay(lockey$("angler.remark.g2"))
+        if prkWhich = 2 then guideSay(lockey$("angler.remark.g3"))
+        exitfunction
+    endif
+    if prkBoard < 15
+        if prkWhich = 0 then guideSay(lockey$("angler.remark.r1"))
+        if prkWhich = 1 then guideSay(lockey$("angler.remark.r2"))
+        if prkWhich = 2 then guideSay(lockey$("angler.remark.r3"))
+        exitfunction
+    endif
+    if prkBoard < 24
+        if prkWhich = 0 then guideSay(lockey$("angler.remark.c1"))
+        if prkWhich = 1 then guideSay(lockey$("angler.remark.c2"))
+        if prkWhich = 2 then guideSay(lockey$("angler.remark.c3"))
+        exitfunction
+    endif
+    if prkWhich = 0 then guideSay(lockey$("angler.remark.o1"))
+    if prkWhich = 1 then guideSay(lockey$("angler.remark.o2"))
+    if prkWhich = 2 then guideSay(lockey$("angler.remark.o3"))
+endfunction
+
+
+` how many fish there are
+function puzzleFishLeft()
+    pfCount = 0
+    pfLast = CELL_COUNT - 1
+    for pfI = 0 to pfLast
+        if CELLS(pfI).value > 0 then pfCount = pfCount + 1
+    next
+endfunction pfCount
+
+
+` the cell to put the cursor on: the fish that is nearest to the middle of the sea floor
+function puzzleLowestFish()
+    plBest = 0
+    plBestFar = 999
+    plLast = CELL_COUNT - 1
+    for plI = 0 to plLast
+        if CELLS(plI).value > 0
+            plFar = (PUZZLE_TALL - 1 - CELLS(plI).coord.y) * 2
+            plFarX = CELLS(plI).coord.x - PUZZLE_SIDE / 2
+            if plFarX < 0 then plFarX = 0 - plFarX
+            plFar = plFar + plFarX
+            if plFar < plBestFar
+                plBestFar = plFar
+                plBest = plI
+            endif
+        endif
+    next
+endfunction plBest
+
+
+` a position and the best move from it. see HINTS in fish_headers_puzzle.
+function puzzleHintRow(phrKey, phrMove)
+    PUZZLE_HINT_KEYS(PUZZLE_HINT_ROWS) = phrKey
+    PUZZLE_HINT_MOVES(PUZZLE_HINT_ROWS) = phrMove
+    PUZZLE_HINT_ROWS = PUZZLE_HINT_ROWS + 1
+endfunction
+
+
+` another move from a step of a line, and where it ends up. see long_puzzles_agree_with_the_game.
+function puzzleCheck(pckAt, pckMove, pckKey, pckLost)
+    PUZZLE_CHECK_AT(PUZZLE_CHECKS) = pckAt
+    PUZZLE_CHECK_MOVE(PUZZLE_CHECKS) = pckMove
+    PUZZLE_CHECK_KEY(PUZZLE_CHECKS) = pckKey
+    PUZZLE_CHECK_LOST(PUZZLE_CHECKS) = pckLost
+    PUZZLE_CHECKS = PUZZLE_CHECKS + 1
+endfunction
+
+
+` nothing is hopping, and nothing is said
+function puzzleHintOff()
+    PUZZLE_HINT_WANT = 0
+    PUZZLE_HINT_A = -1
+    PUZZLE_HINT_B = -1
+    PUZZLE_HINT_SAID$ = ""
+endfunction
+
+
+` how a fish is written down in a position. a cell only keeps its kind, so the digit is found from TUTORIAL_KINDS.
+function puzzleHintCell(phcKind, phcFlags)
+    phcCell = 0
+    if phcKind > 0
+        for phcD = 1 to 7
+            if TUTORIAL_KINDS(phcD) = phcKind then phcCell = phcD
+        next
+    endif
+endfunction phcCell + phcFlags * 10
+
+
+` the key of the position in PUZZLE_HINT_CELLS, with the cursor here. build/make_puzzle_lab.py has this too. the
+` cursor counts by the part of the sea that it can get to, which is every cell that it does not have to pop a belly
+` up fish to reach, and that part goes by its first cell.
+function puzzleHintKey(phkCursor)
+    PUZZLE_FLOOD_STAMP = PUZZLE_FLOOD_STAMP + 1
+    PUZZLE_FLOOD_SEEN(phkCursor) = PUZZLE_FLOOD_STAMP
+    PUZZLE_FLOOD(0) = phkCursor
+    phkLeft = 1
+    phkFirst = phkCursor
+    while phkLeft > 0
+        phkLeft = phkLeft - 1
+        phkAt = PUZZLE_FLOOD(phkLeft)
+        if phkAt < phkFirst then phkFirst = phkAt
+        phkX = phkAt mod PUZZLE_SIDE
+        for phkSide = 0 to 3
+            phkNext = -1
+            if phkSide = 0 and phkX > 0 then phkNext = phkAt - 1
+            if phkSide = 1 and phkX < PUZZLE_SIDE - 1 then phkNext = phkAt + 1
+            if phkSide = 2 then phkNext = phkAt - PUZZLE_SIDE
+            if phkSide = 3 then phkNext = phkAt + PUZZLE_SIDE
+            if phkNext >= 0 and phkNext < CELL_COUNT
+                if PUZZLE_HINT_CELLS(phkNext) / 10 <> 1 and PUZZLE_FLOOD_SEEN(phkNext) <> PUZZLE_FLOOD_STAMP
+                    PUZZLE_FLOOD_SEEN(phkNext) = PUZZLE_FLOOD_STAMP
+                    PUZZLE_FLOOD(phkLeft) = phkNext
+                    phkLeft = phkLeft + 1
+                endif
+            endif
+        next
+    endwhile
+
+    phkKey = PUZZLE_NOW + 1
+    phkLast = CELL_COUNT - 1
+    for phkI = 0 to phkLast
+        phkKey = (phkKey * 37 + PUZZLE_HINT_CELLS(phkI)) mod PUZZLE_HINT_MOD
+    next
+    phkKey = (phkKey * 37 + phkFirst) mod PUZZLE_HINT_MOD
+endfunction phkKey
+
+
+` the move from the position in PUZZLE_HINT_CELLS, or -1
+function puzzleHintFind(phfCursor)
+    phfKey = puzzleHintKey(phfCursor)
+    phfLast = PUZZLE_HINT_ROWS - 1
+    for phfI = 0 to phfLast
+        if PUZZLE_HINT_KEYS(phfI) = phfKey then exitfunction PUZZLE_HINT_MOVES(phfI)
+    next
+endfunction -1
+
+
+` the move from the board as it is now, or -1
+function puzzleHintHere()
+    if PUZZLE_HINT_ROWS = 0 then puzzleHintList()
+    phhLast = CELL_COUNT - 1
+    for phhI = 0 to phhLast
+        PUZZLE_HINT_CELLS(phhI) = puzzleHintCell(CELLS(phhI).value, puzzleFishFlags(phhI))
+    next
+    phhMove = puzzleHintFind(SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT)
+endfunction phhMove
+
+
+` 1 when this board cannot be cleared from here. see HINTS in fish_headers_puzzle.
+function puzzleIsLost()
+    pilFish = puzzleFishLeft()
+    if pilFish = 0 then exitfunction 0
+    pilMove = puzzleHintHere()
+    if pilMove < 0 then exitfunction 1
+endfunction 0
+
+
+` looks at the board, once it has settled. see THE SNOW STOPS in fish_headers_puzzle.
+function puzzleLostLook()
+    PUZZLE_LOST = puzzleIsLost()
+    PUZZLE_NO_MOVE = puzzleNoMoveLeft()
+endfunction
+
+
+` the snow slows down for as long as the board is lost. the seabed takes this off of the clock of the snow.
+function stepPuzzleStill(spsElapsed#)
+    spsSecs# = spsElapsed# * .001
+    if PUZZLE_ON = 1 and PUZZLE_LOST = 1
+        PUZZLE_STILL# = PUZZLE_STILL# + spsSecs# / PUZZLE_STILL_SECS#
+    else
+        PUZZLE_STILL# = PUZZLE_STILL# - spsSecs# / PUZZLE_STILL_BACK_SECS#
+    endif
+    if PUZZLE_STILL# > 1 then PUZZLE_STILL# = 1
+    if PUZZLE_STILL# < 0 then PUZZLE_STILL# = 0
+endfunction
+
+
+` the board is lost, and she says so, in a way that she did not say it the last time
+function puzzleSayLost()
+    pslPick = rnd(6)
+    if pslPick = PUZZLE_LOST_LAST then pslPick = (pslPick + 1) mod 6
+    PUZZLE_LOST_LAST = pslPick
+    if pslPick = 0 then guideSay(lockey$("angler.puzzle.stuck2"))
+    if pslPick = 1 then guideSay(lockey$("angler.puzzle.lost.door"))
+    if pslPick = 2 then guideSay(lockey$("angler.puzzle.lost.noway"))
+    if pslPick = 3 then guideSay(lockey$("angler.puzzle.lost.nowhere"))
+    if pslPick = 4 then guideSay(lockey$("angler.puzzle.lost.over"))
+    if pslPick = 5 then guideSay(lockey$("angler.puzzle.lost.nice"))
+endfunction
+
+
+` what to do from here. see HINTS in fish_headers_puzzle.
+function puzzleHint()
+    puzzleHintOff()
+    PUZZLE_HINT_AT = PUZZLE_UNDO_NEXT
+    PUZZLE_HINT_NEXT_MS = 0
+
+    phLast = CELL_COUNT - 1
+    phMove = puzzleHintHere()
+    if phMove >= 0
+        PUZZLE_HINT_BACK = 0
+        PUZZLE_HINT_A = phMove / 10000
+        PUZZLE_HINT_B = phMove mod 10000
+        if PUZZLE_HINT_B >= PUZZLE_HINT_MOVE_FLAG
+            PUZZLE_HINT_A = PUZZLE_HINT_B - PUZZLE_HINT_MOVE_FLAG
+            PUZZLE_HINT_B = PUZZLE_HINT_A
+            PUZZLE_HINT_SAID$ = "take the cursor to the fish that hops"
+        else
+            PUZZLE_HINT_SAID$ = "swap the two fish that hop"
+        endif
+        exitfunction
+    endif
+
+    ` this is not a good place to be. how far back was the last good one?
+    for phBack = 1 to PUZZLE_UNDO_COUNT
+        phSlot = (PUZZLE_UNDO_NEXT + PUZZLE_UNDO_MAX - phBack) mod PUZZLE_UNDO_MAX
+        for phI = 0 to phLast
+            phKept = PUZZLE_UNDO(phSlot * CELL_COUNT + phI)
+            PUZZLE_HINT_CELLS(phI) = puzzleHintCell(phKept mod PUZZLE_UNDO_TURNED, phKept / PUZZLE_UNDO_TURNED)
+        next
+        phMove = puzzleHintFind(PUZZLE_UNDO_CURSOR(phSlot))
+        if phMove >= 0
+            PUZZLE_HINT_BACK = phBack
+            PUZZLE_HINT_SAID$ = "this cannot be won now. take back " + str$(phBack)
+            exitfunction
+        endif
+    next
+    PUZZLE_HINT_BACK = -1
+    PUZZLE_HINT_SAID$ = "nothing to go on from here. start the board again"
+endfunction
+
+
+` the fish of the hint hop, until something else happens
+function puzzleHintHop()
+    if PUZZLE_HINT_A < 0 and PUZZLE_HINT_SAID$ = "" then exitfunction
+    if PUZZLE_HINT_AT <> PUZZLE_UNDO_NEXT
+        puzzleHintOff()
+        exitfunction
+    endif
+    if PUZZLE_HINT_A < 0 then exitfunction
+    phhNow = game ms()
+    if phhNow < PUZZLE_HINT_NEXT_MS then exitfunction
+    PUZZLE_HINT_NEXT_MS = phhNow + PUZZLE_HINT_HOP_MS
+    create basic tween CELLS(PUZZLE_HINT_A).scaleWaveTweenId, 1.7, 1, 400, 0
+    create basic tween CELLS(PUZZLE_HINT_B).scaleWaveTweenId, 1.7, 1, 400, 0
+endfunction
+
+
+` a digit of a row of PUZZLE_BELLIES, PUZZLE_BUBBLES or PUZZLE_RAINBOWS
+function puzzleBit(ptdRow, ptdX)
+    ptdAt = PUZZLE_SIDE - 1 - ptdX
+    while ptdAt > 0
+        ptdRow = ptdRow / 10
+        ptdAt = ptdAt - 1
+    endwhile
+endfunction ptdRow mod 10
+
+
+` this fish is belly up, with nothing animated
+function puzzleTurn(ptnCell)
+    CELLS(ptnCell).bellyUp = 1
+    CELLS(ptnCell).bellyShown# = 3.14159
+endfunction
+
+
+` 1 when this swap may not be made. startLiveMove asks. see THE FISH in fish_headers_puzzle.
+function puzzleBlocksSwap(pbsA, pbsB)
+    if PUZZLE_ON = 0 then exitfunction 0
+    pbsPops = puzzleSwapPops(pbsA, pbsB)
+endfunction 1 - pbsPops
+
+
+` 1 when this swap can be made: it pops something, or a fish in a bubble is in it, whose swaps are free. a belly up fish
+` that is swapped pops, because the cursor goes with it.
+function puzzleSwapPops(pspA, pspB)
+    if CELLS(pspA).bellyUp = 1 then exitfunction 1
+    if BUBBLED_AT(pspA) then exitfunction 1
+    if BUBBLED_AT(pspB) then exitfunction 1
+    pspAt = CELLS(pspA).value
+    pspTo = CELLS(pspB).value
+    pspRainAt = RAINBOW_FISH(pspA)
+    pspRainTo = RAINBOW_FISH(pspB)
+    if pspAt = pspTo and pspRainAt = pspRainTo then exitfunction 0
+    CELLS(pspA).value = pspTo
+    CELLS(pspB).value = pspAt
+    RAINBOW_FISH(pspA) = pspRainTo
+    RAINBOW_FISH(pspB) = pspRainAt
+    pspSizeA = puzzleGroupSize(pspA, 0)
+    pspSizeB = puzzleGroupSize(pspB, 0)
+    pspWildA = puzzleGroupSize(pspA, 1)
+    pspWildB = puzzleGroupSize(pspB, 1)
+    CELLS(pspA).value = pspAt
+    CELLS(pspB).value = pspTo
+    RAINBOW_FISH(pspA) = pspRainAt
+    RAINBOW_FISH(pspB) = pspRainTo
+    pspNeed = getRequiredComboCount()
+    pspPops = 0
+    if pspSizeA >= pspNeed then pspPops = 1
+    if pspSizeB >= pspNeed then pspPops = 1
+    if pspWildA >= pspNeed then pspPops = 1
+    if pspWildB >= pspNeed then pspPops = 1
+endfunction pspPops
+
+
+` how many fish of a kind touch this one, with it. or if it is a rainbow fish, and pgsWild is 1, how many rainbow fish.
+function puzzleGroupSize(pgsCell, pgsWild)
+    pgsKind = CELLS(pgsCell).value
+    if pgsKind = 0 then exitfunction 0
+    if pgsWild = 1 and RAINBOW_FISH(pgsCell) = 0 then exitfunction 0
+    PUZZLE_FLOOD_STAMP = PUZZLE_FLOOD_STAMP + 1
+    PUZZLE_FLOOD_SEEN(pgsCell) = PUZZLE_FLOOD_STAMP
+    PUZZLE_FLOOD(0) = pgsCell
+    pgsLeft = 1
+    pgsSize = 0
+    while pgsLeft > 0
+        pgsLeft = pgsLeft - 1
+        pgsAt = PUZZLE_FLOOD(pgsLeft)
+        pgsSize = pgsSize + 1
+        pgsX = pgsAt mod PUZZLE_SIDE
+        for pgsSide = 0 to 3
+            pgsNext = -1
+            if pgsSide = 0 and pgsX > 0 then pgsNext = pgsAt - 1
+            if pgsSide = 1 and pgsX < PUZZLE_SIDE - 1 then pgsNext = pgsAt + 1
+            if pgsSide = 2 then pgsNext = pgsAt - PUZZLE_SIDE
+            if pgsSide = 3 then pgsNext = pgsAt + PUZZLE_SIDE
+            if pgsNext >= 0 and pgsNext < CELL_COUNT
+                pgsSame = CELLS(pgsNext).value = pgsKind
+                if pgsWild = 1
+                    pgsSame = 0
+                    if CELLS(pgsNext).value > 0 and RAINBOW_FISH(pgsNext) = 1 then pgsSame = 1
+                endif
+                if pgsSame = 1 and PUZZLE_FLOOD_SEEN(pgsNext) <> PUZZLE_FLOOD_STAMP
+                    PUZZLE_FLOOD_SEEN(pgsNext) = PUZZLE_FLOOD_STAMP
+                    PUZZLE_FLOOD(pgsLeft) = pgsNext
+                    pgsLeft = pgsLeft + 1
+                endif
+            endif
+        next
+    endwhile
+endfunction pgsSize
+
+
+` 1 when there are fish left, and no swap can be made
+function puzzleNoMoveLeft()
+    pnmFish = puzzleFishLeft()
+    if pnmFish = 0 then exitfunction 0
+    pnmLast = CELL_COUNT - 1
+    for pnmI = 0 to pnmLast
+        if CELLS(pnmI).value > 0
+            if CELLS(pnmI).bellyUp = 1 then exitfunction 0
+            for pnmSide = 0 to 1
+                pnmTo = pnmI + 1
+                if pnmSide = 1 then pnmTo = pnmI + PUZZLE_SIDE
+                pnmOk = 1
+                if pnmSide = 0 and pnmI mod PUZZLE_SIDE = PUZZLE_SIDE - 1 then pnmOk = 0
+                if pnmTo >= CELL_COUNT then pnmOk = 0
+                if pnmOk
+                    if CELLS(pnmTo).value > 0
+                        pnmPops = puzzleSwapPops(pnmI, pnmTo)
+                        if pnmPops then exitfunction 0
+                    endif
+                endif
+            next
+        endif
+    next
+endfunction 1
+
+
+` what Ava says while this board comes in. she says the second thing once the first has been read.
+function puzzleOpening(poBoard)
+    if poBoard = PUZZLE_COUNT - 1
+        guideSay(lockey$("angler.puzzle.d10.a2"))
+        guideThen(lockey$("angler.puzzle.d10.b2"))
+        exitfunction
+    endif
+    ` a new fish, and what it does. see THE FISH in fish_headers_puzzle.
+    if poBoard = PUZZLE_NEW_BELLY
+        guideSay(lockey$("angler.puzzle.fish.belly.a"))
+        guideThen(lockey$("angler.puzzle.fish.belly.b"))
+        exitfunction
+    endif
+    if poBoard = PUZZLE_NEW_BUBBLE
+        guideSay(lockey$("angler.puzzle.fish.bubble.a"))
+        guideThen(lockey$("angler.puzzle.fish.bubble.b"))
+        exitfunction
+    endif
+    if poBoard = PUZZLE_NEW_RAINBOW
+        guideSay(lockey$("angler.puzzle.fish.rainbow.a"))
+        guideThen(lockey$("angler.puzzle.fish.rainbow.b"))
+        exitfunction
+    endif
+    if poBoard > 8
+        puzzleRemark(poBoard)
+        exitfunction
+    endif
+    select poBoard
+        case 0
+            guideSay(lockey$("angler.puzzle.d1.a"))
+            guideThen(lockey$("angler.puzzle.d1.b"))
+            guideThen(lockey$("angler.puzzle.d3.b"))
+        endcase
+        case 1
+            guideSay(lockey$("angler.puzzle.d2.a2"))
+            guideThen(lockey$("angler.puzzle.d2.b2"))
+        endcase
+        case 2
+            guideSay(lockey$("angler.puzzle.d3.a2"))
+            guideThen(lockey$("angler.puzzle.d3.b2"))
+        endcase
+        case 3
+            guideSay(lockey$("angler.puzzle.d4.a"))
+            guideThen(lockey$("angler.puzzle.d4.b"))
+        endcase
+        case 4
+            guideSay(lockey$("angler.puzzle.d5.a"))
+            guideThen(lockey$("angler.puzzle.d5.b"))
+        endcase
+        case 5
+            guideSay(lockey$("angler.puzzle.d6.a"))
+            guideThen(lockey$("angler.puzzle.d6.b"))
+        endcase
+        case 6
+            guideSay(lockey$("angler.puzzle.d7.a2"))
+            guideThen(lockey$("angler.puzzle.d7.b"))
+        endcase
+        case 7
+            guideSay(lockey$("angler.puzzle.d8.a"))
+            guideThen(lockey$("angler.puzzle.d8.b"))
+        endcase
+        case 8
+            guideSay(lockey$("angler.puzzle.d9.a"))
+            guideThen(lockey$("angler.puzzle.d9.b"))
+        endcase
+    endselect
+endfunction
+
+
+` and the one thing that she says when it is clear
+function puzzleCleared(pcBoard)
+    if pcBoard = PUZZLE_COUNT - 1
+        guideSay(lockey$("angler.puzzle.d10.done2"))
+        exitfunction
+    endif
+    select pcBoard
+        case 0
+            guideSay(lockey$("angler.puzzle.d1.done2"))
+        endcase
+        case 1
+            guideSay(lockey$("angler.puzzle.d2.done"))
+        endcase
+        case 2
+            guideSay(lockey$("angler.puzzle.d3.done2"))
+        endcase
+        case 3
+            guideSay(lockey$("angler.puzzle.d4.done"))
+        endcase
+        case 4
+            guideSay(lockey$("angler.puzzle.d5.done"))
+        endcase
+        case 5
+            guideSay(lockey$("angler.puzzle.d6.done"))
+        endcase
+        case 6
+            guideSay(lockey$("angler.puzzle.d7.done2"))
+        endcase
+        case 7
+            guideSay(lockey$("angler.puzzle.d8.done"))
+        endcase
+        case 8
+            guideSay(lockey$("angler.puzzle.d9.done"))
+        endcase
+    endselect
+endfunction

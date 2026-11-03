@@ -43,9 +43,13 @@ setup_angler:
 
     reserve sprite id(ANGLER_SPRITE)
     sprite ANGLER_SPRITE, -500, -500, TEX_ANGLER
-    set sprite offset ANGLER_SPRITE, 0, 0
+    set sprite offset ANGLER_SPRITE, .5, .5 `it rocks around its middle. see anglerPlace.
     size sprite ANGLER_SPRITE, ANGLER_ART_W * ANGLER_SCALE, ANGLER_ART_H * ANGLER_SCALE
-    set sprite flip ANGLER_SPRITE, ANGLER_OWN_BULB, 0 `the new art's angler faces the other way
+    ` the new art's angler is a card in the fish effect, so that it can tilt and turn. it looks left, and
+    ` the effect turns it around. the old art is not square, and the effect only draws square cards.
+    if ANGLER_OWN_BULB
+        set sprite effect ANGLER_SPRITE, FISH_FX_ID
+    endif
     order sprite ANGLER_SPRITE, ORDER_INFO_PANEL + 2
     hide sprite ANGLER_SPRITE
 
@@ -201,7 +205,7 @@ setup_angler_topics:
         lockey$("angler.topic.score.more"))
     anglerTopic(ANGLER_TIER_PLAIN,
         lockey$("angler.topic.mult.ask"),
-        lockey$("angler.topic.mult.say"),
+        lockey$("angler.topic.mult.group_say"),
         lockey$("angler.topic.mult.more"))
     anglerTopic(ANGLER_TIER_PLAIN,
         lockey$("angler.topic.moves.ask"),
@@ -510,9 +514,12 @@ return
 ` when it was called on the radio, it asks if there is anything else, and it can go around again.
 angler_run:
     questTalkStop() `the quest talk borrows its voices
+    guideOff() `and the guide is the angler. see fish_headers_guide.
     ANGLER_ASKED = -1
     anglerScanBoard()
-    anglerPickTopics(ANGLER_ANCHOR)
+    if ANGLER_FROM_SHOP = 0
+        anglerPickTopics(ANGLER_ANCHOR)
+    endif
 
     ` it starts at the bottom, with the light around the bulb
     ANGLER_SPOT = -1
@@ -547,18 +554,26 @@ angler_run:
         angGreet$ = loc$("angler.greet.teach")
     endif
 
+    if ANGLER_FROM_SHOP
+        angGreet = rnd(3)
+        angGreet$ = loc$("angler.shop.howdy")
+        if angGreet = 1
+            angGreet$ = loc$("angler.shop.still")
+        endif
+        if angGreet = 2
+            angGreet$ = loc$("angler.shop.back")
+        endif
+        if angGreet = 3
+            angGreet$ = loc$("angler.shop.look")
+        endif
+    endif
+
     angChosen = -1 `angler_choose sets this. it is further down, and a name has to be set before it is read.
 
-    ` the very first time, it says who it is, before anything else. see THE FIRST MEETING in fish_headers_angler.
+    ` the very first time, it has a little more to say at the end. see THE FIRST MEETING in fish_headers_angler.
     angFirstMeeting = 1 - ANGLER_MET
+    if ANGLER_FROM_SHOP then angFirstMeeting = 0
     angFirstAsked = 0
-    if angFirstMeeting
-        set text loc INFO_HINT_TEXT_ID, "angler.hint.goon"
-        anglerSay(loc$("angler.meet.friend"))
-        gosub angler_wait
-        anglerSay(loc$("angler.meet.lost"))
-        gosub angler_wait
-    endif
     angAgain = 1
     while angAgain
         angAgain = 0
@@ -588,7 +603,7 @@ angler_run:
             ` a question. from info mode, a light that was kept is spent on it. a call costs nothing.
             ANGLER_ASKED = ANGLER_PICK(angChosen)
             if ANGLER_FROM_CARD = 0
-                if ANGLER_FROM_RADIO = 0
+                if ANGLER_FROM_RADIO + ANGLER_FROM_SHOP = 0
                     anglerBankSpend()
                 endif
             endif
@@ -598,6 +613,7 @@ angler_run:
             ` the light goes to what it is about, if that is on the screen. the angler gets out of the way of it.
             anglerTopicBlob(ANGLER_ASKED)
             ANGLER_SPOT = ANGLER_FOUND
+            if ANGLER_FROM_SHOP then ANGLER_SPOT = -1 `the upgrade screen is over all of that
             if ANGLER_SPOT >= 0
                 anglerSpotRect()
                 angSpotY = ANGLER_SPOT_Y + ANGLER_SPOT_H / 2
@@ -787,7 +803,11 @@ return
 angler_frame:
     gosub frame_input_icons
     gosub frame_angler
-    gosub update_frame
+    if ANGLER_FROM_SHOP
+        gosub frame_ability_selection
+    else
+        gosub update_frame
+    endif
     sync
 return
 
@@ -807,7 +827,7 @@ frame_angler:
     angX# = angX# + ANGLER_SHIFT_X
     angBob# = sin(game ms() * .002) * 2
     angY# = angBoxY# + 22 + angBob#
-    position sprite ANGLER_SPRITE, angX#, angY#
+    anglerPlace(angX#, angY#, 1)
 
     anglerSpeakStep()
 
@@ -939,7 +959,54 @@ endfunction
 
 
 ` put new words in the box. they are said one letter at a time. see THE VOICE in fish_headers_angler.
+` put the angler here, with its top left corner at this spot, and keep it alive. every now and then it
+` rocks, like something in a comic book: the sprite rotates, and the fish effect tilts it back and forth
+` as a card, together. and it lets out a bubble, more of them while it talks. all of this is for show,
+` so it is rolled with rnd.
+function anglerPlace(apX#, apY#, apScale#)
+    apW# = ANGLER_ART_W * ANGLER_SCALE * apScale#
+    apH# = ANGLER_ART_H * ANGLER_SCALE * apScale#
+    position sprite ANGLER_SPRITE, apX# + apW# / 2, apY# + apH# / 2
+
+    apNow = game ms()
+    if apNow >= ANGLER_ROCK_NEXT
+        ANGLER_ROCK_FROM = apNow
+        ANGLER_ROCK_NEXT = apNow + ANGLER_ROCK_MS + ANGLER_ROCK_GAP + rnd(ANGLER_ROCK_GAP)
+        ANGLER_ROCK_WAY = 1 - rnd(1) * 2
+    endif
+
+    ` it leans over, and back past the middle, slowly, and settles
+    apAge# = apNow - ANGLER_ROCK_FROM
+    apRockMs# = ANGLER_ROCK_MS
+    apT# = apAge# / apRockMs#
+    apSwing# = 0
+    if apT# < 1 then apSwing# = sin(apT# * 6.28) * (1 - apT#) * ANGLER_ROCK_WAY
+    apRoll# = apSwing# * ANGLER_ROCK_TURN#
+    if ANGLER_OWN_BULB
+        ` it swings around to look the way that it is going
+        apWant# = 3.14159 * (1 - SHOP_FACE_LEFT)
+        ANGLER_YAW# = ANGLER_YAW# + (apWant# - ANGLER_YAW#) * .04
+        apPitch# = abs(apSwing#) * ANGLER_ROCK_PITCH#
+        apYaw# = ANGLER_YAW# + apSwing# * ANGLER_ROCK_YAW#
+        set sprite all texcoord1 ANGLER_SPRITE, apPitch#, apYaw#, apRoll# - 10, apW#
+    else
+        rotate sprite ANGLER_SPRITE, apRoll#
+    endif
+
+    if apNow >= ANGLER_BLOW_NEXT
+        ANGLER_BLOW_NEXT = apNow + 1200 + rnd(1600)
+        if ANGLER_SPEAKING then ANGLER_BLOW_NEXT = apNow + 450 + rnd(500)
+        apMouthX# = apX# + apW# * .92
+        if SHOP_FACE_LEFT then apMouthX# = apX# + apW# * .08
+        apMouthY# = apY# + apH# * .62
+        spawnBubblesOnLayer(apMouthX#, apMouthY#, 4, 1 + rnd(1), 0, rgb(190, 225, 255), ORDER_OVERLAY_BUBBLES, 1000, 220, .7)
+    endif
+endfunction
+
+
 function anglerSay(angSayWords$)
+    ANGLER_SAYS = ANGLER_SAYS + 1
+    ANGLER_LAST$ = angSayWords$
     set text ANGLER_SAY_TEXT_ID, angSayWords$
     show text ANGLER_SAY_TEXT_ID
     create basic tween ANGLER_SAY_FADE_TWEEN_ID, 1, 1, 1, 0

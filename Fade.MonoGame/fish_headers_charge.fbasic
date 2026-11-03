@@ -1,0 +1,179 @@
+` THE CHARGE. the points of a combo do not go straight into the bar of the round. as they land, they
+` grow a part of the bar of its own, in a color of its own, past the end of what was there before, and a
+` number rides the end of it with how many points it has come to.
+` once the board has settled, and the last of the points has landed, the bar takes the charge in. a
+` glint runs along the bar from its start, and gets to the end of what the bar has just as the bar starts
+` to grow into the charge. then it rides the front of the bar across the charge, a bright edge between
+` the old and the new, and fades once the bar has all of it. as the glint gets there, the number pops in
+` a soft puff of smoke, the way that a fish does. when the charge fills the bar, the bar takes it in at
+` once, with a boom and a wave of bubbles.
+` while the bar is full and fizzing, nothing charges: what spills past the end is the OVERFLOW.
+` stepCharge, in fish_routines_charge, does the work, from frame_score, and frame_score draws the bar with
+` chargeBankFill and chargeDrawGlint. the boom is made by Tools/bar_charge_sounds_gen.py.
+` the charge is alive while it grows: it breathes, it fizzes with little bubbles, more where the points
+` land, and its color goes by how big a deal it is, from the sea green of a small one to the gold and
+` coral of a big one, in bands that run along it. its number counts up to the points, and does not jump.
+` the bar springs a little past the end of the charge as it takes it in, and settles back.
+` as the bar gets near full, the empty part of it pulses, faster the nearer it is. and when the charge
+` fills it, the bar stretches, squashes, and settles, and bursts into bubbles along the whole of it,
+` before it starts to fizz.
+#constant CHARGE_IDLE 0 `the bar has everything
+#constant CHARGE_CHARGING 1 `points are landing in the charge
+#constant CHARGE_EATING 2 `the bar is taking the charge in
+#constant CHARGE_GLINTING 3 `the glint is on its way to the end of the bar, to start it off
+global CHARGE_STATE = 0
+global CHARGE_BANK_SCORE = 0 `the score up to where the bar has taken it in. the charge is the rest of the score that shows.
+global CHARGE_LAST_SHOWN = 0 `the score that showed on the last frame, to tell when points land
+global CHARGE_LAST_LAND_MS = 0 `when points last landed
+global CHARGE_SETTLE_MS = 200 `how long after the last of them, with the board settled, the glint sets off
+global CHARGE_EAT_AT = 0 `when the bar started to take it in
+global CHARGE_EAT_FROM# = 0 `how full the bar was, before the charge, when it started to
+global CHARGE_EAT_TO = 0 `the score that it is taking in up to
+global CHARGE_EAT_MS = 380 `how long it takes
+global CHARGE_EAT_FULL_MS = 260 `and how long, when the charge has filled the bar
+global CHARGE_EAT_FULL = 0 `1 when it is the charge that filled the bar
+global CHARGE_WAS_HOLD = 0 `SCORE_BAR_HOLD on the last frame, to tell when the bar fills
+global CHARGE_PEAK = 0 `the most points that the charge came to
+global CHARGE_HEFT# = 0 `how big a deal it is, from 0 to 1, the way that THE POINTS FLY works it out
+global CHARGE_SLICE_COUNT = 12 `the part of the bar that is charging is drawn in this many slices, so that its color can run along it
+global dim CHARGE_SPRITES(12)
+global CHARGE_COLOR_R = 90 `the sea green of a small charge
+global CHARGE_COLOR_G = 230
+global CHARGE_COLOR_B = 210
+global CHARGE_HEFT_NOW# = 0 `how big a deal the charge is, as it is drawn. it warms up to it, and does not jump.
+global CHARGE_HEFT_MS = 250 `how long it takes to warm up
+global CHARGE_COLOR_NOW = 0 `the color of the charge on this frame, which its number is drawn in
+` THE TONES. a charge goes from one pair of colors to the next as it grows, and never runs out of them:
+` sea green, then gold and coral, then violet and pink, blue and cyan, lime and lemon, red and orange,
+` and then round again from violet. each pair is a color and the color of its bands.
+global CHARGE_TONE_COUNT = 6
+global dim CHARGE_TONE_AR(6)
+global dim CHARGE_TONE_AG(6)
+global dim CHARGE_TONE_AB(6)
+global dim CHARGE_TONE_BR(6)
+global dim CHARGE_TONE_BG(6)
+global dim CHARGE_TONE_BB(6)
+global CHARGE_TONE_LOOP = 2 `which pair it goes round to after the last
+global CHARGE_TONE_STEP# = 20 `how many fish' worth more it takes to go from one pair to the next, after gold
+global CHARGE_TONE_NOW# = 0 `which pair it is, and how far to the next, as it is drawn. it warms up to it, as CHARGE_HEFT_NOW# does.
+global CHARGE_RAMP_PX = 28 `how far apart the bands of color are, along the charge
+global CHARGE_RAMP_MS = 500 `how long a band takes to run that far
+global CHARGE_BREATH_MS = 650 `how long a breath takes, for a small charge. a big one breathes faster.
+global CHARGE_FIZZ_NEXT = 0 `when the charge lets off its next little bubble
+global CHARGE_FIZZ_GAP = 150 `how many milliseconds there are between them, for a small charge
+global CHARGE_SPRING# = 2.2 `how hard the bar springs past the end of the charge as it takes it in. 0 is not at all.
+global CHARGE_SPRING_PX = 4 `and the most that it goes past, in pixels
+
+` THE FINISH, when the charge fills the bar
+global CHARGE_BURST_AT = -1 `when it filled, or -1
+global CHARGE_BURST_MS = 450 `how long the bar takes to stretch, squash, and settle
+global CHARGE_BURST_TALL# = 1.3 `how much taller than usual it stretches
+global CHARGE_NEAR# = .85 `how full the bar is when its empty part starts to pulse
+global CHARGE_BURST_ODDS = 40 `one bubble in this many of the burst makes a sound. the boom has bubbles in it already.
+
+` THE OVERFLOW GETS THE SAME. see OVERFLOW in fish_headers. what spills past a full bar is drawn in slices
+` too, alive in the color of its tier, with lighter bands that run along it, and it pulses as it gets near
+` full. points that land in it make its end jump, and not the full bar under it. when it fills, and the
+` multiplier goes up, the bar stretches and squashes, a glint sweeps along the whole of it, and bubbles
+` burst along it from the start to the end. chargeDrawOverflow draws it, and chargeOverflowBurst bursts it.
+global dim CHARGE_OVER_SPRITES(12)
+global dim CHARGE_OVER_R(4) `the colors of the tiers, the same as getOverflowColor, in fish_funcs
+global dim CHARGE_OVER_G(4)
+global dim CHARGE_OVER_B(4)
+global CHARGE_SWEEP_AT = -1 `when the glint set off along the whole bar, for a tier that filled, or -1
+global CHARGE_SWEEP_MS = 420 `how long it takes to get to the end
+
+global CHARGE_TIP_X# = 0 `where the end of the charge is drawn, on the last frame
+global CHARGE_BANK_X# = 0 `and the end of what the bar has
+
+` THE STRING. the bar of the round is drawn to a render target of its own, and BarStringEffect draws that
+` bent by waves, as if the bar were a string: a wave runs out both ways from where it starts, bounces off
+` the ends, and dies away. most of the time there are none. big landings make a small one at the end
+` of the charge, the bar taking a charge in makes one where the charge starts, as big as the charge was
+` a big deal, and the bar filling, or a tier of the OVERFLOW filling, makes a big one from the end.
+` chargeWave starts one.
+global CHARGE_WAVE_COUNT = 6
+global dim CHARGE_WAVE_X#(6) `where it started, in pixels across the screen
+global dim CHARGE_WAVE_AT(6) `when, on the clock of the game
+global dim CHARGE_WAVE_AMP#(6) `how far it bends the bar, in pixels
+global CHARGE_WAVE_NEXT = 0
+global TARGET_BAR `what the bar is drawn to
+global CHARGE_BAR_FX_ID = 0
+global CHARGE_BAR_VIEW_SPRITE
+global CHARGE_BAR_LEFT = 0 `the two ends of the bar, in pixels across the screen. setup_charge keeps them.
+global CHARGE_BAR_RIGHT = 0
+global CHARGE_WAVE_LAND# = .35 `how big a deal a landing has to be to make a wave
+global CHARGE_WAVE_TAKE# = 2 `how big the wave is when the bar takes a charge in, at the least. a bigger deal makes one twice as big.
+global CHARGE_WAVE_FULL# = 4 `and of the bar filling
+
+` THE CLIMB. every time points land in the bar, a note plays a step higher up D minor, as a Shepard tone:
+` the same note in four octaves at once, the top one fading out and the bottom one fading in as it climbs,
+` so that it never gets to the top. the climb carries on from one combo to the next, all round long.
+` while the bar fills, the notes are a bubble popping. points that spill past the full bar are the bloop
+` voice, and once the multiplier has gone up on that bar, the sonar ping. when the bar takes a charge in,
+` three of them answer, rolled: the note that it got to, and a third and a fifth above it. when a tier of
+` the overflow fills, they answer on the next one, so that the change is heard. a fast run of landings is
+` thinned, so that there are never two notes closer than CHARGE_CUE_GAP_MS. the notes are made by
+` Tools/bar_cue_sounds_gen.py, as cue-bubble-1 to cue-bubble-7, and the same for bloop and sonar.
+#constant CHARGE_CUE_BUBBLE 0
+#constant CHARGE_CUE_BLOOP 1
+#constant CHARGE_CUE_SONAR 2
+global CHARGE_CUE_STEPS = 7 `the notes of D minor, D E F G A Bb C
+global dim CHARGE_CUE_CLIPS(21) `the clip of each note, for each of the three: (instrument * 7) + note
+` every note has voices of its own, made once and kept, and they take turns. a voice that is made again
+` for every note drops the one that was ringing, and a dropped one can be cut off at any moment, which
+` the upgrade screen did, as it made its cards.
+global CHARGE_CUE_VOICES = 3 `how many of each note can ring at once
+global dim CHARGE_CUE_SFX(63) `((instrument * 7) + note) * 3 + which voice
+global dim CHARGE_CUE_TURN(21) `which voice of each note plays next
+global CHARGE_CUE_STEP = 0 `how far it has climbed. it only ever goes up, and the note is this, round the scale.
+global CHARGE_CUE_LAST_MS = -1000 `when the last note played
+global CHARGE_CUE_GAP_MS = 140
+global CHARGE_CUE_ROLL_MS = 60 `how far apart the three notes of a chord are
+global dim CHARGE_CUE_VOL#(3) `how loud each of the three is
+
+` the boom, and its wave of bubbles, fade away once the upgrade screen is asked for, or a menu comes up
+global CHARGE_BOOM_LOUD# = 0 `how loud it is playing now
+global CHARGE_BOOM_FADE_MS = 500 `how long it takes to fade away
+global CHARGE_BOOM_MS = 0 `when stepChargeBoom last ran
+global CHARGE_PUNCH_LIFT# = .3 `how far toward white the end of the charge goes, as points land in it
+
+` the glint. it is a bright edge, with a fading tail behind it, inside the part of the bar that it has run along.
+global CHARGE_GLINT_AT = -1 `when it set off from the start of the bar
+global CHARGE_GLINT_MS = 300 `how long it takes to get to the end of what the bar has. it speeds up as it goes.
+global CHARGE_GLINT_GONE_AT = -1 `when the bar had all of the charge, and the glint started to fade, or -1
+global CHARGE_GLINT_FADE_MS = 180 `how long it takes to fade
+global CHARGE_GLINT_HEFT# = 0 `how bright it is, from 0 to 1
+global CHARGE_GLINT_TAIL = 10 `how long its tail is
+global CHARGE_GLINT_FAR = 12 `and the fainter part behind that
+global dim CHARGE_GLINT_SPRITES(3) `the edge, its tail, and the fainter part
+
+` the number that rides the end of the charge
+global CHARGE_TEXT_ID
+global CHARGE_TEXT_POINTS = -1 `the points that it says, so that it is only written again when they change
+global CHARGE_TEXT_TARGET = -1 `the points that it is counting up to
+global CHARGE_TEXT_ROLL# = 0 `where it has counted up to
+global CHARGE_TEXT_WROTE_AT = 0 `when it was last written
+global CHARGE_ROLL_MS = 90 `how quickly it counts. it closes most of the gap in this long.
+global CHARGE_ROLL_GAP_MS = 45 `and it is not written more often than this, while it counts, because making words takes a lot
+global CHARGE_TEXT_POP_AT = -1 `when it last changed. it pops, a little.
+global CHARGE_TEXT_POP_MS = 160
+global CHARGE_TEXT_TALL# = 15
+global CHARGE_TEXT_SHOWN# = 0 `how much of it is there, from 0 to 1
+global CHARGE_TEXT_X# = 0 `where it is, so that it slides along with the end of the charge
+global CHARGE_TEXT_MS = 0 `when it was last drawn
+global CHARGE_TEXT_TALL_NOW# = 15 `how tall it was last drawn
+
+` when the bar takes the charge in, the number pops in a puff of smoke, the way that a fish does, but softer
+global CHARGE_PUFF_SPRITE
+global CHARGE_PUFF_AT = -1 `when it started, or -1
+global CHARGE_PUFF_FROM = 0 `the frames of the puff that it plays, from and to
+global CHARGE_PUFF_TO = 0
+global CHARGE_PUFF_MS = 400 `the same as a fish
+global CHARGE_PUFF_SIZE = 26 `how big it is, for the smallest charge. a big one is half as big again.
+global CHARGE_PUFF_ALPHA = 110 `how much of it shows, from 0 to 255
+global CHARGE_SFX_POP = 0 `and the pop of a fish, quietly
+global CHARGE_POP_VOL# = .3
+
+global CHARGE_SFX_BOOM = 0 `when the charge fills the bar
+global CHARGE_BOOM_VOL# = .8

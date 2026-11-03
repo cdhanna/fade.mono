@@ -75,6 +75,7 @@ endfunction
 function bubbledAhead(aheadLast)
     BUBBLED_GROUP = -1
     if BUBBLED_ON = 0 then exitfunction
+    if PUZZLE_ON then exitfunction
     if TIDE_NIGHT then exitfunction
     if aheadLast >= COMBO_GROUP_ROOM then exitfunction
     aheadCursor = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
@@ -255,7 +256,7 @@ function bubbledMomentNow(nowSlot)
     nowY# = nowPos.y
     nowPos.y = nowPos.y - CELL_SIZE / 2
     nowScale# = getBoardBubbleScale() * BUBBLED_MOMENT_TEXT#
-    nowTxt = spawnScoreTextScaled(nowPos, "+" + str$(BUBBLED_MOMENT_POINTS(nowSlot)), 0, 1000, nowScale#)
+    nowTxt = spawnPointsText(nowPos, BUBBLED_MOMENT_POINTS(nowSlot), 0, 1000, nowScale#)
     color text nowTxt, rgb(190, 235, 255)
     spawnBubbles(nowPos.x, nowY#, CELL_SIZE * .7, 18, 0, rgb(200, 240, 255))
     bubbledBurst(nowPos.x, nowY#, 0)
@@ -272,7 +273,7 @@ function bubbledScore(scoreCell, scoreBase, scoreDelay)
         y = getCellY(scoreCell / CELL_COLUMN_COUNT)
     }
     scorePos.y = scorePos.y - CELL_SIZE / 2
-    scoreTxt = spawnBoardScoreText(scorePos, "+" + str$(scorePoints), scoreDelay, 900)
+    scoreTxt = spawnBoardPointsText(scorePos, scorePoints, scoreDelay, 900)
     color text scoreTxt, rgb(190, 235, 255)
     queueScore(scorePoints, scoreDelay)
     spawnBubbles(scorePos.x, scorePos.y + CELL_SIZE / 2, CELL_SIZE / 2, 12, scoreDelay, rgb(200, 240, 255))

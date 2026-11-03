@@ -443,12 +443,9 @@ setup_score:
     global PROGRESS_BAR_COUNT = 1
     PROGRESS_BARS(0) = SCORE_BAR
 
-    ` the bar that fills toward more multiplier, on top of the full one. see OVERFLOW in fish_headers.
-    reserve sprite id(OVERFLOW_SPRITE)
-    sprite OVERFLOW_SPRITE, SCORE_POS.x + 1, SCORE_POS.y + 1, TEX_PIXEL
-    size sprite OVERFLOW_SPRITE, 0, SCORE_SIZE.y - 2
-    set sprite offset OVERFLOW_SPRITE, 0, 0
-    color sprite OVERFLOW_SPRITE, rgb(255, 220, 64, 255)
+    ` the part of the bar that points charge up in, before the bar takes them in, and the bar that fills
+    ` toward more multiplier, on top of the full one. see THE CHARGE in fish_headers_charge, and OVERFLOW in fish_headers.
+    gosub setup_charge
 
     ` global SCORE_SLIDE_BACKDROP_SPRITE
     ` global SCORE_SLIDE_FRONT_SPRITE
@@ -625,6 +622,7 @@ update_frame:
     rotateDrawBox() `the outline of the box of a "rotate". see fish_headers_fast.
     perf lap 21
     gosub frame_hints
+    gosub frame_guide `the angler, as the guide of the first dive. see fish_headers_guide.
     perf lap 22
     updateBubbles()
     perf lap 23
@@ -1076,8 +1074,11 @@ frame_dbg:
             gosub frame_debug_glow
             gosub frame_debug_school
             gosub frame_debug_rainbow
+            chargeDebug()
             gosub frame_debug_quests
             gosub frame_debug_angler
+            gosub frame_debug_puzzle
+            gosub frame_debug_ava
             if INFO_MODE = 0
                 ` the dance. see THE DANCE in fish_headers.
                 if new key down(scancode("M"))
@@ -1222,6 +1223,9 @@ frame_score:
     ` the points past the end of a full bar go toward more multiplier. see OVERFLOW in fish_headers.
     stepOverflow()
 
+    ` the points that have landed charge up, until the bar takes them in. see THE CHARGE in fish_headers_charge.
+    stepCharge()
+
     if SCORE_BAR_HOLD > 0
 
         ` show ability upgrade! but not while fish are still popping. it waits for the board to settle,
@@ -1285,7 +1289,14 @@ frame_score:
         bar = PROGRESS_BARS(i)
         barFill# = tweenVal(bar.progressTweenId)
         scoreWidth# = (bar.size.x - 2.0) * barFill#
-        size sprite bar.foregroundSpriteId, scoreWidth#, 2
+
+        ` what the bar has taken in is drawn in its own color, and the points that are still charging past
+        ` it in the color of the charge. see THE CHARGE in fish_headers_charge.
+        barBank# = chargeBankFill(barFill#)
+        bankWidth# = (bar.size.x - 2.0) * barBank#
+        chargeWidth# = scoreWidth# - bankWidth#
+        if chargeWidth# < 1 then chargeWidth# = 0
+        CHARGE_BANK_X# = bar.pos.x + 1 + bankWidth#
 
         ` the bar shakes by a pixel while it is filling up. while it is full and fizzing, it shakes
         ` every which way, and it is brighter. it sits still when it is emptying out, or doing nothing.
@@ -1300,36 +1311,100 @@ frame_score:
         endif
         SCORE_BAR_LAST_FILL# = barFill#
 
-        position sprite bar.backgroundSpriteId, bar.pos.x + barShakeX, bar.pos.y + barShakeY
-        position sprite bar.foregroundSpriteId, bar.pos.x + 1 + barShakeX, bar.pos.y + 1 + barShakeY
+        ` when a charge fills it, it stretches and squashes. see THE FINISH in fish_headers_charge.
+        barStretch# = chargeBarStretch()
+
+        ` points that fly in make it jump: it gets fatter and brighter for a moment. see THE POINTS FLY in fish_headers.
+        ` while points are charging, it is the end of the charge that jumps, and it only gets a little brighter.
+        ` the bar itself does not, even before the charge is wide enough to be seen. see THE CHARGE in fish_headers_charge.
+        barPunchUp = 0
+        chargePunchUp = 0
+        chargeLift# = 0
+        chargeLive = 0
+        if CHARGE_STATE <> CHARGE_IDLE
+            chargeLive = 1
+        endif
+        if chargeWidth# > 0
+            chargeLive = 1
+        endif
+        if SCORE_BAR_PUNCH_AT >= 0
+            barPunchAge = game ms() - SCORE_BAR_PUNCH_AT
+            if barPunchAge < SCORE_BAR_PUNCH_MS
+                barPunchAgeF# = barPunchAge
+                barPunchMs# = SCORE_BAR_PUNCH_MS
+                barPunch# = SCORE_BAR_PUNCH# * (1 - barPunchAgeF# / barPunchMs#)
+                if chargeLive
+                    chargePunchUp = 1 + 3 * barPunch#
+                    chargeLift# = CHARGE_PUNCH_LIFT# * barPunch#
+                else
+                    barPunchUp = 1 + 3 * barPunch#
+                    barPunchR = 64 + 191 * barPunch#
+                    barPunchG = 128 + 127 * barPunch#
+                    if SCORE_BAR_HOLD = 0 then barColor = rgb(barPunchR, barPunchG, 255, 255)
+                endif
+            endif
+        endif
+
+        ` while the bar is full, points that land make the end of the overflow jump, and not the bar under it
+        overPunchUp = 0
+        if SCORE_BAR_HOLD > 0 and OVERFLOW_FILL# > 0
+            overPunchUp = barPunchUp
+            barPunchUp = 0
+        endif
+
+        ` the empty part of the bar pulses as it gets near full
+        barBackTall# = bar.size.y * barStretch#
+        size sprite bar.backgroundSpriteId, bar.size.x, barBackTall#
+        position sprite bar.backgroundSpriteId, bar.pos.x + barShakeX, bar.pos.y + barShakeY - (barBackTall# - bar.size.y) / 2
+        color sprite bar.backgroundSpriteId, chargeBackColor(barFill#)
+
+        barMidY# = bar.pos.y + 2 + barShakeY
+        barFrontTall# = 2 * barStretch# + barPunchUp * 2
+        size sprite bar.foregroundSpriteId, bankWidth#, barFrontTall#
+        position sprite bar.foregroundSpriteId, bar.pos.x + 1 + barShakeX, barMidY# - barFrontTall# / 2
         color sprite bar.foregroundSpriteId, barColor
+
+        chargeSegTall# = 2 * barStretch# + chargePunchUp * 2
+        chargeDrawSegment(bar.pos.x + 1 + bankWidth# + barShakeX, chargeWidth#, barMidY#, chargeSegTall#, chargeLift#)
+
+        ` the glint that runs to the end of the bar, and then is its front as it takes a charge in
+        chargeDrawGlint(bar.pos.x + 1 + barShakeX, bar.pos.x + 1 + bankWidth# + barShakeX, bar.pos.y + 1 + barShakeY)
+
         span = bar.endVal - bar.startVal
-        z$ = "/"
-        x$ = str$(span)
         ` a bar that is being held full says that it is full, and not how far past the end the score went
         shownInRound = SCORE_SHOWN - SCORE_BAR.startVal
         if SCORE_BAR_HOLD and shownInRound > span then shownInRound = span
-        ` while the tutorial shows what the bar is, the numbers follow the bar. see tutorial_round_bar.
-        if TUTORIAL_BAR_DEMO then shownInRound = span * barFill#
-        y$ = str$(shownInRound)
 
         ` and once there are points past the end, it counts them toward the next bonus multiplier
-        if OVERFLOW_NEED > 0 and OVERFLOW_POINTS > 0
-            y$ = "+" + str$(OVERFLOW_POINTS)
-            x$ = str$(OVERFLOW_NEED)
+        barLabelOver = 0
+        if OVERFLOW_NEED > 0 and OVERFLOW_POINTS > 0 then barLabelOver = 1
+        barLabelHas = shownInRound
+        barLabelOf = span
+        if barLabelOver
+            barLabelHas = OVERFLOW_POINTS
+            barLabelOf = OVERFLOW_NEED
         endif
 
-        concat$ = y$ + z$ + x$
-        set text bar.textNumId, y$ + z$ + x$
+        ` the words are only made again when the numbers change. making words takes a lot.
+        if barLabelHas <> BAR_LABEL_HAS or barLabelOf <> BAR_LABEL_OF or barLabelOver <> BAR_LABEL_OVER
+            BAR_LABEL_HAS = barLabelHas
+            BAR_LABEL_OF = barLabelOf
+            BAR_LABEL_OVER = barLabelOver
+            if barLabelOver
+                set text bar.textNumId, "+" + str$(barLabelHas) + "/" + str$(barLabelOf)
+            else
+                set text bar.textNumId, str$(barLabelHas) + "/" + str$(barLabelOf)
+            endif
+            BAR_LABEL_WIDE# = get text size x(bar.textNumId)
+        endif
 
-        ` the overflow is drawn over the full bar, and shakes along with it
+        ` the number of the charge rides the end of it, clear of these numbers
+        chargeStepText(bar.pos.x + 1 + scoreWidth#, bar.pos.x + bar.size.x - BAR_LABEL_WIDE# - 6)
+
+        ` the overflow is drawn over the full bar, and shakes and stretches along with it. see THE OVERFLOW
+        ` GETS THE SAME in fish_headers_charge.
         overWidth# = (bar.size.x - 2.0) * OVERFLOW_FILL#
-        size sprite OVERFLOW_SPRITE, overWidth#, 2
-        position sprite OVERFLOW_SPRITE, bar.pos.x + 1 + barShakeX, bar.pos.y + 1 + barShakeY
-        overDrawTier = OVERFLOW_TIER
-        if overDrawTier >= OVERFLOW_TIER_MAX then overDrawTier = OVERFLOW_TIER_MAX - 1
-        color sprite OVERFLOW_SPRITE, getOverflowColor(overDrawTier)
-        set sprite alpha OVERFLOW_SPRITE, 255 * HUD_KEEP#
+        chargeDrawOverflow(bar.pos.x + 1 + barShakeX, overWidth#, barMidY#, 2 * barStretch# + overPunchUp * 2)
     next
 
 
@@ -1359,6 +1434,16 @@ frame_free_moves:
             txtId = spawnScoreText(freeMovePos, "-1", 0)
             color text txtId, rgb(190, 220, 255)
 
+            ` and a happy ding, a step higher for each one: up F A C, F A C, the bright chord in the key
+            ` of the music, and it stays on the top note after that
+            freeDingNote = F4 + (FREE_MOVES_DING / 3) * 7
+            freeDingStep = FREE_MOVES_DING mod 3
+            freeDingNote = freeDingNote + freeDingStep * 2
+            if freeDingNote > C6 then freeDingNote = C6
+            playMusicNote(INSTRUMENT_BELL, freeDingNote, FREE_MOVES_DING_LOUD#)
+            FREE_MOVES_DING = FREE_MOVES_DING + 1
+            if PENDING_FREE_MOVES = 0 then FREE_MOVES_DING = 0
+
             ` every move that comes off gives the screen a little knock
             create basic tween FREE_MOVES_SHAKE_TWEEN_ID, 0, SHAKE_FREE_MOVE_AMOUNT#, 180, 0
             set tween type FREE_MOVES_SHAKE_TWEEN_ID, 1
@@ -1384,6 +1469,12 @@ return
 frame_texts:
     for i = 0 to SCORE_TEXT_COUNT - 1
         scoreTxt = SCORE_TEXTS(i)
+
+        ` points fly into the bar. see THE POINTS FLY in fish_headers.
+        if scoreTxt.flies
+            stepFlyingScore(i)
+            skip
+        endif
 
         if scoreTxt.active = 0
             `hide text scoreTxt.textId
@@ -1876,7 +1967,7 @@ handle_combos:
                     x = getCellX(cell.coord.x),
                     y = getCellY(cell.coord.y)
                 }
-                singTxtId = spawnBoardScoreText(singPos, "+" + str$(singPoints), delay, 800)
+                singTxtId = spawnBoardPointsText(singPos, singPoints, delay, 800)
                 color text singTxtId, rgb(255, 170, 190)
                 queueScore(singPoints, delay)
 
@@ -1974,7 +2065,7 @@ handle_combos:
                 scorePoints = scoreAdd * SCORE_MULTIPLIER * SCHOOL_STAKES * groupBonus * coralScore `see THE MULTIPLIER in fish_headers
                 ` this one is gone by the time the next fish of the stack pops, so that each of them
                 ` gets a text of its own to be read
-                stackTxtId = spawnBoardScoreText(stackTxtPos, "+" + str$(scorePoints), delay, FISH_STACK_POP_GAP - 20)
+                stackTxtId = spawnBoardPointsText(stackTxtPos, scorePoints, delay, FISH_STACK_POP_GAP - 20)
                 color text stackTxtId, FISH_COLORS(getFishColorIndex(cell.value))
                 queueScore(scorePoints, delay) `the bar gets these when this fish of the stack pops
 
@@ -2039,7 +2130,7 @@ handle_combos:
             cellRainbow = rainbowFishScore(i - 1)
             cellWorth = scoreAdd + cellRainbow
             scorePoints = cellWorth * SCORE_MULTIPLIER * SCHOOL_STAKES * groupBonus * coralScore
-            txtId = spawnBoardScoreText(txtPos, "+" + str$(scorePoints), delay, 800)
+            txtId = spawnBoardPointsText(txtPos, scorePoints, delay, 800)
             color text txtId, FISH_COLORS(getFishColorIndex(cell.value))
 
             ` create basic tween SCORE_BAR.progressTweenId, getScoreRatio(0), getScoreRatio(scoreAdd), 100, 50
@@ -2285,6 +2376,10 @@ handle_combos:
 
         gosub update_frame
         sync
+
+        ` a puzzle can be taken back at any time. see UNDO AND START OVER CUT THROUGH EVERYTHING in fish_headers_puzzle.
+        comboBack = puzzleWantsBack()
+        if comboBack then goto _combos_stopped
     until anyStillPlaying = 0
 
     ` the fish that popped took their stacks with them
@@ -2328,8 +2423,10 @@ handle_combos:
 
             cell = CELLS(index)
             if cell.comboBlownUp
-                ` keep track that this cell is "gone" in the column
-                emptyCount += 1
+                ` keep track that this cell is "gone" in the column. nothing falls on a little board of the
+                ` tutorial, which has gaps in it: the new fish comes in where the old one was.
+                if TUTORIAL_BOARD = 0 then emptyCount = emptyCount + 1
+                if PUZZLE_ON then emptyCount = emptyCount + 1 `the fish of a puzzle do fall
             else
                 ` save that the cell needs to move so many units DOWN 
                 CELLS(index).comboDownShift = emptyCount
@@ -2351,7 +2448,9 @@ handle_combos:
         ` hide the fxSprite if it was used
         hide sprite cell.fxSpriteId
 
-        create basic tween cell.comboDownShiftTweenId, getCellY(cell.coord.y), getCellY(cell.coord.y + cell.comboDownShift), 500, 0
+        fallMs = 500
+        if PUZZLE_ON then fallMs = PUZZLE_FALL_MS
+        create basic tween cell.comboDownShiftTweenId, getCellY(cell.coord.y), getCellY(cell.coord.y + cell.comboDownShift), fallMs, 0
         set tween easing cell.comboDownShiftTweenId, EASING_BOUNCE
     next
 
@@ -2376,6 +2475,8 @@ handle_combos:
 
         gosub update_frame
         sync
+        comboBack = puzzleWantsBack()
+        if comboBack then goto _combos_stopped
     until anyStillPlaying = 0
 
     ` now all the cells have animated to the right spot; but we need to do 2 things...
@@ -2420,6 +2521,11 @@ handle_combos:
 
     set sfx volume SFX_DROP, 1
 
+    ` the gaps of a little board have just been drawn as if they were fish
+    if TUTORIAL_BOARD
+        tutorialHideGaps()
+    endif
+
     ` the cells that popped are empty until a new fish has been picked for them. a new fish is picked
     ` so that it does not pop when it lands, and a cell that is still empty must not look like a
     ` fish while that is being worked out. see NEW FISH in fish_headers.
@@ -2463,15 +2569,22 @@ handle_combos:
 
             ` and it faces one way or the other. see FACING in fish_headers_school.
             schoolNewFish(i - 1)
+            if TUTORIAL_BOARD
+                tutorialFaceRight(i - 1) `see THE LITTLE BOARDS in fish_routines_intro
+            endif
             rainbowNewFish(i - 1) `an ordinary fish. see fish_headers_rainbow.
             bubbledNewFish(i - 1) `with no bubble. see fish_headers_bubbled.
             setFishTexture(cell.spriteId, CELLS(i-1).value)
+            if TUTORIAL_BOARD
+                if CELLS(i-1).value = 0 then hide sprite cell.spriteId `the next little board can have a gap where this fish was
+            endif
             targetY = y - CELL_SIZE * 2
             startAlpha = 0
             `color sprite cell.spriteId, rgb(0,0,0)
         endif
 
         delay = cell.coord.x * 20 + (CELL_ROW_COUNT - cell.coord.y)*20
+        if PUZZLE_ON then delay = 0 `nothing is coming in, so nothing is waited for
 
         ` a new fish that drops in may come down to the bottom row
         if cell.comboBlownUp > 0
@@ -2496,6 +2609,7 @@ handle_combos:
     rainbowSeedNow() `and the fish in a cell that a pulse clouded is one too. see AND THEY BREED.
 
     ` wait for all exit animations to finish
+    _combos_settling:
     COMBO_PHASE = 3
     repeat
         anyStillPlaying = 0
@@ -2520,6 +2634,8 @@ handle_combos:
 
         gosub update_frame
         sync
+        comboBack = puzzleWantsBack()
+        if comboBack then goto _combos_stopped
     until anyStillPlaying = 0
 
     ` the combo is done with all of its fish
@@ -2528,6 +2644,10 @@ handle_combos:
 
     set sfx volume SFX_DROP, 0
 
+return
+
+_combos_stopped:
+    gosub puzzle_stop_move
 return
 
 

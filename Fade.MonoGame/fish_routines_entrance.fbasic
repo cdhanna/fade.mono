@@ -13,6 +13,7 @@ entrance_prepare:
 
     entWanted = 1
     if TUTORIAL_STAGE = 1 then entWanted = 0
+    if PUZZLE_ON then entWanted = 0
     if PENDING_BOARD_EXPANSIONS > 0 then entWanted = 0
     if REQUEST_ABILITY_SELECTION then entWanted = 0
     ENTRANCE_ON = entWanted
@@ -69,6 +70,8 @@ entrance_setup_hud:
     attach text to transform MULT_NUM_TEXT_ID, ENTRANCE_TF_LEFT
     attach sprite to transform MULT_BAR_BACK_SPRITE, ENTRANCE_TF_LEFT
     attach sprite to transform MULT_BAR_FILL_SPRITE, ENTRANCE_TF_LEFT
+    attach sprite to transform MULT_BAR_CHARGE_SPRITE, ENTRANCE_TF_LEFT
+    attach sprite to transform MULT_BAR_GLINT_SPRITE, ENTRANCE_TF_LEFT
     attach sprite to transform COOLDOWN_CLOCK_SPRITE, ENTRANCE_TF_LEFT
 
     ` the right: the rounds that are left
@@ -78,7 +81,17 @@ entrance_setup_hud:
     ` the top: the bar of the round
     attach sprite to transform SCORE_BAR.backgroundSpriteId, ENTRANCE_TF_TOP
     attach sprite to transform SCORE_BAR.foregroundSpriteId, ENTRANCE_TF_TOP
-    attach sprite to transform OVERFLOW_SPRITE, ENTRANCE_TF_TOP
+    for entranceOverI = 0 to CHARGE_SLICE_COUNT - 1
+        attach sprite to transform CHARGE_OVER_SPRITES(entranceOverI), ENTRANCE_TF_TOP
+    next
+    for entranceChargeI = 0 to CHARGE_SLICE_COUNT - 1
+        attach sprite to transform CHARGE_SPRITES(entranceChargeI), ENTRANCE_TF_TOP
+    next
+    attach text to transform CHARGE_TEXT_ID, ENTRANCE_TF_TOP
+    attach sprite to transform CHARGE_PUFF_SPRITE, ENTRANCE_TF_TOP
+    for entranceShineI = 0 to 2
+        attach sprite to transform CHARGE_GLINT_SPRITES(entranceShineI), ENTRANCE_TF_TOP
+    next
     attach text to transform SCORE_BAR.textNumId, ENTRANCE_TF_TOP
     attach text to transform SCORE_BAR.textTitleId, ENTRANCE_TF_TOP
 

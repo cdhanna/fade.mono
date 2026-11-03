@@ -1,0 +1,285 @@
+remstart
+    THE POINTS FLY. see fish_headers. a score text that is points flies into the bar, and how big a
+    deal it is goes by the points next to the multiplier.
+remend
+
+test pointsfly_points_fly_and_words_do_not from fishBoard
+    tPfPos as vec = { x = 200, y = 200 }
+    spawnPointsText(tPfPos, 30, 0, 800, 1)
+    tPfSlot = SCORE_TEXT_NUM - 1
+    if tPfSlot < 0 then tPfSlot = SCORE_TEXT_COUNT - 1
+    assert SCORE_TEXTS(tPfSlot).flies = 1, "points fly"
+    spawnScoreTextScaled(tPfPos, "hello", 0, 800, 1)
+    tPfSlot = SCORE_TEXT_NUM - 1
+    if tPfSlot < 0 then tPfSlot = SCORE_TEXT_COUNT - 1
+    assert SCORE_TEXTS(tPfSlot).flies = 0, "words do not"
+    end
+endtest
+
+test pointsfly_a_few_hundred_is_big_early_and_nothing_late from fishBoard
+    tPfPos as vec = { x = 200, y = 200 }
+    SCORE_MULTIPLIER = 1
+    spawnPointsText(tPfPos, 300, 0, 800, 1)
+    tPfSlot = SCORE_TEXT_NUM - 1
+    if tPfSlot < 0 then tPfSlot = SCORE_TEXT_COUNT - 1
+    tPfBig = 0
+    if SCORE_TEXTS(tPfSlot).big# = 1 then tPfBig = 1
+    assert tPfBig = 1, "300 at a multiplier of 1 is as big as it gets"
+
+    SCORE_MULTIPLIER = 20
+    spawnPointsText(tPfPos, 300, 0, 800, 1)
+    tPfSlot = SCORE_TEXT_NUM - 1
+    if tPfSlot < 0 then tPfSlot = SCORE_TEXT_COUNT - 1
+    tPfBig = 1
+    if SCORE_TEXTS(tPfSlot).big# = 0 then tPfBig = 0
+    assert tPfBig = 0, "and at a multiplier of 20 it is the usual size"
+    SCORE_MULTIPLIER = 1
+    end
+endtest
+
+test pointsfly_points_pop_before_the_multiplier_and_then_after from fishBoard
+    tPfPos as vec = { x = 200, y = 200 }
+    SCORE_MULTIPLIER = 4
+    tPfTxt = spawnPointsText(tPfPos, 80, 0, 800, 1)
+    assert get text$(tPfTxt) = "+80", "as it stands, it pops out as all that it is worth"
+
+    SCORE_FLY_DOUBLE_ON = 1
+    tPfTxt = spawnPointsText(tPfPos, 80, 0, 800, 1)
+    tPfSlot = SCORE_TEXT_NUM - 1
+    if tPfSlot < 0 then tPfSlot = SCORE_TEXT_COUNT - 1
+    assert get text$(tPfTxt) = "+20", "it pops out as what it was worth without the multiplier"
+    SCORE_TEXTS(tPfSlot).popAt = game ms() - SCORE_FLY_DOUBLE_MS - 10
+    stepFlyingScore(tPfSlot)
+    assert get text$(tPfTxt) = "+80", "and punches up to what it is worth"
+
+    tPfTxt = spawnPointsText(tPfPos, 81, 0, 800, 1)
+    assert get text$(tPfTxt) = "+81", "points the multiplier had nothing to do with only pop once"
+
+    SCORE_MULTIPLIER = 1
+    tPfTxt = spawnPointsText(tPfPos, 80, 0, 800, 1)
+    assert get text$(tPfTxt) = "+80", "and with no multiplier there is nothing to punch up to"
+    SCORE_FLY_DOUBLE_ON = 0
+    end
+endtest
+
+test pointsfly_long_numbers_step_past_each_other from fishBoard
+    tPfPos as vec = { x = 200, y = 200 }
+    spawnPointsText(tPfPos, 40, 0, 800, 1)
+    tPfSlot = SCORE_TEXT_NUM - 1
+    if tPfSlot < 0 then tPfSlot = SCORE_TEXT_COUNT - 1
+    assert SCORE_TEXTS(tPfSlot).fromY# = 200, "a short number sits on its fish"
+
+    spawnPointsText(tPfPos, 450, 0, 800, 1)
+    tPfSlot = SCORE_TEXT_NUM - 1
+    if tPfSlot < 0 then tPfSlot = SCORE_TEXT_COUNT - 1
+    tPfFirst# = SCORE_TEXTS(tPfSlot).fromY#
+    spawnPointsText(tPfPos, 450, 0, 800, 1)
+    tPfSlot = SCORE_TEXT_NUM - 1
+    if tPfSlot < 0 then tPfSlot = SCORE_TEXT_COUNT - 1
+    tPfSecond# = SCORE_TEXTS(tPfSlot).fromY#
+    tPfApart = 0
+    if (tPfFirst# - 200) * (tPfSecond# - 200) < 0 then tPfApart = 1
+    assert tPfApart = 1, "two long ones in a row sit on either side of their fish"
+
+    spawnPointsText(tPfPos, 4500, 0, 800, 1)
+    tPfSlot = SCORE_TEXT_NUM - 1
+    if tPfSlot < 0 then tPfSlot = SCORE_TEXT_COUNT - 1
+    tPfFar# = SCORE_TEXTS(tPfSlot).fromY# - 200
+    if tPfFar# < 0 then tPfFar# = 0 - tPfFar#
+    tPfNear# = tPfSecond# - 200
+    if tPfNear# < 0 then tPfNear# = 0 - tPfNear#
+    tPfFurther = 0
+    if tPfFar# > tPfNear# then tPfFurther = 1
+    assert tPfFurther = 1, "and a longer one steps further"
+    end
+endtest
+
+remstart
+    THE MULTIPLIER FILLS. see fish_headers. a swap that pops something sends a "+1" into the multiplier's
+    bar, and the bar only shows it when it lands. the multiplier itself counts it at once.
+remend
+
+test pointsfly_the_multiplier_bar_waits_for_its_plus_one from fishBoard
+    resetMultiplier()
+    CORAL_SWAP_A = 0
+    CORAL_SWAP_B = 1
+    MULT_PENDING_SWAPS = 1
+    judgeMultiplierSwaps(1)
+    assert MULT_PROGRESS = 1, "the swap counts at once"
+    assert MULT_FLY_AT >= 0, "and a +1 is on its way"
+    assert get text$(MULT_NUM_TEXT_ID) = "0/2", "the bar has not shown it yet"
+
+    multFlyLand()
+    assert MULT_FLY_AT = -1, "it has landed"
+    assert get text$(MULT_NUM_TEXT_ID) = "1/2", "and the bar shows it"
+
+    ` the one that fills the bar holds the multiplier going up until it lands too
+    CORAL_SWAP_A = 0
+    CORAL_SWAP_B = 1
+    MULT_PENDING_SWAPS = 1
+    judgeMultiplierSwaps(1)
+    assert SCORE_MULTIPLIER = 2, "the multiplier is up at once"
+    assert get text$(MULT_TEXT_ID) = "x1", "but it shows when the +1 lands"
+    multFlyLand()
+    assert get text$(MULT_TEXT_ID) = "x2", "and then it does"
+    assert MULT_PUNCH_DIR = 1, "with a punch"
+    resetMultiplier()
+    end
+endtest
+
+remstart
+    THE CHAIN. see fish_headers. every group that a swap pops is a step in the multiplier's bar, every group
+    of the chain after it is one more, and a swap can fill the bar twice at most.
+remend
+
+function tPfWave(tPfGroups)
+    QUEST_BUNCH_GROUPS = 0
+    judgeMultiplierSwaps(tPfGroups)
+endfunction
+
+test pointsfly_two_groups_from_a_swap_are_two_steps from fishBoard
+    resetMultiplier()
+    SCORE_MULTIPLIER = 2
+    refreshMultiplier(1)
+    MULT_PENDING_SWAPS = 1
+    tPfWave(2)
+    assert MULT_PROGRESS = 2, "two groups at once are two steps"
+    assert MULT_FLY_COUNT = 2, "with a +1 for each"
+    resetMultiplier()
+    end
+endtest
+
+test pointsfly_every_wave_of_a_chain_is_a_step from fishBoard
+    resetMultiplier()
+    MULT_PENDING_SWAPS = 1
+    tPfWave(1)
+    assert MULT_PROGRESS = 1, "the swap is a step"
+    tPfWave(1)
+    assert SCORE_MULTIPLIER = 2, "and the wave after it fills the bar"
+    assert MULT_FLY_COUNT = 2, "and its +1 waits its turn"
+    tPfWave(2)
+    assert MULT_PROGRESS = 2, "a wave of two groups is two steps"
+    tPfWave(0)
+    assert MULT_CHAIN_LIVE = 0, "the board has settled"
+    tPfWave(1)
+    assert MULT_PROGRESS = 2, "and what pops next, that no swap set off, is not a step"
+
+    assert get text$(MULT_NUM_TEXT_ID) = "0/2", "the bar has shown none of it yet"
+    multFlyLand()
+    assert get text$(MULT_NUM_TEXT_ID) = "1/2", "the first +1 shows the first step"
+    multFlyLand()
+    assert get text$(MULT_TEXT_ID) = "x2", "the second shows the multiplier going up"
+    assert get text$(MULT_NUM_TEXT_ID) = "0/5", "and the bar as it was then"
+    multFlyLand()
+    assert get text$(MULT_NUM_TEXT_ID) = "1/5", "and the next one the next step"
+    multFlyLand()
+    assert get text$(MULT_NUM_TEXT_ID) = "2/5", "and the last shows how things are"
+    assert MULT_FLY_AT = -1, "and none is left"
+    resetMultiplier()
+    end
+endtest
+
+test pointsfly_a_swap_fills_the_bar_twice_at_most_and_then_pays from fishBoard
+    resetMultiplier()
+    MULT_PROGRESS = 1
+    MULT_PENDING_SWAPS = 1
+    tPfWave(1)
+    assert SCORE_MULTIPLIER = 2, "the swap fills the bar"
+    for tPfI = 1 to 5
+        tPfWave(1)
+    next
+    assert SCORE_MULTIPLIER = 3, "the chain fills it again"
+    assert MULT_PROGRESS = 0, "and it stops there, at empty"
+    tPfScore = CURRENT_SCORE
+    tPfWave(1)
+    assert MULT_PROGRESS = 0, "a wave past that is no step"
+    assert CURRENT_SCORE = tPfScore + MULT_CHAIN_OVER_POINTS, "it pays"
+    assert SCORE_MULTIPLIER = 3, "and the multiplier stays"
+    tPfScore = CURRENT_SCORE
+    tPfWave(2)
+    assert CURRENT_SCORE = tPfScore + MULT_CHAIN_OVER_POINTS * 2, "and each group past that pays"
+
+    tPfSlot = SCORE_TEXT_NUM - 1
+    if tPfSlot < 0 then tPfSlot = SCORE_TEXT_COUNT - 1
+    assert SCORE_TEXTS(tPfSlot).base = 0, "the multiplier had nothing to do with those points"
+
+    ` a new swap has a cap of its own
+    MULT_PENDING_SWAPS = 1
+    tPfWave(1)
+    assert MULT_PROGRESS = 1, "the next swap is a step again"
+    resetMultiplier()
+    end
+endtest
+
+function tPfCatchTime(tPfMs)
+    MULT_CATCH_AT = game ms() - tPfMs
+    stepMultCatch(tweenVal(MULT_FILL_TWEEN_ID))
+endfunction
+
+test pointsfly_the_blue_only_catches_up_when_it_is_all_over from fishBoard
+    resetMultiplier()
+    MULT_PROGRESS = 2
+    SCORE_MULTIPLIER = 3
+    refreshMultiplier(1)
+    tPfBank = MULT_BANK# * 100
+    assert tPfBank = 25, "a bar that was set shows all blue"
+    stepMultCatch(tweenVal(MULT_FILL_TWEEN_ID))
+    tPfBank = MULT_BANK# * 100
+    assert tPfBank = 25, "right away, with no sweep to wait for"
+
+    MULT_PENDING_SWAPS = 1
+    tPfWave(1)
+    multFlyLand()
+    stepMultCatch(.375)
+    tPfBank = MULT_BANK# * 100
+    assert tPfBank = 25, "it has landed, and the blue stays where it was"
+    assert MULT_CHAIN_LIVE = 1, "the chain is still going"
+    assert MULT_CATCH_STATE = MULT_CATCH_IDLE, "so nothing sweeps"
+
+    tPfWave(0)
+    REQUEST_COMBO_CHECK = 0
+    stepMultCatch(.375)
+    assert MULT_CATCH_STATE = MULT_CATCH_WAIT, "it is all over, and the sweep is coming"
+    MULT_CATCH_AT = game ms() - MULT_CATCH_WAIT_MS - 1
+    stepMultCatch(.375)
+    assert MULT_CATCH_STATE = MULT_CATCH_GLINT, "the glint runs first"
+    tPfBank = MULT_BANK# * 100
+    assert tPfBank = 25, "and the blue waits for it"
+    MULT_CATCH_AT = game ms() - MULT_CATCH_GLINT_MS - 1
+    stepMultCatch(.375)
+    assert MULT_CATCH_STATE = MULT_CATCH_EAT, "the glint gets to the border, and the blue sets off"
+    MULT_CATCH_AT = game ms() - MULT_CATCH_EAT_MS - 1
+    stepMultCatch(.375)
+    tPfBank = MULT_BANK# * 1000
+    assert tPfBank = 375, "and it has swept over the segment"
+    assert MULT_CATCH_STATE = MULT_CATCH_FADE, "and the glint fades"
+    resetMultiplier()
+    end
+endtest
+
+test pointsfly_the_bar_going_up_clears_the_blue from fishBoard
+    resetMultiplier()
+    MULT_PROGRESS = 1
+    refreshMultiplier(1)
+    MULT_PENDING_SWAPS = 1
+    tPfWave(1)
+    multFlyLand()
+    tPfBank = MULT_BANK# * 100
+    assert tPfBank = 0, "the bar has gone up, and starts again"
+    assert get text$(MULT_TEXT_ID) = "x2", "with the new multiplier"
+    resetMultiplier()
+    end
+endtest
+
+test pointsfly_the_old_rule_has_no_chain from fishBoard
+    resetMultiplier()
+    MULT_CHAIN_ON = 0
+    MULT_PENDING_SWAPS = 1
+    SCORE_MULTIPLIER = 2
+    tPfWave(2)
+    tPfWave(1)
+    assert MULT_PROGRESS = 1, "only the swap is a step"
+    MULT_CHAIN_ON = 1
+    resetMultiplier()
+    end
+endtest

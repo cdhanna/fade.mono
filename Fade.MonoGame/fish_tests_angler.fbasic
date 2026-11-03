@@ -422,3 +422,94 @@ test angler_codec_and_gold_bar_spots_have_topics from fishBoard
     assert ANGLER_FOUND = ANGLER_T_GODLY, "and the gold bar is about the godly shape"
     end
 endtest
+
+
+test shop_question_goes_to_what_just_happened from fishBoard
+    anglerRecentClear()
+    for tspI = 0 to ANGLER_TOPIC_COUNT - 1
+        ANGLER_HEARD(tspI) = 0
+    next
+    anglerNote(ANGLER_T_FACING)
+    anglerNote(ANGLER_T_SCHOOL)
+    assert ANGLER_RECENT(0) = ANGLER_T_SCHOOL, "the newest thing comes first"
+    assert ANGLER_RECENT(1) = ANGLER_T_FACING, "and the one before it is behind it"
+    anglerNote(ANGLER_T_FACING)
+    assert ANGLER_RECENT(0) = ANGLER_T_FACING, "a thing that happens again moves up"
+    assert ANGLER_RECENT(1) = ANGLER_T_SCHOOL, "and it is only in there once"
+    assert ANGLER_RECENT(2) = -1, "and nothing else is in there"
+
+    shopPickTopics()
+    assert ANGLER_PICK_COUNT = 3, "there are three questions"
+    assert ANGLER_PICK(0) = ANGLER_T_FACING, "the newest thing comes first"
+    assert ANGLER_PICK(1) = ANGLER_T_SCHOOL, "and then the one before it"
+    ANGLER_HEARD(ANGLER_T_FACING) = 1
+    shopPickTopics()
+    assert ANGLER_PICK(0) = ANGLER_T_SCHOOL, "a thing that has been asked about is not on offer"
+
+    ` every question is about something that has not been asked about, and it is never a rumor
+    tspAsked = 0
+    while tspAsked < 200
+        shopPickTopics()
+        if ANGLER_PICK_COUNT = 0
+            tspAsked = 200
+        else
+            for tspI = 0 to ANGLER_PICK_COUNT - 1
+                assert ANGLER_HEARD(ANGLER_PICK(tspI)) = 0, "it has not been asked about"
+                assert ANGLER_TIER(ANGLER_PICK(tspI)) = ANGLER_TIER_PLAIN, "a free question is never a rumor"
+            next
+            anglerHear(ANGLER_PICK(0))
+            tspAsked = tspAsked + 1
+        endif
+    endwhile
+    assert ANGLER_PICK_COUNT = 0, "once it has all been asked about, there is nothing on offer"
+    end
+endtest
+
+
+test shop_angler_comes_and_goes_with_the_screen from fishBoard
+    SHOP_ENABLED = 1
+    shopOpen()
+    assert GUIDE_SHOP = 1, "the angler is at the upgrade screen"
+    assert SHOP_ROAM = 1, "and it swims around in the deep"
+    assert ANGLER_SPEAKING = 0, "and it says nothing until it is asked"
+    assert SHOP_ASKED = 0, "and the question has not been asked"
+    SHOP_ASKED = 1
+    shopShow(0)
+    assert SHOP_HIDDEN = 1, "it waits behind a page of its own"
+    shopShow(1)
+    guideOff()
+    assert GUIDE_SHOP = 0, "and it goes with the upgrade screen"
+    assert GUIDE_ON = 0, "all the way"
+    assert SHOP_ROAM = 0, "and the deep goes with it"
+
+    TUTORIAL_UPGRADE_TALK = 1
+    shopOpen()
+    assert SHOP_ROAM = 0, "the first upgrade screen of a tutorial has it in the corner"
+    guideOff()
+    TUTORIAL_UPGRADE_TALK = 0
+
+    ` the next one is free again
+    shopOpen()
+    assert SHOP_ASKED = 0, "every upgrade screen has its own"
+    guideOff()
+    SHOP_ENABLED = 0
+    end
+endtest
+
+
+test text_tags_style_words_and_take_up_no_room from fishBoard
+    set text ANGLER_SAY_TEXT_ID, "{bold}one{end} {bounce}two{end} {gold}three{end}!"
+    tttLength = text reveal length(ANGLER_SAY_TEXT_ID)
+    assert tttLength = 14, "a tag is not a character"
+    assert text reveal char(ANGLER_SAY_TEXT_ID, 0) = 111, "the words start where they start"
+    assert text reveal char(ANGLER_SAY_TEXT_ID, 4) = 116, "and the letters of a bounce are in order"
+    assert text reveal char(ANGLER_SAY_TEXT_ID, 5) = 119, "one after the other"
+    assert text reveal char(ANGLER_SAY_TEXT_ID, 13) = 33, "and the words after a tag are there"
+    tttStyled# = get text size x(ANGLER_SAY_TEXT_ID)
+    set text ANGLER_SAY_TEXT_ID, "one two three!"
+    tttPlain# = get text size x(ANGLER_SAY_TEXT_ID)
+    tttSame = 0
+    if tttStyled# - tttPlain# < 2 and tttPlain# - tttStyled# < 2 then tttSame = 1
+    assert tttSame = 1, "the tags do not change how wide the text is"
+    end
+endtest

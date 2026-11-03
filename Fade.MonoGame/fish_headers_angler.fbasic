@@ -1,7 +1,9 @@
 remstart
     THE ANGLER
-    an old angler fish who lives in the dark, and knows how the sea works. the "bright idea" card
-    brings it, and it answers a question. the routines are in fish_routines_angler, and the tests
+    an old angler fish who lives in the dark, and knows how the sea works. it talks the player through the
+    tutorial (fish_headers_guide), and it keeps the shop at every upgrade screen (fish_headers_shop), where
+    a question about what just happened is free. anything else is not: the "bright idea" card brings it,
+    and it answers a question, rumors and all. the routines are in fish_routines_angler, and the tests
     are in fish_tests_angler. the pictures are drawn by Tools/angler_art_gen.py.
 
     THE CARD. "bright idea" is an instant, and it is dealt like any other card, by the seed. it is
@@ -58,12 +60,11 @@ remstart
     asking. after it has answered, it asks if there is anything else: another question, with new ones
     picked about the board as it is then, or goodbye for now. a deep rumor tells of the call.
 
-    THE FIRST MEETING. the very first time that the player meets the angler, however that came about, it
-    says who it is before it offers anything: that it is a friend, and that it can help. and when it
-    has answered that first question, it says, before it goes, that its light can be kept for later,
-    up to ANGLER_BANK_MAX of them, from game to game, and asked in info mode. when the light was kept
-    the first time, that was said already, so it goes without it. ANGLER_MET says if it has happened,
-    and it is kept in the preferences. "forget what was heard", in the debug window, forgets it too.
+    THE FIRST MEETING. the player meets the angler in the tutorial, so it needs no introduction here. the
+    first time that it answers a question in its scene, it says, before it goes, that its light can be
+    kept for later, up to ANGLER_BANK_MAX of them, from game to game, and asked in info mode. when the light
+    was kept the first time, that was said already, so it goes without it. ANGLER_MET says if it has
+    happened, and it is kept in the preferences. "forget what was heard", in the debug window, forgets it too.
 
     every answer must be true, the rumors most of all. a player who is told a lie by the one who
     explains things stops listening. the silly ones say plainly that they are silly. TUNA is never
@@ -79,6 +80,7 @@ global ANGLER_BANKED = 0 `how many are kept. it is read from the preferences whe
 global ANGLER_PENDING = 0 `1 when the card has been taken, and the angler comes once the upgrade screen has gone
 global ANGLER_FROM_CARD = 0 `1 while the angler came for the card, and 0 while it came from info mode, or the radio
 global ANGLER_FROM_RADIO = 0 `1 while it came because it was called on the radio. see THE CALL.
+global ANGLER_FROM_SHOP = 0 `1 while it came because it was asked at the upgrade screen. see fish_headers_shop.
 global ANGLER_CALL_PENDING = 0 `1 when it has been called. it comes once the radio has tapped back its answer.
 global ANGLER_CALL_PAUSE_MS = 400 `how long after the answer it comes, in milliseconds
 global ANGLER_CALL_AT_MS = 0 `when it comes, once the answer is over, or 0 while it is still being tapped
@@ -127,6 +129,17 @@ global ANGLER_LINE_LAST = 0 `the last of the lines that are up: the line under t
 global ANGLER_ASKED = -1 `the topic that was picked, or -1 when the light was kept, or nothing was asked
 
 ` THE SCENE
+` how it rocks, and blows its bubbles. see anglerPlace.
+global ANGLER_ROCK_MS = 3600 `how long it rocks for. it is a big, slow fish.
+global ANGLER_ROCK_GAP = 5000 `how long it waits after one, and up to this much more on top
+global ANGLER_ROCK_TURN# = .17 `how far the sprite rotates, in radians
+global ANGLER_ROCK_YAW# = .55 `how far the fish effect turns it to the side
+global ANGLER_ROCK_PITCH# = .35 `and how far it tips it back
+global ANGLER_ROCK_FROM = -100000 `when it last started to rock
+global ANGLER_ROCK_NEXT = 0
+global ANGLER_ROCK_WAY = 1
+global ANGLER_YAW# = 3.14159 `how far it has turned around
+global ANGLER_BLOW_NEXT = 0 `when the next bubble comes
 global ANGLER_SCALE = 2 `how many pixels of the game a pixel of the pictures is
 global ANGLER_TIP_X = 47 `where the light hangs from, in the pixels of Angler.png. see ANGLER_TIP in Tools/angler_art_gen.py.
 global ANGLER_TIP_Y = 9
@@ -159,6 +172,8 @@ global ANGLER_BOX_BORDER as infoBorder
 global ANGLER_CURSOR as infoBorder
 global ANGLER_SAY_TEXT_ID = 0
 global dim ANGLER_LINE_TEXTS(4) `the questions, and the line under them
+global ANGLER_SAYS = 0 `counts every line that it starts to say
+global ANGLER_LAST$ = " " `and the last one
 global ANGLER_SWIM_TWEEN_ID = 0 `0 when it is off the screen to the left, and 1 when it is where it talks from
 global ANGLER_UP_TWEEN_ID = 0 `0 when it talks from the bottom of the screen, and 1 from the top
 global ANGLER_SAY_FADE_TWEEN_ID = 0 `the words fade in

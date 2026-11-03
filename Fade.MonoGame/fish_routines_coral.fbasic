@@ -1139,6 +1139,7 @@ function coralCanCastNow()
 
     ` the very first game has enough going on. see THE FIRST DIVE, in fish_routines_intro.
     if TUTORIAL_STAGE > 0 then coralCanNow = 0
+    if PUZZLE_ON then coralCanNow = 0
 
     ` a pattern that is still waiting on an earlier swap keeps its turn
     if CORAL_PENDING_SLOT >= 0 then coralCanNow = 0
@@ -1593,6 +1594,7 @@ function coralRollHint()
     coralRollOk = 1
     if CORAL_HINT_START_MS >= 0 then coralRollOk = 0
     if TUTORIAL_STAGE > 0 then coralRollOk = 0
+    if PUZZLE_ON then coralRollOk = 0
 
     ` and not while the fish are making the QR code. see TUNA in fish_headers.
     if TUNA_SHOWN# > 0 then coralRollOk = 0
@@ -2350,7 +2352,13 @@ function applyHudFade()
     hudBarAlpha = 200
     if SCORE_BAR_HOLD > 0 then hudBarAlpha = 255
     set sprite alpha SCORE_BAR.foregroundSpriteId, hudBarAlpha * hudBar#
-    set sprite alpha OVERFLOW_SPRITE, 255 * hudBar#
+    for hudOverI = 0 to CHARGE_SLICE_COUNT - 1
+        set sprite alpha CHARGE_OVER_SPRITES(hudOverI), 255 * hudBar#
+    next
+    for hudChargeI = 0 to CHARGE_SLICE_COUNT - 1
+        set sprite alpha CHARGE_SPRITES(hudChargeI), 255 * hudBar#
+    next
+    set text alpha CHARGE_TEXT_ID, 255 * CHARGE_TEXT_SHOWN# * hudBar#
     set text alpha SCORE_BAR.textNumId, 200 * hudBar#
     set text alpha SCORE_BAR.textTitleId, 200 * hudBar#
     set text alpha ROUNDS_LABEL_TEXT_ID, 200 * hudBar#

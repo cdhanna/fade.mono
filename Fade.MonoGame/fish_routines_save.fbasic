@@ -276,6 +276,7 @@ frame_autosave:
 
     ` not during the tutorial, which plays on little boards of its own. see THE LITTLE BOARDS in fish_routines_intro.
     if TUTORIAL_STAGE > 0 then return
+    if PUZZLE_ON then return
 
     ` not while fish are still popping and falling. the board is saved once it has settled.
     if REQUEST_COMBO_CHECK then return
@@ -303,6 +304,14 @@ return
 
 ` the main menu's "Resume". put the saved game back, and then the bubbles take the menu away.
 menu_resume_game:
+    ` a player who stayed with Ava goes back to the board that they got to
+    resumeStayed = puzzleStaying()
+    if resumeStayed
+        PUZZLE_RESUMED = 1
+        gosub menu_start_game
+        return
+    endif
+
     gosub reset_game
     gosub load_game
 

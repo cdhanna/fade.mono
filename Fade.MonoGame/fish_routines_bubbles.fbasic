@@ -58,6 +58,10 @@ function updateBubbles()
     ` and so do the bolts of the jellyfish. see fish_routines_zap.
     updateZaps()
 
+    ` and the boom of a full bar fades away under the upgrade screen. see THE CHARGE in fish_headers_charge.
+    stepChargeBoom()
+    chargeStepWaves() `and the bar of the round waves. see THE STRING in fish_headers_charge.
+
     ` how long it has been since the last frame. the game can stall, when a window is dragged for
     ` example, and the bubbles should not all leap up the screen when it comes back.
     bubNow = game ms()
@@ -251,8 +255,6 @@ endfunction
 ` one bubble in `loudOdds` makes a sound when it pops. `alpha` is 255 for a solid bubble, and less for a faint one.
 ` `sizeScale#` is 1 for bubbles of the usual size, and less for smaller ones.
 function spawnBubblesOnLayer(x, y, radius, count, delay, tint, drawOrder, loudOdds, alpha, sizeScale#)
-    ` none while the tutorial has the water to itself. see THE FIRST UPGRADE in fish_routines_intro.
-    if TUTORIAL_QUIET_BUBBLES then exitfunction
     for n = 1 to count
         i = FLOAT_BUBBLE_NEXT
         FLOAT_BUBBLE_NEXT = (FLOAT_BUBBLE_NEXT + 1) mod FLOAT_BUBBLE_COUNT

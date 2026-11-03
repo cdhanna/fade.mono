@@ -1263,7 +1263,8 @@ test trailer_first_pop from trailerShot
     trailerLateHud()
     trailerHudLevel(0)
     JELLY_STING_CHANCE = 100
-    trailerBarShort(700)
+    ` far enough off that the pop of the opening cannot fill it. shot 3 sets it again.
+    trailerBarShort(5000)
 
     ` stripes of kinds that never match, and none of them is a seahorse or a crab, all hidden
     for tS1Y = 0 to CELL_ROW_COUNT - 1
@@ -1439,6 +1440,19 @@ test trailer_first_pop from trailerShot
     tS1SwapCol = TR_BEST_CELL mod CELL_COLUMN_COUNT
     tS1SwapRow = TR_BEST_CELL / CELL_COLUMN_COUNT
     tS1SwapDown = TR_BEST_DOWN
+
+    ` a fish in a bubble and a rainbow fish are just there on the board, on the far side from the swap.
+    ` they are set by hand, so that nothing announces them.
+    tS1FarX = CELL_COLUMN_COUNT - 2
+    if tS1SwapCol > CELL_COLUMN_COUNT / 2 then tS1FarX = 1
+    tS1BubbleCell = trailerIndex(tS1FarX, CELL_ROW_COUNT - 3)
+    BUBBLED_AT(tS1BubbleCell) = 1
+    BUBBLED_BORN_AT(tS1BubbleCell) = game ms()
+    BUBBLED_COUNT = BUBBLED_COUNT + 1
+    RAINBOW_FISH(trailerIndex(CELL_COLUMN_COUNT / 2, CELL_ROW_COUNT - 2)) = 1
+
+    ` the combo fills the bar, on screen
+    trailerBarShort(70)
 
     ` the fish come in as a wave from the top left corner, the way they do at the start of a game, and
     ` what is around the board comes in with them
@@ -1638,14 +1652,59 @@ test trailer_night_held from trailerShot
     tS8Cell = trailerIndex(7, 1)
     diverArrive(tS8Cell)
     DIVER_FACE_LEFT = 1
-    trailerCursor(6, 5)
-    trailerWalkTo(2, 7)
 
+    ` THE NIGHT INK, a shot of its own, and the same take as the shot after it, so that the ink, the squid
+    ` and the cursor carry on over the cut. there is a smear of ink on the right of the board already. the
+    ` cursor pushes the squid, which puffs away into more ink, and drags ink along with two swaps, and
+    ` ends where the night shot sets off from.
+    inkCell(trailerIndex(3, 3))
+    inkCell(trailerIndex(4, 3))
+    inkCell(trailerIndex(4, 4))
+    inkCell(trailerIndex(5, 4))
+    inkCell(trailerIndex(5, 3))
+    SQUID_CELL = trailerIndex(7, 4)
+    trailerCursor(7, 6)
     for tTrFrame = 1 to 40
         TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
         DIVER_FACE_LEFT = 1
         runto update_frame
     next
+    trailerRecord("trailer_night_ink")
+    for tTrFrame = 1 to 125
+        TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
+        DIVER_FACE_LEFT = 1
+        runto update_frame
+    next
+    trailerWalkTo(7, 4)
+    for tTrFrame = 1 to 46
+        TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
+        DIVER_FACE_LEFT = 1
+        trailerWalkStep()
+        runto update_frame
+    next
+    ` a push does not move the cursor
+    trailerMove(-1, 0, 1)
+    trailerCursor(7, 4)
+    for tTrFrame = 1 to 70
+        TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
+        DIVER_FACE_LEFT = 1
+        runto update_frame
+    next
+    trailerMove(0, 1, 1)
+    for tTrFrame = 1 to 48
+        TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
+        DIVER_FACE_LEFT = 1
+        runto update_frame
+    next
+    trailerMove(-1, 0, 1)
+    for tTrFrame = 1 to 80
+        TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
+        DIVER_FACE_LEFT = 1
+        runto update_frame
+    next
+    record stop
+
+    trailerWalkTo(2, 7)
     trailerRecord("trailer_night_held")
     for tTrFrame = 1 to 130
         TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES

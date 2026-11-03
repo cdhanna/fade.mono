@@ -1,0 +1,896 @@
+` THE CHARGE. see fish_headers_charge.
+
+goto routines_charge_exit
+
+` the part of the bar that charges, its number, its glint, and its sounds. setup_score comes here, once the bar is made.
+setup_charge:
+    for chargeSetupI = 0 to CHARGE_SLICE_COUNT - 1
+        chargeSetupSprite = 0
+        reserve sprite id(chargeSetupSprite)
+        sprite chargeSetupSprite, SCORE_POS.x + 1, SCORE_POS.y + 1, TEX_PIXEL
+        size sprite chargeSetupSprite, 0, SCORE_SIZE.y - 2
+        set sprite offset chargeSetupSprite, 0, 0
+        color sprite chargeSetupSprite, rgb(CHARGE_COLOR_R, CHARGE_COLOR_G, CHARGE_COLOR_B, 255)
+        CHARGE_SPRITES(chargeSetupI) = chargeSetupSprite
+    next
+
+    reserve text id(CHARGE_TEXT_ID)
+    text CHARGE_TEXT_ID, SCORE_POS.x, SCORE_POS.y + 2, SCORE_FONT, "+0"
+    order text CHARGE_TEXT_ID, ORDER_HUD_TEXT
+    size text y CHARGE_TEXT_ID, CHARGE_TEXT_TALL#
+    set text offset CHARGE_TEXT_ID, .5, 0
+    color text CHARGE_TEXT_ID, rgb(CHARGE_COLOR_R, CHARGE_COLOR_G, CHARGE_COLOR_B, 255)
+    enable text drop shadow CHARGE_TEXT_ID, 2, -2, rgb(0, 0, 0)
+    set text alpha CHARGE_TEXT_ID, 0
+
+    reserve sprite id(CHARGE_PUFF_SPRITE)
+    sprite CHARGE_PUFF_SPRITE, 0, 0, TEX_SMOKE_1
+    order sprite CHARGE_PUFF_SPRITE, ORDER_HUD_TEXT
+    hide sprite CHARGE_PUFF_SPRITE
+
+    ` what spills past a full bar, drawn over the charge. see THE OVERFLOW GETS THE SAME in fish_headers_charge.
+    for chargeSetupI = 0 to CHARGE_SLICE_COUNT - 1
+        chargeSetupSprite = 0
+        reserve sprite id(chargeSetupSprite)
+        sprite chargeSetupSprite, SCORE_POS.x + 1, SCORE_POS.y + 1, TEX_PIXEL
+        size sprite chargeSetupSprite, 0, SCORE_SIZE.y - 2
+        set sprite offset chargeSetupSprite, 0, 0
+        CHARGE_OVER_SPRITES(chargeSetupI) = chargeSetupSprite
+    next
+    CHARGE_OVER_R(0) = 255
+    CHARGE_OVER_G(0) = 220
+    CHARGE_OVER_B(0) = 64
+    CHARGE_OVER_R(1) = 255
+    CHARGE_OVER_G(1) = 144
+    CHARGE_OVER_B(1) = 48
+    CHARGE_OVER_R(2) = 255
+    CHARGE_OVER_G(2) = 80
+    CHARGE_OVER_B(2) = 136
+    CHARGE_OVER_R(3) = 200
+    CHARGE_OVER_G(3) = 104
+    CHARGE_OVER_B(3) = 255
+
+    ` made after the bar and the charge, so that the glint is drawn over them
+    for chargeSetupI = 0 to 2
+        chargeSetupSprite = 0
+        reserve sprite id(chargeSetupSprite)
+        sprite chargeSetupSprite, 0, 0, TEX_PIXEL
+        set sprite offset chargeSetupSprite, 0, 0
+        size sprite chargeSetupSprite, 0, 2
+        color sprite chargeSetupSprite, rgb(230, 245, 255, 0)
+        CHARGE_GLINT_SPRITES(chargeSetupI) = chargeSetupSprite
+    next
+
+    ` THE STRING: the bar is drawn to a render target of its own, which is drawn bent by the waves
+    reserve render target id(TARGET_BAR)
+    render target TARGET_BAR
+    set render target background color TARGET_BAR, rgb(0, 0, 0, 0)
+    set sprite render target SCORE_BAR.backgroundSpriteId, TARGET_BAR
+    set sprite render target SCORE_BAR.foregroundSpriteId, TARGET_BAR
+    for chargeSetupI = 0 to CHARGE_SLICE_COUNT - 1
+        set sprite render target CHARGE_SPRITES(chargeSetupI), TARGET_BAR
+        set sprite render target CHARGE_OVER_SPRITES(chargeSetupI), TARGET_BAR
+    next
+    for chargeSetupI = 0 to 2
+        set sprite render target CHARGE_GLINT_SPRITES(chargeSetupI), TARGET_BAR
+    next
+    chargeSetupFx = 0
+    reserve effect id(chargeSetupFx)
+    effect chargeSetupFx, "Fish/Shaders/BarStringEffect"
+    reserve sprite id(CHARGE_BAR_VIEW_SPRITE)
+    sprite CHARGE_BAR_VIEW_SPRITE, 0, 0, render target texture(TARGET_BAR)
+    set sprite offset CHARGE_BAR_VIEW_SPRITE, 0, 0
+    size sprite CHARGE_BAR_VIEW_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    set sprite effect CHARGE_BAR_VIEW_SPRITE, chargeSetupFx
+    CHARGE_BAR_FX_ID = chargeSetupFx
+    CHARGE_BAR_LEFT = SCORE_POS.x
+    chargeSetTone(0, CHARGE_COLOR_R, CHARGE_COLOR_G, CHARGE_COLOR_B, 160, 250, 240)
+    chargeSetTone(1, 255, 200, 80, 255, 115, 150)
+    chargeSetTone(2, 190, 110, 255, 255, 125, 215)
+    chargeSetTone(3, 70, 160, 255, 130, 250, 255)
+    chargeSetTone(4, 160, 250, 80, 255, 250, 150)
+    chargeSetTone(5, 255, 85, 70, 255, 175, 60)
+    CHARGE_BAR_RIGHT = SCORE_POS.x + SCORE_SIZE.x
+    for chargeSetupI = 0 to CHARGE_WAVE_COUNT - 1
+        CHARGE_WAVE_AMP#(chargeSetupI) = 0
+    next
+
+    CHARGE_SFX_BOOM = tideLoadSound("Fish/Audio/bar-charge-boom", SFX_GROUP_SFX, 0)
+
+    ` THE CLIMB: the notes, and the voices that play them, so that one can ring on under the next
+    for chargeSetupI = 0 to CHARGE_CUE_STEPS - 1
+        chargeSetupClip = 0
+        reserve sfx clip id(chargeSetupClip)
+        load sfx clip chargeSetupClip, "Fish/Audio/cue-bubble-" + str$(chargeSetupI + 1)
+        CHARGE_CUE_CLIPS(CHARGE_CUE_BUBBLE * CHARGE_CUE_STEPS + chargeSetupI) = chargeSetupClip
+        chargeSetupClip = 0
+        reserve sfx clip id(chargeSetupClip)
+        load sfx clip chargeSetupClip, "Fish/Audio/cue-bloop-" + str$(chargeSetupI + 1)
+        CHARGE_CUE_CLIPS(CHARGE_CUE_BLOOP * CHARGE_CUE_STEPS + chargeSetupI) = chargeSetupClip
+        chargeSetupClip = 0
+        reserve sfx clip id(chargeSetupClip)
+        load sfx clip chargeSetupClip, "Fish/Audio/cue-sonar-" + str$(chargeSetupI + 1)
+        CHARGE_CUE_CLIPS(CHARGE_CUE_SONAR * CHARGE_CUE_STEPS + chargeSetupI) = chargeSetupClip
+    next
+    chargeSetupNotes = CHARGE_CUE_STEPS * 3
+    for chargeSetupI = 0 to chargeSetupNotes - 1
+        CHARGE_CUE_TURN(chargeSetupI) = 0
+        for chargeSetupV = 0 to CHARGE_CUE_VOICES - 1
+            chargeSetupVoice = 0
+            reserve sfx id(chargeSetupVoice)
+            sfx chargeSetupVoice, CHARGE_CUE_CLIPS(chargeSetupI)
+            set sfx group chargeSetupVoice, SFX_GROUP_SFX
+            CHARGE_CUE_SFX(chargeSetupI * CHARGE_CUE_VOICES + chargeSetupV) = chargeSetupVoice
+        next
+    next
+    CHARGE_CUE_VOL#(CHARGE_CUE_BUBBLE) = .45
+    CHARGE_CUE_VOL#(CHARGE_CUE_BLOOP) = .45
+    CHARGE_CUE_VOL#(CHARGE_CUE_SONAR) = .4
+    reserve sfx id(CHARGE_SFX_POP)
+    set sfx group CHARGE_SFX_POP, SFX_GROUP_SFX
+return
+
+routines_charge_exit:
+
+
+` nothing is charging: the bar has all of the score that shows. syncScoreShown calls this, for a new
+` game and a loaded one.
+function chargeReset()
+    CHARGE_STATE = CHARGE_IDLE
+    CHARGE_BANK_SCORE = SCORE_SHOWN
+    CHARGE_LAST_SHOWN = SCORE_SHOWN
+    CHARGE_WAS_HOLD = SCORE_BAR_HOLD
+    CHARGE_PEAK = 0
+    CHARGE_TEXT_POINTS = -1
+    CHARGE_TEXT_SHOWN# = 0
+    CHARGE_TEXT_TARGET = -1
+    CHARGE_TEXT_ROLL# = 0
+    CHARGE_GLINT_GONE_AT = -1
+    CHARGE_BURST_AT = -1
+    CHARGE_SWEEP_AT = -1
+    CHARGE_HEFT_NOW# = 0
+    CHARGE_TONE_NOW# = 0
+endfunction
+
+
+` start a wave on the bar, at this spot across the screen, this many pixels big. see THE STRING.
+function chargeWave(chargeWaveX#, chargeWaveAmp#)
+    CHARGE_WAVE_X#(CHARGE_WAVE_NEXT) = chargeWaveX#
+    CHARGE_WAVE_AT(CHARGE_WAVE_NEXT) = game ms()
+    CHARGE_WAVE_AMP#(CHARGE_WAVE_NEXT) = chargeWaveAmp#
+    CHARGE_WAVE_NEXT = (CHARGE_WAVE_NEXT + 1) mod CHARGE_WAVE_COUNT
+endfunction
+
+
+` hand the waves to BarStringEffect. its numbers do not stay set from one frame to the next, so
+` updateBubbles calls this on every frame, under the menus and the upgrade screen too.
+function chargeStepWaves()
+    if CHARGE_BAR_FX_ID = 0
+        exitfunction
+    endif
+    chargeWaveNow# = game ms()
+    chargeWaveNow# = chargeWaveNow# / 1000
+    set effect param float2 CHARGE_BAR_FX_ID, "Time", chargeWaveNow#, 0
+    set effect param float2 CHARGE_BAR_FX_ID, "Screen", WORLD_WIDTH, WORLD_HEIGHT
+    set effect param float2 CHARGE_BAR_FX_ID, "Span", CHARGE_BAR_LEFT, CHARGE_BAR_RIGHT
+    for chargeWaveI = 0 to CHARGE_WAVE_COUNT - 1
+        chargeWaveAt# = CHARGE_WAVE_AT(chargeWaveI)
+        chargeWaveAt# = chargeWaveAt# / 1000
+        chargeWaveName$ = "Pulse0"
+        if chargeWaveI = 1 then chargeWaveName$ = "Pulse1"
+        if chargeWaveI = 2 then chargeWaveName$ = "Pulse2"
+        if chargeWaveI = 3 then chargeWaveName$ = "Pulse3"
+        if chargeWaveI = 4 then chargeWaveName$ = "Pulse4"
+        if chargeWaveI = 5 then chargeWaveName$ = "Pulse5"
+        set effect param float4 CHARGE_BAR_FX_ID, chargeWaveName$, CHARGE_WAVE_X#(chargeWaveI), chargeWaveAt#, CHARGE_WAVE_AMP#(chargeWaveI), 0
+    next
+endfunction
+
+
+` a number part of the way from one to another, for mixing colors
+function chargeLerp(chargeLerpFrom, chargeLerpTo, chargeLerpT#)
+    chargeLerpOut = chargeLerpFrom + (chargeLerpTo - chargeLerpFrom) * chargeLerpT#
+endfunction chargeLerpOut
+
+
+` how big a deal this many points are, from 0 to 1, next to the multiplier. the same as THE POINTS FLY, in fish_headers.
+` THE TONES, in fish_headers_charge: which pair of colors a charge of these points is, and how far on to
+` the next. it is chargeHeft, up to gold, and does not stop there.
+function chargeTone(chargeTonePoints)
+    chargeToneMult = SCORE_MULTIPLIER
+    if chargeToneMult < 1 then chargeToneMult = 1
+    chargeToneOf# = chargeTonePoints
+    chargeToneDiv# = 10 * chargeToneMult
+    chargeToneOf# = chargeToneOf# / chargeToneDiv#
+    chargeToneIs# = (chargeToneOf# - SCORE_FLY_HEFT_FROM#) / SCORE_FLY_HEFT_SPAN#
+    if chargeToneIs# < 0 then chargeToneIs# = 0
+    if chargeToneIs# > 1
+        chargeToneGold# = SCORE_FLY_HEFT_FROM# + SCORE_FLY_HEFT_SPAN#
+        chargeToneIs# = 1 + (chargeToneOf# - chargeToneGold#) / CHARGE_TONE_STEP#
+    endif
+endfunction chargeToneIs#
+
+function chargeSetTone(chargeSetToneI, aR, aG, aB, bR, bG, bB)
+    CHARGE_TONE_AR(chargeSetToneI) = aR
+    CHARGE_TONE_AG(chargeSetToneI) = aG
+    CHARGE_TONE_AB(chargeSetToneI) = aB
+    CHARGE_TONE_BR(chargeSetToneI) = bR
+    CHARGE_TONE_BG(chargeSetToneI) = bG
+    CHARGE_TONE_BB(chargeSetToneI) = bB
+endfunction
+
+` which pair of colors comes this many on from the first, going round from CHARGE_TONE_LOOP after the last
+function chargeToneAt(chargeToneAtN)
+    chargeToneAtI = chargeToneAtN
+    if chargeToneAtI >= CHARGE_TONE_COUNT
+        chargeToneRound = CHARGE_TONE_COUNT - CHARGE_TONE_LOOP
+        chargeToneAtI = CHARGE_TONE_LOOP + (chargeToneAtI - CHARGE_TONE_LOOP) mod chargeToneRound
+    endif
+endfunction chargeToneAtI
+
+function chargeHeft(chargeHeftPoints)
+    chargeHeftMult = SCORE_MULTIPLIER
+    if chargeHeftMult < 1 then chargeHeftMult = 1
+    chargeHeftOf# = chargeHeftPoints
+    chargeHeftDiv# = 10 * chargeHeftMult
+    chargeHeftOf# = chargeHeftOf# / chargeHeftDiv#
+    chargeHeftBig# = (chargeHeftOf# - SCORE_FLY_HEFT_FROM#) / SCORE_FLY_HEFT_SPAN#
+    if chargeHeftBig# < 0 then chargeHeftBig# = 0
+    if chargeHeftBig# > 1 then chargeHeftBig# = 1
+endfunction chargeHeftBig#
+
+
+` what the bar has taken in, as how full it is drawn, from 0 to 1. chargeTip# is how full the whole of
+` it is drawn, the charge and all, and what the bar has is never past that. frame_score draws the part
+` up to here in the color of the bar, and the rest in the color of the charge.
+function chargeBankFill(chargeTip#)
+    chargeOver# = 0
+    chargeSpan# = SCORE_BAR.endVal - SCORE_BAR.startVal
+    chargeAhead# = CHARGE_BANK_SCORE - SCORE_BAR.startVal
+    chargeBank# = chargeAhead# / chargeSpan#
+    if CHARGE_STATE = CHARGE_EATING
+        ` it sweeps over the charge, quickly and then gently
+        chargeToAhead# = CHARGE_EAT_TO - SCORE_BAR.startVal
+        chargeTo# = chargeToAhead# / chargeSpan#
+        if chargeTo# > 1 then chargeTo# = 1
+        chargeEatMs# = CHARGE_EAT_MS
+        if CHARGE_EAT_FULL then chargeEatMs# = CHARGE_EAT_FULL_MS
+        chargeEatAge# = game ms() - CHARGE_EAT_AT
+        chargeP# = chargeEatAge# / chargeEatMs#
+        if chargeP# > 1 then chargeP# = 1
+        ` and it springs a little past the end, and settles back
+        chargeQ# = chargeP# - 1
+        chargeSpring# = CHARGE_SPRING#
+        chargeP# = 1 + (chargeSpring# + 1) * chargeQ# * chargeQ# * chargeQ# + chargeSpring# * chargeQ# * chargeQ#
+        chargeBank# = CHARGE_EAT_FROM# + (chargeTo# - CHARGE_EAT_FROM#) * chargeP#
+        chargeBarPx# = SCORE_BAR.size.x - 2
+        chargeOver# = CHARGE_SPRING_PX / chargeBarPx#
+        if chargeBank# > chargeTo# + chargeOver# then chargeBank# = chargeTo# + chargeOver#
+    endif
+    if chargeBank# < 0 then chargeBank# = 0
+    if chargeBank# > 1 then chargeBank# = 1
+    if chargeBank# > chargeTip# + chargeOver# then chargeBank# = chargeTip# + chargeOver#
+endfunction chargeBank#
+
+
+` the bar starts to take the charge in, and the number pops. chargeEatFull is 1 when the charge has
+` filled the bar, which breaks it with a boom.
+function chargeEat(chargeEatFull)
+    CHARGE_EAT_FROM# = chargeBankFill(tweenVal(SCORE_BAR.progressTweenId))
+    CHARGE_EAT_AT = game ms()
+    CHARGE_EAT_TO = SCORE_SHOWN
+    CHARGE_EAT_FULL = chargeEatFull
+    CHARGE_STATE = CHARGE_EATING
+    CHARGE_HEFT# = chargeHeft(CHARGE_PEAK)
+    CHARGE_GLINT_HEFT# = .6 + .4 * CHARGE_HEFT#
+    CHARGE_GLINT_GONE_AT = -1
+    chargePopNumber()
+    if chargeEatFull
+        tidePlaySound(CHARGE_SFX_BOOM, CHARGE_BOOM_VOL#, 0)
+        CHARGE_BOOM_LOUD# = CHARGE_BOOM_VOL#
+    else
+        chargeCueChord()
+        ` and a wave runs out along the bar from where the charge starts. see THE STRING.
+        chargeWave(CHARGE_BANK_X#, CHARGE_WAVE_TAKE# * (1 + CHARGE_HEFT#))
+    endif
+endfunction
+
+
+` frame_score calls this on every frame of the game, once the points that are due are on the bar
+function stepCharge()
+    chargeNow = game ms()
+    chargeLanded = 0
+    if SCORE_SHOWN > CHARGE_LAST_SHOWN then chargeLanded = 1
+    if chargeLanded then CHARGE_LAST_LAND_MS = chargeNow
+    CHARGE_LAST_SHOWN = SCORE_SHOWN
+
+    ` THE CLIMB: a note a step up for points that land, but never two too close together
+    if chargeLanded
+        if chargeNow - CHARGE_CUE_LAST_MS >= CHARGE_CUE_GAP_MS
+            CHARGE_CUE_LAST_MS = chargeNow
+            CHARGE_CUE_STEP = CHARGE_CUE_STEP + 1
+            chargeCueNote(CHARGE_CUE_STEP, 0, 1)
+
+            ` and a big one sends a little wave down the bar from the end of the charge. see THE STRING.
+            if CHARGE_HEFT_NOW# > CHARGE_WAVE_LAND#
+                chargeWave(CHARGE_TIP_X#, .6 + 1.4 * CHARGE_HEFT_NOW#)
+            endif
+        endif
+    endif
+
+    ` the bar has just filled: it takes the charge in at once
+    chargeFilled = 0
+    if SCORE_BAR_HOLD > 0 and CHARGE_WAS_HOLD = 0 then chargeFilled = 1
+    CHARGE_WAS_HOLD = SCORE_BAR_HOLD
+    if chargeFilled
+        chargePoints = SCORE_SHOWN - CHARGE_BANK_SCORE
+        if chargePoints > CHARGE_PEAK then CHARGE_PEAK = chargePoints
+        chargeEat(1)
+        chargeWave(SCORE_POS.x + SCORE_SIZE.x, CHARGE_WAVE_FULL#)
+
+        ` THE FINISH: the bar stretches and squashes, and bursts into bubbles along the whole of it, from
+        ` the start to the end. it waits to fizz until they are out.
+        CHARGE_BURST_AT = chargeNow
+        SCORE_BAR_FIZZ_MS = chargeNow + CHARGE_BURST_MS
+        for chargeBurstI = 0 to 15
+            chargeBurstX = SCORE_POS.x + (SCORE_SIZE.x * chargeBurstI) / 15
+            chargeBurstTint = CHARGE_COLOR_NOW
+            if chargeBurstI mod 3 = 0 then chargeBurstTint = rgb(255, 255, 255)
+            spawnBubblesOnLayer(chargeBurstX, SCORE_POS.y + 2, 3, 2, chargeBurstI * 18, chargeBurstTint, ORDER_FLOAT_BUBBLES, CHARGE_BURST_ODDS, 255, 1)
+        next
+    endif
+
+    if CHARGE_STATE = CHARGE_IDLE
+        if SCORE_BAR_HOLD > 0
+            ` nothing charges while the bar is full. what spills past it is the OVERFLOW.
+            CHARGE_BANK_SCORE = SCORE_SHOWN
+        else
+            if SCORE_SHOWN > CHARGE_BANK_SCORE
+                CHARGE_STATE = CHARGE_CHARGING
+                CHARGE_PEAK = 0
+            endif
+        endif
+    endif
+
+    ` points that land while the glint is on its way call it off. it sets off again once they settle.
+    if CHARGE_STATE = CHARGE_GLINTING
+        if chargeLanded
+            CHARGE_STATE = CHARGE_CHARGING
+        endif
+    endif
+
+    if CHARGE_STATE = CHARGE_CHARGING
+        chargePoints = SCORE_SHOWN - CHARGE_BANK_SCORE
+        if chargePoints > CHARGE_PEAK then CHARGE_PEAK = chargePoints
+
+        ` the board has settled, and the last of the points landed a moment ago: the glint sets off
+        chargeSettled = 0
+        if REQUEST_COMBO_CHECK = 0 and LIVE_MOVE_ACTIVE = 0 and SCORE_TICK_COUNT = 0 and INK_PAYING = 0
+            if chargeNow - CHARGE_LAST_LAND_MS >= CHARGE_SETTLE_MS then chargeSettled = 1
+        endif
+        if chargeSettled
+            CHARGE_STATE = CHARGE_GLINTING
+            CHARGE_GLINT_AT = chargeNow
+            CHARGE_GLINT_HEFT# = .6 + .4 * chargeHeft(CHARGE_PEAK)
+            CHARGE_GLINT_GONE_AT = -1
+        endif
+    endif
+
+    ` and once it gets to the end of what the bar has, the bar starts to grow into the charge
+    if CHARGE_STATE = CHARGE_GLINTING
+        if chargeNow - CHARGE_GLINT_AT >= CHARGE_GLINT_MS
+            chargeEat(0)
+        endif
+    endif
+
+    if CHARGE_STATE = CHARGE_EATING
+        chargeEatMs = CHARGE_EAT_MS
+        if CHARGE_EAT_FULL then chargeEatMs = CHARGE_EAT_FULL_MS
+        if chargeNow - CHARGE_EAT_AT >= chargeEatMs
+            CHARGE_BANK_SCORE = CHARGE_EAT_TO
+            CHARGE_STATE = CHARGE_IDLE
+            CHARGE_GLINT_GONE_AT = chargeNow
+        endif
+    endif
+endfunction
+
+
+
+
+` the number at the end of the charge, on this frame. chargeTipX# is where the end of the charge is
+` drawn, and chargeRoomTo# is as far right as the number can go, so that it stays clear of the numbers
+` of the bar. frame_score calls this after it has drawn the bar.
+function chargeStepText(chargeTipX#, chargeRoomTo#)
+    chargeTextNow = game ms()
+    chargeElapsed = chargeTextNow - CHARGE_TEXT_MS
+    CHARGE_TEXT_MS = chargeTextNow
+    if chargeElapsed < 0 then chargeElapsed = 0
+    if chargeElapsed > 50 then chargeElapsed = 50
+    chargeElapsed# = chargeElapsed
+
+    CHARGE_TIP_X# = chargeTipX#
+
+    ` it is up while the points charge, and while the glint is on its way
+    chargeWant# = 0
+    if CHARGE_STATE = CHARGE_CHARGING
+        chargeWant# = 1
+    endif
+    if CHARGE_STATE = CHARGE_GLINTING
+        chargeWant# = 1
+    endif
+    if chargeWant# > 0
+        chargeSays = SCORE_SHOWN - CHARGE_BANK_SCORE
+        if chargeSays <> CHARGE_TEXT_TARGET and chargeSays > 0
+            ` points have landed: it pops, and little bubbles come off the end of the charge
+            CHARGE_TEXT_TARGET = chargeSays
+            CHARGE_TEXT_POP_AT = chargeTextNow
+            if CHARGE_TEXT_SHOWN# < .05 then CHARGE_TEXT_X# = chargeTipX#
+            chargeLandX = chargeTipX#
+            chargeLandCount = 1 + 2 * CHARGE_HEFT_NOW#
+            spawnBubblesOnLayer(chargeLandX, SCORE_POS.y + 2, 2, chargeLandCount, 0, CHARGE_COLOR_NOW, ORDER_FLOAT_BUBBLES, FLOAT_BUBBLE_WAKE_LOUD_ODDS, 220, .7)
+        endif
+
+        ` how big a deal it is, which it warms up to
+        chargeHeftWant# = chargeHeft(CHARGE_TEXT_TARGET)
+        chargeHeftStep# = chargeElapsed# / CHARGE_HEFT_MS
+        if chargeHeftStep# > 1 then chargeHeftStep# = 1
+        CHARGE_HEFT_NOW# = CHARGE_HEFT_NOW# + (chargeHeftWant# - CHARGE_HEFT_NOW#) * chargeHeftStep#
+        chargeToneWant# = chargeTone(CHARGE_TEXT_TARGET)
+        CHARGE_TONE_NOW# = CHARGE_TONE_NOW# + (chargeToneWant# - CHARGE_TONE_NOW#) * chargeHeftStep#
+
+        ` it counts up to the points, quickly, and is only written when what it says changes, and not
+        ` more often than every CHARGE_ROLL_GAP_MS, except to land on the points
+        chargeRollTarget# = CHARGE_TEXT_TARGET
+        chargeRollStep# = chargeElapsed# / CHARGE_ROLL_MS
+        if chargeRollStep# > 1 then chargeRollStep# = 1
+        CHARGE_TEXT_ROLL# = CHARGE_TEXT_ROLL# + (chargeRollTarget# - CHARGE_TEXT_ROLL#) * chargeRollStep# + 1
+        ` the last of it is not counted out a digit at a time: it lands once it is nearly there
+        if CHARGE_TEXT_ROLL# > chargeRollTarget# * .99 then CHARGE_TEXT_ROLL# = chargeRollTarget#
+        chargeRollSays = CHARGE_TEXT_ROLL#
+        if chargeRollSays <> CHARGE_TEXT_POINTS
+            chargeRollWrite = 0
+            if chargeRollSays = CHARGE_TEXT_TARGET then chargeRollWrite = 1
+            if chargeTextNow - CHARGE_TEXT_WROTE_AT >= CHARGE_ROLL_GAP_MS then chargeRollWrite = 1
+            if chargeRollWrite
+                set text CHARGE_TEXT_ID, "+" + str$(chargeRollSays)
+                CHARGE_TEXT_POINTS = chargeRollSays
+                CHARGE_TEXT_WROTE_AT = chargeTextNow
+            endif
+        endif
+    endif
+
+    chargeStepPuff(chargeTextNow)
+
+    ` it comes in quickly. it goes all at once, in a puff, when the bar takes the charge in. see chargePopNumber.
+    if CHARGE_TEXT_SHOWN# < chargeWant#
+        CHARGE_TEXT_SHOWN# = CHARGE_TEXT_SHOWN# + chargeElapsed# / 90
+        if CHARGE_TEXT_SHOWN# > chargeWant# then CHARGE_TEXT_SHOWN# = chargeWant#
+    endif
+    if chargeWant# = 0
+        CHARGE_TEXT_SHOWN# = 0
+    endif
+    if CHARGE_TEXT_SHOWN# <= 0
+        CHARGE_TEXT_POINTS = -1
+        CHARGE_TEXT_TARGET = -1
+        CHARGE_TEXT_ROLL# = 0
+        set text alpha CHARGE_TEXT_ID, 0
+        exitfunction
+    endif
+
+    ` how big it is goes by how big a deal it is, and it pops a little every time points land
+    chargeTall# = CHARGE_TEXT_TALL# * (1 + .35 * CHARGE_HEFT_NOW#)
+    if CHARGE_TEXT_POP_AT >= 0
+        chargePopAge# = chargeTextNow - CHARGE_TEXT_POP_AT
+        if chargePopAge# < CHARGE_TEXT_POP_MS
+            chargePopMs# = CHARGE_TEXT_POP_MS
+            chargeTall# = chargeTall# * (1 + .25 * (1 - chargePopAge# / chargePopMs#))
+        endif
+    endif
+    ` and it grows in as it comes
+    chargeTall# = chargeTall# * (.6 + .4 * CHARGE_TEXT_SHOWN#)
+    size text y CHARGE_TEXT_ID, chargeTall#
+
+    ` it follows the end of the charge, but not past the start of the bar, or into its numbers
+    chargeHalf# = get text size x(CHARGE_TEXT_ID) / 2
+    chargeGoX# = chargeTipX#
+    if chargeGoX# > chargeRoomTo# - chargeHalf# then chargeGoX# = chargeRoomTo# - chargeHalf#
+    if chargeGoX# < SCORE_POS.x + chargeHalf# then chargeGoX# = SCORE_POS.x + chargeHalf#
+    chargeSlide# = chargeElapsed# * .02
+    if chargeSlide# > 1 then chargeSlide# = 1
+    CHARGE_TEXT_X# = CHARGE_TEXT_X# + (chargeGoX# - CHARGE_TEXT_X#) * chargeSlide#
+    chargeTextY# = SCORE_POS.y + 2
+    CHARGE_TEXT_TALL_NOW# = chargeTall#
+    set text position CHARGE_TEXT_ID, CHARGE_TEXT_X#, chargeTextY#
+    color text CHARGE_TEXT_ID, CHARGE_COLOR_NOW
+    set text alpha CHARGE_TEXT_ID, 255 * CHARGE_TEXT_SHOWN# * HUD_KEEP# * HUD_KEEP_BAR#
+endfunction
+
+
+` the number of the charge pops, in a soft puff of smoke and the quiet sound of a fish popping, where
+` it is. chargeEat calls this as the bar starts to take the charge in.
+function chargePopNumber()
+    if CHARGE_TEXT_SHOWN# > 0
+        chargePuff = SMOKE_ANIMS(rnd(SMOKE_ANIM_COUNT))
+        chargePuffY# = SCORE_POS.y + 2 + CHARGE_TEXT_TALL_NOW# / 2
+        chargePuffSize# = CHARGE_PUFF_SIZE * (1 + .5 * CHARGE_HEFT#)
+        sprite CHARGE_PUFF_SPRITE, CHARGE_TEXT_X#, chargePuffY#, chargePuff.texId
+        size sprite CHARGE_PUFF_SPRITE, chargePuffSize#, chargePuffSize#
+        rotate sprite CHARGE_PUFF_SPRITE, rnd(8) * .25
+        color sprite CHARGE_PUFF_SPRITE, SMOKE_COLORS(rnd(SMOKE_COLOR_COUNT))
+        set sprite alpha CHARGE_PUFF_SPRITE, CHARGE_PUFF_ALPHA * HUD_KEEP# * HUD_KEEP_BAR#
+        set sprite frame CHARGE_PUFF_SPRITE, chargePuff.startFrame
+        show sprite CHARGE_PUFF_SPRITE
+        CHARGE_PUFF_FROM = chargePuff.startFrame
+        CHARGE_PUFF_TO = chargePuff.endFrame
+        CHARGE_PUFF_AT = game ms()
+
+        sfx CHARGE_SFX_POP, rnd(EXPLODE_SOUND_COUNT)
+        set sfx volume CHARGE_SFX_POP, CHARGE_POP_VOL#
+        set sfx pitch CHARGE_SFX_POP, .1
+        play sfx CHARGE_SFX_POP
+
+        ` and a few small bubbles, in the color of the smoke
+        chargePuffX = CHARGE_TEXT_X#
+        chargePuffBubY = chargePuffY#
+        chargePuffBubSize = 4 + 3 * CHARGE_HEFT#
+        chargePuffCount = 2 + 3 * CHARGE_HEFT#
+        spawnBubbles(chargePuffX, chargePuffBubY, chargePuffBubSize, chargePuffCount, 0, SMOKE_COLORS(0))
+    endif
+    CHARGE_TEXT_SHOWN# = 0
+    CHARGE_TEXT_POINTS = -1
+    CHARGE_TEXT_TARGET = -1
+    CHARGE_TEXT_ROLL# = 0
+    set text alpha CHARGE_TEXT_ID, 0
+endfunction
+
+
+` play the puff of the number along, and hide it once it is over
+function chargeStepPuff(chargePuffNow)
+    if CHARGE_PUFF_AT >= 0
+        chargePuffAge# = chargePuffNow - CHARGE_PUFF_AT
+        chargePuffMs# = CHARGE_PUFF_MS
+        chargePuffT# = chargePuffAge# / chargePuffMs#
+        if chargePuffT# >= 1
+            CHARGE_PUFF_AT = -1
+            hide sprite CHARGE_PUFF_SPRITE
+        else
+            chargePuffFrame = CHARGE_PUFF_FROM + (CHARGE_PUFF_TO - CHARGE_PUFF_FROM) * chargePuffT#
+            set sprite frame CHARGE_PUFF_SPRITE, chargePuffFrame
+        endif
+    endif
+endfunction
+
+
+` the glint, on this frame. chargeGlintLeft# is the start of the bar, and chargeGlintBank# is the end of
+` what the bar has, as it is drawn. on its way, the glint runs from the start of the bar to that end,
+` faster and faster, so that it gets there just as the bar starts to grow. then it is the front of the
+` bar as it grows across the charge, and it fades where it stops.
+function chargeDrawGlint(chargeGlintLeft#, chargeGlintBank#, chargeGlintY#)
+    chargeGlintOn = 0
+    chargeGlintAt# = chargeGlintBank#
+    chargeGlintFade# = 1
+    if CHARGE_STATE = CHARGE_GLINTING
+        chargeGlintOn = 1
+        chargeGlintAge# = game ms() - CHARGE_GLINT_AT
+        chargeGlintMs# = CHARGE_GLINT_MS
+        chargeGlintP# = chargeGlintAge# / chargeGlintMs#
+        if chargeGlintP# > 1 then chargeGlintP# = 1
+        chargeGlintAt# = chargeGlintLeft# + (chargeGlintBank# - chargeGlintLeft#) * chargeGlintP# * chargeGlintP#
+        ` it comes up out of nothing as it sets off
+        chargeGlintFade# = chargeGlintP# * 4
+        if chargeGlintFade# > 1 then chargeGlintFade# = 1
+    endif
+    if CHARGE_STATE = CHARGE_EATING
+        chargeGlintOn = 1
+    endif
+    chargeGlintHeft# = CHARGE_GLINT_HEFT#
+    if CHARGE_STATE = CHARGE_IDLE and CHARGE_SWEEP_AT >= 0
+        ` a tier of the overflow has filled: it sweeps the whole of the bar, and fades as it gets to the end
+        chargeSweepAge# = game ms() - CHARGE_SWEEP_AT
+        chargeSweepMs# = CHARGE_SWEEP_MS
+        chargeSweepP# = chargeSweepAge# / chargeSweepMs#
+        if chargeSweepP# >= 1
+            CHARGE_SWEEP_AT = -1
+        else
+            chargeGlintOn = 1
+            chargeGlintHeft# = 1
+            chargeGlintAt# = chargeGlintLeft# + (chargeGlintBank# - chargeGlintLeft#) * chargeSweepP# * (2 - chargeSweepP#)
+            if chargeSweepP# > .7 then chargeGlintFade# = (1 - chargeSweepP#) / .3
+        endif
+    endif
+    if CHARGE_STATE = CHARGE_IDLE and chargeGlintOn = 0
+        if CHARGE_GLINT_GONE_AT >= 0
+            chargeGlintGoneAge# = game ms() - CHARGE_GLINT_GONE_AT
+            chargeGlintFadeMs# = CHARGE_GLINT_FADE_MS
+            chargeGlintFade# = 1 - chargeGlintGoneAge# / chargeGlintFadeMs#
+            if chargeGlintFade# > 0
+                chargeGlintOn = 1
+            else
+                CHARGE_GLINT_GONE_AT = -1
+            endif
+        endif
+    endif
+
+    chargeGlintAlpha# = 255 * chargeGlintHeft# * chargeGlintFade# * HUD_KEEP# * HUD_KEEP_BAR#
+    ` the edge, a little taller than the bar, then its tail, and the fainter part behind that
+    for chargeGlintI = 0 to 2
+        chargeGlintSprite = CHARGE_GLINT_SPRITES(chargeGlintI)
+        chargeGlintTo# = chargeGlintAt#
+        chargeGlintFrom# = chargeGlintAt# - 2
+        chargeGlintTall = 4
+        chargeGlintPart# = 1
+        if chargeGlintI = 1
+            chargeGlintTo# = chargeGlintAt# - 2
+            chargeGlintFrom# = chargeGlintTo# - CHARGE_GLINT_TAIL
+            chargeGlintTall = 2
+            chargeGlintPart# = .45
+        endif
+        if chargeGlintI = 2
+            chargeGlintTo# = chargeGlintAt# - (2 + CHARGE_GLINT_TAIL)
+            chargeGlintFrom# = chargeGlintTo# - CHARGE_GLINT_FAR
+            chargeGlintTall = 2
+            chargeGlintPart# = .18
+        endif
+        if chargeGlintFrom# < chargeGlintLeft# then chargeGlintFrom# = chargeGlintLeft#
+        if chargeGlintOn = 0 then chargeGlintTo# = chargeGlintFrom#
+        if chargeGlintTo# > chargeGlintFrom#
+            size sprite chargeGlintSprite, chargeGlintTo# - chargeGlintFrom#, chargeGlintTall
+            position sprite chargeGlintSprite, chargeGlintFrom#, chargeGlintY# - (chargeGlintTall - 2) / 2
+            set sprite alpha chargeGlintSprite, chargeGlintAlpha# * chargeGlintPart#
+        else
+            size sprite chargeGlintSprite, 0, 2
+        endif
+    next
+endfunction
+
+
+` the part of the bar that is charging, on this frame: chargeSegWidth# wide from chargeSegLeft#, the
+` middle of it at chargeSegMidY#, chargeSegTall# tall. chargeSegLift# is how far toward white it is
+` for points that have just landed in it. it breathes, its color goes by how big a deal it is, in bands
+` that run along it, and it fizzes.
+function chargeDrawSegment(chargeSegLeft#, chargeSegWidth#, chargeSegMidY#, chargeSegTall#, chargeSegLift#)
+    chargeSegNow = game ms()
+    chargeSegNow# = chargeSegNow
+    chargeSegH# = CHARGE_HEFT_NOW#
+    chargeSegRampPx# = CHARGE_RAMP_PX
+    chargeSegRampMs# = CHARGE_RAMP_MS
+
+    ` a small one is sea green, with a paler green in its bands, and it goes through THE TONES as it grows
+    chargeSegTone = CHARGE_TONE_NOW#
+    if chargeSegTone > CHARGE_TONE_NOW# then chargeSegTone = chargeSegTone - 1
+    chargeSegToneP# = CHARGE_TONE_NOW# - chargeSegTone
+    chargeSegT0 = chargeToneAt(chargeSegTone)
+    chargeSegT1 = chargeToneAt(chargeSegTone + 1)
+    chargeSegAR = chargeLerp(CHARGE_TONE_AR(chargeSegT0), CHARGE_TONE_AR(chargeSegT1), chargeSegToneP#)
+    chargeSegAG = chargeLerp(CHARGE_TONE_AG(chargeSegT0), CHARGE_TONE_AG(chargeSegT1), chargeSegToneP#)
+    chargeSegAB = chargeLerp(CHARGE_TONE_AB(chargeSegT0), CHARGE_TONE_AB(chargeSegT1), chargeSegToneP#)
+    chargeSegBR = chargeLerp(CHARGE_TONE_BR(chargeSegT0), CHARGE_TONE_BR(chargeSegT1), chargeSegToneP#)
+    chargeSegBG = chargeLerp(CHARGE_TONE_BG(chargeSegT0), CHARGE_TONE_BG(chargeSegT1), chargeSegToneP#)
+    chargeSegBB = chargeLerp(CHARGE_TONE_BB(chargeSegT0), CHARGE_TONE_BB(chargeSegT1), chargeSegToneP#)
+
+    ` it breathes toward white, more and faster the bigger it is, on top of the points that land
+    chargeSegBreathMs# = CHARGE_BREATH_MS * (1 - .4 * chargeSegH#)
+    chargeSegBreath# = .5 + .5 * sin(6.2832 * chargeSegNow# / chargeSegBreathMs#)
+    chargeSegWhite# = (.05 + .15 * chargeSegH#) * chargeSegBreath# + chargeSegLift#
+    if chargeSegWhite# > 1 then chargeSegWhite# = 1
+
+    ` the color that its number is drawn in
+    CHARGE_COLOR_NOW = rgb(chargeLerp(chargeSegAR, 255, chargeSegWhite#), chargeLerp(chargeSegAG, 255, chargeSegWhite#), chargeLerp(chargeSegAB, 255, chargeSegWhite#), 255)
+
+    chargeSegAlpha = 255 * HUD_KEEP# * HUD_KEEP_BAR#
+    chargeSegDeep# = .3 + .7 * chargeSegH# `how strong the bands are
+    chargeSegCount# = CHARGE_SLICE_COUNT
+    chargeSegEach# = chargeSegWidth# / chargeSegCount#
+    chargeSegTop# = chargeSegMidY# - chargeSegTall# / 2
+    for chargeSegI = 0 to CHARGE_SLICE_COUNT - 1
+        chargeSegSprite = CHARGE_SPRITES(chargeSegI)
+        if chargeSegWidth# <= 0
+            size sprite chargeSegSprite, 0, 2
+        else
+            chargeSegAt# = chargeSegI
+            chargeSegX# = chargeSegLeft# + chargeSegEach# * chargeSegAt#
+            chargeSegFromX# = chargeSegX# - SCORE_POS.x
+            chargeSegWave# = chargeSegFromX# / chargeSegRampPx# - chargeSegNow# / chargeSegRampMs#
+            chargeSegMix# = chargeSegDeep# * (.5 + .5 * sin(6.2832 * chargeSegWave#))
+            chargeSegR = chargeLerp(chargeSegAR, chargeSegBR, chargeSegMix#)
+            chargeSegG = chargeLerp(chargeSegAG, chargeSegBG, chargeSegMix#)
+            chargeSegB = chargeLerp(chargeSegAB, chargeSegBB, chargeSegMix#)
+            chargeSegR = chargeLerp(chargeSegR, 255, chargeSegWhite#)
+            chargeSegG = chargeLerp(chargeSegG, 255, chargeSegWhite#)
+            chargeSegB = chargeLerp(chargeSegB, 255, chargeSegWhite#)
+            size sprite chargeSegSprite, chargeSegEach# + .5, chargeSegTall#
+            position sprite chargeSegSprite, chargeSegX#, chargeSegTop#
+            color sprite chargeSegSprite, rgb(chargeSegR, chargeSegG, chargeSegB, chargeSegAlpha)
+        endif
+    next
+
+    ` and it fizzes with little bubbles while it charges, more often the bigger it is
+    chargeSegFizzing = 0
+    if CHARGE_STATE = CHARGE_CHARGING
+        chargeSegFizzing = 1
+    endif
+    if CHARGE_STATE = CHARGE_GLINTING
+        chargeSegFizzing = 1
+    endif
+    if chargeSegFizzing and chargeSegWidth# > 2 and chargeSegNow >= CHARGE_FIZZ_NEXT
+        CHARGE_FIZZ_NEXT = chargeSegNow + CHARGE_FIZZ_GAP * (1 - .6 * chargeSegH#)
+        chargeSegFizzSpan = chargeSegWidth#
+        chargeSegFizzX = chargeSegLeft# + rnd(chargeSegFizzSpan)
+        chargeSegFizzY = chargeSegMidY#
+        spawnBubblesOnLayer(chargeSegFizzX, chargeSegFizzY, 1, 1, 0, CHARGE_COLOR_NOW, ORDER_FLOAT_BUBBLES, FLOAT_BUBBLE_WAKE_LOUD_ODDS, 200, .6)
+    endif
+endfunction
+
+
+` how many times as tall as usual the bar is drawn on this frame. it is 1, except for THE FINISH, when it
+` stretches up, squashes down past where it was, and settles.
+function chargeBarStretch()
+    chargeStretch# = 1
+    if CHARGE_BURST_AT >= 0
+        chargeStretchAge# = game ms() - CHARGE_BURST_AT
+        chargeStretchMs# = CHARGE_BURST_MS
+        chargeStretchP# = chargeStretchAge# / chargeStretchMs#
+        if chargeStretchP# >= 1
+            CHARGE_BURST_AT = -1
+        else
+            chargeStretchLeft# = 1 - chargeStretchP#
+            chargeStretch# = 1 + CHARGE_BURST_TALL# * sin(7.854 * chargeStretchP#) * chargeStretchLeft# * chargeStretchLeft#
+            if chargeStretch# < .4 then chargeStretch# = .4
+        endif
+    endif
+endfunction chargeStretch#
+
+
+` the color of the empty part of the bar, on this frame. once the bar is CHARGE_NEAR# full, it pulses,
+` brighter and faster the nearer to full the bar is.
+function chargeBackColor(chargeBackFill#)
+    chargeBackRoom# = 1 - CHARGE_NEAR#
+    chargeBackNear# = (chargeBackFill# - CHARGE_NEAR#) / chargeBackRoom#
+    if chargeBackNear# < 0 then chargeBackNear# = 0
+    if chargeBackNear# > 1 then chargeBackNear# = 1
+    if SCORE_BAR_HOLD > 0 then chargeBackNear# = 0
+    chargeBackMs# = 700 - 350 * chargeBackNear#
+    chargeBackNow# = game ms()
+    chargeBackPulse# = chargeBackNear# * (.5 + .5 * sin(6.2832 * chargeBackNow# / chargeBackMs#))
+    chargeBackR = chargeLerp(32, 80, chargeBackPulse#)
+    chargeBackG = chargeLerp(64, 140, chargeBackPulse#)
+    chargeBackB = chargeLerp(128, 230, chargeBackPulse#)
+    chargeBackA = (128 + 80 * chargeBackPulse#) * HUD_KEEP# * HUD_KEEP_BAR#
+endfunction rgb(chargeBackR, chargeBackG, chargeBackB, chargeBackA)
+
+
+` what spills past a full bar, on this frame: chargeOverWidth# wide from chargeOverLeft#, the middle of it
+` at chargeOverMidY#, chargeOverTall# tall. see THE OVERFLOW GETS THE SAME in fish_headers_charge.
+function chargeDrawOverflow(chargeOverLeft#, chargeOverWidth#, chargeOverMidY#, chargeOverTall#)
+    chargeOverNow = game ms()
+    chargeOverNow# = chargeOverNow
+    chargeOverTier = OVERFLOW_TIER
+    if chargeOverTier >= OVERFLOW_TIER_MAX then chargeOverTier = OVERFLOW_TIER_MAX - 1
+    chargeOverAR = CHARGE_OVER_R(chargeOverTier)
+    chargeOverAG = CHARGE_OVER_G(chargeOverTier)
+    chargeOverAB = CHARGE_OVER_B(chargeOverTier)
+
+    ` it breathes, and it pulses harder and faster as it gets near full, the way that the bar does
+    chargeOverNear# = (OVERFLOW_FILL# - CHARGE_NEAR#) / (1 - CHARGE_NEAR#)
+    if chargeOverNear# < 0 then chargeOverNear# = 0
+    if chargeOverNear# > 1 then chargeOverNear# = 1
+    if OVERFLOW_TIER >= OVERFLOW_TIER_MAX then chargeOverNear# = 0
+    chargeOverBreathMs# = CHARGE_BREATH_MS * (1 - .5 * chargeOverNear#)
+    chargeOverBreath# = .5 + .5 * sin(6.2832 * chargeOverNow# / chargeOverBreathMs#)
+    chargeOverWhite# = (.08 + .3 * chargeOverNear#) * chargeOverBreath#
+
+    chargeOverAlpha = 255 * HUD_KEEP# * HUD_KEEP_BAR#
+    chargeOverRampPx# = CHARGE_RAMP_PX
+    chargeOverRampMs# = CHARGE_RAMP_MS
+    chargeOverCount# = CHARGE_SLICE_COUNT
+    chargeOverEach# = chargeOverWidth# / chargeOverCount#
+    chargeOverTop# = chargeOverMidY# - chargeOverTall# / 2
+    for chargeOverI = 0 to CHARGE_SLICE_COUNT - 1
+        chargeOverSprite = CHARGE_OVER_SPRITES(chargeOverI)
+        if chargeOverWidth# <= 0
+            size sprite chargeOverSprite, 0, 2
+        else
+            chargeOverAt# = chargeOverI
+            chargeOverX# = chargeOverLeft# + chargeOverEach# * chargeOverAt#
+            chargeOverFromX# = chargeOverX# - SCORE_POS.x
+            chargeOverWave# = chargeOverFromX# / chargeOverRampPx# - chargeOverNow# / chargeOverRampMs#
+            ` its bands are a lighter shade of it
+            chargeOverMix# = .35 * (.5 + .5 * sin(6.2832 * chargeOverWave#)) + chargeOverWhite#
+            if chargeOverMix# > 1 then chargeOverMix# = 1
+            chargeOverR = chargeLerp(chargeOverAR, 255, chargeOverMix#)
+            chargeOverG = chargeLerp(chargeOverAG, 255, chargeOverMix#)
+            chargeOverB = chargeLerp(chargeOverAB, 255, chargeOverMix#)
+            size sprite chargeOverSprite, chargeOverEach# + .5, chargeOverTall#
+            position sprite chargeOverSprite, chargeOverX#, chargeOverTop#
+            color sprite chargeOverSprite, rgb(chargeOverR, chargeOverG, chargeOverB, chargeOverAlpha)
+        endif
+    next
+endfunction
+
+
+` a tier of the overflow has filled, and the multiplier has gone up: the bar stretches and squashes, a
+` glint sweeps along it, and bubbles burst along it from the start to the end, in the color of the tier
+` that it was. stepOverflow, in fish_funcs, calls this.
+function chargeOverflowBurst(chargeOverTint)
+    CHARGE_BURST_AT = game ms()
+    CHARGE_SWEEP_AT = game ms()
+    chargeCueChord() `on the next one, now that the multiplier has gone up. see THE CLIMB in fish_headers_charge.
+    chargeWave(SCORE_POS.x + SCORE_SIZE.x, CHARGE_WAVE_FULL# * .8)
+    for chargeOverBurstI = 0 to 15
+        chargeOverBurstX = SCORE_POS.x + (SCORE_SIZE.x * chargeOverBurstI) / 15
+        chargeOverBurstTint = chargeOverTint
+        if chargeOverBurstI mod 3 = 0 then chargeOverBurstTint = rgb(255, 255, 255)
+        spawnBubblesOnLayer(chargeOverBurstX, SCORE_POS.y + 2, 3, 2, chargeOverBurstI * 18, chargeOverBurstTint, ORDER_FLOAT_BUBBLES, CHARGE_BURST_ODDS, 255, 1)
+    next
+endfunction
+
+
+` the boom of a full bar, on this frame. it fades away once the upgrade screen is asked for, or a menu
+` comes up, so that its bubbles do not carry on over the cards. updateBubbles calls this, because it
+` runs under the upgrade screen too.
+function stepChargeBoom()
+    chargeBoomNow = game ms()
+    chargeBoomGone = chargeBoomNow - CHARGE_BOOM_MS
+    CHARGE_BOOM_MS = chargeBoomNow
+    if chargeBoomGone < 0 then chargeBoomGone = 0
+    if chargeBoomGone > 50 then chargeBoomGone = 50
+    if CHARGE_BOOM_LOUD# > 0
+        chargeBoomAway = 0
+        if SCORE_BAR_HOLD = 2 then chargeBoomAway = 1
+        if MENU_MODE <> 0 then chargeBoomAway = 1
+        if chargeBoomAway
+            chargeBoomGone# = chargeBoomGone
+            chargeBoomFadeMs# = CHARGE_BOOM_FADE_MS
+            CHARGE_BOOM_LOUD# = CHARGE_BOOM_LOUD# - CHARGE_BOOM_VOL# * chargeBoomGone# / chargeBoomFadeMs#
+            if CHARGE_BOOM_LOUD# < 0 then CHARGE_BOOM_LOUD# = 0
+            set sfx volume CHARGE_SFX_BOOM, CHARGE_BOOM_LOUD#
+        endif
+    endif
+endfunction
+
+
+` which of the three the climb is on: the bubble while the bar fills, the bloop for what spills past the
+` full bar, and the sonar once the multiplier has gone up on it. see THE CLIMB in fish_headers_charge.
+function chargeCueInstrument()
+    chargeCueInst = CHARGE_CUE_BUBBLE
+    if SCORE_BAR_HOLD > 0
+        chargeCueInst = CHARGE_CUE_BLOOP
+        if OVERFLOW_TIER > 0 then chargeCueInst = CHARGE_CUE_SONAR
+    endif
+endfunction chargeCueInst
+
+
+` play one note of the climb, chargeCueStep up it, chargeCueWait milliseconds from now, chargeCueLoud# as
+` loud as usual, on the next voice of that note
+function chargeCueNote(chargeCueStep, chargeCueWait, chargeCueLoud#)
+    chargeCueInst = chargeCueInstrument()
+    chargeCueAt = chargeCueStep mod CHARGE_CUE_STEPS
+    chargeCueNoteI = chargeCueInst * CHARGE_CUE_STEPS + chargeCueAt
+    chargeCueTurn = CHARGE_CUE_TURN(chargeCueNoteI)
+    CHARGE_CUE_TURN(chargeCueNoteI) = (chargeCueTurn + 1) mod CHARGE_CUE_VOICES
+    chargeCueVoice = CHARGE_CUE_SFX(chargeCueNoteI * CHARGE_CUE_VOICES + chargeCueTurn)
+    set sfx volume chargeCueVoice, CHARGE_CUE_VOL#(chargeCueInst) * chargeCueLoud#
+    set sfx pan chargeCueVoice, (rnd(41) - 20) * .01
+    if chargeCueWait > 0
+        delay play sfx chargeCueVoice, chargeCueWait
+    else
+        play sfx chargeCueVoice
+    endif
+endfunction
+
+
+` the chord that answers: the note that the climb got to, and a third and a fifth above it, rolled
+function chargeCueChord()
+    chargeCueNote(CHARGE_CUE_STEP, 0, .75)
+    chargeCueNote(CHARGE_CUE_STEP + 2, CHARGE_CUE_ROLL_MS, .75)
+    chargeCueNote(CHARGE_CUE_STEP + 4, CHARGE_CUE_ROLL_MS * 2, .75)
+endfunction
+
+
+
+` THE DEBUG WINDOW. frame_dbg, in fish_routines, comes here on every frame.
+function chargeDebug()
+    begin debug window("Score bars")
+    debugChargeChanged = debug toggle("score text pops before the multiplier, then after", SCORE_FLY_DOUBLE_ON)
+    end debug window
+endfunction

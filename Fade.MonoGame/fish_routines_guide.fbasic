@@ -1,0 +1,495 @@
+goto routines_guide_exit
+
+` THE GUIDE. see fish_headers_guide.
+
+` the main loop comes here once, at the start, after setup_angler
+setup_guide:
+    reserve tween id(GUIDE_GLOW_TWEEN_ID)
+    create basic tween GUIDE_GLOW_TWEEN_ID, 0, 0, 1, 0
+    reserve tween id(GUIDE_BOX_TWEEN_ID)
+    create basic tween GUIDE_BOX_TWEEN_ID, 0, 0, 1, 0
+    reserve tween id(GUIDE_BANG_TWEEN_ID)
+    create basic tween GUIDE_BANG_TWEEN_ID, 0, 0, 1, 0
+    reserve tween id(GUIDE_SIDE_TWEEN_ID)
+    create basic tween GUIDE_SIDE_TWEEN_ID, 0, 0, 1, 0
+    reserve tween id(GUIDE_VISIT_TWEEN_ID)
+    create basic tween GUIDE_VISIT_TWEEN_ID, 0, 0, 1, 0
+
+    ` a "!" is not a word, so it is the same in every language
+    reserve text id(GUIDE_BANG_TEXT_ID)
+    text GUIDE_BANG_TEXT_ID, -500, -500, SCORE_FONT, "!"
+    size text y GUIDE_BANG_TEXT_ID, 32
+    set text offset GUIDE_BANG_TEXT_ID, .5, 1
+    color text GUIDE_BANG_TEXT_ID, rgb(255, 222, 96, 255)
+    order text GUIDE_BANG_TEXT_ID, ORDER_ANGLER_TEXT
+    enable text drop shadow GUIDE_BANG_TEXT_ID, 2, -2, rgb(0,0,0)
+    hide text GUIDE_BANG_TEXT_ID
+return
+
+
+` the first time. the line of text that is up comes first, and the light, the angler and the "!" come in
+` under it, and it talks over the line. the confirm key goes straight to the talking, and then finishes
+` the words, and then goes on. this is the only part of the guide that holds the game back.
+guide_enter:
+    guideShow()
+    set text loc INTRO_TEXT_ID, "intro.line.match3"
+    color text INTRO_TEXT_ID, rgb(255, 255, 255, 0)
+    color sprite INTRO_DIM_SPRITE, rgb(4, 8, 24, 0)
+    show sprite INTRO_DIM_SPRITE
+    show text INTRO_TEXT_ID
+
+    geStart = game ms()
+    geFade# = INTRO_FADE_MS
+    geLit = 0
+    geSwum = 0
+    geBanged = 0
+    geTalked = 0
+    geLineOut = 0
+    geFrom# = 1
+    geDone = 0
+    while geDone = 0
+        geAge = game ms() - geStart
+
+        if geAge >= GUIDE_LIGHT_AT
+            if geLit = 0
+                geLit = 1
+                create basic tween GUIDE_GLOW_TWEEN_ID, 0, 1, GUIDE_LIGHT_MS, 0
+            endif
+        endif
+        if geAge >= GUIDE_SWIM_AT
+            if geSwum = 0
+                geSwum = 1
+                create basic tween ANGLER_SWIM_TWEEN_ID, 0, 1, GUIDE_ENTER_MS, 0
+            endif
+        endif
+        if geAge >= GUIDE_BANG_AT
+            if geBanged = 0
+                geBanged = 1
+                guideBang()
+            endif
+        endif
+        if geAge >= GUIDE_TALK_AT
+            if geTalked = 0
+                geTalked = 1
+                geLineOut = game ms()
+                geFrom# = 1
+                if geAge < INTRO_FADE_MS then geFrom# = geAge / geFade#
+                create basic tween GUIDE_GLOW_TWEEN_ID, 1, 1, 1, 0
+                create basic tween ANGLER_SWIM_TWEEN_ID, tweenVal(ANGLER_SWIM_TWEEN_ID), 1, 200, 0
+                create basic tween GUIDE_BOX_TWEEN_ID, 0, 1, 250, 0
+                guideSay(lockey$("intro.ang.read"))
+                guideThen(lockey$("intro.ang.hey2"))
+                guideThen(lockey$("intro.ang.easy2"))
+                guideThen(lockey$("intro.ang.knows"))
+                guideThen(lockey$("intro.ang.deal"))
+                guideThen(lockey$("intro.ang.fish1"))
+            endif
+        endif
+
+        ` the line fades in, and the angler cuts it off. the dark goes as soon as it does.
+        geAlpha# = 1
+        if geAge < INTRO_FADE_MS then geAlpha# = geAge / geFade#
+        if geLineOut > 0
+            geOut# = game ms() - geLineOut
+            geAlpha# = geFrom# * (1 - geOut# / 300)
+            if geAlpha# < 0 then geAlpha# = 0
+        endif
+        color text INTRO_TEXT_ID, rgb(255, 255, 255, 255 * geAlpha#)
+        color sprite INTRO_DIM_SPRITE, rgb(4, 8, 24, INTRO_DIM_ALPHA * geAlpha#)
+
+        geGo = 0
+        if new action down(ACT_CONFIRM) then geGo = 1
+        geClicked = mouseClickAnywhere() `a click is the confirm key here. see THE MOUSE in fish_headers_mouse.
+        if geClicked then geGo = 1
+        if geGo
+            if geTalked
+                guideHurry()
+            else
+                geStart = game ms() - GUIDE_TALK_AT
+                create basic tween ANGLER_SWIM_TWEEN_ID, 1, 1, 1, 0
+            endif
+        endif
+
+        ` once it has said it all, the words stay up for a while, and the game goes on by itself
+        if geTalked
+            geDone = guideReady()
+        endif
+
+        gosub frame_input_icons
+        gosub update_frame
+        sync
+    endwhile
+
+    hide sprite INTRO_DIM_SPRITE
+    hide text INTRO_TEXT_ID
+return
+
+
+` the angler on every frame while it is up. update_frame comes here.
+frame_guide:
+    ` the question marks that are up finish drifting, after it has gone
+    if GUIDE_MARKS_UNTIL > 0
+        tutorialMarksStep()
+        if game ms() >= GUIDE_MARKS_UNTIL then GUIDE_MARKS_UNTIL = 0
+    endif
+
+    if GUIDE_ON = 0 then return
+    if GUIDE_SHOP then return `the upgrade screen has its own. see frame_shop.
+
+    ` the undo key of a puzzle counts, whatever the fish are doing. see UNDO in fish_headers_puzzle.
+    if PUZZLE_ON
+        if new action down(ACT_ABILITY(0)) then PUZZLE_UNDO_WANT = PUZZLE_UNDO_WANT + 1
+        gosub frame_puzzle_swim
+        return
+    endif
+
+    gSwim# = tweenVal(ANGLER_SWIM_TWEEN_ID)
+    gGlow# = tweenVal(GUIDE_GLOW_TWEEN_ID)
+    gBox# = tweenVal(GUIDE_BOX_TWEEN_ID)
+
+    ` it is small and low down in the deep, and it swims up to where it talks from
+    gScale# = GUIDE_DEEP_SCALE# + (1 - GUIDE_DEEP_SCALE#) * gSwim#
+    gBob# = sin(game ms() * .002) * 2
+    gSide# = tweenVal(GUIDE_SIDE_TWEEN_ID)
+    gSide# = gSide# * gSide# * (3 - 2 * gSide#)
+    gHomeX# = 12 + ANGLER_SHIFT_X
+    gHomeY# = GUIDE_BOX_Y + 8
+    gDockX# = gHomeX# + (GUIDE_SIDE_X - gHomeX#) * gSide#
+    gDockY# = gHomeY# + (GUIDE_SIDE_Y - gHomeY#) * gSide# + gBob#
+
+    ` it swims up to the thing that it is talking about
+    gVisit# = tweenVal(GUIDE_VISIT_TWEEN_ID)
+    gVisit# = gVisit# * gVisit# * (3 - 2 * gVisit#)
+    gDockX# = gDockX# + (GUIDE_VISIT_X - gDockX#) * gVisit#
+    gDockY# = gDockY# + (GUIDE_VISIT_Y - gDockY#) * gVisit#
+
+    ` it swims across, and turns around to face the board when it gets there
+    gLeft = 0
+    if gSide# >= .98 then gLeft = 1
+    if GUIDE_VISITING then gLeft = 1
+    if gLeft <> SHOP_FACE_LEFT
+        shopFace(gLeft)
+    endif
+    gX# = gDockX# + GUIDE_DEEP_X * (1 - gSwim#)
+    gY# = gDockY# + GUIDE_DEEP_Y * (1 - gSwim#)
+    anglerPlace(gX#, gY#, gScale#)
+    size sprite ANGLER_SPRITE, ANGLER_ART_W * ANGLER_SCALE * gScale#, ANGLER_ART_H * ANGLER_SCALE * gScale#
+    color sprite ANGLER_SPRITE, rgb(255, 255, 255, 255 * gSwim#)
+
+    anglerSpeakStep()
+    guideQueueStep()
+
+    if TEX_ANGLER_HAPPY > 0
+        gFace = TEX_ANGLER
+        if ANGLER_SPEAKING then gFace = TEX_ANGLER_HAPPY
+        set sprite texture ANGLER_SPRITE, gFace
+    endif
+
+    ` the light comes on first, before anything else can be seen
+    gTip# = ANGLER_TIP_X
+    if gLeft then gTip# = ANGLER_ART_W - ANGLER_TIP_X
+    gTipX# = gX# + gTip# * ANGLER_SCALE * gScale#
+    gTipY# = gY# + ANGLER_TIP_Y * ANGLER_SCALE * gScale#
+    gGlowSize# = (84 + sin(game ms() * .004) * 6) * gScale# * gGlow#
+    position sprite ANGLER_GLOW_SPRITE, gTipX#, gTipY# + ANGLER_GLOW_DROP
+    size sprite ANGLER_GLOW_SPRITE, gGlowSize#, gGlowSize#
+    color sprite ANGLER_GLOW_SPRITE, rgb(ANGLER_GLOW_R, ANGLER_GLOW_G, ANGLER_GLOW_B, 150 * gGlow#)
+
+    ` the "!" jumps up from its head
+    gBang# = tweenVal(GUIDE_BANG_TWEEN_ID)
+    if gBang# > 0
+        gBangHead# = gX# + ANGLER_ART_W * ANGLER_SCALE * gScale# / 2
+        gBangUp# = gY# - 2 - gBang# * 6
+        set text position GUIDE_BANG_TEXT_ID, gBangHead#, gBangUp#
+        set text alpha GUIDE_BANG_TEXT_ID, 255 * gBang#
+        show text GUIDE_BANG_TEXT_ID
+    else
+        hide text GUIDE_BANG_TEXT_ID
+    endif
+
+    ` the box, and the words in it
+    gBoxX = GUIDE_BOX_X
+    gBoxY = GUIDE_BOX_Y
+    gBoxW = ANGLER_BOX_W
+    gBoxH = GUIDE_BOX_H
+    if GUIDE_SIDE
+        gBoxX = GUIDE_SIDE_BOX_X
+        gBoxY = GUIDE_SIDE_BOX_Y
+        gBoxW = GUIDE_SIDE_BOX_W
+        gBoxH = GUIDE_SIDE_BOX_H
+    endif
+    position sprite ANGLER_BOX_SPRITE, gBoxX, gBoxY
+    color sprite ANGLER_BOX_SPRITE, rgb(10, 14, 30, 235 * gBox#)
+    layoutInfoBorder(ANGLER_BOX_BORDER, gBoxX, gBoxY, gBoxW, gBoxH)
+    colorInfoBorder(ANGLER_BOX_BORDER, rgb(255, 210, 120, 160 * gBox#))
+    set text position ANGLER_SAY_TEXT_ID, gBoxX + 10, gBoxY + 7
+    set text alpha ANGLER_SAY_TEXT_ID, 255 * gBox#
+
+    if GUIDE_VISITING
+        gPulse# = .75 + sin(game ms() * .006) * .25
+        colorInfoBorder(TUTORIAL_BAR_BORDER, rgb(255, 222, 96, 255 * gPulse# * gVisit#))
+    endif
+
+    ` what it talks about on its way out. the words about the bar are the first two of the six, so
+    ` the bar has its outline until the third, and the last three have the question marks.
+    if GUIDE_END_TALK
+        gBarOn = 0
+        if GUIDE_QUEUED >= 4 then gBarOn = 1
+        showInfoBorder(TUTORIAL_BAR_BORDER, gBarOn)
+        if gBarOn
+            gPulse# = .75 + sin(game ms() * .006) * .25
+            colorInfoBorder(TUTORIAL_BAR_BORDER, rgb(255, 222, 96, 255 * gPulse#))
+        endif
+        if GUIDE_QUEUED <= 2
+            if GUIDE_LEAVING = 0
+                if game ms() >= GUIDE_MARK_NEXT
+                    GUIDE_MARK_NEXT = game ms() + 300 + rnd(300)
+                    GUIDE_MARKS_UNTIL = game ms() + TUTORIAL_MARK_LIFE
+                    tutorialMarkSpawn(getCellX(rnd(CELL_COLUMN_COUNT)), getCellY(rnd(CELL_ROW_COUNT)))
+                endif
+            endif
+        endif
+    endif
+
+    ` once it has swum off, it is put away
+    if GUIDE_LEAVING
+        gGone = is tween done(ANGLER_SWIM_TWEEN_ID)
+        if gGone >= 1
+            guideOff()
+        endif
+    endif
+return
+
+
+routines_guide_exit:
+
+
+` put the angler up, down in the deep, with nothing to see yet
+function guideShow()
+    questTalkStop() `the quest talk borrows its voices
+    GUIDE_ON = 1
+    GUIDE_LEAVING = 0
+    GUIDE_QUEUED = 0
+    GUIDE_NEXT_MS = 0
+    create basic tween ANGLER_SWIM_TWEEN_ID, 0, 0, 1, 0
+    create basic tween GUIDE_GLOW_TWEEN_ID, 0, 0, 1, 0
+    create basic tween GUIDE_BOX_TWEEN_ID, 0, 0, 1, 0
+    create basic tween GUIDE_BANG_TWEEN_ID, 0, 0, 1, 0
+    create basic tween GUIDE_SIDE_TWEEN_ID, 0, 0, 1, 0
+    size sprite ANGLER_BOX_SPRITE, ANGLER_BOX_W, GUIDE_BOX_H
+    show sprite ANGLER_SPRITE
+    show sprite ANGLER_GLOW_SPRITE
+    show sprite ANGLER_BOX_SPRITE
+    showInfoBorder(ANGLER_BOX_BORDER, 1)
+endfunction
+
+
+` a "!" over its head. it pops up, stays a moment, and goes.
+function guideBang()
+    create basic tween GUIDE_BANG_TWEEN_ID, 0, 1, GUIDE_BANG_MS, 0
+    set tween type GUIDE_BANG_TWEEN_ID, 1
+    spawnBubbles(60, GUIDE_BOX_Y, 14, 6, 0, rgb(ANGLER_GLOW_R, ANGLER_GLOW_G, ANGLER_GLOW_B))
+endfunction
+
+
+` say this now, and forget whatever was waiting. `guideKey$` is a key of the strings.
+function guideSay(guideKey$)
+    if GUIDE_ON = 0 then exitfunction
+    GUIDE_QUEUED = 0
+    GUIDE_NEXT_MS = 0
+
+    ` in a puzzle she finishes her thought first, quickly. see WHERE SHE IS in fish_headers_puzzle.
+    guideFinishes = 0
+    if PUZZLE_ON and ANGLER_SPEAKING then guideFinishes = 1
+    if PUZZLE_RUSH_TALK > 0 then guideFinishes = 0
+    if guideFinishes
+        guideThen(guideKey$)
+        GUIDE_NEXT_MS = 1
+        PUZZLE_SAY_PUSHED = 1
+        exitfunction
+    endif
+    anglerSay(loc$(guideKey$))
+endfunction
+
+
+` say this once the words before it have been said, and have had time to be read
+function guideThen(guideThenKey$)
+    guideThenWords(loc$(guideThenKey$))
+endfunction
+
+
+` the same, with words that have already been looked up, for a line that has numbers in it
+function guideThenWords(guideWords$)
+    if GUIDE_ON = 0 then exitfunction
+    if GUIDE_QUEUED >= GUIDE_QUEUE_ROOM then exitfunction
+    GUIDE_QUEUE$(GUIDE_QUEUED) = guideWords$
+    GUIDE_QUEUED = GUIDE_QUEUED + 1
+endfunction
+
+
+` says the next of the words that are waiting, when it is time. frame_guide comes here.
+function guideQueueStep()
+    if GUIDE_LEAVING then exitfunction
+    if ANGLER_SPEAKING then exitfunction
+    guideNow = game ms()
+
+    ` the last words of the tutorial stay up for longer, and then it goes
+    if GUIDE_QUEUED = 0
+        if GUIDE_END_TALK = 0 then exitfunction
+        if GUIDE_NEXT_MS = 0
+            GUIDE_NEXT_MS = guideNow + GUIDE_HOLD_MS * 2
+            exitfunction
+        endif
+        if guideNow >= GUIDE_NEXT_MS
+            guideLeave()
+        endif
+        exitfunction
+    endif
+
+    if GUIDE_NEXT_MS = 0
+        GUIDE_NEXT_MS = guideNow + GUIDE_HOLD_MS
+        exitfunction
+    endif
+    if guideNow < GUIDE_NEXT_MS then exitfunction
+
+    anglerSay(GUIDE_QUEUE$(0))
+    GUIDE_NEXT_MS = 0
+    GUIDE_QUEUED = GUIDE_QUEUED - 1
+    guideMove = 0
+    while guideMove < GUIDE_QUEUED
+        GUIDE_QUEUE$(guideMove) = GUIDE_QUEUE$(guideMove + 1)
+        guideMove = guideMove + 1
+    endwhile
+endfunction
+
+
+` 1 once it has said everything, and that has had time to be read. what comes next waits for this.
+function guideReady()
+    guideIsReady = 0
+    if GUIDE_ON = 0
+        guideIsReady = 1
+    else
+        if ANGLER_SPEAKING + GUIDE_QUEUED > 0
+            GUIDE_QUIET_MS = 0
+        else
+            if GUIDE_QUIET_MS = 0 then GUIDE_QUIET_MS = game ms() + GUIDE_HOLD_MS
+            if game ms() >= GUIDE_QUIET_MS then guideIsReady = 1
+        endif
+    endif
+endfunction guideIsReady
+
+
+` the confirm button, or asking it again. the words come out at once, or the next ones do, or what
+` comes next stops waiting for them to be read.
+function guideHurry()
+    if ANGLER_SPEAKING
+        anglerSpeakAll()
+        exitfunction
+    endif
+    if GUIDE_QUEUED > 0
+        GUIDE_NEXT_MS = 1
+        exitfunction
+    endif
+    GUIDE_QUIET_MS = 1
+endfunction
+
+
+` it swims up to this info blob, and puts an outline around it. see tutorial_visit.
+function guideVisit(guideBlob)
+    guideBlobX = INFOS(guideBlob).topLeft.x
+    guideBlobY = INFOS(guideBlob).topLeft.y
+    guideBlobW = INFOS(guideBlob).size.x
+    guideBlobH = INFOS(guideBlob).size.y
+    GUIDE_VISITING = 1
+    GUIDE_VISIT_X = guideBlobX + guideBlobW + 6 + ANGLER_SHIFT_X
+    GUIDE_VISIT_Y = guideBlobY
+    if GUIDE_SIDE
+        GUIDE_VISIT_X = GUIDE_SIDE_X
+        GUIDE_VISIT_Y = guideBlobY + guideBlobH + 2
+    endif
+    layoutInfoBorder(TUTORIAL_BAR_BORDER, guideBlobX, guideBlobY, guideBlobW, guideBlobH)
+    colorInfoBorder(TUTORIAL_BAR_BORDER, rgb(255, 222, 96, 0))
+    showInfoBorder(TUTORIAL_BAR_BORDER, 1)
+    create basic tween GUIDE_VISIT_TWEEN_ID, 0, 1, GUIDE_VISIT_MS, 0
+endfunction
+
+
+` and it swims back
+function guideVisitEnd()
+    GUIDE_VISITING = 0
+    showInfoBorder(TUTORIAL_BAR_BORDER, 0)
+    create basic tween GUIDE_VISIT_TWEEN_ID, tweenVal(GUIDE_VISIT_TWEEN_ID), 0, GUIDE_VISIT_MS, 0
+endfunction
+
+
+` the whole board is coming in, and there is no room under it. the box goes, and it crosses over the
+` board, to the side. guideBeside brings the box back there.
+function guideAside()
+    if GUIDE_ON = 0 then exitfunction
+    GUIDE_QUEUED = 0
+    anglerSpeakAll()
+    create basic tween GUIDE_BOX_TWEEN_ID, tweenVal(GUIDE_BOX_TWEEN_ID), 0, 250, 0
+    create basic tween GUIDE_SIDE_TWEEN_ID, 0, 1, GUIDE_CROSS_MS, 0
+endfunction
+
+
+` the box comes back, beside the board
+function guideBeside()
+    if GUIDE_ON = 0 then exitfunction
+    GUIDE_SIDE = 1
+    create basic tween GUIDE_SIDE_TWEEN_ID, 1, 1, 1, 0
+    size sprite ANGLER_BOX_SPRITE, GUIDE_SIDE_BOX_W, GUIDE_SIDE_BOX_H
+    set text wrap ANGLER_SAY_TEXT_ID, GUIDE_SIDE_BOX_W - 20
+    create basic tween GUIDE_BOX_TWEEN_ID, 0, 1, 250, 0
+endfunction
+
+
+` it swims off, and frame_guide puts it away when it has gone
+function guideLeave()
+    if GUIDE_ON = 0 then exitfunction
+    GUIDE_LEAVING = 1
+    GUIDE_QUEUED = 0
+    create basic tween ANGLER_SWIM_TWEEN_ID, tweenVal(ANGLER_SWIM_TWEEN_ID), 0, GUIDE_RISE_MS, 0
+    create basic tween GUIDE_BOX_TWEEN_ID, tweenVal(GUIDE_BOX_TWEEN_ID), 0, 250, 0
+endfunction
+
+
+` put it all away, at once, the way that the angler's scene expects to find it
+function guideOff()
+    if GUIDE_ON = 0 then exitfunction
+    GUIDE_ON = 0
+    if GUIDE_SHOP
+        shopPutBack()
+    endif
+    shopFace(0)
+    GUIDE_LEAVING = 0
+    GUIDE_QUEUED = 0
+    GUIDE_NEXT_MS = 0
+    GUIDE_SIDE = 0
+    GUIDE_VISITING = 0
+    create basic tween GUIDE_VISIT_TWEEN_ID, 0, 0, 1, 0
+    GUIDE_QUIET_MS = 0
+    GUIDE_END_TALK = 0
+    showInfoBorder(TUTORIAL_BAR_BORDER, 0)
+    set text wrap ANGLER_SAY_TEXT_ID, ANGLER_BOX_W - 20
+    anglerSpeakAll()
+    hide sprite ANGLER_SPRITE
+    hide sprite ANGLER_GLOW_SPRITE
+    hide sprite ANGLER_BOX_SPRITE
+    showInfoBorder(ANGLER_BOX_BORDER, 0)
+    hide text ANGLER_SAY_TEXT_ID
+    hide text GUIDE_BANG_TEXT_ID
+    size sprite ANGLER_BOX_SPRITE, ANGLER_BOX_W, ANGLER_BOX_H
+    size sprite ANGLER_SPRITE, ANGLER_ART_W * ANGLER_SCALE, ANGLER_ART_H * ANGLER_SCALE
+endfunction
+
+
+
+
+
+
+
+
+
+
+

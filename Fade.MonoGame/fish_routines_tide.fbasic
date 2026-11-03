@@ -373,7 +373,7 @@ function tidePaysAhead(tidePayAt)
         y = getCellY(CORAL_SWAP_B / CELL_COLUMN_COUNT)
     }
     tidePayColor = rgb(150, 235, 220)
-    tidePayTxt = spawnScoreTextScaled(tidePayPos, "+" + str$(tidePayPoints), tidePayAt, 900, getBoardBubbleScale() * 1.3)
+    tidePayTxt = spawnPointsText(tidePayPos, tidePayPoints, tidePayAt, 900, getBoardBubbleScale() * 1.3)
     color text tidePayTxt, tidePayColor
 
     ` a pull's points fall. the text that was just made is the one before SCORE_TEXT_NUM.
@@ -465,6 +465,7 @@ function tideCycleDone()
         if TIDE_CYCLES >= TIDE_CYCLES_TO_TURN
             TIDE_CYCLES = TIDE_CYCLES_TO_TURN
             TIDE_NIGHT = 1
+            anglerNoteNight()
             TIDE_SEEN = 1
             TIDE_NIGHT_LEFT = TIDE_NIGHT_MOVES
 
@@ -498,6 +499,7 @@ endfunction
 ` a move has been counted. the night is one move shorter, and when it has none left, day breaks.
 ` registerMove, in fish_funcs, calls this. a move that is given back does not make the night longer.
 function tideMoveMade(tideMoves)
+    if PUZZLE_ON then exitfunction
     if TIDE_NIGHT
         ` the night is over already, and holding on while the ink pops. see THE END OF THE NIGHT in fish_headers_squid.
         if SQUID_ENDING > 0 then exitfunction
@@ -908,11 +910,20 @@ function stepTide()
     if TIDE_SEEN
         tideMarksNow# = tideMarks()
     endif
-    set effect param float4 SEABED_FX_ID, "Tide", TIDE_LEVEL_SHOWN#, TIDE_NIGHT_SHOWN#, TIDE_MOON_SHOWN#, tideMarksNow#
+    ` it is dark in the deep, and that is only how it looks. see IT IS DEEP DOWN HERE in fish_headers_puzzle.
+    tideDeepWant# = 0
+    if PUZZLE_ON then tideDeepWant# = PUZZLE_DEEP#
+    tideStep# = tideElapsed# * PUZZLE_DEEP_EASE#
+    if tideStep# > 1 then tideStep# = 1
+    PUZZLE_DEEP_SHOWN# = PUZZLE_DEEP_SHOWN# + (tideDeepWant# - PUZZLE_DEEP_SHOWN#) * tideStep#
+    tideDark# = TIDE_NIGHT_SHOWN#
+    if PUZZLE_DEEP_SHOWN# > tideDark# then tideDark# = PUZZLE_DEEP_SHOWN#
+
+    set effect param float4 SEABED_FX_ID, "Tide", TIDE_LEVEL_SHOWN#, tideDark#, TIDE_MOON_SHOWN#, tideMarksNow#
     ` the moon and the marks fade away with the rest of the hud when the game is won. see THE FISH GO HOME in fish_headers.
     set effect param float SEABED_FX_ID, "TideShow", HUD_KEEP#
-    set effect param float2 FISH_FX_ID, "Night", TIDE_NIGHT_SHOWN#, tideTime#
-    set effect param float CORAL_FX_ID, "Night", TIDE_NIGHT_SHOWN#
+    set effect param float2 FISH_FX_ID, "Night", tideDark#, tideTime#
+    set effect param float CORAL_FX_ID, "Night", tideDark#
 
     tideInfoRefresh()
     tideStepSounds(tideElapsed#)

@@ -1,0 +1,441 @@
+goto routines_shop_exit
+
+` THE SHOP. see fish_headers_shop.
+
+` the main loop comes here once, at the start, after setup_guide
+setup_shop:
+    ` the corners of the dark of the deep. see DeepEffect.fx.
+    reserve effect id(SHOP_DEEP_FX_ID)
+    effect SHOP_DEEP_FX_ID, "Fish/Shaders/DeepEffect"
+    set effect param float SHOP_DEEP_FX_ID, "Deep", 0
+    set sprite effect UPGRADE_DIM_SPRITE, SHOP_DEEP_FX_ID
+
+    reserve text id(SHOP_ASK_TEXT_ID)
+    text loc SHOP_ASK_TEXT_ID, SHOP_X + 31, SHOP_Y + 64, SCORE_FONT, "angler.shop.ask"
+    size text y SHOP_ASK_TEXT_ID, 16
+    set text offset SHOP_ASK_TEXT_ID, .5, 0
+    enable rich text SHOP_ASK_TEXT_ID
+    color text SHOP_ASK_TEXT_ID, rgb(150, 190, 255, 220)
+    order text SHOP_ASK_TEXT_ID, ORDER_ABILITY_TEXT
+    set text render target SHOP_ASK_TEXT_ID, TARGET_UPGRADE
+    hide text SHOP_ASK_TEXT_ID
+
+    for shopSetupI = 0 to SHOP_RECENT_ROOM - 1
+        ANGLER_RECENT(shopSetupI) = -1
+    next
+return
+
+
+` the words of the first upgrade screen of a game that had the tutorial. it only talks when it is
+` asked, after that. the upgrade screen comes here once the wave of bubbles has brought it in.
+shop_greet:
+    if GUIDE_SHOP = 0 then return
+    if TUTORIAL_UPGRADE_TALK = 0 then return
+    TUTORIAL_UPGRADE_TALK = 0
+    shopOpenBox()
+    guideSay(lockey$("angler.shop.ask2"))
+return
+
+
+` the info key, or a click on the angler. the upgrade screen comes here on every frame.
+shop_input:
+    if GUIDE_SHOP = 0 then return
+    if SHOP_HIDDEN then return
+    shopGo = new action down(ACT_INFO)
+    shopClickX = SHOP_SWIM_X#
+    shopClickY = SHOP_SWIM_Y#
+    shopClick = mouseClick(shopClickX, shopClickY, 64, 80)
+    if shopClick then shopGo = 1
+    if shopGo
+        gosub shop_ask
+    endif
+return
+
+
+` it was asked. while it is still talking, this hurries it along. otherwise, it comes for real.
+shop_ask:
+    if ANGLER_SPEAKING + GUIDE_QUEUED > 0
+        guideHurry()
+        return
+    endif
+
+    if SHOP_ASKED
+        shopOpenBox()
+        guideSay(lockey$("angler.shop.spent2"))
+        return
+    endif
+
+    shopPickTopics()
+    if ANGLER_PICK_COUNT = 0
+        shopOpenBox()
+        guideSay(lockey$("angler.shop.none"))
+        return
+    endif
+
+    ` its scene, the same one that the card brings, over the upgrade screen, which waits behind the dark
+    shopRoamWas = SHOP_ROAM
+    guideOff()
+    order sprite UPGRADE_COMPOSITE_SPRITE, ORDER_INTRO
+    reset text render target INFO_HINT_TEXT_ID
+    ANGLER_FROM_CARD = 0
+    ANGLER_FROM_RADIO = 0
+    ANGLER_FROM_SHOP = 1
+    ANGLER_ANCHOR = -1
+    gosub angler_run
+    ANGLER_FROM_SHOP = 0
+
+    ` and back to the upgrade screen, which is how it was
+    order sprite UPGRADE_COMPOSITE_SPRITE, ORDER_ABILITY_BACKDROP
+    create basic tween INFO_FADE_TWEEN_ID, 1, 1, 1, 0
+    set text render target INFO_HINT_TEXT_ID, TARGET_UPGRADE
+    hintMode(0)
+    order text INFO_HINT_TEXT_ID, ORDER_ABILITY_TEXT
+    shopOpenAs(shopRoamWas)
+    if ANGLER_ASKED >= 0 then SHOP_ASKED = 1
+return
+
+
+` the angler on every frame of the upgrade screen. frame_ability_selection comes here.
+frame_shop:
+    SHOP_TITLE_KEEP# = 1
+    if GUIDE_SHOP = 0 then return
+
+    ` how long it has been, for the swimming. a page of its own, or the wave, can have held this up.
+    shopNow = game ms()
+    shopMs# = shopNow - SHOP_LAST_MS
+    SHOP_LAST_MS = shopNow
+    if shopMs# > 50 then shopMs# = 50
+
+    ` the deep comes on. the corners close in on the middle of the screen, in the dark backdrop, so it is
+    ` under the angler, the cards and the words, and it goes when the upgrade screen does.
+    if SHOP_ROAM
+        shopDeepMs# = SHOP_DEEP_MS
+        SHOP_DEEP# = SHOP_DEEP# + shopMs# / shopDeepMs#
+        if SHOP_DEEP# > 1 then SHOP_DEEP# = 1
+        set effect param float SHOP_DEEP_FX_ID, "Deep", SHOP_DEEP#
+    endif
+
+    if SHOP_HIDDEN then return
+
+    anglerSpeakStep()
+    guideQueueStep()
+
+    ` once the words are all out, they stay up for a while, and the title comes back
+    if ANGLER_SPEAKING + GUIDE_QUEUED > 0
+        SHOP_CLOSE_MS = 0
+    else
+        if SHOP_BOX_OPEN
+            if SHOP_CLOSE_MS = 0 then SHOP_CLOSE_MS = shopNow + GUIDE_HOLD_MS * 2
+            if shopNow >= SHOP_CLOSE_MS
+                SHOP_BOX_OPEN = 0
+                create basic tween GUIDE_BOX_TWEEN_ID, tweenVal(GUIDE_BOX_TWEEN_ID), 0, 300, 0
+            endif
+        endif
+    endif
+
+    shopBox# = tweenVal(GUIDE_BOX_TWEEN_ID)
+    SHOP_TITLE_KEEP# = 1 - shopBox#
+
+    ` it swims to the corner to talk, and around in the dark the rest of the time
+    shopRush = 1
+    if SHOP_ROAM
+        if SHOP_BOX_OPEN = 0 then shopRush = 0
+    endif
+    shopSpeed# = SHOP_ROAM_SPEED#
+    if shopRush
+        shopSpeed# = SHOP_RUSH_SPEED#
+        SHOP_GO_X# = SHOP_X
+        SHOP_GO_Y# = SHOP_Y
+    endif
+    shopDx# = SHOP_GO_X# - SHOP_SWIM_X#
+    shopDy# = SHOP_GO_Y# - SHOP_SWIM_Y#
+    shopAway# = sqrt(shopDx# * shopDx# + shopDy# * shopDy#)
+    shopStep# = shopSpeed# * shopMs# / 1000
+    if shopAway# <= shopStep#
+        SHOP_SWIM_X# = SHOP_GO_X#
+        SHOP_SWIM_Y# = SHOP_GO_Y#
+        if shopRush
+            shopFace(0) `it looks at the words
+        else
+            SHOP_GO_X# = 20 + rnd(460)
+            SHOP_GO_Y# = 20 + rnd(210)
+        endif
+    else
+        SHOP_SWIM_X# = SHOP_SWIM_X# + shopDx# * shopStep# / shopAway#
+        SHOP_SWIM_Y# = SHOP_SWIM_Y# + shopDy# * shopStep# / shopAway#
+        if shopDx# < -2
+            shopFace(1)
+        endif
+        if shopDx# > 2
+            shopFace(0)
+        endif
+    endif
+
+    shopBob# = sin(game ms() * .002) * 2
+    shopY# = SHOP_SWIM_Y# + shopBob#
+    anglerPlace(SHOP_SWIM_X#, shopY#, 1)
+    if TEX_ANGLER_HAPPY > 0
+        shopFaceTex = TEX_ANGLER
+        if ANGLER_SPEAKING then shopFaceTex = TEX_ANGLER_HAPPY
+        set sprite texture ANGLER_SPRITE, shopFaceTex
+    endif
+
+    shopTip# = ANGLER_TIP_X * ANGLER_SCALE
+    if SHOP_FACE_LEFT then shopTip# = (ANGLER_ART_W - ANGLER_TIP_X) * ANGLER_SCALE
+    shopTipX# = SHOP_SWIM_X# + shopTip#
+    shopTipY# = shopY# + ANGLER_TIP_Y * ANGLER_SCALE
+    shopGlow# = 84 + sin(game ms() * .004) * 6
+    position sprite ANGLER_GLOW_SPRITE, shopTipX#, shopTipY# + ANGLER_GLOW_DROP
+    size sprite ANGLER_GLOW_SPRITE, shopGlow#, shopGlow#
+
+    position sprite ANGLER_BOX_SPRITE, SHOP_BOX_X, SHOP_BOX_Y
+    color sprite ANGLER_BOX_SPRITE, rgb(10, 14, 30, 235 * shopBox#)
+    layoutInfoBorder(ANGLER_BOX_BORDER, SHOP_BOX_X, SHOP_BOX_Y, ANGLER_BOX_W, SHOP_BOX_H)
+    colorInfoBorder(ANGLER_BOX_BORDER, rgb(255, 210, 120, 160 * shopBox#))
+    set text position ANGLER_SAY_TEXT_ID, SHOP_BOX_X + 10, SHOP_BOX_Y + 7
+    set text alpha ANGLER_SAY_TEXT_ID, 255 * shopBox#
+
+    ` the question has been asked, so the words that say how are dim
+    shopAskAlpha = 220
+    if SHOP_ASKED then shopAskAlpha = 90
+    set text alpha SHOP_ASK_TEXT_ID, shopAskAlpha
+return
+
+
+routines_shop_exit:
+
+
+` the angler comes to the upgrade screen, with its box closed. the upgrade screen comes here before the
+` wave of bubbles, so that the wave brings it in. see THE FIRST ONE and THE DEEP in fish_headers_shop.
+function shopOpen()
+    shopOpenAs(1 - TUTORIAL_UPGRADE_TALK)
+endfunction
+
+
+` the same, swimming around in the deep (1), or in the corner (0)
+function shopOpenAs(shopRoamIt)
+    if SHOP_ENABLED = 0 then exitfunction
+    guideOff() `it may still be saying its last words of the tutorial
+    questTalkStop() `the quest talk borrows its voices
+
+    set sprite render target ANGLER_SPRITE, TARGET_UPGRADE
+    set sprite render target ANGLER_GLOW_SPRITE, TARGET_UPGRADE
+    set sprite render target ANGLER_BOX_SPRITE, TARGET_UPGRADE
+    setInfoBorderTarget(ANGLER_BOX_BORDER, TARGET_UPGRADE)
+    set text render target ANGLER_SAY_TEXT_ID, TARGET_UPGRADE
+
+    ` it has to be over the dark backdrop of the upgrade screen, and under the cards. guideOff puts these back.
+    ` it was made late, and that counts for a few steps of the order, so the backdrop goes well under the cards
+    ` to leave it room between them. nothing else on the upgrade screen is down there.
+    order sprite UPGRADE_DIM_SPRITE, ORDER_ABILITY_BACKDROP - 20
+    order sprite ANGLER_GLOW_SPRITE, ORDER_ABILITY_BACKDROP - 12
+    order sprite ANGLER_SPRITE, ORDER_ABILITY_BACKDROP - 12
+    order sprite ANGLER_BOX_SPRITE, ORDER_ABILITY_TEXT + 2 `over the bubbles that sit on top of a card
+    shopBorderOrder(ORDER_ABILITY_TEXT + 3)
+    shopWordsOrder(ORDER_ABILITY_TEXT + 16) `the box was made late too, so the words go well above it
+
+    GUIDE_ON = 1
+    GUIDE_SHOP = 1
+    GUIDE_QUEUED = 0
+    GUIDE_NEXT_MS = 0
+    SHOP_ROAM = shopRoamIt
+    SHOP_ASKED = 0
+    SHOP_HIDDEN = 0
+    SHOP_BOX_OPEN = 0
+    SHOP_CLOSE_MS = 0
+    SHOP_DEEP# = 0
+    SHOP_LAST_MS = game ms()
+    create basic tween GUIDE_BOX_TWEEN_ID, 0, 0, 1, 0
+    size sprite ANGLER_SPRITE, ANGLER_ART_W * ANGLER_SCALE, ANGLER_ART_H * ANGLER_SCALE
+    color sprite ANGLER_SPRITE, rgb(255, 255, 255, 255)
+    color sprite ANGLER_GLOW_SPRITE, rgb(ANGLER_GLOW_R, ANGLER_GLOW_G, ANGLER_GLOW_B, 150)
+    size sprite ANGLER_BOX_SPRITE, ANGLER_BOX_W, SHOP_BOX_H
+    shopFace(0)
+
+    SHOP_SWIM_X# = SHOP_X
+    SHOP_SWIM_Y# = SHOP_Y
+    if SHOP_ROAM
+        SHOP_SWIM_X# = 20 + rnd(460)
+        SHOP_SWIM_Y# = 20 + rnd(210)
+        color sprite UPGRADE_DIM_SPRITE, rgb(2, 6, 16, SHOP_DIM_ALPHA)
+    endif
+    SHOP_GO_X# = SHOP_SWIM_X#
+    SHOP_GO_Y# = SHOP_SWIM_Y#
+    anglerPlace(SHOP_SWIM_X#, SHOP_SWIM_Y#, 1)
+    shopShow(1)
+    shopTakeHint()
+endfunction
+
+
+` the hints of the upgrade screen, with how to ask the angler in them while it swims around
+function shopTakeHint()
+    shopHintAsk = 0
+    if GUIDE_SHOP
+        if SHOP_ROAM then shopHintAsk = 1
+    endif
+    if shopHintAsk
+        set text INFO_HINT_TEXT_ID, loc$("ability.hint.ask")
+    else
+        set text INFO_HINT_TEXT_ID, loc$("ability.hint.take")
+    endif
+endfunction
+
+
+` look left (1), or right (0). anglerPlace turns the new art's card around to do it.
+function shopFace(shopFaceLeft)
+    SHOP_FACE_LEFT = shopFaceLeft
+    if ANGLER_OWN_BULB = 0
+        set sprite flip ANGLER_SPRITE, shopFaceLeft, 0
+    endif
+endfunction
+
+
+` a page of its own goes up over the upgrade screen, and the angler waits behind it (0), or comes back (1)
+function shopShow(shopShown)
+    if GUIDE_SHOP = 0 then exitfunction
+    SHOP_HIDDEN = 1 - shopShown
+    if shopShown
+        show sprite ANGLER_SPRITE
+        show sprite ANGLER_GLOW_SPRITE
+        show sprite ANGLER_BOX_SPRITE
+        showInfoBorder(ANGLER_BOX_BORDER, 1)
+        show text ANGLER_SAY_TEXT_ID
+        if SHOP_ROAM = 0
+            show text SHOP_ASK_TEXT_ID
+        endif
+    else
+        anglerSpeakAll()
+        GUIDE_QUEUED = 0
+        hide sprite ANGLER_SPRITE
+        hide sprite ANGLER_GLOW_SPRITE
+        hide sprite ANGLER_BOX_SPRITE
+        showInfoBorder(ANGLER_BOX_BORDER, 0)
+        hide text SHOP_ASK_TEXT_ID
+        hide text ANGLER_SAY_TEXT_ID
+    endif
+endfunction
+
+
+function shopBorderOrder(shopOrder)
+    order sprite ANGLER_BOX_BORDER.topId, shopOrder
+    order sprite ANGLER_BOX_BORDER.bottomId, shopOrder
+    order sprite ANGLER_BOX_BORDER.leftId, shopOrder
+    order sprite ANGLER_BOX_BORDER.rightId, shopOrder
+endfunction
+
+
+function shopWordsOrder(shopWordsAt)
+    order text ANGLER_SAY_TEXT_ID, shopWordsAt
+endfunction
+
+
+` everything that shopOpen moved goes back. guideOff comes here.
+function shopPutBack()
+    GUIDE_SHOP = 0
+    SHOP_BOX_OPEN = 0
+    SHOP_ROAM = 0
+    SHOP_TITLE_KEEP# = 1
+    SHOP_DEEP# = 0
+    hide text SHOP_ASK_TEXT_ID
+    color sprite UPGRADE_DIM_SPRITE, rgb(0, 0, 0, 166)
+    order sprite UPGRADE_DIM_SPRITE, ORDER_ABILITY_BACKDROP
+    set effect param float SHOP_DEEP_FX_ID, "Deep", 0
+    reset sprite render target ANGLER_SPRITE
+    reset sprite render target ANGLER_GLOW_SPRITE
+    reset sprite render target ANGLER_BOX_SPRITE
+    reset sprite render target ANGLER_BOX_BORDER.topId
+    reset sprite render target ANGLER_BOX_BORDER.bottomId
+    reset sprite render target ANGLER_BOX_BORDER.leftId
+    reset sprite render target ANGLER_BOX_BORDER.rightId
+    reset text render target ANGLER_SAY_TEXT_ID
+    order sprite ANGLER_GLOW_SPRITE, ORDER_INFO_PANEL
+    order sprite ANGLER_SPRITE, ORDER_INFO_PANEL + 2
+    order sprite ANGLER_BOX_SPRITE, ORDER_INFO_PANEL
+    shopBorderOrder(ORDER_INFO_PANEL + 1)
+    shopWordsOrder(ORDER_ANGLER_TEXT)
+endfunction
+
+
+` the box comes up over the title
+function shopOpenBox()
+    SHOP_CLOSE_MS = 0
+    if SHOP_BOX_OPEN then exitfunction
+    SHOP_BOX_OPEN = 1
+    create basic tween GUIDE_BOX_TWEEN_ID, tweenVal(GUIDE_BOX_TWEEN_ID), 1, 200, 0
+endfunction
+
+
+` the questions of the upgrade screen, into ANGLER_PICK: up to three things that the player has seen, and
+` has not asked about. see THE FREE QUESTION in fish_headers_shop.
+function shopPickTopics()
+    ANGLER_PICK_COUNT = 0
+    for shopPickI = 0 to SHOP_RECENT_ROOM - 1
+        shopTry = ANGLER_RECENT(shopPickI)
+        if shopTry >= 0
+            if ANGLER_PICK_COUNT < 3
+                if ANGLER_HEARD(shopTry) = 0
+                    shopTryOpen = anglerTopicOpen(shopTry)
+                    if shopTryOpen
+                        ANGLER_PICK(ANGLER_PICK_COUNT) = shopTry
+                        ANGLER_PICK_COUNT = ANGLER_PICK_COUNT + 1
+                    endif
+                endif
+            endif
+        endif
+    next
+
+    anglerScanBoard()
+    shopPickFrom(1)
+    shopPickFrom(0)
+endfunction
+
+
+` fill up the questions from what is near, or from everything that the player can see
+function shopPickFrom(shopNear)
+    shopGoOn = 1
+    while shopGoOn
+        shopGoOn = 0
+        if ANGLER_PICK_COUNT < 3
+            anglerPickPlain(shopNear)
+            if ANGLER_FOUND >= 0
+                if ANGLER_HEARD(ANGLER_FOUND) = 0
+                    ANGLER_PICK(ANGLER_PICK_COUNT) = ANGLER_FOUND
+                    ANGLER_PICK_COUNT = ANGLER_PICK_COUNT + 1
+                    shopGoOn = 1
+                endif
+            endif
+        endif
+    endwhile
+endfunction
+
+
+` this just happened. it goes at the front of what has happened lately, and if it was in there already,
+` it moves up. see fish_headers_shop.
+function anglerNote(noteTopic)
+    noteFrom = SHOP_RECENT_ROOM - 1
+    for noteI = 0 to SHOP_RECENT_ROOM - 1
+        if ANGLER_RECENT(noteI) = noteTopic
+            noteFrom = noteI
+            noteI = SHOP_RECENT_ROOM
+        endif
+    next
+    while noteFrom > 0
+        ANGLER_RECENT(noteFrom) = ANGLER_RECENT(noteFrom - 1)
+        noteFrom = noteFrom - 1
+    endwhile
+    ANGLER_RECENT(0) = noteTopic
+endfunction
+
+
+` night has fallen. the tide comes before the topics of the angler are declared, so it comes here.
+function anglerNoteNight()
+    anglerNote(ANGLER_T_NIGHT)
+endfunction
+
+
+` a new game has started, and nothing has happened in it
+function anglerRecentClear()
+    for noteI = 0 to SHOP_RECENT_ROOM - 1
+        ANGLER_RECENT(noteI) = -1
+    next
+endfunction

@@ -574,6 +574,10 @@ menu_pick:
             if MENU_MODE = MENU_MODE_MAIN
                 menuIntroSeen = get pref(PREF_INTRO_SEEN, 0)
                 if menuIntroSeen < INTRO_VERSION then menuFirstGame = 1
+
+                ` a player who stayed with Ava is not asked what kind of game. she asks them something else.
+                menuStaying = puzzleStaying()
+                if menuStaying then menuFirstGame = 1
             endif
 
             if menuFirstGame
@@ -807,6 +811,13 @@ menu_start_game:
     MENU_MODE = MENU_MODE_CLOSED
 
     gosub run_first_dive_intro
+
+    ` the player told Ava that they are leaving, so this is a usual game after all
+    if PUZZLE_LEFT = 1
+        PUZZLE_LEFT = 2
+        gosub menu_start_game
+        PUZZLE_LEFT = 0
+    endif
 return
 
 
@@ -1351,6 +1362,7 @@ frame_menu_render:
     set effect param float2 MENU_FX_ID, "Grid", WORLD_WIDTH, WORLD_HEIGHT
 
     menuMs = game ms()
+    if DEBUG_MODE then gosub frame_debug_ava
 
     ` the main loop does not run update_frame while a menu is up, so this keeps the bubbles and the music going
     updateBubbles()
@@ -1539,6 +1551,8 @@ function setMenuPage(page)
     ` when there is a saved game to go back to, the main menu starts with "Resume", the same as the pause menu does
     if page = MENU_PAGE_MAIN
         savedGame = hasSavedGame()
+        menuStayed = puzzleStaying()
+        if menuStayed then savedGame = 1
         if savedGame
             first = MENU_ITEM_RESUME
             MENU_ITEMS(MENU_ITEM_RESUME).desc$ = loc$("menu.resume.desc.saved")
@@ -1615,6 +1629,11 @@ function setMenuPage(page)
         if i < first or i > last then onPage = 0
         if page = MENU_PAGE_PAUSE
             if i = MENU_ITEM_HIGHSCORES or i = MENU_ITEM_CREDITS then onPage = 0
+
+            ` see THE MENUS DOWN HERE in fish_headers_puzzle
+            if PUZZLE_ON
+                if i = MENU_ITEM_NEW_GAME or i = MENU_ITEM_CODEC then onPage = 0
+            endif
         endif
 
         ` the pause menu has "Inventory" right under "Resume"
@@ -1680,9 +1699,13 @@ function setMenuPage(page)
 
             if page = MENU_PAGE_PAUSE
                 if i = MENU_ITEM_RESUME
-                    MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_MOVES
-                    MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
-                    showMenuItemText(MENU_ITEM_MOVES)
+                    if PUZZLE_ON
+                        hideMenuItemText(MENU_ITEM_MOVES)
+                    else
+                        MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_MOVES
+                        MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+                        showMenuItemText(MENU_ITEM_MOVES)
+                    endif
                 endif
             endif
 
@@ -1933,6 +1956,8 @@ function refreshOptionLines()
     if OPTION_GAME_INTRO
         setMenuItemValue(MENU_ITEM_GAME_INTRO, loc$("menu.intro"), loc$("menu.value.yes"))
         MENU_ITEMS(MENU_ITEM_GAME_INTRO).desc$ = loc$("menu.intro.yes.desc")
+        menuGone = puzzleGone()
+        if menuGone then MENU_ITEMS(MENU_ITEM_GAME_INTRO).desc$ = loc$("menu.intro.gone.desc")
     else
         setMenuItemValue(MENU_ITEM_GAME_INTRO, loc$("menu.intro"), loc$("menu.value.no"))
         MENU_ITEMS(MENU_ITEM_GAME_INTRO).desc$ = loc$("menu.intro.no.desc")

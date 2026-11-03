@@ -3,60 +3,77 @@ goto routines_intro_exit
 remstart
     THE FIRST DIVE
     the very first game is a little tutorial. the wave of bubbles goes by and there is nothing there
-    but the water. a few lines of text go by, one at a time:
-
-        This is a match 3 game.
-        Take your time.
-        Soak it in.
-
-    the confirm button skips the lines.
+    but the water, and one line of text: "This is a match 3 game." a light comes on down in the deep,
+    the angler swims up behind it, and it cuts the line off: "Hey you! This is not JUST a match 3 game!"
+    from there on, the angler says everything, in a box under the board, and it does not stop the
+    game to do it. see fish_headers_guide. the confirm button skips ahead.
 
     THE LITTLE BOARDS
-    players did not see that the cursor can go anywhere without it costing anything, or that a group
-    of fish does not have to be in a straight line. so the game starts on a board of three by three,
-    and grows, a ring at a time, with one thing to learn on each:
+    the board has hidden rules, and the one that the little boards are about is the way that the fish
+    face. every little board is the whole nine by nine board, with gaps in it where there are no fish.
+    so nothing has to be hoped for:
 
-        3 by 3      a seahorse, a crab and a seahorse in a row, with one more seahorse under the
-                    crab. the cursor is on the crab. "Hold [swap] and push [dir] to swap."
-                    the pop brings in the count of moves, and the multiplier.
-        5 by 5      the next match is up in the far corner, away from the cursor.
-                    "You can move around for free." the count of moves does not go up on the way.
-                    under the board: "A swap that pops nothing costs multiplier."
-        7 by 7      the only match is a group in the shape of an L.
-                    "Fish do not need to be in straight lines."
+        a row of 5      the angler says that there are lots of fish down here, and they come in as it
+                        says "Look, here are some!", and that they pop in groups of 3 or more. a seahorse,
+                        a seahorse, a crab, a seahorse and a goldfish. the cursor is on the crab. "Hold
+                        [swap] and push [dir] to swap." once it has popped, the angler says that moving
+                        the cursor costs nothing, and the row is still there to try it on. then the
+                        count of moves comes in, and the multiplier, one after the other.
+        the row, and    the first board with an up and a down. the only swap that does anything is the
+        two more fish   one up or down, and it makes a group in the shape of an L, a few cells from the
+                        cursor. the angler says, after it has popped, that fish do not need to be in
+                        straight lines.
+        a row of 9      two seahorses at the left, and one all the way at the right. it takes six
+                        swaps to bring it home, and every one of them turns it to look left, away from
+                        the other two. the angler talks about that while it is happening, not before.
+                        they pop, because they do not all look the same way.
+        a row of 9      the same thing, the other way around: one seahorse all the way at the left, and
+                        two at the right. brought home, it looks the way that they look, so they
+                        do not pop. they swim off. that is a school, and it is the last thing before the
+                        whole board. if the player brings the two to the one instead, they pop, and
+                        the board comes in again, with the angler telling them to slow down.
 
-    a little board keeps the cells the size that they are on the board that the game starts with, and
-    it sits in the middle of where that board will be. so a fish of one little board is still in the
-    same spot on the screen on the next one, and the new fish grow in around it. the fish are laid out
-    by hand, in tutorialLayoutKind. any swap can be made. on the second board, the swap that the board
-    is about is the only one that pops anything, so every other swap there costs the multiplier, the
-    way it does in the game: the line under the board comes back, and the bar wiggles. on the first
-    and third boards, a few other swaps pop too, and that is fine.
-    any pop brings in the next board. the fish that drop in after a pop are the ones that the next
-    board has there, so after the swap that the board is about, nothing changes when it grows. after
-    some other pop, the fish that are not what the next board has there grow in again as the right
-    ones. a test in fish_tests_tutorial plays every board, to check all of that.
+    a fish that swaps across ends up facing the way that it moved, whichever one the cursor carried.
+    and every fish starts out looking right. schoolJudge leaves the first two boards alone.
 
-    the third pop fades the little board away, and the things around it, which leaves the water. the
-    line about info mode comes up, and the hint for it is the only hint, brighter than usual. it waits
-    for the key, and starts to bob after a few seconds. the key brings in the whole board, and info
-    mode opens over it. it is the board that the game was dealt before the tutorial started, with its
-    streams of the seed where they were, and the moves and the multiplier go back to how a game
-    starts. so a seed plays the same game, with the tutorial or without it. the bar of the round and
-    the rounds that are left come in with it.
+    a gap is a cell with no fish in it, a value of 0. the cursor does not go into one (tutorialIsGap, from
+    startLiveMove), and it is not a group (findCombos). nothing falls on a little board, because a fish
+    above a gap would fall into it: a new fish comes in where the old one was, the one that the next
+    board has there. a fish of a little board that the next one has too stays where it is, and the rest
+    grow in. the fish are laid out by hand, in tutorialLayoutKind, and a test in fish_tests_tutorial
+    plays every board.
 
-    THE FISH OF THE MYSTERY
-    when info mode is closed, the board fades away to the water, and one seahorse shows up. now and
-    then a question mark comes up out of it. it turns around and back, rolls belly up and back,
-    shimmers with the rainbow, and swaps out to the left, into nothing, and back. "Remember," is over
-    the fish, and "The ocean is mysterious." under it. then a screen of its own: "You cannot lose.",
-    with "Get through 30 rounds in as few moves as possible." under it. then the board comes back.
-    that is the end of the tutorial.
+    what the angler says depends a little on what the player does: see tutorialMissed, tutorialWatch,
+    tutorialTooSoon and tutorial_pop.
+
+    THE THINGS AROUND THE BOARD come in one at a time, and the angler swims up to each one, with an outline
+    around it and everything else left alone, and says what it is. see tutorial_visit. the first pop brings
+    the count of moves and then the multiplier, before the board of the L, which is the first one where they
+    count. the multiplier mentions what a swap that pops nothing costs, which it only does the once. the
+    rounds come with the whole board. before that, it swims back to the count of moves and says that it is
+    about to reset them, and does.
+
+    THE WHOLE BOARD
+    the angler gets to finish about the school, and then the board that the game was dealt rolls out from the
+    middle, a ring at a time, over the row that was there (tutorial_open_sea). it is the board that the
+    game was dealt before the tutorial started, with its streams of the seed where they were, and the
+    moves and the multiplier go back to how a game starts, so a seed plays the same game with the
+    tutorial or without it. the bar of the round and the rounds that are left fade in with it. nothing
+    goes away first: the water never shows on its own after the first line of text.
+
+    the whole board has no room under it, so the angler crosses over it while it comes in, and talks
+    from beside it from then on. it asks for info mode, the hint for it is the only hint, brighter than
+    usual, and it starts to bob after a few seconds. this is the one place that waits for a key.
+
+    the key opens info mode over the board, and the angler says what it is for, and points at the codec.
+    closing it hands the game over, with the cursor, and that is the end of the tutorial
+    (tutorial_goodbye). the angler stays for a little while and the player can play under it: the bar of
+    the round gets an outline while it is explained, then the rounds, then that the sea can end a few
+    ways, with question marks coming up out of the fish, and it swims off.
 
     THE FIRST UPGRADE
-    when the first round of a game that had the tutorial is won, the board fades away again before the
-    upgrade screen comes up, no bubbles float up, and a few lines go by: "Hi again.", "You finished the
-    first round." with "Good job!" under it, and "Now you may select an upgrade."
+    the first upgrade screen of a game that had the tutorial starts with the angler alone in the dark,
+    saying what upgrades are. see tutorial_first_shop, shop_greet, and fish_headers_shop.
 
     a piece that has not come in yet is not explained in info mode, and it does not count anything
     yet either. no moves are counted, and the multiplier does not fill, until they can be seen, and
@@ -79,7 +96,7 @@ remstart
     - the main loop calls tutorial_advance, which brings in the next board once the pops have settled
     - startLiveMove asks tutorialBlocksSwap about every swap
     - judgeMultiplierSwaps calls tutorialMissed when a swap pops nothing
-    - handle_ability_selection calls tutorial_upgrade_talk before the first upgrade screen
+    - shop_greet has the words of the first upgrade screen
 
     THE HINTS
     this part is nothing to do with the tutorial, and it is always on. the line of key hints along the
@@ -115,64 +132,10 @@ setup_intro:
     enable rich text INTRO_TEXT_ID `so that a line can show a picture of a key, like {info}
     hide text INTRO_TEXT_ID
 
-    ` the words over a little board. frame_hints puts them just above its top row, and fades them.
-    reserve text id(TUTORIAL_CAPTION_TEXT_ID)
-    text TUTORIAL_CAPTION_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT / 2, SCORE_FONT, " "
-    size text max TUTORIAL_CAPTION_TEXT_ID, 340, 32 `between the moves on the left of the board and the rounds on the right
-    set text offset TUTORIAL_CAPTION_TEXT_ID, .5, 1
-    color text TUTORIAL_CAPTION_TEXT_ID, rgb(255, 255, 255, 255)
-    order text TUTORIAL_CAPTION_TEXT_ID, ORDER_INTRO + 4
-    enable rich text TUTORIAL_CAPTION_TEXT_ID `so that it can show a picture of a key, like {swap}
-    enable text drop shadow TUTORIAL_CAPTION_TEXT_ID, 2, -2, rgb(0,0,0)
-    set text alpha TUTORIAL_CAPTION_TEXT_ID, 0
-    hide text TUTORIAL_CAPTION_TEXT_ID
-    reserve tween id(TUTORIAL_CAPTION_TWEEN_ID)
-    create basic tween TUTORIAL_CAPTION_TWEEN_ID, 0, 0, 1, 0
-
-    ` the line under a little board, about a swap that pops nothing. it is the color of the multiplier's
-    ` "no", and the size of the hints, so that their pictures of keys are as sharp as the hints' are.
-    reserve text id(TUTORIAL_SUB_TEXT_ID)
-    text loc TUTORIAL_SUB_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT / 2, SCORE_FONT, "intro.tut.miss"
-    size text max TUTORIAL_SUB_TEXT_ID, 340, 16
-    set text offset TUTORIAL_SUB_TEXT_ID, .5, 0
-    color text TUTORIAL_SUB_TEXT_ID, rgb(255, 230, 150, 255)
-    order text TUTORIAL_SUB_TEXT_ID, ORDER_INTRO + 4
-    enable text drop shadow TUTORIAL_SUB_TEXT_ID, 2, -2, rgb(0,0,0)
-    set text alpha TUTORIAL_SUB_TEXT_ID, 0
-    hide text TUTORIAL_SUB_TEXT_ID
-    reserve tween id(TUTORIAL_SUB_TWEEN_ID)
-    create basic tween TUTORIAL_SUB_TWEEN_ID, 0, 0, 1, 0
-
-    ` the smaller line under a line of tutorial_lines, like "Good job!"
-    reserve text id(INTRO_SUB_TEXT_ID)
-    text loc INTRO_SUB_TEXT_ID, WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + 24, SCORE_FONT, "intro.line.goodjob"
-    size text max INTRO_SUB_TEXT_ID, WORLD_WIDTH - 40, 16
-    set text offset INTRO_SUB_TEXT_ID, .5, 0
-    color text INTRO_SUB_TEXT_ID, rgb(255, 230, 150, 0)
-    order text INTRO_SUB_TEXT_ID, ORDER_INTRO + 4
-    enable text drop shadow INTRO_SUB_TEXT_ID, 2, -2, rgb(0,0,0)
-    hide text INTRO_SUB_TEXT_ID
-
-    ` the lines under the bar of the round, and the outline around it. see tutorial_round_bar.
-    reserve text id(TUTORIAL_BAR_TEXT_ID)
-    text loc TUTORIAL_BAR_TEXT_ID, WORLD_WIDTH / 2, 60, SCORE_FONT, "intro.tut.bar"
-    size text max TUTORIAL_BAR_TEXT_ID, 400, 20
-    set text offset TUTORIAL_BAR_TEXT_ID, .5, 0
-    color text TUTORIAL_BAR_TEXT_ID, rgb(255, 255, 255, 255)
-    order text TUTORIAL_BAR_TEXT_ID, ORDER_INTRO + 4
-    enable text drop shadow TUTORIAL_BAR_TEXT_ID, 2, -2, rgb(0,0,0)
-    hide text TUTORIAL_BAR_TEXT_ID
-    reserve text id(TUTORIAL_BAR_SUB_TEXT_ID)
-    text loc TUTORIAL_BAR_SUB_TEXT_ID, WORLD_WIDTH / 2, 84, SCORE_FONT, "intro.tut.bar.sub"
-    size text max TUTORIAL_BAR_SUB_TEXT_ID, 400, 16
-    set text offset TUTORIAL_BAR_SUB_TEXT_ID, .5, 0
-    color text TUTORIAL_BAR_SUB_TEXT_ID, rgb(255, 230, 150, 255)
-    order text TUTORIAL_BAR_SUB_TEXT_ID, ORDER_INTRO + 4
-    enable text drop shadow TUTORIAL_BAR_SUB_TEXT_ID, 2, -2, rgb(0,0,0)
-    hide text TUTORIAL_BAR_SUB_TEXT_ID
+    ` the outline around the bar of the round, while the angler talks about it. see frame_guide.
     TUTORIAL_BAR_BORDER = createInfoBorder(ORDER_INTRO + 3)
 
-    ` the question marks of the mystery. a question mark is not a word, so it is the same in every language.
+    ` the question marks. a question mark is not a word, so it is the same in every language.
     for markI = 0 to TUTORIAL_MARK_COUNT - 1
         reserve text id(TUTORIAL_MARK_TEXTS(markI))
         text TUTORIAL_MARK_TEXTS(markI), 0, 0, SCORE_FONT, "?"
@@ -228,6 +191,22 @@ return
 ` a new game is about to start. if it is the first one, or the intro was asked for, take everything
 ` off of the screen, so that the wave of bubbles uncovers nothing but the water.
 tutorial_prepare:
+    ` the long visit is not a tutorial, but it plays on a little board. see fish_headers_puzzle.
+    tutPuzzle = puzzleWanted()
+    if tutPuzzle
+        gosub puzzle_prepare
+        return
+    endif
+    PUZZLE_ENV_SPENT = 1
+
+    ` she is the one who gave the first dive. see LEAVING in fish_headers_puzzle.
+    tutGone = puzzleGone()
+    if tutGone
+        PUZZLE_GONE_TALK = OPTION_GAME_INTRO
+        OPTION_GAME_INTRO = 0
+        return
+    endif
+
     tutWanted = 0
     tutSeen = get pref(PREF_INTRO_SEEN, 0)
     if tutSeen < INTRO_VERSION then tutWanted = 1
@@ -240,10 +219,13 @@ tutorial_prepare:
     if tutWanted = 0 then return
     set pref PREF_INTRO_SEEN, INTRO_VERSION
     TUTORIAL_STAGE = 1
-    TUTORIAL_UPGRADE_TALK = 1 `a few words before the first upgrade screen too. see tutorial_upgrade_talk.
+    TUTORIAL_UPGRADE_TALK = 1 `a few words at the first upgrade screen too. see shop_greet.
     TUTORIAL_SCORE_HOLD = 0
     TUTORIAL_BOARD = 0
     TUTORIAL_STEP_DONE = 0
+    TUTORIAL_VISIT = 0
+    TUTORIAL_RETRY = 0
+    TUTORIAL_INFO_TRIES = 0
 
     ` the game has been dealt its board already. it is kept for when the little boards are done, along
     ` with the way the fish face, and where the streams of the seed had got to, so that the tutorial does
@@ -269,68 +251,23 @@ tutorial_prepare:
 return
 
 
-` the lines of text, and then the first of the little boards. a new game comes here when the wave of
-` bubbles has gone.
+` the line of text, the angler, and then the first of the little boards. a new game comes here when
+` the wave of bubbles has gone.
 run_first_dive_intro:
+    if PUZZLE_ON
+        gosub puzzle_enter
+        return
+    endif
+    if PUZZLE_GONE_TALK
+        gosub puzzle_gone_intro
+        return
+    endif
     if TUTORIAL_STAGE <> 1 then return
 
-    introFade# = INTRO_FADE_MS
-    introCount = 3 `how many lines there are
-    introTotal = INTRO_LINE_MS * introCount
-    introStart = game ms()
-    introShown = -1
-    introDone = 0
+    gosub guide_enter
 
-    show sprite INTRO_DIM_SPRITE
-    show text INTRO_TEXT_ID
-
-    while introDone = 0
-        introAge = game ms() - introStart
-
-        ` which line is up
-        introLine = 0
-        if introAge >= INTRO_LINE_MS then introLine = 1
-        if introAge >= INTRO_LINE_MS * 2 then introLine = 2
-        if introAge >= introTotal then introLine = introCount
-
-        if introLine >= introCount
-            introDone = 1
-        else
-            if introLine <> introShown
-                introShown = introLine
-                if introLine = 0 then set text loc INTRO_TEXT_ID, "intro.line.match3"
-                if introLine = 1 then set text loc INTRO_TEXT_ID, "intro.line.time"
-                if introLine = 2 then set text loc INTRO_TEXT_ID, "intro.line.soak"
-            endif
-
-            ` every line fades in, stays a while, and fades out
-            introLineStart = introLine * INTRO_LINE_MS
-            introIn# = introAge - introLineStart
-            introLeft# = INTRO_LINE_MS - introIn#
-            introAlpha# = 1
-            if introIn# < introFade# then introAlpha# = introIn# / introFade#
-            if introLeft# < introFade# then introAlpha# = introLeft# / introFade#
-            color text INTRO_TEXT_ID, rgb(255, 255, 255, 255 * introAlpha#)
-
-            ` the dark comes in with the first line, and goes out with the last one
-            introEnd# = introTotal - introAge
-            introDim# = 1
-            if introAge < INTRO_FADE_MS then introDim# = introAge / introFade#
-            if introEnd# < introFade# then introDim# = introEnd# / introFade#
-            color sprite INTRO_DIM_SPRITE, rgb(4, 8, 24, INTRO_DIM_ALPHA * introDim#)
-        endif
-
-        if new action down(ACT_CONFIRM) then introDone = 1
-        introClicked = mouseClickAnywhere() `a click is the confirm key here. see THE MOUSE in fish_headers_mouse.
-        if introClicked then introDone = 1
-
-        ` the water goes on being drawn underneath
-        gosub update_frame
-        sync
-    endwhile
-
-    hide sprite INTRO_DIM_SPRITE
-    hide text INTRO_TEXT_ID
+    ` the fish come in as the angler says so
+    guideSay(lockey$("intro.ang.fish2"))
 
     ` the first little board. the hints for moving and swapping are where they always are, along the
     ` bottom, and the one for info mode waits for the end.
@@ -342,43 +279,109 @@ return
 
 
 ` a move has just popped fish on a little board. handle_combos comes here, once for every move that
-` does. the words go, and the first pop brings in the moves and the multiplier, with a puff of bubbles.
+` does. the first pop brings in the moves and the multiplier, with a puff of bubbles.
 ` the next board waits for the board to settle. see tutorial_advance.
 tutorial_pop:
+    if PUZZLE_ON then return
     if TUTORIAL_STEP_DONE then return
     TUTORIAL_STEP_DONE = 1
-    tutCaptionNow# = tweenVal(TUTORIAL_CAPTION_TWEEN_ID)
-    create basic tween TUTORIAL_CAPTION_TWEEN_ID, tutCaptionNow#, 0, 250, 0
-    tutCaptionNow# = tweenVal(TUTORIAL_SUB_TWEEN_ID)
-    create basic tween TUTORIAL_SUB_TWEEN_ID, tutCaptionNow#, 0, 250, 0
-
+    ` what the angler says depends on how it went
     if TUTORIAL_STAGE = 2
-        gosub tutorial_show_moves
-        spawnBubbles(56, 30, 22, 14, 0, rgb(255, 255, 255))
-        spawnBubbles(MULT_POS.x + 30, MULT_POS.y + 28, 22, 14, 120, rgb(255, 255, 255))
+        if TUTORIAL_SWAPS = 0
+            guideSay(lockey$("intro.ang.pop1"))
+        else
+            guideSay(lockey$("intro.ang.pop2"))
+        endif
+        ` the board waits for the angler, so the row is still there to wander along
+        guideThen(lockey$("intro.ang.wander"))
+        TUTORIAL_VISIT = 1
+    endif
+
+    if TUTORIAL_STAGE = 3
+        guideSay(lockey$("intro.tut.shape"))
+        guideThen(lockey$("intro.ang.sink"))
+    endif
+
+    if TUTORIAL_STAGE = 4
+        guideSay(lockey$("intro.ang.popped"))
+    endif
+
+    ` the last board is the first school. if it popped, it comes in again.
+    if TUTORIAL_STAGE = 5
+        if SCHOOL_COUNT > TUTORIAL_SCHOOLS_WAS
+            guideSay(lockey$("intro.ang.left2"))
+            tutQuick = game ms() - TUTORIAL_BOARD_MS
+            if tutQuick < TUTORIAL_QUICK_MS
+                guideThen(lockey$("intro.ang.fast"))
+            else
+                guideThen(lockey$("intro.ang.slow"))
+            endif
+            guideThen(lockey$("intro.ang.soon3"))
+            TUTORIAL_VISIT = 3
+        else
+            TUTORIAL_RETRY = 1
+            guideSay(lockey$("intro.ang.rushed"))
+        endif
     endif
 return
 
 
 ` the main loop comes here on every frame of the game. once a little board has popped, and the board
 ` has settled, the next one comes in, or the whole board does. and once info mode has been closed at
-` the end of the tutorial, the fish of the mystery comes.
+` the end of the tutorial, the game is the player's.
 tutorial_advance:
-    ` the main loop only comes here while info mode is closed
-    if TUTORIAL_STAGE = 6
-        gosub tutorial_mystery
+    if PUZZLE_ON
+        gosub puzzle_advance
         return
+    endif
+
+    ` the main loop only comes here while info mode is closed
+    if TUTORIAL_STAGE = 7
+        gosub tutorial_goodbye
+        return
+    endif
+
+    if TUTORIAL_STAGE > 1
+        if TUTORIAL_STAGE < 6
+            tutorialWatch()
+        endif
     endif
 
     if TUTORIAL_STEP_DONE = 0 then return
     if REQUEST_COMBO_CHECK then return
     if LIVE_MOVE_ACTIVE then return
 
+    ` the board waits for the angler. the confirm button hurries it along.
+    if new action down(ACT_CONFIRM)
+        guideHurry()
+    endif
+    tutReady = guideReady()
+    if tutReady = 0 then return
+
+    if TUTORIAL_VISIT > 0
+        taVisit = TUTORIAL_VISIT
+        gosub tutorial_visit
+
+        ` the count of moves, and then the multiplier, each on its own
+        if taVisit = 1
+            TUTORIAL_VISIT = 2
+            gosub tutorial_visit
+        endif
+    endif
+
     TUTORIAL_STEP_DONE = 0
     gosub clear_queued_moves
 
+    ` the last board comes in again, if it was not a school
+    if TUTORIAL_RETRY
+        TUTORIAL_RETRY = 0
+        TUTORIAL_GROW_TO = 4
+        gosub tutorial_grow
+        return
+    endif
+
     ` the stage is one more than the little board that was just played, so it is the next one
-    if TUTORIAL_STAGE < 4
+    if TUTORIAL_STAGE < 5
         TUTORIAL_GROW_TO = TUTORIAL_STAGE
         gosub tutorial_grow
     else
@@ -422,6 +425,15 @@ tutorial_grow:
         GLOW_TURN#(tgI) = 0
         RAINBOW_FISH(tgI) = 0
 
+        ` a gap is nothing at all, and it faces no way
+        if CELLS(tgI).value = 0
+            SCHOOL_FACE(tgI) = 0
+            SCHOOL_SHOWN#(tgI) = 0
+            hide sprite CELLS(tgI).spriteId
+            hide sprite CELLS(tgI).fxSpriteId
+            skip
+        endif
+
         ` a fish that was on the last board is still there, if it is the right one
         tgKept = 0
         tgOldX = tgX - tgShift
@@ -442,6 +454,7 @@ tutorial_grow:
             create basic tween CELLS(tgI).scaleWaveTweenId, 1, 1, 1, 0
         else
             schoolNewFish(tgI)
+            tutorialFaceRight(tgI)
 
             ` a new fish grows in with the ring around the board that it is on, going out from the middle.
             ` the rings go one after the other, and the fish of a ring follow each other around it a little.
@@ -472,6 +485,11 @@ tutorial_grow:
         SELECTION_POS.x = tgSize / 2
         SELECTION_POS.y = tgSize / 2
     endif
+    ` the row that it was off of has gone, so it comes back to the row of the board
+    if SELECTION_POS.y <> 4
+        tgCursorCell = SELECTION_POS.x + SELECTION_POS.y * tgSize
+        if CELLS(tgCursorCell).value = 0 then SELECTION_POS.y = 4
+    endif
     scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
     gosub update_selection_position
     cursorArrive(tgLongest + TUTORIAL_GROW_MS) `once the last fish has grown in. see fish_headers_cursorshow.
@@ -480,20 +498,165 @@ tutorial_grow:
     TUTORIAL_STEP_DONE = 0
     TUTORIAL_STAGE = tgStep + 1
 
-    ` the words of the board. the second board has a line under it too: the cursor moves for free, and
-    ` a swap that pops nothing is what costs. a swap like that on the third board brings that line back.
-    if tgStep = 1 then set text loc TUTORIAL_CAPTION_TEXT_ID, "intro.tut.swap"
-    if tgStep = 2 then set text loc TUTORIAL_CAPTION_TEXT_ID, "intro.tut.free"
-    if tgStep = 3 then set text loc TUTORIAL_CAPTION_TEXT_ID, "intro.tut.shape"
-    create basic tween TUTORIAL_CAPTION_TWEEN_ID, 0, 1, 400, tgLongest
-    create basic tween TUTORIAL_SUB_TWEEN_ID, 0, 0, 1, 0
-    if tgStep = 2
-        create basic tween TUTORIAL_SUB_TWEEN_ID, 0, 1, 400, tgLongest + 600
-    endif
-
     ` the fish grow in while the game waits. the frame goes on being drawn underneath.
     TUTORIAL_WAIT_UNTIL = game ms() + tgLongest + TUTORIAL_GROW_MS
     gosub tutorial_wait
+
+    TUTORIAL_SWAPS = 0
+    TUTORIAL_WAIT_SAID = 0
+    TUTORIAL_SCHOOLS_WAS = SCHOOL_COUNT
+    TUTORIAL_BOARD_MS = game ms()
+    TUTORIAL_IDLE_MS = game ms()
+
+    ` and the angler says what the board is about. the player can get on with it while it talks. once
+    ` a board has been swapped on, tutorialMissed has it talk about what is happening.
+    if tgStep = 1
+        guideThen(lockey$("intro.tut.swap"))
+    endif
+    if tgStep = 2
+        guideSay(lockey$("intro.ang.updown"))
+    endif
+    if tgStep = 3
+        guideSay(lockey$("intro.ang.carry"))
+    endif
+    if tgStep = 4
+        if ANGLER_SPEAKING + GUIDE_QUEUED = 0
+            guideSay(lockey$("intro.ang.again"))
+        endif
+    endif
+return
+
+
+` the angler swims up to one thing around the board, and says what it is, and swims back. what comes
+` next waits for it. see THE THINGS AROUND THE BOARD at the top of this file. TUTORIAL_VISIT says which:
+` 1 the count of moves, 2 the multiplier, 3 the count of moves again, to reset it, and 4 the rounds.
+tutorial_visit:
+    tvWhich = TUTORIAL_VISIT
+    TUTORIAL_VISIT = 0
+
+    tvBlob = INFO_INDEX_MOVE_COUNT
+    if tvWhich = 2 then tvBlob = INFO_INDEX_MULTIPLIER
+    if tvWhich = 4 then tvBlob = INFO_INDEX_ROUNDS
+    if tvWhich = 1
+        gosub tutorial_show_count
+    endif
+    if tvWhich = 2
+        gosub tutorial_show_mult
+        resetMultiplier()
+        refreshMultiplier(0)
+    endif
+    if tvWhich < 3
+        tvBubbleX = INFOS(tvBlob).topLeft.x + INFOS(tvBlob).size.x / 2
+        tvBubbleY = INFOS(tvBlob).topLeft.y + INFOS(tvBlob).size.y / 2
+        spawnBubbles(tvBubbleX, tvBubbleY, 22, 14, 0, rgb(255, 255, 255))
+    endif
+
+    guideVisit(tvBlob)
+    while is tween done(GUIDE_VISIT_TWEEN_ID) < 1
+        gosub update_frame
+        sync
+    endwhile
+
+    if tvWhich = 1
+        guideSay(lockey$("intro.ang.count"))
+    endif
+    if tvWhich = 2
+        guideSay(lockey$("intro.ang.mult"))
+        guideThen(lockey$("intro.ang.miss"))
+        wiggleMultiplierBar()
+    endif
+    if tvWhich = 3
+        guideSay(lockey$("intro.ang.reset"))
+    endif
+    if tvWhich = 4
+        anglerSay(loc$("intro.ang.rounds2", "rounds", GAME_ROUND_CAP))
+    endif
+
+    tvReady = 0
+    while tvReady = 0
+        gosub frame_input_icons
+        tvHurry = new action down(ACT_CONFIRM)
+        tvClick = mouseClickAnywhere()
+        if tvClick then tvHurry = 1
+        if tvHurry
+            guideHurry()
+        endif
+        tvReady = guideReady()
+        gosub update_frame
+        sync
+    endwhile
+
+    ` the moves were practice, and they go, where the player can see it
+    if tvWhich = 3
+        CURRENT_MOVE_COUNT = 0
+        set text MOVE_COUNT_TEXT_ID, "0"
+        resetMultiplier()
+        refreshMultiplier(150)
+        tvBubbleX = INFOS(tvBlob).topLeft.x + INFOS(tvBlob).size.x / 2
+        tvBubbleY = INFOS(tvBlob).topLeft.y + INFOS(tvBlob).size.y / 2
+        spawnBubbles(tvBubbleX, tvBubbleY, 26, 18, 0, rgb(255, 222, 96))
+        TUTORIAL_WAIT_UNTIL = game ms() + 900
+        gosub tutorial_wait
+    endif
+
+    guideVisitEnd()
+    while is tween done(GUIDE_VISIT_TWEEN_ID) < 1
+        gosub update_frame
+        sync
+    endwhile
+return
+
+
+` THE FIRST UPGRADE. before there are any cards, the dark comes down, and there is only the angler, who
+` says what the upgrades are, in the broadest way. handle_ability_selection comes here, and the upgrade
+` screen comes up behind it. the confirm button hurries it along.
+tutorial_first_shop:
+    hintShow(0)
+    color sprite INTRO_DIM_SPRITE, rgb(2, 6, 16, 0)
+    show sprite INTRO_DIM_SPRITE
+    guideShow()
+    create basic tween GUIDE_GLOW_TWEEN_ID, 0, 1, GUIDE_LIGHT_MS, 0
+    create basic tween ANGLER_SWIM_TWEEN_ID, 0, 1, GUIDE_ENTER_MS, 0
+    tfsStart = game ms()
+    tfsTalked = 0
+    tfsDone = 0
+    while tfsDone = 0
+        tfsAge# = game ms() - tfsStart
+        tfsDim# = tfsAge# / 900
+        if tfsDim# > 1 then tfsDim# = 1
+        color sprite INTRO_DIM_SPRITE, rgb(2, 6, 16, 238 * tfsDim#)
+
+        if tfsTalked = 0
+            if tfsAge# >= GUIDE_ENTER_MS
+                tfsTalked = 1
+                create basic tween GUIDE_BOX_TWEEN_ID, 0, 1, 250, 0
+                guideSay(lockey$("intro.line.round1"))
+                guideThen(lockey$("intro.line.goodjob"))
+                guideThen(lockey$("intro.ang.passive"))
+                guideThen(lockey$("intro.ang.custom"))
+                guideThen(lockey$("intro.line.upgrade"))
+            endif
+        else
+            gosub frame_input_icons
+            tfsHurry = new action down(ACT_CONFIRM)
+            tfsClick = mouseClickAnywhere()
+            if tfsClick then tfsHurry = 1
+            if tfsHurry
+                guideHurry()
+            endif
+            tfsDone = guideReady()
+        endif
+
+        gosub update_frame
+        sync
+    endwhile
+
+    guideLeave()
+    while GUIDE_ON
+        gosub update_frame
+        sync
+    endwhile
+    hintShow(1)
 return
 
 
@@ -506,602 +669,129 @@ tutorial_wait:
 return
 
 
-` the fish of the board shrink away, from the middle out, and the game waits for them. the cursor goes
-` too. with TUTORIAL_SHRINK_HUD, the things around the board fade away along with them, and are put
-` away, which leaves nothing but the water.
-tutorial_shrink_board:
-    tsLast = CELL_COUNT - 1
-    tsLongest = 0
-    for tsI = 0 to tsLast
-        tsRingX = CELLS(tsI).coord.x - CELL_COLUMN_COUNT / 2
-        if tsRingX < 0 then tsRingX = 0 - tsRingX
-        tsRingY = CELLS(tsI).coord.y - CELL_ROW_COUNT / 2
-        if tsRingY < 0 then tsRingY = 0 - tsRingY
-        tsRing = tsRingX
-        if tsRingY > tsRing then tsRing = tsRingY
-        tsDelay = tsRing * TUTORIAL_GROW_STAGGER
-        if tsDelay > tsLongest then tsLongest = tsDelay
-        tsFrom# = tweenVal(CELLS(tsI).scaleWaveTweenId)
-        create basic tween CELLS(tsI).scaleWaveTweenId, tsFrom#, 0, TUTORIAL_GROW_MS, tsDelay
-    next
+` the board that the game was dealt rolls out from the middle, a ring at a time, over the little board.
+` a fish that is there goes first, and the new one grows in where it was. the swaps of the little boards
+` are not part of the game, so the streams of the seed go back to where they were, and the moves and the
+` multiplier go back to how a game starts. the bar of the round and the rounds that are left fade in
+` with it. the angler gets out of the way.
+tutorial_open_sea:
+    TUTORIAL_BOARD = 0
     hide sprite SELECTION_SPRITE
+    guideAside()
 
-    tsStart = game ms()
-    tsSpan# = tsLongest + TUTORIAL_GROW_MS
-    TUTORIAL_WAIT_UNTIL = tsStart + tsLongest + TUTORIAL_GROW_MS
-    while game ms() < TUTORIAL_WAIT_UNTIL
-        if TUTORIAL_SHRINK_HUD
-            tsAge# = game ms() - tsStart
-            HUD_KEEP# = 1 - tsAge# / tsSpan#
-            if HUD_KEEP# < 0 then HUD_KEEP# = 0
+    HUD_KEEP_BAR# = 0
+    gosub tutorial_show_score
+    applyHudFade()
+
+    tosStart = game ms()
+    tosLast = CELL_COUNT - 1
+    tosLongest = 0
+    for tosI = 0 to tosLast
+        tosRingX = CELLS(tosI).coord.x - CELL_COLUMN_COUNT / 2
+        if tosRingX < 0 then tosRingX = 0 - tosRingX
+        tosRingY = CELLS(tosI).coord.y - CELL_ROW_COUNT / 2
+        if tosRingY < 0 then tosRingY = 0 - tosRingY
+        tosRing = tosRingX
+        if tosRingY > tosRing then tosRing = tosRingY
+        tosDelay = tosRing * TUTORIAL_SEA_STAGGER + (CELLS(tosI).coord.x + CELLS(tosI).coord.y) * 8
+        if tosDelay > tosLongest then tosLongest = tosDelay
+        if CELLS(tosI).value > 0
+            tosFrom# = tweenVal(CELLS(tosI).scaleWaveTweenId)
+            create basic tween CELLS(tosI).scaleWaveTweenId, tosFrom#, 0, TUTORIAL_GROW_MS, tosDelay
         endif
+        TUTORIAL_TURN_AT(tosI) = tosStart + tosDelay + TUTORIAL_GROW_MS
+    next
+
+    tosEnd = tosStart + tosLongest + TUTORIAL_GROW_MS + TUTORIAL_FISH_GROW
+    tosSpan# = tosEnd - tosStart
+    while game ms() < tosEnd
+        tosNow = game ms()
+        for tosI = 0 to tosLast
+            if TUTORIAL_TURN_AT(tosI) > 0
+                if tosNow >= TUTORIAL_TURN_AT(tosI)
+                    TUTORIAL_TURN_AT(tosI) = 0
+                    tutorialDealCell(tosI)
+                endif
+            endif
+        next
+        tosAge# = tosNow - tosStart
+        HUD_KEEP_BAR# = tosAge# / tosSpan#
+        if HUD_KEEP_BAR# > 1 then HUD_KEEP_BAR# = 1
         gosub update_frame
+        applyHudFade()
         sync
     endwhile
+    HUD_KEEP_BAR# = 1
+    applyHudFade()
 
-    if TUTORIAL_SHRINK_HUD
-        gosub tutorial_hide_moves
-        gosub tutorial_hide_score
-        HUD_KEEP# = 1
-    endif
-    for tsI = 0 to tsLast
-        hide sprite CELLS(tsI).spriteId
-    next
-return
-
-
-` the fish of the board grow back, and the things around the board come back, the way they were
-` before tutorial_shrink_board took them away
-tutorial_regrow_board:
-    trLast = CELL_COUNT - 1
-    trLongest = 0
-    for trI = 0 to trLast
-        trDelay = (CELLS(trI).coord.x + CELLS(trI).coord.y) * TUTORIAL_FISH_STAGGER
-        if trDelay > trLongest then trLongest = trDelay
-        create basic tween CELLS(trI).scaleWaveTweenId, 0, 1, TUTORIAL_FISH_GROW, trDelay
-        size sprite CELLS(trI).spriteId, 0, 0
-        if CELLS(trI).value > 0
-            show sprite CELLS(trI).spriteId
-        endif
-    next
-    cursorArrive(trLongest + TUTORIAL_FISH_GROW)
-    gosub tutorial_show_moves
-    gosub tutorial_show_score
-    applyHudFade() `with HUD_KEEP# at 1, this puts back what the fade took
-    hintShow(1)
-    TUTORIAL_WAIT_UNTIL = game ms() + trLongest + TUTORIAL_FISH_GROW
-    gosub tutorial_wait
-return
-
-
-` the board that the game was dealt comes in, as it was dealt, with the streams of the seed where they
-` were, and the moves and the multiplier as a game starts with them. the swaps of the little boards are
-` not part of the game. this does not wait for the fish to grow in: TUTORIAL_WAIT_UNTIL says when they have.
-tutorial_deal_in:
-    resizeGrid(GRID_START_COUNT, GRID_START_COUNT)
-    for tdI = 0 to 399
-        SCHOOL_FACE(tdI) = TUTORIAL_DEAL_FACE(tdI)
-        SCHOOL_SHOWN#(tdI) = 0
-    next
-    SCHOOL_SPAWNS = TUTORIAL_DEAL_SPAWNS
-    for tdI = 0 to 2
-        set random stream state tdI, TUTORIAL_RNG(tdI * 2), TUTORIAL_RNG(tdI * 2 + 1)
-    next
-
-    ` the fish come in. each one grows from nothing, and the ones at the top left go first, so that
-    ` they come in as a wave from that corner. frame_scale_wave is what sizes them.
-    tdLast = CELL_COUNT - 1
-    tdLongest = 0
-    for tdI = 0 to tdLast
-        CELLS(tdI).value = TUTORIAL_DEAL(tdI)
-        CELLS(tdI).comboForce = 0
-        CELLS(tdI).comboBlownUp = 0
-        clearCellStack(tdI)
-        GLOW_TURN#(tdI) = 0
-        RAINBOW_FISH(tdI) = 0
-        updateCell(CELLS(tdI))
-        set sprite alpha CELLS(tdI).spriteId, 255
-        hide sprite CELLS(tdI).fxSpriteId
-
-        tdDelay = (CELLS(tdI).coord.x + CELLS(tdI).coord.y) * TUTORIAL_FISH_STAGGER
-        if tdDelay > tdLongest then tdLongest = tdDelay
-        create basic tween CELLS(tdI).scaleWaveTweenId, 0, 1, TUTORIAL_FISH_GROW, tdDelay
-        size sprite CELLS(tdI).spriteId, 0, 0
-        show sprite CELLS(tdI).spriteId
-    next
-
+    tutorialDealDone()
     SELECTION_POS.x = CELL_COLUMN_COUNT / 2
     SELECTION_POS.y = CELL_ROW_COUNT / 2
     scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
     gosub update_selection_position
-    cursorArrive(tdLongest + TUTORIAL_FISH_GROW)
-
-    CURRENT_MOVE_COUNT = 0
     set text MOVE_COUNT_TEXT_ID, "0"
-    resetMultiplier()
-    coralTrailClear()
-    TUTORIAL_WAIT_UNTIL = game ms() + tdLongest + TUTORIAL_FISH_GROW
 return
 
 
-` the third little board has popped. its fish go, and the things around it, which leaves the water.
-` then the line about info mode, and the key to open it. the key brings in the board that the game was
-` dealt, with the bar of the round, and info mode opens over it.
+` the third little board has swum off. the whole board comes in, and the angler asks for info mode. the
+` key opens it, over that same board.
 tutorial_finish:
-    TUTORIAL_BOARD = 0
-    create basic tween TUTORIAL_CAPTION_TWEEN_ID, 0, 0, 1, 0
-    create basic tween TUTORIAL_SUB_TWEEN_ID, 0, 0, 1, 0
+    gosub tutorial_open_sea
+    guideBeside()
+    TUTORIAL_VISIT = 4
+    gosub tutorial_visit
 
-    TUTORIAL_SHRINK_HUD = 1
-    gosub tutorial_shrink_board
-
-    ` the line about info mode, over the water, and the hint for it on its own, where it always is.
+    ` the angler says the line about info mode, and the hint for it is on its own, where it always is.
     ` frame_hints makes it bob after a while.
-    TUTORIAL_STAGE = 5
+    TUTORIAL_STAGE = 6
     HINT_NO_INFO = 0
     HINT_ONLY_INFO = 1
     hintShow(1)
     TUTORIAL_KEY_MS = game ms()
-    set text loc INTRO_TEXT_ID, "intro.line.info"
-    show text INTRO_TEXT_ID
-    show sprite INTRO_DIM_SPRITE
-    tfStart = game ms()
+    guideSay(lockey$("intro.ang.peek2"))
+    guideThen(lockey$("intro.line.info"))
 
     tfEntered = 0
     while tfEntered = 0
         ` the main loop is not running, so this keeps the picture of the key right. it is a
         ` picture of a button if the player picks up a controller.
         gosub frame_input_icons
-
-        tfIn# = game ms() - tfStart
-        tfFade# = INTRO_FADE_MS
-        tfAlpha# = 1
-        if tfIn# < tfFade# then tfAlpha# = tfIn# / tfFade#
-        color text INTRO_TEXT_ID, rgb(255, 255, 255, 255 * tfAlpha#)
-        color sprite INTRO_DIM_SPRITE, rgb(4, 8, 24, INTRO_DIM_ALPHA * tfAlpha#)
-
         if new action down(ACT_INFO) then tfEntered = 1
-
         gosub update_frame
         sync
     endwhile
 
-    hide sprite INTRO_DIM_SPRITE
-    hide text INTRO_TEXT_ID
     TUTORIAL_KEY_MS = 0
     HINT_ONLY_INFO = 0
     hintShow(1)
 
-    ` the board that the game was dealt comes in, with everything around it, and the bar of the round
-    ` and the rounds that are left for the first time
-    gosub tutorial_deal_in
-    gosub tutorial_show_moves
-    gosub tutorial_show_score
-    applyHudFade() `with HUD_KEEP# at 1, this puts back what the fade took
-    spawnBubbles(WORLD_WIDTH / 2, 20, 40, 18, 0, rgb(255, 255, 255))
-    spawnBubbles(WORLD_WIDTH - 80, 30, 22, 14, 120, rgb(255, 255, 255))
-    gosub tutorial_wait
-
-    ` and info mode opens over the board, which is what the player asked for. the hint to close it
-    ` again starts to bob, if it is left open. when it is closed, tutorial_advance brings the fish of
-    ` the mystery.
-    TUTORIAL_STAGE = 6
+    ` info mode opens over the board, which is what the player asked for. the hint to close it again
+    ` starts to bob, if it is left open. when it is closed, tutorial_advance comes to tutorial_goodbye.
+    TUTORIAL_STAGE = 7
     TUTORIAL_INFO_MS = game ms()
     gosub info_open
+    guideSay(lockey$("intro.ang.look"))
+    guideThen(lockey$("intro.ang.codec2"))
 return
 
 
-` THE FISH OF THE MYSTERY. info mode has been closed at the end of the tutorial. the board fades away
-` to the water, and one seahorse shows a few of the things that can happen to a fish, without saying
-` what they are: it turns around, rolls over, shimmers with the rainbow, and swaps out into nothing and
-` back, with question marks coming up out of it. "Remember," over it, and "The ocean is mysterious."
-` under it. then the line about the game, on a screen of its own, and the board comes back.
-tutorial_mystery:
-    TUTORIAL_STAGE = 7
-    hintShow(0)
-    TUTORIAL_SHRINK_HUD = 1
-    gosub tutorial_shrink_board
-
-    ` the one fish is in the middle of a little board of its own, with nothing around it
-    tutorialGrid(3)
-    for tmI = 0 to 8
-        CELLS(tmI).value = 0
-        CELLS(tmI).comboForce = 0
-        CELLS(tmI).comboBlownUp = 0
-        clearCellStack(tmI)
-        GLOW_TURN#(tmI) = 0
-        RAINBOW_FISH(tmI) = 0
-        hide sprite CELLS(tmI).spriteId
-        hide sprite CELLS(tmI).fxSpriteId
-    next
-    tmFish = 4
-    CELLS(tmFish).value = TEX_BASS `the seahorse
-    tmFace = schoolArtFace(TEX_BASS)
-    if tmFace = 0 then tmFace = 1
-    SCHOOL_FACE(tmFish) = tmFace `the way its picture faces, so that it is not turned around to start with
-    SCHOOL_SHOWN#(tmFish) = 0
-    updateCell(CELLS(tmFish))
-    set sprite alpha CELLS(tmFish).spriteId, 255
-    size sprite CELLS(tmFish).spriteId, 0, 0
-    show sprite CELLS(tmFish).spriteId
-    create basic tween CELLS(tmFish).scaleWaveTweenId, 0, 1, TUTORIAL_FISH_GROW, 0
-    SELECTION_POS.x = 1
-    SELECTION_POS.y = 1
-    scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
-    gosub update_selection_position
-    cursorArrive(TUTORIAL_FISH_GROW)
-
-    ` "Remember," over the fish, and the rest of it under the fish, on the line that is under a
-    ` little board. it is white here, and bigger, because it is the point of the whole thing.
-    set text loc TUTORIAL_CAPTION_TEXT_ID, "intro.tut.remember"
-    create basic tween TUTORIAL_CAPTION_TWEEN_ID, 0, 1, 500, 300
-    set text loc TUTORIAL_SUB_TEXT_ID, "intro.tut.mysterious"
-    size text max TUTORIAL_SUB_TEXT_ID, WORLD_WIDTH - 40, 24
-    color text TUTORIAL_SUB_TEXT_ID, rgb(255, 255, 255, 255)
-    create basic tween TUTORIAL_SUB_TWEEN_ID, 0, 1, 500, 1300
-    tmNextMark = 700
-
-    ` what the fish does, and when, in milliseconds from when it shows up
-    tmMiddleX# = getCellX(1)
-    tmLeftX# = getCellX(0)
-    tmY = getCellY(1)
-    tmSpan# = 0
-    tmStart = game ms()
-    tmLit = 0
-    tmShockLeft = 0
-    tmShockRight = 0
-    tmShrunk = 0
-    tmDone = 0
-    while tmDone = 0
-        tmAge = game ms() - tmStart
-
-        ` it turns around to face the other way, and back. see WHAT SHOWS in fish_headers_glow.
-        tmTurn# = 0
-        if tmAge > 900
-            if tmAge < 2300
-                tmTurnAge# = tmAge - 900
-                tmSpan# = 1400
-                tmTurn# = sin((tmTurnAge# * 3.14159) / tmSpan#)
-            endif
-        endif
-        GLOW_TURN#(tmFish) = tmTurn#
-
-        ` it rolls over, belly up, and back. see frame_fish_fx.
-        tmBelly = 0
-        if tmAge > 2600
-            if tmAge < 3700 then tmBelly = 1
-        endif
-        CELLS(tmFish).bellyUp = tmBelly
-
-        ` it shimmers with the rainbow. see fish_headers_rainbow.
-        RAINBOW_FISH(tmFish) = 0
-        if tmAge > 4300
-            if tmAge < 6200 then RAINBOW_FISH(tmFish) = 1
-            if tmLit = 0
-                tmLit = 1
-                RAINBOW_LIT_FROM(tmFish) = game ms()
-                RAINBOW_LIT_UNTIL(tmFish) = game ms() + 700
-            endif
-        endif
-
-        ` and it swaps to the left, into nothing, and back to the right, the way a swap carries a fish
-        tmSlide# = 0
-        if tmAge > 6600
-            tmSlideAge# = tmAge - 6600
-            tmSpan# = 220
-            tmSlide# = tmSlideAge# / tmSpan#
-            if tmShockLeft = 0
-                tmShockLeft = 1
-                spawnCursorWake(1, 1)
-                spawnShockwaveToward(1, 1, -1, 0, SHOCK_SWAP_STRENGTH#, 0, SHOCK_LIFE)
-            endif
-        endif
-        if tmSlide# > 1 then tmSlide# = 1
-        if tmAge > 7500
-            tmSlideAge# = tmAge - 7500
-            tmSpan# = 220
-            tmSlide# = 1 - tmSlideAge# / tmSpan#
-            if tmSlide# < 0 then tmSlide# = 0
-            if tmShockRight = 0
-                tmShockRight = 1
-                spawnCursorWake(0, 1)
-                spawnShockwaveToward(0, 1, 1, 0, SHOCK_SWAP_STRENGTH#, 0, SHOCK_LIFE)
-            endif
-        endif
-        ` it eases into each stop
-        tmEase# = tmSlide# * tmSlide# * (3 - 2 * tmSlide#)
-        tmX# = tmMiddleX# + (tmLeftX# - tmMiddleX#) * tmEase#
-        position sprite CELLS(tmFish).spriteId, tmX#, tmY
-        position sprite SELECTION_SPRITE, tmX#, tmY
-
-        ` a question mark comes up out of the fish, now and then, wherever the fish is
-        if tmAge > tmNextMark
-            if tmAge < 8400
-                tmNextMark = tmAge + 650 + rnd(400)
-                tmMarkX# = tmX# + rnd(9) - 4
-                tmMarkY# = tmY - 6
-                tutorialMarkSpawn(tmMarkX#, tmMarkY#)
-            endif
-        endif
-        tutorialMarksStep()
-
-        ` the confirm button goes on to the end
-        tmSkip = 0
-        if new action down(ACT_CONFIRM) then tmSkip = 1
-        tmClicked = mouseClickAnywhere()
-        if tmClicked then tmSkip = 1
-        if tmSkip
-            if tmAge < 9000 then tmStart = game ms() - 9000
-        endif
-
-        ` then the words and the fish go
-        if tmAge > 9000
-            if tmShrunk = 0
-                tmShrunk = 1
-                tmFrom# = tweenVal(TUTORIAL_CAPTION_TWEEN_ID)
-                create basic tween TUTORIAL_CAPTION_TWEEN_ID, tmFrom#, 0, 300, 0
-                tmFrom# = tweenVal(TUTORIAL_SUB_TWEEN_ID)
-                create basic tween TUTORIAL_SUB_TWEEN_ID, tmFrom#, 0, 300, 0
-                create basic tween CELLS(tmFish).scaleWaveTweenId, 1, 0, TUTORIAL_GROW_MS, 0
-                hide sprite SELECTION_SPRITE
-            endif
-        endif
-        if tmAge > 9800 then tmDone = 1
-
-        gosub update_frame
-        sync
-    endwhile
-
-    GLOW_TURN#(tmFish) = 0
-    CELLS(tmFish).bellyUp = 0
-    CELLS(tmFish).bellyShown# = 0
-    RAINBOW_FISH(tmFish) = 0
-    RAINBOW_LIT_UNTIL(tmFish) = 0
-    hide sprite CELLS(tmFish).spriteId
-    tutorialMarksClear()
-
-    ` the line under a little board goes back to the way that the second board has it
-    set text loc TUTORIAL_SUB_TEXT_ID, "intro.tut.miss"
-    size text max TUTORIAL_SUB_TEXT_ID, 340, 16
-    color text TUTORIAL_SUB_TEXT_ID, rgb(255, 230, 150, 255)
-
-    ` then a screen of its own about the game: "You cannot lose.", and how many rounds, under it
-    TUTORIAL_LINES_SET = 1
-    gosub tutorial_lines
-
-    ` and the board comes back, as it was dealt, with everything around it
-    gosub tutorial_deal_in
-    gosub tutorial_show_moves
-    gosub tutorial_show_score
-    applyHudFade() `with HUD_KEEP# at 1, this puts back what the fade took
-    hintShow(1)
-    gosub tutorial_wait
-
-    ` and what a round is: the bar that fills up
-    gosub tutorial_round_bar
+` info mode has been closed, and the game is the player's. the tutorial is over, and the angler stays
+` for a little while, and talks while the player plays. see frame_guide for the outline around the bar,
+` and the question marks.
+tutorial_goodbye:
     TUTORIAL_STAGE = 0
-return
-
-
-` THE BAR OF THE ROUND. see fish_headers. the water darkens, and the bar, its name and its numbers are
-` lifted over the dark, with an outline that pulses around them. the bar fills up once, fizzing at the
-` top, and empties out again, while the lines under it say that filling it finishes the round. the
-` score is 0 all the while, so the bar only shows what its tween is told. the confirm key moves on.
-tutorial_round_bar:
-    trbX = SCORE_POS.x - 6
-    trbY = SCORE_POS.y - 19
-    trbW = SCORE_SIZE.x + 12
-    trbH = 39
-    layoutInfoBorder(TUTORIAL_BAR_BORDER, trbX, trbY, trbW, trbH)
-    set text position TUTORIAL_BAR_TEXT_ID, WORLD_WIDTH / 2, trbY + trbH + 8
-    set text position TUTORIAL_BAR_SUB_TEXT_ID, WORLD_WIDTH / 2, trbY + trbH + 32
-
-    ` over the dark, which is at ORDER_INTRO
-    order sprite SCORE_BAR.backgroundSpriteId, ORDER_INTRO + 2
-    order sprite SCORE_BAR.foregroundSpriteId, ORDER_INTRO + 2
-    order text SCORE_BAR.textNumId, ORDER_INTRO + 2
-    order text SCORE_BAR.textTitleId, ORDER_INTRO + 2
-
-    color sprite INTRO_DIM_SPRITE, rgb(4, 8, 24, 0)
-    show sprite INTRO_DIM_SPRITE
-    show text TUTORIAL_BAR_TEXT_ID
-    show text TUTORIAL_BAR_SUB_TEXT_ID
-    showInfoBorder(TUTORIAL_BAR_BORDER, 1)
-    spawnBubbles(WORLD_WIDTH / 2, SCORE_POS.y, 40, 10, 0, rgb(255, 230, 150))
-
-    TUTORIAL_BAR_DEMO = 1
-    trbStart = game ms()
-    trbFilled = 0
-    trbEmptied = 0
-    trbFizz = 0
-    trbDone = 0
-    trbFade# = 400
-    while trbDone = 0
-        trbAge = game ms() - trbStart
-
-        ` the bar fills, and empties again
-        if trbAge >= TUTORIAL_BAR_FILL_AT
-            if trbFilled = 0
-                trbFilled = 1
-                create basic tween SCORE_BAR.progressTweenId, 0, 1, TUTORIAL_BAR_FILL_MS, 0
-            endif
-        endif
-        if trbAge >= TUTORIAL_BAR_EMPTY_AT
-            if trbEmptied = 0
-                trbEmptied = 1
-                create basic tween SCORE_BAR.progressTweenId, tweenVal(SCORE_BAR.progressTweenId), 0, 500, 0
-            endif
-        endif
-
-        ` it fizzes while it is full, the way a full bar does in the game
-        trbFull = 0
-        if trbFilled
-            if trbEmptied = 0
-                if tweenVal(SCORE_BAR.progressTweenId) >= 1 then trbFull = 1
-            endif
-        endif
-        if trbFull
-            if game ms() >= trbFizz
-                trbFizz = game ms() + 60
-                spawnBubblesOnLayer(SCORE_BAR.pos.x + rnd(SCORE_BAR.size.x), SCORE_BAR.pos.y + 2, 2, 1, 0, rgb(190, 225, 255), ORDER_INTRO + 3, 40, 255, 1)
-            endif
-        endif
-
-        ` everything fades in, and out at the end
-        trbIn# = trbAge
-        trbLeft# = TUTORIAL_BAR_MS - trbAge
-        trbAlpha# = 1
-        if trbIn# < trbFade# then trbAlpha# = trbIn# / trbFade#
-        if trbLeft# < trbFade# then trbAlpha# = trbLeft# / trbFade#
-        if trbAlpha# < 0 then trbAlpha# = 0
-        color sprite INTRO_DIM_SPRITE, rgb(4, 8, 24, INTRO_DIM_ALPHA * 1.6 * trbAlpha#)
-        set text alpha TUTORIAL_BAR_TEXT_ID, 255 * trbAlpha#
-        trbSubIn# = trbIn# - 500
-        trbSubAlpha# = 1
-        if trbSubIn# < trbFade# then trbSubAlpha# = trbSubIn# / trbFade#
-        if trbSubAlpha# < 0 then trbSubAlpha# = 0
-        if trbAlpha# < trbSubAlpha# then trbSubAlpha# = trbAlpha#
-        set text alpha TUTORIAL_BAR_SUB_TEXT_ID, 255 * trbSubAlpha#
-
-        ` the outline pulses gently
-        trbNow# = game ms()
-        trbPulse# = .75 + sin(trbNow# * .006) * .25
-        colorInfoBorder(TUTORIAL_BAR_BORDER, rgb(255, 222, 96, 255 * trbAlpha# * trbPulse#))
-
-        ` the confirm key, or a click, goes on: the rest of it fades out
-        trbSkip = 0
-        if new action down(ACT_CONFIRM) then trbSkip = 1
-        trbClicked = mouseClickAnywhere()
-        if trbClicked then trbSkip = 1
-        if trbSkip
-            trbSkipTo = TUTORIAL_BAR_MS - trbFade#
-            if trbAge < trbSkipTo then trbStart = game ms() - trbSkipTo
-        endif
-        if trbAge >= TUTORIAL_BAR_MS then trbDone = 1
-
-        gosub update_frame
-        sync
-    endwhile
-
-    ` everything back the way it is in the game, with an empty bar
-    TUTORIAL_BAR_DEMO = 0
-    create basic tween SCORE_BAR.progressTweenId, 0, 0, 1, 0
-    order sprite SCORE_BAR.backgroundSpriteId, 0
-    order sprite SCORE_BAR.foregroundSpriteId, 0
-    order text SCORE_BAR.textNumId, ORDER_HUD_TEXT
-    order text SCORE_BAR.textTitleId, ORDER_HUD_TEXT
-    hide sprite INTRO_DIM_SPRITE
-    hide text TUTORIAL_BAR_TEXT_ID
-    hide text TUTORIAL_BAR_SUB_TEXT_ID
-    showInfoBorder(TUTORIAL_BAR_BORDER, 0)
-return
-
-
-` lines of text over the darkened water, one at a time, the way the first lines of the tutorial go. a
-` line can have a smaller one under it. TUTORIAL_LINES_SET says which lines: 1 the line about the game
-` after the fish of the mystery, 2 the lines before the first upgrade screen. the confirm button goes on
-` to the next line.
-tutorial_lines:
-    tlCount = 3
-    if TUTORIAL_LINES_SET = 1 then tlCount = 1
-    tlLine = 0
-    tlShown = -1
-    tlStart = game ms()
-    tlMs# = INTRO_LINE_MS
-    tlFade# = INTRO_FADE_MS
-
-    color text INTRO_TEXT_ID, rgb(255, 255, 255, 0)
-    color sprite INTRO_DIM_SPRITE, rgb(4, 8, 24, 0)
-    show sprite INTRO_DIM_SPRITE
-    show text INTRO_TEXT_ID
-
-    while tlLine < tlCount
-        if tlLine <> tlShown
-            tlShown = tlLine
-            tlStart = game ms()
-            tlLong = 0 `a line with a smaller one under it stays up for longer
-            hide text INTRO_SUB_TEXT_ID
-            if TUTORIAL_LINES_SET = 1
-                set text loc INTRO_TEXT_ID, "intro.line.nolose"
-                set text loc INTRO_SUB_TEXT_ID, "intro.line.rounds", "rounds", GAME_ROUND_CAP
-                show text INTRO_SUB_TEXT_ID
-                tlLong = 2
-            endif
-            if TUTORIAL_LINES_SET = 2
-                if tlLine = 0 then set text loc INTRO_TEXT_ID, "intro.line.hi"
-                if tlLine = 1
-                    set text loc INTRO_TEXT_ID, "intro.line.round1"
-                    set text loc INTRO_SUB_TEXT_ID, "intro.line.goodjob"
-                    show text INTRO_SUB_TEXT_ID
-                    tlLong = 1
-                endif
-                if tlLine = 2 then set text loc INTRO_TEXT_ID, "intro.line.upgrade"
-            endif
-            tlMs# = INTRO_LINE_MS
-            if tlLong = 1 then tlMs# = INTRO_LINE_MS + 800
-            if tlLong = 2 then tlMs# = INTRO_LINE_MS + 2000
-        endif
-
-        ` every line fades in, stays a while, and fades out
-        tlIn# = game ms() - tlStart
-        tlLeft# = tlMs# - tlIn#
-        tlAlpha# = 1
-        if tlIn# < tlFade# then tlAlpha# = tlIn# / tlFade#
-        if tlLeft# < tlFade# then tlAlpha# = tlLeft# / tlFade#
-        if tlAlpha# < 0 then tlAlpha# = 0
-        color text INTRO_TEXT_ID, rgb(255, 255, 255, 255 * tlAlpha#)
-
-        ` the smaller line comes in a little after its line, and goes with it
-        tlSubIn# = tlIn# - 600
-        tlSubAlpha# = 1
-        if tlSubIn# < tlFade# then tlSubAlpha# = tlSubIn# / tlFade#
-        if tlAlpha# < tlSubAlpha# then tlSubAlpha# = tlAlpha#
-        if tlSubAlpha# < 0 then tlSubAlpha# = 0
-        color text INTRO_SUB_TEXT_ID, rgb(255, 230, 150, 255 * tlSubAlpha#)
-
-        ` the dark comes in with the first line, and goes out with the last one
-        tlDim# = 1
-        if tlLine = 0
-            if tlIn# < tlFade# then tlDim# = tlIn# / tlFade#
-        endif
-        if tlLine = tlCount - 1
-            if tlLeft# < tlFade# then tlDim# = tlLeft# / tlFade#
-        endif
-        if tlDim# < 0 then tlDim# = 0
-        color sprite INTRO_DIM_SPRITE, rgb(4, 8, 24, INTRO_DIM_ALPHA * tlDim#)
-
-        tlNext = 0
-        if tlLeft# <= 0 then tlNext = 1
-        if new action down(ACT_CONFIRM) then tlNext = 1
-        tlClicked = mouseClickAnywhere() `a click is the confirm key here. see THE MOUSE in fish_headers_mouse.
-        if tlClicked then tlNext = 1
-        if tlNext then tlLine = tlLine + 1
-
-        gosub update_frame
-        sync
-    endwhile
-
-    hide sprite INTRO_DIM_SPRITE
-    hide text INTRO_TEXT_ID
-    hide text INTRO_SUB_TEXT_ID
-return
-
-
-` THE FIRST UPGRADE. the first round of a game that had the tutorial has been won, and the upgrade screen
-` is about to come up for the first time. handle_ability_selection comes here first. the board fades away,
-` a few lines say what the upgrade screen is, and the board comes back for when it is done. no bubbles
-` float up while the lines are up, not even the ones of the full bar, so that there is only the water.
-tutorial_upgrade_talk:
-    TUTORIAL_UPGRADE_TALK = 0
-    hintShow(0)
-    TUTORIAL_SHRINK_HUD = 1
-    gosub tutorial_shrink_board
-    TUTORIAL_QUIET_BUBBLES = 1
-    clearBubbles()
-    TUTORIAL_LINES_SET = 2
-    gosub tutorial_lines
-    TUTORIAL_QUIET_BUBBLES = 0
-    gosub tutorial_regrow_board
+    cursorArrive(0)
+    tgbX = SCORE_POS.x - 6
+    tgbY = SCORE_POS.y - 19
+    tgbW = SCORE_SIZE.x + 12
+    layoutInfoBorder(TUTORIAL_BAR_BORDER, tgbX, tgbY, tgbW, 39)
+    guideSay(lockey$("intro.tut.bar"))
+    guideThen(lockey$("intro.tut.bar.sub"))
+    guideThen(lockey$("intro.line.nolose"))
+    guideThen(lockey$("intro.ang.end2"))
+    guideThen(lockey$("intro.ang.secrets"))
+    guideThen(lockey$("intro.ang.trust"))
+    GUIDE_END_TALK = 1
 return
 
 
@@ -1111,7 +801,14 @@ tutorial_end:
     TUTORIAL_SCORE_HOLD = 0
     TUTORIAL_INFO_MS = 0
     TUTORIAL_UPGRADE_TALK = 0
-    TUTORIAL_QUIET_BUBBLES = 0
+    guideOff()
+    if GUIDE_MARKS_UNTIL > 0
+        GUIDE_MARKS_UNTIL = 0
+        tutorialMarksClear()
+    endif
+    if PUZZLE_ON
+        gosub puzzle_end
+    endif
     if TUTORIAL_STAGE = 0 then return
     TUTORIAL_STAGE = 0
     TUTORIAL_BOARD = 0
@@ -1120,10 +817,6 @@ tutorial_end:
     TUTORIAL_KEY_MS = 0
     HINT_ONLY_INFO = 0
     HINT_NO_INFO = 0
-    create basic tween TUTORIAL_CAPTION_TWEEN_ID, 0, 0, 1, 0
-    create basic tween TUTORIAL_SUB_TWEEN_ID, 0, 0, 1, 0
-    hide text TUTORIAL_CAPTION_TEXT_ID
-    hide text TUTORIAL_SUB_TEXT_ID
     hide sprite INTRO_DIM_SPRITE
     hide text INTRO_TEXT_ID
     HUD_KEEP# = 1
@@ -1155,19 +848,31 @@ tutorial_hide_moves:
     hide text MULT_NUM_TEXT_ID
     hide sprite MULT_BAR_BACK_SPRITE
     hide sprite MULT_BAR_FILL_SPRITE
+    hide sprite MULT_BAR_CHARGE_SPRITE
+    hide sprite MULT_BAR_GLINT_SPRITE
     setInfoBlobEnabled(INFO_INDEX_MOVE_COUNT, 0)
     setInfoBlobEnabled(INFO_INDEX_MULTIPLIER, 0)
 return
 
 tutorial_show_moves:
+    gosub tutorial_show_count
+    gosub tutorial_show_mult
+return
+
+tutorial_show_count:
     show text MOVES_LABEL_TEXT_ID
     show text MOVE_COUNT_TEXT_ID
+    setInfoBlobEnabled(INFO_INDEX_MOVE_COUNT, 1)
+return
+
+tutorial_show_mult:
     show text MULT_LABEL_TEXT_ID
     show text MULT_TEXT_ID
     show text MULT_NUM_TEXT_ID
     show sprite MULT_BAR_BACK_SPRITE
     show sprite MULT_BAR_FILL_SPRITE
-    setInfoBlobEnabled(INFO_INDEX_MOVE_COUNT, 1)
+    show sprite MULT_BAR_CHARGE_SPRITE
+    show sprite MULT_BAR_GLINT_SPRITE
     setInfoBlobEnabled(INFO_INDEX_MULTIPLIER, 1)
 return
 
@@ -1176,7 +881,13 @@ return
 tutorial_hide_score:
     hide sprite SCORE_BAR.backgroundSpriteId
     hide sprite SCORE_BAR.foregroundSpriteId
-    hide sprite OVERFLOW_SPRITE
+    for introOverI = 0 to CHARGE_SLICE_COUNT - 1
+        hide sprite CHARGE_OVER_SPRITES(introOverI)
+    next
+    for introChargeI = 0 to CHARGE_SLICE_COUNT - 1
+        hide sprite CHARGE_SPRITES(introChargeI)
+    next
+    hide text CHARGE_TEXT_ID
     hide text SCORE_BAR.textNumId
     hide text SCORE_BAR.textTitleId
     hide text ROUNDS_LABEL_TEXT_ID
@@ -1188,7 +899,13 @@ return
 tutorial_show_score:
     show sprite SCORE_BAR.backgroundSpriteId
     show sprite SCORE_BAR.foregroundSpriteId
-    show sprite OVERFLOW_SPRITE
+    for introOverI = 0 to CHARGE_SLICE_COUNT - 1
+        show sprite CHARGE_OVER_SPRITES(introOverI)
+    next
+    for introChargeI = 0 to CHARGE_SLICE_COUNT - 1
+        show sprite CHARGE_SPRITES(introChargeI)
+    next
+    show text CHARGE_TEXT_ID
     show text SCORE_BAR.textNumId
     show text SCORE_BAR.textTitleId
     show text ROUNDS_LABEL_TEXT_ID
@@ -1234,8 +951,8 @@ frame_hints:
     endif
     for hintIconI = 0 to 2
         hintIconScale# = 1 + tweenVal(ICON_PUNCH_TWEENS(hintIconI)) * ICON_PUNCH_SIZE#
-        set text icon scale TUTORIAL_CAPTION_TEXT_ID, ICON_PUNCH_IDS(hintIconI), hintIconScale#
         set text icon scale INTRO_TEXT_ID, ICON_PUNCH_IDS(hintIconI), hintIconScale#
+        set text icon scale ANGLER_SAY_TEXT_ID, ICON_PUNCH_IDS(hintIconI), hintIconScale#
     next
 
     ` they sit in a row, in the middle of the screen. the pictures of the keys are not the same width
@@ -1269,28 +986,6 @@ frame_hints:
 
     ` a - b + c comes out as a - (b + c), so the subtraction goes last
     set text position HINT_PART_TEXTS(2), hintX# + hintWave# * tweenVal(HINT_SHAKE_TWEENS(2)), WORLD_HEIGHT + hintKeyBob - 2
-
-    ` the words over a little board sit just above its top row. see THE LITTLE BOARDS, at the top of this file.
-    hintCaption# = tweenVal(TUTORIAL_CAPTION_TWEEN_ID)
-    if hintCaption# > 0
-        hintCaptionY = GRID_POS.y - CELL_SIZE / 2
-        set text position TUTORIAL_CAPTION_TEXT_ID, GRID_CENTER.x, hintCaptionY - 8
-        set text alpha TUTORIAL_CAPTION_TEXT_ID, hintCaption# * 255
-        show text TUTORIAL_CAPTION_TEXT_ID
-    else
-        hide text TUTORIAL_CAPTION_TEXT_ID
-    endif
-
-    ` and the line about a swap that pops nothing sits just under its bottom row
-    hintSub# = tweenVal(TUTORIAL_SUB_TWEEN_ID)
-    if hintSub# > 0
-        hintSubY = GRID_POS.y + (CELL_ROW_COUNT - 1) * CELL_SIZE + CELL_SIZE / 2
-        set text position TUTORIAL_SUB_TEXT_ID, GRID_CENTER.x, hintSubY + 4
-        set text alpha TUTORIAL_SUB_TEXT_ID, hintSub# * 255
-        show text TUTORIAL_SUB_TEXT_ID
-    else
-        hide text TUTORIAL_SUB_TEXT_ID
-    endif
 
     ` in the very first game, info mode opened by itself, and the only hint is the one to close it.
     ` if it has been left open for a while, that hint bobs the same way, to ask for the key.
@@ -1414,52 +1109,78 @@ endfunction
 
 ` THE LITTLE BOARDS. see the top of this file.
 
-` how many cells there are across a little board, and down it. 0 for one that there is not.
+` how many cells there are across a little board, and down it. 0 for one that there is not. they
+` are all the whole board, with gaps in it.
 function tutorialLayoutSize(tlsStep)
     tlsSize = 0
-    if tlsStep = 1 then tlsSize = 3
-    if tlsStep = 2 then tlsSize = 5
-    if tlsStep = 3 then tlsSize = 7
+    if tlsStep >= 1
+        if tlsStep <= 4 then tlsSize = GRID_START_COUNT
+    endif
 endfunction tlsSize
+
+
+` 1 when this cell is a gap in a little board. see THE LITTLE BOARDS, at the top of this file.
+function tutorialIsGap(tigCell)
+    tigIs = 0
+    if TUTORIAL_BOARD
+        if CELLS(tigCell).value = 0 then tigIs = 1
+    endif
+endfunction tigIs
+
+
+` every fish of a little board starts out looking right, so that the way that a fish turns can be seen
+function tutorialFaceRight(tfrCell)
+    SCHOOL_FACE(tfrCell) = 1
+    tfrArt = schoolArtFace(CELLS(tfrCell).value)
+    SCHOOL_SHOWN#(tfrCell) = 0
+    if tfrArt <> 0
+        if tfrArt <> 1 then SCHOOL_SHOWN#(tfrCell) = 1
+    endif
+endfunction
+
+
+` handle_combos draws every cell again after a pop, and a gap has nothing to show
+function tutorialHideGaps()
+    thgLast = CELL_COUNT - 1
+    for thgI = 0 to thgLast
+        if CELLS(thgI).value = 0
+            hide sprite CELLS(thgI).spriteId
+        endif
+    next
+endfunction
 
 
 ` the kind of fish that a little board has in a cell. every row is a number, one digit for every cell,
 ` and a digit is a kind of fish from TUTORIAL_KINDS:
 `     1 puffer, 2 catfish, 3 goldfish, 4 angelfish, 5 crab, 6 seahorse, 7 starfish
-` the letters next to the rows say the same: P F G A C S W.
-` a board has no group of three to start with. on the second board, only the swap that the board is
-` about makes one. the fish that drop in after its pop are the ones that the next board has
-` there. fish_tests_tutorial checks all of that.
+` the letters next to the rows say the same: P F G A C S W, and a dot for a gap. a row that is not
+` here is all gaps, and a row that starts with gaps starts with zeros, which a number leaves off.
+` a board has no group of three to start with, and only the swap that the board is about makes one.
+` the fish that drop in after its pop are the ones that the next board has there.
+` fish_tests_tutorial checks all of that.
 function tutorialLayoutKind(tlkStep, tlkX, tlkY)
     tlkRow = 0
 
-    ` the seahorses: swap the crab down. the cursor starts on the crab.
+    ` the seahorses: swap the crab with the seahorse to the right of it. the cursor starts on the crab.
     if tlkStep = 1
-        if tlkY = 0 then tlkRow = 314 `G P A
-        if tlkY = 1 then tlkRow = 656 `S C S
-        if tlkY = 2 then tlkRow = 762 `W S F
+        if tlkY = 4 then tlkRow = 6656300 `. . S S C S G . .
     endif
 
-    ` the angelfish, along the top: swap the seahorse at the top right with the angelfish at the end.
-    ` the cursor comes from the crab of the last board, near the bottom. no other swap pops anything.
+    ` swap the puffer with the seahorse under it, and the three of them make an L
     if tlkStep = 2
-        if tlkY = 0 then tlkRow = 14464 `P A A S A
-        if tlkY = 1 then tlkRow = 65235 `S C F G C
-        if tlkY = 2 then tlkRow = 23147 `F G P A W
-        if tlkY = 3 then tlkRow = 47521 `A W C F P
-        if tlkY = 4 then tlkRow = 16374 `P S G W A
+        if tlkY = 3 then tlkRow = 6000000 `. . S . . . . . .
+        if tlkY = 4 then tlkRow = 326125372 `G F S P F C G W F
+        if tlkY = 5 then tlkRow = 600000 `. . . S . . . . .
     endif
 
-    ` the angelfish again, down the left side: swap the angelfish on the left edge down, beside the
-    ` one to its right, and the four of them make an L. a few other swaps near it pop too, which is fine.
+    ` the seahorse at the end comes all the way to the left, and looks away from the other two
     if tlkStep = 3
-        if tlkY = 0 then tlkRow = 3523542 `G C F G C A F
-        if tlkY = 1 then tlkRow = 2147167 `F P A W P S W
-        if tlkY = 2 then tlkRow = 7652351 `W S C F G C P
-        if tlkY = 3 then tlkRow = 4231472 `A F G P A W F
-        if tlkY = 4 then tlkRow = 5475216 `C A W C F P S
-        if tlkY = 5 then tlkRow = 4163743 `A P S G W A G
-        if tlkY = 6 then tlkRow = 4352165 `A G C F P S C
+        if tlkY = 4 then tlkRow = 664125376 `S S A P F C G W S
+    endif
+
+    ` the seahorse at the start comes all the way to the right, and looks the way that the other two do
+    if tlkStep = 4
+        if tlkY = 4 then tlkRow = 625413766 `S F C A P G W S S
     endif
 
     ` the digit of the cell. the first cell of a row is the first digit.
@@ -1476,25 +1197,25 @@ function tutorialLayoutKind(tlkStep, tlkX, tlkY)
 endfunction tlkKind
 
 
-` the cell of the swap that a little board is about, as a number on that board. `tscEnd` is 0 for
-` the fish that the cursor is meant to start the swap on, and 1 for the one that it goes to.
-function tutorialSwapCell(tscStep, tscEnd)
-    tscX = 0
-    tscY = 0
-    if tscStep = 1
-        tscX = 1
-        tscY = 1 + tscEnd
-    endif
+` where the fish that a little board is about is, after `tscSwaps` swaps of bringing it home
+function tutorialSwapCell(tscStep, tscSwaps)
+    tscX = 5 - tscSwaps
+    tscY = 4
     if tscStep = 2
-        tscX = 4 - tscEnd
-        tscY = 0
+        tscX = 3
+        tscY = 5 - tscSwaps
     endif
-    if tscStep = 3
-        tscX = 0
-        tscY = 3 + tscEnd
-    endif
+    if tscStep = 3 then tscX = 8 - tscSwaps
+    if tscStep = 4 then tscX = tscSwaps
     tscCell = tscX + tscY * tutorialLayoutSize(tscStep)
 endfunction tscCell
+
+
+` how many swaps it takes to bring that fish home
+function tutorialCarrySwaps(tcsStep)
+    tcsSwaps = 6
+    if tcsStep < 3 then tcsSwaps = 1
+endfunction tcsSwaps
 
 
 ` make the board a little board, `tgSize` cells across and down. resizeGrid would make its cells big,
@@ -1525,7 +1246,9 @@ endfunction
 ` the next board has in that spot. the last board makes way for the whole board, so any fish that does
 ` not pop will do there. this does not roll the streams of the seed.
 function tutorialNewFish(tnfCell)
+    if PUZZLE_ON then exitfunction 0 `nothing comes back. see fish_headers_puzzle.
     tnfNext = TUTORIAL_STAGE `one more than the little board that is being played
+    if TUTORIAL_RETRY then tnfNext = 4
     tnfNextSize = tutorialLayoutSize(tnfNext)
     tnfKind = 0
     if tnfNextSize > 0
@@ -1556,6 +1279,10 @@ endfunction tnfKind
 ` that nothing changes under the board as it grows. startLiveMove asks this about every swap.
 function tutorialBlocksSwap(tbsA, tbsB)
     tbsBlocked = 0
+    if PUZZLE_ON
+        if REQUEST_COMBO_CHECK then tbsBlocked = 1 `the swaps wait for the board to settle. see THE RULES in fish_headers_puzzle.
+        if PUZZLE_CLEARED_MS > 0 then tbsBlocked = 1
+    endif
     if TUTORIAL_BOARD
         if TUTORIAL_STEP_DONE then tbsBlocked = 1
     endif
@@ -1565,19 +1292,113 @@ function tutorialBlocksSwap(tbsA, tbsB)
 endfunction tbsBlocked
 
 
-` a swap on a little board popped nothing, and that cost the multiplier. judgeMultiplierSwaps comes here.
-` the line under the board says so, and the bar of the multiplier wiggles, so that the player looks at it.
+` a swap on a little board popped nothing. judgeMultiplierSwaps comes here. the angler talks about what
+` is happening on the board. it does not nag about the multiplier. see tutorial_visit.
 function tutorialMissed()
     if TUTORIAL_BOARD = 0 then exitfunction
     if TUTORIAL_STEP_DONE then exitfunction
-    tmsFrom# = tweenVal(TUTORIAL_SUB_TWEEN_ID)
-    create basic tween TUTORIAL_SUB_TWEEN_ID, tmsFrom#, 1, 250, 0
-    wiggleMultiplierBar()
+    TUTORIAL_SWAPS = TUTORIAL_SWAPS + 1
+
+    ` the long way home, while it can be seen
+    if TUTORIAL_STAGE = 4
+        if TUTORIAL_SWAPS = 1
+            guideSay(lockey$("intro.ang.turn"))
+        endif
+        if TUTORIAL_SWAPS = 4
+            if tutorialLooksAway()
+                guideSay(lockey$("intro.ang.wrong"))
+            endif
+        endif
+    endif
+    if TUTORIAL_STAGE = 5
+        if TUTORIAL_SWAPS = 3
+            guideSay(lockey$("intro.ang.same2"))
+        endif
+    endif
 endfunction
 
 
-` THE QUESTION MARKS. one more question mark shows up at this spot, and drifts up from it. see THE FISH
-` OF THE MYSTERY. they are only for show, so where they go is rolled with rnd.
+` 1 when a seahorse looks left, which is the one that is being brought home
+function tutorialLooksAway()
+    tlaIs = 0
+    tlaLast = CELL_COUNT - 1
+    for tlaI = 0 to tlaLast
+        if CELLS(tlaI).value = TUTORIAL_KINDS(6)
+            if SCHOOL_FACE(tlaI) < 0 then tlaIs = 1
+        endif
+    next
+endfunction tlaIs
+
+
+` the main loop comes here on every frame of a little board. if the player has stopped, it says that is
+` fine. it does not say so twice on one board.
+function tutorialWatch()
+    twNow = game ms()
+    twAny = new any input()
+    if twAny then TUTORIAL_IDLE_MS = twNow
+    if TUTORIAL_STEP_DONE then exitfunction
+    if TUTORIAL_WAIT_SAID then exitfunction
+    if ANGLER_SPEAKING + GUIDE_QUEUED > 0
+        TUTORIAL_IDLE_MS = twNow
+        exitfunction
+    endif
+    if twNow - TUTORIAL_IDLE_MS < TUTORIAL_IDLE_LIMIT then exitfunction
+    TUTORIAL_WAIT_SAID = 1
+    guideSay(lockey$("intro.ang.wait"))
+endfunction
+
+
+` the info key, on a little board. it is coming. and then it stops answering.
+function tutorialTooSoon()
+    TUTORIAL_INFO_TRIES = TUTORIAL_INFO_TRIES + 1
+    if TUTORIAL_INFO_TRIES = 1
+        guideSay(lockey$("intro.ang.soon1"))
+    endif
+    if TUTORIAL_INFO_TRIES = 2
+        guideSay(lockey$("intro.ang.soon2"))
+    endif
+endfunction
+
+
+` one cell of the board that the game was dealt comes back, and its fish grows in. tutorial_open_sea
+` comes here for every cell, and frame_scale_wave is what sizes them.
+function tutorialDealCell(tdcCell)
+    CELLS(tdcCell).value = TUTORIAL_DEAL(tdcCell)
+    SCHOOL_FACE(tdcCell) = TUTORIAL_DEAL_FACE(tdcCell)
+    SCHOOL_SHOWN#(tdcCell) = 0
+    CELLS(tdcCell).comboForce = 0
+    CELLS(tdcCell).comboBlownUp = 0
+    clearCellStack(tdcCell)
+    GLOW_TURN#(tdcCell) = 0
+    RAINBOW_FISH(tdcCell) = 0
+    updateCell(CELLS(tdcCell))
+    set sprite alpha CELLS(tdcCell).spriteId, 255
+    hide sprite CELLS(tdcCell).fxSpriteId
+    create basic tween CELLS(tdcCell).scaleWaveTweenId, 0, 1, TUTORIAL_FISH_GROW, 0
+    size sprite CELLS(tdcCell).spriteId, 0, 0
+    show sprite CELLS(tdcCell).spriteId
+endfunction
+
+
+` the rest of the game goes back to how it was dealt: the streams of the seed, how many fish have come in,
+` the moves and the multiplier. a seed plays the same game, with the tutorial or without it.
+function tutorialDealDone()
+    for tddI = 0 to 399
+        SCHOOL_FACE(tddI) = TUTORIAL_DEAL_FACE(tddI)
+    next
+    SCHOOL_SPAWNS = TUTORIAL_DEAL_SPAWNS
+    for tddI = 0 to 2
+        set random stream state tddI, TUTORIAL_RNG(tddI * 2), TUTORIAL_RNG(tddI * 2 + 1)
+    next
+    CURRENT_MOVE_COUNT = 0
+    resetMultiplier()
+    coralTrailClear()
+endfunction
+
+
+` THE QUESTION MARKS. one more question mark shows up at this spot, and drifts up from it. the angler
+` brings them when it says that the sea can end a few ways. they are only for show, so where they go is
+` rolled with rnd.
 function tutorialMarkSpawn(tmkX#, tmkY#)
     tmkI = TUTORIAL_MARK_NEXT
     TUTORIAL_MARK_NEXT = (TUTORIAL_MARK_NEXT + 1) mod TUTORIAL_MARK_COUNT

@@ -7,8 +7,8 @@ remstart
     pop, or leaves fish that the next board does not have.
 remend
 
-test tutorial_boards_pop_only_their_one_swap from fishBoard
-    for ttStep = 1 to 3
+test tutorial_boards_pop_only_when_the_fish_gets_home from fishBoard
+    for ttStep = 1 to 4
         ttSize = tutorialLayoutSize(ttStep)
         tutorialGrid(ttSize)
         TUTORIAL_BOARD = 1
@@ -26,16 +26,14 @@ test tutorial_boards_pop_only_their_one_swap from fishBoard
         ttB = tutorialSwapCell(ttStep, 1)
         ttNo = tutorialBlocksSwap(ttA, ttB)
         assert ttNo = 0, "the swap of the board is allowed"
-        ttOther = ttA + 1
-        if CELLS(ttA).coord.x = ttSize - 1 then ttOther = ttA - 1
-        ttNo = tutorialBlocksSwap(ttA, ttOther)
-        assert ttNo = 0, "and so is any other swap"
         TUTORIAL_STEP_DONE = 1
         ttNo = tutorialBlocksSwap(ttA, ttB)
         assert ttNo = 1, "but no swap is, once the board has popped"
         TUTORIAL_STEP_DONE = 0
 
-        ` every swap there is: each cell with the one to its right, and the one under it
+        ` every swap there is from the start: each cell with the one to its right, and the one under it.
+        ` only the swap that a short board is about pops anything.
+        ttCarry = tutorialCarrySwaps(ttStep)
         for ttFrom = 0 to ttLast
             for ttWay = 0 to 1
                 ttTo = -1
@@ -47,57 +45,48 @@ test tutorial_boards_pop_only_their_one_swap from fishBoard
                 endif
                 if ttTo >= 0
                     ttLay()
+                    if CELLS(ttFrom).value = 0 then ttTo = -1
+                endif
+                if ttTo >= 0
+                    if CELLS(ttTo).value = 0 then ttTo = -1
+                endif
+                if ttTo >= 0
                     ttKind = CELLS(ttFrom).value
                     CELLS(ttFrom).value = CELLS(ttTo).value
                     CELLS(ttTo).value = ttKind
                     ttBig = ttPopping()
                     ttIsIt = 0
-                    if ttFrom = ttA and ttTo = ttB then ttIsIt = 1
-                    if ttFrom = ttB and ttTo = ttA then ttIsIt = 1
-
-                    if ttIsIt
-                        ttLine = ttDiagonal()
-                        assert ttLine = 0, "the swap of the board makes no line of four corner to corner"
-                        ttWant = 3
-                        if ttStep = 3 then ttWant = 4
-                        assert ttBig = ttWant, "the swap of the board pops a group of the size that the board is about"
-                    else
-                        ` on the board about moving for free, any other swap pops nothing, and costs the multiplier
-                        if ttStep = 2
-                            assert ttBig = 0, "no other swap on the board pops anything"
-                        endif
+                    if ttCarry = 1
+                        if ttFrom = ttB and ttTo = ttA then ttIsIt = 1
                     endif
-
-                    ` whatever pops, the fish fall, the new ones drop in, and nothing more pops
-                    if ttBig > 0
-                        ttFall()
-                        ttBig = ttPopping()
-                        assert ttBig = 0, "nothing more pops once the new fish are in"
-
-                        ` after the swap of the board, the next board has the same fish in the middle, so
-                        ` that nothing changes when it grows
-                        if ttIsIt
-                            ttNext = tutorialLayoutSize(ttStep + 1)
-                            if ttNext > 0
-                                ttShift = (ttNext - ttSize) / 2
-                                for ttI = 0 to ttLast
-                                    ttHas = tutorialLayoutKind(ttStep + 1, CELLS(ttI).coord.x + ttShift, CELLS(ttI).coord.y + ttShift)
-                                    assert ttHas = CELLS(ttI).value, "the next board has the fish that this one leaves"
-                                next
-                            endif
-                        endif
+                    if ttIsIt = 0
+                        assert ttBig = 0, "no other swap on the board pops anything"
                     endif
                 endif
             next
         next
 
-        ` the board of the L: the group is not in a straight line
-        if ttStep = 3
-            ttLay()
+        ` the fish goes the long way home. it only pops when it gets there.
+        ttLay()
+        for ttSwap = 0 to ttCarry - 1
+            ttA = tutorialSwapCell(ttStep, ttSwap)
+            ttB = tutorialSwapCell(ttStep, ttSwap + 1)
             ttKind = CELLS(ttA).value
+            assert ttKind = TEX_BASS, "the fish that goes home is a seahorse"
             CELLS(ttA).value = CELLS(ttB).value
             CELLS(ttB).value = ttKind
             ttBig = ttPopping()
+            if ttSwap = ttCarry - 1
+                assert ttBig = 3, "it pops once it is home"
+            else
+                assert ttBig = 0, "and not on the way"
+            endif
+        next
+        ttLine = ttDiagonal()
+        assert ttLine = 0, "the way home makes no line of four corner to corner"
+
+        ` the board of the L: the group is not in a straight line
+        if ttStep = 2
             ttMinX = 99
             ttMaxX = -1
             ttMinY = 99
@@ -112,6 +101,19 @@ test tutorial_boards_pop_only_their_one_swap from fishBoard
             next
             assert ttMaxX > ttMinX, "the L goes across"
             assert ttMaxY > ttMinY, "and down"
+        endif
+
+        ` the fish that the first board leaves are the fish that the second one has
+        ttFall()
+        ttBig = ttPopping()
+        assert ttBig = 0, "nothing more pops once the new fish are in"
+        if ttStep = 1
+            for ttI = 0 to ttLast
+                if CELLS(ttI).value > 0
+                    ttHas = tutorialLayoutKind(2, CELLS(ttI).coord.x, CELLS(ttI).coord.y)
+                    assert ttHas = CELLS(ttI).value, "the next board has the fish that this one leaves"
+                endif
+            next
         endif
     next
 
@@ -136,41 +138,29 @@ test tutorial_boards_pop_only_their_one_swap from fishBoard
         ttEnd = CELL_COUNT - 1
         for ttCell = 0 to ttEnd
             CELLS(ttCell).comboBlownUp = 0
-            ttGroup = countFishGroup(ttCell, CELLS(ttCell).value, 3)
-            if ttGroup >= 3
-                CELLS(ttCell).comboBlownUp = 1
-                ttCount = ttCount + 1
+            if CELLS(ttCell).value > 0
+                ttGroup = countFishGroup(ttCell, CELLS(ttCell).value, 3)
+                if ttGroup >= 3
+                    CELLS(ttCell).comboBlownUp = 1
+                    ttCount = ttCount + 1
+                endif
             endif
         next
     endfunction ttCount
 
-    ` the fish above the ones that popped fall, the way that handle_combos makes them, and the new fish
-    ` drop in, the way that handle_combos picks them on a little board
+    ` nothing falls on a little board. the new fish drop in where the old ones were, the way that
+    ` handle_combos picks them.
     function ttFall()
         ttEnd = CELL_COUNT - 1
-        ttCols = CELL_COLUMN_COUNT
-        for ttCol = 0 to ttCols - 1
-            ttDown = ttCols - 1
-            ttRow = ttCols - 1
-            while ttRow >= 0
-                ttSpot = ttCol + ttRow * ttCols
-                if CELLS(ttSpot).comboBlownUp = 0
-                    CELLS(ttCol + ttDown * ttCols).value = CELLS(ttSpot).value
-                    ttDown = ttDown - 1
-                endif
-                ttRow = ttRow - 1
-            endwhile
-            while ttDown >= 0
-                CELLS(ttCol + ttDown * ttCols).value = 0
-                ttDown = ttDown - 1
-            endwhile
+        for ttCell = 0 to ttEnd
+            if CELLS(ttCell).comboBlownUp
+                CELLS(ttCell).value = 0
+            endif
         next
         for ttCell = 0 to ttEnd
-            CELLS(ttCell).comboBlownUp = 0
-        next
-        for ttCell = 0 to ttEnd
-            if CELLS(ttCell).value = 0
+            if CELLS(ttCell).comboBlownUp
                 CELLS(ttCell).value = tutorialNewFish(ttCell)
+                CELLS(ttCell).comboBlownUp = 0
             endif
         next
     endfunction
@@ -183,6 +173,7 @@ test tutorial_boards_pop_only_their_one_swap from fishBoard
             ttCx = CELLS(ttCell).coord.x
             ttCy = CELLS(ttCell).coord.y
             ttCk = CELLS(ttCell).value
+            if ttCk = 0 then skip
             for ttLean = 0 to 1
                 ttDx = 1
                 if ttLean = 1 then ttDx = -1
@@ -205,4 +196,129 @@ test tutorial_boards_pop_only_their_one_swap from fishBoard
             next
         next
     endfunction ttLines
+endtest
+
+
+test tutorial_gaps_are_not_fish from fishBoard
+    tutorialGrid(tutorialLayoutSize(4))
+    TUTORIAL_BOARD = 1
+    TUTORIAL_STAGE = 5
+    tgLast = CELL_COUNT - 1
+    for tgCell = 0 to tgLast
+        CELLS(tgCell).value = tutorialLayoutKind(4, CELLS(tgCell).coord.x, CELLS(tgCell).coord.y)
+    next
+
+    tgIsGap = tutorialIsGap(0)
+    assert tgIsGap = 1, "a cell with no fish is a gap"
+    tgIsGap = tutorialIsGap(tutorialSwapCell(4, 0))
+    assert tgIsGap = 0, "and a cell with a fish is not"
+
+    ` the gaps touch each other, and they are not a group
+    findCombos(0, 1)
+    tgFilled = 0
+    for tgCell = 1 to tgLast
+        if CELLS(tgCell).comboFillMask > 0 then tgFilled = tgFilled + 1
+    next
+    assert tgFilled = 0, "a gap does not flood into the gaps around it"
+
+    TUTORIAL_BOARD = 0
+    TUTORIAL_STAGE = 0
+    tgIsGap = tutorialIsGap(0)
+    assert tgIsGap = 0, "and there are only gaps on a little board"
+    end
+endtest
+
+
+test tutorial_first_school_is_all_one_way from fishBoard
+    tutorialGrid(tutorialLayoutSize(4))
+    tfsLast = CELL_COUNT - 1
+    for tfsCell = 0 to tfsLast
+        CELLS(tfsCell).value = tutorialLayoutKind(4, CELLS(tfsCell).coord.x, CELLS(tfsCell).coord.y)
+        tutorialFaceRight(tfsCell)
+    next
+    tfsFaced = 0
+    for tfsCell = 0 to tfsLast
+        if CELLS(tfsCell).value = TEX_BASS
+            if SCHOOL_FACE(tfsCell) = 1 then tfsFaced = tfsFaced + 1
+        endif
+    next
+    assert tfsFaced = 3, "the three seahorses of the last board all look right"
+
+    ` carried to the right, it still looks right, so they look the same way. on the second board it comes
+    ` from the other side, so it does not.
+    tfsFrom = tutorialSwapCell(4, 0)
+    tfsTo = tutorialSwapCell(4, tutorialCarrySwaps(4))
+    assert tfsTo > tfsFrom, "the last board brings it to the right"
+    tfsFrom = tutorialSwapCell(3, 0)
+    tfsTo = tutorialSwapCell(3, tutorialCarrySwaps(3))
+    assert tfsTo < tfsFrom, "and the one before brings it to the left"
+    end
+endtest
+
+
+test tutorial_whole_board_comes_back_as_dealt from fishBoard
+    tbdLast = CELL_COUNT - 1
+    for tbdCell = 0 to tbdLast
+        TUTORIAL_DEAL(tbdCell) = CELLS(tbdCell).value
+        TUTORIAL_DEAL_FACE(tbdCell) = SCHOOL_FACE(tbdCell)
+    next
+    TUTORIAL_DEAL_SPAWNS = SCHOOL_SPAWNS
+    tbdSpawns = SCHOOL_SPAWNS
+    TUTORIAL_RNG(0) = random stream state(0, 0)
+    TUTORIAL_RNG(1) = random stream state(0, 1)
+    tbdState = random stream state(0, 0)
+    TUTORIAL_RNG(2) = random stream state(1, 0)
+    TUTORIAL_RNG(3) = random stream state(1, 1)
+    TUTORIAL_RNG(4) = random stream state(2, 0)
+    TUTORIAL_RNG(5) = random stream state(2, 1)
+
+    ` the little boards, and everything that they change
+    tutorialGrid(tutorialLayoutSize(3))
+    for tbdCell = 0 to tbdLast
+        CELLS(tbdCell).value = tutorialLayoutKind(3, CELLS(tbdCell).coord.x, CELLS(tbdCell).coord.y)
+        tutorialFaceRight(tbdCell)
+    next
+    SCHOOL_SPAWNS = tbdSpawns + 40
+    CURRENT_MOVE_COUNT = 9
+    set random stream state 0, tbdState + 1, TUTORIAL_RNG(1)
+
+    for tbdCell = 0 to tbdLast
+        tutorialDealCell(tbdCell)
+    next
+    tutorialDealDone()
+
+    tbdWrong = 0
+    for tbdCell = 0 to tbdLast
+        if CELLS(tbdCell).value <> TUTORIAL_DEAL(tbdCell) then tbdWrong = tbdWrong + 1
+        if SCHOOL_FACE(tbdCell) <> TUTORIAL_DEAL_FACE(tbdCell) then tbdWrong = tbdWrong + 1
+    next
+    assert tbdWrong = 0, "every fish is the one that was dealt, facing the way that it was dealt"
+    assert SCHOOL_SPAWNS = tbdSpawns, "the fish of the little boards do not count"
+    assert CURRENT_MOVE_COUNT = 0, "and neither do their moves"
+    assert random stream state(0, 0) = tbdState, "and the streams of the seed are where they were"
+    end
+endtest
+
+
+test guide_says_what_waits_in_turn_and_goes_beside_the_board from fishBoard
+    guideShow()
+    guideSay(lockey$("intro.tut.bar"))
+    guideThen(lockey$("intro.tut.bar.sub"))
+    guideThen(lockey$("intro.line.nolose"))
+    guideThenWords(loc$("intro.line.rounds", "rounds", GAME_ROUND_CAP))
+    guideThen(lockey$("intro.ang.end"))
+    assert GUIDE_QUEUED = 4, "all of the last words of the tutorial have room to wait"
+    tgwWant$ = loc$("intro.tut.bar.sub")
+    assert GUIDE_QUEUE$(0) = tgwWant$, "the words wait in the order that they were asked for"
+    tgwWant$ = loc$("intro.line.rounds", "rounds", GAME_ROUND_CAP)
+    assert GUIDE_QUEUE$(2) = tgwWant$, "a line with a number in it has its number"
+
+    guideAside()
+    assert GUIDE_QUEUED = 0, "it stops talking to cross the board"
+    guideBeside()
+    assert GUIDE_SIDE = 1, "and it talks from beside the board"
+    guideOff()
+    assert GUIDE_SIDE = 0, "and the next time that it comes, it starts from under the board"
+    assert GUIDE_ON = 0, "and it has gone"
+    end
 endtest

@@ -700,7 +700,223 @@ function spawnScoreTextScaled(pos as vec, score$, delay, life, textScale#)
     create basic tween txt.fadeTweenId,     textAlpha, 0,     fadeTime, delay + life - fadeTime
     create basic tween txt.scaleOutTweenId, textHeight#, 4 * textScale#, shrinkTime, delay + life - shrinkTime
 
+    SCORE_TEXTS(i).flies = 0 `spawnPointsText makes it fly. see THE POINTS FLY in fish_headers.
+
 endfunction txt.textId
+
+` a score text that is points, "+120", which pops out of a spot and flies into the bar of the round. see
+` THE POINTS FLY in fish_headers. it takes the points as a number, so that how big a deal they are is
+` known without reading them back out of the words, and it makes the words once, the same as before.
+function spawnPointsText(pos as vec, points, delay, life, textScale#)
+    pointsTxt = spawnScoreTextScaled(pos, "+" + str$(points), delay, life, textScale#)
+    pointsSlot = SCORE_TEXT_NUM - 1
+    if pointsSlot < 0 then pointsSlot = SCORE_TEXT_COUNT - 1
+    pointsOff = tutorialScoreOff() `while nothing scores, the text is not shown, so it does not fly either
+
+    ` how many fish it is worth, next to the multiplier
+    pointsMult = SCORE_MULTIPLIER
+    if pointsMult < 1 then pointsMult = 1
+    pointsHeft# = points
+    pointsDiv# = 10 * pointsMult
+    pointsHeft# = pointsHeft# / pointsDiv#
+    pointsBig# = (pointsHeft# - SCORE_FLY_HEFT_FROM#) / SCORE_FLY_HEFT_SPAN#
+    if pointsBig# < 0 then pointsBig# = 0
+    if pointsBig# > 1 then pointsBig# = 1
+
+    ` it shows what it was worth before the multiplier first. see THE DOUBLE POP in fish_headers.
+    pointsTimes = pointsMult * SCHOOL_STAKES
+    SCORE_TEXTS(pointsSlot).points = points
+    SCORE_TEXTS(pointsSlot).base = 0
+    SCORE_TEXTS(pointsSlot).doubled = 0
+    if SCORE_FLY_DOUBLE_ON and pointsTimes > 1 and points > 0
+        if points mod pointsTimes = 0
+            SCORE_TEXTS(pointsSlot).base = points / pointsTimes
+            set text pointsTxt, "+" + str$(points / pointsTimes)
+        endif
+    endif
+
+    SCORE_TEXTS(pointsSlot).flies = 1
+    if pointsOff then SCORE_TEXTS(pointsSlot).flies = 0
+    SCORE_TEXTS(pointsSlot).landed = 0
+    SCORE_TEXTS(pointsSlot).faint# = 0
+    SCORE_TEXTS(pointsSlot).popAt = game ms() + delay
+    SCORE_TEXTS(pointsSlot).big# = pointsBig#
+    pointsTall# = SCORE_FLY_TALL# * textScale# * (1 + SCORE_FLY_GROW# * pointsBig#)
+    SCORE_TEXTS(pointsSlot).tall# = pointsTall#
+    SCORE_TEXTS(pointsSlot).fromX# = pos.x
+
+    ` a long number is wider than its fish, so it would run into the one next to it. every other one sits
+    ` a little higher, and the rest a little lower, so that they step past each other. the fish of a
+    ` group are scored one after the other, so the ones side by side take turns.
+    pointsStep# = 0
+    if points >= 100 then pointsStep# = SCORE_FLY_STEP3#
+    if points >= 1000 then pointsStep# = SCORE_FLY_STEP4#
+    pointsStep# = pointsStep# * pointsTall#
+    if pointsSlot mod 2 = 0 then pointsStep# = 0 - pointsStep#
+    SCORE_TEXTS(pointsSlot).fromY# = pos.y + pointsStep#
+
+    ` it leans a little, as all of them do, and it lands a little way from the others: mostly a bit behind
+    ` the end of the fill, inside the part that is full
+    pointsTilt# = rnd(10) * .05 - .25
+    rotate text pointsTxt, pointsTilt#
+    SCORE_TEXTS(pointsSlot).tilt# = pointsTilt#
+    SCORE_TEXTS(pointsSlot).aimX# = rnd(21) - 14
+    SCORE_TEXTS(pointsSlot).aimY# = rnd(5) - 2
+endfunction pointsTxt
+
+` the same, for points that the multiplier had nothing to do with, so they only ever pop once
+function spawnFlatPointsText(pos as vec, points, delay, life, textScale#)
+    flatTxt = spawnPointsText(pos, points, delay, life, textScale#)
+    flatSlot = SCORE_TEXT_NUM - 1
+    if flatSlot < 0 then flatSlot = SCORE_TEXT_COUNT - 1
+    SCORE_TEXTS(flatSlot).base = 0
+    set text flatTxt, "+" + str$(points)
+endfunction flatTxt
+
+` the same, out of a fish on the board, so it shrinks with the fish when the board has grown
+function spawnBoardPointsText(pos as vec, points, delay, life)
+    boardPointsTxt = spawnPointsText(pos, points, delay, life, getBoardBubbleScale())
+endfunction boardPointsTxt
+
+` THE POINTS FLY. see fish_headers. one score text that is points, on this frame: it pops, sits, flies
+` into the end of the bar of the round, and lands, which makes the bar jump.
+function stepFlyingScore(flyI)
+    flyText = SCORE_TEXTS(flyI).textId
+    flyNow = game ms()
+    flyAge = flyNow - SCORE_TEXTS(flyI).popAt
+    if flyAge < 0
+        set text alpha flyText, 0
+        exitfunction
+    endif
+    flyBigNow# = SCORE_TEXTS(flyI).big#
+    flyScale# = SCORE_TEXTS(flyI).scale#
+
+    ` gone once it has landed
+    if flyAge >= SCORE_FLY_LAND_MS
+        if SCORE_TEXTS(flyI).landed = 0
+            SCORE_TEXTS(flyI).landed = 1
+            flyPunch# = .45 + .55 * flyBigNow#
+            if SCORE_BAR_PUNCH_AT >= 0
+                ` one that lands while the bar is still jumping keeps it up
+                if flyNow - SCORE_BAR_PUNCH_AT < SCORE_BAR_PUNCH_MS
+                    if SCORE_BAR_PUNCH# > flyPunch# then flyPunch# = SCORE_BAR_PUNCH#
+                endif
+            endif
+            SCORE_BAR_PUNCH_AT = flyNow
+            SCORE_BAR_PUNCH# = flyPunch#
+            if flyBigNow# > .3
+                flyBubSize = 4 + 6 * flyBigNow#
+                flyBubCount = 3 + 6 * flyBigNow#
+                spawnBubbles(SCORE_TEXTS(flyI).landX#, SCORE_BAR.pos.y + 1, flyBubSize, flyBubCount, 0, rgb(190, 225, 255))
+            endif
+        endif
+        SCORE_TEXTS(flyI).flies = 0
+        SCORE_TEXTS(flyI).active = 0
+        set text alpha flyText, 0
+        exitfunction
+    endif
+
+    ` it pops up a little too big, and settles. a bigger deal pops harder.
+    flyTall# = SCORE_TEXTS(flyI).tall#
+    flyOver# = 1.3 + .3 * flyBigNow#
+    flySize# = 1
+    if flyAge < SCORE_FLY_POP_MS
+        flyAgeF# = flyAge
+        flyPopMs# = SCORE_FLY_POP_MS
+        flyP# = flyAgeF# / flyPopMs#
+        if flyP# < .55
+            flySize# = .3 + (flyOver# - .3) * flyP# / .55
+        else
+            flySize# = flyOver# + (1 - flyOver#) * (flyP# - .55) / .45
+        endif
+    endif
+
+    ` and then it punches up to what the multiplier made it. see THE DOUBLE POP in fish_headers.
+    if SCORE_TEXTS(flyI).base > 0
+        if flyAge < SCORE_FLY_DOUBLE_MS
+            flySize# = flySize# * SCORE_FLY_BASE_SIZE#
+        else
+            if SCORE_TEXTS(flyI).doubled = 0
+                SCORE_TEXTS(flyI).doubled = 1
+                set text flyText, "+" + str$(SCORE_TEXTS(flyI).points)
+                spawnBubblesOnLayer(SCORE_TEXTS(flyI).fromX#, SCORE_TEXTS(flyI).fromY# - 12 * flyScale#, 3, 3, 0, rgb(255, 255, 255), ORDER_FLOAT_BUBBLES, 40, 255, 1)
+            endif
+            flyDoubleAge = flyAge - SCORE_FLY_DOUBLE_MS
+            if flyDoubleAge < SCORE_FLY_DOUBLE_POP_MS
+                flyDoubleAge# = flyDoubleAge
+                flyDoubleMs# = SCORE_FLY_DOUBLE_POP_MS
+                flyDoubleP# = flyDoubleAge# / flyDoubleMs#
+                flyDoubleOver# = 1.45 + .25 * flyBigNow#
+                if flyDoubleP# < .4
+                    flySize# = SCORE_FLY_BASE_SIZE# + (flyDoubleOver# - SCORE_FLY_BASE_SIZE#) * flyDoubleP# / .4
+                else
+                    flySize# = flyDoubleOver# + (1 - flyDoubleOver#) * (flyDoubleP# - .4) / .6
+                endif
+            endif
+        endif
+    endif
+
+    ` it rises a little from where it was scored, or falls, for the tide. see THE TIDE PAYS in fish_headers_tide.
+    flyRiseMs# = SCORE_FLY_AT_MS
+    flyRiseAge# = flyAge
+    flyRiseP# = flyRiseAge# / flyRiseMs#
+    if flyRiseP# > 1 then flyRiseP# = 1
+    flyRiseP# = flyRiseP# * (2 - flyRiseP#)
+    flyRise# = 18 * flyScale# * flyRiseP#
+    if SCORE_TEXTS(flyI).falls then flyRise# = 0 - flyRise#
+    flyX# = SCORE_TEXTS(flyI).fromX#
+    flyY# = SCORE_TEXTS(flyI).fromY# - flyRise#
+    flyAlpha = 255
+
+    if flyAge < SCORE_FLY_AT_MS
+        SCORE_TEXTS(flyI).flyX# = flyX#
+        SCORE_TEXTS(flyI).flyY# = flyY#
+    else
+        ` and then it flies to the end of the bar, faster and faster, and smaller, in a curve
+        ` each one goes to its own spot near the end of the fill, so that they do not all meet at one point
+        flyBarLeft# = SCORE_BAR.pos.x + 1
+        flyGoX# = flyBarLeft# + (SCORE_BAR.size.x - 2) * tweenVal(SCORE_BAR.progressTweenId)
+        flyGoX# = flyGoX# + SCORE_TEXTS(flyI).aimX#
+        if flyGoX# < flyBarLeft# then flyGoX# = flyBarLeft#
+        flyGoY# = SCORE_BAR.pos.y + 1
+        flyGoY# = flyGoY# + SCORE_TEXTS(flyI).aimY#
+        SCORE_TEXTS(flyI).landX# = flyGoX#
+        flyGoAge# = flyAge - SCORE_FLY_AT_MS
+        flyGoMs# = SCORE_FLY_MS
+        flyGoP# = flyGoAge# / flyGoMs#
+        flyAlongX# = flyGoP# * (2 - flyGoP#)
+        flyAlongY# = flyGoP# * flyGoP#
+        flyAwayX# = flyGoX# - SCORE_TEXTS(flyI).flyX#
+        flyAwayY# = flyGoY# - SCORE_TEXTS(flyI).flyY#
+        flyX# = SCORE_TEXTS(flyI).flyX# + flyAwayX# * flyAlongX#
+        flyY# = SCORE_TEXTS(flyI).flyY# + flyAwayY# * flyAlongY#
+        flySize# = 1 - .6 * flyGoP#
+        if flyGoP# > .7 then flyAlpha = 255 * (1 - flyGoP#) / .3
+        ` one that started faint comes up to all of it as it comes forward to the bar
+        flyAlpha = flyAlpha * (1 - SCORE_TEXTS(flyI).faint# * (1 - flyGoP#))
+
+        ` and it leans its top the way that it is going, as if it is headed there. how it is going is how
+        ` its place is changing, along the curve. it turns into that from its own lean as it sets off, and
+        ` never leans so far over that it cannot be read.
+        flyHeadX# = flyAwayX# * (2 - 2 * flyGoP#)
+        flyHeadY# = flyAwayY# * 2 * flyGoP#
+        ` it only leans part of the way, so that it hints at where it is headed and does not tip over.
+        flyHead# = atan2(flyHeadX#, 0 - flyHeadY#) * SCORE_FLY_LEAN#
+        if flyHead# > SCORE_FLY_LEAN_MAX# then flyHead# = SCORE_FLY_LEAN_MAX#
+        if flyHead# < 0 - SCORE_FLY_LEAN_MAX# then flyHead# = 0 - SCORE_FLY_LEAN_MAX#
+        flyTurn# = flyGoP# / .4
+        if flyTurn# > 1 then flyTurn# = 1
+        flyLean# = SCORE_TEXTS(flyI).tilt# + (flyHead# - SCORE_TEXTS(flyI).tilt#) * flyTurn#
+        rotate text flyText, flyLean#
+    endif
+
+    if flyAge < SCORE_FLY_AT_MS
+        flyAlpha = flyAlpha * (1 - SCORE_TEXTS(flyI).faint#)
+    endif
+    set text position flyText, flyX#, flyY#
+    size text y flyText, flyTall# * flySize#
+    set text alpha flyText, flyAlpha
+endfunction
 
 function setProgressTween(bar as progressBar, progress)
     x = progress - bar.startVal
@@ -721,7 +937,8 @@ function queueScore(points, delay)
     CURRENT_SCORE = CURRENT_SCORE + points
 
     if SCORE_TICK_COUNT < SCORE_TICK_MAX
-        SCORE_TICK_MS(SCORE_TICK_COUNT) = game ms() + delay
+        ` they get to the bar when their text does. see THE POINTS FLY in fish_headers.
+        SCORE_TICK_MS(SCORE_TICK_COUNT) = game ms() + delay + SCORE_FLY_LAND_MS
         SCORE_TICK_POINTS(SCORE_TICK_COUNT) = points
         SCORE_TICK_COUNT = SCORE_TICK_COUNT + 1
     else
@@ -767,6 +984,7 @@ function syncScoreShown()
     SCORE_TICK_COUNT = 0
     SCORE_BAR_HOLD = 0
     resetOverflow()
+    chargeReset() `see THE CHARGE in fish_headers_charge
 endfunction
 
 ` how many points past the end of the bar it takes to have won `tierCount` of the bonus multipliers.
@@ -842,9 +1060,7 @@ function stepOverflow()
                 OVERFLOW_TIER = OVERFLOW_TIER + 1
                 OVERFLOW_FILL# = 0
                 addMultiplier(1)
-                for overN = 1 to 24
-                    spawnBubblesOnLayer(SCORE_BAR.pos.x + rnd(SCORE_BAR.size.x), SCORE_BAR.pos.y + 2, 3, 1, 0, overBurst, ORDER_FLOAT_BUBBLES, 40, 255, 1)
-                next
+                chargeOverflowBurst(overBurst) `see THE OVERFLOW GETS THE SAME in fish_headers_charge
                 overGoing = 1
             endif
         endif
@@ -1029,6 +1245,11 @@ function findCombos(cIndex, groupId)
 
     ` and neither does the squid of the night, which is a group of one. see fish_headers_squid.
     if cIndex = SQUID_CELL then exitfunction
+
+    ` and the gaps of a little board of the tutorial are not a group of anything
+    if TUTORIAL_BOARD
+        if cell.value = 0 then exitfunction
+    endif
 
     hasLeft = cell.coord.x > 0
     hasRight = cell.coord.x < CELL_COLUMN_COUNT - 1
@@ -1650,6 +1871,19 @@ function startLiveMove(dirX, dirY, wantSwap)
     if allowed
         aIndex = getCellIndex(SELECTION_POS)
         bIndex = getCellIndex(liveTarget)
+
+        ` nothing goes into a gap of a little board of the tutorial. see THE LITTLE BOARDS in fish_routines_intro.
+        ` the cursor can go over the gaps of a puzzle, but no fish can. see THE RULES in fish_headers_puzzle.
+        tutorialGapThere = tutorialIsGap(bIndex)
+        if PUZZLE_ON
+            if wantSwap = 0 then tutorialGapThere = 0
+            if wantSwap
+                puzzleGapHere = tutorialIsGap(aIndex)
+                if puzzleGapHere then tutorialGapThere = 1
+            endif
+        endif
+        if tutorialGapThere then allowed = 0
+
         if wantSwap
             if isCellLocked(aIndex) then allowed = 0
             if isCellLocked(bIndex) then allowed = 0
@@ -1661,10 +1895,23 @@ function startLiveMove(dirX, dirY, wantSwap)
             ` a little board of the tutorial only allows the swap that it is about. see THE LITTLE BOARDS in fish_routines_intro.
             tutorialSaysNo = tutorialBlocksSwap(aIndex, bIndex)
             if tutorialSaysNo then allowed = 0
+
+            ` and on some of the boards of the lab, a swap has to pop something. see THE LAB in fish_headers_puzzle.
+            puzzleSaysNo = puzzleBlocksSwap(aIndex, bIndex)
+            if puzzleSaysNo then allowed = 0
         endif
     endif
 
     if allowed
+        ` a swap of a puzzle can be taken back. see UNDO in fish_headers_puzzle.
+        if PUZZLE_ON
+            puzzleTakesBack = wantSwap
+            if CELLS(bIndex).bellyUp = 1 then puzzleTakesBack = 1 `the cursor is going to pop it
+            if puzzleTakesBack
+                puzzleUndoPush()
+            endif
+        endif
+
         ` the cursor leaves a few bubbles behind
         spawnCursorWake(SELECTION_POS.x, SELECTION_POS.y)
 
@@ -2247,12 +2494,14 @@ endfunction
 function tutorialMovesOff()
     isOff = 0
     if TUTORIAL_STAGE > 0 and TUTORIAL_STAGE < 3 then isOff = 1
+    if PUZZLE_ON then isOff = 1
 endfunction isOff
 
 ` 1 while the bar of the round is not on the screen yet, or the fish that brought it in are still popping
 function tutorialScoreOff()
     isOff = 0
     if TUTORIAL_STAGE > 0 then isOff = 1
+    if PUZZLE_ON then isOff = 1
     if TUTORIAL_SCORE_HOLD then isOff = 1
 endfunction isOff
 

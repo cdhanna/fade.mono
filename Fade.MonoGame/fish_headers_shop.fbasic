@@ -1,0 +1,68 @@
+remstart
+    THE SHOP
+    the upgrade screen is the angler's shop. it is there at every upgrade screen, and it never holds
+    anything up, and it does not say anything unless it is asked. the routines are in fish_routines_shop.
+
+    it is the guide (see fish_headers_guide), with GUIDE_SHOP on, so the words wait in the same line. the
+    upgrade screen has a loop of its own, so frame_guide does not run: frame_ability_selection comes to
+    frame_shop instead. everything is drawn to TARGET_UPGRADE, so that the wave of bubbles brings it in.
+    guideOff puts it all back.
+
+    THE FIRST ONE. the first upgrade screen of a game that had the tutorial has the angler in the corner,
+    next to the title, with the words under it that say how to ask it. there is a scene of its own first,
+    before the cards: see THE FIRST UPGRADE in fish_routines_intro. here it only says that it can be asked.
+
+    THE DEEP. every other one is deeper (SHOP_ROAM): the water is much darker, the corners of the dark
+    backdrop close in (DeepEffect.fx, which is under the cards and the words, unlike a screen effect), and
+    the angler swims around in the dark behind the cards, with only its light for company. how to ask it
+    is in the hints along the bottom. when it has something to say, it swims up to the corner to say it.
+
+    THE QUESTION. the info key, or a click on the angler, brings it for real: the dark comes down over the
+    upgrade screen, and it swims in with its scene, the same one that the card brings (angler_run, with
+    ANGLER_FROM_SHOP). the questions are up to three, and a line that goes back. they are only about
+    things that the player has seen, and has not asked about yet. shopPickTopics finds them: first what
+    happened lately, from ANGLER_RECENT, newest first, then what is on the board, then anything else that
+    the player can see. it is never a rumor. rumors are what the card, and a kept light, are for. it
+    answers one on every upgrade screen, and it all goes on rnd, never on a stream. going back without
+    asking does not use it up.
+
+    the things that happened are noted with anglerNote. they last for one game, and they are not saved.
+    a game that is carried on later starts with none, and goes by the board.
+remend
+
+global SHOP_ENABLED = 1 `0 and the angler is not at the upgrade screen. the tests turn it off.
+global GUIDE_SHOP = 0 `1 while the guide is at the upgrade screen
+global SHOP_ROAM = 0 `1 while it swims around in the dark. see THE DEEP.
+global SHOP_ASKED = 0 `1 once the question of this upgrade screen has been asked
+global SHOP_HIDDEN = 0 `1 while a page of its own is up over the upgrade screen, like the book
+global SHOP_BOX_OPEN = 0 `1 while its box is up, or on its way up
+global SHOP_CLOSE_MS = 0 `when the box goes, once the words are out, or 0 until then
+global SHOP_TITLE_KEEP# = 1 `how much of the title shows, while the box goes over it
+global SHOP_ASK_TEXT_ID = 0 `the words under the angler that say how to ask it, on the first upgrade screen
+
+` where it sits to talk. the cards take up the middle, and there can be four of them, so the top is what is left.
+global SHOP_X = 6
+global SHOP_Y = 8
+global SHOP_BOX_X = 150
+global SHOP_BOX_Y = 2
+global SHOP_BOX_H = 96 `room for the four lines of an answer, or for a line and the questions
+
+` where it swims
+global SHOP_SWIM_X# = 0
+global SHOP_SWIM_Y# = 0
+global SHOP_GO_X# = 0 `where it is headed
+global SHOP_GO_Y# = 0
+global SHOP_FACE_LEFT = 0 `1 while it looks left
+global SHOP_LAST_MS = 0 `the last frame that it moved on
+global SHOP_ROAM_SPEED# = 22 `how fast it swims around, in pixels every second
+global SHOP_RUSH_SPEED# = 170 `and how fast it comes when it is asked
+
+` how deep it is, from 0 to 1. it comes on over SHOP_DEEP_MS once the wave has gone.
+global SHOP_DEEP# = 0
+global SHOP_DEEP_MS = 900
+global SHOP_DEEP_FX_ID = 0 `what closes the corners in, on the dark backdrop of the upgrade screen
+global SHOP_DIM_ALPHA = 200 `how dark the middle of the deep is
+
+` what has happened lately, newest first. -1 is nothing. the numbers are topics of the angler.
+global SHOP_RECENT_ROOM = 8
+global dim ANGLER_RECENT(8)

@@ -129,6 +129,9 @@ gosub setup_morse
 gosub setup_cameo `the words that these swim through for are set in setup_morse
 gosub setup_beat `these use the bubble effect too
 gosub setup_angler `on top of the dark of info mode, and after the hints that it puts its lights in
+gosub setup_guide `the angler, as the guide of the first dive. see fish_headers_guide.
+gosub setup_puzzle `the long visit. see fish_headers_puzzle.
+gosub setup_shop
 gosub setup_questtalk `the creatures that talk when a quest is taken. it borrows the voices of the angler.
 gosub setup_demo `the game plays itself when the main menu is left alone. see THE DEMO in fish_headers_demo.
 gosub setup_teach `the first few times something big happens, the game slows down for it. see THE BIG MOMENTS in fish_headers_teach.
@@ -236,6 +239,14 @@ do
             if wantPause
                 tunaHide() `the code is drawn on top of everything, so it goes before the menu comes. see TUNA in fish_headers.
                 gosub menu_open_pause
+            endif
+
+            ` the Ava window has changed what the game is, so it goes back to the main menu. see frame_debug_ava.
+            if PUZZLE_DBG_TITLE
+                PUZZLE_DBG_TITLE = 0
+                tunaHide()
+                gosub menu_open_pause
+                gosub menu_quit_to_title
             endif
 
             ` when the last round has been won, the game is over

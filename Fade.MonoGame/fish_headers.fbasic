@@ -487,6 +487,8 @@ global PENDING_FREE_MOVES = 0
 global FREE_MOVES_TICK_TWEEN_ID
 global FREE_MOVES_SHAKE_TWEEN_ID
 global FREE_MOVES_SHAKING = 0
+global FREE_MOVES_DING = 0 `how many have come off in this run, for the note that each one rings. see frame_free_moves.
+global FREE_MOVES_DING_LOUD# = .5
 
 ` THE SCORE THAT SHOWS. a combo is scored all at once, when it is found, but its fish pop one after another.
 ` so the bar of the round's progress does not show CURRENT_SCORE. it shows SCORE_SHOWN, which gets the points
@@ -494,6 +496,40 @@ global FREE_MOVES_SHAKING = 0
 ` the round is over when the score that shows gets to the end of the bar, so that the bar is seen filling up first.
 ` queueScore and stepScoreTicks, in fish_funcs, do the work.
 global SCORE_SHOWN = 0
+
+` THE POINTS FLY. a score text that is points ("+120") pops out of where it was scored, a little too big,
+` and settles; it sits there for a moment, and then flies up into the end of the bar of the round, and
+` the bar jumps as it lands. so every point is seen going from where it came from into the bar. queueScore
+` holds the points back until then, SCORE_FLY_LAND_MS after they were scored, so the bar fills as they land.
+` how big the text is, and how hard it pops and the bar jumps, goes by how much it is worth next to the
+` multiplier: points / (10 * SCORE_MULTIPLIER), which is how many fish' worth it is. a few hundred points
+` at a multiplier of 1 are a big deal, and the same points at a multiplier of 20 are nothing much.
+` spawnScoreTextScaled starts one, and stepFlyingScore, in fish_funcs, plays it. any other text, like
+` the words that a quest says, floats up and fades the way that it always did.
+global SCORE_FLY_POP_MS = 200 `how long the pop takes
+global SCORE_FLY_AT_MS = 400 `how long after it pops it sets off for the bar
+global SCORE_FLY_MS = 360 `how long the flight takes
+global SCORE_FLY_LAND_MS = 760 `when it lands, after it popped. SCORE_FLY_AT_MS + SCORE_FLY_MS.
+global SCORE_FLY_HEFT_FROM# = 4 `a text worth this many fish or fewer is the usual size
+global SCORE_FLY_HEFT_SPAN# = 16 `and one worth this many more than that is as big as they get
+global SCORE_FLY_GROW# = .9 `how much bigger the biggest are
+global SCORE_FLY_TALL# = 19 `how tall the usual size is, in pixels, on a board that has not grown
+global SCORE_FLY_STEP3# = .3 `how far a number of 3 digits sits up or down from its fish, in how tall it is
+global SCORE_FLY_STEP4# = .45 `and one of 4 or more
+global SCORE_FLY_LEAN# = .55 `how much of the way it is headed it leans into, as it flies
+global SCORE_FLY_LEAN_MAX# = .6 `and the most that it leans, in radians
+global SCORE_BAR_PUNCH_AT = -1 `when a text last landed in the bar, or -1
+global SCORE_BAR_PUNCH# = 0 `and how hard, from 0 to 1
+global SCORE_BAR_PUNCH_MS = 240 `how long the bar's jump lasts
+` THE DOUBLE POP. it is off, and only the debug window of the bars turns it on: points pop out as all that
+` they are worth. with it on, points that the multiplier went into pop out as what they were worth without it, "+20",
+` and then punch up to what they are worth with it, "+80", with a second, bigger pop and a fizz, before
+` they fly. points that cannot be divided by the multiplier, like a payout that it had nothing to do
+` with, only pop once. so the fish is seen to be worth something, and the multiplier is seen making it more.
+global SCORE_FLY_DOUBLE_ON = 0
+global SCORE_FLY_DOUBLE_MS = 250 `when it punches up, after it popped
+global SCORE_FLY_DOUBLE_POP_MS = 150 `how long that pop takes
+global SCORE_FLY_BASE_SIZE# = .8 `how big it is before it punches up, next to after
 
 ` when the bar fills up, the round is over. the upgrade screen does not come up right away, though. it waits
 ` for the board to settle, so that fish which are still popping get to finish. the bar stays full that whole
@@ -519,7 +555,6 @@ global OVERFLOW_TIER = 0 `how many have been won on this full bar
 global OVERFLOW_FILL# = 0 `how full the one that is being filled is drawn, from 0 to 1
 global OVERFLOW_POINTS = 0 `how many points are in the one that is being filled
 global OVERFLOW_NEED = 0 `and how many it takes
-global OVERFLOW_SPRITE
 
 ` HOW LONG A ROUND IS. round n needs SCORE_ROUND_BASE * n ^ SCORE_ROUND_POWER# points, and from the round after
 ` SCORE_ROUND_RAMP_FROM on, SCORE_ROUND_RAMP_PERCENT more of that for every round past it: 400, 1130, 2080, 3200,
@@ -542,26 +577,46 @@ global SCORE_BAR_FIZZ_GAP = 55 `how many milliseconds there are between them
 
 ` the bar shakes a little while it is filling up, and it shakes more, and is brighter, while it is full and fizzing
 global SCORE_BAR_LAST_FILL# = 0 `how full the bar was drawn on the last frame, to tell when it is filling up
+
+` the numbers under the end of the bar, as they were last written, so that the words are only made again
+` when one of them changes. frame_score writes them.
+global BAR_LABEL_HAS = -1 `the points that it says it has
+global BAR_LABEL_OF = -1 `out of this many
+global BAR_LABEL_OVER = -1 `1 when they are the points past the end. see OVERFLOW.
+global BAR_LABEL_WIDE# = 0 `how wide they are
 global SCORE_TICK_MAX = 600 `more than every fish on the biggest board, with a full stack behind each one
 global SCORE_TICK_COUNT = 0 `how many are waiting
 global dim SCORE_TICK_MS(SCORE_TICK_MAX) `when each one is due
 global dim SCORE_TICK_POINTS(SCORE_TICK_MAX) `and how many points it is worth
 
 ` THE MULTIPLIER. every fish that pops scores this many times what it would have.
-` a swap that makes something pop fills the multiplier's bar a little. when the bar is full, the multiplier
+` every group that a swap pops fills the multiplier's bar a little, and so does every group of the chain that
+` it sets off, as fish fall and pop. see THE CHAIN. when the bar is full, the multiplier
 ` goes up by one, and the bar starts again from empty. a swap that pops nothing empties the bar. if the
 ` bar is empty already, it takes one off of the multiplier instead, down to 1 at the least. so the first
 ` miss only costs the bar, and it is the next one in a row that costs a multiplier.
-` the bar takes 3 more swaps in a row to fill every time: 2 to get to x2, 5 to get to x3, 8 to get to x4.
+` the bar takes 3 more steps to fill every time: 2 to get to x2, 5 to get to x3, 8 to get to x4.
 ` how many it takes follows from the multiplier, so when the multiplier goes down, so does how many it takes.
 ` there is no top to the multiplier. the higher it is, the longer the next one takes, and the more every pop is worth.
-` only swaps count. the special moves, and the cursor moving on its own, do not fill the bar or empty it.
+` only swaps count, and the chains that they set off. the special moves, and the cursor moving on its own,
+` do not fill the bar or empty it.
 ` the routines are in fish_routines_multiplier.
 global SCORE_MULTIPLIER = 1
 global MULT_FIRST_REQUIRED = 2 `how many swaps in a row it takes to get from x1 to x2
 global MULT_REQUIRED_STEP = 3 `and how many more it takes for every multiplier after that
-global MULT_PROGRESS = 0 `how many swaps in a row have popped something, since the bar was last empty
+global MULT_PROGRESS = 0 `how many steps are in the bar, since it was last empty
 global MULT_PENDING_SWAPS = 0 `swaps that have been made, that handle_combos has not looked at the board since
+` THE CHAIN. every group that a swap pops is one step, and so is every group that pops each time that
+` handle_combos looks at the board again, until it looks and nothing has. only a chain that a swap set off
+` counts. a new swap that pops, while a chain is falling, takes the chain over. one swap can fill the bar
+` MULT_CHAIN_MOST_UPS times, and the bar stops there, at empty. each group after that pays MULT_CHAIN_OVER_POINTS
+` for the round in place of a step, and the multiplier has nothing to do with those.
+global MULT_CHAIN_ON = 1 `0 for the rule as it was, for the balance bot to compare
+global MULT_CHAIN_LIVE = 0 `1 while a chain that a swap set off is falling
+global MULT_CHAIN_UPS = 0 `how many times this swap has filled the bar
+global MULT_CHAIN_MOST_UPS = 2
+global MULT_CHAIN_OVER_POINTS = 500
+global MULT_CHAIN_OVER_GAP_MS = 150 `how far apart the points of two groups that pop at once show up
 ` THINK BIGGER. with the card, a group needs 4 fish to pop. a swap that puts 3 together, which would have
 ` popped without the card, is let off: the bar does not fill, and nothing is taken away. the 3 stay on the
 ` board, to grow into something bigger, like a burst of the rainbow fish, or a school. thinkBiggerHeld, in
@@ -584,6 +639,63 @@ global MULT_WIGGLE_AT = -1 `when the bar last started to wiggle, or -1. see wigg
 global MULT_WIGGLE_TIME = 320 `how long a wiggle lasts, in milliseconds
 global MULT_WIGGLE_SIZE = 2 `how far the bar goes to each side, in pixels
 global MULT_WIGGLE_FIZZ = 5 `how many bubbles come off the bar when a wiggle starts
+
+` THE MULTIPLIER FILLS. a swap that pops something makes a "+1" pop up just under the end of the
+` multiplier's bar, and rise into it. the bar only shows it
+` when it lands: the bar jumps taller, flashes, and fizzes, and if that fills it, the multiplier goes up
+` right then. the multiplier counts the swap at once, as it always did; only what shows waits for it.
+` every group sends one. they wait their turn, and each one shows the bar as it was when it
+` was sent.
+` going up is a big deal: the number jumps, wobbles, flashes, and pops bubbles that can be heard.
+` stepMultFly, in fish_routines_multiplier, flies it.
+global MULT_FLY_TEXT_ID
+global MULT_FLY_AT = -1 `when the one that is flying popped out, or -1 when none is
+global MULT_FLY_MOST = 8 `how many can wait. if more come than that, the first one lands right away.
+global MULT_FLY_COUNT = 0 `how many there are, with the first of them the one that is flying
+global dim MULT_FLY_SHOW_MULT(8) `what the multiplier was when it was sent
+global dim MULT_FLY_SHOW_PROGRESS(8) `and the bar
+global dim MULT_FLY_SHOW_UP(8) `1 when the multiplier went up with it
+global MULT_FLY_HOLD = 0 `1 while a step goes into the bar that its "+1" will show
+global MULT_FLY_FROM_X# = 0 `where it popped out
+global MULT_FLY_FROM_Y# = 0
+global MULT_FLY_POP_MS = 140 `how long it takes to pop out
+global MULT_FLY_SIT_MS = 220 `when it sets off for the bar, after it popped out
+global MULT_FLY_MS = 180 `how long it takes to rise into the bar
+global MULT_FLY_TALL# = 16 `how tall it is
+global MULT_FLY_BELOW = 18 `how far under the bar it pops up, in pixels
+global MULT_FLY_ROOM = 22 `and how far it keeps from the right end, where the count is
+` THE BAR CATCHES UP. the multiplier's bar works the way that the bar of the round does. a "+1" that lands
+` grows a segment of another color past the blue. once everything that the swap set off is over, with the
+` board settled and every "+1" landed, a glint runs along the blue to the border, and the blue sweeps over
+` the segment, with the glint on its edge. the bar going up clears it all, and it starts again from empty.
+` stepMultCatch, in fish_routines_multiplier, does this.
+global MULT_BAR_CHARGE_SPRITE
+global MULT_BAR_GLINT_SPRITE
+global MULT_BANK# = 0 `how much of the bar is blue, from 0 to 1. MULT_FILL_TWEEN_ID is how much is filled, the segment and all.
+global MULT_SHOWN_MULT = 1 `the multiplier that the bar is showing the steps of
+global MULT_CATCH_IDLE = 0
+global MULT_CATCH_WAIT = 1 `it is all over, and there is a moment before the glint
+global MULT_CATCH_GLINT = 2 `the glint runs along the blue
+global MULT_CATCH_EAT = 3 `the blue sweeps over the segment
+global MULT_CATCH_FADE = 4 `and the glint fades
+global MULT_CATCH_STATE = 0
+global MULT_CATCH_AT = 0 `when this part of it started
+global MULT_CATCH_WAIT_MS = 180
+global MULT_CATCH_GLINT_MS = 240 `how long the glint takes, along a bar that is all blue
+global MULT_CATCH_EAT_MS = 300
+global MULT_CATCH_FADE_MS = 160
+global MULT_EAT_FROM# = 0 `how much was blue when the sweep started
+global MULT_EAT_TO# = 0 `and how much it sweeps up to
+global MULT_GLINT_TAIL = 8 `how long the glint is, in pixels, as it runs
+global MULT_CHARGE_BREATH_MS = 500 `how long a breath of the segment takes
+global MULT_BAR_HIT_AT = -1 `when one last landed in the bar, or -1
+global MULT_BAR_HIT_MS = 300 `how long the bar's jump lasts
+global MULT_UP_POPS = 4 `how many pops are heard when the multiplier goes up, one after the other
+global dim MULT_UP_SFX(4)
+global MULT_UP_POP_GAP = 55 `milliseconds between them
+global MULT_UP_VOL# = .75
+global MULT_LAND_SFX
+global MULT_LAND_VOL# = .35
 
 ` THE UPGRADE WIPE. the upgrade screen is not drawn onto the screen. it is drawn to a render target of its
 ` own, and the wave of bubbles wipes that in over the game, and away again, the same way that it wipes the
@@ -1254,45 +1366,25 @@ global INTRO_VERSION = 2
 global INTRO_TEXT_ID
 global INTRO_DIM_SPRITE
 global ORDER_INTRO = 90 `on top of the board and the score text, and underneath the info screen
-global INTRO_LINE_MS = 3200 `how long every line is up for, in milliseconds, with its fades
 global INTRO_FADE_MS = 700 `how long a line takes to fade in, and to fade out
 global INTRO_DIM_ALPHA = 90 `how dark the water gets behind the lines, out of 255
 
 ` 0 when there is no tutorial. 1 while the lines of text are still to come, and everything is off of the
-` screen. 2, 3 and 4 while the first, second and third of the little boards are being played. 5 while
-` the whole board is in, and the info key is waiting to be pressed. 6 while info mode is open. 7 while
-` the fish of the mystery, and the lines after it, are going.
+` screen. 2 to 5 while the four little boards are being played, one after the other. 6 while the whole
+` board is in, and the info key is waiting to be pressed. 7 while info mode is open.
 global TUTORIAL_STAGE = 0
 global TUTORIAL_SCORE_HOLD = 0 `1 while the fish that brought the bar in are still popping. they do not score.
 
 ` THE LITTLE BOARDS. see the top of fish_routines_intro.
 global TUTORIAL_BOARD = 0 `1 while the board is one of the little boards
 global TUTORIAL_STEP_DONE = 0 `1 once the little board that is being played has popped, until the next one has come in
-global TUTORIAL_GROW_TO = 0 `the little board that tutorial_grow is to bring in: 1, 2 or 3
-global TUTORIAL_CAPTION_TEXT_ID `the words over a little board
-global TUTORIAL_CAPTION_TWEEN_ID `how much of the words can be seen, from 0 to 1
-global TUTORIAL_SUB_TEXT_ID `the line under a little board, about a swap that pops nothing
-global TUTORIAL_SUB_TWEEN_ID `how much of it can be seen, from 0 to 1
-global TUTORIAL_UPGRADE_TALK = 0 `1 in a game that had the tutorial, until the lines before its first upgrade screen have been said
-global TUTORIAL_LINES_SET = 0 `which lines tutorial_lines says
-global TUTORIAL_SHRINK_HUD = 0 `1 when tutorial_shrink_board takes the things around the board away too
+global TUTORIAL_GROW_TO = 0 `the little board that tutorial_grow is to bring in: 1 to 4
+global TUTORIAL_UPGRADE_TALK = 0 `1 in a game that had the tutorial, until its first upgrade screen has come. see shop_greet.
 global TUTORIAL_WAIT_UNTIL = 0 `the game ms() that tutorial_wait draws frames until
-global TUTORIAL_QUIET_BUBBLES = 0 `1 while no floating bubbles are made, so that the lines of the tutorial have the water to themselves
-global INTRO_SUB_TEXT_ID `the smaller line under a line of tutorial_lines
 
-` THE BAR OF THE ROUND, in the tutorial. once the board is back for good, the bar of the round is lifted over
-` the darkened water, outlined, and filled up once and emptied, with a line under it about what it is for.
-` see tutorial_round_bar in fish_routines_intro.
-global TUTORIAL_BAR_TEXT_ID
-global TUTORIAL_BAR_SUB_TEXT_ID
-global TUTORIAL_BAR_BORDER as infoBorder
-global TUTORIAL_BAR_MS = 6000 `how long it is up for, in milliseconds, unless the confirm key moves on sooner
-global TUTORIAL_BAR_FILL_AT = 900 `when the bar starts to fill, and how long it takes
-global TUTORIAL_BAR_FILL_MS = 1500
-global TUTORIAL_BAR_EMPTY_AT = 3400 `and when it empties out again
-global TUTORIAL_BAR_DEMO = 0 `1 while it is shown, so that frame_score has the numbers follow the bar
+global TUTORIAL_BAR_BORDER as infoBorder `the outline around the bar of the round, while the angler talks about it
 
-` the question marks that drift up around the fish of the mystery. see tutorialMarkSpawn in fish_routines_intro.
+` the question marks that drift up out of the fish at the end of the tutorial. see tutorialMarkSpawn in fish_routines_intro.
 global TUTORIAL_MARK_COUNT = 16
 global dim TUTORIAL_MARK_TEXTS(16)
 global dim TUTORIAL_MARK_BORN(16) `the game ms() that each one showed up, or 0 for one that is not up
@@ -1311,6 +1403,8 @@ global dim TUTORIAL_FACE_KEEP(400) `the way that the fish of a little board face
 global dim TUTORIAL_SHOWN_KEEP#(400)
 global TUTORIAL_GROW_MS = 260 `how long the fish of a little board take to grow, or to shrink away, in milliseconds
 global TUTORIAL_GROW_STAGGER = 70 `how much later the fish of every ring around the board start than the ring inside it
+global TUTORIAL_SEA_STAGGER = 110 `and the same for the whole board, when it rolls out. see tutorial_open_sea.
+global dim TUTORIAL_TURN_AT(400) `the game ms() that each cell turns into the fish that the game was dealt, or 0 once it has
 
 ` the hint for info mode is the first thing to show, on its own, where it always is. it waits to be pressed.
 global TUTORIAL_KEY_MS = 0 `when it showed up, or 0 when this is not going on

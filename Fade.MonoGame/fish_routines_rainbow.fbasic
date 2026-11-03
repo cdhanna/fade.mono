@@ -206,6 +206,7 @@ endfunction
 ` cursor is on, once no flow has gone on this look yet. the fish that ends up there is a rainbow fish.
 function rainbowBreedGroup(breedGroup, waitMs)
     if RAINBOW_FISH_ON = 0 then exitfunction
+    if PUZZLE_ON then exitfunction
     if RAINBOW_NO_BREED then exitfunction `see NONE ARE BROUGHT IN A BURST
     if RAINBOW_PULSE_LOOK then exitfunction
     breedTo = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
@@ -333,6 +334,7 @@ endfunction
 function rainbowShareAhead(shareLast, shareCounted)
     RAINBOW_SHARE_COUNT = 0
     if RAINBOW_FISH_ON = 0 then exitfunction
+    if PUZZLE_ON then exitfunction
     if RAINBOW_SHARE_BONUS <= 0 then exitfunction
     if shareCounted = 0 then exitfunction
     if shareLast >= COMBO_GROUP_ROOM then exitfunction
@@ -381,7 +383,7 @@ function rainbowSharePop(shareEach, shareDelay, popCell)
     sharePos.y = getCellY(popCell / CELL_COLUMN_COUNT) + CELL_SIZE * RAINBOW_SHARE_BELOW# * shareScale#
     shareScale# = shareScale# * RAINBOW_SHARE_TEXT_SCALE#
     shareAt = shareDelay + RAINBOW_SHARE_AFTER
-    shareTxt = spawnScoreTextScaled(sharePos, "+" + str$(shareAll), shareAt, RAINBOW_SHARE_LIFE, shareScale#)
+    shareTxt = spawnPointsText(sharePos, shareAll, shareAt, RAINBOW_SHARE_LIFE, shareScale#)
     ` it is white, on the render target that turns it to the rainbow
     set text render target shareTxt, TARGET_RAINBOW_TEXT
     color text shareTxt, rgb(255, 255, 255)
@@ -549,6 +551,7 @@ function rainbowBurstAhead(burstLast, burstBase)
     ` a new look: no flow has gone yet
     RAINBOW_PULSE_LOOK = 0
     if RAINBOW_FISH_ON = 0 then exitfunction
+    if PUZZLE_ON then exitfunction
     if TIDE_NIGHT then exitfunction
     if burstLast >= COMBO_GROUP_ROOM then exitfunction
 

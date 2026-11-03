@@ -1,0 +1,345 @@
+remstart
+    THE LONG VISIT, AND ITS PUZZLES
+
+    this is a prototype of the game that is left when the player stays down there with Ava. the board comes
+    back, but none of the numbers do: no moves, no multiplier, no bar of the round, no rounds, no score.
+    there is a list of boards of fish that do not come back when they pop, and the goal is an empty sea. she
+    says a few words as a board comes in, and one more thing when it is clear. so the talk goes as far as the
+    player has got through the boards, and not by any clock.
+
+    the way in is still the FISH_PUZZLE environment variable, because the goodbye that offers it is not built, or the
+    Ava window of FISH_DEBUG, which puts her and the game in any state, from the main menu or from a game
+    (frame_debug_ava). a player who has gone in has stayed, and the game remembers it (PUZZLE_PREF + 2, puzzleStaying)
+    with or without the variable. the main menu then has Resume, which goes straight back to the board that the
+    player got to, and New Game, which asks first (see LEAVING). a number in FISH_PUZZLE only says where to start when
+    there is no progress yet. FISH_PUZZLE_BOARD, from 1, jumps to a board no matter what. the variables only get the
+    player in: once a usual game has started, or the Ava window has been used, they do nothing (PUZZLE_ENV_SPENT).
+
+    IT IS DEEP DOWN HERE
+    the sea is dark, the way that it is at night, but it is not night. PUZZLE_DEEP# only goes to what is drawn (see
+    stepTide). nothing else looks at it, so the fish are awake, and there are no night sounds and no jellyfish.
+
+    THE MENUS DOWN HERE
+    there is nothing to look up and nothing is carried, so the pause menu has no Inventory and no Codec, and a new game
+    is a thing for the main menu, where she asks about it.
+
+    LEAVING
+    New Game goes down into the empty sea like any other, and Ava comes up in the usual scene and asks if the
+    player is leaving, before a board is dealt (puzzle_ask). staying carries on from the same board. leaving
+    forgets that the player stayed, and a new game of the usual kind starts from there (PUZZLE_LEFT, and
+    menu_start_game). the boards keep their place, because she says that she will keep it. what comes after she
+    is gone is not built.
+
+    the game remembers that the player left (PUZZLE_GONE_PREF, puzzleGone). she does not come back: a new game is never
+    a puzzle, and there is no first dive, because she is the one who gave it. "Include intro" gets a few big words in
+    the empty water instead (puzzle_gone_intro). what else changes when she has gone is not built.
+
+    WHERE SHE IS
+    while the player works, she wanders around the sea like any other fish (frame_puzzle_swim). she keeps out
+    from behind the fish: she goes across the board in a lane of open water, over the highest fish or
+    under the sea floor (puzzleLaneY), and she only changes lanes out past the side of the board. she can be a
+    little in front of everything or a little behind it, bigger and brighter in front, and smaller and
+    dimmer behind, and she changes that out past the side of the board too.
+
+    there is no box while she does. a line comes apart into its words (PUZZLE_WORDS), and they sit in rows over her
+    head. nothing pushes a word around, and there are no physics: before the first word comes out, every word is
+    given a row and a place along it (puzzleWordsLayOut). her voice sets the pace: a word comes out when she gets to it.
+    it pops out of her mouth, small, and flies up to its place (puzzleWordOut), and it stays there. her swimming has
+    nothing to do with that. when the player does something she says something about it right away, so she does not go
+    anywhere first: she turns to the right, where she is, and the paragraph is laid out over her.
+
+    a row ends at the end of a phrase, if it has got long enough. when one is finished it moves up a row. under the
+    fish there is only room for one row, so it fades, and her voice waits for it (puzzleRowBeforeIsUp).
+
+    she finishes a thought. if there is something new to say while she is saying a line, the rest of that line goes
+    at twice the speed (PUZZLE_SAY_PUSHED), and the new thing comes right after it. the words of the old line go at
+    once, in PUZZLE_SAY_GONE_MS, and the new one waits for them, so that two lines are never on top of each other.
+
+    the rows that she has finished drift up, slowly and all together (PUZZLE_SAY_RISE#). once the line is out,
+    the whole paragraph keeps going until its lowest word is out of the fish, and then it stops, and fades when
+    its turn comes. under the fish there is only room for one row, and no way up that is not through them, so
+    there a row stays where it is and fades, before she swims back for the next one (puzzleWordsGo). the confirm
+    button lets out the rest of a line at once, each word in its place.
+
+    it is the guide all the same: guideSay and guideThen work as they always do, and the line itself is still
+    in ANGLER_SAY_TEXT_ID, out of sight, because that is what her voice follows. only where the words are drawn is
+    different.
+
+    a talk is another thing. she swims down to where her picture goes, and the usual scene comes up around
+    her. it goes away again and she swims off. a puzzle is nine across and seven down, and it sits higher
+    than a game does, so that the box of the scene does not cover the sea floor (PUZZLE_FLOOR_Y).
+
+    THE TALKS
+    every third board has a talk after it, and that is the usual scene, the same one as asking her a
+    question: the dark comes down, she swims in, and the replies are the usual list. she says two things,
+    the player picks one of two replies, she answers that, and she says one more thing (puzzle_talk).
+    the words are in build/make_ava_talk.py, which makes fish_puzzle_talk. there are more of them than there are
+    places for, so PUZZLE_TALK_PICK says which ones are used. each one that needs another comes after it: Gary before
+    what happened to Gary, the moon that she saves before the moon that she asks for. the first boards have words of
+    their own, and the rest have a remark that goes by how far along the player is (puzzleRemark). the board that a new
+    fish comes in on has her saying what it does (puzzleOpening).
+
+    UNDO
+    the first special move key takes back the last swap, whatever it popped. puzzleUndoPush keeps the board
+    as a swap starts, and PUZZLE_UNDO_MAX of them are kept. a new board forgets them. a puzzle has no moves
+    of its own on that key, so nothing else wants it. the key counts while the fish are still popping and
+    falling, and it happens the moment that they stop, so that it never feels ignored.
+
+    WHY THERE ARE PUZZLES
+    she is afraid that nobody stays without a reason, so she made them one. the boards are a bribe, and
+    they run out. she says so, and that the player can go, and then there is no board, no goal and nothing
+    to do (PUZZLE_ALONE_MS). this is saved, so a player who closes the game and comes back gets the same
+    thing, sooner. the player who stays anyway gets the first thing that she ever said at the
+    upgrade screen, "You're still here?", and that is the happy ending. nothing else happens.
+
+    then she says that she made another one, and that it is bad, and the boards go on, just because (PUZZLE_AFTER).
+    those will be made as they are needed. for now it is the same list again, as a stand-in.
+
+    THE RULES
+    the fish pop the way that they always do: every group of 3 or more that touch, and then the fish over
+    them fall, and that can pop more. nothing comes in from the top. any number of swaps can be made, and
+    a swap that pops nothing costs nothing. a fish cannot be swapped into an empty cell. the cursor can
+    go over one. so the fish in a column that has been emptied can never go past it, and a board that has
+    been cut in two stays cut in two, which is what the puzzle is about. the swaps wait for the board to
+    settle, which keeps the game on the rules that the puzzles were proven with.
+
+    no new rainbow fish or bubbles are made, and there is no coral, no schools and no tide, because any of those can
+    leave a fish behind that the proof of the board did not count on. each is switched off where it starts,
+    by asking PUZZLE_ON. the ones that a board starts with are another matter. see THE FISH.
+
+    THE FISH
+    the board plays by the rules of the game. a swap has to pop something, or it is not made (puzzleBlocksSwap). that
+    goes for every board. three fish change what can be done, and all three do just what they do in a game:
+        belly up  it pops when the cursor comes to it, with any that touch it (popBellyUpFish). so it is a pop that needs
+                  no group, and the cursor has to go around one to keep it.
+        bubbled   its swaps are free, so it is the only fish that moves without popping. the board is looked at after
+                  each one, so what it puts together pops, and every step pushes a fish one cell over and leaves it
+                  there. a walk that is not thought through pops the wrong group, or leaves fish that can never meet.
+                  that is why free swaps are not the way out that they sound like. two bubbles that touch both pop,
+                  whatever kinds they are.
+        rainbow   three that touch all pop, whatever kinds they are (rainbowWildAhead), and they match with their own
+                  kind until then. they do not make more (rainbowBreedGroup), and there are no bursts.
+
+    UNDO AND START OVER CUT THROUGH EVERYTHING
+    the player can see that they goofed before the fish have finished popping, so these do not wait for the board to
+    settle. a swap only changes the board once it has played out, and what undo kept comes from before it started,
+    so nothing has to be finished first: the combo stops where it is (puzzleWantsBack, _combos_stopped), and
+    puzzle_stop_move clears up what it left going. every fish is then put back, not only the ones that changed,
+    because a fish can be halfway through a fall (PUZZLE_UNDO_ALL).
+
+    HINTS
+    with FISH_DEBUG, the window has a hint button. there is no solver in the game: build/make_puzzle_boards.py finds every
+    position of every board, a bubble and all, and writes down the ones that can still win, with the move from each that
+    is nearest to the end (puzzleHintRow). a position is found by a key made from its fish and from the part of the sea
+    that the cursor can get to (puzzleHintKey). the two fish of the swap hop until a move is made. a position that is
+    not there is lost (puzzleIsLost), and it is looked for in what undo has kept, which says how many swaps to take back.
+
+    A BOARD IS NEVER A GUESS
+    fish_puzzles is made by build/make_puzzle_boards.py, which builds every board backwards from an empty sea, and then
+    solves it all the way. the first ten are only swaps. then belly up fish come in, then bubbles, then rainbow fish, and
+    they are there to make the later boards harder, so there are still boards without them, and a board does not have to
+    need its fish. only the first of each kind does. going around a belly up fish costs nothing, so every other board
+    with one has to lose at least a fifth of the time that one is popped, or it is only a free pop. some have a gate:
+    belly up fish on a diagonal, which do not touch and which the cursor cannot get between, closing off a corner, or
+    two diagonals that stand on the floor like a tent. long_puzzles_all_clear, in fish_tests_puzzle, plays the
+    line of each board through the real game, and at every step of it long_puzzles_agree_with_the_game makes a few other
+    moves as well, and looks at where they end up. a change to what a pop does has to pass those.
+
+    the info key puts the board back at any time. there is no cost to that.
+
+    THE SNOW STOPS
+    she does not say when a swap has lost the board. being told at once was no fun. the water says it, and only if the
+    player looks: the snow slows down, over a few seconds, until it hangs still, and it starts again when the swap is
+    taken back (puzzleLostLook, stepPuzzleStill). she only speaks once the snow has stopped and there is not a move left
+    to make, because then the player has to be told about undo.
+
+    the little boards of the tutorial already know how to have gaps, so a puzzle is one of those:
+    TUTORIAL_BOARD is 1 while one is up, and TUTORIAL_STAGE stays at 0.
+remend
+
+` as many boards as the arrays have room for
+global PUZZLE_MAX = 30
+global PUZZLE_SIDE = 9
+global PUZZLE_TALL = 7
+global PUZZLE_FLOOR_Y = 218 `the middle of the bottom row. the box starts at 236.
+global PUZZLE_COUNT = 30
+
+global PUZZLE_ON = 0 `1 while a puzzle is up
+global PUZZLE_NEW_BELLY = 10 `the board that the first belly up fish comes in on, from 0. she says what it does.
+global PUZZLE_NEW_BUBBLE = 15 `and the first bubble
+global PUZZLE_NEW_RAINBOW = 20 `and the first rainbow fish
+global PUZZLE_NOW = 0 `which board is up, from 0
+global PUZZLE_CLEARED_MS = 0 `when the sea was cleared, or 0 while there are fish in it
+global PUZZLE_AGAIN = 0 `1 when the player has asked for the board to be put back
+global PUZZLE_STUCK_SAID = 0 `1 once Ava has said that this board cannot be cleared now
+global PUZZLE_LOST_LAST = -1 `which of the things that she says about that she said last, so that it is not the same twice
+global PUZZLE_LOST = 0 `1 while the board can never be cleared from where it is. see THE SNOW STOPS.
+global PUZZLE_NO_MOVE = 0 `1 while it is lost and there is not a move left to make
+global PUZZLE_STILL# = 0 `how far the snow has stopped, from 0, not at all, to 1, hanging still
+global PUZZLE_STILL_SECS# = 7 `how long it takes to stop
+global PUZZLE_STILL_BACK_SECS# = 1.5 `and how long it takes to get going again
+global PUZZLE_FISH_WAS = 0 `how many fish there were when the board was last looked at
+global PUZZLE_CLEAR_HOLD_MS = 1600 `how long the empty sea stays, over and above the time to read the last words
+global PUZZLE_STAY_MS = 20000 `how long the player has to stay with nothing to do. see WHY THERE ARE PUZZLES.
+global PUZZLE_ALONE_MS = 0 `when she looks up again, while there is nothing left, or 0
+global PUZZLE_ASKED = 0 `1 once she has asked if the player is still here
+global PUZZLE_AFTER = 0 `1 once she has made another one, just because
+global PUZZLE_RAN_OUT = 0 `1 once the boards have run out, until she makes another one
+
+` a row is a number with a digit for each cell, and 0 is no fish. the digit picks from TUTORIAL_KINDS.
+global dim PUZZLE_ROWS(270)
+` the swaps that clear the board. they are for the test. PUZZLE_MAX boards of PUZZLE_SWAP_ROOM swaps.
+global PUZZLE_SWAP_ROOM = 24
+global dim PUZZLE_SWAP_A(720)
+global dim PUZZLE_SWAP_B(720)
+global dim PUZZLE_SWAPS(30)
+
+global dim PUZZLE_BELLIES(270) `like PUZZLE_ROWS, and a 1 is a fish that starts out belly up
+global dim PUZZLE_BUBBLES(270) `or in a bubble
+global dim PUZZLE_RAINBOWS(270) `or a rainbow fish
+global dim PUZZLE_FLOOD(63) `the cells that puzzleGroupSize still has to look at
+global dim PUZZLE_FLOOD_SEEN(63)
+global PUZZLE_FLOOD_STAMP = 0
+global PUZZLE_UNDO_TURNED = 100 `an undo keeps a fish as its kind, plus this times what puzzleFishFlags says about it
+global PUZZLE_GONE_PREF = 9003 `1 once the player has left her, whichever boards they were on
+global PUZZLE_ENV_SPENT = 0 `1 when the environment variables have stopped counting
+global PUZZLE_DEEP# = .85 `how dark it is down here, from 0 to 1. see IT IS DEEP DOWN HERE.
+global PUZZLE_DEEP_SHOWN# = 0
+global PUZZLE_DEEP_EASE# = .0015
+global PUZZLE_GONE_TALK = 0 `1 when a game is starting with the words of the intro with nobody in it
+global PUZZLE_GONE_TEXT_ID = 0
+global PUZZLE_GONE_TALL = 28
+global PUZZLE_GONE_WIDE = 480
+global PUZZLE_GONE_FADE_MS = 500
+global PUZZLE_DBG_BOARD = 1 `the board that the Ava window puts the player on
+global PUZZLE_DBG_TITLE = 0 `1 when the Ava window has changed things, and the game has to go back to the main menu
+` HINTS
+global PUZZLE_HINT_ROOM = 8000
+global PUZZLE_HINT_MOD = 50000017 `build/make_puzzle_boards.py has this too
+global PUZZLE_HINT_MOVE_FLAG = 1000 `the second cell of a move has this when it is the cursor going there, with no swap
+global PUZZLE_HINT_HOP_MS = 700 `how often the fish of a hint hop
+global dim PUZZLE_HINT_KEYS(8000)
+global dim PUZZLE_HINT_MOVES(8000)
+global dim PUZZLE_HINT_CELLS(63) `the position that is being looked for: a digit, plus 10 times what puzzleFishFlags says
+global PUZZLE_HINT_ROWS = 0 `how many have been read. they are only read for the first hint.
+global PUZZLE_HINT_WANT = 0 `the button was pressed. it waits for the fish to stop, the way that undo does.
+global PUZZLE_HINT_A = -1 `the cells that hop, or -1
+global PUZZLE_HINT_B = -1
+global PUZZLE_HINT_BACK = 0 `how many swaps have to be taken back first, or -1 if it does not know
+global PUZZLE_HINT_AT = 0 `what PUZZLE_UNDO_NEXT was. once it has changed, the hint is old.
+global PUZZLE_HINT_NEXT_MS = 0
+global PUZZLE_HINT_SAID$ = ""
+` a few other moves from each step of the line of a board, for long_puzzles_agree_with_the_game: the board and the step,
+` the move, the key of where it ends up, and 1 if that is lost
+global dim PUZZLE_CHECK_AT(4000)
+global dim PUZZLE_CHECK_MOVE(4000)
+global dim PUZZLE_CHECK_KEY(4000)
+global dim PUZZLE_CHECK_LOST(4000)
+global PUZZLE_CHECKS = 0
+
+` what is saved, in the preferences: the board that the player is up to, and then 0 while there are
+` boards left, 1 once they have run out, and 2 once she has made another one
+global PUZZLE_PREF = 9000 `the board, then 0 playing, 1 ran out or 2 after, and then 1 if the player stayed
+global PUZZLE_ASK = 0 `1 when she has to ask if the player is leaving before anything is dealt
+global PUZZLE_RESUMED = 0 `1 when the player picked Resume, so there is nothing to ask
+global PUZZLE_LEFT = 0 `1 when the player said yes, and 2 while the usual game that comes next is starting
+global PUZZLE_BACK_MS = 3000 `how long she takes to look up, for a player who has come back to nothing
+
+` THE TALKS
+global PUZZLE_TALK_EVERY = 3
+global PUZZLE_TALK_LAST = 9 `how many are used
+global dim PUZZLE_TALK_PICK(10) `which of the talks of build/make_ava_talk.py each one is, from 1
+global PUZZLE_TALK_NOW = 0 `which talk, from 1
+global PUZZLE_BEST_SCORE = 0 `the talk about the old scores says this
+global dim PUZZLE_REPLY_OF(38) `the two replies of every talk
+
+` UNDO. a ring of boards: 63 cells each, and where the cursor was.
+global PUZZLE_UNDO_MAX = 40
+
+` WHERE SHE IS
+global PUZZLE_SWIM_X# = -60
+global PUZZLE_SWIM_Y# = 120
+global PUZZLE_GO_X# = 200
+global PUZZLE_GO_Y# = 120
+global PUZZLE_SWIM_MS = 0 `when she last moved
+global PUZZLE_LANE = 0 `0 is over the fish, and 1 is under the sea floor
+global PUZZLE_LANE_Y# = 120
+global PUZZLE_SWIM_SPEED# = 30 `pixels every second
+global PUZZLE_RUSH_SPEED# = 240 `on her way to her picture
+global PUZZLE_NEAR# = 0 `from 0, behind the board, to 1, in front of it. she eases to whichever side she is on.
+global PUZZLE_SIZE_FAR# = .36 `how big she is out in the water, behind the board, of the size of her picture
+global PUZZLE_SIZE_NEAR# = .5 `and in front of it
+global PUZZLE_IN_FRONT = 0 `the side that she is on
+global PUZZLE_WANT_FRONT = 0 `the side that she wants to be on
+global PUZZLE_ORDER_BACK = 13 `the fish are at ORDER_FISH, which is 20
+global PUZZLE_ORDER_FRONT = 28
+global PUZZLE_ORDER_WORDS = 15 `her words are in the water behind the fish
+global PUZZLE_RUSH_TALK = 0 `the talk that she is on her way to, from 1, or 0
+global PUZZLE_SAY_SEEN = 0 `the last thing that she said, by ANGLER_SAYS
+global PUZZLE_SAY_DONE_MS = 0 `when it was all out
+global PUZZLE_SAY_HOLD = 0 `1 while her voice is waiting for her to get to where she can say the line
+global PUZZLE_SAY_OUT = 0 `how many words of the line have come out of her
+global PUZZLE_SAY_NEED# = 0 `how wide the widest row of the line is
+global PUZZLE_SAY_LEFT# = 0 `where the rows of the line start. the first word says.
+global PUZZLE_SAY_Y# = 0 `and how high the row that she is on is
+global PUZZLE_SAY_LANE = 0 `the lane that the line was said in. she can be in another one by the time that it has finished.
+global PUZZLE_SAY_ROWS = 0 `how many rows the line comes to
+global PUZZLE_SAY_SPEED# = 30 `how fast she swims with a line to say, in pixels every second
+global PUZZLE_SAY_CATCH# = 140 `and how fast she gets into the water that can be seen, if she is out of it
+global PUZZLE_SAY_PUSHED = 0 `1 when there is something new to say, so the end of this line goes at twice the speed
+global PUZZLE_SAY_GONE_MS = 150 `how fast the words of a line go, when something new is being said
+global PUZZLE_SAY_ROW_STAY_MS = 900 `how long a row stays, for it to be read, when it fades before the next one
+global PUZZLE_SAY_FADES = 0 `1 when this line has no room for its rows, so each one fades before the next one starts
+global dim PUZZLE_WORD_QUICK(64) `1 when it fades in PUZZLE_SAY_GONE_MS
+global PUZZLE_UNDO_ALL = 0 `1 when the next undo puts every fish back. see UNDO AND START OVER CUT THROUGH EVERYTHING.
+global PUZZLE_SAY_RISE# = .005 `how fast the words drift up, in pixels every millisecond
+global PUZZLE_SAY_LIFT# = .005 `how much of the way to its new row a row moves, every millisecond
+global PUZZLE_SAY_CEILING = 12 `the words stop drifting up here
+global PUZZLE_SAY_SIZE = 16 `how tall a word is, once it has come out of her mouth
+global PUZZLE_SAY_SWAY# = 3.0 `how many pixels the words sway from side to side, and half that up and down. they
+`sway together, because a gap between two words is smaller than two words swaying apart would have to keep clear of.
+global PUZZLE_SAY_LEAN# = 3.0 `how many pixels the ends of a word go up and down when it leans, however long it is
+global PUZZLE_SAY_WRAP = 190 `the most that fits in the box of a talk
+global PUZZLE_SAY_ROW_WIDE = 140 `how wide a row of words gets, if the water over her has room for that many rows
+global PUZZLE_SAY_GAP = 8 `between two words
+global PUZZLE_SAY_EDGE = 6 `how close a word gets to the side of the screen
+global PUZZLE_SAY_ROW = 20 `from a row of words to the next
+global PUZZLE_SAY_FIRST = 0 `the first word of the line that she is saying
+global PUZZLE_SAY_COUNT = 0 `and how many there are
+global PUZZLE_WORD_SLOTS = 64
+global PUZZLE_WORD_NEXT = 0 `the slot that the next word goes in
+global dim PUZZLE_WORDS(64) `a text for every word that can be in the water
+global dim PUZZLE_WORD_STATE(64) `0 is not in use, 1 is waiting to be said, 2 is out
+global dim PUZZLE_WORD_AT(64) `how many letters of the line come before it
+global dim PUZZLE_WORD_BORN(64) `when it came out of her
+global dim PUZZLE_WORD_END(64) `when it starts to fade, or 0 for when she has finished the line
+global dim PUZZLE_WORD_W#(64) `how wide it is
+global dim PUZZLE_WORD_ROW(64) `the row of the line that it is in
+global dim PUZZLE_WORD_LINE(64) `which line it is a word of, by ANGLER_SAYS
+global dim PUZZLE_WORD_IN#(64) `how far along its row it is
+global dim PUZZLE_WORD_BORN_X#(64) `where her mouth was when it came out
+global dim PUZZLE_WORD_BORN_Y#(64)
+global dim PUZZLE_WORD_SMALL(64) `1 while it is still on its way up from her mouth
+global dim PUZZLE_WORD_X#(64) `where it is
+global dim PUZZLE_WORD_FROM_Y#(64) `how high her mouth was
+global dim PUZZLE_WORD_TO_LIFT#(64) `how far the rows after it want it to have moved up
+global dim PUZZLE_WORD_LIFT#(64) `and how far it has got
+global dim PUZZLE_WORD_TILT#(64) `the angle that it leans at
+global dim PUZZLE_WORD_UP#(64) `how far it has drifted
+global dim PUZZLE_WORD_SHOWN_X#(64) `where it is on the screen, around its middle, and how far it leans
+global dim PUZZLE_WORD_SHOWN_Y#(64)
+global dim PUZZLE_WORD_SHOWN_TILT#(64)
+global dim PUZZLE_WORD_FROM_ROW(64) `the tests keep which words to look at here
+global dim PUZZLE_WORD_SWAY#(64) `where it is in its sway
+global PUZZLE_SAY_OUT_MS = 180 `how long a word takes to come up from her mouth to its place
+global PUZZLE_SAY_STAY_MS = 2000 `how long the words stay once she has finished the line
+global PUZZLE_SAY_FADE_MS = 500
+global PUZZLE_WORD_STAGGER_MS = 70 `how much later each word of a line starts to fade than the one before it
+global PUZZLE_UNDO_COUNT = 0 `how many can be taken back
+global PUZZLE_UNDO_WANT = 0 `how many the player has asked to take back. frame_guide counts the key, on every frame.
+global PUZZLE_UNDO_GROW_MS = 70
+global PUZZLE_FALL_MS = 180 `how long fish take to fall on a puzzle. a game takes 500.
+global PUZZLE_CURSOR_MOVED = 0
+global PUZZLE_UNDO_NEXT = 0 `the slot of the ring that the next one goes in
+global dim PUZZLE_UNDO(2520)
+global dim PUZZLE_UNDO_CURSOR(40)

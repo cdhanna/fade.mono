@@ -1,0 +1,2083 @@
+remstart
+    THE TESTS OF THE PUZZLES OF THE LONG VISIT
+    see fish_headers_puzzle. a puzzle that cannot be cleared must never ship, so long_puzzles_all_clear
+    plays the swaps of every board through the real game, and the other tests look after the rules
+    that the swaps were proven with. see the top of fish_tests for how the tests work.
+remend
+
+global TP_TALK_TALL = 0
+global TP_MOST_WORDS = 0
+global TP_PREF_BOARD = 0 `what a mock of get pref says, for the tests that need something to have been saved
+global TP_PREF_STAYED = 0
+global TP_PRESS = 0 `every key is down while this is 1. a talk is a scene that holds the game, and it needs them.
+global TP_WORDS_TOP# = 999 `the highest that a word has been
+global TP_PREF_GONE = 0
+global TP_WORDS_TOUCHED = 0 `how many times two words touched, and how: in a row, between rows, and between lines
+global TP_WORDS_ROW = 0
+global TP_WORDS_ROWS = 0
+global TP_WORDS_LINES = 0
+
+test puzzle_fish_do_not_come_back from fishBoard
+    tpPuzzleUp(0)
+    tpBoardWas = puzzleFishLeft()
+    assert tpBoardWas > 5, "the first board has fish on it"
+
+    tpPlay(0, 0)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+    tpFish = puzzleFishLeft()
+    assert tpFish < tpBoardWas, "a swap of the list pops some"
+    assert tpFloating() = 0, "and the ones over them have fallen"
+
+    tpSwapCount = PUZZLE_SWAPS(0)
+    for tpN = 1 to tpSwapCount - 1
+        tpPlay(0, tpN)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+    next
+    tpFish = puzzleFishLeft()
+    assert tpFish = 0, "and the list clears the sea, with nothing dropping in"
+    end
+endtest
+
+
+test puzzle_undo_key_counts_while_fish_fall from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    tpBoardWas = tpBoardSum()
+    tpPlay(0, 0)
+    tpTick = 0
+    while PUZZLE_UNDO_COUNT = 0 and tpTick < 200
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    assert PUZZLE_UNDO_COUNT = 1, "the swap has started"
+
+    ` the key is pressed while it is all still going on
+    PUZZLE_UNDO_WANT = 1
+    tpTick = 0
+    while PUZZLE_UNDO_WANT > 0 and tpTick < 2000
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    assert PUZZLE_UNDO_WANT = 0, "it happens as soon as the fish have stopped"
+    tpBoardNow = tpBoardSum()
+    assert tpBoardNow = tpBoardWas, "and the board is back"
+    end
+endtest
+
+
+test puzzle_she_swims_on_both_sides_of_the_fish from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+    assert PUZZLE_IN_FRONT = 0, "she starts behind the fish"
+
+    ` nothing changes while she is over the board
+    PUZZLE_SWIM_X# = getCellX(4)
+    PUZZLE_GO_X# = getCellX(4) + 1
+    PUZZLE_SWIM_Y# = 100
+    PUZZLE_GO_Y# = 100
+    PUZZLE_WANT_FRONT = 1
+    runto _loop
+    runto _loop
+    assert PUZZLE_IN_FRONT = 0, "she does not change sides in the middle of the fish"
+
+    ` and it does once she is out past the edge
+    PUZZLE_SWIM_X# = 2
+    PUZZLE_GO_X# = -200
+    PUZZLE_GO_Y# = 100
+    PUZZLE_WANT_FRONT = 1
+    runto _loop
+    runto _loop
+    assert PUZZLE_IN_FRONT = 1, "she comes around the edge of the board"
+
+    ` she keeps going by herself, wherever she gets to
+    PUZZLE_SWIM_SPEED# = 100000
+    tpWasX = PUZZLE_GO_X#
+    tpTick = 0
+    tpMoved = 0
+    while tpMoved = 0 and tpTick < 300
+        runto _loop
+        tpNowX = PUZZLE_GO_X#
+        if tpNowX <> tpWasX then tpMoved = 1
+        tpTick = tpTick + 1
+    endwhile
+    assert tpMoved = 1, "she picks somewhere else to swim to"
+    end
+endtest
+
+
+test puzzle_she_keeps_out_from_behind_the_fish from fishBoard
+    tpPuzzleUp(0)
+    tpTop = puzzleFishTop()
+    tpFloor = getCellY(CELL_ROW_COUNT - 1) + CELL_SIZE / 2
+    tpTall = ANGLER_ART_H * ANGLER_SCALE * PUZZLE_SIZE_NEAR#
+    tpCrossed = 0
+    tpOver = 0
+    tpUnder = 0
+    tpBad = 0
+    PUZZLE_SWIM_X# = 20
+    PUZZLE_SWIM_Y# = 150
+    PUZZLE_LANE = -1
+    for tpN = 0 to 300
+        puzzleSwimNext()
+        tpFromX = PUZZLE_SWIM_X#
+        tpFromY = PUZZLE_SWIM_Y#
+        tpToX = PUZZLE_GO_X#
+        tpToY = PUZZLE_GO_Y#
+        PUZZLE_SWIM_X# = PUZZLE_GO_X#
+        PUZZLE_SWIM_Y# = PUZZLE_GO_Y#
+        tpEnded = puzzleOffBoard()
+        assert tpEnded = 1, "she always ends up out past the side of the board"
+
+        ` across the board she stays level, in water that has no fish in it
+        tpAcross = tpToX - tpFromX
+        if tpAcross < 0 then tpAcross = 0 - tpAcross
+        if tpAcross > 150
+            tpCrossed = tpCrossed + 1
+            if tpToY <> tpFromY then tpBad = 1
+            tpIsOver = 0
+            if tpToY + tpTall <= tpTop then tpIsOver = 1
+            tpIsUnder = 0
+            if tpToY >= tpFloor then tpIsUnder = 1
+            if tpIsOver + tpIsUnder = 0 then tpBad = 1
+            tpOver = tpOver + tpIsOver
+            tpUnder = tpUnder + tpIsUnder
+        endif
+    next
+    assert tpBad = 0, "she goes around the fish"
+    assert tpOver > 0, "over them"
+    assert tpUnder > 0, "and under them"
+    end
+endtest
+
+
+test puzzle_remembers_that_the_player_stayed from fishBoard
+    mock get pref(tpPrefIndex, tpPrefElse)
+    endmock tpPrefAt(tpPrefIndex)
+    tpStay = puzzleStaying()
+    assert tpStay = 0, "nobody has stayed yet"
+    tpWant = puzzleWanted()
+    assert tpWant = 0, "and a new game is a usual game"
+
+    TP_PREF_STAYED = 1
+    tpStay = puzzleStaying()
+    assert tpStay = 1, "the game remembers it"
+    tpWant = puzzleWanted()
+    assert tpWant = 1, "and a new game is a puzzle, with no help from outside"
+
+    PUZZLE_LEFT = 1
+    tpWant = puzzleWanted()
+    assert tpWant = 0, "until the player tells her that they are leaving"
+    PUZZLE_LEFT = 0
+    end
+endtest
+
+
+test puzzle_picks_up_where_the_player_left_off from fishBoard
+    mock get pref(tpPrefIndex, tpPrefElse)
+    endmock tpPrefAt(tpPrefIndex)
+    TP_PREF_BOARD = 7
+    TP_PREF_STAYED = 1
+    puzzleWhere()
+    assert PUZZLE_ASK = 1, "New Game has to ask first"
+    assert PUZZLE_NOW = 7, "and it knows which board the player got to"
+
+    ` Resume does not ask
+    PUZZLE_RESUMED = 1
+    puzzleWhere()
+    assert PUZZLE_ASK = 0, "Resume goes straight back"
+    assert PUZZLE_RESUMED = 0, "only that once"
+    assert PUZZLE_NOW = 7, "to the same board"
+
+    ` a number from outside does not take the player back to the start
+    mock is env set(tpEnvName$)
+    endmock tpEnvName$ = "FISH_PUZZLE"
+    mock env$(tpEnvAsked$)
+    endmock "1"
+    puzzleWhere()
+    assert PUZZLE_NOW = 7, "a number is only for when there is nothing to pick up"
+
+    TP_PREF_BOARD = 0
+    puzzleWhere()
+    assert PUZZLE_NOW = 0, "and then it says where to start"
+    end
+endtest
+
+
+test puzzle_words_stay_where_they_come_out from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+    PUZZLE_SWIM_X# = 300
+    PUZZLE_SWIM_Y# = 40
+    PUZZLE_LANE = 0
+    PUZZLE_SAY_SPEED# = 300
+    guideSay(lockey$("angler.puzzle.d4.a"))
+    tpFirst = PUZZLE_SAY_FIRST
+    tpTick = 0
+    while tpTick < 400 and (PUZZLE_SAY_COUNT = 0 or PUZZLE_SAY_OUT < 3)
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    tpFirst = PUZZLE_SAY_FIRST
+    assert PUZZLE_SAY_OUT >= 3, "the words come out"
+    tpWasX# = PUZZLE_WORD_X#(tpFirst)
+    tpSpeed# = PUZZLE_WORD_X#(tpFirst + 1)
+    tpEnd# = tpWasX# + PUZZLE_WORD_W#(tpFirst)
+    assert tpSpeed# >= tpEnd#, "and one is not on top of the one before it"
+
+    ` however far she goes, the words stay
+    for tpN = 0 to 30
+        runto _loop
+    next
+    tpNow# = PUZZLE_WORD_X#(tpFirst)
+    assert tpNow# = tpWasX#, "a word does not move along"
+    PUZZLE_SAY_SPEED# = 30
+    end
+endtest
+
+
+test puzzle_a_row_under_the_fish_fades_before_the_next_one from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+    PUZZLE_SAY_SPEED# = 120
+    PUZZLE_LANE = 1
+    puzzleDebugSay(lockey$("angler.puzzle.d7.b"))
+    assert PUZZLE_SAY_ROWS > 1, "it takes a few rows"
+    tpFirst = PUZZLE_SAY_FIRST
+    tpSecond = -1
+    tpN = 0
+    while tpN < PUZZLE_SAY_COUNT
+        tpSlot = (PUZZLE_SAY_FIRST + tpN) mod PUZZLE_WORD_SLOTS
+        if tpSecond < 0 and PUZZLE_WORD_ROW(tpSlot) = 1 then tpSecond = tpSlot
+        tpN = tpN + 1
+    endwhile
+    tpTick = 0
+    while PUZZLE_WORD_END(tpFirst) = 0 and tpTick < 3000
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    assert PUZZLE_WORD_END(tpFirst) > 0, "the row is told to fade"
+    tpLift = PUZZLE_WORD_TO_LIFT#(tpFirst)
+    assert tpLift = 0, "and it does not move up into the fish"
+    assert PUZZLE_WORD_STATE(tpSecond) = 1, "and the next row has not started"
+
+    tpTick = 0
+    while PUZZLE_WORD_STATE(tpSecond) = 1 and tpTick < 3000
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    assert PUZZLE_WORD_STATE(tpFirst) = 0, "the row has gone by the time that the next one starts"
+    end
+endtest
+
+
+test puzzle_every_swap_has_to_pop from fishBoard
+    tpPuzzleUp(0)
+    tpFirstA = PUZZLE_SWAP_A(0)
+    tpFirstB = PUZZLE_SWAP_B(0)
+    tpNo = puzzleBlocksSwap(tpFirstA, tpFirstB)
+    assert tpNo = 0, "the first swap of the list pops, so it can be made"
+
+    tpBlocked = 0
+    tpLast = CELL_COUNT - 1
+    for tpI = 0 to tpLast - 1
+        if CELLS(tpI).value > 0 and CELLS(tpI + 1).value > 0
+            tpNo = puzzleBlocksSwap(tpI, tpI + 1)
+            tpBlocked = tpBlocked + tpNo
+        endif
+    next
+    assert tpBlocked > 0, "and one that pops nothing cannot"
+    tpNoneLeft = puzzleNoMoveLeft()
+    assert tpNoneLeft = 0, "and the board is not out of moves"
+    end
+endtest
+
+
+test puzzle_hint_clears_a_board_of_each_fish_from_the_start from fishBoard
+    RAINBOW_FISH_ON = 1
+    for tpRule = 0 to 4
+        tpPuzzleUp(tpRule * 6)
+        tpFish = puzzleFishLeft()
+        tpTurns = 0
+        while tpFish > 0 and tpTurns < 40
+            tpHintPlay()
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+            tpFish = puzzleFishLeft()
+            tpTurns = tpTurns + 1
+        endwhile
+        assert tpFish = 0, "the hints clear the board"
+    next
+    end
+endtest
+
+
+test puzzle_hint_says_how_far_to_take_back_a_swap_that_lost from fishBoard
+    tpPuzzleUp(0)
+    puzzleHint()
+    assert PUZZLE_HINT_BACK = 0, "the board can be won from the start"
+    tpGoodA = PUZZLE_HINT_A
+    tpGoodB = PUZZLE_HINT_B
+
+    ` a swap that pops, and has no way on from it
+    tpLost = 0
+    tpLast = CELL_COUNT - 1
+    for tpI = 0 to tpLast
+        tpTo = tpSwapRight(tpI)
+        if tpLost = 0 and tpTo >= 0
+            tpQueueSwap(tpI, tpTo)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+            puzzleHint()
+            if PUZZLE_HINT_BACK = 1
+                tpLost = 1
+            else
+                puzzleUndo()
+            endif
+        endif
+    next
+    assert tpLost = 1, "a swap that lost the board is found"
+    assert PUZZLE_HINT_A < 0, "and no fish hops, because there is nothing good to do from here"
+
+    puzzleUndo()
+    puzzleHint()
+    assert PUZZLE_HINT_BACK = 0, "once it has been taken back, the hint is there again"
+    assert PUZZLE_HINT_A + PUZZLE_HINT_B = tpGoodA + tpGoodB, "and it is the same one"
+    end
+endtest
+
+
+test puzzle_the_snow_stops_on_a_lost_board_and_she_says_nothing from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    PUZZLE_STILL_SECS# = .05
+    PUZZLE_STILL_BACK_SECS# = .05
+    tpIsLost = puzzleIsLost()
+    assert tpIsLost = 0, "the board can be won from the start"
+
+    tpFound = 0
+    tpLast = CELL_COUNT - 1
+    for tpI = 0 to tpLast
+        tpTo = tpSwapRight(tpI)
+        if tpFound = 0 and tpTo >= 0
+            tpQueueSwap(tpI, tpTo)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+            tpIsLost = puzzleIsLost()
+            if tpIsLost
+                runto _loop
+                tpNoMove = puzzleNoMoveLeft()
+                if tpNoMove = 0 then tpFound = 1
+            endif
+            if tpFound = 0
+                assert PUZZLE_LOST = tpIsLost, "the board is only called lost when it is"
+                PUZZLE_UNDO_WANT = 1
+                runto _loop
+                runto _loop
+            endif
+        endif
+    next
+    assert tpFound = 1, "a swap that lost the board and left moves is found"
+    assert PUZZLE_LOST = 1, "the water knows"
+
+    tpWaited = 0
+    while PUZZLE_STILL# < 1 and tpWaited < 600
+        runto _loop
+        tpWaited = tpWaited + 1
+    endwhile
+    assert PUZZLE_STILL# = 1, "the snow stops"
+    runto _loop
+    tpClockWas# = SEABED_SNOW_CLOCK#
+    runto _loop
+    runto _loop
+    assert SEABED_SNOW_CLOCK# = tpClockWas#, "and it hangs still"
+    assert PUZZLE_STUCK_SAID = 0, "and she says nothing while there are moves left"
+
+    PUZZLE_UNDO_WANT = 1
+    runto _loop
+    runto _loop
+    assert PUZZLE_LOST = 0, "a swap taken back is not lost"
+    tpWaited = 0
+    while PUZZLE_STILL# > 0 and tpWaited < 600
+        runto _loop
+        tpWaited = tpWaited + 1
+    endwhile
+    assert PUZZLE_STILL# = 0, "and the snow gets going again"
+    tpClockWas# = SEABED_SNOW_CLOCK#
+    runto _loop
+    runto _loop
+    assert SEABED_SNOW_CLOCK# > tpClockWas#, "and it moves"
+    end
+endtest
+
+
+test puzzle_she_only_speaks_when_the_snow_has_stopped_and_no_move_is_left from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    PUZZLE_STILL_SECS# = 600
+    PUZZLE_LOST = 1
+    PUZZLE_NO_MOVE = 1
+    runto _loop
+    runto _loop
+    assert PUZZLE_STUCK_SAID = 0, "the snow has not stopped yet"
+    PUZZLE_STILL# = 1
+    runto _loop
+    runto _loop
+    assert PUZZLE_STUCK_SAID = 1, "and now there is nothing else to do"
+    end
+endtest
+
+
+test puzzle_she_does_not_say_the_board_is_lost_the_same_way_twice from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    PUZZLE_ON = 0
+    tpDifferent = 0
+    tpWas$ = ""
+    for tpN = 0 to 30
+        puzzleSayLost()
+        assert ANGLER_LAST$ <> tpWas$, "it is never the same one twice"
+        tpWas$ = ANGLER_LAST$
+    next
+    end
+endtest
+
+
+test puzzle_hint_stops_once_a_move_is_made from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    PUZZLE_HINT_WANT = 1
+    runto _loop
+    runto _loop
+    assert PUZZLE_HINT_WANT = 0, "the button is answered once the fish have stopped"
+    assert PUZZLE_HINT_A >= 0, "and a fish hops"
+    tpQueueSwap(PUZZLE_HINT_A, PUZZLE_HINT_B)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+    runto _loop
+    assert PUZZLE_HINT_A < 0, "and it is gone after the swap"
+    assert PUZZLE_HINT_SAID$ = "", "and so are the words"
+    end
+endtest
+
+
+test puzzle_belly_up_fish_pops_when_the_cursor_comes_to_it from fishBoard
+    tpPuzzleUp(PUZZLE_NEW_BELLY)
+    tpCell = -1
+    tpLast = CELL_COUNT - 1
+    for tpI = 0 to tpLast
+        if CELLS(tpI).bellyUp = 1 and tpCell < 0 then tpCell = tpI
+    next
+    assert tpCell >= 0, "the board has a belly up fish"
+    tpWas = puzzleFishLeft()
+
+    ` from the side that the list of the board does not care about
+    tpFromX = tpCell mod PUZZLE_SIDE
+    tpDirX = 1
+    if tpFromX = PUZZLE_SIDE - 1 then tpDirX = -1
+    SELECTION_POS.x = tpFromX + tpDirX
+    SELECTION_POS.y = tpCell / PUZZLE_SIDE
+    tpStep as vec = {
+        x = 0 - tpDirX,
+        y = 0
+    }
+    QUEUED_MOVES(QUEUED_MOVE_NUM) = {
+        dir = tpStep
+        swap = 0,
+        moveBindingIndex = -1
+    }
+    QUEUED_MOVE_NUM = QUEUED_MOVE_NUM + 1
+    tpTick = 0
+    tpNow = tpWas
+    while tpNow = tpWas and tpTick < 300
+        runto _loop
+        tpNow = puzzleFishLeft()
+        tpTick = tpTick + 1
+    endwhile
+    assert tpNow < tpWas, "it pops"
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+
+    puzzleUndo()
+    tpBack = puzzleFishLeft()
+    assert tpBack = tpWas, "and it can be taken back"
+    tpTurned = 0
+    for tpI = 0 to tpLast
+        if CELLS(tpI).bellyUp = 1 then tpTurned = 1
+    next
+    assert tpTurned = 1, "belly up again"
+    end
+endtest
+
+
+test puzzle_words_come_out_of_her_mouth_and_go_over_her_head from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+    PUZZLE_LANE = 0
+    puzzleDebugSay(lockey$("angler.puzzle.d4.a"))
+    tpTick = 0
+    while PUZZLE_SAY_OUT < 1 and tpTick < 40
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    tpFirst = PUZZLE_SAY_FIRST
+    assert PUZZLE_SAY_OUT >= 1, "the word comes out"
+    tpSwimY# = PUZZLE_SWIM_Y#
+    tpRowY# = PUZZLE_WORD_FROM_Y#(tpFirst)
+    tpBornY# = PUZZLE_WORD_BORN_Y#(tpFirst)
+    assert tpBornY# > tpSwimY#, "it starts at her mouth, inside her picture"
+    assert tpRowY# < tpSwimY#, "and its place is over her head"
+    tpBornX# = PUZZLE_WORD_BORN_X#(tpFirst)
+    tpPlaceX# = PUZZLE_WORD_X#(tpFirst)
+    assert tpPlaceX# < tpBornX#, "just behind her mouth"
+    assert PUZZLE_WORD_SMALL(tpFirst) = 1, "and it is on its way"
+
+    tpTick = 0
+    while PUZZLE_WORD_SMALL(tpFirst) = 1 and tpTick < 200
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    assert PUZZLE_WORD_SMALL(tpFirst) = 0, "and it gets there"
+    end
+endtest
+
+
+test puzzle_words_never_touch from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+    PUZZLE_SAY_SPEED# = 120
+    TP_WORDS_TOUCHED = 0
+    TP_WORDS_ROW = 0
+    TP_WORDS_ROWS = 0
+    TP_WORDS_LINES = 0
+
+    ` a paragraph over the fish, then one under them, then one that follows another with nothing in between, and
+    ` then one under the fish that the player hurries
+    for tpTurn = 0 to 3
+        if tpTurn < 2
+            PUZZLE_LANE = tpTurn
+            puzzleDebugSay(lockey$("angler.puzzle.d7.b"))
+        endif
+        if tpTurn = 2
+            PUZZLE_LANE = 0
+            puzzleDebugSay(lockey$("angler.puzzle.d4.a"))
+            guideThen(lockey$("angler.puzzle.d7.b"))
+        endif
+        if tpTurn = 3
+            PUZZLE_LANE = 1
+            puzzleDebugSay(lockey$("angler.puzzle.d7.b"))
+        endif
+        tpTick = 0
+        tpQuiet = 0
+        while tpQuiet < 60 and tpTick < 4000
+            runto _loop
+            tpWordsMeasure()
+            tpTick = tpTick + 1
+            if tpTurn = 3 and tpTick = 120 then guideHurry()
+            tpTalking = ANGLER_SPEAKING + GUIDE_QUEUED
+            if PUZZLE_SAY_OUT < PUZZLE_SAY_COUNT then tpTalking = 1
+            if tpTalking > 0
+                tpQuiet = 0
+            else
+                tpQuiet = tpQuiet + 1
+            endif
+        endwhile
+    next
+    assert TP_WORDS_ROW = 0, "no word touches the next one along"
+    assert TP_WORDS_ROWS = 0, "or one in another row"
+    assert TP_WORDS_LINES = 0, "or one of another line"
+    end
+endtest
+
+
+test puzzle_words_never_go_off_the_top_of_the_screen from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+
+    ` fish right up to the top of the board, so there is only room for a row over her
+    CELLS(4).value = CELLS(58).value
+    PUZZLE_SAY_SPEED# = 120
+    TP_WORDS_TOP# = 999
+    for tpTurn = 0 to 1
+        PUZZLE_LANE = 0
+        puzzleDebugSay(lockey$("angler.puzzle.d7.b"))
+        assert PUZZLE_SAY_ROWS > 1, "it takes more rows than there is room for"
+        assert PUZZLE_SAY_FADES = 1, "so they fade, one at a time"
+        tpTick = 0
+        tpQuiet = 0
+        while tpQuiet < 120 and tpTick < 4000
+            runto _loop
+            tpWordsMeasure()
+            tpTick = tpTick + 1
+            if tpTurn = 1 and tpTick = 60 then guideHurry()
+            tpTalking = ANGLER_SPEAKING + GUIDE_QUEUED
+            if PUZZLE_SAY_OUT < PUZZLE_SAY_COUNT then tpTalking = 1
+            if tpTalking > 0
+                tpQuiet = 0
+            else
+                tpQuiet = tpQuiet + 1
+            endif
+        endwhile
+    next
+    assert TP_WORDS_TOP# < 999, "words came out"
+    assert TP_WORDS_TOP# >= PUZZLE_SAY_CEILING - 3, "and none of them went over the top of the screen"
+    end
+endtest
+
+
+test puzzle_it_is_dark_down_here_but_it_is_not_night from fishBoard
+    tpPuzzleUp(0)
+    PUZZLE_DEEP_SHOWN# = 0
+    tpTick = 0
+    while tpTick < 300
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    assert PUZZLE_DEEP_SHOWN# > .1, "it gets dark"
+    assert TIDE_NIGHT = 0, "and it is not night"
+    assert TIDE_NIGHT_SHOWN# < .01, "and nothing that looks at the night can tell"
+    end
+endtest
+
+
+test puzzle_the_pause_menu_has_nothing_that_is_not_down_here from fishBoard
+    tpPuzzleUp(0)
+    setMenuPage(MENU_PAGE_PAUSE)
+    tpMoves = 0
+    tpNewGame = 0
+    tpCodec = 0
+    tpResume = 0
+    for tpN = 0 to MENU_PAGE_LENGTH - 1
+        if MENU_PAGE_ITEMS(tpN) = MENU_ITEM_MOVES then tpMoves = 1
+        if MENU_PAGE_ITEMS(tpN) = MENU_ITEM_NEW_GAME then tpNewGame = 1
+        if MENU_PAGE_ITEMS(tpN) = MENU_ITEM_CODEC then tpCodec = 1
+        if MENU_PAGE_ITEMS(tpN) = MENU_ITEM_RESUME then tpResume = 1
+    next
+    assert tpResume = 1, "the game can be gone back to"
+    assert tpMoves = 0, "there is no inventory"
+    assert tpNewGame = 0, "and a new game is for the main menu"
+    assert tpCodec = 0, "and there is nothing to look up"
+
+    PUZZLE_ON = 0
+    setMenuPage(MENU_PAGE_PAUSE)
+    tpMoves = 0
+    for tpN = 0 to MENU_PAGE_LENGTH - 1
+        if MENU_PAGE_ITEMS(tpN) = MENU_ITEM_MOVES then tpMoves = 1
+    next
+    assert tpMoves = 1, "a usual game still has one"
+    end
+endtest
+
+
+test puzzle_a_game_goes_where_it_is_told_and_not_where_the_environment_says from fishBoard
+    mock get pref(tpPrefIndex, tpPrefElse)
+    endmock tpPrefAt(tpPrefIndex)
+    mock is env set(tpEnvName$)
+    endmock 1
+    TP_PREF_STAYED = 0
+    TP_PREF_GONE = 0
+    PUZZLE_LEFT = 0
+    PUZZLE_ENV_SPENT = 0
+    OPTION_GAME_INTRO = 0
+    tpWanted = puzzleWanted()
+    assert tpWanted = 1, "the environment gets a player in"
+
+    OPTION_GAME_INTRO = 1
+    tpWanted = puzzleWanted()
+    assert tpWanted = 0, "but asking for the intro is asking for the usual game"
+    OPTION_GAME_INTRO = 0
+
+    PUZZLE_ENV_SPENT = 1
+    tpWanted = puzzleWanted()
+    assert tpWanted = 0, "and after that it does not count"
+
+    TP_PREF_STAYED = 1
+    tpWanted = puzzleWanted()
+    assert tpWanted = 1, "a player who stayed goes back down"
+
+    TP_PREF_GONE = 1
+    tpWanted = puzzleWanted()
+    assert tpWanted = 0, "but she does not come back"
+    TP_PREF_STAYED = 0
+    TP_PREF_GONE = 0
+    end
+endtest
+
+
+test puzzle_the_ava_window_puts_the_game_in_a_state from fishBoard
+    mock get pref(tpPrefIndex, tpPrefElse)
+    endmock tpPrefAt(tpPrefIndex)
+    mock set pref(tpSetIndex, tpSetValue)
+        tpPrefSet(tpSetIndex, tpSetValue)
+    endmock
+    PUZZLE_DBG_BOARD = 7
+    puzzleDebugState(2)
+    assert TP_PREF_BOARD = 6, "she is on that board"
+    tpStaying = puzzleStaying()
+    assert tpStaying = 1, "and the player has stayed"
+    assert PUZZLE_ENV_SPENT = 1, "and the environment no longer counts"
+
+    puzzleDebugState(5)
+    tpStaying = puzzleStaying()
+    tpGone = puzzleGone()
+    assert tpStaying = 0, "the player left"
+    assert tpGone = 1, "and she has gone"
+
+    puzzleDebugState(1)
+    tpGone = puzzleGone()
+    assert tpGone = 0, "and she is back"
+    end
+endtest
+
+
+test puzzle_rows_start_at_the_ends_of_phrases from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+    PUZZLE_LANE = 1
+    guideSay(lockey$("angler.puzzle.d7.b"))
+    guideHurry()
+    runto _loop
+    runto _loop
+    tpCount = PUZZLE_SAY_COUNT
+    assert PUZZLE_SAY_ROWS > 1, "it takes a few rows"
+    for tpN = 1 to tpCount - 1
+        tpSlot = PUZZLE_SAY_FIRST + tpN
+        if PUZZLE_WORD_ROW(tpSlot) <> PUZZLE_WORD_ROW(tpSlot - 1)
+            tpLeft# = PUZZLE_WORD_X#(tpSlot)
+            tpStart# = PUZZLE_SAY_LEFT#
+            assert tpLeft# = tpStart#, "every row starts at the same place"
+            tpEnds = puzzleWordEndsPhrase(word of$(ANGLER_LAST$, tpN - 1))
+            assert tpEnds = 1, "and the row before it ended on a phrase"
+        endif
+    next
+    end
+endtest
+
+
+test puzzle_a_paragraph_drifts_until_it_is_out_of_the_fish from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+    PUZZLE_LANE = 0
+    PUZZLE_SAY_STAY_MS = 100000
+    guideSay(lockey$("angler.puzzle.d1.a"))
+    guideHurry()
+    runto _loop
+    runto _loop
+    tpSlot = PUZZLE_SAY_FIRST
+    tpTop# = puzzleFishTop()
+
+    ` down in the fish it keeps going up
+    tpCount = PUZZLE_SAY_COUNT
+    for tpN = 0 to tpCount - 1
+        PUZZLE_WORD_FROM_Y#(tpSlot + tpN) = tpTop# + 30
+        PUZZLE_WORD_UP#(tpSlot + tpN) = 0
+    next
+    for tpN = 0 to 10
+        runto _loop
+    next
+    tpUp# = PUZZLE_WORD_UP#(tpSlot)
+    assert tpUp# > 0, "it drifts up"
+
+    ` once all of it is out of them, it stops
+    for tpN = 0 to tpCount - 1
+        PUZZLE_WORD_FROM_Y#(tpSlot + tpN) = tpTop# - 60
+        PUZZLE_WORD_UP#(tpSlot + tpN) = 0
+    next
+    for tpN = 0 to 10
+        runto _loop
+    next
+    tpUp# = PUZZLE_WORD_UP#(tpSlot)
+    assert tpUp# = 0, "and it stops once it is clear"
+
+    ` every word of it drifts the same, so the rows stay rows
+    for tpN = 0 to tpCount - 1
+        PUZZLE_WORD_FROM_Y#(tpSlot + tpN) = tpTop# + 30
+        PUZZLE_WORD_UP#(tpSlot + tpN) = 0
+    next
+    for tpN = 0 to 10
+        runto _loop
+    next
+    tpFar# = PUZZLE_WORD_UP#(tpSlot)
+    tpLast# = PUZZLE_WORD_UP#(tpSlot + tpCount - 1)
+    assert tpFar# = tpLast#, "all together"
+    PUZZLE_SAY_STAY_MS = 2000
+    end
+endtest
+
+
+test puzzle_a_paragraph_stops_at_the_sea_floor_under_the_fish from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+    PUZZLE_LANE = 1
+    PUZZLE_SAY_STAY_MS = 100000
+    guideSay(lockey$("angler.puzzle.d1.a"))
+    guideHurry()
+    runto _loop
+    runto _loop
+    tpSlot = PUZZLE_SAY_FIRST
+    for tpN = 0 to 20
+        runto _loop
+    next
+    tpUp# = PUZZLE_WORD_UP#(tpSlot)
+    assert tpUp# = 0, "it does not go up through the fish"
+    PUZZLE_SAY_STAY_MS = 2000
+    end
+endtest
+
+
+test puzzle_debug_button_says_a_paragraph_right_away from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+    puzzleDebugSay(lockey$("angler.puzzle.d4.a"))
+    tpWords = PUZZLE_SAY_COUNT
+    assert tpWords = 16, "the line is laid out at once"
+
+    ` she does not swim anywhere first
+    tpTick = 0
+    while PUZZLE_SAY_OUT < 1 and tpTick < 6
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    assert PUZZLE_SAY_OUT >= 1, "the first word comes out straight away"
+
+    ` and pressing it again leaves nothing of the first one
+    puzzleDebugSay(lockey$("angler.puzzle.d1.a"))
+    tpLeft = 0
+    tpLast = PUZZLE_WORD_SLOTS - 1
+    for tpI = 0 to tpLast
+        if PUZZLE_WORD_STATE(tpI) > 0 then tpLeft = tpLeft + 1
+    next
+    assert tpLeft = PUZZLE_SAY_COUNT, "only the new line is there"
+    end
+endtest
+
+
+test puzzle_her_words_do_not_follow_her from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+    PUZZLE_SWIM_X# = 240
+    PUZZLE_GO_X# = 400
+    PUZZLE_SWIM_Y# = 100
+    PUZZLE_GO_Y# = 100
+    tpSpeed# = PUZZLE_SWIM_SPEED#
+    guideSay(lockey$("angler.puzzle.d1.a"))
+    runto _loop
+    tpWordsSay = word count(ANGLER_LAST$)
+    assert tpWordsSay = 8, "the line comes apart into its words"
+    tpFirst = PUZZLE_SAY_FIRST
+
+    ` the first word comes out right where she is
+    tpTick = 0
+    while PUZZLE_SAY_OUT < 1 and tpTick < 400
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    tpSayX = PUZZLE_WORD_X#(tpFirst)
+    tpSwimX = PUZZLE_SWIM_X#
+    tpAhead = abs(tpSayX - tpSwimX)
+    assert tpAhead < 100, "the word is right behind her mouth, and not out on its way to somewhere else"
+
+    ` the next one has its place after the first one, and the first one does not move
+    tpTick = 0
+    while PUZZLE_SAY_OUT < 2 and tpTick < 400
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    tpBackX = PUZZLE_WORD_X#(tpFirst)
+    tpNextX = PUZZLE_WORD_X#(tpFirst + 1)
+    assert tpBackX = tpSayX, "the word before it stays where it is"
+    tpGap = tpBackX + PUZZLE_WORD_W#(tpFirst)
+    assert tpNextX >= tpGap, "so that they are in a line behind her, and not on top of each other"
+    tpSpeedNow# = PUZZLE_SWIM_SPEED#
+    assert tpSpeedNow# = tpSpeed#, "and she does not hurry for it"
+
+    ` she goes off somewhere else, and the words do not go with her
+    PUZZLE_SWIM_X# = 450
+    PUZZLE_SWIM_Y# = 40
+    runto _loop
+    runto _loop
+    tpNowX = PUZZLE_WORD_X#(tpFirst)
+    assert tpNowX = tpBackX, "the words do not follow her"
+
+    ` each word leans a way of its own
+    tpLeans = 0
+    for tpN = 1 to tpWordsSay - 1
+        tpA = PUZZLE_WORD_TILT#(tpFirst) * 10000
+        tpB = PUZZLE_WORD_TILT#(tpFirst + tpN) * 10000
+        if tpA <> tpB then tpLeans = 1
+    next
+    assert tpLeans = 1, "they do not lean the same way"
+
+    ` the next thing that she says starts from her again
+    tpLine = ANGLER_SAYS
+    guideSay(lockey$("angler.puzzle.d1.b"))
+    tpTick = 0
+    while PUZZLE_SAY_FIRST = tpFirst and tpTick < 800
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    tpNext = PUZZLE_SAY_FIRST
+    assert tpNext <> tpFirst, "a new line has words of its own"
+    tpEnd = PUZZLE_WORD_END(tpFirst)
+    assert tpEnd > 0, "and the words of the line before it start to go"
+    end
+endtest
+
+
+test puzzle_she_says_a_line_right_away_wherever_she_is from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+    PUZZLE_LANE = 0
+    PUZZLE_SWIM_Y# = 100
+    PUZZLE_GO_Y# = 100
+    runto _loop
+    PUZZLE_SWIM_X# = 300
+    PUZZLE_GO_X# = 10
+    PUZZLE_SWIM_Y# = PUZZLE_LANE_Y#
+    PUZZLE_GO_Y# = PUZZLE_LANE_Y#
+    shopFace(1)
+    guideSay(lockey$("angler.puzzle.d1.a"))
+    tpStart = game ms()
+    tpTick = 0
+    while PUZZLE_SAY_OUT = 0 and tpTick < 400
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    tpTook = game ms() - tpStart
+    assert PUZZLE_SAY_OUT > 0, "she starts"
+    assert tpTook < 500, "right away"
+    tpFace = SHOP_FACE_LEFT
+    assert tpFace = 0, "and she turned to the right to say it"
+    end
+endtest
+
+
+test puzzle_words_keep_up_with_her_voice from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+    PUZZLE_LANE = 0
+    puzzleDebugSay(lockey$("angler.puzzle.d7.b"))
+    tpStart = game ms()
+    tpTick = 0
+    while PUZZLE_SAY_OUT < PUZZLE_SAY_COUNT and tpTick < 4000
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    tpTook = game ms() - tpStart
+    assert PUZZLE_SAY_OUT = PUZZLE_SAY_COUNT, "the line comes out"
+    assert tpTook < PUZZLE_SAY_COUNT * 300, "and a word takes less than a third of a second"
+    end
+endtest
+
+
+test puzzle_she_finishes_a_thought_before_the_next_one from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+    PUZZLE_LANE = 0
+    puzzleDebugSay(lockey$("angler.puzzle.d4.a"))
+    tpTick = 0
+    while PUZZLE_SAY_OUT < 2 and tpTick < 400
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    tpLine = ANGLER_SAYS
+    tpFirst = PUZZLE_SAY_FIRST
+    tpCount = PUZZLE_SAY_COUNT
+    guideSay(lockey$("angler.puzzle.stuck2"))
+    assert ANGLER_SAYS = tpLine, "she does not stop in the middle"
+    assert PUZZLE_SAY_PUSHED = 1, "she hurries instead"
+
+    tpTick = 0
+    while ANGLER_SAYS = tpLine and tpTick < 800
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    assert ANGLER_SAYS = tpLine + 1, "and then she says it"
+    assert PUZZLE_SAY_OUT = 0, "with none of it out yet"
+    runto _loop
+    tpOld = puzzleOldWordsUp()
+    assert tpOld = 1, "because the old words are still going"
+    tpOldAll = 0
+    for tpN = 0 to tpCount - 1
+        tpSlot = (tpFirst + tpN) mod PUZZLE_WORD_SLOTS
+        if PUZZLE_WORD_STATE(tpSlot) = 2
+            tpOldAll = tpOldAll + PUZZLE_WORD_QUICK(tpSlot)
+        endif
+    next
+    assert tpOldAll > 0, "and they are going at once"
+
+    tpStart = game ms()
+    tpTick = 0
+    while PUZZLE_SAY_OUT = 0 and tpTick < 400
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    tpTook = game ms() - tpStart
+    tpOld = puzzleOldWordsUp()
+    assert tpOld = 0, "they have gone when the new one starts"
+    assert tpTook < 500, "and that does not take long"
+    end
+endtest
+
+
+test puzzle_undo_cuts_through_a_swap from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    tpBoardWas = tpBoardSum()
+    tpCursorWas = SELECTION_POS.x + SELECTION_POS.y * PUZZLE_SIDE
+    tpPlay(0, 0)
+    tpTick = 0
+    while LIVE_MOVE_ACTIVE = 0 and tpTick < 200
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    assert LIVE_MOVE_ACTIVE = 1, "the swap is playing"
+    PUZZLE_UNDO_WANT = 1
+    runto _loop
+    assert PUZZLE_UNDO_WANT = 0, "undo does not wait for it"
+    assert LIVE_MOVE_ACTIVE = 0, "the swap has stopped"
+    assert REQUEST_COMBO_CHECK = 0, "and nothing is going to pop"
+    tpBoardNow = tpBoardSum()
+    assert tpBoardNow = tpBoardWas, "the board is back"
+    tpPlaced = tpFishOutOfPlace()
+    assert tpPlaced = 0, "and every fish is where it belongs"
+
+    tpN = 0
+    tpSwaps = PUZZLE_SWAPS(0)
+    while tpN < tpSwaps
+        tpPlay(0, tpN)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+        tpN = tpN + 1
+    endwhile
+    tpFish = puzzleFishLeft()
+    assert tpFish = 0, "and the board still works"
+    end
+endtest
+
+
+test puzzle_undo_cuts_through_the_popping from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    tpBoardWas = tpBoardSum()
+    tpPlay(0, 0)
+    runto _combos_spread
+    PUZZLE_UNDO_WANT = 1
+    runto _loop
+    runto _loop
+    assert PUZZLE_UNDO_WANT = 0, "undo does not wait for the fish to pop"
+    assert COMBO_PHASE = 0, "they have stopped"
+    tpBoardNow = tpBoardSum()
+    assert tpBoardNow = tpBoardWas, "the board is back"
+    tpPlaced = tpFishOutOfPlace()
+    assert tpPlaced = 0, "and every fish is where it belongs"
+    tpCount = PUZZLE_UNDO_COUNT
+    assert tpCount = 0, "and there is nothing more to take back"
+    end
+endtest
+
+
+test puzzle_undo_cuts_through_the_falling from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    tpBoardWas = tpBoardSum()
+    tpPlay(0, 0)
+    runto _combos_settling
+    PUZZLE_UNDO_WANT = 1
+    runto _loop
+    runto _loop
+    assert PUZZLE_UNDO_WANT = 0, "undo does not wait for the fish to fall"
+    tpBoardNow = tpBoardSum()
+    assert tpBoardNow = tpBoardWas, "the board is back"
+    tpPlaced = tpFishOutOfPlace()
+    assert tpPlaced = 0, "and every fish is where it belongs"
+    end
+endtest
+
+
+test puzzle_starting_over_cuts_through_the_popping from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    tpBoardWas = tpBoardSum()
+    tpPlay(0, 0)
+    runto _combos_spread
+    PUZZLE_AGAIN = 1
+    tpTick = 0
+    while PUZZLE_AGAIN = 1 and tpTick < 300
+        runto _loop
+        tpTick = tpTick + 1
+    endwhile
+    assert PUZZLE_AGAIN = 0, "it does not wait for the fish to pop"
+    assert COMBO_PHASE = 0, "they have stopped"
+    tpBoardNow = tpBoardSum()
+    assert tpBoardNow = tpBoardWas, "the board is back"
+    tpPlaced = tpFishOutOfPlace()
+    assert tpPlaced = 0, "and every fish is where it belongs"
+    end
+endtest
+
+
+test puzzle_a_long_line_is_a_paragraph from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+    PUZZLE_SWIM_X# = 300
+    PUZZLE_GO_X# = 400
+    PUZZLE_SWIM_Y# = 100
+    PUZZLE_GO_Y# = 100
+    PUZZLE_LANE = 0
+    guideSay(lockey$("angler.puzzle.d1.b"))
+    runto _loop
+    runto _loop
+
+    ` confirm lets out the rest of it
+    guideHurry()
+    runto _loop
+    runto _loop
+    tpOut = PUZZLE_SAY_OUT
+    tpCount = PUZZLE_SAY_COUNT
+    assert tpOut = tpCount, "every word is out"
+    tpState = PUZZLE_WORD_STATE(PUZZLE_SAY_FIRST)
+    assert tpState = 2, "and it stays out, and does not vanish because it came out all at once"
+    assert PUZZLE_SAY_HOLD = 0, "and nothing is waiting"
+    assert PUZZLE_SAY_ROWS > 1, "it is too long for one row"
+
+    tpSlot = PUZZLE_SAY_FIRST
+    tpLift = PUZZLE_WORD_TO_LIFT#(tpSlot)
+    assert tpLift > 0, "the first rows have moved up"
+    tpSlot = PUZZLE_SAY_FIRST + tpCount - 1
+    tpLift = PUZZLE_WORD_TO_LIFT#(tpSlot)
+    assert tpLift = 0, "and the last one is level with her"
+
+    for tpN = 0 to tpCount - 1
+        tpSlot = PUZZLE_SAY_FIRST + tpN
+        tpEnd = PUZZLE_WORD_X#(tpSlot) + PUZZLE_WORD_W#(tpSlot)
+        assert tpEnd <= WORLD_WIDTH, "and the words are all in the water"
+        tpStart = PUZZLE_WORD_X#(tpSlot)
+        assert tpStart >= 0, "on both sides"
+    next
+    end
+endtest
+
+
+test puzzle_splits_a_line_into_words from fishBoard
+    tpWordsSay = word count("Those ones. {info} takes that back.")
+    assert tpWordsSay = 6, "words are what is between the spaces"
+    tpWord$ = word of$("Those ones. {info} takes", 2)
+    assert tpWord$ = "{info}", "a picture of a key is a word"
+    tpStart = word start("Those ones. {info} takes", 3)
+    assert tpStart = 14, "and it counts as one letter when the line is said"
+    tpWordsSay = word count("Tu as vu ?")
+    assert tpWordsSay = 3, "a mark on its own stays with the word before it"
+    end
+endtest
+
+
+test puzzle_sits_above_her_box from fishBoard
+    tpPuzzleUp(0)
+    assert CELL_ROW_COUNT = PUZZLE_TALL, "the board is seven down"
+    tpFloor = getCellY(CELL_ROW_COUNT - 1) + CELL_SIZE / 2
+    assert tpFloor <= GUIDE_BOX_Y, "and the sea floor is over the box"
+    tpRoof = getCellY(0) - CELL_SIZE / 2
+    assert tpRoof >= 0, "and the top row is on the screen"
+    end
+endtest
+
+
+test puzzle_undo_takes_back_a_pop from fishBoard
+    tpPuzzleUp(0)
+    tpBoardWas = tpBoardSum()
+    tpFishWas = puzzleFishLeft()
+    tpCellA = PUZZLE_SWAP_A(0)
+
+    tpPlay(0, 0)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+    tpFish = puzzleFishLeft()
+    assert tpFish < tpFishWas, "the swap popped some"
+    assert PUZZLE_UNDO_COUNT = 1, "and it can be taken back"
+
+    puzzleUndo()
+    tpBoardNow = tpBoardSum()
+    assert tpBoardNow = tpBoardWas, "the board is the way that it was"
+    assert PUZZLE_UNDO_COUNT = 0, "and there is nothing more to take back"
+    assert SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT = tpCellA, "and the cursor went back"
+
+    ` the list still clears it from there
+    tpSwapCount = PUZZLE_SWAPS(0)
+    for tpN = 0 to tpSwapCount - 1
+        tpPlay(0, tpN)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+    next
+    tpFish = puzzleFishLeft()
+    assert tpFish = 0, "and it can be played again from there"
+
+    ` every swap can be taken back, all the way to the start
+    tpN = PUZZLE_UNDO_COUNT
+    while tpN > 0
+        puzzleUndo()
+        tpN = tpN - 1
+    endwhile
+    tpBoardNow = tpBoardSum()
+    assert tpBoardNow = tpBoardWas, "all of the way back to the board that came in"
+
+    ` and with nothing to take back, nothing happens
+    puzzleUndo()
+    tpBoardNow = tpBoardSum()
+    assert tpBoardNow = tpBoardWas, "one too many does nothing"
+    assert PUZZLE_UNDO_COUNT = 0, "and the count stays at nothing"
+    end
+endtest
+
+
+test puzzle_shows_no_numbers from fishBoard
+    tpPuzzleUp(0)
+    tpScore = CURRENT_SCORE
+    tpMoves = tutorialMovesOff()
+    assert tpMoves = 1, "no moves are counted"
+    tpOff = tutorialScoreOff()
+    assert tpOff = 1, "and nothing scores"
+
+    tpPlay(0, 0)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+    assert CURRENT_SCORE = tpScore, "the score has not moved"
+    end
+endtest
+
+
+test puzzle_no_fish_goes_into_a_gap from fishBoard
+    tpPuzzleUp(0)
+    tpBoardWas = puzzleFishLeft()
+
+    ` the cursor can go over the empty water
+    testCursor(0, 6)
+    testQueueMove(0, -1, 0, -1)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+    assert SELECTION_POS.y = 5, "the cursor goes over a gap"
+
+    ` but it cannot carry anything from there
+    testQueueMove(1, 0, 1, -1)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+    assert SELECTION_POS.x = 0, "and a swap from a gap goes nowhere"
+    tpFish = puzzleFishLeft()
+    assert tpFish = tpBoardWas, "and moves no fish"
+    end
+endtest
+
+
+test puzzle_a_big_group_leaves_nothing_behind from fishBoard
+    RAINBOW_FISH_ON = 1
+    BUBBLED_ON = 1
+    tpPuzzleUp(0)
+    tpLast = CELL_COUNT - 1
+    for tpI = 0 to tpLast
+        CELLS(tpI).value = 0
+    next
+
+    ` one swap makes two groups of five, with the cursor pushing a fish into each. in a game, that leaves a
+    ` rainbow fish or a fish in a bubble behind, which is a fish that the proof of a board did not count on.
+    for tpX = 0 to 4
+        testPut(tpX, 6, TEX_BASS)
+        testPut(tpX, 5, TEX_CRAB)
+    next
+    testPut(2, 6, TEX_CRAB)
+    testPut(2, 5, TEX_BASS)
+    testCursor(2, 5)
+    testQueueMove(0, 1, 1, -1)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+    tpFish = puzzleFishLeft()
+    assert tpFish = 0, "no rainbow fish and no bubble: every fish has gone"
+    end
+endtest
+
+
+test puzzle_lines_fit_the_box from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    puzzleSwimOn()
+    set text wrap ANGLER_SAY_TEXT_ID, PUZZLE_SAY_WRAP
+    tpRoom = 150
+    for tpLang = 0 to 4
+        if tpLang = 0 then set language "en"
+        if tpLang = 1 then set language "pt-BR"
+        if tpLang = 2 then set language "fr"
+        if tpLang = 3 then set language "de"
+        if tpLang = 4 then set language "pl"
+        tpTall = tpTallest()
+        print "[puzzle fit] language " + str$(tpLang) + " tallest " + str$(tpTall) + " room " + str$(tpRoom) + " board " + str$(TP_TALL_BOARD)
+        assert tpTall <= tpRoom, "what she says over a board is not a wall of words"
+        assert TP_MOST_WORDS <= 32, "and it fits in the words that can be in the water"
+        assert TP_TALK_TALL <= 48, "and a talk fits the usual box"
+    next
+    set language "en"
+    end
+endtest
+
+
+test puzzle_runs_out_and_the_player_stays from fishBoard
+    tpPuzzleUp(PUZZLE_COUNT - 1)
+    guideShow()
+    PUZZLE_STAY_MS = 0
+    PUZZLE_CLEAR_HOLD_MS = 0
+    GUIDE_HOLD_MS = 1
+
+    ` the last board has just been cleared
+    tpLast = CELL_COUNT - 1
+    for tpI = 0 to tpLast
+        CELLS(tpI).value = 0
+    next
+    runto _loop
+    assert PUZZLE_CLEARED_MS > 0, "the last board is clear"
+
+    tpTick = 0
+    tpSawAlone = 0
+    tpSawAsked = 0
+    while PUZZLE_AFTER = 0 and tpTick < 4000
+        runto _loop
+        anglerSpeakAll()
+        if PUZZLE_ALONE_MS > 0 then tpSawAlone = 1
+        if PUZZLE_ASKED then tpSawAsked = 1
+        tpTick = tpTick + 1
+    endwhile
+    assert tpSawAlone = 1, "first there is nothing left"
+    assert tpSawAsked = 1, "then she asks if the player is still here"
+    assert PUZZLE_AFTER = 1, "and then she makes another one"
+    tpFish = puzzleFishLeft()
+    assert tpFish > 0, "and it is on the board"
+    end
+endtest
+
+
+test puzzle_a_talk_comes_after_every_third_board from fishBoard
+    tpWhich = puzzleTalkAfter(1)
+    assert tpWhich = 0, "no talk after the second board"
+    tpWhich = puzzleTalkAfter(2)
+    assert tpWhich = 1, "the first talk is after the third"
+    tpWhich = puzzleTalkAfter(14)
+    assert tpWhich = 10, "the one that says it is half of them is after the fifteenth"
+    tpWhich = puzzleTalkAfter(26)
+    assert tpWhich = 19, "the last talk is after the twenty-seventh"
+    tpWhich = puzzleTalkAfter(29)
+    assert tpWhich = 0, "and the last board has the ending instead"
+
+    ` clear the third board, and go through the talk with every key held
+    mock new action down
+    endmock TP_PRESS
+    tpPuzzleUp(2)
+    guideShow()
+    puzzleSwimOn()
+    PUZZLE_CLEAR_HOLD_MS = 0
+    GUIDE_HOLD_MS = 1
+    ANGLER_SWIM_MS = 1
+    PUZZLE_RUSH_SPEED# = 100000
+    PUZZLE_FISH_WAS = 1
+    tpLast = CELL_COUNT - 1
+    for tpI = 0 to tpLast
+        CELLS(tpI).value = 0
+    next
+    runto angler_frame
+    assert PUZZLE_TALK_NOW = 1, "the talk is the angler's usual scene"
+    assert GUIDE_ON = 0, "and she is not the guide while it goes on"
+    TP_PRESS = 1
+    runto _puzzle_talked
+    TP_PRESS = 0
+    assert GUIDE_ON = 1, "she goes back to wandering around"
+    runto _loop
+    tpN = 0
+    while PUZZLE_NOW = 2 and tpN < 3000
+        runto _loop
+        tpN = tpN + 1
+    endwhile
+    assert PUZZLE_NOW = 3, "and the next board came in"
+    end
+endtest
+
+
+test puzzle_picks_up_where_the_player_got_to from fishBoard
+    puzzleResume(21, 0)
+    assert PUZZLE_NOW = 21, "the board that was saved"
+    assert PUZZLE_RAN_OUT = 0, "with boards left"
+    PUZZLE_RAN_OUT = 0
+    puzzleResume(99, 1)
+    assert PUZZLE_RAN_OUT = 1, "a player who ran out comes back to nothing"
+    PUZZLE_RAN_OUT = 0
+    puzzleResume(3, 2)
+    assert PUZZLE_AFTER = 1, "and one who stayed goes on"
+    PUZZLE_AFTER = 0
+    puzzleResume(5000, 0)
+    assert PUZZLE_NOW = 0, "and a number that makes no sense is the first board"
+    end
+endtest
+
+
+test puzzle_a_bubble_swaps_for_free_and_two_that_touch_pop from fishBoard
+    tpFishUp()
+    testPut(1, 6, TEX_BASS)
+    testPut(2, 6, TEX_CRAB)
+    testPut(3, 6, TEX_BASS)
+    testPut(4, 6, TEX_CRAB)
+    testPut(5, 6, TEX_PUFFER)
+    tpNo = puzzleBlocksSwap(56, 57)
+    assert tpNo = 1, "a swap that pops nothing is not made"
+    BUBBLED_AT(56) = 1
+    tpNo = puzzleBlocksSwap(56, 57)
+    assert tpNo = 0, "and with a bubble in it, it is"
+    tpNo = puzzleBlocksSwap(55, 56)
+    assert tpNo = 0, "from either side"
+
+    BUBBLED_AT(59) = 1
+    tpQueueSwap(56, 57)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+    assert BUBBLED_AT(57) = 1, "the bubble goes with its fish"
+    tpFish = puzzleFishLeft()
+    assert tpFish = 5, "and nothing popped"
+
+    tpQueueSwap(57, 58)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+    tpFish = puzzleFishLeft()
+    assert tpFish = 3, "two bubbles that touch both pop, whatever kinds they are"
+    tpLeft = bubbledCount()
+    assert tpLeft = 0, "and they are gone"
+    end
+endtest
+
+
+test puzzle_three_rainbow_fish_that_touch_pop_and_nothing_else_is_made from fishBoard
+    RAINBOW_FISH_ON = 1
+    tpFishUp()
+    testPut(1, 6, TEX_BASS)
+    testPut(2, 6, TEX_CRAB)
+    testPut(3, 6, TEX_PUFFER)
+    testPut(4, 6, TEX_BASS)
+    testPut(3, 5, TEX_CRAB)
+    RAINBOW_FISH(55) = 1
+    RAINBOW_FISH(56) = 1
+    RAINBOW_FISH(48) = 1
+    tpNo = puzzleBlocksSwap(48, 57)
+    assert tpNo = 0, "a swap that brings three together pops, so it can be made"
+    tpNo = puzzleBlocksSwap(57, 58)
+    assert tpNo = 1, "and one that does not cannot"
+
+    tpQueueSwap(48, 57)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+    tpFish = puzzleFishLeft()
+    assert tpFish = 2, "the three go, whatever kinds they are"
+    tpRainbows = 0
+    tpLast = CELL_COUNT - 1
+    for tpI = 0 to tpLast
+        tpRainbows = tpRainbows + RAINBOW_FISH(tpI)
+    next
+    assert tpRainbows = 0, "and no more are made"
+    end
+endtest
+
+
+test puzzle_a_group_beside_a_rainbow_fish_makes_no_more_of_them from fishBoard
+    RAINBOW_FISH_ON = 1
+    tpFishUp()
+    testPut(1, 6, TEX_BASS)
+    testPut(2, 6, TEX_BASS)
+    testPut(3, 6, TEX_CRAB)
+    testPut(3, 5, TEX_BASS)
+    testPut(4, 6, TEX_PUFFER)
+    RAINBOW_FISH(58) = 1
+    testPut(5, 6, TEX_PUFFER)
+    testPut(6, 6, TEX_PUFFER)
+    RAINBOW_FISH(59) = 1
+    tpQueueSwap(48, 57)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+    tpRainbows = 0
+    tpLast = CELL_COUNT - 1
+    for tpI = 0 to tpLast
+        tpRainbows = tpRainbows + RAINBOW_FISH(tpI)
+    next
+    assert tpRainbows <= 2, "no fish turned into one"
+    end
+endtest
+
+
+test puzzle_undo_brings_back_a_bubble_and_a_rainbow_fish from fishBoard
+    RAINBOW_FISH_ON = 1
+    tpFishUp()
+    testPut(1, 6, TEX_BASS)
+    testPut(2, 6, TEX_CRAB)
+    testPut(3, 6, TEX_BASS)
+    testPut(4, 6, TEX_CRAB)
+    testPut(5, 6, TEX_PUFFER)
+    BUBBLED_AT(56) = 1
+    BUBBLED_AT(58) = 1
+    RAINBOW_FISH(59) = 1
+    tpQueueSwap(56, 57)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+    tpFish = puzzleFishLeft()
+    assert tpFish = 3, "the bubbles came together"
+    PUZZLE_UNDO_WANT = 1
+    runto _loop
+    runto _loop
+    tpFish = puzzleFishLeft()
+    assert tpFish = 5, "and undo brings their fish back"
+    assert BUBBLED_AT(56) = 1, "in their bubbles"
+    assert BUBBLED_AT(58) = 1, "both of them"
+    assert BUBBLED_AT(57) = 0, "where they were"
+    assert RAINBOW_FISH(59) = 1, "and the rainbow fish is still one"
+    tpWait = 0
+    while tpWait < 90
+        runto _loop
+        tpWait = tpWait + 1
+    endwhile
+    assert BUBBLED_AT(56) = 1, "and no burst that was on its way takes the bubble"
+    end
+endtest
+
+
+test puzzle_undo_cuts_through_two_bubbles_coming_together from fishBoard
+    tpFishUp()
+    testPut(1, 6, TEX_BASS)
+    testPut(2, 6, TEX_CRAB)
+    testPut(3, 6, TEX_BASS)
+    testPut(4, 6, TEX_CRAB)
+    testPut(5, 6, TEX_PUFFER)
+    BUBBLED_AT(56) = 1
+    BUBBLED_AT(58) = 1
+    tpQueueSwap(56, 57)
+    runto _loop
+    runto _loop
+    tpWait = 0
+    tpBusyNow = 1
+    while COMBO_PHASE = 0 and tpBusyNow = 1 and tpWait < 300
+        runto _loop
+        tpBusyNow = tpBusy()
+        tpWait = tpWait + 1
+    endwhile
+    PUZZLE_UNDO_WANT = 1
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+    tpWait = 0
+    while tpWait < 90
+        runto _loop
+        tpWait = tpWait + 1
+    endwhile
+    tpLeft = bubbledCount()
+    assert tpLeft = 2, "both bubbles are back, and they stay"
+    end
+endtest
+
+
+test puzzle_a_new_fish_is_explained_on_the_board_that_it_comes_in_on from fishBoard
+    tpPuzzleUp(PUZZLE_NEW_BUBBLE)
+    tpBubbles = bubbledCount()
+    assert tpBubbles > 0, "the first board of bubbles has one"
+    tpPuzzleUp(PUZZLE_NEW_BUBBLE - 1)
+    tpBubbles = bubbledCount()
+    assert tpBubbles = 0, "and the one before it does not"
+    tpPuzzleUp(PUZZLE_NEW_RAINBOW)
+    tpRainbows = 0
+    tpLast = CELL_COUNT - 1
+    for tpI = 0 to tpLast
+        tpRainbows = tpRainbows + RAINBOW_FISH(tpI)
+    next
+    assert tpRainbows > 0, "the first board of rainbow fish has one"
+    tpBelly = 0
+    tpPuzzleUp(PUZZLE_NEW_BELLY - 1)
+    for tpI = 0 to tpLast
+        tpBelly = tpBelly + CELLS(tpI).bellyUp
+    next
+    assert tpBelly = 0, "the boards before belly up fish come in are only swaps"
+    tpPuzzleUp(PUZZLE_NEW_BELLY)
+    for tpI = 0 to tpLast
+        tpBelly = tpBelly + CELLS(tpI).bellyUp
+    next
+    assert tpBelly > 0, "and belly up fish come in on the board that she says that"
+    end
+endtest
+
+
+test long_puzzles_agree_with_the_game from fishBoard
+    if val(env$("FISH_TESTS_LONG")) = 0 then end
+    RAINBOW_FISH_ON = 1
+    BUBBLED_ON = 1
+    puzzleCheckList()
+    assert PUZZLE_CHECKS > 0, "there is something to check"
+    for tpBoard = 0 to PUZZLE_COUNT - 1
+        tpPuzzleUp(tpBoard)
+        tpSwapCount = PUZZLE_SWAPS(tpBoard)
+        for tpN = 0 to tpSwapCount - 1
+            tpOthers = PUZZLE_CHECKS - 1
+            for tpC = 0 to tpOthers
+                if PUZZLE_CHECK_AT(tpC) = tpBoard * 100 + tpN
+                    tpPlayMove(PUZZLE_CHECK_MOVE(tpC))
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+                    runto _loop
+                    tpHere = tpBoardKey()
+                    assert tpHere = PUZZLE_CHECK_KEY(tpC), "the board ends up where the solver says that it does"
+                    assert PUZZLE_LOST = PUZZLE_CHECK_LOST(tpC), "and it is lost when the solver says that it is"
+                    PUZZLE_UNDO_WANT = 1
+                    runto _loop
+                    runto _loop
+                    assert PUZZLE_LOST = 0, "and it is not, once that is taken back"
+                endif
+            next
+            tpPlay(tpBoard, tpN)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+            runto _loop
+        next
+    next
+    end
+endtest
+
+
+test long_puzzles_all_clear from fishBoard
+    if val(env$("FISH_TESTS_LONG")) = 0 then end
+    RAINBOW_FISH_ON = 1
+    BUBBLED_ON = 1
+    for tpBoard = 0 to PUZZLE_COUNT - 1
+        tpPuzzleUp(tpBoard)
+        tpSwapCount = PUZZLE_SWAPS(tpBoard)
+        assert tpSwapCount > 0, "every board has its list of swaps"
+        for tpN = 0 to tpSwapCount - 1
+            puzzleHint()
+            assert PUZZLE_HINT_BACK = 0, "the hints know the position of every swap of the list"
+            tpPlay(tpBoard, tpN)
+    runto _loop
+    runto _loop
+    tpBusyNow = tpBusy()
+    while tpBusyNow
+        runto _loop
+        tpBusyNow = tpBusy()
+    endwhile
+            assert tpFloating() = 0, "no fish is left hanging in the water"
+        next
+        tpFish = puzzleFishLeft()
+        assert tpFish = 0, "the list of swaps clears the board"
+    next
+    end
+endtest
+
+
+` put a puzzle up, the way that puzzle_deal does, without the wait
+function tpPuzzleUp(tpUpBoard)
+    PUZZLE_ON = 1
+    PUZZLE_NOW = tpUpBoard
+    PUZZLE_CLEARED_MS = 0
+    PUZZLE_AGAIN = 0
+    puzzleBoard()
+    PUZZLE_FISH_WAS = puzzleFishLeft()
+    tpUpCursor = puzzleLowestFish()
+    SELECTION_POS.x = tpUpCursor mod PUZZLE_SIDE
+    SELECTION_POS.y = tpUpCursor / PUZZLE_SIDE
+    QUEUED_MOVE_NUM = 0
+    QUEUED_MOVE_TAIL = 0
+endfunction
+
+
+` the fish to the right of this one, if it can be swapped with it, or -1
+function tpSwapRight(tpRightAt)
+    if tpRightAt mod PUZZLE_SIDE = PUZZLE_SIDE - 1 then exitfunction -1
+    tpRightTo = tpRightAt + 1
+    if CELLS(tpRightAt).value = 0 then exitfunction -1
+    if CELLS(tpRightTo).value = 0 then exitfunction -1
+    tpRightNo = puzzleBlocksSwap(tpRightAt, tpRightTo)
+    if tpRightNo then exitfunction -1
+endfunction tpRightTo
+
+
+` a move with the cursor here. a test has to wait for the fish after it.
+function tpQueueMove(tpMoveA, tpMoveB, tpMoveSwaps)
+    SELECTION_POS.x = tpMoveA mod PUZZLE_SIDE
+    SELECTION_POS.y = tpMoveA / PUZZLE_SIDE
+    tpMoveX = (tpMoveB mod PUZZLE_SIDE) - (tpMoveA mod PUZZLE_SIDE)
+    tpMoveY = (tpMoveB / PUZZLE_SIDE) - (tpMoveA / PUZZLE_SIDE)
+    tpMoveDir as vec = {
+        x = tpMoveX,
+        y = tpMoveY
+    }
+    QUEUED_MOVES(QUEUED_MOVE_NUM) = {
+        dir = tpMoveDir
+        swap = tpMoveSwaps,
+        moveBindingIndex = -1
+    }
+    QUEUED_MOVE_NUM = QUEUED_MOVE_NUM + 1
+endfunction
+
+
+function tpQueueSwap(tpSwapA, tpSwapB)
+    tpQueueMove(tpSwapA, tpSwapB, 1)
+endfunction
+
+
+` do what the hint says. a test has to wait for the fish after it.
+function tpHintPlay()
+    puzzleHint()
+    assert PUZZLE_HINT_BACK = 0, "there is a hint from here"
+    tpHintA = PUZZLE_HINT_A
+    tpHintB = PUZZLE_HINT_B
+    if tpHintA <> tpHintB
+        tpQueueSwap(tpHintA, tpHintB)
+        exitfunction
+    endif
+
+    ` the cursor comes to a belly up fish, from a side that it can get to
+    tpSideCursor = SELECTION_POS.x + SELECTION_POS.y * PUZZLE_SIDE
+    tpReached = puzzleHintKey(tpSideCursor)
+    tpCursor = -1
+    for tpSide = 0 to 3
+        tpFrom = -1
+        if tpSide = 0 and tpHintB mod PUZZLE_SIDE > 0 then tpFrom = tpHintB - 1
+        if tpSide = 1 and tpHintB mod PUZZLE_SIDE < PUZZLE_SIDE - 1 then tpFrom = tpHintB + 1
+        if tpSide = 2 then tpFrom = tpHintB - PUZZLE_SIDE
+        if tpSide = 3 then tpFrom = tpHintB + PUZZLE_SIDE
+        if tpFrom >= 0 and tpFrom < CELL_COUNT
+            if PUZZLE_FLOOD_SEEN(tpFrom) = PUZZLE_FLOOD_STAMP then tpCursor = tpFrom
+        endif
+    next
+    assert tpCursor >= 0, "the cursor can get to the fish of the hint"
+    tpQueueMove(tpCursor, tpHintB, 0)
+endfunction
+
+
+` looks at every pair of words on the screen, the way that they are now. a word that is on its way out of her
+` mouth is left out, and so is one that has mostly faded.
+function tpWordsMeasure()
+    tpWNow = game ms()
+    tpWLast = PUZZLE_WORD_SLOTS - 1
+    tpWFade = PUZZLE_SAY_FADE_MS / 2
+    for tpW = 0 to tpWLast
+        PUZZLE_WORD_FROM_ROW(tpW) = 0
+        if PUZZLE_WORD_STATE(tpW) = 2 and PUZZLE_WORD_SMALL(tpW) = 0
+            PUZZLE_WORD_FROM_ROW(tpW) = 1
+            if PUZZLE_WORD_SHOWN_Y#(tpW) < TP_WORDS_TOP#
+                TP_WORDS_TOP# = PUZZLE_WORD_SHOWN_Y#(tpW)
+            endif
+            if PUZZLE_WORD_END(tpW) > 0 and tpWNow > PUZZLE_WORD_END(tpW) + tpWFade
+                PUZZLE_WORD_FROM_ROW(tpW) = 0
+            endif
+        endif
+    next
+    tpWTall# = PUZZLE_SAY_SIZE * .75
+    for tpW = 0 to tpWLast - 1
+        if PUZZLE_WORD_FROM_ROW(tpW)
+            for tpV = tpW + 1 to tpWLast
+                if PUZZLE_WORD_FROM_ROW(tpV)
+                    tpDX# = abs(PUZZLE_WORD_SHOWN_X#(tpW) - PUZZLE_WORD_SHOWN_X#(tpV))
+                    tpDX# = tpDX# - (PUZZLE_WORD_W#(tpW) + PUZZLE_WORD_W#(tpV)) / 2
+                    tpDY# = abs(PUZZLE_WORD_SHOWN_Y#(tpW) - PUZZLE_WORD_SHOWN_Y#(tpV))
+                    tpLeanW# = abs(sin(PUZZLE_WORD_SHOWN_TILT#(tpW))) * PUZZLE_WORD_W#(tpW) / 2
+                    tpLeanV# = abs(sin(PUZZLE_WORD_SHOWN_TILT#(tpV))) * PUZZLE_WORD_W#(tpV) / 2
+                    tpDY# = tpDY# - (tpWTall# + tpLeanW# + tpLeanV#)
+                    if tpDX# < 0 and tpDY# < 0
+                        TP_WORDS_TOUCHED = TP_WORDS_TOUCHED + 1
+                        if PUZZLE_WORD_LINE(tpW) <> PUZZLE_WORD_LINE(tpV)
+                            TP_WORDS_LINES = TP_WORDS_LINES + 1
+                        else
+                            if PUZZLE_WORD_ROW(tpW) = PUZZLE_WORD_ROW(tpV)
+                                TP_WORDS_ROW = TP_WORDS_ROW + 1
+                            else
+                                TP_WORDS_ROWS = TP_WORDS_ROWS + 1
+                            endif
+                        endif
+                    endif
+                endif
+            next
+        endif
+    next
+endfunction
+
+
+` a puzzle with no fish in it, for a test to put its own in
+function tpFishUp()
+    tpPuzzleUp(0)
+    tpEmptyLast = CELL_COUNT - 1
+    for tpEmptyI = 0 to tpEmptyLast
+        puzzlePut(tpEmptyI, 0)
+    next
+endfunction
+
+
+` the key of the board as it is now
+function tpBoardKey()
+    tpKeyMove = puzzleHintHere()
+    tpKeyIs = puzzleHintKey(SELECTION_POS.x + SELECTION_POS.y * PUZZLE_SIDE)
+endfunction tpKeyIs
+
+
+` a move, the way that the hints write it
+function tpPlayMove(tpMoveIs)
+    tpMoveFrom = tpMoveIs / 10000
+    tpMoveTo = tpMoveIs mod 10000
+    if tpMoveTo >= 1000
+        tpQueueMove(tpMoveFrom, tpMoveTo - 1000, 0)
+    else
+        tpQueueMove(tpMoveFrom, tpMoveTo, 1)
+    endif
+endfunction
+
+
+` make one swap of the list of a board
+function tpPlay(tpPlayBoard, tpPlayN)
+    tpA = PUZZLE_SWAP_A(tpPlayBoard * PUZZLE_SWAP_ROOM + tpPlayN)
+    tpB = PUZZLE_SWAP_B(tpPlayBoard * PUZZLE_SWAP_ROOM + tpPlayN)
+    tpSwaps = 1
+    if tpB >= 1000
+        tpB = tpB - 1000
+        tpSwaps = 0
+    endif
+    SELECTION_POS.x = tpA mod PUZZLE_SIDE
+    SELECTION_POS.y = tpA / PUZZLE_SIDE
+    tpDirX = (tpB mod PUZZLE_SIDE) - (tpA mod PUZZLE_SIDE)
+    tpDirY = (tpB / PUZZLE_SIDE) - (tpA / PUZZLE_SIDE)
+    tpQueue as vec = {
+        x = tpDirX,
+        y = tpDirY
+    }
+    QUEUED_MOVES(QUEUED_MOVE_NUM) = {
+        dir = tpQueue
+        swap = tpSwaps,
+        moveBindingIndex = -1
+    }
+    QUEUED_MOVE_NUM = QUEUED_MOVE_NUM + 1
+endfunction
+
+
+` how many fish are not at their place on the board
+function tpFishOutOfPlace()
+    tpOut = 0
+    tpOutLast = CELL_COUNT - 1
+    for tpOutI = 0 to tpOutLast
+        if CELLS(tpOutI).value > 0
+            tpOutX# = sprite x(CELLS(tpOutI).spriteId) - getCellX(CELLS(tpOutI).coord.x)
+            tpOutY# = sprite y(CELLS(tpOutI).spriteId) - getCellY(CELLS(tpOutI).coord.y)
+            if abs(tpOutX#) > 1 then tpOut = tpOut + 1
+            if abs(tpOutY#) > 1 then tpOut = tpOut + 1
+        endif
+    next
+endfunction tpOut
+
+
+` how many fish have water under them
+function tpFloating()
+    tpHanging = 0
+    for tpFX = 0 to PUZZLE_SIDE - 1
+        tpSeen = 0
+        for tpFY = 0 to PUZZLE_SIDE - 1
+            tpV = CELLS(tpFX + tpFY * PUZZLE_SIDE).value
+            if tpV > 0 then tpSeen = 1
+            if tpV = 0 and tpSeen = 1 then tpHanging = tpHanging + 1
+        next
+    next
+endfunction tpHanging
+
+
+` 1 while anything is moving on the board, or waiting to
+function tpBusy()
+    tpIsBusy = 0
+    if REQUEST_COMBO_CHECK then tpIsBusy = 1
+    if LIVE_MOVE_ACTIVE then tpIsBusy = 1
+    if QUEUED_MOVE_NUM > QUEUED_MOVE_TAIL then tpIsBusy = 1
+endfunction tpIsBusy
+
+
+global TP_TALL_BOARD = 0
+
+` how tall the tallest of the things that Ava says at the puzzles is, in this language
+function tpTallest()
+    tpMost = 0
+    for tpSayBoard = 0 to PUZZLE_COUNT - 1
+        puzzleOpening(tpSayBoard)
+        tpWordsHere = word count(ANGLER_LAST$)
+        if tpWordsHere > TP_MOST_WORDS then TP_MOST_WORDS = tpWordsHere
+        tpHigh = get text size y(ANGLER_SAY_TEXT_ID)
+        if tpHigh > tpMost
+            tpMost = tpHigh
+            TP_TALL_BOARD = tpSayBoard
+        endif
+        set text ANGLER_SAY_TEXT_ID, GUIDE_QUEUE$(0)
+        tpHigh = get text size y(ANGLER_SAY_TEXT_ID)
+        if tpHigh > tpMost
+            tpMost = tpHigh
+            TP_TALL_BOARD = tpSayBoard
+        endif
+        puzzleCleared(tpSayBoard)
+        tpHigh = get text size y(ANGLER_SAY_TEXT_ID)
+        if tpHigh > tpMost
+            tpMost = tpHigh
+            TP_TALL_BOARD = tpSayBoard
+        endif
+    next
+    guideSay(lockey$("angler.puzzle.stuck2"))
+    tpHigh = get text size y(ANGLER_SAY_TEXT_ID)
+    if tpHigh > tpMost then tpMost = tpHigh
+    guideSay(lockey$("angler.puzzle.another"))
+    tpHigh = get text size y(ANGLER_SAY_TEXT_ID)
+    if tpHigh > tpMost then tpMost = tpHigh
+    set text wrap ANGLER_SAY_TEXT_ID, ANGLER_BOX_W - 20
+    TP_TALK_TALL = 0
+    for tpTalk = 1 to PUZZLE_TALK_LAST
+        for tpPart = 1 to 5
+            puzzleTalkSay(tpTalk, tpPart)
+            tpHigh = get text size y(ANGLER_SAY_TEXT_ID)
+            if tpHigh > TP_TALK_TALL then TP_TALK_TALL = tpHigh
+        next
+    next
+    set text wrap ANGLER_SAY_TEXT_ID, PUZZLE_SAY_WRAP
+endfunction tpMost
+
+
+` a number that comes out the same for the same fish in the same cells
+function tpBoardSum()
+    tpSum = 0
+    tpSumLast = CELL_COUNT - 1
+    for tpSumI = 0 to tpSumLast
+        tpSum = (tpSum * 31 + CELLS(tpSumI).value + tpSumI) mod 1000003
+    next
+endfunction tpSum
+
+
+` what the preferences say, for a mock of get pref
+function tpPrefSet(tpSetAt, tpSetTo)
+    if tpSetAt = PUZZLE_PREF then TP_PREF_BOARD = tpSetTo
+    if tpSetAt = PUZZLE_PREF + 2 then TP_PREF_STAYED = tpSetTo
+    if tpSetAt = PUZZLE_GONE_PREF then TP_PREF_GONE = tpSetTo
+endfunction
+
+
+function tpPrefAt(tpAtIndex)
+    tpAtValue = 0
+    if tpAtIndex = PUZZLE_PREF then tpAtValue = TP_PREF_BOARD
+    if tpAtIndex = PUZZLE_PREF + 2 then tpAtValue = TP_PREF_STAYED
+    if tpAtIndex = PUZZLE_GONE_PREF then tpAtValue = TP_PREF_GONE
+endfunction tpAtValue

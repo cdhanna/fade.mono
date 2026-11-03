@@ -69,6 +69,7 @@ test long_balance_bot_plays_a_game from fishBoard
     mock new action down
     endmock tbPress
 
+    if val(env$("FISH_BALANCE_NO_CHAIN")) then MULT_CHAIN_ON = 0
     tbSeed = val(env$("FISH_BALANCE_SEED"))
     if tbSeed < 1 then tbSeed = 4321
     OPTION_GAME_SEED = tbSeed
@@ -153,7 +154,10 @@ test long_balance_bot_plays_a_game from fishBoard
                         for tbCard = 0 to choiceCount
                             tbOffer = ABILITY_CHOICES(tbCard).abilityIndex
                             if tbPick < 0
-                                if CARDS(tbOffer).abilityType <> ABILITY_TYPE_MOVE then tbPick = tbCard
+                                ` the angler's card waits for a key, and does nothing for the score
+                                if tbOffer <> ABILITY_INDEX_ANGLER
+                                    if CARDS(tbOffer).abilityType <> ABILITY_TYPE_MOVE then tbPick = tbCard
+                                endif
                             endif
                         next
                         if tbPick >= 0

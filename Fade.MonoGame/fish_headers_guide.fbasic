@@ -1,0 +1,130 @@
+remstart
+    THE GUIDE
+    the angler, at work in the first dive. in angler_run it brings the dark down and the game stops until
+    it has gone. here there is no dark, it sits under the board in a box of its own, and the player
+    goes on playing while it talks. the routines are in fish_routines_guide.
+
+    it uses the pictures, the box, the words and the voice of the angler, so only one of the two can be
+    up at a time. angler_run sends the guide away if it ever comes while the guide is up.
+
+    guide_enter is how it first shows up, and it is the only part that holds the game back. the line
+    of text comes up on its own, a small light comes on down in the deep, the angler swims up behind
+    it, a "!" pops up over its head, and it cuts the line off.
+
+    from then on, guideSay() has it say something now, and guideThen() has it say something once the
+    words before have had time to be read. neither one waits for a button, and neither one holds up a
+    swap. guideLeave() has it swim off.
+
+    the whole board has no room under it. guideAside() takes it across the board while the board comes in,
+    and guideBeside() brings the box back, in the column under the codec, and it turns around to face
+    the board. the panels of info mode about the rounds and the codec would come down over it, so they
+    go to the left of what they are about while it is there. see layoutInfoPanel.
+
+    it knows a lot, and it will teach the player, but it wants them to relax first: calm down, no rush,
+    it will tell them soon. it talks slowly, and it says more than the rules. the board does not move on
+    until it has finished: see guideReady.
+
+    it listens, too. what it says depends a little on what the player does on the little boards, and
+    the tutorial keeps track of that here. see tutorialMissed, tutorial_pop and tutorialWatch.
+
+    guideVisit() has it swim up to one thing around the board, with an outline on it, to talk about that
+    and nothing else. guideVisitEnd() sends it back to where it talks from. see tutorial_visit.
+remend
+
+global GUIDE_ON = 0 `1 while the angler is up as the guide. frame_guide does nothing until it is.
+global GUIDE_LEAVING = 0 `1 while it swims off
+global GUIDE_GLOW_TWEEN_ID = 0 `how much of its light has come on, from 0 to 1
+global GUIDE_BOX_TWEEN_ID = 0 `how much of the box can be seen, from 0 to 1
+global GUIDE_BANG_TWEEN_ID = 0 `the "!" over its head, from 0 to 1 and back
+global GUIDE_BANG_TEXT_ID = 0
+
+` where it talks from. the three rows in the middle of the board end at 218, and the hints start at 304.
+global GUIDE_BOX_X = 150
+global GUIDE_BOX_Y = 236
+global GUIDE_BOX_H = 56
+
+` where it talks from once the whole board is in. the box is narrow there, so what it says there is short.
+global GUIDE_SIDE = 0 `1 while it talks from there
+global GUIDE_SIDE_TWEEN_ID = 0 `how far across it has got, from 0 to 1
+global GUIDE_SIDE_X = 438
+global GUIDE_SIDE_Y = 92
+global GUIDE_SIDE_BOX_X = 426
+global GUIDE_SIDE_BOX_Y = 158
+global GUIDE_SIDE_BOX_W = 138
+global GUIDE_SIDE_BOX_H = 140
+global GUIDE_CROSS_MS = 1300 `how long it takes to get across
+
+` the one thing that it is talking about. see guideVisit.
+global GUIDE_VISITING = 0 `1 while it is up there
+global GUIDE_VISIT_TWEEN_ID = 0 `how far it has got, from 0 to 1
+global GUIDE_VISIT_X = 0
+global GUIDE_VISIT_Y = 0
+global GUIDE_VISIT_MS = 1100 `how long it takes to get there
+
+` where it starts from, from where it ends up, and how small it is out there
+global GUIDE_DEEP_X = -34
+global GUIDE_DEEP_Y = 40
+global GUIDE_DEEP_SCALE# = .45
+
+` when things happen in guide_enter, in milliseconds from when the line of text starts
+global GUIDE_LIGHT_AT = 1800
+global GUIDE_SWIM_AT = 4400
+global GUIDE_BANG_AT = 7400
+global GUIDE_TALK_AT = 8600
+global GUIDE_LIGHT_MS = 2200 `how long the light takes to come on
+global GUIDE_ENTER_MS = 2800 `how long it takes to swim up, the first time
+global GUIDE_RISE_MS = 900 `how long it takes to swim off
+global GUIDE_BANG_MS = 700 `how long the "!" is up
+global GUIDE_HOLD_MS = 2800 `how long words stay up once they have been said, before what comes next
+
+` the words that are waiting to be said. see guideThen.
+global GUIDE_QUEUE_ROOM = 6
+global dim GUIDE_QUEUE$(6)
+global GUIDE_QUEUED = 0
+global GUIDE_NEXT_MS = 0 `when the next words are said, or 0 until the words before are all out
+global GUIDE_QUIET_MS = 0 `when everything that it said has had time to be read, or 0 until it has stopped. see guideReady.
+
+` what the player has done on the little boards, for what the angler says about it
+global TUTORIAL_SWAPS = 0 `the swaps on this board that popped nothing
+global TUTORIAL_VISIT = 0 `what it swims up to before the next board. see tutorial_visit.
+global TUTORIAL_RETRY = 0 `1 when the last board popped, where it should have been a school, and it comes in again
+global TUTORIAL_SCHOOLS_WAS = 0 `SCHOOL_COUNT when this board came in, to see if it made a school
+global TUTORIAL_BOARD_MS = 0 `when this board came in
+global TUTORIAL_IDLE_MS = 0 `when anything was last pressed
+global TUTORIAL_WAIT_SAID = 0 `1 once it has told the player that there is no rush, on this board
+global TUTORIAL_IDLE_LIMIT = 15000 `how long the player can sit there before it says so
+global TUTORIAL_QUICK_MS = 14000 `a school that takes less than this is quick
+global TUTORIAL_INFO_TRIES = 0 `how many times the info key has been pressed too soon
+
+` its last words of the tutorial. see tutorial_goodbye.
+global GUIDE_END_TALK = 0 `1 while it says them, and it goes when they are done
+global GUIDE_MARK_NEXT = 0 `when the next question mark comes up
+global GUIDE_MARKS_UNTIL = 0 `when the last question mark will have gone, or 0 when there are none up
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -530,6 +530,12 @@ endfunction
 ` the group. see fish_headers_school.
 function schoolJudge(schoolGroup, schoolBase, schoolSwapped)
     if SCHOOL_ON = 0 then exitfunction
+
+    ` the first three little boards of the tutorial are about plain pops. the last is about this.
+    if TUTORIAL_BOARD
+        if TUTORIAL_STAGE < 5 then exitfunction
+    endif
+
     ` at daybreak, every group that the night held can be a school, whatever made it: the night is for
     ` setting the board up. see THE DAWN in fish_headers_school.
     ` and with the "fall in line" card, a group that fell together can be one too. see THE CARD.
@@ -1379,15 +1385,16 @@ function schoolFlushPop(schoolPopFish)
         x = schoolPopX,
         y = schoolPopY
     }
-    schoolPopText = spawnBoardScoreText(schoolFlushAt, "+" + str$(schoolPopPoints), 0, 700)
+    schoolPopText = spawnBoardPointsText(schoolFlushAt, schoolPopPoints, 0, 700)
 
     ` the score is as far off as the fish was: the same haze over its color, and no more of it shows
-    ` than shows of the fish. spawnScoreTextScaled fades it in to all of it, so that is done again.
+    ` than shows of the fish. it comes up to all of it as it flies forward to the bar. see THE POINTS FLY in fish_headers.
     color text schoolPopText, schoolHazeColor(schoolPopTint)
     schoolPopIndex = (SCORE_TEXT_NUM + SCORE_TEXT_COUNT - 1) mod SCORE_TEXT_COUNT
     if SCORE_TEXTS(schoolPopIndex).textId = schoolPopText
-        create basic tween SCORE_TEXTS(schoolPopIndex).fadeInTweenId, 0, FLOCK_ALPHA, 100, 0
-        create basic tween SCORE_TEXTS(schoolPopIndex).fadeTweenId, FLOCK_ALPHA, 0, 200, 500
+        schoolPopFaint# = FLOCK_ALPHA
+        schoolPopFaint# = 1 - schoolPopFaint# / 255
+        SCORE_TEXTS(schoolPopIndex).faint# = schoolPopFaint#
     endif
     queueScore(schoolPopPoints, 0)
 

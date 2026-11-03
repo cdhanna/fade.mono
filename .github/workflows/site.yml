@@ -1,0 +1,83 @@
+name: Site
+
+# The website (site/, see its README) to Cloudflare Pages: on a push to main that changes the site or
+# the media it is built from (site/media.lock), and by hand.
+#
+# The site's media is not in git: build/push-site-media.ps1 makes it from the renders and puts it in R2,
+# pinned in site/media.lock, as the game's assets are. This fetches it, builds, and deploys.
+#
+# Secrets:
+#   CLOUDFLARE_API_TOKEN     the R2 read token CI already has (steam/SETUP.md, "Cloudflare bucket")
+#   CLOUDFLARE_ACCOUNT_ID    the account
+#   CLOUDFLARE_PAGES_TOKEN   a token with Account / Cloudflare Pages / Edit, for the deploy
+# Variables:
+#   PAGES_PROJECT            the Pages project, or fish-fish-pop. Made on the first run if it is not there.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'site/**'
+      - 'build/fetch-site-media.sh'
+      - '.github/workflows/site.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: site
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PAGES_PROJECT: ${{ vars.PAGES_PROJECT || 'fish-fish-pop' }}
+  # pinned, as build/assets-config.sh pins it
+  WRANGLER: npx --yes wrangler@4.126.0
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Fetch the site's media
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set as repository secrets. See steam/SETUP.md."
+            exit 1
+          fi
+          bash build/fetch-site-media.sh
+
+      - name: Build
+        working-directory: site
+        run: |
+          npm ci
+          # Vite alone: the media came made (push-site-media.ps1), so nothing here needs ffmpeg
+          npm run build:ci
+
+      - name: Deploy to Cloudflare Pages
+        working-directory: site
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_PAGES_TOKEN must be set as a repository secret (Account / Cloudflare Pages / Edit). See site/README.md."
+            exit 1
+          fi
+          # the first deploy needs the project to be there; a deploy does not make it
+          if ! $WRANGLER pages project list | grep -qw "$PAGES_PROJECT"; then
+            $WRANGLER pages project create "$PAGES_PROJECT" --production-branch main
+          fi
+          $WRANGLER pages deploy dist --project-name "$PAGES_PROJECT" --branch main \
+            --commit-hash "$GITHUB_SHA" --commit-message "$(git log -1 --format=%s)"

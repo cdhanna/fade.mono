@@ -182,6 +182,7 @@ endfunction
 
 ` a new game has started, so every moment is new again in it
 function teachResetGame()
+    anglerRecentClear()
     for teachResetI = 0 to TEACH_KINDS - 1
         TEACH_GAME(teachResetI) = 0
     next
@@ -345,6 +346,20 @@ function teachShow(teachShowKind, teachX#, teachY#)
     teachShowLvl = TEACH_PEND_LEVEL(teachShowKind)
     if teachShowLvl = TEACH_OFF then exitfunction
     TEACH_PEND_LEVEL(teachShowKind) = TEACH_OFF
+
+    ` the angler can be asked about what just happened. see THE FREE QUESTION in fish_headers_shop.
+    if teachShowKind = TEACH_BELLY_UP
+        anglerNote(ANGLER_T_BELLY)
+    endif
+    if teachShowKind = TEACH_SCHOOL
+        anglerNote(ANGLER_T_SCHOOL)
+    endif
+    if teachShowKind = TEACH_CORAL_SONG
+        anglerNote(ANGLER_T_SONGS)
+    endif
+    if teachShowKind = TEACH_RAINBOW_NEW or teachShowKind = TEACH_RAINBOW_WILD
+        anglerNote(ANGLER_T_RAINBOW)
+    endif
 
     teachNow = game ms()
     teachAt = teachNow + TEACH_PEND_AT(teachShowKind)
@@ -1049,6 +1064,9 @@ function codecNewStep()
 
     ` the spot of info mode comes and goes with info mode
     codecInfoAlpha# = tweenVal(INFO_FADE_TWEEN_ID) * 255
+    if PUZZLE_ON
+        codecInfoAlpha# = 0 `the dark of a talk is not info mode, and a puzzle has none
+    endif
     if codecInfoAlpha# < 8
         hide text CODEC_SPOT_TEXT_ID
         hide text CODEC_SPOT_BADGE_ID

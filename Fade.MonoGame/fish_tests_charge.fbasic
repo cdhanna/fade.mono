@@ -1,0 +1,138 @@
+remstart
+    THE CHARGE. see fish_headers_charge. points that land charge up past what the bar has, and the bar
+    takes them in once the board has settled, or all at once when they fill it.
+remend
+
+test charge_points_charge_up_and_the_bar_takes_them_in from fishBoard
+    syncScoreShown()
+    tChBase = SCORE_SHOWN
+    SCORE_SHOWN = tChBase + 40
+    REQUEST_COMBO_CHECK = 1
+    stepCharge()
+    assert CHARGE_STATE = CHARGE_CHARGING, "points that land charge up"
+    assert CHARGE_BANK_SCORE = tChBase, "and the bar does not have them yet"
+
+    ` while the board is still going, it keeps charging, however long ago the points landed
+    CHARGE_LAST_LAND_MS = game ms() - 5000
+    stepCharge()
+    assert CHARGE_STATE = CHARGE_CHARGING, "it waits for the board to settle"
+
+    REQUEST_COMBO_CHECK = 0
+    CHARGE_LAST_LAND_MS = game ms() - 5000
+    stepCharge()
+    assert CHARGE_STATE = CHARGE_GLINTING, "once it has, the glint sets off along the bar"
+
+    ` points that land before it gets there call it off
+    SCORE_SHOWN = tChBase + 50
+    stepCharge()
+    assert CHARGE_STATE = CHARGE_CHARGING, "more points call the glint off"
+    SCORE_SHOWN = tChBase + 40
+    CHARGE_LAST_SHOWN = SCORE_SHOWN
+    CHARGE_PEAK = 40
+    CHARGE_LAST_LAND_MS = game ms() - 5000
+    stepCharge()
+    assert CHARGE_STATE = CHARGE_GLINTING, "and it sets off again once they settle"
+
+    CHARGE_GLINT_AT = game ms() - 5000
+    stepCharge()
+    assert CHARGE_STATE = CHARGE_EATING, "when it gets to the end of the bar, the bar takes the charge in"
+    assert CHARGE_PEAK = 40, "all of it"
+
+    CHARGE_EAT_AT = game ms() - 5000
+    stepCharge()
+    assert CHARGE_STATE = CHARGE_IDLE, "and then it has it"
+    assert CHARGE_BANK_SCORE = tChBase + 40, "every point"
+    end
+endtest
+
+test charge_the_bar_draws_what_it_has_short_of_the_charge from fishBoard
+    syncScoreShown()
+    tChSpan = SCORE_BAR.endVal - SCORE_BAR.startVal
+    CHARGE_BANK_SCORE = SCORE_BAR.startVal + tChSpan / 4
+    CHARGE_STATE = CHARGE_CHARGING
+    tChBank# = chargeBankFill(.75)
+    tChRight = 0
+    if tChBank# > .24 and tChBank# < .26 then tChRight = 1
+    assert tChRight = 1, "the bar is drawn up to what it has, and the charge is the rest"
+
+    tChBank# = chargeBankFill(.1)
+    tChRight = 0
+    if tChBank# = .1 then tChRight = 1
+    assert tChRight = 1, "and never past the end of the charge"
+
+    syncScoreShown()
+    end
+endtest
+
+test charge_filling_the_bar_breaks_it_at_once from fishBoard
+    syncScoreShown()
+    SCORE_SHOWN = SCORE_SHOWN + 30
+    REQUEST_COMBO_CHECK = 1
+    stepCharge()
+    assert CHARGE_STATE = CHARGE_CHARGING, "it charges"
+
+    SCORE_BAR_HOLD = 1
+    stepCharge()
+    assert CHARGE_STATE = CHARGE_EATING, "the bar is full, so it takes the charge in, with the board still going"
+    assert CHARGE_EAT_FULL = 1, "and it breaks"
+
+    ` and nothing charges while the bar is full
+    CHARGE_EAT_AT = game ms() - 5000
+    stepCharge()
+    SCORE_SHOWN = SCORE_SHOWN + 500
+    stepCharge()
+    assert CHARGE_STATE = CHARGE_IDLE, "what spills past a full bar does not charge"
+    REQUEST_COMBO_CHECK = 0
+    SCORE_BAR_HOLD = 0
+    syncScoreShown()
+    end
+endtest
+
+test charge_a_new_game_has_no_charge from fishBoard
+    SCORE_SHOWN = SCORE_SHOWN + 30
+    stepCharge()
+    syncScoreShown()
+    assert CHARGE_STATE = CHARGE_IDLE, "a new game starts with nothing charging"
+    assert CHARGE_BANK_SCORE = SCORE_SHOWN, "and the bar has the whole score"
+    end
+endtest
+
+test charge_the_climb_goes_bubble_then_bloop_then_sonar from fishBoard
+    syncScoreShown()
+    assert chargeCueInstrument() = CHARGE_CUE_BUBBLE, "while the bar fills, the climb is bubbles"
+    SCORE_BAR_HOLD = 1
+    OVERFLOW_TIER = 0
+    assert chargeCueInstrument() = CHARGE_CUE_BLOOP, "what spills past the full bar is the bloop"
+    OVERFLOW_TIER = 1
+    assert chargeCueInstrument() = CHARGE_CUE_SONAR, "and once the multiplier has gone up on it, the sonar"
+    SCORE_BAR_HOLD = 0
+    resetOverflow()
+
+    ` it climbs a step for points that land, but not for two that land too close together
+    tChStep = CHARGE_CUE_STEP
+    CHARGE_CUE_LAST_MS = game ms() - 5000
+    SCORE_SHOWN = SCORE_SHOWN + 10
+    REQUEST_COMBO_CHECK = 1
+    stepCharge()
+    assert CHARGE_CUE_STEP = tChStep + 1, "points that land climb a step"
+    SCORE_SHOWN = SCORE_SHOWN + 10
+    stepCharge()
+    assert CHARGE_CUE_STEP = tChStep + 1, "but not again right away"
+    REQUEST_COMBO_CHECK = 0
+    syncScoreShown()
+    end
+endtest
+
+test charge_tones_keep_changing_as_it_grows from fishBoard
+    SCORE_MULTIPLIER = 1
+    tChTone = chargeTone(40) * 100
+    assert tChTone = 0, "a small charge is the first pair"
+    tChTone = chargeTone(200) * 100
+    assert tChTone = 100, "a big one gets to gold"
+    tChTone = chargeTone(400) * 100
+    assert tChTone = 200, "and a bigger one goes on past it"
+    assert chargeToneAt(5) = 5, "the last pair"
+    assert chargeToneAt(6) = CHARGE_TONE_LOOP, "and then it goes round again"
+    assert chargeToneAt(7) = CHARGE_TONE_LOOP + 1, "and on"
+    end
+endtest

@@ -341,6 +341,9 @@ setup_ability_selection:
     CARD_PIP_LIT = rgb(170, 220, 255, 235)
     CARD_PIP_DIM = rgb(135, 170, 230, 245) `a popped bubble is only a thin broken rim, so it is brighter than a dim square was
     CARD_PIP_FULL = rgb(255, 190, 90, 200)
+    ` THE PIPS POP, below: how long it all takes, and how much of that is the swell
+    global PIP_POP_MS = 460
+    global PIP_POP_SWELL_MS = 150
 
     ` selections
     global dim ABILITY_CHOICES(ABILITY_CHOICE_LENGTH) as abilityChoice
@@ -823,10 +826,12 @@ handle_ability_selection:
     if LIVE_MOVE_ACTIVE then return
     REQUEST_ABILITY_SELECTION = 0
 
-    ` the first upgrade screen of a game that had the tutorial has a few words first. see THE FIRST
-    ` UPGRADE in fish_routines_intro.
+    ` the first one of a game that had the tutorial starts with only the angler, and no cards. see
+    ` THE FIRST UPGRADE in fish_routines_intro.
     if TUTORIAL_UPGRADE_TALK
-        gosub tutorial_upgrade_talk
+        if SHOP_ENABLED
+            gosub tutorial_first_shop
+        endif
     endif
 
     ` a stretch of the steam timeline for the upgrade screen, in the color for getting ready to play.
@@ -921,10 +926,18 @@ handle_ability_selection:
         BOOK_INSTANT = 0
     endif
 
+    ` the angler is up in the corner, unless the book is what comes up. see fish_headers_shop.
+    shopOpen()
+    if bookComesUp
+        shopShow(0)
+    endif
+
     TRANSITION_FOR_UPGRADE = 1
     TRANSITION_TO_MENU = 1
     gosub menu_transition
     TRANSITION_FOR_UPGRADE = 0
+    hide sprite INTRO_DIM_SPRITE
+    gosub shop_greet
 
     ` the card that was taken from the book, or -1. it stands in for the card that is highlighted.
     bookTaken = -1
@@ -938,7 +951,10 @@ handle_ability_selection:
             bookComesUp = 0
             gosub book_run
             bookTaken = BOOK_PICK
+            shopShow(1)
         endif
+
+        gosub shop_input
 
         ` allow left/right input
         dir = 0
@@ -1093,7 +1109,9 @@ handle_ability_selection:
                     upgradePicked = 0
                     if fastBookOn()
                         ` with the "open book" card, this line opens the book. a card that is taken from it is the pick.
+                        shopShow(0)
                         gosub handle_book
+                        shopShow(1)
                         bookTaken = BOOK_PICK
                         if bookTaken >= 0
                             upgradePicked = 1
@@ -1110,7 +1128,9 @@ handle_ability_selection:
                 if UPGRADE_ROW_PICK = 2
                     upgradePicked = 0
                     if getDroppableCount() > 0
+                        shopShow(0)
                         gosub handle_passive_drop
+                        shopShow(1)
                         upgradePicked = DROP_DONE
                     endif
                 endif
@@ -1129,6 +1149,11 @@ handle_ability_selection:
 
                 ` write down what was picked, and on which move, for the table of high scores
                 logUpgrade(selectedAbilityIndex)
+
+                ` the bubble that the pick uses pops, on the card, before anything else. see THE PIPS.
+                if bookTaken < 0
+                    gosub pop_card_pips
+                endif
             endif
 
             ` taking nothing is a fast, and anything else ends it. see THE FAST in fish_headers_fast.
@@ -1157,6 +1182,7 @@ handle_ability_selection:
                     hide text UPGRADE_SKIP_TEXT_ID `the page that comes next has rows where these lines are
                     hide text UPGRADE_REROLL_TEXT_ID
                     hide text UPGRADE_DROP_TEXT_ID
+                    shopShow(0)
                     gosub handle_move_equip
                 endcase
             endselect
@@ -1174,6 +1200,7 @@ handle_ability_selection:
             hide text UPGRADE_REROLL_TEXT_ID
             hide text UPGRADE_DROP_TEXT_ID
             UPGRADE_SKIP_SELECTED = 0
+            guideOff()
 
             ` none of it is being drawn any more, so it can all be put away
             create basic tween INFO_FADE_TWEEN_ID, 0, 0, 1, 0
@@ -1205,6 +1232,103 @@ handle_ability_selection:
 return
 
 
+` THE PIPS POP. a card has just been picked. if it shows how many more times it can be taken, the bubble
+` for this time pops; and a move that goes into an empty slot pops the bubble of that slot. they swell,
+` burst into the broken rim of a popped bubble, a little too big, and shrink back to their size. the
+` screen waits for that, so it is seen before it goes. a pick that uses no bubble waits for nothing.
+pop_card_pips:
+    pipPopCard = ABILITY_SELECTION_INDEX
+    pipPopKind = ABILITY_CHOICES(pipPopCard).abilityIndex
+    pipPopUse = -1
+    pipPopSlot = -1
+
+    ` the times that it can still be taken are the bright ones, from the left. the last of them goes.
+    if CARDS(pipPopKind).maxUses > 0
+        pipPopLeft = CARDS(pipPopKind).maxUses - CARDS(pipPopKind).uses
+        if pipPopLeft > 0
+            if pipPopLeft <= CARD_PIP_MAX
+                pipPopUse = CARD_USE_PIPS(pipPopCard * CARD_PIP_MAX + pipPopLeft - 1)
+            endif
+        endif
+    endif
+
+    ` the empty slots are the bright ones above a move card, and the move takes one of them
+    if CARDS(pipPopKind).abilityType = ABILITY_TYPE_MOVE
+        pipPopEmpty = 0
+        for pipPopN = 0 to MOVE_SLOTS_OPEN - 1
+            if MOVE_ABILITY_BINDINGS(pipPopN).assigned = 0 then pipPopEmpty = pipPopEmpty + 1
+        next
+        if pipPopEmpty > 0
+            if pipPopEmpty <= CARD_PIP_MAX
+                pipPopSlot = CARD_SLOT_PIPS(pipPopCard * CARD_PIP_MAX + pipPopEmpty - 1)
+            endif
+        endif
+    endif
+
+    if pipPopUse >= 0 or pipPopSlot >= 0
+        pipPopStart = game ms()
+        pipPopDone = 0
+        pipPopBurst = 0
+        while pipPopDone = 0
+            pipPopAge = game ms() - pipPopStart
+            if pipPopAge >= PIP_POP_MS
+                pipPopAge = PIP_POP_MS
+                pipPopDone = 1
+            endif
+            pipPopAgeF# = pipPopAge
+            pipPopSize# = CARD_PIP_SIZE
+            if pipPopAge < PIP_POP_SWELL_MS
+                ` it swells
+                pipPopSwellMs# = PIP_POP_SWELL_MS
+                pipPopSize# = CARD_PIP_SIZE * (1 + .55 * pipPopAgeF# / pipPopSwellMs#)
+            else
+                ` and bursts. the rim is a little too big, and shrinks back to its size.
+                if pipPopBurst = 0
+                    pipPopBurst = 1
+                    if pipPopUse >= 0
+                        color sprite pipPopUse, CARD_PIP_DIM
+                        playBubblePop(sprite x(pipPopUse), 2, .7)
+                    endif
+                    if pipPopSlot >= 0
+                        color sprite pipPopSlot, CARD_PIP_DIM
+                        playBubblePop(sprite x(pipPopSlot), 3, .6)
+                    endif
+                endif
+                pipPopAfter# = pipPopAgeF# - PIP_POP_SWELL_MS
+                pipPopRest# = PIP_POP_MS - PIP_POP_SWELL_MS
+                pipPopP# = pipPopAfter# / pipPopRest#
+                pipPopP# = 1 - (1 - pipPopP#) * (1 - pipPopP#)
+                pipPopSize# = CARD_PIP_SIZE * (1.9 - .9 * pipPopP#)
+            endif
+            pipPopStyle = 0
+            pipPopFill# = .45
+            if pipPopBurst
+                pipPopStyle = 4
+                pipPopFill# = 0
+            endif
+            if pipPopUse >= 0
+                size sprite pipPopUse, pipPopSize#, pipPopSize#
+                set sprite all texcoord1 pipPopUse, pipPopSize#, pipPopFill#, 0, pipPopStyle
+            endif
+            if pipPopSlot >= 0
+                size sprite pipPopSlot, pipPopSize#, pipPopSize#
+                set sprite all texcoord1 pipPopSlot, pipPopSize#, pipPopFill#, 0, pipPopStyle
+            endif
+            gosub frame_ability_selection
+            sync
+        endwhile
+
+        ` and they are back to their size, popped, for the screen to fade away with
+        if pipPopUse >= 0
+            size sprite pipPopUse, CARD_PIP_SIZE, CARD_PIP_SIZE
+        endif
+        if pipPopSlot >= 0
+            size sprite pipPopSlot, CARD_PIP_SIZE, CARD_PIP_SIZE
+        endif
+    endif
+return
+
+
 ` everything on the upgrade screen that changes from frame to frame
 frame_ability_selection:
     ` the main loop does not run while the upgrade screen is up, so this has to keep the input icons right itself
@@ -1213,10 +1337,14 @@ frame_ability_selection:
     ` and it has to keep the bubbles and the music going, too
     updateBubbles()
     updateMusic()
+    gosub frame_shop
 
     ` the upgrade screen is drawn through the mask that the wave of bubbles paints. see THE UPGRADE WIPE in fish_headers.
     set effect param texture MENU_FX_ID, "MaskTexture", render target texture(TARGET_MASK)
-    set effect param float MENU_FX_ID, "Fade", tweenVal(INFO_FADE_TWEEN_ID)
+    ` the angler's scene shares that tween, and the upgrade screen stays where it is behind it
+    abilityMenuFade# = tweenVal(INFO_FADE_TWEEN_ID)
+    if ANGLER_FROM_SHOP then abilityMenuFade# = 1
+    set effect param float MENU_FX_ID, "Fade", abilityMenuFade#
     set effect param float MENU_FX_ID, "Invert", UPGRADE_INVERT
 
     ` the line that takes none of the cards is white when it is the one that is highlighted
@@ -1248,8 +1376,9 @@ frame_ability_selection:
     ` TODO: stupid FX system loses parameters between reloads, so best to set them in a loop.
     abilityFade# = tweenVal(INFO_FADE_TWEEN_ID)
     set effect param float INFO_FX_ID, "Fade", abilityFade#
+    abilityFade# = abilityMenuFade#
 
-    set text alpha ABILITY_SELECT_LABEL_TEXT_ID, 255 * tweenVal(ABILITY_SELECT_LABEL_FADE_TWEEN_ID)
+    set text alpha ABILITY_SELECT_LABEL_TEXT_ID, 255 * tweenVal(ABILITY_SELECT_LABEL_FADE_TWEEN_ID) * SHOP_TITLE_KEEP#
     set text position ABILITY_SELECT_LABEL_TEXT_ID, text x(ABILITY_SELECT_LABEL_TEXT_ID), tweenVal(titleDropTweenId)
     set text alpha INFO_HINT_TEXT_ID, 140 + 115 * abilityFade#
 
@@ -1678,7 +1807,7 @@ function loadCardStrings()
     CARDS(ABILITY_INDEX_OATH).name$ = loc$("ability.oath.name")
     CARDS(ABILITY_INDEX_OATH).desc$ = loc$("ability.oath.desc")
     CARDS(ABILITY_INDEX_ANGLER).name$ = loc$("ability.angler.name")
-    CARDS(ABILITY_INDEX_ANGLER).desc$ = loc$("ability.angler.desc")
+    CARDS(ABILITY_INDEX_ANGLER).desc$ = loc$("ability.angler.desc2")
     CARDS(ABILITY_INDEX_FALL_IN_LINE).name$ = loc$("ability.fall_in_line.name")
     CARDS(ABILITY_INDEX_FALL_IN_LINE).desc$ = loc$("ability.fall_in_line.desc")
     CARDS(ABILITY_INDEX_FLIPPER).name$ = loc$("ability.flipper.name")

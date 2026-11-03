@@ -7,7 +7,7 @@ remstart
 
     the rest of the game only has to do three things:
     - call multiplierSwapMade() when a swap has been made
-    - call judgeMultiplierSwaps() when handle_combos has looked at the board, and knows if anything popped
+    - call judgeMultiplierSwaps() when handle_combos has looked at the board, and knows what popped
     - multiply what a fish scores by SCORE_MULTIPLIER
 
     it sits underneath the count of moves: the multiplier, and the bar that fills up toward the next one.
@@ -48,6 +48,18 @@ setup_multiplier:
     set sprite offset MULT_BAR_FILL_SPRITE, 0, 0
     color sprite MULT_BAR_FILL_SPRITE, rgb(64, 128, 255, 200)
 
+    ` what has gone into the bar and has not been swept over yet, and the glint that sweeps it. see THE BAR
+    ` CATCHES UP in fish_headers.
+    reserve sprite id(MULT_BAR_CHARGE_SPRITE)
+    sprite MULT_BAR_CHARGE_SPRITE, MULT_POS.x + 1, MULT_POS.y + 47, TEX_PIXEL
+    size sprite MULT_BAR_CHARGE_SPRITE, 0, 2
+    set sprite offset MULT_BAR_CHARGE_SPRITE, 0, 0
+    reserve sprite id(MULT_BAR_GLINT_SPRITE)
+    sprite MULT_BAR_GLINT_SPRITE, MULT_POS.x + 1, MULT_POS.y + 47, TEX_PIXEL
+    size sprite MULT_BAR_GLINT_SPRITE, 0, 2
+    set sprite offset MULT_BAR_GLINT_SPRITE, 0, 0
+    color sprite MULT_BAR_GLINT_SPRITE, rgb(255, 255, 255, 0)
+
     ` how many swaps in a row there have been, out of how many it takes
     reserve text id(MULT_NUM_TEXT_ID)
     text MULT_NUM_TEXT_ID, MULT_POS.x + MULT_BAR_WIDTH, MULT_POS.y + 48, SCORE_FONT, "0/2"
@@ -57,12 +69,45 @@ setup_multiplier:
     color text MULT_NUM_TEXT_ID, rgb(64, 128, 255, 200)
     enable text drop shadow MULT_NUM_TEXT_ID, 2, -2, rgb(0,0,0)
 
+    ` the "+1" that a swap sends into the bar. see THE MULTIPLIER FILLS in fish_headers.
+    reserve text id(MULT_FLY_TEXT_ID)
+    text MULT_FLY_TEXT_ID, 0, 0, SCORE_FONT, "+1"
+    order text MULT_FLY_TEXT_ID, ORDER_SCORE_TEXT
+    size text y MULT_FLY_TEXT_ID, MULT_FLY_TALL#
+    set text offset MULT_FLY_TEXT_ID, .5, .5
+    color text MULT_FLY_TEXT_ID, rgb(150, 200, 255)
+    enable text drop shadow MULT_FLY_TEXT_ID, 1, -1, rgb(0, 0, 0)
+    set text alpha MULT_FLY_TEXT_ID, 0
+
+    ` the pops of the multiplier going up, each a voice of its own, made once, so that none is cut off.
+    ` they are the pops of the fish, higher and higher.
+    multPopClipA = 0
+    reserve sfx clip id(multPopClipA)
+    load sfx clip multPopClipA, "Fish/Audio/bubble-pop-2"
+    multPopClipB = 0
+    reserve sfx clip id(multPopClipB)
+    load sfx clip multPopClipB, "Fish/Audio/bubble-pop-4"
+    for multSetupI = 0 to MULT_UP_POPS - 1
+        multSetupVoice = 0
+        reserve sfx id(multSetupVoice)
+        if multSetupI mod 2 = 0
+            sfx multSetupVoice, multPopClipA
+        else
+            sfx multSetupVoice, multPopClipB
+        endif
+        set sfx group multSetupVoice, SFX_GROUP_SFX
+        MULT_UP_SFX(multSetupI) = multSetupVoice
+    next
+    reserve sfx id(MULT_LAND_SFX)
+    sfx MULT_LAND_SFX, multPopClipB
+    set sfx group MULT_LAND_SFX, SFX_GROUP_SFX
+
     reserve tween id(MULT_FILL_TWEEN_ID)
     reserve tween id(MULT_PUNCH_TWEEN_ID)
     create basic tween MULT_FILL_TWEEN_ID, 0, 0, 1, 0
     create basic tween MULT_PUNCH_TWEEN_ID, 0, 0, 1, 0
 
-    infoIndex = allocateInfoBlob(MULT_POS.x - 4, MULT_POS.y - 2, MULT_BAR_WIDTH + 8, 66, loc$("multiplier.label"), loc$("multiplier.info.desc"))
+    infoIndex = allocateInfoBlob(MULT_POS.x - 4, MULT_POS.y - 2, MULT_BAR_WIDTH + 8, 66, loc$("multiplier.label"), loc$("multiplier.info.short"))
     INFO_INDEX_MULTIPLIER = infoIndex
 
 return
@@ -71,11 +116,15 @@ return
 routines_multiplier_exit:
 
 
-` how many swaps in a row have to pop something to fill the bar. it is 2 for the first multiplier,
+` how many steps it takes to fill the bar. it is 2 for the first multiplier,
 ` and 3 more for every one after that: 2, 5, 8, 11, and so on.
 function getMultiplierRequired()
-    required = MULT_FIRST_REQUIRED + (SCORE_MULTIPLIER - 1) * MULT_REQUIRED_STEP
+    required = multiplierRequiredAt(SCORE_MULTIPLIER)
 endfunction required
+
+function multiplierRequiredAt(requiredMult)
+    requiredIs = MULT_FIRST_REQUIRED + (requiredMult - 1) * MULT_REQUIRED_STEP
+endfunction requiredIs
 
 
 ` a swap has been made. it is not known yet if it popped anything. handle_combos finds that out.
@@ -88,15 +137,32 @@ endfunction
 
 ` handle_combos has looked at the board, and `comboCount` groups of fish are popping.
 ` if any swaps were made since the last time, this is where they fill the bar, or empty it.
-` the fish that keep popping afterwards, as the board fills back in, are not swaps, so they do neither.
+` the fish that keep popping afterwards, as the board fills back in, fill it too, as THE CHAIN of the swap.
 function judgeMultiplierSwaps(comboCount)
+    ` the board has settled, or it is another wave of the chain
+    if MULT_PENDING_SWAPS = 0 and MULT_CHAIN_LIVE
+        if comboCount - QUEST_BUNCH_GROUPS > 0
+            multiplierChainSteps(comboCount - QUEST_BUNCH_GROUPS)
+        else
+            MULT_CHAIN_LIVE = 0
+        endif
+    endif
+
     if MULT_PENDING_SWAPS > 0
         pendingSwaps = MULT_PENDING_SWAPS
         MULT_PENDING_SWAPS = 0
 
         if comboCount > 0
-            fillMultiplierBar()
+            ` it starts a chain. see THE CHAIN in fish_headers.
+            MULT_CHAIN_LIVE = MULT_CHAIN_ON
+            MULT_CHAIN_UPS = 0
+            swapGroups = 1
+            if MULT_CHAIN_ON
+                if comboCount - QUEST_BUNCH_GROUPS > 1 then swapGroups = comboCount - QUEST_BUNCH_GROUPS
+            endif
+            multiplierChainSteps(swapGroups)
         else
+            MULT_CHAIN_LIVE = 0
             ` a swap that put together a group that only coral kept from popping is let off. the bar does
             ` not fill, and nothing is taken away. see CORAL in fish_headers. a swap that made a line of
             ` fish, corner to corner, is let off the same way. see DIAGONALS in fish_headers.
@@ -145,6 +211,42 @@ function judgeMultiplierSwaps(comboCount)
 endfunction
 
 
+` the groups that have just popped: a step in the bar for each one, or points, once the swap has filled
+` the bar as often as it can. see THE CHAIN in fish_headers.
+function multiplierChainSteps(chainGroups)
+    chainOverDelay = 0
+    chainOverPos as vec = {
+        x = MULT_POS.x + MULT_BAR_WIDTH / 2,
+        y = MULT_POS.y + 47 + MULT_FLY_BELOW
+    }
+    for chainGroupI = 1 to chainGroups
+        if MULT_CHAIN_UPS >= MULT_CHAIN_MOST_UPS
+            queueScore(MULT_CHAIN_OVER_POINTS, chainOverDelay)
+            spawnFlatPointsText(chainOverPos, MULT_CHAIN_OVER_POINTS, chainOverDelay, 800, 1)
+            chainOverDelay = chainOverDelay + MULT_CHAIN_OVER_GAP_MS
+        else
+            multiplierStep()
+        endif
+    next
+    refreshMultiplier(150)
+endfunction
+
+
+` one step in the bar, which the player sees when its "+1" lands. see THE MULTIPLIER FILLS in fish_headers.
+function multiplierStep()
+    stepWasMult = SCORE_MULTIPLIER
+    MULT_FLY_HOLD = 1
+    fillMultiplierBar()
+    MULT_FLY_HOLD = 0
+    stepWentUp = 0
+    if SCORE_MULTIPLIER > stepWasMult
+        stepWentUp = 1
+        MULT_CHAIN_UPS = MULT_CHAIN_UPS + 1
+    endif
+    multFlySend(stepWentUp)
+endfunction
+
+
 ` the bar goes up by one. a swap that pops fish does this, and so does a bubble of the beat that was
 ` left hanging when its tune ended. see THE DANCE in fish_headers. this does not draw the bar again.
 ` refreshMultiplier does.
@@ -159,10 +261,151 @@ function fillMultiplierBar()
         ` the highest that it gets goes on the table of high scores
         if SCORE_MULTIPLIER > BEST_MULTIPLIER then BEST_MULTIPLIER = SCORE_MULTIPLIER
 
-        MULT_PUNCH_DIR = 1
-        create basic tween MULT_PUNCH_TWEEN_ID, 1, 0, 500, 0
-        spawnBubbles(MULT_POS.x + 24, MULT_POS.y + 30, 8, 14, 0, rgb(255, 255, 255))
+        ` a "+1" that is on its way shows it when it lands
+        if MULT_FLY_HOLD = 0
+            if MULT_FLY_COUNT > 0
+                MULT_FLY_SHOW_UP(MULT_FLY_COUNT - 1) = 1
+            else
+                multiplierWentUp()
+            endif
+        endif
     endif
+endfunction
+
+
+` the multiplier has gone up, and this is seen and heard: it jumps, and pops
+function multiplierWentUp()
+    MULT_PUNCH_DIR = 1
+    create basic tween MULT_PUNCH_TWEEN_ID, 1, 0, 700, 0
+    ` no bubbles come off of a multiplier that is not on the screen
+    if HUD_KEEP# * HUD_KEEP_MULT# > .5
+        spawnBubbles(MULT_POS.x + 24, MULT_POS.y + 30, 8, 14, 0, rgb(255, 255, 255))
+        spawnBubbles(MULT_POS.x + 24, MULT_POS.y + 30, 4, 10, 0, rgb(190, 225, 255))
+    endif
+    for upPopI = 0 to MULT_UP_POPS - 1
+        upPopVoice = MULT_UP_SFX(upPopI)
+        upPopPitch# = upPopI
+        set sfx pitch upPopVoice, .15 + upPopPitch# * .2
+        set sfx volume upPopVoice, MULT_UP_VOL#
+        set sfx pan upPopVoice, -.4
+        if upPopI = 0
+            play sfx upPopVoice
+        else
+            delay play sfx upPopVoice, upPopI * MULT_UP_POP_GAP
+        endif
+    next
+endfunction
+
+
+` a step has gone into the bar, and a "+1" is sent to show it. it waits its turn behind the others.
+function multFlySend(sendUp)
+    if MULT_FLY_COUNT >= MULT_FLY_MOST
+        multFlyLand()
+    endif
+    MULT_FLY_SHOW_MULT(MULT_FLY_COUNT) = SCORE_MULTIPLIER
+    MULT_FLY_SHOW_PROGRESS(MULT_FLY_COUNT) = MULT_PROGRESS
+    MULT_FLY_SHOW_UP(MULT_FLY_COUNT) = sendUp
+    MULT_FLY_COUNT = MULT_FLY_COUNT + 1
+    if MULT_FLY_COUNT = 1
+        multFlyStart()
+    endif
+endfunction
+
+
+` the first "+1" in line pops up just under the end of the bar, to rise into it. it keeps clear of the
+` count at the right end.
+function multFlyStart()
+    multFlyX# = MULT_POS.x + 1 + (MULT_BAR_WIDTH - 2) * tweenVal(MULT_FILL_TWEEN_ID)
+    multFlyMost# = MULT_POS.x + MULT_BAR_WIDTH - MULT_FLY_ROOM
+    if multFlyX# > multFlyMost# then multFlyX# = multFlyMost#
+    if multFlyX# < MULT_POS.x + 6 then multFlyX# = MULT_POS.x + 6
+    MULT_FLY_FROM_X# = multFlyX#
+    MULT_FLY_FROM_Y# = MULT_POS.y + 47 + MULT_FLY_BELOW
+    MULT_FLY_AT = game ms()
+    rotate text MULT_FLY_TEXT_ID, rnd(10) * .04 - .2
+endfunction
+
+
+` it gets to the bar, and the bar shows what it was sent with. the last of them shows how things are now,
+` which is the same, unless something else has happened to the bar since.
+function multFlyLand()
+    landMult = MULT_FLY_SHOW_MULT(0)
+    landProgress = MULT_FLY_SHOW_PROGRESS(0)
+    landUp = MULT_FLY_SHOW_UP(0)
+    MULT_FLY_COUNT = MULT_FLY_COUNT - 1
+    for landI = 0 to MULT_FLY_COUNT - 1
+        MULT_FLY_SHOW_MULT(landI) = MULT_FLY_SHOW_MULT(landI + 1)
+        MULT_FLY_SHOW_PROGRESS(landI) = MULT_FLY_SHOW_PROGRESS(landI + 1)
+        MULT_FLY_SHOW_UP(landI) = MULT_FLY_SHOW_UP(landI + 1)
+    next
+    if MULT_FLY_COUNT > 0
+        showMultiplier(landMult, landProgress, 120)
+        multFlyStart()
+    else
+        MULT_FLY_AT = -1
+        set text alpha MULT_FLY_TEXT_ID, 0
+        refreshMultiplier(120)
+    endif
+    MULT_BAR_HIT_AT = game ms()
+    multLandX = MULT_POS.x + 1 + (MULT_BAR_WIDTH - 2) * tweenVal(MULT_FILL_TWEEN_ID)
+    if HUD_KEEP# * HUD_KEEP_MULT# > .5
+        spawnBubblesOnLayer(multLandX, MULT_POS.y + 47, 3, 4, 0, rgb(255, 255, 255), ORDER_FLOAT_BUBBLES, 40, 255, 1)
+    endif
+    set sfx pitch MULT_LAND_SFX, .5
+    set sfx volume MULT_LAND_SFX, MULT_LAND_VOL#
+    set sfx pan MULT_LAND_SFX, -.4
+    play sfx MULT_LAND_SFX
+    if landUp
+        multiplierWentUp()
+    endif
+endfunction
+
+
+` the "+1" on this frame: it pops up under the bar, sits for a moment, and rises into the end of it.
+` see THE MULTIPLIER FILLS in fish_headers.
+function stepMultFly()
+    if MULT_FLY_AT < 0 then exitfunction
+    flyMAge = game ms() - MULT_FLY_AT
+    if flyMAge >= MULT_FLY_SIT_MS + MULT_FLY_MS
+        multFlyLand()
+        exitfunction
+    endif
+
+    flyMSize# = 1
+    flyMAlpha = 255
+    flyMX# = MULT_FLY_FROM_X#
+    flyMY# = MULT_FLY_FROM_Y#
+    if flyMAge < MULT_FLY_POP_MS
+        flyMAge# = flyMAge
+        flyMPopMs# = MULT_FLY_POP_MS
+        flyMP# = flyMAge# / flyMPopMs#
+        if flyMP# < .55
+            flyMSize# = .3 + 1.1 * flyMP# / .55
+        else
+            flyMSize# = 1.4 - .4 * (flyMP# - .55) / .45
+        endif
+    endif
+    if flyMAge < MULT_FLY_SIT_MS
+        flyMRise# = flyMAge
+        flyMSitMs# = MULT_FLY_SIT_MS
+        flyMRise# = flyMRise# / flyMSitMs#
+        flyMY# = flyMY# - 3 * flyMRise# * (2 - flyMRise#)
+    else
+        ` it rises faster and faster, and leans over to the end of the fill
+        flyMSetY# = MULT_FLY_FROM_Y# - 3
+        flyMGoX# = MULT_POS.x + 1 + (MULT_BAR_WIDTH - 2) * tweenVal(MULT_FILL_TWEEN_ID)
+        flyMGoY# = MULT_POS.y + 47
+        flyMGoAge# = flyMAge - MULT_FLY_SIT_MS
+        flyMGoMs# = MULT_FLY_MS
+        flyMGoP# = flyMGoAge# / flyMGoMs#
+        flyMX# = MULT_FLY_FROM_X# + (flyMGoX# - MULT_FLY_FROM_X#) * flyMGoP# * (2 - flyMGoP#)
+        flyMY# = flyMSetY# + (flyMGoY# - flyMSetY#) * flyMGoP# * flyMGoP#
+        flyMSize# = 1 - .4 * flyMGoP#
+        if flyMGoP# > .6 then flyMAlpha = 255 * (1 - flyMGoP#) / .4
+    endif
+    set text position MULT_FLY_TEXT_ID, flyMX#, flyMY#
+    size text y MULT_FLY_TEXT_ID, MULT_FLY_TALL# * flyMSize#
+    set text alpha MULT_FLY_TEXT_ID, flyMAlpha * HUD_KEEP# * HUD_KEEP_MULT#
 endfunction
 
 
@@ -182,24 +425,45 @@ function addMultiplier(amount)
     SCORE_MULTIPLIER = SCORE_MULTIPLIER + amount
     if SCORE_MULTIPLIER > BEST_MULTIPLIER then BEST_MULTIPLIER = SCORE_MULTIPLIER
 
-    MULT_PUNCH_DIR = 1
-    create basic tween MULT_PUNCH_TWEEN_ID, 1, 0, 500, 0
-    spawnBubbles(MULT_POS.x + 24, MULT_POS.y + 30, 8, 14, 0, rgb(255, 255, 255))
+    multiplierWentUp()
     refreshMultiplier(150)
 endfunction
 
 
 ` write the multiplier onto the screen, and slide the bar to where it should be over `duration` milliseconds
+` while a "+1" is on its way, it waits for that to land. see THE MULTIPLIER FILLS in fish_headers.
 function refreshMultiplier(duration)
+    if MULT_FLY_AT >= 0 then exitfunction
+    showMultiplier(SCORE_MULTIPLIER, MULT_PROGRESS, duration)
+endfunction
+
+
+function showMultiplier(showMult, showProgress, duration)
+    showFillFrom# = tweenVal(MULT_FILL_TWEEN_ID)
+    ` it has gone up, and the bar starts again from empty
+    if showMult > MULT_SHOWN_MULT
+        showFillFrom# = 0
+        MULT_BANK# = 0
+        MULT_CATCH_STATE = MULT_CATCH_IDLE
+    endif
+    MULT_SHOWN_MULT = showMult
+
     ` with "high stakes", it shows the doubled number. see THREE MORE CARDS in fish_headers_school.
-    set text MULT_TEXT_ID, "x" + str$(SCORE_MULTIPLIER * SCHOOL_STAKES)
+    set text MULT_TEXT_ID, "x" + str$(showMult * SCHOOL_STAKES)
 
-    requiredNow = getMultiplierRequired()
-    set text MULT_NUM_TEXT_ID, str$(MULT_PROGRESS) + "/" + str$(requiredNow)
+    requiredNow = multiplierRequiredAt(showMult)
+    set text MULT_NUM_TEXT_ID, str$(showProgress) + "/" + str$(requiredNow)
 
-    progressNow# = MULT_PROGRESS
+    progressNow# = showProgress
     requiredNow# = requiredNow
-    create basic tween MULT_FILL_TWEEN_ID, tweenVal(MULT_FILL_TWEEN_ID), progressNow# / requiredNow#, duration, 0
+
+    ` nothing to see for one that is set right away, like a game that has been loaded
+    if duration <= 1
+        showFillFrom# = progressNow# / requiredNow#
+        MULT_BANK# = showFillFrom#
+        MULT_CATCH_STATE = MULT_CATCH_IDLE
+    endif
+    create basic tween MULT_FILL_TWEEN_ID, showFillFrom#, progressNow# / requiredNow#, duration, 0
 endfunction
 
 
@@ -211,21 +475,167 @@ function resetMultiplier()
     MULT_PROGRESS = 0
     MULT_PENDING_SWAPS = 0
     MULT_PUNCH_DIR = 0
+    MULT_FLY_AT = -1
+    MULT_FLY_COUNT = 0
+    MULT_CHAIN_LIVE = 0
+    MULT_CHAIN_UPS = 0
+    MULT_BAR_HIT_AT = -1
+    MULT_BANK# = 0
+    MULT_SHOWN_MULT = 1
+    MULT_CATCH_STATE = MULT_CATCH_IDLE
+    set text alpha MULT_FLY_TEXT_ID, 0
     create basic tween MULT_PUNCH_TWEEN_ID, 0, 0, 1, 0
     create basic tween MULT_FILL_TWEEN_ID, 0, 0, 1, 0
     refreshMultiplier(1)
 endfunction
 
 
+` THE BAR CATCHES UP, in fish_headers, on this frame. `catchTip#` is how much of the bar is filled.
+function stepMultCatch(catchTip#)
+    ` a miss takes the bar back down, and the blue goes with it
+    if MULT_BANK# > catchTip# then MULT_BANK# = catchTip#
+
+    catchOver = 1
+    if MULT_CHAIN_LIVE then catchOver = 0
+    if MULT_FLY_COUNT > 0 then catchOver = 0
+    if MULT_PENDING_SWAPS > 0 then catchOver = 0
+    if REQUEST_COMBO_CHECK then catchOver = 0
+    if catchTip# - MULT_BANK# < .002 then catchOver = 0
+
+    catchNow = game ms()
+    catchAge# = catchNow - MULT_CATCH_AT
+
+    catchState = MULT_CATCH_STATE
+    if catchState = MULT_CATCH_IDLE
+        if catchOver
+            MULT_CATCH_STATE = MULT_CATCH_WAIT
+            MULT_CATCH_AT = catchNow
+        endif
+    endif
+    if catchState = MULT_CATCH_WAIT
+        if catchOver = 0
+            MULT_CATCH_STATE = MULT_CATCH_IDLE
+        else
+            if catchAge# >= MULT_CATCH_WAIT_MS
+                MULT_CATCH_STATE = MULT_CATCH_GLINT
+                MULT_CATCH_AT = catchNow
+            endif
+        endif
+    endif
+    if catchState = MULT_CATCH_GLINT
+        if catchOver = 0
+            MULT_CATCH_STATE = MULT_CATCH_IDLE
+        else
+            ` it gets to the border just as the blue sets off
+            if catchAge# >= multCatchGlintMs()
+                MULT_CATCH_STATE = MULT_CATCH_EAT
+                MULT_CATCH_AT = catchNow
+                MULT_EAT_FROM# = MULT_BANK#
+                MULT_EAT_TO# = catchTip#
+            endif
+        endif
+    endif
+    if catchState = MULT_CATCH_EAT
+        catchP# = catchAge# / MULT_CATCH_EAT_MS
+        if catchP# >= 1
+            MULT_BANK# = MULT_EAT_TO#
+            MULT_CATCH_STATE = MULT_CATCH_FADE
+            MULT_CATCH_AT = catchNow
+        else
+            MULT_BANK# = MULT_EAT_FROM# + (MULT_EAT_TO# - MULT_EAT_FROM#) * catchP# * (2 - catchP#)
+        endif
+        if MULT_BANK# > catchTip# then MULT_BANK# = catchTip#
+    endif
+    if catchState = MULT_CATCH_FADE
+        if catchAge# >= MULT_CATCH_FADE_MS
+            MULT_CATCH_STATE = MULT_CATCH_IDLE
+        endif
+    endif
+endfunction
+
+` it is quicker over a bar that is less blue, so that it moves at much the same speed
+function multCatchGlintMs()
+    glintMs# = 80 + (MULT_CATCH_GLINT_MS - 80) * MULT_BANK#
+endfunction glintMs#
+
+` the segment and the glint, on this frame. they stand in the bar, at the same height as the blue.
+function multCatchDraw(drawTip#, drawLeft#, drawTop, drawTall, drawHit#)
+    drawHud# = HUD_KEEP# * HUD_KEEP_MULT#
+    drawSpan# = MULT_BAR_WIDTH - 2.0
+    drawBankX# = drawLeft# + drawSpan# * MULT_BANK#
+    drawTipX# = drawLeft# + drawSpan# * drawTip#
+
+    ` the segment breathes toward white, and flashes with the bar
+    drawNow# = game ms()
+    drawBreath# = .5 + .5 * sin(6.2832 * drawNow# / MULT_CHARGE_BREATH_MS)
+    drawWhite# = .12 * drawBreath# + .8 * drawHit#
+    if drawWhite# > 1 then drawWhite# = 1
+    drawR = chargeLerp(CHARGE_COLOR_R, 255, drawWhite#)
+    drawG = chargeLerp(CHARGE_COLOR_G, 255, drawWhite#)
+    drawB = chargeLerp(CHARGE_COLOR_B, 255, drawWhite#)
+    position sprite MULT_BAR_CHARGE_SPRITE, drawBankX#, drawTop
+    size sprite MULT_BAR_CHARGE_SPRITE, drawTipX# - drawBankX#, drawTall
+    color sprite MULT_BAR_CHARGE_SPRITE, rgb(drawR, drawG, drawB, 255 * drawHud#)
+
+    ` the glint runs along the blue to the border, and then rides the edge of the blue
+    drawGlintAlpha# = 0
+    drawGlintX# = drawBankX#
+    drawGlintWide# = 2
+    if MULT_CATCH_STATE = MULT_CATCH_GLINT
+        drawGlintP# = game ms() - MULT_CATCH_AT
+        drawGlintP# = drawGlintP# / multCatchGlintMs()
+        if drawGlintP# > 1 then drawGlintP# = 1
+        drawGlintX# = drawLeft# + (drawBankX# - drawLeft#) * drawGlintP# * drawGlintP#
+        drawGlintWide# = 2 + (MULT_GLINT_TAIL - 2) * (1 - drawGlintP#)
+        drawGlintAlpha# = drawGlintP#
+    endif
+    if MULT_CATCH_STATE = MULT_CATCH_EAT
+        drawGlintAlpha# = 1
+    endif
+    if MULT_CATCH_STATE = MULT_CATCH_FADE
+        drawGlintFade# = game ms() - MULT_CATCH_AT
+        drawGlintAlpha# = 1 - drawGlintFade# / MULT_CATCH_FADE_MS
+    endif
+    drawGlintFrom# = drawGlintX# - drawGlintWide#
+    if drawGlintFrom# < drawLeft# then drawGlintFrom# = drawLeft#
+    position sprite MULT_BAR_GLINT_SPRITE, drawGlintFrom#, drawTop
+    size sprite MULT_BAR_GLINT_SPRITE, drawGlintX# - drawGlintFrom# + 1, drawTall
+    color sprite MULT_BAR_GLINT_SPRITE, rgb(255, 255, 255, 255 * drawGlintAlpha# * drawHud#)
+endfunction
+
+
 ` draw the multiplier. update_frame calls this on every frame.
 function stepMultiplier()
-    fillWidth# = (MULT_BAR_WIDTH - 2.0) * tweenVal(MULT_FILL_TWEEN_ID)
-    size sprite MULT_BAR_FILL_SPRITE, fillWidth#, 2
+    stepMultFly()
+
+    ` a "+1" that has just landed makes the bar jump taller, and flash, and that dies away
+    barHit# = 0
+    if MULT_BAR_HIT_AT >= 0
+        barHitAge# = game ms() - MULT_BAR_HIT_AT
+        barHitMs# = MULT_BAR_HIT_MS
+        if barHitAge# < barHitMs#
+            barHit# = 1 - barHitAge# / barHitMs#
+            barHit# = barHit# * barHit#
+        else
+            MULT_BAR_HIT_AT = -1
+        endif
+    endif
+    barGrow = 3.4 * barHit#
+
+    ` what shows as blue is what has been swept over. the rest of the fill is the segment.
+    fillTip# = tweenVal(MULT_FILL_TWEEN_ID)
+    stepMultCatch(fillTip#)
+    fillWidth# = (MULT_BAR_WIDTH - 2.0) * MULT_BANK#
+    size sprite MULT_BAR_FILL_SPRITE, fillWidth#, 2 + 2 * barGrow
+    size sprite MULT_BAR_BACK_SPRITE, MULT_BAR_WIDTH, 4 + 2 * barGrow
+    fillR# = 64 + 191 * barHit#
+    fillG# = 128 + 127 * barHit#
+    color sprite MULT_BAR_FILL_SPRITE, rgb(fillR#, fillG#, 255, (200 + 55 * barHit#) * HUD_KEEP# * HUD_KEEP_MULT#)
 
     ` the wiggle of the bar dies away, and then the bar is back where setup_multiplier put it
+    wiggleShift# = 0
     if MULT_WIGGLE_AT >= 0
         wiggleAge = game ms() - MULT_WIGGLE_AT
-        wiggleShift# = 0
         if wiggleAge < MULT_WIGGLE_TIME
             wiggleAge# = wiggleAge
             wiggleTime# = MULT_WIGGLE_TIME
@@ -233,9 +643,10 @@ function stepMultiplier()
         else
             MULT_WIGGLE_AT = -1
         endif
-        position sprite MULT_BAR_BACK_SPRITE, MULT_POS.x + wiggleShift#, MULT_POS.y + 46
-        position sprite MULT_BAR_FILL_SPRITE, MULT_POS.x + 1 + wiggleShift#, MULT_POS.y + 47
     endif
+    position sprite MULT_BAR_BACK_SPRITE, MULT_POS.x + wiggleShift#, MULT_POS.y + 46 - barGrow
+    position sprite MULT_BAR_FILL_SPRITE, MULT_POS.x + 1 + wiggleShift#, MULT_POS.y + 47 - barGrow
+    multCatchDraw(fillTip#, MULT_POS.x + 1 + wiggleShift#, MULT_POS.y + 47 - barGrow, 2 + 2 * barGrow, barHit#)
 
     ` the punch is 1 when the multiplier has just changed, and it dies away to 0
     punch# = tweenVal(MULT_PUNCH_TWEEN_ID)
@@ -254,9 +665,13 @@ function stepMultiplier()
     flashR# = baseR#
     flashG# = baseG#
     flashB# = baseB#
+    textTurn# = 0
     if MULT_PUNCH_DIR > 0
-        ` going up: it jumps bigger, and flashes white
-        textSize# = 30 + 6 * punch#
+        ` going up: it jumps a lot bigger, and springs back and forth as it settles, and wobbles, and
+        ` flashes white
+        punchSpring# = cos((1 - punch#) * 10)
+        textSize# = 30 + 18 * punch# * punch# * punchSpring#
+        textTurn# = sin((1 - punch#) * 14) * .18 * punch#
         flashR# = baseR# + (255 - baseR#) * punch#
         flashG# = baseG# + (255 - baseG#) * punch#
     endif
@@ -269,6 +684,7 @@ function stepMultiplier()
     endif
 
     size text y MULT_TEXT_ID, textSize#
+    rotate text MULT_TEXT_ID, textTurn#
     set text position MULT_TEXT_ID, textX#, MULT_POS.y + 43
     color text MULT_TEXT_ID, rgb(flashR#, flashG#, flashB#, 200 + 55 * punch#)
 endfunction

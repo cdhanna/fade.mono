@@ -15,7 +15,9 @@
 //                half a turn puts the fish upside down, with its back showing.
 //   texcoord1.y  yaw, in radians. positive turns the fish to face the right.
 //   texcoord1.z  how many fish are in the stack. the part after the decimal point slides the last
-//                one out from behind the one in front of it, so a count can be animated.
+//                one out from behind the one in front of it, so a count can be animated. less than -5
+//                is one fish that is also rolled, like a picture on a wall: it is 10 less than the roll,
+//                in radians. the sprite itself cannot rotate, because the corners are worked out from it.
 //   texcoord1.w  the size of the sprite in pixels. the quad grows by this much, so that there is
 //                room to draw the tilt and the stack outside of the sprite. 0 leaves the quad alone.
 //
@@ -197,6 +199,11 @@ VertexShaderOutput SpriteVertexShader(	float4 position	: POSITION0,
 	// of its own pixels doubled up and some dropped.
 	position.xy += floor(custom2.xy + .5);
 	output.Quad = corner * (1.0 + grow);
+
+	float roll = step(custom.z, -5.0) * (custom.z + 10.0);
+	float sinR = sin(roll);
+	float cosR = cos(roll);
+	output.Quad = float2(cosR * output.Quad.x + sinR * output.Quad.y, cosR * output.Quad.y - sinR * output.Quad.x);
 
 	float sinP = sin(custom.x);
 	float cosP = cos(custom.x);
