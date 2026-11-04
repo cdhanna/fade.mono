@@ -4,6 +4,7 @@ goto routines_puzzle_exit
 
 setup_puzzle:
     gosub setup_puzzle_list
+    puzzleFindGates()
     puzzleTalkPicks()
     gosub setup_puzzle_talk
     reserve text id(PUZZLE_GONE_TEXT_ID)
@@ -56,9 +57,16 @@ return
 puzzle_enter:
     PUZZLE_SWIM_X# = -60
     PUZZLE_SWIM_Y# = 110
+    ` she asks if a player who stayed is leaving, or, with every ending reached, she asks the last question. see
+    ` THE LAST QUESTION in fish_headers_ava.
     if PUZZLE_ASK
+        pzAskWas = PUZZLE_ASK
         PUZZLE_ASK = 0
-        gosub puzzle_ask
+        if pzAskWas = 2
+            gosub puzzle_offer
+        else
+            gosub puzzle_ask
+        endif
         if PUZZLE_LEFT then return
         PUZZLE_SWIM_X# = 12 + ANGLER_SHIFT_X
         PUZZLE_SWIM_Y# = 218
@@ -66,6 +74,7 @@ puzzle_enter:
 
     ` the player has stayed, and the game remembers that from now on
     set pref PUZZLE_PREF + 2, 1
+    set pref AVA_PREF_OFFER, AVA_OFFER_TAKEN
     guideShow()
     create basic tween GUIDE_GLOW_TWEEN_ID, 0, 1, GUIDE_LIGHT_MS, 0
     create basic tween ANGLER_SWIM_TWEEN_ID, 1, 1, 1, 0
@@ -84,7 +93,7 @@ puzzle_enter:
 
     gosub puzzle_deal
     if PUZZLE_AFTER
-        guideSay(lockey$("angler.puzzle.another"))
+        avaAfterLine(PUZZLE_NOW)
     else
         puzzleOpening(PUZZLE_NOW)
     endif
@@ -323,8 +332,9 @@ puzzle_next:
     set pref PUZZLE_PREF, PUZZLE_NOW
     hintShow(1)
     gosub puzzle_deal
+    ` she said that she made another one when the thirty ran out, so she does not say it again
     if PUZZLE_AFTER
-        guideSay(lockey$("angler.puzzle.another"))
+        avaAfterLine(PUZZLE_NOW)
     else
         puzzleOpening(PUZZLE_NOW)
     endif
@@ -388,8 +398,7 @@ puzzle_ask:
         gosub angler_wait
         puzzleSay(lockey$("angler.puzzle.go.d"))
         gosub angler_wait
-        set pref PUZZLE_PREF + 2, 0
-        set pref PUZZLE_GONE_PREF, 1
+        avaLeaves()
         PUZZLE_LEFT = 1
     endif
     gosub puzzle_scene_close
@@ -885,6 +894,9 @@ frame_debug_ava:
             endif
         endif
     endif
+
+    ` and the way down to her, and what comes after she has gone. see fish_headers_ava.
+    gosub frame_debug_ava_way
 return
 
 
@@ -1599,6 +1611,11 @@ endfunction pstStaying
 ` 1 when a new game is a puzzle
 function puzzleWanted()
     pwnWanted = puzzleStaying()
+
+    ` with every ending reached, she has a question first, and a player who said yes to it from her list goes down. see
+    ` THE LAST QUESTION in fish_headers_ava.
+    pwnOffer = avaOfferDue()
+    if pwnOffer > 0 then pwnWanted = 1
     if PUZZLE_ENV_SPENT = 0
         if is env set("FISH_PUZZLE") then pwnWanted = 1
     endif
@@ -1614,6 +1631,8 @@ endfunction pwnWanted
 ` where a new puzzle game goes, and if she has to ask first. a player who stayed is asked if they are leaving, unless they came back in with Resume
 function puzzleWhere()
     PUZZLE_ASK = puzzleStaying()
+    pwhOffer = avaOfferDue()
+    if pwhOffer = 1 then PUZZLE_ASK = 2
     if PUZZLE_RESUMED
         PUZZLE_ASK = 0
     endif
@@ -2080,6 +2099,17 @@ function puzzleOpening(poBoard)
         guideThen(lockey$("angler.puzzle.fish.rainbow.b"))
         exitfunction
     endif
+    ` and the first gate, and the first tent. see puzzleFindGates.
+    if poBoard = PUZZLE_NEW_GATE
+        guideSay(lockey$("angler.ava.gate.a"))
+        guideThen(lockey$("angler.ava.gate.b"))
+        exitfunction
+    endif
+    if poBoard = PUZZLE_NEW_TENT
+        guideSay(lockey$("angler.ava.tent.a"))
+        guideThen(lockey$("angler.ava.tent.b"))
+        exitfunction
+    endif
     if poBoard > 8
         puzzleRemark(poBoard)
         exitfunction
@@ -2160,5 +2190,102 @@ function puzzleCleared(pcBoard)
         case 8
             guideSay(lockey$("angler.puzzle.d9.done"))
         endcase
+        ` the boards from the tenth on. the words are in build/make_ava_return.py.
+        case 9
+            guideSay(lockey$("angler.ava.done.b10"))
+        endcase
+        case 10
+            guideSay(lockey$("angler.ava.done.b11"))
+        endcase
+        case 11
+            guideSay(lockey$("angler.ava.done.b12"))
+        endcase
+        case 12
+            guideSay(lockey$("angler.ava.done.b13"))
+        endcase
+        case 13
+            guideSay(lockey$("angler.ava.done.b14"))
+        endcase
+        case 14
+            guideSay(lockey$("angler.ava.done.b15"))
+        endcase
+        case 15
+            guideSay(lockey$("angler.ava.done.b16"))
+        endcase
+        case 16
+            guideSay(lockey$("angler.ava.done.b17"))
+        endcase
+        case 17
+            guideSay(lockey$("angler.ava.done.b18"))
+        endcase
+        case 18
+            guideSay(lockey$("angler.ava.done.b19"))
+        endcase
+        case 19
+            guideSay(lockey$("angler.ava.done.b20"))
+        endcase
+        case 20
+            guideSay(lockey$("angler.ava.done.b21"))
+        endcase
+        case 21
+            guideSay(lockey$("angler.ava.done.b22"))
+        endcase
+        case 22
+            guideSay(lockey$("angler.ava.done.b23"))
+        endcase
+        case 23
+            guideSay(lockey$("angler.ava.done.b24"))
+        endcase
+        case 24
+            guideSay(lockey$("angler.ava.done.b25"))
+        endcase
+        case 25
+            guideSay(lockey$("angler.ava.done.b26"))
+        endcase
+        case 26
+            guideSay(lockey$("angler.ava.done.b27"))
+        endcase
+        case 27
+            guideSay(lockey$("angler.ava.done.b28"))
+        endcase
+        case 28
+            guideSay(lockey$("angler.ava.done.b29"))
+        endcase
     endselect
+endfunction
+
+
+` the first board with a gate, and the first with a tent, from 0, or -1. see THE FISH in fish_headers_puzzle. a gate is
+` two belly up fish on a diagonal, and a tent has one with a belly up fish on both of the diagonals under it.
+function puzzleFindGates()
+    PUZZLE_NEW_GATE = -1
+    PUZZLE_NEW_TENT = -1
+    pfgLastBoard = PUZZLE_COUNT - 1
+    pfgLastY = PUZZLE_TALL - 2
+    pfgLastX = PUZZLE_SIDE - 1
+    for pfgBoard = 0 to pfgLastBoard
+        for pfgY = 0 to pfgLastY
+            pfgRow = PUZZLE_BELLIES(pfgBoard * PUZZLE_SIDE + pfgY)
+            pfgBelow = PUZZLE_BELLIES(pfgBoard * PUZZLE_SIDE + pfgY + 1)
+            for pfgX = 0 to pfgLastX
+                pfgHere = puzzleBit(pfgRow, pfgX)
+                if pfgHere
+                    pfgLeft = 0
+                    pfgRight = 0
+                    if pfgX > 0
+                        pfgLeft = puzzleBit(pfgBelow, pfgX - 1)
+                    endif
+                    if pfgX < pfgLastX
+                        pfgRight = puzzleBit(pfgBelow, pfgX + 1)
+                    endif
+                    if pfgLeft + pfgRight > 0
+                        if PUZZLE_NEW_GATE < 0 then PUZZLE_NEW_GATE = pfgBoard
+                    endif
+                    if pfgLeft + pfgRight = 2
+                        if PUZZLE_NEW_TENT < 0 then PUZZLE_NEW_TENT = pfgBoard
+                    endif
+                endif
+            next
+        next
+    next
 endfunction

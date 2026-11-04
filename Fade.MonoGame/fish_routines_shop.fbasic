@@ -59,14 +59,19 @@ shop_ask:
         return
     endif
 
+    ` what she has to say of her own does not wait for the next upgrade screen. see fish_headers_ava.
+    shopAvaWords = avaHasWords()
     if SHOP_ASKED
-        shopOpenBox()
-        guideSay(lockey$("angler.shop.spent2"))
-        return
+        if shopAvaWords = 0
+            shopOpenBox()
+            guideSay(lockey$("angler.shop.spent2"))
+            return
+        endif
     endif
 
     shopPickTopics()
-    if ANGLER_PICK_COUNT = 0
+    if SHOP_ASKED then ANGLER_PICK_COUNT = 0
+    if ANGLER_PICK_COUNT + shopAvaWords = 0
         shopOpenBox()
         guideSay(lockey$("angler.shop.none"))
         return
@@ -215,6 +220,13 @@ endfunction
 ` the same, swimming around in the deep (1), or in the corner (0)
 function shopOpenAs(shopRoamIt)
     if SHOP_ENABLED = 0 then exitfunction
+
+    ` once she has gone, nobody keeps the shop. see SHE HAS GONE in fish_headers_ava.
+    shopGone = puzzleGone()
+    if shopGone
+        shopTakeHint()
+        exitfunction
+    endif
     guideOff() `it may still be saying its last words of the tutorial
     questTalkStop() `the quest talk borrows its voices
 

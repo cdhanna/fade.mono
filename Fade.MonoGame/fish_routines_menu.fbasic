@@ -539,6 +539,21 @@ frame_menu:
         endif
     endif
 
+    ` the bottle on the water of the main menu, once Ava has gone. see THE BOTTLE in fish_headers_ava.
+    if MENU_PAGE = MENU_PAGE_MAIN
+        if AVA_BOTTLE_SEEN
+            menuBottle = new action down(ACT_INFO)
+            menuBottleX = AVA_BOTTLE_AT_X# - 16
+            menuBottleY = AVA_BOTTLE_AT_Y# - 16
+            menuBottleHit = mouseClick(menuBottleX, menuBottleY, 32, 32)
+            if menuBottleHit then menuBottle = 1
+            if menuBottle
+                menuPicked = -1
+                gosub ava_bottle_read
+            endif
+        endif
+    endif
+
     if menuPicked >= 0
         gosub menu_pick
     endif
@@ -1557,6 +1572,10 @@ function setMenuPage(page)
             first = MENU_ITEM_RESUME
             MENU_ITEMS(MENU_ITEM_RESUME).desc$ = loc$("menu.resume.desc.saved")
         endif
+
+        ` the bottle on the water can be read. see THE BOTTLE in fish_headers_ava.
+        menuBottleThere = avaBottleThere()
+        if menuBottleThere then hint$ = loc$("menu.hint.main.bottle")
     endif
 
     ` the options page can be opened from the main menu or from the pause menu, and looks the same from both.

@@ -1,0 +1,94 @@
+remstart
+    AVA, AND THE WAY DOWN TO HER
+    the long visit (fish_headers_puzzle) is the last ending of the game. this is how a player gets to it, and what happens
+    after they leave her. the routines are in fish_routines_ava, and the tests are in fish_tests_ava. the words are in
+    build/make_ava_return.py.
+
+    THE FIVE ENDINGS. the fish go home, the reef, the ancient one, the diver's album, and the god of the sea. each is
+    remembered in the preferences already (PREF_ENDING_HOME and the rest), and avaEndingReached reads them, by the
+    numbers of AVA_END_HOME and the rest.
+
+    WELCOME BACK. the first time that she is asked anything after an ending has been reached, at the shop, from info mode,
+    on the radio or with the card, she says two things about that ending before her questions (avaWelcome, in angler_run).
+    it is said once for each ending, and the preferences keep which have been said (AVA_PREF_WELCOMED + the ending). the
+    ancient one does not get a well done. she does not speak at the shop without being asked: see fish-angler-voice.
+
+    THE SEA THAT IS LEFT. once an ending has been reached, her questions start with one of her own: "Is there more down
+    here?" (AVA_PICK_SEA). she answers with a true hint at an ending that the player has not reached, and then that there is
+    no need to go anywhere yet: she is the one being clingy. there is one hint for every ending that has been reached, so a
+    new one opens with every ending, and none once there is nothing left to see (avaSeaDue). AVA_PREF_HINT + the ending keeps
+    which have been heard. the hints go in the order of AVA_HINT_ORDER, the easy ones first.
+
+    THE LAST QUESTION. with every ending reached, a new game goes down into the empty sea instead, and she comes up and asks
+    (puzzle_offer): she has seen the lot, so the player will be going. there are three answers.
+        staying    the long visit starts, from the first board, which begins "You stayed. I did tell you not to."
+        leaving    she says goodbye, and she is gone (PUZZLE_GONE_PREF), and the game that was asked for starts
+        one more   the game that was asked for starts, and the question goes into her list (AVA_PICK_LEAVE), where it waits.
+                   staying from there means the next new game goes down to her. leaving there is the same goodbye, and she
+                   leaves the shop with it. "not yet" keeps it waiting.
+    AVA_PREF_OFFER keeps where that has got to: AVA_OFFER_NONE, AVA_OFFER_LATER, AVA_OFFER_INVITED, AVA_OFFER_TAKEN.
+
+    SHE HAS GONE. there is nobody at the shop (shopOpenAs), and the radio's HELP and INFO bring nobody. the card still comes
+    with the seed, and it still brings her, because a deal must never depend on what the player has done.
+
+    THE BOTTLE. after AVA_BOTTLE_GAMES games without her (AVA_PREF_GONE_GAMES), a bottle floats on the water of the main menu
+    (avaBottleStep, which frame_surface calls). the info key, or a click on it, reads the letter in it (ava_bottle_read): a
+    few flat lines, one at a time, and FRIEND in Morse code. it stays there to be read again for as long as she is gone.
+
+    FRIEND ON THE RADIO. FRIEND, tapped out in a game, brings her once the radio has tapped back its R (AVA_CALL_PENDING,
+    which handle_angler looks at). while she is gone, she asks if the player is coming down (ava_return). coming down takes
+    the game back to the main menu, and from there straight to the board that the player got to. "not now" leaves her gone,
+    and it can be tapped again. while she is not gone, it is a call like HELP. it is not her name: the marks of AVA are
+    inside the marks of INFO, and a word is heard whatever came before it, so INFO would bring her back halfway through.
+
+    THE AVA WINDOW. with FISH_DEBUG, the "Ava" window (frame_debug_ava) sets every part of this, from the main menu or a game.
+remend
+
+global AVA_ENDING_COUNT = 5
+global AVA_END_HOME = 1
+global AVA_END_REEF = 2
+global AVA_END_ANCIENT = 3
+global AVA_END_DIVER = 4
+global AVA_END_NEPTUNE = 5
+global dim AVA_HINT_ORDER(5) `the order that the hints go in, from 0. setup_ava fills it.
+
+` what is kept in the preferences. they are next to the ones of the long visit, which go up to PUZZLE_GONE_PREF.
+global AVA_PREF_WELCOMED = 9010 `+ the ending: 1 once she has said that it was reached
+global AVA_PREF_HINT = 9016 `+ the ending: 1 once she has given the hint at it
+global AVA_PREF_OFFER = 9022 `where the last question has got to
+global AVA_PREF_GONE_GAMES = 9023 `how many games have started since she went
+global AVA_PREF_BOTTLE = 9024 `1 once the bottle has come
+global AVA_PREF_BACK = 9025 `how many times FRIEND has brought her back
+global AVA_OFFER_NONE = 0 `she has not asked
+global AVA_OFFER_LATER = 1 `the player said "One more dive", so it is in her list
+global AVA_OFFER_INVITED = 2 `the player said that they are staying, from her list, so the next new game goes down
+global AVA_OFFER_TAKEN = 3 `the player went down to her
+
+` the lines of her own at the top of the questions. ANGLER_PICK has these in place of a topic.
+global AVA_PICK_SEA = -2
+global AVA_PICK_LEAVE = -3
+global AVA_PICKS = 0 `how many of the questions are hers, at the top
+
+global AVA_BOTTLE_GAMES = 2
+global AVA_BOTTLE_SPRITE = 0 `made the first time that it is needed, because the menu has to be there first
+global AVA_BOTTLE_X# = 92 `where it floats, on the water in front of the camera
+global AVA_BOTTLE_DOWN = 52 `how far under the horizon
+global AVA_BOTTLE_SIZE = 22
+global AVA_BOTTLE_AT_X# = 0 `where it is on the screen, for a click
+global AVA_BOTTLE_AT_Y# = 0
+global AVA_BOTTLE_SEEN = 0 `1 while it is on the screen
+global AVA_LETTER_TEXT_ID = 0
+global AVA_LETTER_TALL = 24
+global AVA_LETTER_WIDE = 440
+global AVA_LETTER_FADE_MS = 400
+global AVA_LETTER_LINES = 6
+
+global MORSE_WORD_FRIEND = 17 `what she calls the player, and what her letter asks them to answer, after the words that call the old angler fish
+global AVA_CALL_PENDING = 0 `1 when FRIEND has been tapped. she comes once the radio has answered.
+global AVA_CALL_AT_MS = 0
+global AVA_TO_DEEP = 0 `1 when the player said they are coming down, and the game has to go there
+
+` THE AVA WINDOW
+global AVA_DBG_ENDING = 1
+global AVA_DBG_NAME$ = ""
+global dim AVA_TEST_PREFS(64) `what fish_tests_ava makes the preferences say. a global dim in a test file is never made.

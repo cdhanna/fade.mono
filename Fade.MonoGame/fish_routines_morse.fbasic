@@ -58,6 +58,9 @@ setup_morse:
     morseWord(MORSE_WORD_HELP, "HELP", 4)
     morseWord(MORSE_WORD_INFO, "INFO", 4)
 
+    ` and FRIEND, which is what she calls the player. see FRIEND ON THE RADIO in fish_headers_ava.
+    morseWord(MORSE_WORD_FRIEND, "FRIEND", 6)
+
     ` the entry of the codec that each of them unlocks when it is sent. CQ unlocks the radio itself,
     ` and TUNA has none: it is not in the codec. the words that bring somebody swimming through have an entry each, in a row.
     mrsLastSetup = MORSE_WORD_ROOM - 1
@@ -464,12 +467,9 @@ function morseListen()
     if MORSE_HEARD = MORSE_WORD_CTHULHU
         morseCthulhu(game ms())
     endif
-    ` the old angler fish comes. see THE CALL in fish_headers_angler.
-    if MORSE_HEARD = MORSE_WORD_HELP
-        ANGLER_CALL_PENDING = 1
-    endif
-    if MORSE_HEARD = MORSE_WORD_INFO
-        ANGLER_CALL_PENDING = 1
+    ` the old angler fish comes, unless she has gone. see THE CALL in fish_headers_angler, and FRIEND ON THE RADIO in fish_headers_ava.
+    if MORSE_HEARD >= 0
+        avaHeard(MORSE_HEARD)
     endif
     morseTentacleStep(game ms())
 

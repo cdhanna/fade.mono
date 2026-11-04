@@ -1,0 +1,748 @@
+goto routines_ava_exit
+
+` AVA, AND THE WAY DOWN TO HER. see fish_headers_ava.
+
+setup_ava:
+    ` the easy ones first, and the one that she would rather the player did not go looking for last
+    AVA_HINT_ORDER(0) = AVA_END_HOME
+    AVA_HINT_ORDER(1) = AVA_END_REEF
+    AVA_HINT_ORDER(2) = AVA_END_DIVER
+    AVA_HINT_ORDER(3) = AVA_END_NEPTUNE
+    AVA_HINT_ORDER(4) = AVA_END_ANCIENT
+return
+
+
+` one of her own lines was picked from the questions. angler_run comes here. see THE SEA THAT IS LEFT and THE LAST
+` QUESTION in fish_headers_ava. it costs nothing, wherever she was asked from.
+ava_answer:
+    ANGLER_SPOT = -1
+    if ANGLER_ASKED = AVA_PICK_SEA
+        aaSea = avaSeaDue()
+        if aaSea > 0
+            avaSeaSay(aaSea)
+            gosub angler_wait
+            anglerSay(loc$("angler.ava.sea.more"))
+            gosub angler_wait
+            set pref AVA_PREF_HINT + aaSea, 1
+        endif
+    endif
+    if ANGLER_ASKED = AVA_PICK_LEAVE
+        gosub ava_leave_talk
+    endif
+return
+
+
+` the last question, from her list, for a player who said "One more dive"
+ava_leave_talk:
+    anglerSay(loc$("angler.ava.leave.a"))
+    gosub angler_wait
+    set text loc ANGLER_LINE_TEXTS(0), "angler.ava.reply.stay"
+    set text loc ANGLER_LINE_TEXTS(1), "angler.ava.reply.go"
+    set text loc ANGLER_LINE_TEXTS(2), "angler.ava.reply.wait"
+    gosub ava_pick_three
+    if angChosen = 0
+        anglerSay(loc$("angler.ava.leave.stay"))
+        gosub angler_wait
+    endif
+    if angChosen = 1
+        gosub ava_goodbye
+    endif
+    if angChosen = 2
+        anglerSay(loc$("angler.ava.leave.wait"))
+        gosub angler_wait
+    endif
+    avaLeaveAnswered(angChosen)
+return
+
+
+` the player picks one of the three replies that are on the lines. the last one is what the info key and the pause key pick.
+ava_pick_three:
+    aptTall# = get text size y(ANGLER_SAY_TEXT_ID)
+    if aptTall# > 20
+        anglerSay(" ")
+        anglerSpeakAll()
+    endif
+    ANGLER_LINE_LAST = 2
+    set text loc INFO_HINT_TEXT_ID, "angler.hint.pick"
+    gosub angler_choose
+    set text loc INFO_HINT_TEXT_ID, "angler.hint.goon"
+return
+
+
+` she says goodbye. the answer that this is for is what makes her gone. see SHE HAS GONE in fish_headers_ava.
+ava_goodbye:
+    anglerSay(loc$("angler.puzzle.go.a"))
+    gosub angler_wait
+    anglerSay(loc$("angler.puzzle.go.b"))
+    gosub angler_wait
+    anglerSay(loc$("angler.puzzle.go.c"))
+    gosub angler_wait
+    anglerSay(loc$("angler.ava.offer.go"))
+    gosub angler_wait
+return
+
+
+` every ending has been reached, and a new game has gone down into the empty sea. she comes up and asks. puzzle_enter
+` comes here. see THE LAST QUESTION in fish_headers_ava.
+puzzle_offer:
+    gosub puzzle_scene_open
+    create basic tween ANGLER_SWIM_TWEEN_ID, 0, 1, ANGLER_SWIM_MS, 0
+    anglerSay(loc$("angler.ava.offer.a"))
+    gosub angler_wait
+    anglerSay(loc$("angler.ava.offer.b"))
+    gosub angler_wait
+
+    set text loc ANGLER_LINE_TEXTS(0), "angler.ava.reply.stay"
+    set text loc ANGLER_LINE_TEXTS(1), "angler.ava.reply.go"
+    set text loc ANGLER_LINE_TEXTS(2), "angler.ava.reply.dive"
+    gosub ava_pick_three
+
+    if angChosen = 0
+        anglerSay(loc$("angler.ava.offer.stay"))
+        gosub angler_wait
+    endif
+    if angChosen = 1
+        gosub ava_goodbye
+    endif
+    if angChosen = 2
+        anglerSay(loc$("angler.ava.offer.dive"))
+        gosub angler_wait
+        anglerSay(loc$("angler.ava.offer.dive2"))
+        gosub angler_wait
+    endif
+    avaOfferAnswered(angChosen)
+    gosub puzzle_scene_close
+    _ava_offered:
+return
+
+
+` FRIEND was tapped on the radio while she was gone. handle_angler comes here. see FRIEND ON THE RADIO in
+` fish_headers_ava.
+ava_return:
+    questTalkStop() `the quest talk borrows its voices
+    guideOff()
+    gosub puzzle_scene_open
+    create basic tween ANGLER_SWIM_TWEEN_ID, 0, 1, ANGLER_SWIM_MS, 0
+    arBack = get pref(AVA_PREF_BACK, 0)
+    set pref AVA_PREF_BACK, arBack + 1
+    if arBack = 0
+        anglerSay(loc$("angler.ava.back.a2"))
+        gosub angler_wait
+        anglerSay(loc$("angler.ava.back.b"))
+        gosub angler_wait
+    else
+        anglerSay(loc$("angler.ava.back.again"))
+        gosub angler_wait
+    endif
+    anglerSay(loc$("angler.ava.back.ask"))
+    gosub angler_wait
+
+    set text loc ANGLER_LINE_TEXTS(0), "angler.ava.reply.stay"
+    set text loc ANGLER_LINE_TEXTS(1), "angler.ava.reply.notnow"
+    gosub puzzle_scene_pick
+    if angChosen = 0
+        anglerSay(loc$("angler.ava.back.stay"))
+        gosub angler_wait
+    else
+        anglerSay(loc$("angler.ava.back.later"))
+        gosub angler_wait
+    endif
+    avaBackAnswered(angChosen)
+    gosub puzzle_scene_close
+    _ava_returned:
+return
+
+
+` the letter in the bottle, a line at a time, over the main menu. frame_menu comes here. see THE BOTTLE in fish_headers_ava.
+ava_bottle_read:
+    set pref AVA_PREF_BOTTLE, 2
+    avaLetterMake()
+    showMenuChrome(0)
+    set text MENU_HINT_TEXT_ID, loc$("angler.ava.bottle.hint")
+
+    ` the sea goes dim while it is read. the dim is under the surface otherwise, for the pause menu.
+    order sprite MENU_DIM_SPRITE, ORDER_MENU_SURFACE + 5
+    show sprite MENU_DIM_SPRITE
+    show text AVA_LETTER_TEXT_ID
+    for abrLine = 1 to AVA_LETTER_LINES
+        avaLetterLine(abrLine)
+        abrStart = game ms()
+        abrOut = 0
+        abrDone = 0
+        while abrDone = 0
+            abrNow = game ms()
+            abrFade# = AVA_LETTER_FADE_MS
+            abrIn# = abrNow - abrStart
+            abrAlpha# = abrIn# / abrFade#
+            if abrAlpha# > 1 then abrAlpha# = 1
+            if abrOut > 0
+                abrGoing# = abrNow - abrOut
+                abrAlpha# = 1 - abrGoing# / abrFade#
+                if abrAlpha# <= 0
+                    abrAlpha# = 0
+                    abrDone = 1
+                endif
+            endif
+            set text alpha AVA_LETTER_TEXT_ID, 255 * abrAlpha#
+            set text position AVA_LETTER_TEXT_ID, WORLD_WIDTH / 2, 118 + sin(abrNow * .0011) * 3
+            gosub frame_menu_render
+            sync
+
+            ` these are looked at after the frame, so that the press that opened the bottle does not skip a line
+            if abrOut = 0
+                abrGo = new action down(ACT_CONFIRM)
+                abrClick = mouseClickAnywhere()
+                if abrClick then abrGo = 1
+                if abrGo then abrOut = game ms()
+            endif
+        endwhile
+    next
+    set text alpha AVA_LETTER_TEXT_ID, 0
+    hide text AVA_LETTER_TEXT_ID
+    hide sprite MENU_DIM_SPRITE
+    order sprite MENU_DIM_SPRITE, ORDER_MENU_BACKDROP
+    showMenuChrome(1)
+    setMenuPage(MENU_PAGE_MAIN)
+    selectMenuItem(0, 0)
+return
+
+
+` the "Ava: the way down" window of the debug panel. frame_debug_ava comes here. see THE AVA WINDOW in fish_headers_ava.
+frame_debug_ava_way:
+    begin debug window("Ava: the way down")
+    dbgAvWay = avaEndingsReached()
+    debug text "endings reached: " + str$(dbgAvWay) + " of " + str$(AVA_ENDING_COUNT)
+    dbgPzMoved = debug int slider("ending", AVA_DBG_ENDING, 1, AVA_ENDING_COUNT)
+    dbgAvReached = avaEndingReached(AVA_DBG_ENDING)
+    dbgAvWelcomed = get pref(AVA_PREF_WELCOMED + AVA_DBG_ENDING, 0)
+    dbgAvHinted = get pref(AVA_PREF_HINT + AVA_DBG_ENDING, 0)
+    avaDebugName(0, AVA_DBG_ENDING)
+    debug text AVA_DBG_NAME$ + ": reached " + str$(dbgAvReached) + ", welcomed " + str$(dbgAvWelcomed) + ", hinted at " + str$(dbgAvHinted)
+    if debug button("reach it") = 1
+        set pref avaEndingPref(AVA_DBG_ENDING), 1
+    endif
+    if debug button("forget reaching it") = 1
+        set pref avaEndingPref(AVA_DBG_ENDING), 0
+    endif
+    if debug button("forget her welcome for it") = 1
+        set pref AVA_PREF_WELCOMED + AVA_DBG_ENDING, 0
+    endif
+    if debug button("forget her hint at it") = 1
+        set pref AVA_PREF_HINT + AVA_DBG_ENDING, 0
+    endif
+    if debug button("reach every ending") = 1
+        avaDebugEndings(1)
+    endif
+    if debug button("forget every ending, welcome and hint") = 1
+        avaDebugEndings(0)
+    endif
+
+    debug separator
+    dbgAvDue = avaWelcomeDue()
+    avaDebugName(0, dbgAvDue)
+    debug text "she welcomes back next: " + AVA_DBG_NAME$
+    dbgAvDue = avaSeaDue()
+    avaDebugName(0, dbgAvDue)
+    debug text "her hint on offer: " + AVA_DBG_NAME$
+    dbgAvOffer = get pref(AVA_PREF_OFFER, 0)
+    avaDebugName(1, dbgAvOffer)
+    debug text "last question: " + AVA_DBG_NAME$
+    dbgAvDue = avaOfferDue()
+    avaDebugName(2, dbgAvDue)
+    debug text "a new game " + AVA_DBG_NAME$
+    if debug button("not asked yet") = 1
+        set pref AVA_PREF_OFFER, AVA_OFFER_NONE
+    endif
+    if debug button("said one more dive (it is in her list)") = 1
+        set pref AVA_PREF_OFFER, AVA_OFFER_LATER
+    endif
+    if debug button("said staying, from her list") = 1
+        set pref AVA_PREF_OFFER, AVA_OFFER_INVITED
+    endif
+    if debug button("went down to her") = 1
+        set pref AVA_PREF_OFFER, AVA_OFFER_TAKEN
+    endif
+
+    debug separator
+    dbgAvGone = puzzleGone()
+    dbgAvGames = get pref(AVA_PREF_GONE_GAMES, 0)
+    dbgAvBottle = get pref(AVA_PREF_BOTTLE, 0)
+    dbgAvBack = get pref(AVA_PREF_BACK, 0)
+    debug text "gone " + str$(dbgAvGone) + ", games since " + str$(dbgAvGames) + ", bottle " + str$(dbgAvBottle) + " (1 there, 2 read), came back " + str$(dbgAvBack)
+    dbgPzMoved = debug int slider("games until the bottle", AVA_BOTTLE_GAMES, 0, 10)
+    if debug button("she leaves, just now") = 1
+        avaLeaves()
+    endif
+    if debug button("the bottle comes") = 1
+        avaLeaves()
+        set pref AVA_PREF_BOTTLE, 1
+    endif
+    if debug button("the bottle goes") = 1
+        set pref AVA_PREF_BOTTLE, 0
+    endif
+    if debug button("forget that she came back") = 1
+        set pref AVA_PREF_BACK, 0
+    endif
+    if MENU_MODE = 0
+        if debug button("tap FRIEND on the radio") = 1
+            avaHeard(MORSE_WORD_FRIEND)
+        endif
+    endif
+    dbgPzMoved = debug int slider("ms of nothing after the last board", PUZZLE_STAY_MS, 0, 60000)
+    end debug window
+return
+
+
+routines_ava_exit:
+
+
+` the preference that says whether an ending has been reached
+function avaEndingPref(aepEnd)
+    aepPref = PREF_ENDING_HOME
+    if aepEnd = AVA_END_REEF then aepPref = PREF_ENDING_REEF
+    if aepEnd = AVA_END_ANCIENT then aepPref = PREF_ENDING_ANCIENT
+    if aepEnd = AVA_END_DIVER then aepPref = PREF_ENDING_DIVER
+    if aepEnd = AVA_END_NEPTUNE then aepPref = PREF_ENDING_NEPTUNE
+endfunction aepPref
+
+
+` 1 when the ending has been reached, in any game
+function avaEndingReached(aerEnd)
+    aerPref = avaEndingPref(aerEnd)
+    aerReached = 0
+    if get pref(aerPref, 0) > 0 then aerReached = 1
+endfunction aerReached
+
+
+` how many of the endings have been reached
+function avaEndingsReached()
+    aesCount = 0
+    for aesEnd = 1 to AVA_ENDING_COUNT
+        aesOne = avaEndingReached(aesEnd)
+        aesCount = aesCount + aesOne
+    next
+endfunction aesCount
+
+
+` the ending that she has not said welcome back for yet, or 0
+function avaWelcomeDue()
+    awdDue = 0
+    for awdEnd = 1 to AVA_ENDING_COUNT
+        if awdDue = 0
+            awdReached = avaEndingReached(awdEnd)
+            if awdReached
+                if get pref(AVA_PREF_WELCOMED + awdEnd, 0) = 0 then awdDue = awdEnd
+            endif
+        endif
+    next
+endfunction awdDue
+
+
+` one of the two things that she says about an ending, 1 or 2
+function avaWelcomeSay(awsEnd, awsPart)
+    select awsEnd * 10 + awsPart
+        case 11
+            anglerSay(loc$("angler.ava.welcome.home.a"))
+        endcase
+        case 12
+            anglerSay(loc$("angler.ava.welcome.home.b"))
+        endcase
+        case 21
+            anglerSay(loc$("angler.ava.welcome.reef.a"))
+        endcase
+        case 22
+            anglerSay(loc$("angler.ava.welcome.reef.b"))
+        endcase
+        case 31
+            anglerSay(loc$("angler.ava.welcome.ancient.a"))
+        endcase
+        case 32
+            anglerSay(loc$("angler.ava.welcome.ancient.b"))
+        endcase
+        case 41
+            anglerSay(loc$("angler.ava.welcome.diver.a"))
+        endcase
+        case 42
+            anglerSay(loc$("angler.ava.welcome.diver.b"))
+        endcase
+        case 51
+            anglerSay(loc$("angler.ava.welcome.neptune.a"))
+        endcase
+        case 52
+            anglerSay(loc$("angler.ava.welcome.neptune.b"))
+        endcase
+    endselect
+endfunction
+
+
+` the ending that her hint is about, or 0 when she has none to give. there is one for every ending that has been reached,
+` and each is about one that has not been. see THE SEA THAT IS LEFT in fish_headers_ava.
+function avaSeaDue()
+    asdDue = 0
+    asdReached = avaEndingsReached()
+    asdHeard = 0
+    for asdEnd = 1 to AVA_ENDING_COUNT
+        if get pref(AVA_PREF_HINT + asdEnd, 0) > 0 then asdHeard = asdHeard + 1
+    next
+    if asdHeard < asdReached
+        for asdN = 0 to AVA_ENDING_COUNT - 1
+            if asdDue = 0
+                asdEnd = AVA_HINT_ORDER(asdN)
+                asdIs = avaEndingReached(asdEnd)
+                if asdIs = 0
+                    if get pref(AVA_PREF_HINT + asdEnd, 0) = 0 then asdDue = asdEnd
+                endif
+            endif
+        next
+    endif
+endfunction asdDue
+
+
+` her hint at an ending
+function avaSeaSay(assEnd)
+    select assEnd
+        case 1
+            anglerSay(loc$("angler.ava.sea.home"))
+        endcase
+        case 2
+            anglerSay(loc$("angler.ava.sea.reef"))
+        endcase
+        case 3
+            anglerSay(loc$("angler.ava.sea.ancient"))
+        endcase
+        case 4
+            anglerSay(loc$("angler.ava.sea.diver"))
+        endcase
+        case 5
+            anglerSay(loc$("angler.ava.sea.neptune"))
+        endcase
+    endselect
+endfunction
+
+
+` 1 when the last question is waiting in her list
+function avaLeaveDue()
+    aldDue = 0
+    if get pref(AVA_PREF_OFFER, 0) = AVA_OFFER_LATER then aldDue = 1
+    aldGone = puzzleGone()
+    if aldGone then aldDue = 0
+    aldStaying = puzzleStaying()
+    if aldStaying then aldDue = 0
+endfunction aldDue
+
+
+` what a new game is: 1 when she has to ask the last question first, 2 when the player said that they are staying, so it
+` goes straight down, and 0 when it is nothing to do with her
+function avaOfferDue()
+    aodDue = 0
+    aodOffer = get pref(AVA_PREF_OFFER, 0)
+    if aodOffer = AVA_OFFER_NONE
+        aodAll = avaEndingsReached()
+        if aodAll >= AVA_ENDING_COUNT then aodDue = 1
+    endif
+    if aodOffer = AVA_OFFER_INVITED then aodDue = 2
+    aodGone = puzzleGone()
+    if aodGone then aodDue = 0
+    aodStaying = puzzleStaying()
+    if aodStaying then aodDue = 0
+endfunction aodDue
+
+
+` 1 when she has something of her own to say, when she is asked
+function avaHasWords()
+    ahwAny = 0
+    ahwDue = avaWelcomeDue()
+    if ahwDue > 0 then ahwAny = 1
+    ahwDue = avaSeaDue()
+    if ahwDue > 0 then ahwAny = 1
+    ahwDue = avaLeaveDue()
+    if ahwDue > 0 then ahwAny = 1
+endfunction ahwAny
+
+
+` her own lines go at the top of the questions. angler_run comes here once the questions have been picked.
+function avaAddPicks()
+    AVA_PICKS = 0
+    aapSea = avaSeaDue()
+    if aapSea > 0
+        avaPushPick(AVA_PICK_SEA)
+    endif
+    aapLeave = avaLeaveDue()
+    if aapLeave > 0
+        avaPushPick(AVA_PICK_LEAVE)
+    endif
+endfunction
+
+
+` a line of hers goes at the top. there is room for three, so the last of the questions goes if it has to.
+function avaPushPick(appPick)
+    if ANGLER_PICK_COUNT > 2 then ANGLER_PICK_COUNT = 2
+    appN = ANGLER_PICK_COUNT
+    while appN > 0
+        ANGLER_PICK(appN) = ANGLER_PICK(appN - 1)
+        appN = appN - 1
+    endwhile
+    ANGLER_PICK(0) = appPick
+    ANGLER_PICK_COUNT = ANGLER_PICK_COUNT + 1
+    AVA_PICKS = AVA_PICKS + 1
+endfunction
+
+
+` the words of a line of hers in the questions
+function avaPickWords(apwText, apwPick)
+    if apwPick = AVA_PICK_SEA
+        set text loc apwText, "angler.ava.sea.ask"
+    endif
+    if apwPick = AVA_PICK_LEAVE
+        set text loc apwText, "angler.ava.leave.ask"
+    endif
+endfunction
+
+
+` what the answer to the last question does, when the new game asked it: 0 staying, 1 leaving, 2 one more dive. see
+` THE LAST QUESTION in fish_headers_ava.
+function avaOfferAnswered(aoaChosen)
+    if aoaChosen = 1
+        avaLeaves()
+        PUZZLE_LEFT = 1
+    endif
+    if aoaChosen = 2
+        set pref AVA_PREF_OFFER, AVA_OFFER_LATER
+        PUZZLE_LEFT = 1
+    endif
+endfunction
+
+
+` and when it came from her list: 0 staying, which is the next new game, 1 leaving, and 2 not yet
+function avaLeaveAnswered(alaChosen)
+    if alaChosen = 0
+        set pref AVA_PREF_OFFER, AVA_OFFER_INVITED
+    endif
+    if alaChosen = 1
+        avaLeaves()
+    endif
+endfunction
+
+
+` and when FRIEND brought her back: 0 coming down, 1 not now
+function avaBackAnswered(abaChosen)
+    if abaChosen = 0
+        avaComesBack()
+        AVA_TO_DEEP = 1
+    endif
+endfunction
+
+
+` she is gone. see SHE HAS GONE in fish_headers_ava.
+function avaLeaves()
+    set pref PUZZLE_PREF + 2, 0
+    set pref PUZZLE_GONE_PREF, 1
+    set pref AVA_PREF_GONE_GAMES, 0
+    set pref AVA_PREF_BOTTLE, 0
+endfunction
+
+
+` and she is back, and the player is staying
+function avaComesBack()
+    set pref PUZZLE_GONE_PREF, 0
+    set pref PUZZLE_PREF + 2, 1
+    set pref AVA_PREF_OFFER, AVA_OFFER_TAKEN
+    set pref AVA_PREF_GONE_GAMES, 0
+    set pref AVA_PREF_BOTTLE, 0
+endfunction
+
+
+` a game has started without her. tutorial_prepare comes here. after a few, the bottle comes.
+function avaGoneGame()
+    aggGames = get pref(AVA_PREF_GONE_GAMES, 0)
+    aggGames = aggGames + 1
+    set pref AVA_PREF_GONE_GAMES, aggGames
+    if aggGames >= AVA_BOTTLE_GAMES
+        aggBottle = get pref(AVA_PREF_BOTTLE, 0)
+        if aggBottle = 0 then set pref AVA_PREF_BOTTLE, 1
+    endif
+endfunction
+
+
+` 1 while the bottle is floating on the water of the main menu
+function avaBottleThere()
+    abtThere = 0
+    abtGone = puzzleGone()
+    if abtGone
+        if get pref(AVA_PREF_BOTTLE, 0) > 0 then abtThere = 1
+    endif
+endfunction abtThere
+
+
+` a word was heard on the radio. HELP and INFO call the old angler fish, and so does FRIEND, unless she has gone:
+` then they bring nobody, and FRIEND brings her back. morseListen comes here. see FRIEND ON THE RADIO in fish_headers_ava.
+function avaHeard(ahWord)
+    ahCall = 0
+    if ahWord = MORSE_WORD_HELP then ahCall = 1
+    if ahWord = MORSE_WORD_INFO then ahCall = 1
+    if ahWord = MORSE_WORD_FRIEND then ahCall = 2
+    if ahCall = 0 then exitfunction
+    ahGone = puzzleGone()
+    if ahGone
+        if ahCall = 2 then AVA_CALL_PENDING = 1
+    else
+        ANGLER_CALL_PENDING = 1
+    endif
+endfunction
+
+
+` 1 once FRIEND has been tapped, the radio has finished tapping back that it heard, and a moment more has gone by,
+` the same as THE CALL in fish_headers_angler
+function avaCallReady()
+    acrGo = 0
+    if AVA_CALL_PENDING
+        if MORSE_REPLY_ON
+            AVA_CALL_AT_MS = 0
+        else
+            if AVA_CALL_AT_MS = 0 then AVA_CALL_AT_MS = game ms() + ANGLER_CALL_PAUSE_MS
+            if game ms() >= AVA_CALL_AT_MS then acrGo = 1
+        endif
+    endif
+    if acrGo
+        AVA_CALL_PENDING = 0
+        AVA_CALL_AT_MS = 0
+    endif
+endfunction acrGo
+
+
+` the bottle on the water. frame_surface comes here, on every frame of the main menu, with where the horizon is, how far
+` the camera has moved everything, and how far it has gone under. see THE BOTTLE in fish_headers_ava.
+function avaBottleStep(abHorizon#, abShift, abSink#)
+    abThere = avaBottleThere()
+    if abThere = 0
+        avaBottleHide()
+        exitfunction
+    endif
+
+    ` the menu has to be there before anything can be drawn into it, so the bottle is made the first time it is needed
+    if AVA_BOTTLE_SPRITE = 0
+        reserve sprite id(AVA_BOTTLE_SPRITE)
+        sprite AVA_BOTTLE_SPRITE, 0, 0, TEX_BOTTLE
+        set sprite offset AVA_BOTTLE_SPRITE, .5, .5
+        size sprite AVA_BOTTLE_SPRITE, AVA_BOTTLE_SIZE, AVA_BOTTLE_SIZE
+        color sprite AVA_BOTTLE_SPRITE, rgb(225, 235, 255)
+        order sprite AVA_BOTTLE_SPRITE, ORDER_MENU_SURFACE + 3
+        set sprite render target AVA_BOTTLE_SPRITE, TARGET_MENU
+    endif
+
+    ` it drifts a little, and rocks on the swell
+    abTime# = game ms() * .001
+    abX# = AVA_BOTTLE_X# + sin(abTime# * .23) * 6
+    abY# = abHorizon# + AVA_BOTTLE_DOWN + sin(abTime# * 1.1) * 2.5
+    position sprite AVA_BOTTLE_SPRITE, abX#, abY# + abShift
+    rotate sprite AVA_BOTTLE_SPRITE, sin(abTime# * .8) * .35
+    abSeen# = 1 - abSink# * 2
+    if abSeen# < 0 then abSeen# = 0
+    set sprite alpha AVA_BOTTLE_SPRITE, 255 * abSeen#
+    show sprite AVA_BOTTLE_SPRITE
+    AVA_BOTTLE_AT_X# = abX#
+    AVA_BOTTLE_AT_Y# = abY#
+    AVA_BOTTLE_SEEN = 1
+endfunction
+
+
+function avaBottleHide()
+    AVA_BOTTLE_SEEN = 0
+    if AVA_BOTTLE_SPRITE > 0 then hide sprite AVA_BOTTLE_SPRITE
+endfunction
+
+
+` the text that the letter is shown in, made the first time that it is read, because it is drawn into the menu
+function avaLetterMake()
+    if AVA_LETTER_TEXT_ID > 0 then exitfunction
+    reserve text id(AVA_LETTER_TEXT_ID)
+    text AVA_LETTER_TEXT_ID, WORLD_WIDTH / 2, 118, SCORE_FONT, " "
+    size text y AVA_LETTER_TEXT_ID, AVA_LETTER_TALL
+    set text offset AVA_LETTER_TEXT_ID, .5, .5
+    set text wrap AVA_LETTER_TEXT_ID, AVA_LETTER_WIDE
+    set text align AVA_LETTER_TEXT_ID, .5
+    enable text drop shadow AVA_LETTER_TEXT_ID, 2, -2, rgb(0,0,0)
+    color text AVA_LETTER_TEXT_ID, rgb(225, 235, 255)
+    order text AVA_LETTER_TEXT_ID, ORDER_MENU_TEXT + 4
+    set text render target AVA_LETTER_TEXT_ID, TARGET_MENU
+    set text alpha AVA_LETTER_TEXT_ID, 0
+endfunction
+
+
+` a line of the letter, from 1
+function avaLetterLine(allLine)
+    select allLine
+        case 1
+            set text loc AVA_LETTER_TEXT_ID, "angler.ava.bottle.l1"
+        endcase
+        case 2
+            set text loc AVA_LETTER_TEXT_ID, "angler.ava.bottle.l2"
+        endcase
+        case 3
+            set text loc AVA_LETTER_TEXT_ID, "angler.ava.bottle.l3"
+        endcase
+        case 4
+            set text loc AVA_LETTER_TEXT_ID, "angler.ava.bottle.l4"
+        endcase
+        case 5
+            ` FRIEND, in the dots and dashes of the radio
+            set text loc AVA_LETTER_TEXT_ID, "angler.ava.bottle.l5", "code", ".- ...- .-"
+        endcase
+        case 6
+            set text loc AVA_LETTER_TEXT_ID, "angler.ava.bottle.l6"
+        endcase
+    endselect
+endfunction
+
+
+` what she says as a board comes in, once the thirty have run out and she is making more
+function avaAfterLine(aalBoard)
+    select aalBoard mod 3
+        case 0
+            guideSay(lockey$("angler.ava.after.1"))
+        endcase
+        case 1
+            guideSay(lockey$("angler.ava.after.2"))
+        endcase
+        case 2
+            guideSay(lockey$("angler.ava.after.3"))
+        endcase
+    endselect
+endfunction
+
+
+` every ending at once, for the Ava window: 1 reaches them all, and 0 forgets them, and her welcomes and hints with them
+function avaDebugEndings(adeReached)
+    for adeEnd = 1 to AVA_ENDING_COUNT
+        set pref avaEndingPref(adeEnd), adeReached
+        if adeReached = 0
+            set pref AVA_PREF_WELCOMED + adeEnd, 0
+            set pref AVA_PREF_HINT + adeEnd, 0
+        endif
+    next
+endfunction
+
+
+` names for the Ava window, into AVA_DBG_NAME$: an ending (0), where the last question has got to (1), or what a new
+` game will be (2)
+function avaDebugName(adnKind, adnValue)
+    AVA_DBG_NAME$ = "none"
+    if adnKind = 0
+        if adnValue = AVA_END_HOME then AVA_DBG_NAME$ = "the fish go home"
+        if adnValue = AVA_END_REEF then AVA_DBG_NAME$ = "the reef"
+        if adnValue = AVA_END_ANCIENT then AVA_DBG_NAME$ = "the ancient one"
+        if adnValue = AVA_END_DIVER then AVA_DBG_NAME$ = "the diver's album"
+        if adnValue = AVA_END_NEPTUNE then AVA_DBG_NAME$ = "the god of the sea"
+    endif
+    if adnKind = 1
+        AVA_DBG_NAME$ = "not asked"
+        if adnValue = AVA_OFFER_LATER then AVA_DBG_NAME$ = "one more dive, in her list"
+        if adnValue = AVA_OFFER_INVITED then AVA_DBG_NAME$ = "staying, from her list"
+        if adnValue = AVA_OFFER_TAKEN then AVA_DBG_NAME$ = "went down"
+    endif
+    if adnKind = 2
+        AVA_DBG_NAME$ = "is a usual game"
+        if adnValue = 1 then AVA_DBG_NAME$ = "asks the last question"
+        if adnValue = 2 then AVA_DBG_NAME$ = "goes straight down"
+    endif
+endfunction

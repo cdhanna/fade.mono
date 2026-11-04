@@ -7,8 +7,9 @@ remstart
     says a few words as a board comes in, and one more thing when it is clear. so the talk goes as far as the
     player has got through the boards, and not by any clock.
 
-    the way in is still the FISH_PUZZLE environment variable, because the goodbye that offers it is not built, or the
-    Ava window of FISH_DEBUG, which puts her and the game in any state, from the main menu or from a game
+    the way in is to reach every ending of the game, and then start a new one: she asks if the player is leaving, and
+    staying goes down (see THE LAST QUESTION in fish_headers_ava). for working on it there is the FISH_PUZZLE environment
+    variable, and the Ava window of FISH_DEBUG, which puts her and the game in any state, from the main menu or from a game
     (frame_debug_ava). a player who has gone in has stayed, and the game remembers it (PUZZLE_PREF + 2, puzzleStaying)
     with or without the variable. the main menu then has Resume, which goes straight back to the board that the
     player got to, and New Game, which asks first (see LEAVING). a number in FISH_PUZZLE only says where to start when
@@ -27,12 +28,12 @@ remstart
     New Game goes down into the empty sea like any other, and Ava comes up in the usual scene and asks if the
     player is leaving, before a board is dealt (puzzle_ask). staying carries on from the same board. leaving
     forgets that the player stayed, and a new game of the usual kind starts from there (PUZZLE_LEFT, and
-    menu_start_game). the boards keep their place, because she says that she will keep it. what comes after she
-    is gone is not built.
+    menu_start_game). the boards keep their place, because she says that she will keep it.
 
-    the game remembers that the player left (PUZZLE_GONE_PREF, puzzleGone). she does not come back: a new game is never
-    a puzzle, and there is no first dive, because she is the one who gave it. "Include intro" gets a few big words in
-    the empty water instead (puzzle_gone_intro). what else changes when she has gone is not built.
+    the game remembers that the player left (PUZZLE_GONE_PREF, puzzleGone). a new game is never a puzzle, and there is no
+    first dive, because she is the one who gave it. "Include intro" gets a few big words in the empty water instead
+    (puzzle_gone_intro). nobody keeps the shop, and after a few games a letter from her floats on the water of the main
+    menu, with FRIEND in Morse code, which brings her back: see SHE HAS GONE in fish_headers_ava.
 
     WHERE SHE IS
     while the player works, she wanders around the sea like any other fish (frame_puzzle_swim). she keeps out
@@ -93,7 +94,8 @@ remstart
     upgrade screen, "You're still here?", and that is the happy ending. nothing else happens.
 
     then she says that she made another one, and that it is bad, and the boards go on, just because (PUZZLE_AFTER).
-    those will be made as they are needed. for now it is the same list again, as a stand-in.
+    she says that once, and a few words as each of the others comes in (avaAfterLine). those boards will be made as they
+    are needed. for now it is the same list again, as a stand-in.
 
     THE RULES
     the fish pop the way that they always do: every group of 3 or more that touch, and then the fish over
@@ -168,6 +170,8 @@ global PUZZLE_ON = 0 `1 while a puzzle is up
 global PUZZLE_NEW_BELLY = 10 `the board that the first belly up fish comes in on, from 0. she says what it does.
 global PUZZLE_NEW_BUBBLE = 15 `and the first bubble
 global PUZZLE_NEW_RAINBOW = 20 `and the first rainbow fish
+global PUZZLE_NEW_GATE = -1 `and the first board with a gate, and the first with a tent. puzzleFindGates looks for them.
+global PUZZLE_NEW_TENT = -1
 global PUZZLE_NOW = 0 `which board is up, from 0
 global PUZZLE_CLEARED_MS = 0 `when the sea was cleared, or 0 while there are fish in it
 global PUZZLE_AGAIN = 0 `1 when the player has asked for the board to be put back

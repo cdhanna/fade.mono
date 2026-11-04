@@ -468,6 +468,12 @@ handle_angler:
     ` see THE CALL in fish_headers_angler. it waits for the radio to finish tapping back that it heard,
     ` and then a moment more, so that the answer is not cut off.
     angCallGo = 0
+    ` FRIEND, tapped while she was gone, is the same, and brings her back. see FRIEND ON THE RADIO in fish_headers_ava.
+    angAvaGo = avaCallReady()
+    if angAvaGo
+        gosub ava_return
+    endif
+
     if ANGLER_CALL_PENDING
         if MORSE_REPLY_ON
             ANGLER_CALL_AT_MS = 0
@@ -520,6 +526,7 @@ angler_run:
     if ANGLER_FROM_SHOP = 0
         anglerPickTopics(ANGLER_ANCHOR)
     endif
+    avaAddPicks() `her own lines go at the top. see THE SEA THAT IS LEFT in fish_headers_ava.
 
     ` it starts at the bottom, with the light around the bulb
     ANGLER_SPOT = -1
@@ -554,11 +561,12 @@ angler_run:
         angGreet$ = loc$("angler.greet.teach")
     endif
 
+    ` "You're still here?" is kept for the end of the long visit, where it means more. see WHY THERE ARE PUZZLES in fish_headers_puzzle.
     if ANGLER_FROM_SHOP
         angGreet = rnd(3)
         angGreet$ = loc$("angler.shop.howdy")
         if angGreet = 1
-            angGreet$ = loc$("angler.shop.still")
+            angGreet$ = loc$("angler.shop.look")
         endif
         if angGreet = 2
             angGreet$ = loc$("angler.shop.back")
@@ -569,6 +577,16 @@ angler_run:
     endif
 
     angChosen = -1 `angler_choose sets this. it is further down, and a name has to be set before it is read.
+
+    ` the first time that she is asked anything after an ending, she says so. see WELCOME BACK in fish_headers_ava.
+    angWelcome = avaWelcomeDue()
+    if angWelcome > 0
+        avaWelcomeSay(angWelcome, 1)
+        gosub angler_wait
+        avaWelcomeSay(angWelcome, 2)
+        gosub angler_wait
+        set pref AVA_PREF_WELCOMED + angWelcome, 1
+    endif
 
     ` the very first time, it has a little more to say at the end. see THE FIRST MEETING in fish_headers_angler.
     angFirstMeeting = 1 - ANGLER_MET
@@ -582,7 +600,12 @@ angler_run:
         ` without asking, from info mode or the radio
         angPickLast = ANGLER_PICK_COUNT - 1
         for angLineN = 0 to angPickLast
-            set text loc ANGLER_LINE_TEXTS(angLineN), ANGLER_ASK$(ANGLER_PICK(angLineN))
+            angLinePick = ANGLER_PICK(angLineN)
+            if angLinePick >= 0
+                set text loc ANGLER_LINE_TEXTS(angLineN), ANGLER_ASK$(angLinePick)
+            else
+                avaPickWords(ANGLER_LINE_TEXTS(angLineN), angLinePick)
+            endif
         next
         if ANGLER_FROM_CARD
             if ANGLER_BANKED >= ANGLER_BANK_MAX
@@ -602,31 +625,36 @@ angler_run:
         if angChosen < ANGLER_PICK_COUNT
             ` a question. from info mode, a light that was kept is spent on it. a call costs nothing.
             ANGLER_ASKED = ANGLER_PICK(angChosen)
-            if ANGLER_FROM_CARD = 0
-                if ANGLER_FROM_RADIO + ANGLER_FROM_SHOP = 0
-                    anglerBankSpend()
+            if ANGLER_ASKED < 0
+                ` one of her own lines, which costs nothing. see fish_headers_ava.
+                gosub ava_answer
+            else
+                if ANGLER_FROM_CARD = 0
+                    if ANGLER_FROM_RADIO + ANGLER_FROM_SHOP = 0
+                        anglerBankSpend()
+                    endif
                 endif
-            endif
-            anglerHear(ANGLER_ASKED)
-            angFirstAsked = 1
+                anglerHear(ANGLER_ASKED)
+                angFirstAsked = 1
 
-            ` the light goes to what it is about, if that is on the screen. the angler gets out of the way of it.
-            anglerTopicBlob(ANGLER_ASKED)
-            ANGLER_SPOT = ANGLER_FOUND
-            if ANGLER_FROM_SHOP then ANGLER_SPOT = -1 `the upgrade screen is over all of that
-            if ANGLER_SPOT >= 0
-                anglerSpotRect()
-                angSpotY = ANGLER_SPOT_Y + ANGLER_SPOT_H / 2
-                if angSpotY > WORLD_HEIGHT / 2
-                    create basic tween ANGLER_UP_TWEEN_ID, 0, 1, 450, 0
+                ` the light goes to what it is about, if that is on the screen. the angler gets out of the way of it.
+                anglerTopicBlob(ANGLER_ASKED)
+                ANGLER_SPOT = ANGLER_FOUND
+                if ANGLER_FROM_SHOP then ANGLER_SPOT = -1 `the upgrade screen is over all of that
+                if ANGLER_SPOT >= 0
+                    anglerSpotRect()
+                    angSpotY = ANGLER_SPOT_Y + ANGLER_SPOT_H / 2
+                    if angSpotY > WORLD_HEIGHT / 2
+                        create basic tween ANGLER_UP_TWEEN_ID, 0, 1, 450, 0
+                    endif
                 endif
-            endif
 
-            anglerSay(loc$(ANGLER_SAY$(ANGLER_ASKED)))
-            gosub angler_wait
-            if ANGLER_PAGES(ANGLER_ASKED) > 1
-                anglerSay(loc$(ANGLER_MORE$(ANGLER_ASKED)))
+                anglerSay(loc$(ANGLER_SAY$(ANGLER_ASKED)))
                 gosub angler_wait
+                if ANGLER_PAGES(ANGLER_ASKED) > 1
+                    anglerSay(loc$(ANGLER_MORE$(ANGLER_ASKED)))
+                    gosub angler_wait
+                endif
             endif
 
             ` called on the radio, it is in no hurry. it asks if there is anything else.
@@ -653,6 +681,7 @@ angler_run:
                     create basic tween ANGLER_UP_TWEEN_ID, tweenVal(ANGLER_UP_TWEEN_ID), 0, 450, 0
                     anglerScanBoard()
                     anglerPickTopics(-1)
+                    avaAddPicks()
                     angGreet$ = loc$("angler.greet.again")
                 endif
             endif
@@ -704,6 +733,7 @@ angler_run:
     size text y INFO_HINT_TEXT_ID, 16
     order text INFO_HINT_TEXT_ID, ORDER_HUD_TEXT
     set text alpha INFO_HINT_TEXT_ID, 140
+    _angler_ran:
 return
 
 

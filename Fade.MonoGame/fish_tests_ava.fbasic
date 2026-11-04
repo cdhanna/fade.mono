@@ -1,0 +1,482 @@
+remstart
+    THE TESTS OF THE WAY DOWN TO AVA
+    see fish_headers_ava. the preferences are mocked into AVA_TEST_PREFS, so that a test can say which endings have been
+    reached and what she has said, and see what she remembers. see the top of fish_tests for how the tests work.
+remend
+
+global TA_PRESS = 0 `every key is down while this is 1. her scenes hold the game, and they need them.
+
+test ava_endings_are_read_from_where_the_game_keeps_them from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    taReached = avaEndingsReached()
+    assert taReached = 0, "nothing has been reached"
+    set pref PREF_ENDING_REEF, 1
+    taIs = avaEndingReached(AVA_END_REEF)
+    assert taIs = 1, "the reef is where the reef is kept"
+    set pref PREF_ENDING_HOME, 1
+    set pref PREF_ENDING_ANCIENT, 1
+    set pref PREF_ENDING_DIVER, 1
+    set pref PREF_ENDING_NEPTUNE, 1
+    taReached = avaEndingsReached()
+    assert taReached = 5, "and the five endings are all of them"
+    end
+endtest
+
+
+test ava_welcomes_back_once_for_each_ending from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    taDue = avaWelcomeDue()
+    assert taDue = 0, "nothing to say before any ending"
+    set pref PREF_ENDING_HOME, 1
+    set pref PREF_ENDING_ANCIENT, 1
+    taDue = avaWelcomeDue()
+    assert taDue = AVA_END_HOME, "the fish going home first"
+    set pref AVA_PREF_WELCOMED + AVA_END_HOME, 1
+    taDue = avaWelcomeDue()
+    assert taDue = AVA_END_ANCIENT, "and then the ancient one"
+    set pref AVA_PREF_WELCOMED + AVA_END_ANCIENT, 1
+    taDue = avaWelcomeDue()
+    assert taDue = 0, "and only once each"
+    end
+endtest
+
+
+test ava_has_one_hint_for_every_ending_reached from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    taSea = avaSeaDue()
+    assert taSea = 0, "no hint before an ending"
+
+    set pref PREF_ENDING_HOME, 1
+    taSea = avaSeaDue()
+    assert taSea = AVA_END_REEF, "one ending reached, so a hint at the next one in the order"
+    set pref AVA_PREF_HINT + AVA_END_REEF, 1
+    taSea = avaSeaDue()
+    assert taSea = 0, "and only one, for one ending"
+
+    set pref PREF_ENDING_DIVER, 1
+    taSea = avaSeaDue()
+    assert taSea = AVA_END_NEPTUNE, "a second ending opens a second hint, never at one that has been reached"
+
+    set pref PREF_ENDING_REEF, 1
+    set pref PREF_ENDING_ANCIENT, 1
+    set pref PREF_ENDING_NEPTUNE, 1
+    taSea = avaSeaDue()
+    assert taSea = 0, "and nothing is left to hint at once all of it has been seen"
+    end
+endtest
+
+
+test ava_her_own_lines_go_at_the_top_of_the_questions from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    ANGLER_PICK_COUNT = 3
+    ANGLER_PICK(0) = 5
+    ANGLER_PICK(1) = 6
+    ANGLER_PICK(2) = 7
+    avaAddPicks()
+    assert ANGLER_PICK_COUNT = 3, "with nothing of her own, the questions are left alone"
+    assert ANGLER_PICK(0) = 5, "all of them"
+
+    set pref PREF_ENDING_HOME, 1
+    avaAddPicks()
+    assert ANGLER_PICK_COUNT = 3, "there is room for three in the box"
+    assert ANGLER_PICK(0) = AVA_PICK_SEA, "her question is first"
+    assert ANGLER_PICK(1) = 5, "and the others come after it"
+    assert ANGLER_PICK(2) = 6, "and the last one makes room"
+    assert AVA_PICKS = 1, "one of them is hers"
+    end
+endtest
+
+
+test ava_the_last_question_comes_with_every_ending from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    PUZZLE_ENV_SPENT = 1
+    OPTION_GAME_INTRO = 0
+    PUZZLE_LEFT = 0
+    taWanted = puzzleWanted()
+    assert taWanted = 0, "a new game is a usual game"
+
+    avaDebugEndings(1)
+    taDue = avaOfferDue()
+    assert taDue = 1, "every ending reached, so she has a question"
+    taWanted = puzzleWanted()
+    assert taWanted = 1, "and a new game goes down to her"
+    puzzleWhere()
+    assert PUZZLE_ASK = 2, "where she asks it"
+
+    set pref AVA_PREF_OFFER, AVA_OFFER_LATER
+    taWanted = puzzleWanted()
+    assert taWanted = 0, "one more dive is a usual game"
+    taLeave = avaLeaveDue()
+    assert taLeave = 1, "and the question waits in her list"
+
+    set pref AVA_PREF_OFFER, AVA_OFFER_INVITED
+    taWanted = puzzleWanted()
+    assert taWanted = 1, "staying from her list goes down"
+    puzzleWhere()
+    assert PUZZLE_ASK = 0, "with nothing to ask"
+
+    set pref PUZZLE_GONE_PREF, 1
+    taWanted = puzzleWanted()
+    assert taWanted = 0, "but not once she has gone"
+    end
+endtest
+
+
+test ava_each_answer_to_the_last_question_goes_where_it_says from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    avaDebugEndings(1)
+    PUZZLE_LEFT = 0
+    avaOfferAnswered(0)
+    assert PUZZLE_LEFT = 0, "staying stays"
+    taGone = puzzleGone()
+    assert taGone = 0, "and she is there"
+
+    avaOfferAnswered(2)
+    assert PUZZLE_LEFT = 1, "one more dive is a usual game"
+    assert get pref(AVA_PREF_OFFER, 0) = AVA_OFFER_LATER, "and the question goes in her list"
+    taGone = puzzleGone()
+    assert taGone = 0, "and she is still there"
+
+    PUZZLE_LEFT = 0
+    avaLeaveAnswered(2)
+    assert get pref(AVA_PREF_OFFER, 0) = AVA_OFFER_LATER, "not yet keeps it there"
+    avaLeaveAnswered(0)
+    assert get pref(AVA_PREF_OFFER, 0) = AVA_OFFER_INVITED, "and staying from there is the next game"
+
+    avaOfferAnswered(1)
+    assert PUZZLE_LEFT = 1, "leaving is a usual game too"
+    taGone = puzzleGone()
+    assert taGone = 1, "and she is gone"
+    PUZZLE_LEFT = 0
+    end
+endtest
+
+
+test ava_nobody_keeps_the_shop_once_she_has_gone from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    SHOP_ENABLED = 1
+    set pref PUZZLE_GONE_PREF, 1
+    shopOpenAs(1)
+    assert GUIDE_SHOP = 0, "she is not at the shop"
+    set pref PUZZLE_GONE_PREF, 0
+    shopOpenAs(1)
+    assert GUIDE_SHOP = 1, "and she is once she is back"
+    guideOff()
+    SHOP_ENABLED = 0
+    end
+endtest
+
+
+test ava_the_radio_brings_her_back_and_nobody_else from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    ANGLER_CALL_PENDING = 0
+    AVA_CALL_PENDING = 0
+    avaHeard(MORSE_WORD_HELP)
+    assert ANGLER_CALL_PENDING = 1, "HELP calls her"
+    ANGLER_CALL_PENDING = 0
+    avaHeard(MORSE_WORD_FRIEND)
+    assert ANGLER_CALL_PENDING = 1, "and so does FRIEND"
+    assert AVA_CALL_PENDING = 0, "which is only a call while she is there"
+    ANGLER_CALL_PENDING = 0
+
+    set pref PUZZLE_GONE_PREF, 1
+    avaHeard(MORSE_WORD_HELP)
+    avaHeard(MORSE_WORD_INFO)
+    assert ANGLER_CALL_PENDING = 0, "once she has gone, HELP and INFO bring nobody"
+    avaHeard(MORSE_WORD_FRIEND)
+    assert AVA_CALL_PENDING = 1, "and FRIEND brings her back"
+    AVA_CALL_PENDING = 0
+    assert MORSE_WORD_NAME$(MORSE_WORD_FRIEND) = "FRIEND", "it is the word of her letter"
+    end
+endtest
+
+
+test ava_a_bottle_comes_a_few_games_after_she_has_gone from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    avaLeaves()
+    taThere = avaBottleThere()
+    assert taThere = 0, "not at once"
+    for taGame = 1 to AVA_BOTTLE_GAMES
+        avaGoneGame()
+    next
+    taThere = avaBottleThere()
+    assert taThere = 1, "but after a few games"
+    avaComesBack()
+    taThere = avaBottleThere()
+    assert taThere = 0, "and not once she is back"
+    taStaying = puzzleStaying()
+    assert taStaying = 1, "and the player is staying"
+    end
+endtest
+
+
+test ava_coming_down_from_the_radio_goes_to_the_deep from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    avaLeaves()
+    AVA_TO_DEEP = 0
+    avaBackAnswered(1)
+    assert AVA_TO_DEEP = 0, "not now is not now"
+    taGone = puzzleGone()
+    assert taGone = 1, "and she is still gone"
+    avaBackAnswered(0)
+    assert AVA_TO_DEEP = 1, "coming down goes down"
+    taGone = puzzleGone()
+    assert taGone = 0, "and she is back"
+    AVA_TO_DEEP = 0
+    end
+endtest
+
+
+test ava_says_welcome_back_when_she_is_called from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    mock new action down
+    endmock TA_PRESS
+    ANGLER_SWIM_MS = 1
+    set pref PREF_ENDING_DIVER, 1
+    taSaid = ANGLER_SAYS
+    ANGLER_CALL_PENDING = 1
+    runto angler_frame
+    TA_PRESS = 1
+    runto _angler_ran
+    TA_PRESS = 0
+    assert get pref(AVA_PREF_WELCOMED + AVA_END_DIVER, 0) = 1, "she said it"
+    assert ANGLER_SAYS >= taSaid + 3, "two things, and then her greeting"
+    taDue = avaWelcomeDue()
+    assert taDue = 0, "and she does not say it again"
+    end
+endtest
+
+
+test ava_her_name_brings_her_back_to_ask from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    mock new action down
+    endmock TA_PRESS
+    ANGLER_SWIM_MS = 1
+    avaLeaves()
+    AVA_CALL_PENDING = 1
+    MORSE_REPLY_ON = 0
+    runto angler_frame
+    TA_PRESS = 1
+    runto _ava_returned
+    TA_PRESS = 0
+    assert AVA_CALL_PENDING = 0, "she came"
+    assert get pref(AVA_PREF_BACK, 0) = 1, "and the game remembers it"
+    taGone = puzzleGone()
+    assert taGone = 1, "the info key says not now, and she is still gone"
+    assert AVA_TO_DEEP = 0, "so nothing goes down"
+    end
+endtest
+
+
+test ava_her_words_fit from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    set text wrap ANGLER_SAY_TEXT_ID, ANGLER_BOX_W - 20
+    avaLetterMake()
+    for taLang = 0 to 4
+        if taLang = 0 then set language "en"
+        if taLang = 1 then set language "pt-BR"
+        if taLang = 2 then set language "fr"
+        if taLang = 3 then set language "de"
+        if taLang = 4 then set language "pl"
+        taTall = 0
+        for taEnd = 1 to AVA_ENDING_COUNT
+            avaWelcomeSay(taEnd, 1)
+            taHigh = get text size y(ANGLER_SAY_TEXT_ID)
+            if taHigh > taTall then taTall = taHigh
+            avaWelcomeSay(taEnd, 2)
+            taHigh = get text size y(ANGLER_SAY_TEXT_ID)
+            if taHigh > taTall then taTall = taHigh
+            avaSeaSay(taEnd)
+            taHigh = get text size y(ANGLER_SAY_TEXT_ID)
+            if taHigh > taTall then taTall = taHigh
+        next
+        taHigh = taSays("angler.ava.sea.more")
+        if taHigh > taTall then taTall = taHigh
+        taHigh = taSays("angler.ava.offer.a")
+        if taHigh > taTall then taTall = taHigh
+        taHigh = taSays("angler.ava.offer.b")
+        if taHigh > taTall then taTall = taHigh
+        taHigh = taSays("angler.ava.offer.stay")
+        if taHigh > taTall then taTall = taHigh
+        taHigh = taSays("angler.ava.offer.dive")
+        if taHigh > taTall then taTall = taHigh
+        taHigh = taSays("angler.ava.leave.stay")
+        if taHigh > taTall then taTall = taHigh
+        taHigh = taSays("angler.ava.back.a2")
+        if taHigh > taTall then taTall = taHigh
+        taHigh = taSays("angler.ava.back.b")
+        if taHigh > taTall then taTall = taHigh
+        taHigh = taSays("angler.ava.back.stay")
+        if taHigh > taTall then taTall = taHigh
+        print "[ava fit] language " + str$(taLang) + " box " + str$(taTall)
+        assert taTall <= 64, "what she says fits her box"
+
+        ` her questions in the list are one line each
+        set text loc ANGLER_LINE_TEXTS(0), "angler.ava.sea.ask"
+        taHigh = get text size y(ANGLER_LINE_TEXTS(0))
+        assert taHigh <= 20, "her question is one line"
+        set text loc ANGLER_LINE_TEXTS(0), "angler.ava.leave.ask"
+        taHigh = get text size y(ANGLER_LINE_TEXTS(0))
+        assert taHigh <= 20, "and so is the other one"
+
+        taTall = 0
+        for taLine = 1 to AVA_LETTER_LINES
+            avaLetterLine(taLine)
+            taHigh = get text size y(AVA_LETTER_TEXT_ID)
+            if taHigh > taTall then taTall = taHigh
+        next
+        print "[ava fit] language " + str$(taLang) + " letter " + str$(taTall)
+        assert taTall <= 120, "and every line of the letter fits over the menu"
+    next
+    set language "en"
+    end
+endtest
+
+
+test ava_the_first_gate_and_the_first_tent_are_explained from fishBoard
+    assert PUZZLE_NEW_GATE = 13, "the first gate is on the fourteenth board"
+    assert PUZZLE_NEW_TENT = 27, "and the first tent on the twenty-eighth"
+    end
+endtest
+
+
+` say a line in her box, and how tall it is
+function taSays(taSayKey$)
+    anglerSay(loc$(taSayKey$))
+    taSaysTall = get text size y(ANGLER_SAY_TEXT_ID)
+endfunction taSaysTall
+
+
+` the preferences that these tests look at are kept in AVA_TEST_PREFS, from nothing. each test mocks get pref and set pref
+` with taPrefAt and taPrefSet, because a mock has to be in the test itself.
+function taPrefsClear()
+    for taClear = 0 to 63
+        AVA_TEST_PREFS(taClear) = 0
+    next
+endfunction
+
+
+` where a preference is kept: the low ones, which have the endings, and the ones of the long visit and of Ava
+function taPrefSlot(taSlotIndex)
+    taSlotAt = -1
+    if taSlotIndex >= 0
+        if taSlotIndex < 30 then taSlotAt = taSlotIndex
+    endif
+    if taSlotIndex >= 9000
+        if taSlotIndex < 9034 then taSlotAt = 30 + (taSlotIndex - 9000)
+    endif
+endfunction taSlotAt
+
+
+function taPrefAt(taAtIndex)
+    taAtValue = 0
+    taAtSlot = taPrefSlot(taAtIndex)
+    if taAtSlot >= 0 then taAtValue = AVA_TEST_PREFS(taAtSlot)
+endfunction taAtValue
+
+
+function taPrefSet(taPutIndex, taPutValue)
+    taPutSlot = taPrefSlot(taPutIndex)
+    if taPutSlot >= 0 then AVA_TEST_PREFS(taPutSlot) = taPutValue
+endfunction
+
+
+` a word is heard whatever came before it, so a word whose marks are inside another's is heard halfway through that one.
+` her name, AVA, was inside INFO. see FRIEND ON THE RADIO in fish_headers_ava.
+test ava_no_word_on_the_radio_is_heard_inside_another from fishBoard
+    taClashes = 0
+    taWordLast = MORSE_WORD_COUNT - 1
+    for taA = 0 to taWordLast
+        for taB = 0 to taWordLast
+            taLenA = MORSE_WORD_LENGTH(taA)
+            taLenB = MORSE_WORD_LENGTH(taB)
+            taTry = 1
+            if taA = taB then taTry = 0
+            if taLenA = 0 then taTry = 0
+            if taLenA > taLenB then taTry = 0
+            if taTry
+                for taEndAt = taLenA to taLenB
+                    taSame = 1
+                    taFrom = taEndAt - taLenA
+                    taKLast = taLenA - 1
+                    for taK = 0 to taKLast
+                        taMarkA = MORSE_WORD_MARKS(taA * MORSE_MARK_ROOM + taK)
+                        taMarkB = MORSE_WORD_MARKS(taB * MORSE_MARK_ROOM + taFrom + taK)
+                        if taMarkA <> taMarkB then taSame = 0
+                    next
+                    if taSame
+                        print "[ava radio] " + MORSE_WORD_NAME$(taA) + " is inside " + MORSE_WORD_NAME$(taB)
+                        taClashes = taClashes + 1
+                    endif
+                next
+            endif
+        next
+    next
+    assert taClashes = 0, "no word is inside another"
+    end
+endtest
