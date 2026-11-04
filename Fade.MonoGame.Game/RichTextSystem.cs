@@ -114,11 +114,22 @@ public struct RichTextRun
     public int textureId;
     public int frame;
     public Vector2 iconSize;
+
+    // What the tags of the text did to this run. see Builder.TryStyle.
+    public bool hasColor;
+    public Color color;
+    public bool bold;
+    public bool bounce;
+    public int bounceIndex;
 }
 
 /// <summary>
 /// A string split into the pieces that get drawn: stretches of plain text, and icons. It is cached
 /// on the text sprite, and only rebuilt when something it was built from changes.
+///
+/// Rich text can also style its words with tags in braces: {bold}, {bounce}, and the colors {gold},
+/// {red}, {teal} and {blue}. They stay on until {end}, which ends all of them. A tag takes up no room,
+/// and it does not count as a character for the reveal.
 /// </summary>
 public class RichTextLayout
 {
@@ -212,7 +223,7 @@ public static class RichTextSystem
         layout.sourceWrapWidth = wrapWidth;
         layout.sourceAlign = text.align;
 
-        _builder.Build(layout, text.text ?? string.Empty, runtimeFont.font, icons, wrapWidth, text.align);
+        _builder.Build(layout, text.text ?? string.Empty, runtimeFont.font, text.richText, icons, wrapWidth, text.align);
 
         text.layout = layout;
         return layout;
@@ -255,7 +266,15 @@ public static class RichTextSystem
 
         private readonly StringBuilder _scratch = new StringBuilder();
 
-        public void Build(RichTextLayout layout, string source, SpriteFont font, FontIconSet icons,
+        // The tags that are on right now. see TryStyle.
+        private bool _hasColor, _bold, _bounce;
+        private Color _color;
+
+        // A word that comes straight after a tag ended, with no space, is the same word, like the !
+        // of {gold}school{end}!, so it does not wrap away from it.
+        private bool _gluedToTag;
+
+        public void Build(RichTextLayout layout, string source, SpriteFont font, bool rich, FontIconSet icons,
             float wrapWidth, float align)
         {
             _layout = layout;
@@ -271,6 +290,7 @@ public static class RichTextSystem
             _lineFirstRun = 0;
             _lineHasContent = false;
             _penX = _penY = _pendingX = 0;
+            _hasColor = _bold = _bounce = _gluedToTag = false;
 
             var iconCenter = GetIconCenter(font);
 
@@ -294,7 +314,7 @@ public static class RichTextSystem
                     continue;
                 }
 
-                if (c == '{' && icons != null)
+                if (c == '{' && rich)
                 {
                     // Two in a row is how to write one that really is a brace.
                     if (i + 1 < source.Length && source[i + 1] == '{')
@@ -305,7 +325,14 @@ public static class RichTextSystem
                     }
 
                     var close = source.IndexOf('}', i + 1);
+                    if (close > i + 1 && TryStyle(source.Substring(i + 1, close - i - 1).Trim()))
+                    {
+                        i = close;
+                        continue;
+                    }
+
                     if (close > i + 1
+                        && icons != null
                         && icons.TryResolve(source.Substring(i + 1, close - i - 1).Trim(), out var icon)
                         && TryGetIconSize(ref icon, _lineHeight, out var iconSize))
                     {
@@ -352,6 +379,37 @@ public static class RichTextSystem
             _font = null;
         }
 
+        /// <summary>
+        /// A tag turns a style on, or {end} turns them all off. The text before it is finished first,
+        /// because a run has one style.
+        /// </summary>
+        private bool TryStyle(string name)
+        {
+            switch (name.ToLowerInvariant())
+            {
+                case "bold": PlaceWord(); FlushText(); _bold = true; return true;
+                case "bounce": PlaceWord(); FlushText(); _bounce = true; return true;
+                case "gold": PlaceWord(); FlushText(); SetColor(new Color(255, 222, 96)); return true;
+                case "red": PlaceWord(); FlushText(); SetColor(new Color(255, 110, 90)); return true;
+                case "teal": PlaceWord(); FlushText(); SetColor(new Color(110, 235, 200)); return true;
+                case "blue": PlaceWord(); FlushText(); SetColor(new Color(150, 190, 255)); return true;
+                case "end":
+                    PlaceWord();
+                    FlushText();
+                    _hasColor = _bold = _bounce = false;
+                    _gluedToTag = _spaces == 0;
+                    return true;
+            }
+
+            return false;
+        }
+
+        private void SetColor(Color color)
+        {
+            _hasColor = true;
+            _color = color;
+        }
+
         private float MeasureWidth(StringBuilder text)
         {
             return text.Length == 0 ? 0 : _font.MeasureString(text).X;
@@ -381,12 +439,13 @@ public static class RichTextSystem
         {
             if (_word.Length == 0) return;
 
-            if (ShouldWrap(_pendingX + MeasurePendingWith(includeWord: true)))
+            if (!_gluedToTag && ShouldWrap(_pendingX + MeasurePendingWith(includeWord: true)))
             {
                 _spaces = 0;
                 EndLine();
             }
 
+            _gluedToTag = false;
             _pending.Append(' ', _spaces);
             _pending.Append(_word);
             _penX = _pendingX + MeasureWidth(_pending);
@@ -432,14 +491,38 @@ public static class RichTextSystem
         {
             if (_pending.Length == 0) return;
 
-            _layout.runs.Add(new RichTextRun
+            if (_bounce)
             {
-                text = _pending.ToString(),
-                offset = new Vector2(_pendingX, _penY),
-            });
+                // Every letter bounces on its own, so every letter is a run.
+                var letters = _pending.ToString();
+                for (var i = 0; i < letters.Length; i++)
+                {
+                    var before = i == 0 ? 0 : _font.MeasureString(letters.Substring(0, i)).X;
+                    _layout.runs.Add(StyledRun(letters[i].ToString(), new Vector2(_pendingX + before, _penY), i));
+                }
+            }
+            else
+            {
+                _layout.runs.Add(StyledRun(_pending.ToString(), new Vector2(_pendingX, _penY), 0));
+            }
+
             _penX = _pendingX + MeasureWidth(_pending);
             _pendingX = _penX;
             _pending.Clear();
+        }
+
+        private RichTextRun StyledRun(string runText, Vector2 offset, int bounceIndex)
+        {
+            return new RichTextRun
+            {
+                text = runText,
+                offset = offset,
+                hasColor = _hasColor,
+                color = _color,
+                bold = _bold,
+                bounce = _bounce,
+                bounceIndex = bounceIndex,
+            };
         }
 
         private void EndLine()

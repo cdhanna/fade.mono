@@ -489,12 +489,14 @@ public static class RenderSystem
     /// scale belong to the whole text, so each run is drawn around the text's origin instead of
     /// its own. `reveal` is how many characters to draw, counting an icon as one, or -1 for all of
     /// them. see TextSprite.revealOn. `iconScales` is the text's own scale for some of its icons, by
-    /// icon id, or null. see TextSystem.iconScales.
+    /// icon id, or null. see TextSystem.iconScales. `runColors` is false for a shadow, which stays the
+    /// color of the shadow whatever color the tags gave the words.
     /// </summary>
     private static void DrawRichText(SpriteBatch sb, Microsoft.Xna.Framework.Graphics.Fade.SpriteFont font,
         RichTextLayout layout,
         Vector2 position, Color textColor, Color iconColor, float angle, Vector2 origin, Vector2 scale,
-        SpriteEffects effects, float order, int reveal = -1, Dictionary<int, float> iconScales = null)
+        SpriteEffects effects, float order, int reveal = -1, Dictionary<int, float> iconScales = null,
+        bool runColors = true)
     {
         var left = reveal;
         for (var i = 0; i < layout.runs.Count; i++)
@@ -509,8 +511,29 @@ public static class RenderSystem
                     if (runText.Length > left) runText = runText.Substring(0, left);
                     left -= runText.Length;
                 }
-                sb.DrawString(font, runText, position, textColor, angle, origin - run.offset, scale, effects,
-                    order);
+                var runColor = textColor;
+                if (runColors && run.hasColor)
+                {
+                    runColor = new Color(run.color.R, run.color.G, run.color.B, textColor.A);
+                }
+
+                // The letters of a bounce follow each other up and down, in a wave.
+                var runOrigin = origin - run.offset;
+                if (run.bounce)
+                {
+                    var bounceAt = (float)(TweenSystem.currentTime * .006) - run.bounceIndex * .7f;
+                    runOrigin.Y += MathF.Abs(MathF.Sin(bounceAt)) * font.LineSpacing * .16f;
+                }
+
+                sb.DrawString(font, runText, position, runColor, angle, runOrigin, scale, effects, order);
+
+                // Bold is the same letters a pixel over, because a font only comes in one weight.
+                if (run.bold)
+                {
+                    var boldStep = 1f / Math.Max(.0001f, Math.Abs(scale.X));
+                    sb.DrawString(font, runText, position, runColor, angle, runOrigin - new Vector2(boldStep, 0),
+                        scale, effects, order);
+                }
                 continue;
             }
             if (reveal >= 0) left -= 1;
@@ -1075,7 +1098,8 @@ public static class RenderSystem
                             {
                                 // The shadow of an icon is the icon's shape in the shadow color.
                                 DrawRichText(sb, font, layout, position, color, color, angle, origin, scale,
-                                    text.sprite.effects, order, text.revealOn ? text.reveal : -1, textIconScales);
+                                    text.sprite.effects, order, text.revealOn ? text.reveal : -1, textIconScales,
+                                    runColors: false);
                             }
                             else
                             {
