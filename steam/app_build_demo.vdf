@@ -1,0 +1,23 @@
+// SteamPipe build script for the Fish Fish Pop demo: its own app, with its own two depots.
+//
+// As app_build.vdf, but the workflow (.github/workflows/steam.yml) fills the __NAME__s from the
+// repository variables STEAM_DEMO_APP_ID, STEAM_DEMO_DEPOT_WINDOWS and STEAM_DEMO_DEPOT_MAC, and
+// stages the demo build (-p:FishSteamDemo=true) into steam/content/demo-{windows,mac}. See
+// steam/SETUP.md, "The demo".
+"appbuild"
+{
+	"appid"		"__APP_ID__"
+	"desc"		"__DESC__"
+
+	"buildoutput"	"output"
+	"contentroot"	"content"
+
+	// Empty means "upload but don't set live anywhere". The branch must exist on the demo app too.
+	"setlive"	"__SETLIVE__"
+
+	"depots"
+	{
+		"__DEPOT_WINDOWS__"	"depot_demo_windows.vdf"
+		"__DEPOT_MAC__"		"depot_demo_mac.vdf"
+	}
+}

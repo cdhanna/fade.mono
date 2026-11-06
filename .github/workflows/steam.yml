@@ -457,14 +457,26 @@ jobs:
             local log="$RUNNER_TEMP/steamcmd-${label// /_}.log"
             local files=("steam/$vdf")
             for f in "$@"; do files+=("steam/$f"); done
+            # "set -e" is off inside a function called with "|| fail=1", so a missing script
+            # would otherwise carry on into steamcmd and fail there, far less plainly
+            for f in "${files[@]}"; do
+              if [ ! -f "$f" ]; then
+                echo "::error::$label: $f is not in the repository. Commit it."
+                return 1
+              fi
+            done
             echo "::group::$label: app $app"
-            sed -i \
+            if ! sed -i \
               -e "s|__APP_ID__|${app}|g" \
               -e "s|__DEPOT_WINDOWS__|${dwin}|g" \
               -e "s|__DEPOT_MAC__|${dmac}|g" \
               -e "s|__DESC__|${DESC}|g" \
               -e "s|__SETLIVE__|${SET_LIVE}|g" \
-              "${files[@]}"
+              "${files[@]}"; then
+              echo "::endgroup::"
+              echo "::error::$label: could not fill in its build scripts."
+              return 1
+            fi
 
             if ! "$HOME/steamcmd/steamcmd.sh" \
                 +login "$STEAM_USERNAME" \
