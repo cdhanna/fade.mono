@@ -61,6 +61,13 @@ float Sick;      // 1 when the sea is green, which it is in the day once the anc
 #define REEF_LUMPS 0.21
 #define REEF_MURK 0.55
 #define REEF_KNOBS 0.035
+// THE BOX. the reef only covers a part of the screen, but its sprite covers all of it, and every pixel of it
+// walks a line of sight out to the rock. a pixel outside of this box cannot have any of the reef on it, its
+// wash, or the things that grow on it, so it gives up straight away. it is in the units of the reef, across
+// (the way it is drawn, so after it is turned around) and up from the middle of its waterline: x to y across,
+// and z to w up. it was found by working the reef out over a wide square for both reefs and the whole of the
+// bob, with a quarter of a unit to spare. change the shape of the reef, and it has to be found again.
+#define REEF_BOX float4(-5.25, 5.25, -2.65, 1.9)
 #define ReefDark    PICK(float3(0.110, 0.070, 0.210), float3(0.120, 0.150, 0.290))
 #define ReefLit     PICK(float3(0.720, 0.470, 0.520), float3(0.640, 0.700, 0.760))
 #define KelpColor   PICK(float3(0.300, 0.420, 0.250), float3(0.250, 0.620, 0.330))
@@ -354,6 +361,13 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 {
 	// whole pixels, so that everything is as blocky as the rest of the game
 	float2 px = floor(uv * Size);
+
+	// nothing of the reef can be outside of THE BOX, further up
+	float2 inReef = float2((px.x - Where.x) * Where.w, ((Horizon - Bob) + Where.y) - px.y) / Where.z;
+	[branch] if (inReef.x < REEF_BOX.x || inReef.x > REEF_BOX.y || inReef.y < REEF_BOX.z || inReef.y > REEF_BOX.w)
+	{
+		return float4(0.0, 0.0, 0.0, 0.0);
+	}
 
 	// the color of the sea on this pixel, the way that SurfaceEffect.fx works it out
 	float dy = px.y - Horizon;

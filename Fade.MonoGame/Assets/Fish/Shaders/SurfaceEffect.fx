@@ -383,6 +383,12 @@ float splashAt(float4 s, float2 px, float dy)
 	return s.z * sin(d * 0.13 - s.y * 8.0) * reached * fade / (1.0 + d / 220.0) * step(0.0, s.y);
 }
 
+// 1 while a splash has anything to show, and 0 before it, after it, and for one that never was
+float splashLive(float4 s)
+{
+	return step(0.0001, abs(s.z)) * step(0.0, s.y) * step(s.y, SPLASH_LAST);
+}
+
 // the white water right where a splash broke the water, which spreads a little and is soon gone
 float churnAt(float4 s, float2 px, float dy)
 {
@@ -431,8 +437,15 @@ float3 sea(float2 px)
 	float wx = (px.x - Size.x * 0.5) / rowScale;
 	float row = 13.0 * log(1.0 + dy * 0.16);
 
-	// a splash throws the rows about, and the ripples get bigger. see THE SPLASH, further up.
-	float splash = splashAt(SplashA, px, dy) + splashAt(SplashB, px, dy) + splashAt(SplashC, px, dy);
+	// a splash throws the rows about, and the ripples get bigger. see THE SPLASH, further up. most of the time
+	// there is no splash, and then this is all 0, so it is not worked out. a splash is over once its rings are
+	// gone, SPLASH_LAST after it broke the water, and its white water is gone sooner than that.
+	float splash = 0.0;
+	float splashing = splashLive(SplashA) + splashLive(SplashB) + splashLive(SplashC);
+	[branch] if (splashing > 0.0)
+	{
+		splash = splashAt(SplashA, px, dy) + splashAt(SplashB, px, dy) + splashAt(SplashC, px, dy);
+	}
 	row += splash * 2.0;
 	float ripple = sin(wx * 0.10 + 2.4 * sin(row * 1.3 + Time * 0.7)) * sin(row * 2.3 - Time * 1.0);
 	ripple += splash * 2.2;
@@ -463,7 +476,11 @@ float3 sea(float2 px)
 	color = lerp(color, SplashFoam, step(0.4, splash) * 0.55);
 	color *= 1.0 - 0.3 * step(splash, -0.4);
 	color += 0.05 * step(0.4, bottleRings);
-	float churn = churnAt(SplashA, px, dy) + churnAt(SplashB, px, dy) + churnAt(SplashC, px, dy);
+	float churn = 0.0;
+	[branch] if (splashing > 0.0)
+	{
+		churn = churnAt(SplashA, px, dy) + churnAt(SplashB, px, dy) + churnAt(SplashC, px, dy);
+	}
 	// in flecks, thick in the middle and thinner out to the edge, that boil about
 	float churnSpot = hash(float2(floor(px.x * 0.5), px.y) + floor(Time * 10.0) * 7.0);
 	color = lerp(color, SplashFoam, step(1.0 - churn * 0.75, churnSpot) * 0.9);
@@ -496,14 +513,26 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 	// whole pixels, so that everything is as blocky as the rest of the game
 	float2 px = floor(uv * Size);
 
-	float3 color = lerp(sky(px), sea(px), step(Horizon, px.y));
+	// a pixel is the sky or the sea, so only the one that it is, is worked out
+	float3 color;
+	[branch] if (px.y < Horizon)
+	{
+		color = sky(px);
+	}
+	else
+	{
+		color = sea(px);
+	}
 
 	// the thing on the horizon, once the ancient one has been summoned. the sea under it is darker.
-	float4 seen = thing(px);
-	color = lerp(color, seen.rgb, seen.a * Endings.y);
-	float2 underIt = float2(px.x - lerp(THING_FROM, THING_TO, Coming), px.y - Horizon) / lerp(THING_SMALL, THING_BIG, Coming);
-	float shadow = step(abs(underIt.x), 40.0 - underIt.y * 1.3) * step(0.0, underIt.y) * step(underIt.y, 22.0);
-	color *= 1.0 - 0.30 * shadow * step(0.0, sin(underIt.y * 1.7 - Time * 1.4)) * Endings.y;
+	[branch] if (Endings.y > 0.0)
+	{
+		float4 seen = thing(px);
+		color = lerp(color, seen.rgb, seen.a * Endings.y);
+		float2 underIt = float2(px.x - lerp(THING_FROM, THING_TO, Coming), px.y - Horizon) / lerp(THING_SMALL, THING_BIG, Coming);
+		float shadow = step(abs(underIt.x), 40.0 - underIt.y * 1.3) * step(0.0, underIt.y) * step(underIt.y, 22.0);
+		color *= 1.0 - 0.30 * shadow * step(0.0, sin(underIt.y * 1.7 - Time * 1.4)) * Endings.y;
+	}
 
 	// the camera is right at the surface, so the water in front of it rolls by as one dark swell
 	// across the bottom of the screen, with a pale line of foam along the top of it
