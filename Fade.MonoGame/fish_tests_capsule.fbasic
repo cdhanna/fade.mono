@@ -196,3 +196,1736 @@ test capsule_logo from trailerShot
         next
     next
 endtest
+
+
+` DRAFTS of new key art (2026-11-05). the trailer's first shot, turned over: a seahorse, the crab and a
+` seahorse in a row, and the third seahorse under the crab, on a few cells of the board. the board is
+` tilted in 3d: every fish, and the square of its cell, is a card of the fish effect, at the same pitch
+` and yaw, placed by a camera, so the far cells are smaller. the T itself is laid out flat, every fish of
+` it the same size and in a straight line, so it reads cleanly over the board. a fish and its square are
+` one PIECE, which moves as one: it falls in, swaps, pops. the rings of the game lift, lean and push
+` every piece as they pass, the way frame_fish_fx does it to the fish on the board.
+` the reef is a base along the bottom of the picture, in front of everything but the title: the board is
+` stretched across the whole screen for it, the coral grows on its bottom rows and up its corners, and
+` the coral effect's Warp bends it a little off of the cells. schools swim out in the water, the diver
+` and Ava are far off, bubbles come up off of the reef, and the tip of a tentacle only just shows.
+` the title is built up out of copies of each word: a deep edge behind it, a dark outline, a pale rim,
+` and the face. "Pop" has a splash behind it, puffs of the smokes of a pop, thickest behind the middle of
+` the word. build/capsule_drafts.py cuts the stills, and composites them. capsule_anim_title records the
+` title coming in, as a video.
+abstract test capDraftShot from trailerShot
+    global CAPD_ORDER_REEF = 40 `the coral, over the pieces (29 to 33), the schools, Ava and the diver
+    global CAPD_ORDER_BUBBLES = 42
+    global CAPD_ORDER_PUFF = 200 `the splash, well under the words of the title (293 to 297)
+    ` every text of the title, and which word it is part of, and where it sits from the middle of that word
+    global CAPD_TXT_N = 0
+    global dim CAPD_TXT(128)
+    global dim CAPD_TXT_W(128)
+    global dim CAPD_TXT_DX#(128)
+    global dim CAPD_TXT_DY#(128)
+    global dim CAPD_TXT_SZ(128)
+    global CAPD_W_N = 0
+    global dim CAPD_W_X#(4)
+    global dim CAPD_W_Y#(4)
+    ` THE PIECES. the card of the fish, of the square under it, and of the cursor's lit edge (or 0); where
+    ` it is, how big the fish and the square are, their colors, and how much the fish is lifted
+    global CAPD_C_N = 0
+    global dim CAPD_C_FISH(80)
+    global dim CAPD_C_TILE(80)
+    global dim CAPD_C_EDGE(80)
+    global dim CAPD_C_X#(80)
+    global dim CAPD_C_Y#(80)
+    global dim CAPD_C_S#(80)
+    global dim CAPD_C_TS#(80)
+    global dim CAPD_C_R(80)
+    global dim CAPD_C_G(80)
+    global dim CAPD_C_B(80)
+    global dim CAPD_C_A(80)
+    global dim CAPD_C_TR(80)
+    global dim CAPD_C_TG(80)
+    global dim CAPD_C_TB(80)
+    global dim CAPD_C_TA(80)
+    global dim CAPD_C_LIFT#(80)
+    ` and how it is moving: pushed up or down the screen, how much of it shows (0 to 1), more pitch, yaw
+    ` and lift, and how much bigger it is
+    global dim CAPD_C_DY#(80)
+    global dim CAPD_C_SHOW#(80)
+    global dim CAPD_C_DP#(80)
+    global dim CAPD_C_DYAW#(80)
+    global dim CAPD_C_DLIFT#(80)
+    global dim CAPD_C_SQ#(80)
+    ` the card of the game's own ink that goes over a piece's tile, on the cells of the board that are
+    ` inked and the ones next to them, or 0. see capDraftInkCard.
+    global dim CAPD_C_INK(80)
+    ` and which cell of the key art's board that piece is on, for its ink's corners
+    global dim CAPD_C_IR(80)
+    global dim CAPD_C_IC(80)
+    ` the board of the key art: its middle, the size of a cell, and how far off the eye is. capDraftProject
+    ` puts a spot of it on the screen, in CAPD_PX#, CAPD_PY#.
+    global CAPD_G_X# = 0
+    global CAPD_G_Y# = 0
+    global CAPD_G_CELL# = 0
+    global CAPD_G_FOCAL# = 300
+    global CAPD_PX# = 0
+    global CAPD_PY# = 0
+    ` CornerCardEffect: a picture on four corners, so that the cells of the ink meet with no seam
+    global CAPD_CORNER_FX = 0
+    ` how much of the ink shows
+    global CAPD_INK_ALPHA = 165
+    ` and what kind of fish it is drawn as: belly up (half a turn of pitch), and what the effect takes on top
+    ` of its glow (2000 for a rainbow fish, 4000 for one in a bubble). see FishEffect.fx.
+    global dim CAPD_C_BELLY#(80)
+    global dim CAPD_C_FX#(80)
+    global CAPD_RING_LEAN# = .6 `how much of the lean of the rings the pieces take: all of it was too much
+    ` the four pieces of the T: 0 the seahorse under the crab, 1 the crab, 2 and 3 the seahorses beside it
+    global dim CAPD_T_CELL(4)
+    global CAPD_PITCH# = 0
+    global CAPD_YAW# = 0
+    ` what the rings do to a spot, from capDraftShock
+    global CAPD_SH_LIFT# = 0
+    global CAPD_SH_LX# = 0
+    global CAPD_SH_LY# = 0
+    ` the puffs of the splash behind "Pop": where each one is, how big, which smoke, and how late it starts
+    global CAPD_PUFF_N = 0
+    global dim CAPD_PUFF(16)
+    global dim CAPD_PUFF_X#(16)
+    global dim CAPD_PUFF_Y#(16)
+    global dim CAPD_PUFF_S#(16)
+    global dim CAPD_PUFF_F0(16)
+    global dim CAPD_PUFF_FN(16)
+    global dim CAPD_PUFF_LATE#(16)
+    global CAPD_POP_X# = 0 `where the middle of "Pop" is
+    global CAPD_POP_Y# = 0
+    global CAPD_POP_SIZE# = 0
+    ` THE SMOKES OF A POP, the same five that SMOKE_ANIMS has: which texture, its first frame, and how many
+    global dim CAPD_SMOKE_TEX(5)
+    global dim CAPD_SMOKE_F0(5)
+    global dim CAPD_SMOKE_FN(5)
+
+` the five smokes of a pop on the board. the textures are the game's own, which a function cannot see.
+function capDraftSmokes(csmA, csmB)
+    CAPD_SMOKE_TEX(0) = csmA
+    CAPD_SMOKE_F0(0) = 16
+    CAPD_SMOKE_FN(0) = 8
+    CAPD_SMOKE_TEX(1) = csmA
+    CAPD_SMOKE_F0(1) = 56
+    CAPD_SMOKE_FN(1) = 8
+    CAPD_SMOKE_TEX(2) = csmB
+    CAPD_SMOKE_F0(2) = 24
+    CAPD_SMOKE_FN(2) = 12
+    CAPD_SMOKE_TEX(3) = csmB
+    CAPD_SMOKE_F0(3) = 48
+    CAPD_SMOKE_FN(3) = 12
+    CAPD_SMOKE_TEX(4) = csmB
+    CAPD_SMOKE_F0(4) = 72
+    CAPD_SMOKE_FN(4) = 12
+endfunction
+
+` EASING. t from 0 to 1.
+function capEaseInOut(eiT#)
+    eiOut# = 0
+    if eiT# < .5 then eiOut# = 4 * eiT# * eiT# * eiT#
+    if eiT# >= .5
+        eiU# = 2 - 2 * eiT#
+        eiOut# = 1 - eiU# * eiU# * eiU# / 2
+    endif
+endfunction eiOut#
+
+function capEaseOut(eoT#)
+    eoU# = 1 - eoT#
+endfunction 1 - eoU# * eoU# * eoU#
+
+` past its end and back: the ease of a word of the trailer popping in
+function capEaseBack(ebT#)
+    ebU# = ebT# - 1
+endfunction 1 + 2.7 * ebU# * ebU# * ebU# + 1.7 * ebU# * ebU#
+
+` a spring that has been let go, this many frames ago: 1 at the start, swinging through 0, and dying away
+function capSpring(spA#, spRate#)
+endfunction cos(spA# * spRate#) * pow(.87, spA#)
+
+` one card of the fish effect: a fish, or with TEX_PIXEL, a square
+function capDraftCard(cdKind, cdSize#, cdOrder)
+    cdS = 0
+    reserve sprite id(cdS)
+    sprite cdS, 0, 0, cdKind
+    set sprite offset cdS, .5, .5
+    size sprite cdS, cdSize#, cdSize#
+    set sprite effect cdS, FISH_FX_ID
+    order sprite cdS, cdOrder
+endfunction cdS
+
+` a new piece, at rest where it is, and its number
+function capDraftPiece(cpKind, cpX#, cpY#, cpFish#, cpTile#, cpR, cpG, cpB, cpA, cpTR, cpTG, cpTB, cpTA, cpLift#, cpFront, cpCursor)
+    cpI = CAPD_C_N
+    CAPD_C_N = CAPD_C_N + 1
+    CAPD_C_X#(cpI) = cpX#
+    CAPD_C_Y#(cpI) = cpY#
+    CAPD_C_S#(cpI) = cpFish#
+    CAPD_C_TS#(cpI) = cpTile#
+    CAPD_C_R(cpI) = cpR
+    CAPD_C_G(cpI) = cpG
+    CAPD_C_B(cpI) = cpB
+    CAPD_C_A(cpI) = cpA
+    CAPD_C_TR(cpI) = cpTR
+    CAPD_C_TG(cpI) = cpTG
+    CAPD_C_TB(cpI) = cpTB
+    CAPD_C_TA(cpI) = cpTA
+    CAPD_C_LIFT#(cpI) = cpLift#
+    CAPD_C_DY#(cpI) = 0
+    CAPD_C_SHOW#(cpI) = 1
+    CAPD_C_DP#(cpI) = 0
+    CAPD_C_DYAW#(cpI) = 0
+    CAPD_C_DLIFT#(cpI) = 0
+    CAPD_C_SQ#(cpI) = 1
+    CAPD_C_BELLY#(cpI) = 0
+    CAPD_C_FX#(cpI) = 0
+    CAPD_C_INK(cpI) = 0
+    ` the pieces of the T are over the rest of the board
+    CAPD_C_EDGE(cpI) = 0
+    if cpCursor
+        CAPD_C_EDGE(cpI) = capDraftCard(TEX_PIXEL, cpTile#, 30)
+    endif
+    CAPD_C_TILE(cpI) = capDraftCard(TEX_PIXEL, cpTile#, 29 + 2 * cpFront)
+    CAPD_C_FISH(cpI) = capDraftCard(cpKind, cpFish#, 32 + cpFront)
+    capDraftPose(cpI)
+endfunction cpI
+
+` what the rings that are going do to a spot on the screen: how far up the bump it is, and how steep the
+` bump is under it, each way. the same as frame_fish_fx works out for a fish on the board.
+function capDraftShock(csX#, csY#)
+    CAPD_SH_LIFT# = 0
+    CAPD_SH_LX# = 0
+    CAPD_SH_LY# = 0
+    csCx# = (csX# - GRID_POS.x) / CELL_SIZE
+    csCy# = (csY# - GRID_POS.y) / CELL_SIZE
+    csTouched = 0
+    for csS = 0 to SHOCK_LIVE_COUNT - 1
+        csDx# = csCx# - SHOCK_LIVE_X#(csS)
+        csDy# = csCy# - SHOCK_LIVE_Y#(csS)
+        csDist# = sqrt(csDx# * csDx# + csDy# * csDy#)
+        csAhead# = (csDist# - SHOCK_LIVE_R#(csS)) / SHOCK_WIDTH#
+        if abs(csAhead#) < 1
+            csTouched = 1
+            csP# = SHOCK_LIVE_P#(csS)
+            CAPD_SH_LIFT# = CAPD_SH_LIFT# + (.5 + .5 * cos(csAhead# * 3.14159)) * csP#
+            if csDist# > .01
+                csSlope# = sin(csAhead# * 3.14159) * csP#
+                CAPD_SH_LX# = CAPD_SH_LX# + (csSlope# * csDx#) / csDist#
+                CAPD_SH_LY# = CAPD_SH_LY# + (csSlope# * csDy#) / csDist#
+            endif
+        endif
+    next
+    if csTouched
+        ` the sums bend over as they get big, so that rings on top of rings still show
+        CAPD_SH_LIFT# = CAPD_SH_LIFT# / sqrt(1 + (CAPD_SH_LIFT# * CAPD_SH_LIFT#) / (SHOCK_LIFT_MAX# * SHOCK_LIFT_MAX#))
+        csBend# = sqrt(1 + (CAPD_SH_LX# * CAPD_SH_LX# + CAPD_SH_LY# * CAPD_SH_LY#) / (SHOCK_LEAN_MAX# * SHOCK_LEAN_MAX#))
+        CAPD_SH_LX# = CAPD_SH_LX# / csBend#
+        CAPD_SH_LY# = CAPD_SH_LY# / csBend#
+    endif
+endfunction
+
+` put the cards of a piece where it is now: its place, how it is moving, and what the rings do to it
+function capDraftPose(cqI)
+    cqFish = CAPD_C_FISH(cqI)
+    cqTile = CAPD_C_TILE(cqI)
+    cqEdge = CAPD_C_EDGE(cqI)
+    cqShow# = CAPD_C_SHOW#(cqI)
+    if cqShow# <= 0
+        hide sprite cqFish
+        hide sprite cqTile
+        if cqEdge
+            hide sprite cqEdge
+        endif
+        if CAPD_C_INK(cqI)
+            hide sprite CAPD_C_INK(cqI)
+        endif
+        exitfunction
+    endif
+    if cqShow# > 1 then cqShow# = 1
+    show sprite cqFish
+    show sprite cqTile
+    if cqEdge
+        show sprite cqEdge
+    endif
+    if CAPD_C_INK(cqI)
+        show sprite CAPD_C_INK(cqI)
+    endif
+    cqX# = CAPD_C_X#(cqI)
+    cqY# = CAPD_C_Y#(cqI) + CAPD_C_DY#(cqI)
+    capDraftShock(cqX#, cqY#)
+    CAPD_SH_LX# = CAPD_SH_LX# * CAPD_RING_LEAN#
+    CAPD_SH_LY# = CAPD_SH_LY# * CAPD_RING_LEAN#
+    ` positive yaw faces it to the right, and positive pitch faces it up, which is the other way from y
+    cqPitch# = CAPD_PITCH# + CAPD_C_DP#(cqI) - CAPD_SH_LY# * SHOCK_TILT#
+    cqYaw# = CAPD_YAW# + CAPD_C_DYAW#(cqI) + CAPD_SH_LX# * SHOCK_TILT#
+    cqSq# = CAPD_C_SQ#(cqI)
+    cqFishS# = CAPD_C_S#(cqI) * cqSq#
+    cqTileS# = CAPD_C_TS#(cqI) * cqSq#
+    cqPushX# = CAPD_SH_LX# * SHOCK_PUSH# * cqFishS#
+    cqPushY# = CAPD_SH_LY# * SHOCK_PUSH# * cqFishS#
+    cqLift# = CAPD_C_LIFT#(cqI) + CAPD_C_DLIFT#(cqI) + CAPD_SH_LIFT# * SHOCK_LIFT#
+
+    position sprite cqFish, cqX#, cqY#
+    size sprite cqFish, cqFishS#, cqFishS#
+    set sprite all texcoord1 cqFish, cqPitch# + CAPD_C_BELLY#(cqI), cqYaw#, 1, cqFishS#
+    set sprite all texcoord2 cqFish, cqPushX#, cqPushY#, cqLift#, CAPD_C_FX#(cqI)
+    color sprite cqFish, rgb(CAPD_C_R(cqI), CAPD_C_G(cqI), CAPD_C_B(cqI), CAPD_C_A(cqI) * cqShow#)
+
+    position sprite cqTile, cqX#, cqY#
+    size sprite cqTile, cqTileS# * .9, cqTileS# * .9
+    set sprite all texcoord1 cqTile, cqPitch#, cqYaw#, 1, cqTileS# * .9
+    set sprite all texcoord2 cqTile, cqPushX#, cqPushY#, cqLift# * .5, 0
+    color sprite cqTile, rgb(CAPD_C_TR(cqI), CAPD_C_TG(cqI), CAPD_C_TB(cqI), CAPD_C_TA(cqI) * cqShow#)
+
+    if cqEdge
+        position sprite cqEdge, cqX#, cqY#
+        size sprite cqEdge, cqTileS# * .98, cqTileS# * .98
+        set sprite all texcoord1 cqEdge, cqPitch#, cqYaw#, 1, cqTileS# * .98
+        set sprite all texcoord2 cqEdge, cqPushX#, cqPushY#, cqLift# * .5, 0
+        color sprite cqEdge, rgb(112, 140, 224, 235 * cqShow#)
+    endif
+    cqInk = CAPD_C_INK(cqI)
+    if cqInk
+        ` the ink lies on the board itself, so its corners are the board's own, and a cell's corners are
+        ` its neighbours' too. it only drops in with its piece, and does not rock with it.
+        cqU# = CAPD_C_IC(cqI) - 4
+        cqV# = 3.5 - CAPD_C_IR(cqI)
+        cqDy# = CAPD_C_DY#(cqI)
+        capDraftProject(cqU# - .5, cqV# + .5)
+        cqAx# = CAPD_PX#
+        cqAy# = CAPD_PY# + cqDy#
+        capDraftProject(cqU# + .5, cqV# + .5)
+        cqBx# = CAPD_PX#
+        cqBy# = CAPD_PY# + cqDy#
+        capDraftProject(cqU# - .5, cqV# - .5)
+        cqCx# = CAPD_PX#
+        cqCy# = CAPD_PY# + cqDy#
+        capDraftProject(cqU# + .5, cqV# - .5)
+        set sprite all texcoord1 cqInk, cqAx#, cqAy#, cqBx#, cqBy#
+        set sprite all texcoord2 cqInk, cqCx#, cqCy#, CAPD_PX#, CAPD_PY# + cqDy#
+        color sprite cqInk, rgb(255, 255, 255, CAPD_INK_ALPHA * cqShow#)
+    endif
+endfunction
+
+function capDraftPoseAll()
+    for cpaI = 0 to CAPD_C_N - 1
+        capDraftPose(cpaI)
+    next
+endfunction
+
+` a piece falling in, this many frames after it started: it drops faster and faster, as a fish that
+` drops in on the board does, tipped back and turning a little as it comes, and it fades in at the start.
+` it lands with a squash, and rocks and settles. before it starts it is not there.
+function capDraftFallAt(cfI, cfAge)
+    cfLen = 16
+    cfH# = CAPD_C_TS#(cfI) * 3
+    if cfAge < 0
+        CAPD_C_SHOW#(cfI) = 0
+        exitfunction
+    endif
+    if cfAge < cfLen
+        cfT# = cfAge
+        cfT# = cfT# / cfLen
+        CAPD_C_DY#(cfI) = 0 - cfH# * (1 - cfT# * cfT#)
+        CAPD_C_SHOW#(cfI) = cfT# * 4
+        CAPD_C_DP#(cfI) = -.3 * (1 - cfT#)
+        CAPD_C_DYAW#(cfI) = .22 * sin(cfT# * 4 + cfI) * (1 - cfT#)
+        CAPD_C_SQ#(cfI) = 1
+        CAPD_C_DLIFT#(cfI) = .15 * (1 - cfT#)
+    else
+        cfA# = cfAge - cfLen
+        cfDecay# = pow(.87, cfA#)
+        CAPD_C_SHOW#(cfI) = 1
+        ` a hop off of the bottom, and less of one, and less
+        CAPD_C_DY#(cfI) = 0 - abs(sin(cfA# * .32)) * cfH# * .07 * cfDecay#
+        CAPD_C_SQ#(cfI) = 1 - .1 * capSpring(cfA#, .5)
+        CAPD_C_DP#(cfI) = .18 * sin(cfA# * .42) * cfDecay#
+        CAPD_C_DYAW#(cfI) = .08 * sin(cfA# * .33 + cfI) * cfDecay#
+        CAPD_C_DLIFT#(cfI) = 0
+    endif
+endfunction
+
+` which cells of the key art's board are inked: a patch on each side. the key art's board is 9 cells by 7,
+` and the game's own board, that the ink is really on, is 13 by 9, so a cell of the one is 2 columns and
+` 1 row in, on the other.
+function capDraftInked(ciR, ciC)
+    ciYes = 0
+    if ciR = 1 and ciC = 2 then ciYes = 1
+    if ciR = 1 and ciC = 3 then ciYes = 1
+    if ciR = 2 and ciC = 2 then ciYes = 1
+    if ciR = 3 and ciC = 7 then ciYes = 1
+    if ciR = 4 and ciC = 7 then ciYes = 1
+    if ciR = 3 and ciC = 8 then ciYes = 1
+endfunction ciYes
+
+` a card of the game's own ink, for one cell of the key art's board. the ink can only be drawn flat, so a
+` copy of the board's ink sprite draws into a render target of its own, the size of a cell, with a camera
+` on the game board's cell that this one is. the card shows that render target, tilted with its piece.
+function capDraftInkCard(ckR, ckC, ckSize#)
+    ckK = RENDER_SCALE
+    ckCell = CELL_SIZE
+    ckTex = 0
+    reserve texture id(ckTex)
+    create texture target ckTex, ckCell * ckK, ckCell * ckK
+    ckOut = 0
+    reserve render target id(ckOut)
+    render target ckOut, ckTex
+    set render target background color ckOut, rgb(0, 0, 0, 0)
+    ckCam = 0
+    reserve camera id(ckCam)
+    position camera ckCam, getCellX(ckC + 2), getCellY(ckR + 1)
+    set render target camera ckOut, ckCam
+    ckInk = 0
+    reserve sprite id(ckInk)
+    sprite ckInk, getCellX(0) - ckCell / 2 - ckCell, getCellY(0) - ckCell / 2 - ckCell, TEX_PIXEL
+    set sprite offset ckInk, 0, 0
+    size sprite ckInk, (CELL_COLUMN_COUNT + 2) * ckCell, (CELL_ROW_COUNT + 2) * ckCell
+    set sprite effect ckInk, INK_FX_ID
+    set sprite render target ckInk, ckOut
+    ckCard = 0
+    reserve sprite id(ckCard)
+    sprite ckCard, 0, 0, ckTex
+    set sprite effect ckCard, CAPD_CORNER_FX
+    order sprite ckCard, 31
+endfunction ckCard
+
+` where a spot of the key art's board is on the screen, cpU# cells to the right of its middle and cpV#
+` cells up from it, the same way that capDraftGrid places its cells. it goes in CAPD_PX#, CAPD_PY#.
+function capDraftProject(cpU#, cpV#)
+    cpPx# = cpU# * CAPD_G_CELL#
+    cpPy# = cpV# * CAPD_G_CELL#
+    cpZ# = cpPy# * sin(CAPD_PITCH#) + cpPx# * sin(CAPD_YAW#)
+    cpK# = CAPD_G_FOCAL# / (CAPD_G_FOCAL# + cpZ#)
+    CAPD_PX# = CAPD_G_X# + cpPx# * cos(CAPD_YAW#) * cpK#
+    CAPD_PY# = CAPD_G_Y# - cpPy# * cos(CAPD_PITCH#) * cpK#
+endfunction
+
+` the board of the key art, 9 cells by 7, around cgX#, cgY#, cgCell# pixels to a cell, tilted, so it goes a
+` long way off into the distance. the T is at the middle, and the cursor is on the crab. the fish of the
+` other cells are dimmer, and fade away toward the edges. a few of them are what the game has: two rainbow
+` fish, one in a bubble, and two belly up. the cells that come too close to the camera are left out. the T is laid out flat around the crab's cell, all at the size that that cell is, so the T is
+` straight while the rest of the board goes off into the distance.
+function capDraftGrid(cgX#, cgY#, cgCell#, cgPitch#, cgYaw#, cgBass, cgCrab, cgK0, cgK1, cgK2, cgK3, cgK4)
+    CAPD_PITCH# = cgPitch#
+    CAPD_YAW# = cgYaw#
+    cgFocal# = 300
+    CAPD_G_X# = cgX#
+    CAPD_G_Y# = cgY#
+    CAPD_G_CELL# = cgCell#
+    CAPD_G_FOCAL# = cgFocal#
+    if CAPD_CORNER_FX = 0
+        reserve effect id(CAPD_CORNER_FX)
+        effect CAPD_CORNER_FX, "Fish/Shaders/CornerCardEffect"
+    endif
+    cgCosP# = cos(cgPitch#)
+    cgSinP# = sin(cgPitch#)
+    cgCosY# = cos(cgYaw#)
+    cgSinY# = sin(cgYaw#)
+    CAPD_C_N = 0
+    ` where the crab's cell is (row 1, column 2), and how big, which the T is laid out from
+    cgTPy# = .5 * cgCell#
+    cgTK# = cgFocal# / (cgFocal# + cgTPy# * cgSinP#)
+    cgTX# = cgX#
+    cgTY# = cgY# - cgTPy# * cgCosP# * cgTK#
+    cgTS# = cgCell# * cgTK#
+    for cgR = 0 to 6
+        for cgC = 0 to 8
+            cgU# = cgC - 4
+            cgV# = 3.5 - cgR
+            cgPx# = cgU# * cgCell#
+            cgPy# = cgV# * cgCell#
+            cgUpY# = cgPy# * cgCosP#
+            cgZ# = cgPy# * cgSinP#
+            cgSx# = cgPx# * cgCosY#
+            cgZ# = cgZ# + cgPx# * cgSinY#
+            cgK# = cgFocal# / (cgFocal# + cgZ#)
+            cgScrX# = cgX# + cgSx# * cgK#
+            cgScrY# = cgY# - cgUpY# * cgK#
+            cgSize# = cgCell# * cgK#
+            cgNear = 0
+            if cgZ# < -150 then cgNear = 1
+
+            ` which of the T this is, or -1. the T's own cells are flat, from the crab's.
+            cgSlot = -1
+            if cgR = 4 and cgC = 4 then cgSlot = 0
+            if cgR = 3 and cgC = 4 then cgSlot = 1
+            if cgR = 3 and cgC = 3 then cgSlot = 2
+            if cgR = 3 and cgC = 5 then cgSlot = 3
+            if cgSlot >= 0
+                cgScrX# = cgTX# + (cgC - 4) * cgTS#
+                cgScrY# = cgTY# + (cgR - 3) * cgTS#
+                cgSize# = cgTS#
+            endif
+            cgKind = cgBass
+            if cgSlot = 1 then cgKind = cgCrab
+            if cgSlot < 0
+                cgM = (cgC + 2 * cgR) mod 5
+                cgKind = cgK0
+                if cgM = 1 then cgKind = cgK1
+                if cgM = 2 then cgKind = cgK2
+                if cgM = 3 then cgKind = cgK3
+                if cgM = 4 then cgKind = cgK4
+            endif
+
+            ` how far the cell is from the T, which fades the far ones away
+            cgDx# = abs(cgU#)
+            cgDy# = abs(cgV# - .1)
+            cgFar# = cgDx# * .24 + cgDy# * .26
+            if cgFar# > 1 then cgFar# = 1
+            cgTileA = 150 - 140 * cgFar#
+            cgFishA = 225 - 215 * cgFar#
+
+            if cgSlot >= 0
+                cgCursor = 0
+                cgTR = 12
+                cgTG = 24
+                cgTB = 52
+                cgTA = 200
+                if cgSlot = 1
+                    cgCursor = 1
+                    cgTR = 18
+                    cgTG = 28
+                    cgTB = 58
+                    cgTA = 245
+                endif
+                CAPD_T_CELL(cgSlot) = capDraftPiece(cgKind, cgScrX#, cgScrY#, cgSize# * .62, cgSize#, 255, 255, 255, 255, cgTR, cgTG, cgTB, cgTA, .08, 1, cgCursor)
+            else
+                if cgNear = 0
+                    ` the ones that the game would show: rainbow, in a bubble, belly up. they show a little more.
+                    cgFx# = 0
+                    cgBelly# = 0
+                    if cgR = 2 and cgC = 1 then cgFx# = 2000
+                    if cgR = 1 and cgC = 6 then cgFx# = 2000
+                    if cgR = 4 and cgC = 6 then cgFx# = 4000
+                    if cgR = 2 and cgC = 7 then cgBelly# = 3.14159
+                    if cgR = 5 and cgC = 2 then cgBelly# = 3.14159
+                    if cgFx# > 0 or cgBelly# > 0
+                        if cgFishA < 170 then cgFishA = 170
+                    endif
+                    cgI = capDraftPiece(cgKind, cgScrX#, cgScrY#, cgSize# * .58, cgSize#, 150, 175, 215, cgFishA, 10, 22, 48, cgTileA, 0, 0, 0)
+                    CAPD_C_FX#(cgI) = cgFx#
+                    CAPD_C_BELLY#(cgI) = cgBelly#
+                    ` the game's own ink, on the board's tilt: on the inked cells, and on the cells next to them,
+                    ` where its glow spills over
+                    cgInkNear = 0
+                    for cgIr = cgR - 1 to cgR + 1
+                        for cgIc = cgC - 1 to cgC + 1
+                            if capDraftInked(cgIr, cgIc) then cgInkNear = 1
+                        next
+                    next
+                    if cgInkNear
+                        CAPD_C_INK(cgI) = capDraftInkCard(cgR, cgC, cgSize#)
+                        CAPD_C_IR(cgI) = cgR
+                        CAPD_C_IC(cgI) = cgC
+                        capDraftPose(cgI)
+                    endif
+                endif
+            endif
+        next
+    next
+endfunction
+
+function capDraftText(ctText$, ctX#, ctY#, ctSize, ctAngle#, ctColor, ctOrder)
+    ctId = 0
+    reserve text id(ctId)
+    text ctId, ctX#, ctY#, SCORE_FONT, ctText$
+    size text y ctId, ctSize
+    set text offset ctId, .5, .5
+    set text position ctId, ctX#, ctY#
+    rotate text ctId, ctAngle#
+    color text ctId, ctColor
+    order text ctId, ctOrder
+    set text alpha ctId, 255
+    ` it is kept, as part of the word that is being built, so that the word can be moved as one
+    CAPD_TXT(CAPD_TXT_N) = ctId
+    CAPD_TXT_W(CAPD_TXT_N) = CAPD_W_N
+    CAPD_TXT_DX#(CAPD_TXT_N) = ctX# - CAPD_W_X#(CAPD_W_N)
+    CAPD_TXT_DY#(CAPD_TXT_N) = ctY# - CAPD_W_Y#(CAPD_W_N)
+    CAPD_TXT_SZ(CAPD_TXT_N) = ctSize
+    CAPD_TXT_N = CAPD_TXT_N + 1
+endfunction ctId
+
+` one word of the title, dressed: a deep edge going down and to the right, a dark outline all around, a
+` pale rim up and to the left, and the face over all of it. it is the next word, CAPD_W_N.
+function capDraftWord(cwText$, cwX#, cwY#, cwSize, cwAngle#, cwFace, cwRim, cwNearR, cwNearG, cwNearB, cwFarR, cwFarG, cwFarB)
+    CAPD_W_X#(CAPD_W_N) = cwX#
+    CAPD_W_Y#(CAPD_W_N) = cwY#
+    cwDepth = 12
+    cwStep# = cwSize * .006
+    for cwN = cwDepth to 1 step -1
+        cwT# = cwN
+        cwT# = cwT# / cwDepth
+        cwR = cwNearR + (cwFarR - cwNearR) * cwT#
+        cwG = cwNearG + (cwFarG - cwNearG) * cwT#
+        cwB = cwNearB + (cwFarB - cwNearB) * cwT#
+        cwId = capDraftText(cwText$, cwX# + cwN * cwStep# * .6, cwY# + cwN * cwStep#, cwSize, cwAngle#, rgb(cwR, cwG, cwB), 294)
+    next
+    ` the outline, under the deep edge's front
+    cwLine# = cwSize * .035
+    for cwA = 0 to 15
+        cwAng# = cwA * .3927
+        cwId = capDraftText(cwText$, cwX# + cos(cwAng#) * cwLine#, cwY# + sin(cwAng#) * cwLine#, cwSize, cwAngle#, rgb(4, 10, 34), 293)
+    next
+    cwId = capDraftText(cwText$, cwX# - cwSize * .012, cwY# - cwSize * .016, cwSize, cwAngle#, cwRim, 296)
+    cwId = capDraftText(cwText$, cwX#, cwY#, cwSize, cwAngle#, cwFace, 297)
+    CAPD_W_N = CAPD_W_N + 1
+endfunction
+
+` a word of the title, cwpScale# times its size around its middle, pushed down by cwpDrop# pixels, and with
+` this much of it showing, from 0 to 255
+function capDraftWordPose(cwpWord, cwpScale#, cwpDrop#, cwpAlpha)
+    for cwpI = 0 to CAPD_TXT_N - 1
+        if CAPD_TXT_W(cwpI) = cwpWord
+            cwpId = CAPD_TXT(cwpI)
+            set text position cwpId, CAPD_W_X#(cwpWord) + CAPD_TXT_DX#(cwpI) * cwpScale#, CAPD_W_Y#(cwpWord) + cwpDrop# + CAPD_TXT_DY#(cwpI) * cwpScale#
+            size text y cwpId, CAPD_TXT_SZ(cwpI) * cwpScale#
+            set text alpha cwpId, cwpAlpha
+        endif
+    next
+endfunction
+
+` the title around ttX#, ttY#, tilted by ttAngle#: two "Fish" over a big "Pop", jumbled, the first a
+` little up and leaning back, the second a little down and leaning forward. ttScale# of 1 is a pop 104
+` pixels tall. the words are 0, 1 and 2.
+function capDraftTitle(ttX#, ttY#, ttScale#, ttAngle#)
+    ttSin# = sin(ttAngle#)
+    ttCos# = cos(ttAngle#)
+    ttFish = 46 * ttScale#
+    ` each word's place before the tilt: across from the middle, and down from it
+    ttAx# = -44 * ttScale#
+    ttAy# = -60 * ttScale#
+    ttBx# = 44 * ttScale#
+    ttBy# = -46 * ttScale#
+    ttPy# = 22 * ttScale#
+    capDraftWord("Fish", ttX# + ttAx# * ttCos# - ttAy# * ttSin#, ttY# + ttAx# * ttSin# + ttAy# * ttCos#, ttFish, ttAngle# - .1, rgb(214, 236, 255), rgb(255, 255, 255), 46, 92, 170, 10, 24, 70)
+    capDraftWord("Fish", ttX# + ttBx# * ttCos# - ttBy# * ttSin#, ttY# + ttBx# * ttSin# + ttBy# * ttCos#, ttFish, ttAngle# + .08, rgb(214, 236, 255), rgb(255, 255, 255), 46, 92, 170, 10, 24, 70)
+    CAPD_POP_X# = ttX# - ttPy# * ttSin#
+    CAPD_POP_Y# = ttY# + ttPy# * ttCos#
+    CAPD_POP_SIZE# = 104 * ttScale#
+    capDraftWord("Pop", CAPD_POP_X#, CAPD_POP_Y#, CAPD_POP_SIZE#, ttAngle#, rgb(255, 214, 92), rgb(255, 250, 210), 214, 104, 40, 70, 20, 30)
+endfunction
+
+` THE SPLASH behind "Pop": puffs of the smokes of a pop, every one a different smoke, turn, flip, size and
+` blue from the one before it. six big ones are packed in behind the middle of the word, and six smaller
+` ones go out past its ends and over its top. none go under it, where they would cover the board.
+function capDraftSplash()
+    CAPD_PUFF_N = 12
+    for cspI = 0 to CAPD_PUFF_N - 1
+        cspS = 0
+        reserve sprite id(cspS)
+        if cspI < 6
+            ` behind the word, across it, from one end to the other, a little up and down
+            cspAcross# = (cspI - 2.5) / 2.5
+            CAPD_PUFF_X#(cspI) = CAPD_POP_X# + cspAcross# * CAPD_POP_SIZE# * .62 + (rnd(20) - 10) * .01 * CAPD_POP_SIZE#
+            CAPD_PUFF_Y#(cspI) = CAPD_POP_Y# + (rnd(30) - 18) * .01 * CAPD_POP_SIZE#
+            CAPD_PUFF_S#(cspI) = CAPD_POP_SIZE# * (1.0 + rnd(50) * .01)
+        else
+            ` out past the ends, and over the top
+            cspAng# = 3.0 + (cspI - 6) * .68 + rnd(20) * .01
+            CAPD_PUFF_X#(cspI) = CAPD_POP_X# + cos(cspAng#) * CAPD_POP_SIZE# * (1.0 + rnd(25) * .01)
+            CAPD_PUFF_Y#(cspI) = CAPD_POP_Y# + sin(cspAng#) * CAPD_POP_SIZE# * (.45 + rnd(15) * .01)
+            CAPD_PUFF_S#(cspI) = CAPD_POP_SIZE# * (.5 + rnd(35) * .01)
+        endif
+        cspSmoke = (cspI * 3 + cspI / 5) mod 5
+        CAPD_PUFF_F0(cspI) = CAPD_SMOKE_F0(cspSmoke)
+        CAPD_PUFF_FN(cspI) = CAPD_SMOKE_FN(cspSmoke)
+        CAPD_PUFF_LATE#(cspI) = rnd(18) * .01
+        sprite cspS, CAPD_PUFF_X#(cspI), CAPD_PUFF_Y#(cspI), CAPD_SMOKE_TEX(cspSmoke)
+        set sprite offset cspS, .5, .5
+        rotate sprite cspS, rnd(628) * .01
+        set sprite flip cspS, cspI mod 2, (cspI / 2) mod 2
+        cspOrder = cspI mod 3
+        order sprite cspS, CAPD_ORDER_PUFF + cspOrder
+        ` the blues of the smoke on the board, and white
+        cspTint = cspI mod 5
+        if cspTint = 0 then color sprite cspS, rgb(143, 199, 255, 220)
+        if cspTint = 1 then color sprite cspS, rgb(120, 172, 224, 210)
+        if cspTint = 2 then color sprite cspS, rgb(225, 240, 255, 225)
+        if cspTint = 3 then color sprite cspS, rgb(165, 215, 240, 215)
+        if cspTint = 4 then color sprite cspS, rgb(190, 225, 255, 225)
+        CAPD_PUFF(cspI) = cspS
+    next
+    capDraftSplashAt(.35)
+endfunction
+
+` the splash, from 0 (it has only just burst) to 1 (it has gone): each puff, from its own moment, grows out
+` from the word, and runs through the frames of its smoke. past its end it is hidden.
+function capDraftSplashAt(csaT#)
+    for csaI = 0 to CAPD_PUFF_N - 1
+        csaS = CAPD_PUFF(csaI)
+        csaMine# = (csaT# - CAPD_PUFF_LATE#(csaI)) / (1 - CAPD_PUFF_LATE#(csaI))
+        if csaMine# >= 1 or csaMine# < 0
+            hide sprite csaS
+        else
+            show sprite csaS
+            csaOut# = .5 + .5 * capEaseOut(csaMine#)
+            csaX# = CAPD_POP_X# + (CAPD_PUFF_X#(csaI) - CAPD_POP_X#) * csaOut#
+            csaY# = CAPD_POP_Y# + (CAPD_PUFF_Y#(csaI) - CAPD_POP_Y#) * csaOut#
+            position sprite csaS, csaX#, csaY#
+            size sprite csaS, CAPD_PUFF_S#(csaI) * csaOut#, CAPD_PUFF_S#(csaI) * csaOut#
+            csaFrame = csaMine# * CAPD_PUFF_FN(csaI)
+            if csaFrame > CAPD_PUFF_FN(csaI) - 1 then csaFrame = CAPD_PUFF_FN(csaI) - 1
+            set sprite frame csaS, CAPD_PUFF_F0(csaI) + csaFrame
+        endif
+    next
+endfunction
+
+` bubbles off of the whole of "Pop", and a ring out from it through the water, that the fish and the
+` picture bulge in, and a second, weaker one a moment behind it
+function capDraftBurst(cbPower#)
+    cbX = CAPD_POP_X#
+    cbY = CAPD_POP_Y#
+    cbR = CAPD_POP_SIZE# * .9
+    spawnBubblesOnLayer(cbX, cbY, cbR, 26, 0, rgb(215, 235, 255), 299, 0, 230, 1.2)
+    cbCellX# = (CAPD_POP_X# - GRID_POS.x) / CELL_SIZE
+    cbCellY# = (CAPD_POP_Y# - GRID_POS.y) / CELL_SIZE
+    spawnShockwave(cbCellX#, cbCellY#, cbPower#, 0)
+    spawnShockwave(cbCellX#, cbCellY#, cbPower# * .5, 220)
+endfunction
+
+` the reef along the bottom of the picture: the board is stretched across the whole screen, 13 cells by 9
+` (the most cells there are room for is 121), and coral grows on its bottom row, and climbs its corners.
+` the very bottom of it is horror coral, which the tentacle comes up out of. it is drawn in front of the
+` fish, so it hides the bottom of the board. (the ink is on the cards of the board: see capDraftGrid.)
+function capDraftReef()
+    GRID_SPAN = WORLD_WIDTH
+    GRID_CENTER.y = 140
+    resizeGrid(13, 9)
+    trailerFishAway()
+    for crI = 0 to CELL_COUNT - 1
+        CORAL_CELLS(crI) = 0
+        CORAL_SICK(crI) = 0
+    next
+    for crC = 0 to 12
+        ` how many rows up from the bottom it grows, on this column
+        crUp = 2
+        if crC = 0 then crUp = 4
+        if crC = 1 then crUp = 3
+        if crC = 5 then crUp = 3
+        if crC = 12 then crUp = 3
+        for crR = 9 - crUp to 8
+            CORAL_CELLS(crC + crR * 13) = 1
+        next
+        ` the very bottom row is horror coral, and the coral over it is not, so the one goes into the
+        ` other. it climbs a row higher by the tentacle, at the right.
+        CORAL_SICK(crC + 8 * 13) = 1
+        if crC >= 11 then CORAL_SICK(crC + 7 * 13) = 1
+    next
+    coralRecount()
+    order sprite CORAL_VIEW_SPRITE, CAPD_ORDER_REEF
+    ` the ink, on the game's own board. squidStep wipes the ink when the board has changed size, so it is
+    ` told that it has not. the board's own ink sprite is not seen: the cards show it, on the tilt.
+    INK_BOARD_COLS = CELL_COLUMN_COUNT
+    for crR = 0 to 6
+        for crC = 0 to 8
+            if capDraftInked(crR, crC) then inkCell(crC + 2 + (crR + 1) * 13)
+        next
+    next
+endfunction
+
+` the diver far off: small, and hazed blue
+function capDraftDiver(cdvX#, cdvY#, cdvSize#, cdvLeft)
+    cdvS = 0
+    reserve sprite id(cdvS)
+    sprite cdvS, cdvX#, cdvY#, TEX_DIVER_SHEET
+    set sprite offset cdvS, .5, .5
+    size sprite cdvS, cdvSize#, cdvSize#
+    order sprite cdvS, ORDER_FISH - 2
+    set sprite flip cdvS, cdvLeft, 0
+    color sprite cdvS, rgb(150, 185, 230, 150)
+    set sprite frame cdvS, 3
+endfunction cdvS
+
+` Ava, the angler, far off and deep: small and hazed, with only the light that hangs in front of her bright
+function capDraftAva(caX#, caY#, caScale#, caLeft)
+    caW# = ANGLER_ART_W * caScale#
+    caH# = ANGLER_ART_H * caScale#
+    caS = 0
+    reserve sprite id(caS)
+    sprite caS, caX#, caY#, TEX_ANGLER
+    set sprite offset caS, .5, .5
+    size sprite caS, caW#, caH#
+    order sprite caS, ORDER_FISH - 3
+    set sprite flip caS, caLeft, 0
+    color sprite caS, rgb(80, 105, 150, 150)
+    ` her light: where it hangs from, in the picture, and a little under that
+    caTipX# = (ANGLER_TIP_X * caScale#) - caW# / 2
+    if caLeft then caTipX# = 0 - caTipX#
+    caTipY# = (ANGLER_TIP_Y * caScale#) - caH# / 2
+    caG = 0
+    reserve sprite id(caG)
+    sprite caG, caX# + caTipX#, caY# + caTipY# + ANGLER_GLOW_DROP * caScale# * .5, TEX_ANGLER_GLOW
+    set sprite offset caG, .5, .5
+    size sprite caG, 30 * caScale#, 30 * caScale#
+    order sprite caG, ORDER_FISH - 2
+    color sprite caG, rgb(ANGLER_GLOW_R, ANGLER_GLOW_G, ANGLER_GLOW_B, 230)
+endfunction caS
+
+` what has to be done on every frame of a draft: the board's own fish kept away, the tentacle only just
+` up, the coral bent a little and in front, bubbles coming up off of the reef now and then, and the
+` pieces put where they are, with what the rings do to them
+function capDraftFrame(cfF)
+    hintShow(0)
+    trailerHideBut(-1, -1, -1, -1)
+    set sprite alpha SELECTION_SPRITE, 0
+    set sprite all texcoord1 SELECTION_SPRITE, 0, 0, 0, 0
+    if cfF mod 9 = 0
+        spawnBubblesOnLayer(20 + rnd(530), 300, 14, 2, 0, rgb(190, 220, 255), CAPD_ORDER_BUBBLES, 0, 170, 1)
+    endif
+    show sprite TENTACLE_SPRITE
+    set effect param float TENTACLE_FX_ID, "Time", game ms() * .001
+    set effect param float2 TENTACLE_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT
+    set effect param float TENTACLE_FX_ID, "Rise", .26
+    order sprite TENTACLE_SPRITE, CAPD_ORDER_REEF + 1
+    set effect param float TENTACLE_FX_ID, "Lone", 1
+    set effect param float CORAL_FX_ID, "Warp", .08
+    order sprite CORAL_VIEW_SPRITE, CAPD_ORDER_REEF
+    if INK_BOARD_SPRITE > 0
+        set sprite alpha INK_BOARD_SPRITE, 0
+    endif
+    capDraftPoseAll()
+endfunction
+
+` hold the scene until the sea settles, and take it
+function capDraftTake(ckName$)
+    ckOut$ = env$("FISH_CAPSULE_OUT")
+    if ckOut$ = "" then ckOut$ = "capsules"
+    for ckF = 0 to 150
+        capDraftFrame(ckF)
+        if ckF = 95
+            capDraftBurst(0)
+        endif
+        runto update_frame
+    next
+    screenshot ckOut$ + "/raw/" + ckName$
+    print "[capsule] take " + ckName$
+
+endfunction
+
+` and the same scene again with no title, and no splash, for the art that must not have words on it (the
+` library hero, the page background). it waits for the bubbles of the burst to go, which are over the words.
+function capDraftTakeClear(ckcName$)
+    ckcOut$ = env$("FISH_CAPSULE_OUT")
+    if ckcOut$ = "" then ckcOut$ = "capsules"
+    for ckcI = 0 to CAPD_TXT_N - 1
+        hide text CAPD_TXT(ckcI)
+    next
+    for ckcI = 0 to CAPD_PUFF_N - 1
+        hide sprite CAPD_PUFF(ckcI)
+    next
+    for ckcF = 0 to 150
+        capDraftFrame(ckcF)
+        runto update_frame
+    next
+    screenshot ckcOut$ + "/raw/" + ckcName$ + "_clear"
+    print "[capsule] take " + ckcName$ + "_clear"
+endfunction
+
+function capDraftSea(csA, csB, csC, csD, csSmokeA, csSmokeB)
+    capDraftSmokes(csSmokeA, csSmokeB)
+    trailerNoUi()
+    trailerFishAway()
+    hide sprite SCORE_TEXT_VIEW_SPRITE
+    FLOCK_PULL_GRID = 0
+    trailerSchool(csA, 8, 40, 30, 1)
+    trailerSchool(csB, 7, 470, 200, -1)
+    trailerSchool(csC, 6, 250, 20, 1)
+    trailerSchool(csD, 5, 520, 90, -1)
+    capDraftReef()
+endfunction
+endtest
+
+` WIDE: the title on the left, the board on the right
+test capsule_draft_wide from capDraftShot
+    if val(env$("FISH_CAPSULE")) = 0 then end
+    capDraftSea(TEX_GOLDFISH, TEX_CATFISH, TEX_ANGELFISH, TEX_PUFFER, TEX_SMOKE_1, TEX_SMOKE_2)
+    tCdD = capDraftDiver(505, 52, 30, 1)
+    tCdA = capDraftAva(262, 228, .55, 0)
+    capDraftGrid(410, 150, 50, .7, -.6, TEX_BASS, TEX_CRAB, TEX_PUFFER, TEX_CATFISH, TEX_GOLDFISH, TEX_ANGELFISH, TEX_WORM)
+    capDraftTitle(150, 135, 1, -.08)
+    capDraftSplash()
+    capDraftTake("capdraft_wide")
+    capDraftTakeClear("capdraft_wide")
+endtest
+
+` CENTER: the title over the board, the way the old key art was
+test capsule_draft_center from capDraftShot
+    if val(env$("FISH_CAPSULE")) = 0 then end
+    capDraftSea(TEX_GOLDFISH, TEX_CATFISH, TEX_ANGELFISH, TEX_PUFFER, TEX_SMOKE_1, TEX_SMOKE_2)
+    tCdD = capDraftDiver(470, 40, 30, 1)
+    tCdA = capDraftAva(112, 165, .55, 0)
+    capDraftGrid(285, 182, 48, .8, .45, TEX_BASS, TEX_CRAB, TEX_PUFFER, TEX_CATFISH, TEX_GOLDFISH, TEX_ANGELFISH, TEX_WORM)
+    capDraftTitle(285, 72, .78, -.05)
+    capDraftSplash()
+    capDraftTake("capdraft_center")
+    capDraftTakeClear("capdraft_center")
+endtest
+
+` TALL: for the vertical and library capsules, cut from the middle of the screen
+test capsule_draft_tall from capDraftShot
+    if val(env$("FISH_CAPSULE")) = 0 then end
+    capDraftSea(TEX_GOLDFISH, TEX_CATFISH, TEX_ANGELFISH, TEX_PUFFER, TEX_SMOKE_1, TEX_SMOKE_2)
+    tCdD = capDraftDiver(212, 140, 22, 1)
+    tCdA = capDraftAva(362, 122, .45, 1)
+    capDraftGrid(285, 200, 37, .75, -.5, TEX_BASS, TEX_CRAB, TEX_PUFFER, TEX_CATFISH, TEX_GOLDFISH, TEX_ANGELFISH, TEX_WORM)
+    capDraftTitle(285, 72, .62, -.07)
+    capDraftSplash()
+    capDraftTake("capdraft_tall")
+endtest
+
+` THE LOGO of the drafts by itself: the title and its splash, over black and then over white, so that
+` build/capsule_drafts.py can key it out (for the library logo, and the small capsule). the black or white is at
+` order 150: over everything of the sea, and under the splash (200) and the words (293 to 297).
+test capsule_draft_logo from capDraftShot
+    if val(env$("FISH_CAPSULE")) = 0 then end
+    tCdlOut$ = env$("FISH_CAPSULE_OUT")
+    if tCdlOut$ = "" then tCdlOut$ = "capsules"
+    capDraftSmokes(TEX_SMOKE_1, TEX_SMOKE_2)
+    trailerNoUi()
+    trailerFishAway()
+    hide sprite SCORE_TEXT_VIEW_SPRITE
+    tCdlBack = 0
+    reserve sprite id(tCdlBack)
+    sprite tCdlBack, 0, 0, TEX_PIXEL
+    set sprite offset tCdlBack, 0, 0
+    size sprite tCdlBack, WORLD_WIDTH, WORLD_HEIGHT
+    order sprite tCdlBack, 150
+    capDraftTitle(285, 175, 1.1, -.08)
+    capDraftSplash()
+    for tCdlBg = 0 to 1
+        if tCdlBg = 0 then color sprite tCdlBack, rgb(0, 0, 0)
+        if tCdlBg = 1 then color sprite tCdlBack, rgb(255, 255, 255)
+        for tCdlF = 0 to 20
+            hintShow(0)
+            trailerHideBut(-1, -1, -1, -1)
+            set sprite alpha SELECTION_SPRITE, 0
+            runto update_frame
+        next
+        tCdlName$ = "draftlogo_black"
+        if tCdlBg = 1 then tCdlName$ = "draftlogo_white"
+        screenshot tCdlOut$ + "/raw/" + tCdlName$
+        print "[capsule] take " + tCdlName$
+    next
+endtest
+
+` THE WORDS of the drafts' logo, one at a time, with no splash: the same title in the same place as
+` capsule_draft_logo, but only one word of it showing, over black and then over white. the website keys each out
+` (build/capsule_drafts.py writes capsules/logo_words) and floats them, each on its own.
+test capsule_draft_words from capDraftShot
+    if val(env$("FISH_CAPSULE")) = 0 then end
+    tCdwOut$ = env$("FISH_CAPSULE_OUT")
+    if tCdwOut$ = "" then tCdwOut$ = "capsules"
+    trailerNoUi()
+    trailerFishAway()
+    hide sprite SCORE_TEXT_VIEW_SPRITE
+    tCdwBack = 0
+    reserve sprite id(tCdwBack)
+    sprite tCdwBack, 0, 0, TEX_PIXEL
+    set sprite offset tCdwBack, 0, 0
+    size sprite tCdwBack, WORLD_WIDTH, WORLD_HEIGHT
+    order sprite tCdwBack, 150
+    capDraftTitle(285, 175, 1.1, -.08)
+    for tCdwW = 0 to 2
+        for tCdwO = 0 to 2
+            tCdwA = 0
+            if tCdwO = tCdwW then tCdwA = 255
+            capDraftWordPose(tCdwO, 1, 0, tCdwA)
+        next
+        for tCdwBg = 0 to 1
+            if tCdwBg = 0 then color sprite tCdwBack, rgb(0, 0, 0)
+            if tCdwBg = 1 then color sprite tCdwBack, rgb(255, 255, 255)
+            for tCdwF = 0 to 20
+                hintShow(0)
+                trailerHideBut(-1, -1, -1, -1)
+                set sprite alpha SELECTION_SPRITE, 0
+                runto update_frame
+            next
+            tCdwName$ = "draftword" + str$(tCdwW) + "_black"
+            if tCdwBg = 1 then tCdwName$ = "draftword" + str$(tCdwW) + "_white"
+            screenshot tCdwOut$ + "/raw/" + tCdwName$
+            print "[capsule] take " + tCdwName$
+        next
+    next
+endtest
+
+` THE TITLE COMING IN, as a video, for the start of the trailer and wherever the title is shown. the
+` center scene, on an empty board. the three seahorses fall in with the first "Fish", and the crab, with
+` the cursor, with the second. the cursor carries the crab down, the seahorse comes up, and the row of
+` three seahorses pops, in puffs and bubbles, with a ring. "Pop" punches in, bigger than it is, and
+` springs to its size, in its splash, with a ring through the water that rocks every piece. then the rest
+` of the board falls in around it, from the middle out, and new fish fall into the row that popped.
+` everything moves on an ease or a spring. it goes to FISH_CAPSULE_OUT/anim/title_in.mp4.
+test capsule_anim_title from capDraftShot
+    if val(env$("FISH_CAPSULE")) = 0 then end
+    capDraftSea(TEX_GOLDFISH, TEX_CATFISH, TEX_ANGELFISH, TEX_PUFFER, TEX_SMOKE_1, TEX_SMOKE_2)
+    tCaD = capDraftDiver(470, 40, 30, 1)
+    tCaA = capDraftAva(112, 165, .55, 0)
+    capDraftGrid(285, 182, 48, .8, .45, TEX_BASS, TEX_CRAB, TEX_PUFFER, TEX_CATFISH, TEX_GOLDFISH, TEX_ANGELFISH, TEX_WORM)
+    tCaBoard = CAPD_C_N
+    capDraftTitle(285, 72, .78, -.05)
+    capDraftSplash()
+    capDraftSplashAt(2)
+    for tCaW = 0 to 2
+        capDraftWordPose(tCaW, 1, 0, 0)
+    next
+    tCaCrab = CAPD_T_CELL(1)
+    tCaLow = CAPD_T_CELL(0)
+    tCaCrabX# = CAPD_C_X#(tCaCrab)
+    tCaCrabY# = CAPD_C_Y#(tCaCrab)
+    tCaLowX# = CAPD_C_X#(tCaLow)
+    tCaLowY# = CAPD_C_Y#(tCaLow)
+
+    ` the new pieces that fall into the row that popped, once the rest of the board is coming in
+    dim tCaNew(3)
+    dim tCaRow(3)
+    tCaRow(0) = CAPD_T_CELL(2)
+    tCaRow(1) = tCaLow
+    tCaRow(2) = CAPD_T_CELL(3)
+    for tCaI = 0 to 2
+        tCaKind = TEX_ANGELFISH
+        if tCaI = 1 then tCaKind = TEX_GOLDFISH
+        if tCaI = 2 then tCaKind = TEX_PUFFER
+        tCaAt = CAPD_T_CELL(2)
+        if tCaI = 1 then tCaAt = tCaCrab
+        if tCaI = 2 then tCaAt = CAPD_T_CELL(3)
+        tCaNew(tCaI) = capDraftPiece(tCaKind, CAPD_C_X#(tCaAt), CAPD_C_Y#(tCaAt), CAPD_C_S#(tCaAt), CAPD_C_TS#(tCaAt), 255, 255, 255, 255, 12, 24, 52, 200, .08, 1, 0)
+    next
+    for tCaI = 0 to CAPD_C_N - 1
+        CAPD_C_SHOW#(tCaI) = 0
+    next
+
+    ` the puffs of the three seahorses, each a different smoke of a pop
+    dim tCaPuff(3)
+    dim tCaPuffSmoke(3)
+    for tCaI = 0 to 2
+        tCaPuffSmoke(tCaI) = (tCaI * 2 + 1) mod 5
+        tCaS = 0
+        reserve sprite id(tCaS)
+        sprite tCaS, 0, 0, CAPD_SMOKE_TEX(tCaPuffSmoke(tCaI))
+        set sprite offset tCaS, .5, .5
+        rotate sprite tCaS, tCaI * 1.7
+        set sprite flip tCaS, tCaI mod 2, 0
+        color sprite tCaS, rgb(170, 215, 255, 220)
+        order sprite tCaS, 34
+        hide sprite tCaS
+        tCaPuff(tCaI) = tCaS
+    next
+
+    ` the sea settles first
+    for tCaF = 0 to 120
+        capDraftFrame(tCaF)
+        runto update_frame
+    next
+
+    tCaOut$ = env$("FISH_CAPSULE_OUT")
+    if tCaOut$ = "" then tCaOut$ = "capsules"
+    set record size 1920, 1080
+    record start tCaOut$ + "/anim/title_in.mp4"
+    tCaFish1At = 24
+    tCaFish2At = 52
+    tCaSwapAt = 88
+    tCaSwapLen = 14
+    tCaPopAt = tCaSwapAt + tCaSwapLen + 6
+    tCaTitleAt = tCaPopAt + 12
+    tCaFillAt = tCaTitleAt + 28
+    for tCaF = 0 to 380
+        ` the two "Fish": each one springs in past its size and settles
+        for tCaW = 0 to 1
+            tCaAge = tCaF - tCaFish1At
+            if tCaW = 1 then tCaAge = tCaF - tCaFish2At
+            if tCaAge >= 0
+                tCaT# = tCaAge
+                tCaT# = tCaT# / 16.0
+                if tCaT# > 1 then tCaT# = 1
+                capDraftWordPose(tCaW, capEaseBack(tCaT#), 0, 255 * capEaseOut(tCaT#))
+                if tCaAge = 0
+                    spawnBubblesOnLayer(CAPD_W_X#(tCaW), CAPD_W_Y#(tCaW), 26, 10, 0, rgb(210, 230, 255), 299, 0, 200, 1)
+                endif
+            endif
+        next
+
+        ` the three seahorses fall in with the first word, one after another, and the crab with the second.
+        ` each one lands with a little ring.
+        if tCaF < tCaSwapAt
+            for tCaI = 0 to 3
+                tCaCell = CAPD_T_CELL(tCaI)
+                tCaAge = tCaF - tCaFish1At
+                if tCaI = 0 then tCaAge = tCaAge - 5
+                if tCaI = 3 then tCaAge = tCaAge - 10
+                if tCaI = 1 then tCaAge = tCaF - tCaFish2At
+                capDraftFallAt(tCaCell, tCaAge)
+                if tCaAge = 16
+                    spawnShockwave((CAPD_C_X#(tCaCell) - GRID_POS.x) / CELL_SIZE, (CAPD_C_Y#(tCaCell) - GRID_POS.y) / CELL_SIZE, .2, 0)
+                endif
+            next
+        endif
+
+        ` the swap, on an ease in and out: the crab, and the cursor with it, goes down, lifted over the
+        ` seahorse and tipping the way that it goes, and the seahorse comes up. both rock as they stop.
+        tCaAge = tCaF - tCaSwapAt
+        if tCaAge >= 0 and tCaAge <= tCaSwapLen
+            tCaT# = tCaAge
+            tCaT# = capEaseInOut(tCaT# / tCaSwapLen)
+            tCaArc# = sin(tCaT# * 3.14159)
+            CAPD_C_X#(tCaCrab) = tCaCrabX# + (tCaLowX# - tCaCrabX#) * tCaT#
+            CAPD_C_Y#(tCaCrab) = tCaCrabY# + (tCaLowY# - tCaCrabY#) * tCaT#
+            CAPD_C_X#(tCaLow) = tCaLowX# + (tCaCrabX# - tCaLowX#) * tCaT#
+            CAPD_C_Y#(tCaLow) = tCaLowY# + (tCaCrabY# - tCaLowY#) * tCaT#
+            CAPD_C_DY#(tCaCrab) = 0
+            CAPD_C_DY#(tCaLow) = 0
+            CAPD_C_DLIFT#(tCaCrab) = .25 * tCaArc#
+            CAPD_C_DP#(tCaCrab) = -.25 * tCaArc#
+            CAPD_C_DP#(tCaLow) = .15 * tCaArc#
+            CAPD_C_SQ#(tCaCrab) = 1
+            CAPD_C_SQ#(tCaLow) = 1
+            if tCaAge = 0
+                spawnShockwave((tCaCrabX# - GRID_POS.x) / CELL_SIZE, (tCaCrabY# - GRID_POS.y) / CELL_SIZE, .25, 0)
+            endif
+        endif
+        if tCaAge > tCaSwapLen
+            tCaA# = tCaAge - tCaSwapLen
+            CAPD_C_DLIFT#(tCaCrab) = 0
+            CAPD_C_DP#(tCaCrab) = .12 * sin(tCaA# * .5) * pow(.85, tCaA#)
+            CAPD_C_SQ#(tCaCrab) = 1 - .1 * capSpring(tCaA#, .55)
+        endif
+
+        ` the row of seahorses pops: each one swells toward the eye, turns, and fades, with the square of its
+        ` cell, in a puff of its own smoke
+        tCaAge = tCaF - tCaPopAt
+        if tCaAge >= 0 and tCaAge < 40
+            tCaT# = tCaAge
+            tCaT# = tCaT# / 18.0
+            for tCaI = 0 to 2
+                tCaCell = tCaRow(tCaI)
+                tCaX# = CAPD_C_X#(tCaCell)
+                tCaY# = CAPD_C_Y#(tCaCell)
+                tCaS# = CAPD_C_TS#(tCaCell)
+                tCaP = tCaPuff(tCaI)
+                tCaSm = tCaPuffSmoke(tCaI)
+                if tCaT# < 1
+                    CAPD_C_DLIFT#(tCaCell) = .8 * capEaseOut(tCaT#)
+                    CAPD_C_DYAW#(tCaCell) = (tCaI - 1) * .4 * capEaseOut(tCaT#)
+                    CAPD_C_SHOW#(tCaCell) = 1 - tCaT# * tCaT#
+                    show sprite tCaP
+                    position sprite tCaP, tCaX#, tCaY#
+                    tCaPS# = tCaS# * (1.4 + .9 * capEaseOut(tCaT#))
+                    size sprite tCaP, tCaPS#, tCaPS#
+                    tCaFrame = tCaT# * CAPD_SMOKE_FN(tCaSm)
+                    set sprite frame tCaP, CAPD_SMOKE_F0(tCaSm) + tCaFrame
+                else
+                    CAPD_C_SHOW#(tCaCell) = 0
+                    hide sprite tCaP
+                endif
+                if tCaAge = 0
+                    spawnBubblesOnLayer(tCaX#, tCaY#, 10, 10, 0, rgb(215, 235, 255), 299, 0, 220, 1)
+                endif
+            next
+            if tCaAge = 0
+                spawnShockwave((tCaCrabX# - GRID_POS.x) / CELL_SIZE, (tCaCrabY# - GRID_POS.y) / CELL_SIZE, .6, 0)
+            endif
+        endif
+
+        ` "Pop" punches in: it falls from 1.7 times its size, faster and faster, to less than its size, and
+        ` springs back to it. as it hits, a ring goes out through the water.
+        tCaAge = tCaF - tCaTitleAt
+        if tCaAge >= 0
+            tCaHit = 7
+            if tCaAge < tCaHit
+                tCaT# = tCaAge
+                tCaT# = tCaT# / tCaHit
+                tCaScale# = 1.7 - .85 * tCaT# * tCaT#
+                tCaAlpha = 255 * capEaseOut(tCaT#)
+            else
+                tCaA# = tCaAge - tCaHit
+                tCaScale# = 1 - .15 * capSpring(tCaA#, .45)
+                tCaAlpha = 255
+            endif
+            capDraftWordPose(2, tCaScale#, 0, tCaAlpha)
+            if tCaAge = tCaHit
+                capDraftBurst(2)
+            endif
+            if tCaAge >= tCaHit
+                tCaSplash# = tCaAge - tCaHit
+                tCaSplash# = tCaSplash# / 46.0
+                capDraftSplashAt(tCaSplash#)
+            endif
+        endif
+
+        ` the rest of the board falls in, from the middle out, and new fish into the row that popped
+        tCaAge = tCaF - tCaFillAt
+        if tCaAge >= 0
+            for tCaI = 0 to tCaBoard - 1
+                tCaIsT = 0
+                for tCaJ = 0 to 3
+                    if CAPD_T_CELL(tCaJ) = tCaI then tCaIsT = 1
+                next
+                if tCaIsT = 0
+                    tCaDx# = CAPD_C_X#(tCaI) - tCaCrabX#
+                    tCaDy# = CAPD_C_Y#(tCaI) - tCaCrabY#
+                    tCaWait = sqrt(tCaDx# * tCaDx# + tCaDy# * tCaDy#) * .1
+                    capDraftFallAt(tCaI, tCaAge - tCaWait)
+                endif
+            next
+            for tCaI = 0 to 2
+                capDraftFallAt(tCaNew(tCaI), tCaAge - tCaI * 4)
+            next
+        endif
+
+        capDraftFrame(tCaF)
+        runto update_frame
+    next
+    record stop
+    print "[capsule] take title_in"
+endtest
+
+
+` THE TITLE AT THE SURFACE (2026-11-05). the same dressed title as the key art, but out on the sea of
+` the main menu, in the evening: the words come up out of the water one at a time, "Fish", "Fish", and
+` then "Pop" bursts up out of it, with spray thrown up behind it, drops that fall back in, and rings that
+` go out across the water from every one of them. under the words is their reflection, in the water.
+` the title is drawn to a render target of its own, and two sprites show that: the title, cut off at the
+` waterline, so that a word under it is under the water, and the reflection, the same picture turned
+` upside down under the waterline, squashed, and dimmed. the screen effect wobbles it with the rest of the
+` water. the rings are SurfaceRingEffect. the sounds are the game's own: a splash for each word as it
+` comes up, a bloop as it lands, and for "Pop" a bigger splash, a pop and a boom, and the drops plinking.
+` it records itself as a trailer shot, trailer_surface_logo, with its sounds in the .json next to it.
+abstract test capSurfShot from capDraftShot
+    global CSF_WATER = 0 `how far down the screen the waterline under the title is
+    global CSF_OUT = 0 `the render target that the title is drawn to
+    global CSF_TEX = 0
+    global CSF_LOGO = 0 `the sprite of the title, and of its reflection
+    global CSF_MIRROR = 0
+    global CSF_RING_FX = 0
+    global CSF_RING_N = 24
+    global dim CSF_RING(24)
+    global dim CSF_RING_AGE(24) `frames since it started, less than 0 while it waits
+    global dim CSF_RING_LIFE(24)
+    global dim CSF_RING_X#(24)
+    global dim CSF_RING_Y#(24)
+    global dim CSF_RING_R#(24) `how wide it gets, in pixels
+    global dim CSF_RING_A(24)
+    global CSF_RING_NEXT = 0
+    global CSF_DROP_N = 120
+    global dim CSF_DROP(120)
+    global dim CSF_DROP_ON(120)
+    global dim CSF_DROP_X#(120)
+    global dim CSF_DROP_Y#(120)
+    global dim CSF_DROP_VX#(120)
+    global dim CSF_DROP_VY#(120)
+    global dim CSF_DROP_LAND#(120) `the line of the water that it falls back into: further down is nearer
+    global CSF_DROP_NEXT = 0
+    global CSF_GRAVITY# = .14 `pixels per frame, per frame
+    global CSF_PLINK_WAIT = 0 `frames until a drop may make a sound again
+    ` the sounds
+    global CSF_SFX_SPLASH = 0
+    global CSF_SFX_SPLASH_BIG = 0
+    global CSF_SFX_LAND_A = 0
+    global CSF_SFX_LAND_B = 0
+    global CSF_SFX_POP = 0
+    global CSF_SFX_BOOM = 0
+    global CSF_SFX_PLINK = 0
+    global CSF_SFX_CLOUD = 0
+    ` THE CLOUDS that the words turn into: streaks, like the clouds of the sky, long and thin and leaning up
+    ` to the right, dusky purple with an edge lit by the sun going down. a word breaks up into them, row by
+    ` row, and they stretch out, thin away, and drift off on the wind.
+    global CSF_CLOUD_N = 0
+    global dim CSF_CLOUD(140) `the streak, and the lit line along the top of it
+    global dim CSF_CLOUD_HI(140)
+    global dim CSF_CLOUD_X#(140)
+    global dim CSF_CLOUD_Y#(140)
+    global dim CSF_CLOUD_LEN#(140)
+    global dim CSF_CLOUD_WAIT(140)
+    global CSF_CLOUD_LEAN# = -.13 `how the clouds of the evening sky lean
+
+` the main menu, with nothing of it showing but the sea and the sky
+function capSurfSea()
+    GAME_ENDLESS = 1
+    REQUEST_GAME_END = 1
+    runto menu_transition
+    for csF = 1 to 240
+        capSurfQuiet()
+        runto frame_menu_render
+    next
+endfunction
+
+function capSurfQuiet()
+    setMenuChromeAlpha(0)
+    hide text MENU_HINT_TEXT_ID
+endfunction
+
+function capSurfSounds()
+    CSF_SFX_SPLASH = tideLoadSound("Fish/Audio/diver-splash", SFX_GROUP_SFX, 0)
+    CSF_SFX_SPLASH_BIG = tideLoadSound("Fish/Audio/diver-splash", SFX_GROUP_SFX, 0)
+    CSF_SFX_LAND_A = tideLoadSound("Fish/Audio/cue-bloop-3", SFX_GROUP_SFX, 0)
+    CSF_SFX_LAND_B = tideLoadSound("Fish/Audio/cue-bloop-5", SFX_GROUP_SFX, 0)
+    CSF_SFX_POP = tideLoadSound("Fish/Audio/bubble-pop-2", SFX_GROUP_SFX, 0)
+    CSF_SFX_BOOM = tideLoadSound("Fish/Audio/bar-charge-boom", SFX_GROUP_SFX, 0)
+    CSF_SFX_PLINK = tideLoadSound("Fish/Audio/bubble-pop-4", SFX_GROUP_SFX, 0)
+    CSF_SFX_CLOUD = tideLoadSound("Fish/Audio/swap-swell-soft", SFX_GROUP_SFX, 0)
+endfunction
+
+` the render target of the title, and the two sprites that show it. every text of the title, and the
+` splash, is moved onto it.
+function capSurfTarget(csWater)
+    CSF_WATER = csWater
+    reserve render target id(CSF_OUT)
+    render target CSF_OUT
+    set render target background color CSF_OUT, rgb(0, 0, 0, 0)
+    CSF_TEX = render target texture(CSF_OUT)
+    ` one frame of it: the part over the waterline
+    set texture frame count CSF_TEX, 1
+    set texture frame rect CSF_TEX, 0, 0, 0, WORLD_WIDTH * RENDER_SCALE, csWater * RENDER_SCALE
+    reserve sprite id(CSF_LOGO)
+    sprite CSF_LOGO, 0, 0, CSF_TEX
+    set sprite offset CSF_LOGO, 0, 0
+    set sprite frame CSF_LOGO, 0
+    size sprite CSF_LOGO, WORLD_WIDTH, csWater
+    order sprite CSF_LOGO, 296
+    reserve sprite id(CSF_MIRROR)
+    sprite CSF_MIRROR, 0, csWater, CSF_TEX
+    set sprite offset CSF_MIRROR, 0, 0
+    set sprite frame CSF_MIRROR, 0
+    size sprite CSF_MIRROR, WORLD_WIDTH, csWater * .55
+    set sprite flip CSF_MIRROR, 0, 1
+    color sprite CSF_MIRROR, rgb(120, 165, 235, 80)
+    order sprite CSF_MIRROR, 295
+    for csI = 0 to CAPD_TXT_N - 1
+        set text render target CAPD_TXT(csI), CSF_OUT
+    next
+    for csI = 0 to CAPD_PUFF_N - 1
+        set sprite render target CAPD_PUFF(csI), CSF_OUT
+        ` spray: whiter than the splash under the water
+        color sprite CAPD_PUFF(csI), rgb(225, 240, 255, 255)
+    next
+endfunction
+
+function capSurfPools()
+    ` the logo of the main menu has the ring effect loaded already. loading it again under another id
+    ` shares the one effect, which is then disposed of under the other when the game is reset between shots.
+    CSF_RING_FX = LOGO_RING_FX
+    for csI = 0 to CSF_RING_N - 1
+        csS = 0
+        reserve sprite id(csS)
+        sprite csS, 0, 0, TEX_PIXEL
+        set sprite offset csS, .5, .5
+        set sprite effect csS, CSF_RING_FX
+        order sprite csS, 294
+        hide sprite csS
+        CSF_RING(csI) = csS
+        CSF_RING_AGE(csI) = 0
+        CSF_RING_LIFE(csI) = 0
+    next
+    for csI = 0 to CSF_DROP_N - 1
+        csS = 0
+        reserve sprite id(csS)
+        sprite csS, 0, 0, TEX_PIXEL
+        set sprite offset csS, .5, .5
+        order sprite csS, 297
+        hide sprite csS
+        CSF_DROP(csI) = csS
+        CSF_DROP_ON(csI) = 0
+    next
+endfunction
+
+` a ring on the water at x, y, that goes out to crR# pixels wide over crLife frames, after crWait frames
+function capSurfRing(crX#, crY#, crR#, crLife, crWait, crAlpha)
+    crI = CSF_RING_NEXT
+    CSF_RING_NEXT = (CSF_RING_NEXT + 1) mod CSF_RING_N
+    CSF_RING_X#(crI) = crX#
+    CSF_RING_Y#(crI) = crY#
+    CSF_RING_R#(crI) = crR#
+    CSF_RING_LIFE(crI) = crLife
+    CSF_RING_AGE(crI) = 0 - crWait
+    CSF_RING_A(crI) = crAlpha
+endfunction
+
+` drops thrown up out of the water at x, on the waterline, spread out sdSpread pixels to each side, going
+` up as fast as sdUp# pixels a frame at most
+function capSurfSpray(sdX#, sdSpread, sdCount, sdUp#)
+    for sdN = 1 to sdCount
+        sdI = CSF_DROP_NEXT
+        CSF_DROP_NEXT = (CSF_DROP_NEXT + 1) mod CSF_DROP_N
+        sdS = CSF_DROP(sdI)
+        CSF_DROP_ON(sdI) = 1
+        CSF_DROP_X#(sdI) = sdX# + rnd(sdSpread * 2 + 1) - sdSpread
+        CSF_DROP_Y#(sdI) = CSF_WATER
+        CSF_DROP_VX#(sdI) = (rnd(201) - 100) * .012
+        CSF_DROP_VY#(sdI) = 0 - sdUp# * (.45 + rnd(56) * .01)
+        CSF_DROP_LAND#(sdI) = CSF_WATER + 1 + rnd(16)
+        sdSize = 1 + rnd(2)
+        size sprite sdS, sdSize, sdSize
+        sdTint = rnd(3)
+        if sdTint = 0
+            color sprite sdS, rgb(170, 210, 255, 235)
+        else
+            color sprite sdS, rgb(235, 245, 255, 245)
+        endif
+        position sprite sdS, CSF_DROP_X#(sdI), CSF_DROP_Y#(sdI)
+        show sprite sdS
+    next
+endfunction
+
+` everything on the water, one frame on: the rings go out, and the drops fall back in
+function capSurfStep()
+    for ssI = 0 to CSF_RING_N - 1
+        ssS = CSF_RING(ssI)
+        ssLife = CSF_RING_LIFE(ssI)
+        if ssLife > 0
+            CSF_RING_AGE(ssI) = CSF_RING_AGE(ssI) + 1
+            ssAge = CSF_RING_AGE(ssI)
+            if ssAge < 0
+                hide sprite ssS
+            else
+                if ssAge >= ssLife
+                    hide sprite ssS
+                    CSF_RING_LIFE(ssI) = 0
+                else
+                    ssT# = ssAge
+                    ssT# = ssT# / ssLife
+                    ssW# = 4 + CSF_RING_R#(ssI) * capEaseOut(ssT#)
+                    ssH# = ssW# * .2 + 1
+                    show sprite ssS
+                    position sprite ssS, CSF_RING_X#(ssI), CSF_RING_Y#(ssI)
+                    size sprite ssS, ssW#, ssH#
+                    set sprite all texcoord1 ssS, ssW#, ssH#, 1, 0
+                    ssA# = CSF_RING_A(ssI) * (1 - ssT#) * (1 - ssT#)
+                    color sprite ssS, rgb(200, 228, 255, ssA#)
+                endif
+            endif
+        endif
+    next
+    if CSF_PLINK_WAIT > 0
+        CSF_PLINK_WAIT = CSF_PLINK_WAIT - 1
+    endif
+    for ssI = 0 to CSF_DROP_N - 1
+        if CSF_DROP_ON(ssI)
+            ssS = CSF_DROP(ssI)
+            CSF_DROP_VY#(ssI) = CSF_DROP_VY#(ssI) + CSF_GRAVITY#
+            CSF_DROP_X#(ssI) = CSF_DROP_X#(ssI) + CSF_DROP_VX#(ssI)
+            CSF_DROP_Y#(ssI) = CSF_DROP_Y#(ssI) + CSF_DROP_VY#(ssI)
+            ssDown = 0
+            if CSF_DROP_VY#(ssI) > 0
+                if CSF_DROP_Y#(ssI) >= CSF_DROP_LAND#(ssI) then ssDown = 1
+            endif
+            if ssDown
+                ` it falls back in: a little ring, and now and then a plink
+                CSF_DROP_ON(ssI) = 0
+                hide sprite ssS
+                ssRing = rnd(3)
+                if ssRing = 0
+                    capSurfRing(CSF_DROP_X#(ssI), CSF_DROP_LAND#(ssI), 8 + rnd(8), 26, 0, 150)
+                endif
+                if CSF_PLINK_WAIT = 0
+                    CSF_PLINK_WAIT = 5 + rnd(6)
+                    tidePlaySound(CSF_SFX_PLINK, .1 + rnd(8) * .01, (rnd(60) - 10) * .01)
+                endif
+            else
+                position sprite ssS, CSF_DROP_X#(ssI), CSF_DROP_Y#(ssI)
+            endif
+        endif
+    next
+endfunction
+
+` the streaks over every word: a row of them every few pixels down it, two or three to a row, with gaps,
+` across the width of it. "Pop" goes first, and then the two "Fish", each from its middle row out. none
+` are under the horizon, which would be on the water.
+function capSurfCloudsMake()
+    CSF_CLOUD_N = 0
+    for ccW = 0 to 2
+        ccSize# = 46 * .82
+        ccWait = 10
+        ccY# = CAPD_W_Y#(ccW)
+        if ccW = 1 then ccWait = 18
+        if ccW = 2
+            ccSize# = CAPD_POP_SIZE#
+            ccWait = 0
+            ccY# = CAPD_POP_Y#
+        endif
+        ccWide# = ccSize# * 2.2
+        ccTall# = ccSize# * .8
+        ccRows = ccTall# / 3.5
+        for ccR = 0 to ccRows - 1
+            ccDown# = ccR
+            ccDown# = ccDown# / (ccRows - 1) - .5
+            ccRowY# = ccY# + ccDown# * ccTall#
+            ccPer = 2 + rnd(2)
+            ccLeft# = CAPD_W_X#(ccW) - ccWide# / 2
+            for ccN = 0 to ccPer - 1
+                if ccRowY# < SURFACE_HORIZON - 3 and CSF_CLOUD_N < 140
+                    ccI = CSF_CLOUD_N
+                    CSF_CLOUD_N = CSF_CLOUD_N + 1
+                    ccSpan# = ccWide# / ccPer
+                    CSF_CLOUD_LEN#(ccI) = ccSpan# * (.55 + rnd(40) * .01)
+                    CSF_CLOUD_X#(ccI) = ccLeft# + ccSpan# * (ccN + .5) + (rnd(20) - 10) * .01 * ccSpan#
+                    CSF_CLOUD_Y#(ccI) = ccRowY#
+                    CSF_CLOUD_WAIT(ccI) = ccWait + abs(ccDown#) * 16 + rnd(8)
+                    ccS = 0
+                    reserve sprite id(ccS)
+                    sprite ccS, 0, 0, TEX_PIXEL
+                    set sprite offset ccS, .5, .5
+                    rotate sprite ccS, CSF_CLOUD_LEAN#
+                    order sprite ccS, 298
+                    hide sprite ccS
+                    CSF_CLOUD(ccI) = ccS
+                    ccS = 0
+                    reserve sprite id(ccS)
+                    sprite ccS, 0, 0, TEX_PIXEL
+                    set sprite offset ccS, .5, .5
+                    rotate sprite ccS, CSF_CLOUD_LEAN#
+                    order sprite ccS, 299
+                    hide sprite ccS
+                    CSF_CLOUD_HI(ccI) = ccS
+                endif
+            next
+        next
+    next
+endfunction
+
+` the streaks, caAge frames after they start: each one shows up where its piece of the word was, then
+` stretches out long, thins, drifts off up and to the right, and fades away
+function capSurfCloudsAt(caAge)
+    for caI = 0 to CSF_CLOUD_N - 1
+        caS = CSF_CLOUD(caI)
+        caHi = CSF_CLOUD_HI(caI)
+        caA = caAge - CSF_CLOUD_WAIT(caI)
+        caGone# = caA - 100
+        caGone# = caGone# / 70.0
+        if caGone# < 0 then caGone# = 0
+        if caA < 0 or caGone# >= 1
+            hide sprite caS
+            hide sprite caHi
+        else
+            caGrow# = caA
+            caGrow# = caGrow# / 16.0
+            if caGrow# > 1 then caGrow# = 1
+            caGrow# = capEaseOut(caGrow#)
+            caLong# = caA
+            caLong# = caLong# / 150.0
+            if caLong# > 1 then caLong# = 1
+            caLong# = capEaseInOut(caLong#)
+            caLen# = CSF_CLOUD_LEN#(caI) * (.6 + .4 * caGrow#) * (1 + 1.6 * caLong#)
+            caThick# = 3.2 - 1.8 * caLong#
+            caX# = CSF_CLOUD_X#(caI) + caA * .2 + caLong# * CSF_CLOUD_LEN#(caI) * .4
+            caY# = CSF_CLOUD_Y#(caI) - caA * .05 + (caX# - CSF_CLOUD_X#(caI)) * CSF_CLOUD_LEAN#
+            caAlpha = 225 * caGrow# * (1 - caGone#)
+            show sprite caS
+            show sprite caHi
+            position sprite caS, caX#, caY#
+            size sprite caS, caLen#, caThick#
+            color sprite caS, rgb(96, 58, 116, caAlpha)
+            position sprite caHi, caX# + 1, caY# - caThick# / 2
+            size sprite caHi, caLen# * .8, 1
+            color sprite caHi, rgb(255, 148, 116, caAlpha)
+        endif
+    next
+endfunction
+
+` a word of the title, coming up out of the water: from all of the way under it, up past where it sits,
+` and back down to it, with a little swell as it lands. cwAge is frames since it started.
+function capSurfWordAt(cwWord, cwAge)
+    if cwAge < 0
+        capDraftWordPose(cwWord, 1, 0, 0)
+        exitfunction
+    endif
+    cwLen = 20
+    cwUnder# = CSF_WATER - CAPD_W_Y#(cwWord)
+    cwUnder# = cwUnder# + 40
+    if cwAge < cwLen
+        cwT# = cwAge
+        cwT# = cwT# / cwLen
+        cwRise# = capEaseBack(cwT#)
+        capDraftWordPose(cwWord, 1, cwUnder# * (1 - cwRise#), 255)
+    else
+        cwA# = cwAge - cwLen
+        capDraftWordPose(cwWord, 1 + .05 * capSpring(cwA#, .5), 0, 255)
+    endif
+endfunction
+endtest
+
+` THE TITLE AT THE SURFACE, as a trailer shot
+test trailer_surface_logo from capSurfShot
+    capDraftSmokes(TEX_SMOKE_1, TEX_SMOKE_2)
+    capSurfSea()
+    capSurfSounds()
+    capSurfPools()
+    capDraftTitle(250, 120, .82, -.05)
+    capDraftSplash()
+    capSurfTarget(176)
+    tSfFishA = 40
+    tSfFishB = 74
+    tSfPop = 108
+    capSurfCloudsMake()
+    ` when the title turns to clouds
+    tSfCloud = 230
+    trailerRecord("trailer_surface_logo")
+    for tSfF = 0 to 470
+        capSurfQuiet()
+        capSurfWordAt(0, tSfF - tSfFishA)
+        capSurfWordAt(1, tSfF - tSfFishB)
+        ` the words come up: a splash where each breaks the water, and a bloop as it lands
+        if tSfF = tSfFishA
+            capSurfSpray(CAPD_W_X#(0), 14, 14, 3.2)
+            capSurfRing(CAPD_W_X#(0), CSF_WATER + 2, 70, 60, 0, 200)
+            capSurfRing(CAPD_W_X#(0), CSF_WATER + 2, 44, 50, 8, 160)
+            tidePlaySound(CSF_SFX_SPLASH, .4, .35)
+            record mark "word"
+        endif
+        if tSfF = tSfFishA + 12
+            tidePlaySound(CSF_SFX_LAND_A, .45, 0)
+        endif
+        if tSfF = tSfFishB
+            capSurfSpray(CAPD_W_X#(1), 14, 14, 3.2)
+            capSurfRing(CAPD_W_X#(1), CSF_WATER + 2, 70, 60, 0, 200)
+            capSurfRing(CAPD_W_X#(1), CSF_WATER + 2, 44, 50, 8, 160)
+            tidePlaySound(CSF_SFX_SPLASH, .4, .2)
+            record mark "word"
+        endif
+        if tSfF = tSfFishB + 12
+            tidePlaySound(CSF_SFX_LAND_B, .45, 0)
+        endif
+        ` "Pop" bursts up out of the water, bigger than it is, and springs back to its size, in its spray
+        tSfPopAge = tSfF - tSfPop
+        if tSfPopAge < 0
+            capDraftWordPose(2, 1, 0, 0)
+            capDraftSplashAt(-1)
+        else
+            tSfRise# = tSfPopAge
+            tSfRise# = tSfRise# / 7.0
+            if tSfRise# > 1 then tSfRise# = 1
+            tSfUnder# = (CSF_WATER - CAPD_POP_Y# + CAPD_POP_SIZE# * .6) * (1 - capEaseOut(tSfRise#))
+            tSfScale# = 1 + .35 * capSpring(tSfPopAge, .42)
+            capDraftWordPose(2, tSfScale#, tSfUnder#, 255)
+            ` the splash plays all of the way through, and is gone
+            tSfSplash# = tSfPopAge
+            tSfSplash# = tSfSplash# / 75.0
+            capDraftSplashAt(tSfSplash#)
+        endif
+        if tSfF = tSfPop
+            capSurfSpray(CAPD_POP_X#, 46, 70, 5.4)
+            capSurfRing(CAPD_POP_X#, CSF_WATER + 3, 220, 90, 0, 230)
+            capSurfRing(CAPD_POP_X#, CSF_WATER + 3, 150, 80, 7, 200)
+            capSurfRing(CAPD_POP_X#, CSF_WATER + 3, 90, 70, 14, 170)
+            tidePlaySound(CSF_SFX_SPLASH_BIG, .75, -.25)
+            tidePlaySound(CSF_SFX_POP, .8, 0)
+            tidePlaySound(CSF_SFX_BOOM, .45, 0)
+            record mark "pop"
+        endif
+        if tSfF = 200
+            screenshot env$("FISH_TRAILER_OUT") + "/trailer_surface_logo_still"
+        endif
+        ` THE TITLE TURNS TO CLOUDS: the clouds swell up over the words, and the words, and their reflection,
+        ` fade away under them, going the dusky color of the clouds as they go
+        tSfCloudAge = tSfF - tSfCloud
+        capSurfCloudsAt(tSfCloudAge)
+        if tSfCloudAge = 0
+            tidePlaySound(CSF_SFX_CLOUD, .35, .1)
+            record mark "clouds"
+        endif
+        if tSfCloudAge >= 0
+            tSfFade# = tSfCloudAge - 8
+            tSfFade# = tSfFade# / 34.0
+            if tSfFade# < 0 then tSfFade# = 0
+            if tSfFade# > 1 then tSfFade# = 1
+            tSfFade# = capEaseInOut(tSfFade#)
+            color sprite CSF_LOGO, rgb(255 - 120 * tSfFade#, 255 - 170 * tSfFade#, 255 - 120 * tSfFade#, 255 * (1 - tSfFade#))
+            color sprite CSF_MIRROR, rgb(120, 165, 235, 80 * (1 - tSfFade#))
+        endif
+        if tSfF = 300
+            screenshot env$("FISH_TRAILER_OUT") + "/trailer_surface_logo_clouds"
+        endif
+        capSurfStep()
+        runto frame_menu_render
+    next
+    record stop
+endtest
+
+` THE LOGO ON THE MAIN MENU, as it comes in the first time the menu is there. not part of the trailer: a look
+` at the logo of fish_headers_logo where the game puts it.
+test trailer_menu_logo from trailerShot
+    GAME_ENDLESS = 1
+    REQUEST_GAME_END = 1
+    runto menu_transition
+    trailerRecord("trailer_menu_logo")
+    for tMlF = 0 to 420
+        if tMlF = 400
+            screenshot env$("FISH_TRAILER_OUT") + "/trailer_menu_logo_still"
+        endif
+        runto frame_menu_render
+    next
+    record stop
+endtest
+
+` AVA'S BOTTLE on the water of the main menu, close up. not part of the trailer: a look at it where the game puts it.
+test trailer_menu_bottle from trailerShot
+    mock get pref(tMbAt, tMbElse)
+    endmock trailerBottlePref(tMbAt, tMbElse)
+    GAME_ENDLESS = 1
+    REQUEST_GAME_END = 1
+    runto menu_transition
+    for tMbF = 0 to 300
+        runto frame_menu_render
+    next
+    set record view AVA_BOTTLE_X# - 80, SURFACE_HORIZON + AVA_BOTTLE_DOWN - 45, 160, 90
+    trailerRecord("trailer_menu_bottle")
+    for tMbF = 0 to 300
+        if tMbF = 150
+            screenshot env$("FISH_TRAILER_OUT") + "/trailer_menu_bottle_still"
+        endif
+        runto frame_menu_render
+    next
+    record stop
+endtest
+
+` THE SEA OF THE MAIN MENU, with all of it there that can be: the boat, Ava's bottle and the reefs, and the menu
+` hidden. not part of the trailer: a look at them together.
+test trailer_menu_sea from trailerShot
+    mock get pref(tMsAt, tMsElse)
+    endmock trailerBottlePref(tMsAt, tMsElse)
+    GAME_ENDLESS = 1
+    REQUEST_GAME_END = 1
+    runto menu_transition
+    for tMsF = 0 to 300
+        trailerMenuSea()
+        runto frame_menu_render
+    next
+    trailerRecord("trailer_menu_sea")
+    for tMsF = 0 to 300
+        trailerMenuSea()
+        if tMsF = 150
+            screenshot env$("FISH_TRAILER_OUT") + "/trailer_menu_sea_still"
+        endif
+        runto frame_menu_render
+    next
+    record stop
+endtest
+
+` THE GAME STARTING, the way it does for a player: the stars, the camera coming down with the menu hidden,
+` the logo coming up out of the sea, and the menu fading in under it. not part of the trailer. nothing is
+` remembered and nobody is at the keys, the same as in a trailer shot, but the menu is not skipped.
+test trailer_menu_splash
+    if val(env$("FISH_TRAILER")) = 0 then end
+    randomize 7
+    mock get pref
+    endmock 0
+    mock set pref
+    endmock
+    mock begin pref batch
+    endmock
+    mock end pref batch
+    endmock
+    mock action down
+    endmock 0
+    mock new action down
+    endmock 0
+    tMsOut$ = env$("FISH_TRAILER_OUT")
+    record start tMsOut$ + "/trailer_menu_splash.mp4"
+    for tMsF = 0 to 1500
+        if tMsF = 1450
+            screenshot tMsOut$ + "/trailer_menu_splash_still"
+        endif
+        runto frame_menu_render
+    next
+    record stop
+    end
+endtest

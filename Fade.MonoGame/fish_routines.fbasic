@@ -54,7 +54,7 @@ return
 load_fonts:
 
     SCORE_FONT = 1
-    font SCORE_FONT, "Fish/Fonts/ZeroCool"
+    font SCORE_FONT, "Fish/Fonts/ZeroCool" + scoreFontFamily(language$()) `see applyLanguageFont
 
     ` input icons. any rich text that uses the font can draw these by writing the name in braces, like "hold {swap}".
     ` they are pictures of keys, or of controller buttons, depending on what the player is using.
@@ -1241,11 +1241,19 @@ frame_score:
                 ` a game that was won already, and is being carried on with, has no last round. see KEEP PLAYING in fish_headers.
                 if GAME_ENDLESS = 0 then roundWasLast = 1
             endif
+            ` the last round of the Steam demo has no upgrade screen. the bar stays full, and
+            ` handle_steam_demo_over brings up its page. see THE STEAM DEMO in fish_headers_steamdemo.
+            roundDemoOver = steamDemoStops()
+            if roundWasLast = 0 and roundDemoOver
+                STEAM_DEMO_OVER = 1
+                SCORE_BAR_HOLD = 2
+            endif
             if roundWasLast
                 ` that was the last round, so the game is over. handle_game_end, in fish_routines_menu, says so.
                 REQUEST_GAME_END = 1
                 SCORE_BAR_HOLD = 2
-            else
+            endif
+            if roundWasLast = 0 and roundDemoOver = 0
                 ` and neither does a game under the "oceanic oath". see fish_headers_fast.
                 roundNoUpgrade = GAME_ZEN
                 if fastOath() then roundNoUpgrade = 1
@@ -1985,6 +1993,7 @@ handle_combos:
                 create basic tween cell.comboAnimTweenId, 0, 0, 1, 0
             endif
             if groupForce = FORCE_BUNCH then skip
+            ACHIEVE_POPPED = ACHIEVE_POPPED + 1 `for fish_popped, on Steam. see THE STATS in fish_headers_achieve.
 
             smokeIndex = rnd(SMOKE_ANIM_COUNT)
             smoke = SMOKE_ANIMS(smokeIndex)
@@ -2237,6 +2246,9 @@ handle_combos:
     ` a moment that was claimed at the start of the look, and did not happen, is dropped. see THE BIG
     ` MOMENTS in fish_headers_teach.
     teachLookJudged()
+
+    ` the fish that popped go onto Steam's count. see THE STATS in fish_headers_achieve.
+    achievePops()
 
     ` the tests stop here. what pops has been decided and scored, and none of it has been animated yet.
     _combos_judged:

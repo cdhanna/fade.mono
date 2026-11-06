@@ -22,12 +22,16 @@ remend
 save_game:
     ` a demo is never saved, so the player's own game is still there afterwards. see THE DEMO in fish_headers_demo.
     if DEMO_MODE then return
+    ` nor does the Steam demo save over a game that the full game made. see THE SAVE IS SHARED in fish_headers_steamdemo.
+    saveHandsOff = steamDemoHandsOff()
+    if saveHandsOff then return
 
     ` all of this is written to the file once, at the end, instead of once for every number
     begin pref batch
 
     set pref SAVE_PREF, SAVE_VERSION
     set pref SAVE_PREF + 1, 1 `there is a saved game
+    set pref PREF_SAVE_DEMO, STEAM_DEMO `and whether the Steam demo made it. see THE SAVE IS SHARED in fish_headers_steamdemo.
     set pref SAVE_PREF + 2, CELL_COLUMN_COUNT
     set pref SAVE_PREF + 3, CELL_ROW_COUNT
     set pref SAVE_PREF + 4, CURRENT_SCORE
@@ -297,6 +301,9 @@ return
 forget_saved_game:
     ` nor does a demo throw the player's game away
     if DEMO_MODE then return
+    ` nor the Steam demo a game that the full game made. see THE SAVE IS SHARED in fish_headers_steamdemo.
+    forgetHandsOff = steamDemoHandsOff()
+    if forgetHandsOff then return
     set pref SAVE_PREF + 1, 0
     SAVE_SIGNATURE = -1
 return
@@ -336,6 +343,9 @@ function hasSavedGame()
             found = 1
         endif
     endif
+    ` the Steam demo has no Resume for a game that the full game made. see THE SAVE IS SHARED in fish_headers_steamdemo.
+    foundHandsOff = steamDemoHandsOff()
+    if foundHandsOff then found = 0
 endfunction found
 
 
@@ -376,6 +386,7 @@ function grantPassive(abilityIndex)
     ` a game that has taken the oath has it for good. see THE MODIFIERS in fish_headers_fast.
     if abilityIndex = ABILITY_INDEX_OATH
         modSet(MOD_OATH)
+        achieveUnlock("CARD_OATH")
     endif
 
     if CARDS(abilityIndex).obtained
@@ -421,6 +432,9 @@ endfunction
 ` the screen where a move gets put in a slot calls this, and load_game calls it to put the moves back.
 function grantMoveToSlot(abilityIndex, slot)
     codecSeeCard(abilityIndex)
+    if abilityIndex = ABILITY_INDEX_MOVE_ROTATE
+        achieveUnlock("CARD_ROTATE")
+    endif
     moveBinding = MOVE_ABILITY_BINDINGS(slot)
     moveBinding.assigned = 1
     moveBinding.abilityIndex = abilityIndex

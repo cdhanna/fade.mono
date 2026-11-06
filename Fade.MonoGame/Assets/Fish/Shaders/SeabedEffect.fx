@@ -16,6 +16,7 @@
 // the game sets all of these on every frame. a parameter that the game never sets does not keep
 // a value that it is given here, so the things that never change are #defines instead.
 float Time;      // in seconds
+float Drift;     // the time that the plankton moves by, in seconds. it hangs still with the snow when a puzzle is lost. see SEABED_DRIFT_CLOCK# in fish_headers.
 float2 Size;     // how big the screen is, in pixels
 float Void;      // 0 for the sea. toward 1, the sea fades away, and what is there in place of it is the stars, seen through a black hole. see THE TWO ENDINGS in fish_headers.
 float Mood;      // how long the run of pops that is going on is, from 0 to 1. the water is brighter, and the shafts of light are stronger.
@@ -271,7 +272,7 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 	color += lerp(RayColor * 0.2, MoonRay * 0.11, night) * ray;
 
 	// THE NIGHT. little lights drift up through the water, and twinkle. see fish_headers_tide.
-	float2 grain = floor((px + float2(sin(Time * 0.2 + px.y * 0.02) * 6.0, Time * 5.0)) / 2.0);
+	float2 grain = floor((px + float2(sin(Drift * 0.2 + px.y * 0.02) * 6.0, Drift * 5.0)) / 2.0);
 	float plankton = step(0.988, hash(grain + 57.0));
 
 	// THE HINTS IN THE SNOW: the box of a hint has none of the plankton of its own, only the lights of its shape

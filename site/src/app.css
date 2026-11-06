@@ -1,0 +1,166 @@
+/* The colours are the game's: the water (SeabedEffect.fx), the hud's blue (HUD_BLUE in ScreenEffect.fx), the
+   title's pale blue, the score's gold. The buttons are the keys on the hud, and what is picked gets the board's
+   cursor: a pale square with a thin blue line. Corners are square: it is a game of pixels. */
+
+@font-face {
+  font-family: 'Zero Cool';
+  src: url('/fonts/ZeroCool.woff2') format('woff2');
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+  --abyss: #050b1c;
+  --deep: #0c1d40;
+  --water: #174a69;
+  --panel: rgba(6, 16, 38, 0.78);
+  --panel-edge: rgba(64, 128, 255, 0.34);
+  --foam: #d6e9ff;
+  --mist: #b4cbe0;
+  --dim: #8fa9c4;
+  --hud: #4080ff;
+  --hud-light: #7fb0ff;
+  --gold: #ffc44d;
+  --coral: #ff6e9c;
+  --key: #eef3f8;
+  --key-edge: #93a4b8;
+  --shadow: #0a1a3a;
+  --cursor: rgba(190, 205, 235, 0.16);
+  --display: 'Zero Cool', 'Trebuchet MS', sans-serif;
+  --body: 'Nunito Variable', 'Nunito', 'Segoe UI', system-ui, sans-serif;
+  --gutter: clamp(16px, 4vw, 48px);
+  --measure: 1180px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  background: var(--abyss);
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  /* the colour is on html: a body background would paint over the backdrop (z-index -1) */
+  background: transparent;
+  color: var(--mist);
+  font-family: var(--body);
+  font-size: 1.12rem;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+img, video, iframe { display: block; max-width: 100%; }
+main { transition: opacity 0.26s, transform 0.26s; }
+main.leaving { opacity: 0; transform: translateY(-14px); }
+main.coming { opacity: 0; transform: translateY(14px); transition: none; }
+
+a { color: var(--hud-light); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { color: var(--gold); }
+
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+
+h1, h2, h3 {
+  font-family: var(--display);
+  font-weight: normal;
+  color: var(--foam);
+  margin: 0;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+h2 { font-size: clamp(2.2rem, 5vw, 3.2rem); text-shadow: 3px 3px 0 var(--shadow); }
+h3 { font-size: 1.5rem; }
+p { margin: 0 0 1em; }
+
+.wrap {
+  width: 100%;
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+.section {
+  position: relative;
+  padding: clamp(64px, 11vh, 120px) 0;
+  scroll-margin-top: 40px;
+}
+
+.heading { text-align: center; margin-bottom: 44px; }
+.heading h2 { margin-bottom: 14px; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+/* the marks under the moon: three little diamonds */
+.rule {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  height: 12px;
+}
+.rule::before, .rule::after, .rule span {
+  content: '';
+  width: 9px;
+  height: 9px;
+  margin-top: 1px;
+  border: 1px solid var(--hud-light);
+  transform: rotate(45deg);
+}
+.rule span { background: var(--hud-light); }
+
+/* a key on the hud */
+.cta {
+  display: inline-block;
+  padding: 0.42em 1.1em 0.36em;
+  font-family: var(--display);
+  font-size: 1.7rem;
+  line-height: 1.1;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: #15233f;
+  background: var(--key);
+  border: 2px solid #15233f;
+  box-shadow: 0 5px 0 var(--key-edge), 0 5px 0 2px #15233f;
+  transition: transform 0.08s, box-shadow 0.08s, background 0.2s;
+}
+.cta:hover { color: #15233f; background: #fff; transform: translateY(-2px); box-shadow: 0 7px 0 var(--key-edge), 0 7px 0 2px #15233f; }
+.cta:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--key-edge), 0 1px 0 2px #15233f; }
+
+/* a line of the menu, and the board's cursor on it when it is picked */
+.item {
+  display: inline-block;
+  padding: 0.28em 0.9em 0.2em;
+  font-family: var(--display);
+  font-size: 1.35rem;
+  line-height: 1.1;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--foam);
+  text-shadow: 2px 2px 0 var(--shadow);
+  border: 1px solid transparent;
+  background: none;
+  cursor: pointer;
+}
+.item:hover, .item:focus-visible {
+  color: var(--foam);
+  background: var(--cursor);
+  border-color: var(--hud-light);
+}
+
+.small { color: var(--dim); font-size: 0.92rem; }
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

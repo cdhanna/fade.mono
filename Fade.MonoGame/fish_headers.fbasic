@@ -993,6 +993,8 @@ global STEAM_TIMELINE_ROUND = 0
 ` main menu: the reef, the ancient one, the photos and the trident. the options page has one line for it,
 ` "Mementos", once any of them is there, and the page has a line for each of them that is there.
 #constant MENU_PAGE_ENDINGS 6
+` the page that comes up over the game when the last round of the Steam demo has been won. see THE STEAM DEMO in fish_headers_steamdemo.
+#constant MENU_PAGE_DEMO_OVER 7
 global MENU_PAGE = 0
 
 ` every line that any page of the menu can show. a page shows a run of these that are next to each other.
@@ -1042,7 +1044,10 @@ global MENU_PAGE = 0
 #constant MENU_ITEM_ENDINGS_BACK 30
 ` whether a demo plays when the main menu is left alone, under the pop speed. see OPTION_DEMO in fish_headers_demo.
 #constant MENU_ITEM_SET_DEMO 31
-global MENU_ITEM_COUNT = 32
+` the two lines of the page at the end of the Steam demo: the store page of the full game, and "Done". see THE STEAM DEMO in fish_headers_steamdemo.
+#constant MENU_ITEM_DEMO_STORE 32
+#constant MENU_ITEM_DEMO_DONE 33
+global MENU_ITEM_COUNT = 34
 global dim MENU_ITEMS(MENU_ITEM_COUNT) as menuItem
 
 global MENU_PAGE_FIRST = 0 `the first item on the page
@@ -1201,7 +1206,10 @@ global OPTION_WINDOW_H = 0
 
 ` THE SURFACE. the main menu is the view from the surface of the water. the routines are in fish_routines_surface.
 global SURFACE_FX_ID
-global TEX_DIVE_BOAT
+global TEX_DIVE_BOAT `the picture of the boat that is up, one of TEX_BOAT_PLACES
+global dim TEX_BOAT_PLACES(BOAT_PLACES) `a picture of the boat for every place on it that the man can be
+global SURFACE_BOAT_PLACE = 0 `where the man is on it now
+global SURFACE_SHOWN = 0 `1 while the surface is shown, so that the man only moves when it comes up
 
 ` THE TIME OF DAY. the surface has two sets of colors: the middle of the day, and the sun going down.
 ` setup_surface picks one when the game starts, by the clock of the computer. setting the FISH_SKY
@@ -1212,8 +1220,10 @@ global SURFACE_MORNING_HOUR = 6 `and it lasts all night, until this hour
 global SURFACE_SPRITE `the sky and the sea
 global MENU_CAMERA_ID `slides everything in the menu's render target up the screen as the game goes under
 global SURFACE_BOAT_SPRITE
+global SURFACE_WATERLINE_FX = 0 `the effect that sits the boat, and Ava's bottle, in the water. see WaterlineEffect.fx.
 global SURFACE_HORIZON = 150 `how far down the screen the horizon is
 global SURFACE_BOAT_X = 458 `where the middle of the picture of the boat is, which is off to the side of the menu
+global SURFACE_BOAT_SUNK = 0 `where the line of the water is on the boat, from where it rides: the bottom 3 rows of its picture are under it
 global SURFACE_SINK_DISTANCE = 230 `how far up the screen the horizon goes as the camera goes under
 global SURFACE_SWELL_RISE = 150 `and how far up the screen the water right in front of the camera comes
 global SURFACE_SINK_LEAD_SHARE# = .5 `and how much of the way under it has got by then, where 1 is all of the way
@@ -1266,6 +1276,7 @@ global SEABED_RAINBOW_EASE# = .003 `how much of the way there it goes in a milli
 ` the specks would all jump to somewhere else. so they move by a clock of their own, and it is the
 ` clock that runs faster.
 global SEABED_SNOW_CLOCK# = 0 `in seconds
+global SEABED_DRIFT_CLOCK# = 0 `the time that the plankton of the night rises and sways by, in seconds. it stops with the snow of a lost puzzle, but it does not run faster with the mood.
 global SEABED_SNOW_RUSH# = 1.5 `how much faster the clock runs when the mood is all the way up. 1 is twice as fast.
 
 ` THE CURRENT. every so often a little wave comes through the board, from the top left to the bottom
@@ -1414,15 +1425,15 @@ global TUTORIAL_NUDGE_SPEED# = .005 `how fast. it goes up and down once in 6.28 
 
 ` THE HINTS. the three key hints of the game, and the shake that each one gives when the player does
 ` what it is about. the routines are in fish_routines_intro.
-global dim HINT_PART_TEXTS(3) `0 is moving, 1 is swapping, and 2 is info mode
-global dim HINT_SHAKE_TWEENS(3)
+global dim HINT_PART_TEXTS(4) `0 is moving, 1 is swapping, 2 is info mode (start over in a puzzle), and 3 is undo, only in a puzzle
+global dim HINT_SHAKE_TWEENS(4)
 global HINT_PART_GAP = 22 `how far apart they are, in pixels
 global HINT_SHAKE_MS = 220 `how long a shake lasts, in milliseconds
 global HINT_SHAKE_SIZE# = 2 `how far it goes to either side, in pixels
 global HINT_VISIBLE = 1 `0 while the hints are put away, which is while a menu is up
 global HINT_ONLY_INFO = 0 `1 while the hint for info mode is the only one of the three that shows, and it is bright
 global HINT_NO_INFO = 0 `1 while the hint for info mode is left out, which is while the little boards are played
-global dim HINT_PART_ALPHA#(3) `how see-through each one is now. they fade in and out, and this chases where it should be.
+global dim HINT_PART_ALPHA#(4) `how see-through each one is now. they fade in and out, and this chases where it should be.
 global HINT_PART_SHOWN_ALPHA = 140 `how see-through they are when they are there, out of 255. it is the same as the text of the other screens.
 global HINT_FADE_MS# = 160 `how long one takes to fade all the way in, or out, in milliseconds
 global HINT_FADE_LAST_MS = 0

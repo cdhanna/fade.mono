@@ -1,0 +1,150 @@
+goto routines_steamdemo_exit
+
+remstart
+    THE STEAM DEMO. see fish_headers_steamdemo.
+remend
+
+` is this the demo? fish.fbasic does this first of all, before anything asks.
+setup_steam_demo:
+    if is env set("FISH_STEAM_DEMO")
+        if val(env$("FISH_STEAM_DEMO")) <> 0
+            STEAM_DEMO = 1
+        endif
+    endif
+return
+
+
+` the main loop comes here on every frame of the game, beside handle_game_end. when the last round of the
+` demo has been won, this saves the game, with the round won, and brings up the page of the end of the demo
+` over it, the same way that the pause menu comes up.
+handle_steam_demo_over:
+    if STEAM_DEMO_OVER <> 1 then return
+
+    ` let a swap that is playing out finish first
+    if LIVE_MOVE_ACTIVE then return
+    STEAM_DEMO_OVER = 2
+
+    ` the full game, or the demo, carries on with it from here. see THE SAVE IS SHARED.
+    gosub save_game
+
+    questTalkStop()
+    MENU_MODE = MENU_MODE_PAUSE
+
+    hide sprite MENU_BG_SPRITE
+    show sprite MENU_DIM_SPRITE
+    showSurface(0)
+
+    ` without the Steam overlay, the line for the store says where to look instead
+    MENU_ITEMS(MENU_ITEM_DEMO_STORE).desc$ = loc$("menu.demo.store.desc")
+    sdoOverlay = steam overlay enabled()
+    if sdoOverlay = 0 then MENU_ITEMS(MENU_ITEM_DEMO_STORE).desc$ = loc$("menu.demo.store.off")
+    setMenuPage(MENU_PAGE_DEMO_OVER)
+    selectMenuItem(0, 0)
+
+    hintShow(0)
+    set screen shake amount 0
+
+    ` the menu is drawn once before it is shown, the same as the pause menu is. see menu_open_pause.
+    create basic tween MENU_FADE_TWEEN_ID, 0, 0, 1, 0
+    gosub frame_menu_render
+    sync
+
+    show sprite MENU_COMPOSITE_SPRITE
+    create basic tween MENU_FADE_TWEEN_ID, 0, 1, 150, 0
+return
+
+routines_steamdemo_exit:
+
+
+` has the last round of the demo been won? frame_score asks when a round is won, and then this round has no
+` upgrade screen. a short game is over before this, the usual way.
+function steamDemoStops()
+    sdsStop = 0
+    if STEAM_DEMO
+        if DEMO_MODE = 0 and PUZZLE_ON = 0
+            if CURRENT_ROUND >= STEAM_DEMO_ROUNDS
+                sdsStop = 1
+            endif
+        endif
+    endif
+endfunction sdsStop
+
+
+` is the saved game one that the full game made, which the demo leaves alone? see THE SAVE IS SHARED.
+function steamDemoHandsOff()
+    sdhOff = 0
+    if STEAM_DEMO
+        if get pref(SAVE_PREF + 1, 0) = 1
+            if get pref(PREF_SAVE_DEMO, 0) = 0
+                sdhOff = 1
+            endif
+        endif
+    endif
+endfunction sdhOff
+
+
+` how many rounds are left, to show: in the demo, no more than are left of the demo
+function steamDemoRoundsLeft(sdrLeft)
+    if STEAM_DEMO and DEMO_MODE = 0
+        sdrDemo = STEAM_DEMO_ROUNDS - CURRENT_ROUND
+        if sdrDemo < 0 then sdrDemo = 0
+        if sdrDemo < sdrLeft
+            sdrLeft = sdrDemo
+        endif
+    endif
+endfunction sdrLeft
+
+
+` the page of the end of the demo's line for the store: the full game's page, in the Steam overlay. without
+` the overlay, the line shakes its head.
+function steamDemoStore()
+    sdsOverlay = steam overlay enabled()
+    if sdsOverlay
+        open steam overlay url STEAM_DEMO_STORE_URL$
+    else
+        create basic tween MENU_SHAKE_TWEEN_ID, 1, 0, 400, 0
+    endif
+endfunction
+
+
+` the tag, where the logo is. age is how long the logo has been coming in, in milliseconds, or less than
+` nothing before it has started. it comes in after "Pop", with a punch of its own, and bobs with the logo.
+function steamDemoTag(sdtAge, sdtAlpha#, sdtBob#)
+    if STEAM_DEMO = 0 then exitfunction
+    if STEAM_DEMO_TAG_ID = 0 then steamDemoTagMake()
+    sdtA = sdtAge - LOGO_POP_MS - STEAM_DEMO_TAG_WAIT
+    if sdtAge < 0 or sdtA < 0
+        hide text STEAM_DEMO_TAG_ID
+        exitfunction
+    endif
+    show text STEAM_DEMO_TAG_ID
+    sdtF# = sdtA
+    sdtF# = sdtF# / 16.667
+    sdtIn# = sdtA
+    sdtIn# = sdtIn# / 80.0
+    if sdtIn# > 1 then sdtIn# = 1
+    sdtX = LOGO_X# + STEAM_DEMO_TAG_X# * LOGO_SCALE# + .5
+    sdtY = LOGO_Y# + STEAM_DEMO_TAG_Y# * LOGO_SCALE# + sdtBob# + .5
+    set text position STEAM_DEMO_TAG_ID, sdtX, sdtY
+    size text y STEAM_DEMO_TAG_ID, 24 * (1 + .6 * logoSpring(sdtF#, .42))
+    set text alpha STEAM_DEMO_TAG_ID, 255 * sdtIn# * sdtAlpha#
+endfunction
+
+
+` the tag, the first time that it is wanted, on the menu's render target
+function steamDemoTagMake()
+    reserve text id(STEAM_DEMO_TAG_ID)
+    text loc STEAM_DEMO_TAG_ID, 0, 0, SCORE_FONT, "menu.demo.tag"
+    set text offset STEAM_DEMO_TAG_ID, .5, .5
+    color text STEAM_DEMO_TAG_ID, rgb(255, 222, 96)
+    enable text drop shadow STEAM_DEMO_TAG_ID, 2, -2, rgb(150, 36, 24)
+    set text render target STEAM_DEMO_TAG_ID, LOGO_TARGET
+    order text STEAM_DEMO_TAG_ID, ORDER_MENU_TEXT - 3
+    rotate text STEAM_DEMO_TAG_ID, LOGO_ANGLE# + STEAM_DEMO_TAG_ANGLE#
+    hide text STEAM_DEMO_TAG_ID
+endfunction
+
+
+function steamDemoTagHide()
+    if STEAM_DEMO_TAG_ID <> 0 then hide text STEAM_DEMO_TAG_ID
+endfunction

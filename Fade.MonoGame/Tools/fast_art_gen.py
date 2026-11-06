@@ -103,27 +103,43 @@ def see_all_card():
 
 
 def oath_card():
-    """a hook with nothing on it"""
+    """a hand raised to swear the oath, with a heart in the palm: take only memories"""
     c = Canvas(48)
-    c.frame(21, 3, 27, 9, 2)          # the eye of the hook
-    c.rect(23, 9, 25, 32)             # the shank
-    c.line(24, 32, 22, 38, 3)         # the bend
-    c.line(22, 38, 16, 40, 3)
-    c.line(16, 40, 11, 36, 3)
-    c.line(11, 36, 10, 28, 3)         # and up to the point
-    c.line(10, 28, 15, 31, 2)         # the barb
+    # the four fingers, each with its tip rounded off: left, top, right
+    for x0, top in ((13, 10), (18, 6), (23, 7), (28, 12)):
+        c.rect(x0, top, x0 + 3, 27)
+        c.dot(x0, top, 0)
+        c.dot(x0 + 3, top, 0)
+    c.rect(13, 24, 31, 38)            # the palm
+    c.rect(14, 39, 30, 40)
+    c.rect(16, 41, 28, 46)            # the wrist
+    c.line(13, 34, 6, 23, 4)          # the thumb, out to the side
+    c.dot(6, 23, 0)
+    # the heart, cut out of the palm
+    for y, (x0, x1) in enumerate(((18, 20), (24, 26), (17, 27), (17, 27), (18, 26), (19, 25), (20, 24), (21, 23), (22, 22))):
+        if y == 0:
+            c.rect(18, 28, 20, 28, 0)
+            c.rect(24, 28, 26, 28, 0)
+            continue
+        if y == 1:
+            c.rect(17, 29, 21, 29, 0)
+            c.rect(23, 29, 27, 29, 0)
+            continue
+        c.rect(x0, 28 + y, x1, 28 + y, 0)
     return c
 
 
 def badge_oath():
+    """the same hand, small"""
     c = Canvas(12)
-    c.rect(5, 0, 6, 7)
-    c.line(5, 7, 3, 10, 2)
-    c.line(3, 10, 1, 8, 2)
-    c.dot(1, 6)
-    c.dot(1, 7)
-    c.dot(4, 0)
-    c.dot(7, 0)
+    for x0, top in ((3, 2), (5, 1), (7, 1), (9, 3)):
+        c.rect(x0, top, x0, 6)
+    c.rect(3, 6, 9, 9)                # the palm
+    c.rect(4, 10, 8, 11)              # the wrist
+    c.dot(1, 5)                       # the thumb
+    c.dot(2, 6)
+    c.dot(2, 7)
+    c.dot(6, 7, 0)                    # the heart, as small as it gets
     return c
 
 

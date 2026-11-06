@@ -76,7 +76,8 @@ remstart
     the player picks one of two replies, she answers that, and she says one more thing (puzzle_talk).
     the words are in build/make_ava_talk.py, which makes fish_puzzle_talk. there are more of them than there are
     places for, so PUZZLE_TALK_PICK says which ones are used. each one that needs another comes after it: Gary before
-    what happened to Gary, the moon that she saves before the moon that she asks for. the first boards have words of
+    what happened to Gary. they go from her keeping the player at a distance, to her fear of what leaning on someone
+    does, to her catching herself leaning on the player, which is the end of the boards. the first boards have words of
     their own, and the rest have a remark that goes by how far along the player is (puzzleRemark). the board that a new
     fish comes in on has her saying what it does (puzzleOpening).
 
@@ -87,15 +88,20 @@ remstart
     falling, and it happens the moment that they stop, so that it never feels ignored.
 
     WHY THERE ARE PUZZLES
-    she is afraid that nobody stays without a reason, so she made them one. the boards are a bribe, and
-    they run out. she says so, and that the player can go, and then there is no board, no goal and nothing
-    to do (PUZZLE_ALONE_MS). this is saved, so a player who closes the game and comes back gets the same
-    thing, sooner. the player who stays anyway gets the first thing that she ever said at the
-    upgrade screen, "You're still here?", and that is the happy ending. nothing else happens.
+    she is afraid of what leaning on someone does: her exes held on to her, and stopped being anyone, until they only
+    wanted what she wanted. so she keeps the player at a distance, and keeps checking that they are still their own
+    person. but she is afraid that nobody stays without a reason, so she made them one, and the boards are a bribe.
+    over the talks she starts to lean the other way: she arranges things around the player, and waits for them.
 
-    then she says that she made another one, and that it is bad, and the boards go on, just because (PUZZLE_AFTER).
-    she says that once, and a few words as each of the others comes in (avaAfterLine). those boards will be made as they
-    are needed. for now it is the same list again, as a stand-in.
+    THE END OF THE BOARDS
+    the thirtieth board is clear, and she sees it: she made the boards to keep the player, and had started another.
+    this time she is the one holding on, and she wants to stay someone too. so she goes, warmly, and says that she will
+    see the player around (puzzleCleared, angler.ava.free.*). that is the happy ending. once her words are out she swims
+    off the side of the sea (PUZZLE_GOING), the water stays empty for a moment, and the game goes back to the title as
+    the usual game (avaFreed, AVA_TO_TITLE): the player is not staying any more, the menu water is not warm, and she
+    keeps the shop again. the first time that she is asked anything after that, she has a life of her own
+    (angler.ava.freed.*). a player who closes the game while she is going comes back to the empty sea, and she says
+    goodbye again (stage 1 in the preferences). the Puzzle lab window can still bring a board in, for this game only.
 
     THE RULES
     the fish pop the way that they always do: every group of 3 or more that touch, and then the fish over
@@ -151,7 +157,7 @@ remstart
 
     THE SNOW STOPS
     she does not say when a swap has lost the board. being told at once was no fun. the water says it, and only if the
-    player looks: the snow slows down, over a few seconds, until it hangs still, and it starts again when the swap is
+    player looks: the snow stops within about two seconds and hangs still (slowing over seven was too gentle to notice), and it starts again when the swap is
     taken back (puzzleLostLook, stepPuzzleStill). she only speaks once the snow has stopped and there is not a move left
     to make, because then the player has to be told about undo.
 
@@ -180,15 +186,19 @@ global PUZZLE_LOST_LAST = -1 `which of the things that she says about that she s
 global PUZZLE_LOST = 0 `1 while the board can never be cleared from where it is. see THE SNOW STOPS.
 global PUZZLE_NO_MOVE = 0 `1 while it is lost and there is not a move left to make
 global PUZZLE_STILL# = 0 `how far the snow has stopped, from 0, not at all, to 1, hanging still
-global PUZZLE_STILL_SECS# = 7 `how long it takes to stop
+global PUZZLE_STILL_SECS# = 2 `how long it takes to stop. it has to be seen to stop, and not only to slow down.
 global PUZZLE_STILL_BACK_SECS# = 1.5 `and how long it takes to get going again
 global PUZZLE_FISH_WAS = 0 `how many fish there were when the board was last looked at
+global PUZZLE_LOOKED_AT = -1 `and PUZZLE_UNDO_NEXT then, so that a swap that pops nothing is looked at too
 global PUZZLE_CLEAR_HOLD_MS = 1600 `how long the empty sea stays, over and above the time to read the last words
-global PUZZLE_STAY_MS = 20000 `how long the player has to stay with nothing to do. see WHY THERE ARE PUZZLES.
-global PUZZLE_ALONE_MS = 0 `when she looks up again, while there is nothing left, or 0
-global PUZZLE_ASKED = 0 `1 once she has asked if the player is still here
-global PUZZLE_AFTER = 0 `1 once she has made another one, just because
-global PUZZLE_RAN_OUT = 0 `1 once the boards have run out, until she makes another one
+` THE END OF THE BOARDS
+global PUZZLE_RAN_OUT = 0 `1 once the boards have run out, and she is going
+global PUZZLE_GOING = 0 `1 once her goodbye is said, and she swims off
+global PUZZLE_GOING_MS = 0 `when she set off
+global PUZZLE_GONE_AT_MS = 0 `when she went out of sight, or 0 until she has
+global PUZZLE_GOING_PAST = 60 `how far past the right of the sea she swims to, in pixels
+global PUZZLE_GOING_MAX_MS = 9000 `a swim that takes longer than this counts as gone anyway
+global PUZZLE_GOING_HOLD_MS = 1800 `how long the water stays empty after she has gone, before the title
 
 ` a row is a number with a digit for each cell, and 0 is no fish. the digit picks from TUTORIAL_KINDS.
 global dim PUZZLE_ROWS(270)
@@ -231,6 +241,20 @@ global PUZZLE_HINT_A = -1 `the cells that hop, or -1
 global PUZZLE_HINT_B = -1
 global PUZZLE_HINT_BACK = 0 `how many swaps have to be taken back first, or -1 if it does not know
 global PUZZLE_HINT_AT = 0 `what PUZZLE_UNDO_NEXT was. once it has changed, the hint is old.
+` HER SMILE. the quietest hint: while the cursor is on a fish of the move that the hint would give, she smiles,
+` until it moves off. nothing is said, and nothing hops. puzzleSmileLook finds the move once the fish have
+` stopped, and again when the cursor moves, because the cursor can be part of it (belly up fish). it must not
+` be obvious: she stays behind the fish unless she is talking, and she never just changes face. she turns
+` around, back the way she came, and the picture changes while she is edge on, so the turn hides it. moving
+` off the fish takes the smile away at once, with no turn.
+global PUZZLE_SMILE_MOVE = -1 `the move, the way that puzzleHintHere gives it, or -1 while there is none
+global PUZZLE_SMILE_AT = -1 `what PUZZLE_UNDO_NEXT was when it was found
+global PUZZLE_SMILE_CURSOR = -1 `and where the cursor was
+global PUZZLE_SMILE_SHOWN = 0 `1 while her face is the smile
+global PUZZLE_SMILE_TURNING = 0 `1 while she turns around to change it
+global PUZZLE_SMILE_SIDE = 0 `which side of edge on she was when the turn started: 0 facing left, 1 right
+global PUZZLE_SMILE_TURN_MS = 0 `when the turn started
+global PUZZLE_SMILE_TURN_MAX_MS = 1500 `a turn that has not got to edge on by now changes the face anyway
 global PUZZLE_HINT_NEXT_MS = 0
 global PUZZLE_HINT_SAID$ = ""
 ` a few other moves from each step of the line of a board, for long_puzzles_agree_with_the_game: the board and the step,
@@ -243,11 +267,10 @@ global PUZZLE_CHECKS = 0
 
 ` what is saved, in the preferences: the board that the player is up to, and then 0 while there are
 ` boards left, 1 once they have run out, and 2 once she has made another one
-global PUZZLE_PREF = 9000 `the board, then 0 playing, 1 ran out or 2 after, and then 1 if the player stayed
+global PUZZLE_PREF = 9000 `the board, then 0 playing or 1 ran out and she is going (2 was the old ending), and then 1 if the player stayed
 global PUZZLE_ASK = 0 `1 when she has to ask if the player is leaving before anything is dealt
 global PUZZLE_RESUMED = 0 `1 when the player picked Resume, so there is nothing to ask
 global PUZZLE_LEFT = 0 `1 when the player said yes, and 2 while the usual game that comes next is starting
-global PUZZLE_BACK_MS = 3000 `how long she takes to look up, for a player who has come back to nothing
 
 ` THE TALKS
 global PUZZLE_TALK_EVERY = 3

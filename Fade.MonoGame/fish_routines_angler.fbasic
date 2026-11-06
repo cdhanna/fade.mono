@@ -116,9 +116,7 @@ setup_angler:
     gosub setup_angler_topics
 
     ` what this player has kept, and heard, in any game
-    ANGLER_BANKED = get pref(ANGLER_PREF, 0)
-    if ANGLER_BANKED > ANGLER_BANK_MAX then ANGLER_BANKED = ANGLER_BANK_MAX
-    if ANGLER_BANKED < 0 then ANGLER_BANKED = 0
+    anglerBankLoad()
     ANGLER_STAMP = get pref(ANGLER_PREF + 1, 0)
     ANGLER_MET = get pref(ANGLER_PREF + 2, 0)
     angLastTopic = ANGLER_TOPIC_COUNT - 1
@@ -577,6 +575,16 @@ angler_run:
     endif
 
     angChosen = -1 `angler_choose sets this. it is further down, and a name has to be set before it is read.
+
+    ` the first time that she is asked anything after she went at the end of the boards, she has a life of her own.
+    ` see THE END OF THE BOARDS in fish_headers_puzzle.
+    if get pref(AVA_PREF_FREED, 0) = 1
+        anglerSay(loc$("angler.ava.freed.a"))
+        gosub angler_wait
+        anglerSay(loc$("angler.ava.freed.b"))
+        gosub angler_wait
+        set pref AVA_PREF_FREED, 2
+    endif
 
     ` the first time that she is asked anything after an ending, she says so. see WELCOME BACK in fish_headers_ava.
     angWelcome = avaWelcomeDue()
@@ -1281,6 +1289,25 @@ function anglerBankAdd()
     endif
     anglerHintRefresh()
 endfunction angAdded
+
+
+` the card was taken, and she comes once the upgrade screen is out of the way. once Ava has gone, nobody comes. see SHE
+` HAS GONE in fish_headers_ava.
+function anglerCardTaken()
+    actGone = puzzleGone()
+    if actGone = 0 then ANGLER_PENDING = 1
+endfunction
+
+
+` how many lights are kept, from the preferences. while Ava has gone there is nobody for them to call, so they are
+` dark, and none can be spent, but they are still kept for when she comes back. see SHE HAS GONE in fish_headers_ava.
+function anglerBankLoad()
+    ANGLER_BANKED = get pref(ANGLER_PREF, 0)
+    if ANGLER_BANKED > ANGLER_BANK_MAX then ANGLER_BANKED = ANGLER_BANK_MAX
+    if ANGLER_BANKED < 0 then ANGLER_BANKED = 0
+    ablGone = get pref(PUZZLE_GONE_PREF, 0)
+    if ablGone then ANGLER_BANKED = 0
+endfunction
 
 
 ` set how many lights are kept. the debug window does this.

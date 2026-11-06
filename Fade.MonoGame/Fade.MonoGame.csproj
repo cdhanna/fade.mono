@@ -104,9 +104,10 @@
          bottom of this file (a package consumer gets it automatically; this project references
          the engine as a project, so it does not).
 
-         The icon is the standing diver from DiverSheet.png, padded to 32x32 so it scales up by
-         whole numbers. It must not be one of the fish. Icon.png is in git, not the R2 bucket:
-         a build needs it before the bucket assets are checked.
+         The icon is the crab of the board (Assets/Fish/Textures/Art32/Crab_b.png, the one with the
+         thin outline), 32x32 so it scales up by whole numbers. The Steam shortcut and community icons
+         are the same crab (build/capsule_drafts.py). Icon.png is in git, not the R2 bucket: a build
+         needs it before the bucket assets are checked.
 
          The window size is NOT here: fish.fbasic picks it at run time (half the display on a
          Mac), and then the size the player left it at takes over. -->
@@ -389,6 +390,7 @@
 
     <ItemGroup>
         <FadeSource Include="fish_macros.fbasic" />
+        <FadeSource Include="fish_art_boat.fbasic" />
         <FadeSource Include="fish_headers.fbasic" />
         <FadeSource Include="fish_headers_quests.fbasic" />
         <FadeSource Include="fish_headers_diver.fbasic" />
@@ -406,9 +408,12 @@
         <FadeSource Include="fish_headers_ava.fbasic" />
         <FadeSource Include="fish_headers_shop.fbasic" />
         <FadeSource Include="fish_headers_questtalk.fbasic" />
+        <FadeSource Include="fish_headers_achieve.fbasic" />
+        <FadeSource Include="fish_headers_logo.fbasic" />
         <FadeSource Include="fish_headers_customart.fbasic" />
         <FadeSource Include="fish_headers_entrance.fbasic" />
         <FadeSource Include="fish_headers_demo.fbasic" />
+        <FadeSource Include="fish_headers_steamdemo.fbasic" />
         <FadeSource Include="fish_headers_rainbow.fbasic" />
         <FadeSource Include="fish_headers_bubbled.fbasic" />
         <FadeSource Include="fish_headers_mouse.fbasic" />
@@ -470,11 +475,14 @@
         <FadeSource Include="fish_routines_ava.fbasic" />
         <FadeSource Include="fish_routines_shop.fbasic" />
         <FadeSource Include="fish_routines_questtalk.fbasic" />
+        <FadeSource Include="fish_routines_achieve.fbasic" />
+        <FadeSource Include="fish_routines_logo.fbasic" />
         <FadeSource Include="fish_routines_tuna.fbasic" />
         <FadeSource Include="fish_tuna_code.fbasic" />
         <FadeSource Include="fish_routines_quests.fbasic" />
         <FadeSource Include="fish_quests.fbasic" />
         <FadeSource Include="fish_routines_demo.fbasic" />
+        <FadeSource Include="fish_routines_steamdemo.fbasic" />
         <FadeSource Include="fish_routines_rainbow.fbasic" />
         <FadeSource Include="fish_routines_bubbled.fbasic" />
         <FadeSource Include="fish_routines_teach.fbasic" />
@@ -516,7 +524,9 @@
         <FadeSource Include="fish_tests_trailer.fbasic" />
         <FadeSource Include="fish_tests_capsule.fbasic" />
         <FadeSource Include="fish_tests_loc.fbasic" />
+        <FadeSource Include="fish_tests_langshots.fbasic" />
         <FadeSource Include="fish_tests_demo.fbasic" />
+        <FadeSource Include="fish_tests_steamdemo.fbasic" />
         <FadeSource Include="fish_tests_rainbow.fbasic" />
         <FadeSource Include="fish_tests_bubbled.fbasic" />
         <FadeSource Include="fish_tests_tutorial.fbasic" />
@@ -582,6 +592,17 @@
         <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
             <_Parameter1>ScoreKey</_Parameter1>
             <_Parameter2>$(FishScoreKey)</_Parameter2>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+    <!-- THE STEAM DEMO (fish_headers_steamdemo.fbasic): -p:FishSteamDemo=true makes the build the
+         free demo, which is its own Steam app. The Steam workflow publishes one beside the full game.
+         Program.cs reads this back and sets FISH_STEAM_DEMO for the game; a Debug run can set that by
+         hand instead. -->
+    <ItemGroup Condition="'$(FishSteamDemo)' == 'true'">
+        <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+            <_Parameter1>SteamDemo</_Parameter1>
+            <_Parameter2>1</_Parameter2>
         </AssemblyAttribute>
     </ItemGroup>
 

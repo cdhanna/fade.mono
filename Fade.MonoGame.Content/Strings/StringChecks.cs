@@ -35,6 +35,23 @@ public sealed class StringCheckOptions
 
     /// <summary>The characters each font can draw, by font file.</summary>
     public List<(string font, HashSet<int> chars)> fonts = new();
+
+    /// <summary>
+    /// The languages a font of their own draws (<c>fonts</c> in strings.sheet.json): language code to
+    /// the end of that family's file names, so <c>"ru": "-cy"</c> means Russian is drawn by
+    /// <c>Score-cy.spritefont</c> and not by <c>Score.spritefont</c>. A font whose name ends with one of
+    /// these is checked against its languages only; any other font against every language not listed.
+    /// </summary>
+    public Dictionary<string, string> fontFamilies = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Whether this font has to draw this language's text.</summary>
+    public bool FontDraws(string font, string language)
+    {
+        var name = Path.GetFileNameWithoutExtension(font);
+        var family = fontFamilies.Values.FirstOrDefault(s => name.EndsWith(s, StringComparison.OrdinalIgnoreCase));
+        if (family == null) return !fontFamilies.ContainsKey(language);
+        return fontFamilies.TryGetValue(language, out var mine) && string.Equals(mine, family, StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 /// <summary>
@@ -195,6 +212,7 @@ public static class StringChecks
 
                 foreach (var (font, chars) in options.fonts)
                 {
+                    if (!options.FontDraws(font, language)) continue;
                     var missing = MissingChars(text, chars);
                     if (missing.Length > 0)
                         AddKey(CheckSeverity.Error, "FLOC013", key,

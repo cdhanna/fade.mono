@@ -28,8 +28,16 @@ remstart
                    leaves the shop with it. "not yet" keeps it waiting.
     AVA_PREF_OFFER keeps where that has got to: AVA_OFFER_NONE, AVA_OFFER_LATER, AVA_OFFER_INVITED, AVA_OFFER_TAKEN.
 
-    SHE HAS GONE. there is nobody at the shop (shopOpenAs), and the radio's HELP and INFO bring nobody. the card still comes
-    with the seed, and it still brings her, because a deal must never depend on what the player has done.
+    SHE HAS GONE. before any goodbye she makes sure once (ava_sure): she will not come back up, and "No, wait" asks the
+    question again. there is nobody at the shop (shopOpenAs), and the radio's HELP and INFO bring nobody. the card still comes
+    with the seed, because a deal must never depend on what the player has done, but it says that it does nothing
+    (ability.angler.gone), and taking it brings nobody. the lights that were kept go dark (anglerBankLoad): none show and
+    none can be spent, and they are all still there if she comes back.
+
+    THE WARM WATER. while the player is staying with her, and she has not gone, the sea of the main menu is lit warm from
+    underneath, and it breathes (avaWarmStep, which frame_surface calls, and Warm in SurfaceEffect.fx). it is already there
+    when the main menu comes back, and it only comes or goes over AVA_WARM_SECS# while the menu is up. FISH_MENU_WARM, or
+    the "Ava: the way down" window, turns it on.
 
     THE BOTTLE. after AVA_BOTTLE_GAMES games without her (AVA_PREF_GONE_GAMES), a bottle floats on the water of the main menu
     (avaBottleStep, which frame_surface calls). the info key, or a click on it, reads the letter in it (ava_bottle_read): a
@@ -59,10 +67,12 @@ global AVA_PREF_OFFER = 9022 `where the last question has got to
 global AVA_PREF_GONE_GAMES = 9023 `how many games have started since she went
 global AVA_PREF_BOTTLE = 9024 `1 once the bottle has come
 global AVA_PREF_BACK = 9025 `how many times FRIEND has brought her back
+global AVA_PREF_FREED = 9026 `1 once she went at the end of the boards, and 2 once she has said how she is doing since
 global AVA_OFFER_NONE = 0 `she has not asked
 global AVA_OFFER_LATER = 1 `the player said "One more dive", so it is in her list
 global AVA_OFFER_INVITED = 2 `the player said that they are staying, from her list, so the next new game goes down
 global AVA_OFFER_TAKEN = 3 `the player went down to her
+global AVA_OFFER_FREED = 4 `she went, at the end of the boards, to stay herself. the game is the usual one again. see avaFreed.
 
 ` the lines of her own at the top of the questions. ANGLER_PICK has these in place of a topic.
 global AVA_PICK_SEA = -2
@@ -71,9 +81,10 @@ global AVA_PICKS = 0 `how many of the questions are hers, at the top
 
 global AVA_BOTTLE_GAMES = 2
 global AVA_BOTTLE_SPRITE = 0 `made the first time that it is needed, because the menu has to be there first
-global AVA_BOTTLE_X# = 92 `where it floats, on the water in front of the camera
+global AVA_BOTTLE_X# = 538 `where it floats: on the open water past the end of the boat, clear of its reflection, of the menu, and of the reefs, which an ending can put on the left and the right
 global AVA_BOTTLE_DOWN = 52 `how far under the horizon
 global AVA_BOTTLE_SIZE = 22
+global AVA_BOTTLE_SUNK = 4 `how far under its middle the water comes up to
 global AVA_BOTTLE_AT_X# = 0 `where it is on the screen, for a click
 global AVA_BOTTLE_AT_Y# = 0
 global AVA_BOTTLE_SEEN = 0 `1 while it is on the screen
@@ -83,6 +94,13 @@ global AVA_LETTER_WIDE = 440
 global AVA_LETTER_FADE_MS = 400
 global AVA_LETTER_LINES = 6
 
+global AVA_WARM# = 0 `how warm the water of the main menu is now, from 0 to 1
+global AVA_WARM_SECS# = 2.5 `how long it takes to come or go
+global AVA_WARM_MS = 0 `when it was last stepped
+global AVA_DBG_WARM = 0 `0 goes by the game, 1 always warm, 2 never
+global AVA_SURE = 0 `1 when the player was sure about leaving. see ava_sure.
+global AVA_TO_TITLE = 0 `1 when she has gone at the end of the boards, and the game goes back to the title. see THE END OF THE BOARDS in fish_headers_puzzle.
+
 global MORSE_WORD_FRIEND = 17 `what she calls the player, and what her letter asks them to answer, after the words that call the old angler fish
 global AVA_CALL_PENDING = 0 `1 when FRIEND has been tapped. she comes once the radio has answered.
 global AVA_CALL_AT_MS = 0
@@ -91,4 +109,4 @@ global AVA_TO_DEEP = 0 `1 when the player said they are coming down, and the gam
 ` THE AVA WINDOW
 global AVA_DBG_ENDING = 1
 global AVA_DBG_NAME$ = ""
-global dim AVA_TEST_PREFS(64) `what fish_tests_ava makes the preferences say. a global dim in a test file is never made.
+global dim AVA_TEST_PREFS(72) `what fish_tests_ava makes the preferences say. a global dim in a test file is never made.

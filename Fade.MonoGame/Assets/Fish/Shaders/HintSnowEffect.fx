@@ -15,7 +15,7 @@
 // fish_headers_squid, and starSkyDraw. it is drawn onto one plain sprite that covers the whole screen,
 // just on top of the sea floor.
 
-float Time;      // in seconds, the same as SeabedEffect.fx has
+float Time;      // in seconds: the Drift of SeabedEffect.fx, which hangs still with the snow of a lost puzzle
 float2 Size;     // how big the screen is, in pixels
 
 // HintAt is the grain of the top left light of each, and how many squares of the shape wide and tall it

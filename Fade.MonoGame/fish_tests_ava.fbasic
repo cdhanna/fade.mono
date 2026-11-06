@@ -337,12 +337,19 @@ test ava_her_words_fit from fishBoard
     taPrefsClear()
     set text wrap ANGLER_SAY_TEXT_ID, ANGLER_BOX_W - 20
     avaLetterMake()
-    for taLang = 0 to 4
+    for taLang = 0 to 10
         if taLang = 0 then set language "en"
         if taLang = 1 then set language "pt-BR"
         if taLang = 2 then set language "fr"
         if taLang = 3 then set language "de"
         if taLang = 4 then set language "pl"
+        if taLang = 5 then set language "es"
+        if taLang = 6 then set language "ru"
+        if taLang = 7 then set language "tr"
+        if taLang = 8 then set language "ja"
+        if taLang = 9 then set language "zh-CN"
+        if taLang = 10 then set language "ko"
+        applyLanguageFont()
         taTall = 0
         for taEnd = 1 to AVA_ENDING_COUNT
             avaWelcomeSay(taEnd, 1)
@@ -355,7 +362,11 @@ test ava_her_words_fit from fishBoard
             taHigh = get text size y(ANGLER_SAY_TEXT_ID)
             if taHigh > taTall then taTall = taHigh
         next
-        taHigh = taSays("angler.ava.sea.more")
+        taHigh = taSays("angler.ava.sea.more2")
+        if taHigh > taTall then taTall = taHigh
+        taHigh = taSays("angler.ava.freed.a")
+        if taHigh > taTall then taTall = taHigh
+        taHigh = taSays("angler.ava.freed.b")
         if taHigh > taTall then taTall = taHigh
         taHigh = taSays("angler.ava.offer.a")
         if taHigh > taTall then taTall = taHigh
@@ -394,6 +405,7 @@ test ava_her_words_fit from fishBoard
         assert taTall <= 120, "and every line of the letter fits over the menu"
     next
     set language "en"
+    applyLanguageFont()
     end
 endtest
 
@@ -401,6 +413,82 @@ endtest
 test ava_the_first_gate_and_the_first_tent_are_explained from fishBoard
     assert PUZZLE_NEW_GATE = 13, "the first gate is on the fourteenth board"
     assert PUZZLE_NEW_TENT = 27, "and the first tent on the twenty-eighth"
+    end
+endtest
+
+
+test ava_once_she_has_gone_the_card_brings_nobody from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    ANGLER_PENDING = 0
+    anglerCardTaken()
+    assert ANGLER_PENDING = 1, "while she is here, the card brings her"
+    ANGLER_PENDING = 0
+    avaLeaves()
+    anglerCardTaken()
+    assert ANGLER_PENDING = 0, "and once she has gone, nobody comes"
+    assert CARDS(ABILITY_INDEX_ANGLER).abilityType = ABILITY_TYPE_INSTANT, "but it is still the same card, so the seed deals the same"
+    taSaid$ = loc$("ability.angler.gone")
+    assert taSaid$ <> "ability.angler.gone", "and it has words that say it does nothing"
+    end
+endtest
+
+
+test ava_kept_lights_go_dark_while_she_is_gone_and_come_back_with_her from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    set pref ANGLER_PREF, 3
+    anglerBankLoad()
+    assert ANGLER_BANKED = 3, "three lights are kept"
+    avaLeaves()
+    assert ANGLER_BANKED = 0, "she has gone, so none can be spent"
+    taKept = get pref(ANGLER_PREF, 0)
+    assert taKept = 3, "but they are still kept"
+    avaComesBack()
+    assert ANGLER_BANKED = 3, "and they are back with her"
+    end
+endtest
+
+
+test ava_the_menu_water_is_warm_while_the_player_stays_with_her from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    AVA_DBG_WARM = 0
+    taWarm = avaWarmWanted()
+    assert taWarm = 0, "not for a player who has not stayed"
+    set pref PUZZLE_PREF + 2, 1
+    taWarm = avaWarmWanted()
+    assert taWarm = 1, "warm for one who is staying"
+    avaLeaves()
+    taWarm = avaWarmWanted()
+    assert taWarm = 0, "and not once she has gone"
+    avaComesBack()
+    taWarm = avaWarmWanted()
+    assert taWarm = 1, "and warm again when she is back"
+
+    ` the main menu coming back after a while starts as warm as it should be
+    AVA_WARM# = 0
+    AVA_WARM_MS = game ms() - 5000
+    avaWarmStep()
+    assert AVA_WARM# = 1, "it is already warm when the menu comes back"
+    AVA_DBG_WARM = 2
+    AVA_WARM_MS = game ms() - 100
+    avaWarmStep()
+    assert AVA_WARM# < 1, "and it cools slowly"
+    assert AVA_WARM# > .5, "not all at once"
+    AVA_DBG_WARM = 0
     end
 endtest
 
@@ -415,7 +503,7 @@ endfunction taSaysTall
 ` the preferences that these tests look at are kept in AVA_TEST_PREFS, from nothing. each test mocks get pref and set pref
 ` with taPrefAt and taPrefSet, because a mock has to be in the test itself.
 function taPrefsClear()
-    for taClear = 0 to 63
+    for taClear = 0 to 71
         AVA_TEST_PREFS(taClear) = 0
     next
 endfunction
@@ -429,6 +517,10 @@ function taPrefSlot(taSlotIndex)
     endif
     if taSlotIndex >= 9000
         if taSlotIndex < 9034 then taSlotAt = 30 + (taSlotIndex - 9000)
+    endif
+    ` and the lights that the angler keeps
+    if taSlotIndex >= ANGLER_PREF
+        if taSlotIndex < ANGLER_PREF + 3 then taSlotAt = 64 + (taSlotIndex - ANGLER_PREF)
     endif
 endfunction taSlotAt
 

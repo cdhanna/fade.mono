@@ -1,0 +1,30 @@
+remstart
+    THE LANGUAGES, LOOKED AT. a picture of the board and one of the upgrade screen in one language, to see
+    that its font draws it and that its words fit. it only runs when FISH_LANG_SHOT names a language:
+
+        $env:FISH_LANG_SHOT = "ja"; $env:FISH_LANG_SHOT_OUT = "C:/proj/fade.mono/langshots"
+        Fade.MonoGame.exe --filter-uid fade::lang_shot
+
+    and saves <out>/<code>_board.png and <out>/<code>_cards.png. the upgrade screen blocks, so the test
+    ends on it.
+remend
+
+test lang_shot from fishBoard
+    tLsCode$ = env$("FISH_LANG_SHOT")
+    if tLsCode$ = "" then end
+    tLsOut$ = env$("FISH_LANG_SHOT_OUT")
+    if tLsOut$ = "" then tLsOut$ = "langshots"
+    set language tLsCode$
+    applyLanguageFont()
+    reloadMenuStrings()
+    for tLsF = 1 to 90
+        runto update_frame
+    next
+    screenshot tLsOut$ + "/" + tLsCode$ + "_board"
+    REQUEST_ABILITY_SELECTION = 1
+    for tLsF = 1 to 150
+        runto frame_ability_selection
+    next
+    screenshot tLsOut$ + "/" + tLsCode$ + "_cards"
+    end
+endtest

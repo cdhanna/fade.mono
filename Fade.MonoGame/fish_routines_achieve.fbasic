@@ -1,0 +1,112 @@
+goto routines_achieve_exit
+
+remstart
+    THE ACHIEVEMENTS. see fish_headers_achieve.
+    the rest of the game only has to do these things:
+    - gosub setup_achieve once, after setup_morse. fish.fbasic does.
+    - call achieveUnlock with the name, when an ending is reached or a card of the fast is taken. coralEndingRemember,
+      finale_goodbye, puzzle_advance, grantPassive and grantMoveToSlot do.
+    - call achieveMorse(word) when a word is heard on the radio. morseLog does. and avaHeard calls achieveUnlock when
+      FRIEND brings her back.
+    - call achieveQuests() when a quest is finished. questComplete does.
+    - add one to ACHIEVE_POPPED for every fish that pops, and call achievePops() once the pops have been judged.
+      handle_combos does both.
+    - call achieveGameFinished() when a game ends, and achieveStore() at an upgrade screen.
+remend
+
+setup_achieve:
+    ACHIEVE_ENV_DEBUG = isDebugEnvSet()
+
+    for achSetup = 0 to MORSE_WORD_ROOM - 1
+        ACHIEVE_MORSE$(achSetup) = ""
+    next
+    ACHIEVE_MORSE$(MORSE_WORD_SOS) = "MORSE_SOS"
+    ACHIEVE_MORSE$(MORSE_WORD_CQ) = "MORSE_CQ"
+    ACHIEVE_MORSE$(MORSE_WORD_SING) = "MORSE_SING"
+    ACHIEVE_MORSE$(MORSE_WORD_SONG) = "MORSE_SING"
+    ACHIEVE_MORSE$(MORSE_WORD_CTHULHU) = "MORSE_CTHULHU"
+    ACHIEVE_MORSE$(MORSE_WORD_NEMO) = "MORSE_NEMO"
+    ACHIEVE_MORSE$(MORSE_WORD_FREDDI) = "MORSE_FREDDI"
+    ACHIEVE_MORSE$(MORSE_WORD_U571) = "MORSE_U571"
+    ACHIEVE_MORSE$(MORSE_WORD_WILLY) = "MORSE_WILLY"
+    ACHIEVE_MORSE$(MORSE_WORD_PEARL) = "MORSE_PEARL"
+    ACHIEVE_MORSE$(MORSE_WORD_DOPEFISH) = "MORSE_DOPEFISH"
+    ACHIEVE_MORSE$(MORSE_WORD_JAWS) = "MORSE_JAWS"
+    ACHIEVE_MORSE$(MORSE_WORD_ARIEL) = "MORSE_ARIEL"
+    ACHIEVE_MORSE$(MORSE_WORD_MYLEG) = "MORSE_MYLEG"
+    ACHIEVE_MORSE$(MORSE_WORD_HELP) = "MORSE_ANGLER"
+    ACHIEVE_MORSE$(MORSE_WORD_INFO) = "MORSE_ANGLER"
+return
+
+
+` 1 when what is happening counts. see WHAT DOES NOT COUNT in fish_headers_achieve.
+function achieveOk()
+    achOk = 1
+    if DEMO_MODE then achOk = 0
+    if DEBUG_MODE then achOk = 0
+    if GAME_DEBUG_USED then achOk = 0
+    if ACHIEVE_ENV_DEBUG then achOk = 0
+    if STEAM_DEMO then achOk = 0 `the Steam demo has none. see THE STEAM DEMO in fish_headers_steamdemo.
+endfunction achOk
+
+
+` unlocks an achievement, by its API name in Steamworks. one that is unlocked already stays the way it is.
+function achieveUnlock(achName$)
+    achUnlockOk = achieveOk()
+    if achUnlockOk
+        unlock steam achievement achName$
+    endif
+endfunction
+
+
+` a word was heard on the radio
+function achieveMorse(achWord)
+    if achWord >= 0 and achWord < MORSE_WORD_ROOM
+        achMorseName$ = ACHIEVE_MORSE$(achWord)
+        if achMorseName$ <> ""
+            achieveUnlock(achMorseName$)
+        endif
+    endif
+endfunction
+
+
+` a quest has been finished. once every quest has been, in any games, that is ALL_QUESTS.
+function achieveQuests()
+    achQuestsLeft = 0
+    for achQuest = 1 to QUEST_COUNT
+        if QUEST_EVER_DONE(achQuest) = 0 then achQuestsLeft = achQuestsLeft + 1
+    next
+    if achQuestsLeft = 0
+        achieveUnlock("ALL_QUESTS")
+    endif
+endfunction
+
+
+` the fish that popped in the look at the board that was just judged go onto fish_popped
+function achievePops()
+    if ACHIEVE_POPPED > 0
+        achPopsOk = achieveOk()
+        if achPopsOk
+            add steam stat "fish_popped", ACHIEVE_POPPED
+        endif
+    endif
+    ACHIEVE_POPPED = 0
+endfunction
+
+
+` sends the stats to Steam, which unlocks whatever they have got far enough for
+function achieveStore()
+    store steam stats
+endfunction
+
+
+` a game has got to its end
+function achieveGameFinished()
+    achGameOk = achieveOk()
+    if achGameOk
+        add steam stat "games_finished", 1
+    endif
+    achieveStore()
+endfunction
+
+routines_achieve_exit:

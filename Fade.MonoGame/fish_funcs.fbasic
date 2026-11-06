@@ -1153,7 +1153,10 @@ endfunction GAME_ROUND_CAP - CURRENT_ROUND
 ` write how many rounds are left onto the screen. a game that was won, and is being carried on with,
 ` says how many rounds past the end it is. see KEEP PLAYING in fish_headers.
 function showRoundsLeft()
-    roundsWords$ = str$(getRoundsLeft())
+    ` the Steam demo counts down to its own end. see THE STEAM DEMO in fish_headers_steamdemo.
+    roundsLeftNow = getRoundsLeft()
+    roundsLeftNow = steamDemoRoundsLeft(roundsLeftNow)
+    roundsWords$ = str$(roundsLeftNow)
     if GAME_ENDLESS
         roundsWords$ = "+" + str$(CURRENT_ROUND - GAME_ROUND_CAP)
     endif

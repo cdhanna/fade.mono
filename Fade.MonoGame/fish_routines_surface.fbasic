@@ -41,12 +41,16 @@ setup_surface:
     if surfaceSky$ = "day" then SURFACE_DAY = 1
     if surfaceSky$ = "evening" then SURFACE_DAY = 0
 
-    ` in the evening the boat is a dark shape against the sun, and in the day it is a white boat
-    if SURFACE_DAY
-        texture reserve texture id(TEX_DIVE_BOAT), "Fish/Textures/Menu/dive_boat_day"
-    else
-        texture reserve texture id(TEX_DIVE_BOAT), "Fish/Textures/Menu/dive_boat"
-    endif
+    ` in the evening the boat is a dark shape against the sun, and in the day it is a white boat. there is a
+    ` picture of it for every place on it that the man can be (see fish_art_boat, which art/dive_boat.fink makes)
+    surfaceBoatDay$ = ""
+    if SURFACE_DAY then surfaceBoatDay$ = "_day"
+    for surfaceBoatI = 0 to BOAT_PLACES - 1
+        surfaceBoatTex = 0
+        texture reserve texture id(surfaceBoatTex), "Fish/Textures/Menu/dive_boat_" + BOAT_PLACE$(surfaceBoatI) + surfaceBoatDay$
+        TEX_BOAT_PLACES(surfaceBoatI) = surfaceBoatTex
+    next
+    TEX_DIVE_BOAT = TEX_BOAT_PLACES(SURFACE_BOAT_PLACE)
 
     ` what the main menu remembers of the hidden game. see THE MAIN MENU REMEMBERS in fish_headers.
     SURFACE_REEF = get pref(PREF_ENDING_REEF, 0)
@@ -71,11 +75,15 @@ setup_surface:
     set sprite effect SURFACE_SPRITE, SURFACE_FX_ID
     set sprite render target SURFACE_SPRITE, TARGET_MENU
 
-    ` the picture of the boat is 168 by 80, and the bottom of it is the waterline
+    ` the picture of the boat is 168 by 80, and the bottom of it is the waterline. it sits in the water, the
+    ` same as Ava's bottle does.
+    reserve effect id(SURFACE_WATERLINE_FX)
+    effect SURFACE_WATERLINE_FX, "Fish/Shaders/WaterlineEffect"
     reserve sprite id(SURFACE_BOAT_SPRITE)
     sprite SURFACE_BOAT_SPRITE, 0, 0, TEX_DIVE_BOAT
     order sprite SURFACE_BOAT_SPRITE, ORDER_MENU_SURFACE + 1
     set sprite render target SURFACE_BOAT_SPRITE, TARGET_MENU
+    set sprite effect SURFACE_BOAT_SPRITE, SURFACE_WATERLINE_FX
 
     ` the two reefs, once the reef has been saved. see THE REEFS OF THE MAIN MENU in fish_headers.
     SURFACE_REEF_AT_X(0) = 98
@@ -146,7 +154,10 @@ frame_surface:
     ` for that, which moves everything that is drawn there. any other menu is not moved at all.
     surfaceShift = 0
     if MENU_MODE = MENU_MODE_MAIN then surfaceShift = SURFACE_SINK# * SURFACE_SINK_DISTANCE
-    position camera MENU_CAMERA_ID, WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + surfaceShift
+    ` and as the main menu fades in at the start of the game, it rises a little into its place. see THE LOGO.
+    ` the sea is drawn there too, and it is not to move: it is moved back by as much, below.
+    position camera MENU_CAMERA_ID, WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + surfaceShift - LOGO_MENU_RISE#
+    surfaceShift = surfaceShift - LOGO_MENU_RISE#
 
     if MENU_MODE <> MENU_MODE_MAIN then return
 
@@ -170,9 +181,13 @@ frame_surface:
     ` the boat is closer than the horizon, and it rocks on a swell of its own
     surfaceBoatY# = surfaceHorizon# + 30 + sin(surfaceTime# * 1.3 + 1) * 1.5
     position sprite SURFACE_BOAT_SPRITE, SURFACE_BOAT_X, surfaceBoatY# + surfaceShift - 37
+    ` the water comes up over the bottom few rows of the hull
+    set sprite all texcoord1 SURFACE_BOAT_SPRITE, surfaceBoatY# + surfaceShift + SURFACE_BOAT_SUNK, surfaceTime#, .5, 0
+    surfaceWaterline(SURFACE_BOAT_SPRITE)
 
     set effect param float SURFACE_FX_ID, "Time", surfaceTime#
     set effect param float SURFACE_FX_ID, "Day", SURFACE_DAY
+    set effect param float SURFACE_FX_ID, "Sink", surfaceSink#
     set effect param float2 SURFACE_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT
     set effect param float SURFACE_FX_ID, "Horizon", surfaceHorizon#
     set effect param float SURFACE_FX_ID, "Swell", surfaceSwell#
@@ -181,6 +196,8 @@ frame_surface:
     ` out again whenever the main menu has been away, and it comes on quickly at first and then slower
     ` and slower, so it is always coming and it never arrives.
     surfaceNow = game ms()
+    ` and the water that the words of the logo threw about. see THE WATER in fish_headers_logo.
+    logoSplashFx(surfaceNow)
     if surfaceNow - SURFACE_MONSTER_SEEN_MS > 1500 then SURFACE_MONSTER_START_MS = surfaceNow
     SURFACE_MONSTER_SEEN_MS = surfaceNow
     surfaceComing# = (surfaceNow - SURFACE_MONSTER_START_MS) * .001
@@ -270,8 +287,18 @@ frame_surface:
     next
     set effect param float SURFACE_FX_ID, "Coming", surfaceComing#
 
+    ` the water is warm while the player is staying with Ava. see THE WARM WATER in fish_headers_ava.
+    avaWarmStep()
+    ` the light goes as the camera goes under, so that the water is the cold blue of the deep by the time the
+    ` wave of bubbles has uncovered it, and comes back as it comes up
+    surfaceWarm# = 1 - surfaceSink#
+    surfaceWarm# = AVA_WARM# * surfaceWarm# * surfaceWarm#
+    set effect param float SURFACE_FX_ID, "Warm", surfaceWarm#
+
     ` the hull is not in the middle of the picture, because the diver's fins stick out of the back
     set effect param float3 SURFACE_FX_ID, "Boat", SURFACE_BOAT_X - 10, surfaceBoatY#, 60
+    ` and the water laps all along it, sending rings out across the sea
+    set effect param float4 SURFACE_FX_ID, "BoatLap", SURFACE_BOAT_X - 56, SURFACE_BOAT_X + 46, surfaceBoatY#, 1
 
     ` the photos of the diver, on a line over the boat. see THE ENDING in fish_headers_diver.
     surfaceBoatMid# = surfaceBoatY# + surfaceShift
@@ -289,8 +316,33 @@ return
 routines_surface_exit:
 
 
+` the man is at that place on the boat (0 to BOAT_PLACES - 1)
+function surfaceBoatPlace(sbpPlace)
+    SURFACE_BOAT_PLACE = sbpPlace
+    TEX_DIVE_BOAT = TEX_BOAT_PLACES(sbpPlace)
+    set sprite texture SURFACE_BOAT_SPRITE, TEX_DIVE_BOAT
+endfunction
+
+
+` the color of the water that a thing floating in it is seen through, under its waterline. see WaterlineEffect.fx.
+function surfaceWaterline(swSprite)
+    if SURFACE_DAY
+        set sprite all texcoord2 swSprite, .16, .40, .62, .65
+    else
+        set sprite all texcoord2 swSprite, .10, .11, .27, .7
+    endif
+endfunction
+
+
 ` show or hide the surface. it is only behind the main menu, and never behind the pause menu.
 function showSurface(isVisible)
+    ` the man is somewhere else on the boat every time the main menu comes up, and stays there while it is up
+    if isVisible
+        if SURFACE_SHOWN = 0
+            surfaceBoatPlace(rnd(BOAT_PLACES))
+        endif
+    endif
+    SURFACE_SHOWN = isVisible
     if isVisible
         show sprite SURFACE_SPRITE
         show sprite SURFACE_BOAT_SPRITE

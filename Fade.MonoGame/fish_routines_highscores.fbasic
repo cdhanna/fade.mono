@@ -83,16 +83,19 @@ setup_highscores:
 
     ` the leaderboard of every table, on Steam. table n has leaderboard n + 1. one that is not there
     ` yet is made, with the lowest score at the top. without Steam, none of this does anything.
-    for hsTable = 0 to HISCORE_TABLE_COUNT - 1
-        hsBoardName$ = "normal_"
-        if hsTable mod 2 = 1 then hsBoardName$ = "zen_"
-        hsBoardLength = hsTable / 2
-        if hsBoardLength = GAME_LENGTH_SHORT then hsBoardName$ = hsBoardName$ + "short"
-        if hsBoardLength = GAME_LENGTH_REGULAR then hsBoardName$ = hsBoardName$ + "regular"
-        if hsBoardLength = GAME_LENGTH_LONG then hsBoardName$ = hsBoardName$ + "long"
-        steam leaderboard hsTable + 1, hsBoardName$, 1
-        set steam leaderboard check hsTable + 1, STEAM_DETAIL_CHECK
-    next
+    ` the Steam demo is an app of its own, with none of them, and makes none. see THE STEAM DEMO in fish_headers_steamdemo.
+    if STEAM_DEMO = 0
+        for hsTable = 0 to HISCORE_TABLE_COUNT - 1
+            hsBoardName$ = "normal_"
+            if hsTable mod 2 = 1 then hsBoardName$ = "zen_"
+            hsBoardLength = hsTable / 2
+            if hsBoardLength = GAME_LENGTH_SHORT then hsBoardName$ = hsBoardName$ + "short"
+            if hsBoardLength = GAME_LENGTH_REGULAR then hsBoardName$ = hsBoardName$ + "regular"
+            if hsBoardLength = GAME_LENGTH_LONG then hsBoardName$ = hsBoardName$ + "long"
+            steam leaderboard hsTable + 1, hsBoardName$, 1
+            set steam leaderboard check hsTable + 1, STEAM_DETAIL_CHECK
+        next
+    endif
     clearOnlineTable()
 
     hsPanelX = (WORLD_WIDTH - HISCORE_WIDTH) / 2
@@ -1415,6 +1418,8 @@ endfunction debugSet
 ` send the game that has just ended to the leaderboard of its table. see THE SCORES ON STEAM, at
 ` the top of this file, for how it is packed. without Steam, this does nothing.
 function sendGameToSteam(tableIndex, packedName)
+    ` the Steam demo sends none. see THE STEAM DEMO in fish_headers_steamdemo.
+    if STEAM_DEMO then exitfunction
     sendBoard = tableIndex + 1
 
     ` how far apart the upgrades are, in moves, and how many bits the biggest of those gaps needs
@@ -1880,6 +1885,7 @@ function openHighscoreTable(tableIndex, markedRow, cursorAt)
     ` the table is tall, so the title moves up to make room for it. closeHighscores puts it back.
     MENU_TITLE_Y = 26
     set text MENU_TITLE_TEXT_ID, loc$("highscores.title")
+    LOGO_ON = 0
     size text y MENU_TITLE_TEXT_ID, 36
 
     for i = 0 to 7
@@ -2176,6 +2182,7 @@ function openHighscoreInitials(isHighscore)
     openHighscoreChrome((WORLD_WIDTH - 200) / 2, 120, 200, 72)
 
     set text MENU_TITLE_TEXT_ID, loc$("highscores.title.runcomplete")
+    LOGO_ON = 0
     size text y MENU_TITLE_TEXT_ID, 36
 
     ` what the game came to, and what to do about it
@@ -2216,6 +2223,7 @@ function openSeedEntry()
     openHighscoreChrome((WORLD_WIDTH - 250) / 2, 120, 250, 72)
 
     set text MENU_TITLE_TEXT_ID, loc$("highscores.title.seed")
+    LOGO_ON = 0
     size text y MENU_TITLE_TEXT_ID, 36
 
     show text HISCORE_NOTE_TEXT_ID
@@ -2260,6 +2268,7 @@ function openHighscoreDetails(scoreIndex, place)
     openHighscoreChrome(detailX, HISCORE_DETAIL_TOP, HISCORE_DETAIL_WIDTH, panelHeight)
 
     set text MENU_TITLE_TEXT_ID, loc$("highscores.title.upgrades")
+    LOGO_ON = 0
     size text y MENU_TITLE_TEXT_ID, 36
 
     ` whose game it is, and how it did. the initials are the letters from the page where they are entered.

@@ -1,0 +1,640 @@
+goto routines_logo_exit
+
+remstart
+    THE LOGO. see fish_headers_logo.
+    the rest of the game only has to do these things:
+    - gosub setup_logo once, after the menu's render target is made and before menu_startup. setup_menu does.
+    - call logoFrame(ms) on every frame that the menu is drawn. frame_menu_render does.
+    - set LOGO_ON when a page of the menu is laid out (setMenuPage), and LOGO_ON = 0 wherever the title of the
+      menu is set to something else (the codec and the high scores do).
+    - set LOGO_CHROME with the rest of the menu's chrome. showMenuChrome does.
+remend
+
+setup_logo:
+    LOGO_TARGET = TARGET_MENU
+    ` the sounds of it coming in: a soft one for each "Fish", and for "Pop" a splash, a pop and a boom
+    LOGO_SFX_FISH_A = tideLoadSound("Fish/Audio/cue-bloop-3", SFX_GROUP_SFX, 0)
+    LOGO_SFX_SPLASH_A = tideLoadSound("Fish/Audio/diver-splash", SFX_GROUP_SFX, 0)
+    LOGO_SFX_SPLASH_B = tideLoadSound("Fish/Audio/diver-splash", SFX_GROUP_SFX, 0)
+    LOGO_SFX_FISH_B = tideLoadSound("Fish/Audio/cue-bloop-5", SFX_GROUP_SFX, 0)
+    LOGO_SFX_SPLASH = tideLoadSound("Fish/Audio/diver-splash", SFX_GROUP_SFX, 0)
+    LOGO_SFX_POP = tideLoadSound("Fish/Audio/bubble-pop-2", SFX_GROUP_SFX, 0)
+    LOGO_SFX_BOOM = tideLoadSound("Fish/Audio/bar-charge-boom", SFX_GROUP_SFX, 0)
+
+    ` the words, at the size where "Pop" is 104 pixels tall, around the middle of the logo. the first "Fish"
+    ` is a little up and leans back, the second a little down and leans forward, and "Pop" is under them.
+    ` the colors are the same as the Steam art's.
+    logoWord("Fish", -44, -60, 46, -.1, rgb(214, 236, 255), rgb(255, 255, 255), 46, 92, 170, 10, 24, 70)
+    logoWord("Fish", 44, -46, 46, .08, rgb(214, 236, 255), rgb(255, 255, 255), 46, 92, 170, 10, 24, 70)
+    logoWord("Pop", 0, 22, 104, 0, rgb(255, 214, 92), rgb(255, 250, 210), 214, 104, 40, 70, 20, 30)
+    logoMakeSplash()
+    logoMakeWater()
+    logoHide()
+    ` the words come up out of the sea well in front of the horizon, "Pop" nearest, and fly up to their places
+    LOGO_WATER_DY#(0) = LOGO_MENU_WATER_A#
+    LOGO_WATER_DY#(1) = LOGO_MENU_WATER_B#
+    LOGO_WATER_DY#(2) = LOGO_MENU_WATER_POP#
+    LOGO_READY = 1
+return
+
+
+` one text of the logo, part of the word that is being built, dx, dy from its middle, before it is scaled
+function logoText(ltText$, ltDx#, ltDy#, ltSize#, ltColor, ltOrder)
+    ltId = 0
+    reserve text id(ltId)
+    text ltId, 0, 0, SCORE_FONT, ltText$
+    set text offset ltId, .5, .5
+    color text ltId, ltColor
+    set text render target ltId, LOGO_TARGET
+    order text ltId, ltOrder
+    rotate text ltId, LOGO_ANGLE# + LOGO_W_ANGLE#(LOGO_W_N)
+    LOGO_TXT(LOGO_TXT_N) = ltId
+    LOGO_TXT_W(LOGO_TXT_N) = LOGO_W_N
+    LOGO_TXT_DX#(LOGO_TXT_N) = ltDx#
+    LOGO_TXT_DY#(LOGO_TXT_N) = ltDy#
+    LOGO_TXT_SZ#(LOGO_TXT_N) = ltSize#
+    LOGO_TXT_N = LOGO_TXT_N + 1
+endfunction
+
+` a word of the logo, dressed: a deep edge going down and to the right, from the near color to the far one, a
+` dark outline all around, a pale rim up and to the left, and the face over all of it. it is the next word.
+function logoWord(lwText$, lwX#, lwY#, lwSize#, lwAngle#, lwFace, lwRim, lwNearR, lwNearG, lwNearB, lwFarR, lwFarG, lwFarB)
+    LOGO_W_X#(LOGO_W_N) = lwX#
+    LOGO_W_Y#(LOGO_W_N) = lwY#
+    LOGO_W_ANGLE#(LOGO_W_N) = lwAngle#
+    lwDepth = 12
+    lwStep# = lwSize# * .006
+    for lwN = lwDepth to 1 step -1
+        lwT# = lwN
+        lwT# = lwT# / lwDepth
+        lwR = lwNearR + (lwFarR - lwNearR) * lwT#
+        lwG = lwNearG + (lwFarG - lwNearG) * lwT#
+        lwB = lwNearB + (lwFarB - lwNearB) * lwT#
+        logoText(lwText$, lwN * lwStep# * .6, lwN * lwStep#, lwSize#, rgb(lwR, lwG, lwB), ORDER_MENU_TEXT - 6)
+    next
+    lwLine# = lwSize# * .035
+    for lwA = 0 to 15
+        lwAng# = lwA * .3927
+        logoText(lwText$, cos(lwAng#) * lwLine#, sin(lwAng#) * lwLine#, lwSize#, rgb(4, 10, 34), ORDER_MENU_TEXT - 7)
+    next
+    logoText(lwText$, 0 - lwSize# * .012, 0 - lwSize# * .016, lwSize#, lwRim, ORDER_MENU_TEXT - 5)
+    logoText(lwText$, 0, 0, lwSize#, lwFace, ORDER_MENU_TEXT - 4)
+    LOGO_W_N = LOGO_W_N + 1
+endfunction
+
+` THE SPLASH behind "Pop": puffs of the smokes of a pop, every one a different smoke, turn, flip, size and blue
+` from the one before it. five big ones behind the middle of the word, and five smaller ones out past its ends
+` and over its top. none go under it.
+function logoMakeSplash()
+    for lsI = 0 to LOGO_PUFF_N - 1
+        lsS = 0
+        reserve sprite id(lsS)
+        if lsI < 5
+            lsAcross# = (lsI - 2) / 2.0
+            LOGO_PUFF_X#(lsI) = lsAcross# * 64 + (rnd(20) - 10)
+            LOGO_PUFF_Y#(lsI) = (rnd(30) - 18) * 1.04
+            LOGO_PUFF_S#(lsI) = 104 * (1.0 + rnd(50) * .01)
+        else
+            lsAng# = 3.0 + (lsI - 5) * .82 + rnd(20) * .01
+            LOGO_PUFF_X#(lsI) = cos(lsAng#) * 104 * (1.0 + rnd(25) * .01)
+            LOGO_PUFF_Y#(lsI) = sin(lsAng#) * 104 * (.45 + rnd(15) * .01)
+            LOGO_PUFF_S#(lsI) = 104 * (.5 + rnd(35) * .01)
+        endif
+        lsSmoke = (lsI * 3 + lsI / 5) mod SMOKE_ANIM_COUNT
+        LOGO_PUFF_TEX(lsI) = SMOKE_ANIMS(lsSmoke).texId
+        LOGO_PUFF_F0(lsI) = SMOKE_ANIMS(lsSmoke).startFrame
+        LOGO_PUFF_FN(lsI) = SMOKE_ANIMS(lsSmoke).endFrame - SMOKE_ANIMS(lsSmoke).startFrame
+        LOGO_PUFF_LATE#(lsI) = rnd(18) * .01
+        sprite lsS, 0, 0, LOGO_PUFF_TEX(lsI)
+        set sprite offset lsS, .5, .5
+        rotate sprite lsS, rnd(628) * .01
+        set sprite flip lsS, lsI mod 2, (lsI / 2) mod 2
+        set sprite render target lsS, LOGO_TARGET
+        order sprite lsS, ORDER_MENU_TEXT - 9 + lsI mod 2
+        ` the blues of the smoke on the board, and white
+        lsTint = lsI mod 4
+        logoPuffTint(lsI, 143, 199, 255)
+        if lsTint = 1
+            logoPuffTint(lsI, 120, 172, 224)
+        endif
+        if lsTint = 2
+            logoPuffTint(lsI, 225, 240, 255)
+        endif
+        if lsTint = 3
+            logoPuffTint(lsI, 165, 215, 240)
+        endif
+        LOGO_PUFF(lsI) = lsS
+        hide sprite lsS
+    next
+endfunction
+
+` the drops and the rings, on the menu's render target, over the sea and under the words
+function logoMakeWater()
+    reserve effect id(LOGO_RING_FX)
+    effect LOGO_RING_FX, "Fish/Shaders/SurfaceRingEffect"
+    for lmwI = 0 to LOGO_RING_N - 1
+        lmwS = 0
+        reserve sprite id(lmwS)
+        sprite lmwS, 0, 0, TEX_PIXEL
+        set sprite offset lmwS, .5, .5
+        set sprite effect lmwS, LOGO_RING_FX
+        set sprite render target lmwS, LOGO_TARGET
+        order sprite lmwS, ORDER_MENU_TEXT - 11
+        hide sprite lmwS
+        LOGO_RING(lmwI) = lmwS
+        LOGO_RING_LIFE(lmwI) = 0
+    next
+    for lmwI = 0 to LOGO_DROP_N - 1
+        lmwS = 0
+        reserve sprite id(lmwS)
+        sprite lmwS, 0, 0, TEX_PIXEL
+        set sprite offset lmwS, .5, .5
+        set sprite render target lmwS, LOGO_TARGET
+        order sprite lmwS, ORDER_MENU_TEXT - 3
+        hide sprite lmwS
+        LOGO_DROP(lmwI) = lmwS
+        LOGO_DROP_ON(lmwI) = 0
+    next
+endfunction
+
+` a ring on the water at x, y, that goes out to lrR# pixels wide over lrLife frames, after lrWait frames
+function logoRing(lrX#, lrY#, lrR#, lrLife, lrWait, lrAlpha)
+    lrI = LOGO_RING_NEXT
+    LOGO_RING_NEXT = (LOGO_RING_NEXT + 1) mod LOGO_RING_N
+    LOGO_RING_X#(lrI) = lrX#
+    LOGO_RING_Y#(lrI) = lrY#
+    LOGO_RING_R#(lrI) = lrR#
+    LOGO_RING_LIFE(lrI) = lrLife
+    LOGO_RING_AGE(lrI) = 0 - lrWait
+    LOGO_RING_A(lrI) = lrAlpha
+endfunction
+
+` drops thrown up off of the water at x, y, spread lsSpread pixels to each side, going up as fast as lsUp# pixels
+` a frame at most. nearer the camera, all of it is bigger.
+function logoSpray(lsX#, lsY#, lsSpread, lsCount, lsUp#)
+    lsNear# = logoNear(lsY#)
+    lsSpread = lsSpread * lsNear#
+    lsUp# = lsUp# * sqrt(lsNear#)
+    for lsN = 1 to lsCount
+        lsI = LOGO_DROP_NEXT
+        LOGO_DROP_NEXT = (LOGO_DROP_NEXT + 1) mod LOGO_DROP_N
+        lsS = LOGO_DROP(lsI)
+        LOGO_DROP_ON(lsI) = 1
+        LOGO_DROP_X#(lsI) = lsX# + rnd(lsSpread * 2 + 1) - lsSpread
+        LOGO_DROP_Y#(lsI) = lsY#
+        LOGO_DROP_VX#(lsI) = (rnd(201) - 100) * .01 * lsNear#
+        LOGO_DROP_VY#(lsI) = 0 - lsUp# * (.45 + rnd(56) * .01)
+        LOGO_DROP_LAND#(lsI) = lsY# + (1 + rnd(6)) * lsNear#
+        ` nearer the camera, the drops come down nearer and further away than where it broke, along the water
+        if lsY# - SURFACE_HORIZON > 12
+            LOGO_DROP_LAND#(lsI) = SURFACE_HORIZON + logoRowsDy(logoRows(lsY# - SURFACE_HORIZON) + rnd(81) - 40)
+        endif
+        lsSize = 1 + rnd(2) + lsNear# / 2
+        size sprite lsS, lsSize, lsSize
+        lsTint = rnd(3)
+        if lsTint = 0
+            color sprite lsS, logoLit(170, 210, 255, 235)
+        else
+            color sprite lsS, logoLit(235, 245, 255, 245)
+        endif
+        position sprite lsS, LOGO_DROP_X#(lsI), LOGO_DROP_Y#(lsI)
+        show sprite lsS
+    next
+endfunction
+
+` how much nearer the camera than the horizon the water is at y: 1 at the horizon, and more toward the camera. the
+` rings and the spray there are this many times as big.
+function logoNear(lnY#)
+    lnNear# = lnY# - SURFACE_HORIZON
+    if lnNear# < 0 then lnNear# = 0
+endfunction 1 + lnNear# / 50.0
+
+` a word breaks the water at x, y: spray, and rings that go out from it
+function logoBreak(lbX#, lbY#, lbBig)
+    lbHard# = .55
+    lbK# = logoNear(lbY#)
+    if lbBig
+        ` a wide sheet of spray, and a narrow plume up the middle of it that goes higher
+        logoSpray(lbX#, lbY#, 40, 46, 4.8)
+        logoSpray(lbX#, lbY#, 10, 18, 6.6)
+        logoRing(lbX#, lbY# + 2, 230 * lbK#, 100 * sqrt(lbK#), 0, 200)
+        logoRing(lbX#, lbY# + 2, 150 * lbK#, 80 * sqrt(lbK#), 5, 220)
+        logoRing(lbX#, lbY# + 2, 100 * lbK#, 70 * sqrt(lbK#), 11, 190)
+        logoRing(lbX#, lbY# + 2, 60 * lbK#, 60 * sqrt(lbK#), 18, 160)
+        lbHard# = 1
+    else
+        logoSpray(lbX#, lbY#, 14, 18, 3.4)
+        logoRing(lbX#, lbY# + 2, 80 * lbK#, 70 * sqrt(lbK#), 0, 200)
+        logoRing(lbX#, lbY# + 2, 50 * lbK#, 56 * sqrt(lbK#), 8, 170)
+        logoRing(lbX#, lbY# + 2, 30 * lbK#, 46 * sqrt(lbK#), 15, 140)
+    endif
+    LOGO_BREAK_X#(LOGO_BREAK_NEXT) = lbX#
+    LOGO_BREAK_MS(LOGO_BREAK_NEXT) = game ms()
+    LOGO_BREAK_HARD#(LOGO_BREAK_NEXT) = lbHard#
+    LOGO_BREAK_Y#(LOGO_BREAK_NEXT) = lbY#
+    LOGO_BREAK_NEXT = (LOGO_BREAK_NEXT + 1) mod 3
+endfunction
+
+` tell the sea's effect where the words broke the water, and how long ago. frame_surface comes here on every frame.
+function logoSplashFx(lsfNow)
+    lsfA# = logoBreakAge(0, lsfNow)
+    lsfB# = logoBreakAge(1, lsfNow)
+    lsfC# = logoBreakAge(2, lsfNow)
+    set effect param float4 SURFACE_FX_ID, "SplashA", LOGO_BREAK_X#(0), lsfA#, LOGO_BREAK_HARD#(0), LOGO_BREAK_Y#(0)
+    set effect param float4 SURFACE_FX_ID, "SplashB", LOGO_BREAK_X#(1), lsfB#, LOGO_BREAK_HARD#(1), LOGO_BREAK_Y#(1)
+    set effect param float4 SURFACE_FX_ID, "SplashC", LOGO_BREAK_X#(2), lsfC#, LOGO_BREAK_HARD#(2), LOGO_BREAK_Y#(2)
+endfunction
+
+` how long ago, in seconds, a word broke the water, and -1 for never
+function logoBreakAge(lbaI, lbaNow)
+    lbaAge# = -1
+    if LOGO_BREAK_MS(lbaI) > 0
+        lbaAge# = lbaNow - LOGO_BREAK_MS(lbaI)
+        lbaAge# = lbaAge# * .001
+    endif
+endfunction lbaAge#
+
+` the color of the water that the words throw up, in the light of the sky: in the evening it catches the sun going
+` down, and is peach and pink, and in the day it is the pale blue and white that it is given
+function logoLit(llR, llG, llB, llA)
+    if SURFACE_DAY = 0
+        llR = llR + 60
+        if llR > 255 then llR = 255
+        llG = llG * .82
+        llB = llB * .62
+    endif
+endfunction rgb(llR, llG, llB, llA)
+
+` water dripping off of the bottom of a word that has just come up, now and then, less and less, back into the sea
+function logoDrips(ldW, ldAge, ldBob#)
+    ldStart = LOGO_FISH_A_MS
+    ldHalfW = 40
+    ldHalfH = 17
+    if ldW = 1 then ldStart = LOGO_FISH_B_MS
+    if ldW = 2
+        ldStart = LOGO_POP_MS
+        ldHalfW = 70
+        ldHalfH = 36
+    endif
+    ldT = ldAge - ldStart - 250
+    if ldT < 0 then exitfunction
+    if ldT > 1600 then exitfunction
+    ldChance = 100 - ldT / 16
+    if rnd(100) >= ldChance / 2 then exitfunction
+    logoWordAt(ldW)
+    ldX# = LOGO_AT_X# + (rnd(ldHalfW * 2 + 1) - ldHalfW) * LOGO_SCALE#
+    ldY# = LOGO_AT_Y# + ldBob# + ldHalfH * LOGO_SCALE#
+    logoDrip(ldX#, ldY#, SURFACE_HORIZON + LOGO_WATER_DY#(ldW))
+endfunction
+
+` one drop, let go at x, y with nothing to throw it, so it only falls, into the water at ldpWater#
+function logoDrip(ldpX#, ldpY#, ldpWater#)
+    ldpI = LOGO_DROP_NEXT
+    LOGO_DROP_NEXT = (LOGO_DROP_NEXT + 1) mod LOGO_DROP_N
+    ldpS = LOGO_DROP(ldpI)
+    LOGO_DROP_ON(ldpI) = 1
+    LOGO_DROP_X#(ldpI) = ldpX#
+    LOGO_DROP_Y#(ldpI) = ldpY#
+    LOGO_DROP_VX#(ldpI) = 0
+    LOGO_DROP_VY#(ldpI) = .3
+    LOGO_DROP_LAND#(ldpI) = ldpWater# + (1 + rnd(6)) * logoNear(ldpWater#)
+    size sprite ldpS, 1, 1 + rnd(2)
+    color sprite ldpS, logoLit(220, 236, 255, 230)
+    position sprite ldpS, ldpX#, ldpY#
+    show sprite ldpS
+endfunction
+
+` THE WATER'S OWN FLOOR, the way the sea's effect lays its ripples on it (waterAt, in SurfaceEffect.fx): across,
+` they are stretched more the nearer they are, and toward the camera they are rows, more and more spread out
+function logoRowScale(lrsDy#)
+    lrsDepth# = lrsDy# / 170.0
+    if lrsDepth# > 1 then lrsDepth# = 1
+    if lrsDepth# < 0 then lrsDepth# = 0
+endfunction .25 + lrsDepth# * 2.2
+
+function logoRows(lrDy#)
+    if lrDy# < 0 then lrDy# = 0
+endfunction 300 * log(1 + lrDy# * .16, 2.718282)
+
+` and back: how far under the horizon those rows are
+function logoRowsDy(lrdRows#)
+    if lrdRows# < 0 then lrdRows# = 0
+endfunction (pow(2.718282, lrdRows# / 300.0) - 1) / .16
+
+` how a ring lwW# pixels wide, around a place on the water lwY# down the screen, looks lying on the sea: its
+` far side squashed up toward the horizon and its near side swung down toward the camera, into
+` LOGO_RING_SEEN_Y#, the middle of it down the screen, and LOGO_RING_SEEN_H#, how tall it is. a ring right at
+` the horizon, as on the menu, is a flat one around its place instead.
+function logoRingOnWater(lwY#, lwW#)
+    lwDy# = lwY# - SURFACE_HORIZON
+    lwOn# = (lwDy# - 2) / 20.0
+    if lwOn# < 0 then lwOn# = 0
+    if lwOn# > 1 then lwOn# = 1
+    lwR# = lwW# / 2 / logoRowScale(lwDy#)
+    lwAt# = logoRows(lwDy#)
+    lwFar# = logoRowsDy(lwAt# - lwR#)
+    lwNear# = logoRowsDy(lwAt# + lwR#)
+    LOGO_RING_SEEN_Y# = lwY# + (SURFACE_HORIZON + (lwFar# + lwNear#) / 2 - lwY#) * lwOn#
+    lwFlat# = lwW# * .14 + 1
+    lwSeen# = lwNear# - lwFar#
+    LOGO_RING_SEEN_H# = lwFlat# + (lwSeen# - lwFlat#) * lwOn#
+endfunction
+
+` the water, one frame on: the rings go out, and the drops fall back in, each with a little ring now and then
+function logoWaterStep()
+    for lwsI = 0 to LOGO_RING_N - 1
+        lwsS = LOGO_RING(lwsI)
+        lwsLife = LOGO_RING_LIFE(lwsI)
+        if lwsLife > 0
+            LOGO_RING_AGE(lwsI) = LOGO_RING_AGE(lwsI) + 1
+            lwsAge = LOGO_RING_AGE(lwsI)
+            if lwsAge < 0
+                hide sprite lwsS
+            else
+                if lwsAge >= lwsLife
+                    hide sprite lwsS
+                    LOGO_RING_LIFE(lwsI) = 0
+                else
+                    lwsT# = lwsAge
+                    lwsT# = lwsT# / lwsLife
+                    lwsW# = 4 + LOGO_RING_R#(lwsI) * logoEaseOut(lwsT#)
+                    logoRingOnWater(LOGO_RING_Y#(lwsI), lwsW#)
+                    lwsH# = LOGO_RING_SEEN_H#
+                    show sprite lwsS
+                    position sprite lwsS, LOGO_RING_X#(lwsI), LOGO_RING_SEEN_Y#
+                    size sprite lwsS, lwsW#, lwsH#
+                    set sprite all texcoord1 lwsS, lwsW#, lwsH#, 1, 0
+                    lwsA# = LOGO_RING_A(lwsI) * (1 - lwsT#) * (1 - lwsT#)
+                    color sprite lwsS, logoLit(200, 228, 255, lwsA#)
+                endif
+            endif
+        endif
+    next
+    for lwsI = 0 to LOGO_DROP_N - 1
+        if LOGO_DROP_ON(lwsI)
+            lwsS = LOGO_DROP(lwsI)
+            LOGO_DROP_VY#(lwsI) = LOGO_DROP_VY#(lwsI) + LOGO_GRAVITY#
+            LOGO_DROP_X#(lwsI) = LOGO_DROP_X#(lwsI) + LOGO_DROP_VX#(lwsI)
+            LOGO_DROP_Y#(lwsI) = LOGO_DROP_Y#(lwsI) + LOGO_DROP_VY#(lwsI)
+            lwsDown = 0
+            if LOGO_DROP_VY#(lwsI) > 0
+                if LOGO_DROP_Y#(lwsI) >= LOGO_DROP_LAND#(lwsI) then lwsDown = 1
+            endif
+            if lwsDown
+                LOGO_DROP_ON(lwsI) = 0
+                hide sprite lwsS
+                lwsRing = rnd(3)
+                if lwsRing = 0
+                    logoRing(LOGO_DROP_X#(lwsI), LOGO_DROP_LAND#(lwsI), (6 + rnd(6)) * logoNear(LOGO_DROP_LAND#(lwsI)), 24, 0, 140)
+                endif
+            else
+                position sprite lwsS, LOGO_DROP_X#(lwsI), LOGO_DROP_Y#(lwsI)
+            endif
+        endif
+    next
+endfunction
+
+function logoPuffTint(lptI, lptR, lptG, lptB)
+    LOGO_PUFF_R(lptI) = lptR
+    LOGO_PUFF_G(lptI) = lptG
+    LOGO_PUFF_B(lptI) = lptB
+endfunction
+
+function logoHide()
+    for lhI = 0 to LOGO_TXT_N - 1
+        hide text LOGO_TXT(lhI)
+    next
+    for lhI = 0 to LOGO_PUFF_N - 1
+        hide sprite LOGO_PUFF(lhI)
+    next
+    steamDemoTagHide()
+    LOGO_SHOWING = 0
+endfunction
+
+function logoShow()
+    for lhI = 0 to LOGO_TXT_N - 1
+        show text LOGO_TXT(lhI)
+    next
+    LOGO_SHOWING = 1
+endfunction
+
+` where the middle of a word is, on the screen, in LOGO_AT_X#, LOGO_AT_Y#
+function logoWordAt(lwaWord)
+    lwaS# = LOGO_SCALE#
+    lwaX# = LOGO_W_X#(lwaWord) * lwaS#
+    lwaY# = LOGO_W_Y#(lwaWord) * lwaS#
+    LOGO_AT_X# = LOGO_X# + lwaX# * cos(LOGO_ANGLE#) - lwaY# * sin(LOGO_ANGLE#)
+    LOGO_AT_Y# = LOGO_Y# + lwaX# * sin(LOGO_ANGLE#) + lwaY# * cos(LOGO_ANGLE#)
+endfunction
+
+` a word of the logo, lpScale# times its size around its middle, pushed down by lpDrop# pixels, and with
+` lpAlpha of it showing, from 0 to 255
+function logoPoseWord(lpWord, lpScale#, lpDrop#, lpAlpha)
+    logoWordAt(lpWord)
+    lpK# = LOGO_SCALE# * lpScale#
+    ` text sits on whole pixels, and every copy of the word is cut down to one by itself. if the word were
+    ` moved by parts of a pixel, its copies would each jump to the next pixel on a frame of their own, and the
+    ` dark outline would flicker out from behind the face as it bobs. so the word as a whole is on a whole
+    ` pixel, and every copy is the same way from it on every frame.
+    lpX = LOGO_AT_X# + .5
+    lpY = LOGO_AT_Y# + lpDrop# + LOGO_SHIFT#(lpWord) + .5
+    for lpI = 0 to LOGO_TXT_N - 1
+        if LOGO_TXT_W(lpI) = lpWord
+            lpId = LOGO_TXT(lpI)
+            set text position lpId, lpX + LOGO_TXT_DX#(lpI) * lpK#, lpY + LOGO_TXT_DY#(lpI) * lpK#
+            size text y lpId, LOGO_TXT_SZ#(lpI) * lpK#
+            set text alpha lpId, lpAlpha
+        endif
+    next
+endfunction
+
+` the splash, from 0 (it has only just burst) to 1 (it has gone): each puff, from its own moment, grows out from
+` the word, and runs through the frames of its smoke. before its moment, and past its end, it is hidden.
+function logoSplashAt(lsaT#, lsaDrop#, lsaAlpha#)
+    logoWordAt(2)
+    for lsaI = 0 to LOGO_PUFF_N - 1
+        lsaS = LOGO_PUFF(lsaI)
+        lsaMine# = (lsaT# - LOGO_PUFF_LATE#(lsaI)) / (1 - LOGO_PUFF_LATE#(lsaI))
+        if lsaMine# >= 1 or lsaMine# < 0
+            hide sprite lsaS
+        else
+            show sprite lsaS
+            lsaOut# = .5 + .5 * logoEaseOut(lsaMine#)
+            lsaK# = LOGO_SCALE# * lsaOut#
+            position sprite lsaS, LOGO_AT_X# + LOGO_PUFF_X#(lsaI) * lsaK#, LOGO_AT_Y# + lsaDrop# + LOGO_SHIFT#(2) + LOGO_PUFF_Y#(lsaI) * lsaK#
+            size sprite lsaS, LOGO_PUFF_S#(lsaI) * lsaK#, LOGO_PUFF_S#(lsaI) * lsaK#
+            lsaFrame = lsaMine# * LOGO_PUFF_FN(lsaI)
+            if lsaFrame > LOGO_PUFF_FN(lsaI) - 1 then lsaFrame = LOGO_PUFF_FN(lsaI) - 1
+            set sprite frame lsaS, LOGO_PUFF_F0(lsaI) + lsaFrame
+            color sprite lsaS, logoLit(LOGO_PUFF_R(lsaI), LOGO_PUFF_G(lsaI), LOGO_PUFF_B(lsaI), 225 * lsaAlpha#)
+        endif
+    next
+endfunction
+
+` how long a word takes to come up out of the water lrFar# pixels under its place: lrMs, and a little longer for
+` every pixel past 100
+function logoRiseMs(lrMs, lrFar#)
+    lrMore# = lrFar# - 100
+    if lrMore# < 0 then lrMore# = 0
+endfunction lrMs + lrMore# * 1.5
+
+function logoEaseOut(leoT#)
+    leoU# = 1 - leoT#
+endfunction 1 - leoU# * leoU# * leoU#
+
+` past 1 a little, and back
+function logoEaseBack(lebT#)
+    lebU# = lebT# - 1
+endfunction 1 + 2.7 * lebU# * lebU# * lebU# + 1.7 * lebU# * lebU#
+
+` a spring that has been let go, this many frames ago: 1 at the start, swinging through 0, and dying away
+function logoSpring(lspA#, lspRate#)
+endfunction cos(lspA# * lspRate#) * pow(.87, lspA#)
+
+` THE WAY IT COMES IN. the logo, laAge milliseconds after it started to come in, laAlpha# of it showing (0 to
+` 1), and bobbing laBob# pixels. the sounds play as each word comes in.
+function logoAt(laAge, laAlpha#, laBob#)
+    ` each "Fish" drops in from a little over its place, past it, and back
+    for laW = 0 to 1
+        laStart = LOGO_FISH_A_MS
+        if laW = 1 then laStart = LOGO_FISH_B_MS
+        laA = laAge - laStart
+        if laA < 0
+            logoPoseWord(laW, 1, 0, 0)
+        else
+            laT# = laA
+            laT# = laT# / 260.0
+            if laT# > 1 then laT# = 1
+            laIn# = laT# * 4
+            if laIn# > 1 then laIn# = 1
+            laDrop# = 0 - 34 * LOGO_SCALE# * (1 - logoEaseBack(laT#))
+            if LOGO_FROM_WATER
+                ` up out of the sea, from under its water, past its place, and back. the further it has to go,
+                ` the longer it takes.
+                logoWordAt(laW)
+                laFar# = SURFACE_HORIZON + LOGO_WATER_DY#(laW) + 12 - LOGO_AT_Y#
+                laT# = laA
+                laT# = laT# / logoRiseMs(420, laFar#)
+                if laT# > 1 then laT# = 1
+                laDrop# = laFar# * (1 - logoEaseBack(laT#))
+                laIn# = laT# * 6
+                if laIn# > 1 then laIn# = 1
+            endif
+            logoPoseWord(laW, 1, laDrop# + laBob#, 255 * laIn# * laAlpha#)
+        endif
+    next
+    ` "Pop" punches in, half again as big as it is, and springs back to its size, in its splash
+    laA = laAge - LOGO_POP_MS
+    if laA < 0
+        logoPoseWord(2, 1, 0, 0)
+        logoSplashAt(-1, 0, 0)
+    else
+        laF# = laA
+        laF# = laF# / 16.667
+        laIn# = laA
+        laIn# = laIn# / 60.0
+        if laIn# > 1 then laIn# = 1
+        laUp# = 0
+        if LOGO_FROM_WATER
+            ` it bursts up out of the sea first
+            logoWordAt(2)
+            laFar# = SURFACE_HORIZON + LOGO_WATER_DY#(2) + 30 - LOGO_AT_Y#
+            laT# = laA
+            laT# = laT# / logoRiseMs(160, laFar#)
+            if laT# > 1 then laT# = 1
+            laUp# = laFar# * (1 - logoEaseOut(laT#))
+        endif
+        logoPoseWord(2, 1 + .5 * logoSpring(laF#, .42), laBob# + laUp#, 255 * laIn# * laAlpha#)
+        laSplash# = laA
+        laSplash# = laSplash# / LOGO_SPLASH_MS
+        logoSplashAt(laSplash#, laBob#, laAlpha#)
+    endif
+
+    if LOGO_FROM_WATER
+        ` the words come up wet, and drip back into the sea for a moment after
+        for laW = 0 to 2
+            logoDrips(laW, laAge, laBob#)
+        next
+        logoWaterStep()
+    endif
+
+    ` the sounds, and the water breaking, once each
+    if LOGO_PLAYED = 0
+        if laAge >= LOGO_FISH_A_MS
+            LOGO_PLAYED = 1
+            tidePlaySound(LOGO_SFX_FISH_A, .45, 0)
+            if LOGO_FROM_WATER
+                logoWordAt(0)
+                logoBreak(LOGO_AT_X#, SURFACE_HORIZON + LOGO_WATER_DY#(0), 0)
+                tidePlaySound(LOGO_SFX_SPLASH_A, .35, .35)
+            endif
+        endif
+    endif
+    if LOGO_PLAYED = 1
+        if laAge >= LOGO_FISH_B_MS
+            LOGO_PLAYED = 2
+            tidePlaySound(LOGO_SFX_FISH_B, .45, 0)
+            if LOGO_FROM_WATER
+                logoWordAt(1)
+                logoBreak(LOGO_AT_X#, SURFACE_HORIZON + LOGO_WATER_DY#(1), 0)
+                tidePlaySound(LOGO_SFX_SPLASH_B, .35, .2)
+            endif
+        endif
+    endif
+    if LOGO_PLAYED = 2
+        if laAge >= LOGO_POP_MS
+            LOGO_PLAYED = 3
+            if LOGO_FROM_WATER
+                logoWordAt(2)
+                logoBreak(LOGO_AT_X#, SURFACE_HORIZON + LOGO_WATER_DY#(2), 1)
+                tidePlaySound(LOGO_SFX_SPLASH, .5, -.25)
+            endif
+            tidePlaySound(LOGO_SFX_POP, .8, 0)
+            tidePlaySound(LOGO_SFX_BOOM, .4, 0)
+        endif
+    endif
+endfunction
+
+` the main menu's frame. the logo is there when the page wants it and the menu's chrome is shown. the first time
+` the main menu is all there, it comes in. after that, it bobs, the way the plain title did.
+function logoFrame(lfMs)
+    if LOGO_READY = 0 then exitfunction
+    if LOGO_TRAILER then exitfunction
+    if lfMs = LOGO_FRAME_MS then exitfunction
+    LOGO_FRAME_MS = lfMs
+    lfWant = 0
+    lfAlpha# = MENU_CHROME_ALPHA#
+    if LOGO_INTRO then lfAlpha# = 1
+    if LOGO_ON
+        if LOGO_CHROME
+            if lfAlpha# > 0 then lfWant = 1
+        endif
+    endif
+    ` at the start of the game the menu has not laid out its page yet, and it is there anyway
+    if LOGO_INTRO then lfWant = 1
+    if lfWant = 0
+        if LOGO_SHOWING
+            logoHide()
+        endif
+        exitfunction
+    endif
+    if LOGO_SHOWING = 0
+        logoShow()
+    endif
+    if LOGO_START_MS = 0
+        if MENU_CHROME_ALPHA# >= .99
+            LOGO_START_MS = lfMs
+        endif
+    endif
+    if LOGO_START_MS = 0
+        logoAt(-1, 0, 0)
+        steamDemoTag(-1, 0, 0)
+        exitfunction
+    endif
+    ` the menu's camera lowers everything on it while the menu rises in, and the logo is held where it is
+    lfBob# = sin(lfMs * .002) * 3 - LOGO_MENU_RISE#
+    logoAt(lfMs - LOGO_START_MS, lfAlpha#, lfBob#)
+    steamDemoTag(lfMs - LOGO_START_MS, lfAlpha#, lfBob#)
+endfunction
+
+routines_logo_exit:

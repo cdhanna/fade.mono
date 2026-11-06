@@ -34,10 +34,9 @@ return
 ` the wave of bubbles, so that it uncovers nothing but the water.
 puzzle_prepare:
     PUZZLE_ON = 1
-    PUZZLE_AFTER = 0
-    PUZZLE_ASKED = 0
-    PUZZLE_ALONE_MS = 0
     PUZZLE_RAN_OUT = 0
+    PUZZLE_GOING = 0
+    PUZZLE_GONE_AT_MS = 0
     puzzleWhere()
     OPTION_GAME_INTRO = 0
     for pzI = 0 to CELL_COUNT - 1
@@ -79,24 +78,20 @@ puzzle_enter:
     create basic tween GUIDE_GLOW_TWEEN_ID, 0, 1, GUIDE_LIGHT_MS, 0
     create basic tween ANGLER_SWIM_TWEEN_ID, 1, 1, 1, 0
     puzzleSwimOn()
-    set text loc HINT_PART_TEXTS(2), "angler.puzzle.hint2"
+    set text loc HINT_PART_TEXTS(2), "angler.puzzle.hint" `and the undo is a hint of its own, so that each one shakes
     hintShow(1)
     gosub puzzle_scores
 
-    ` a player who comes back to nothing finds nothing, and she looks up
+    ` a player who closed the game while she was going comes back to the empty sea, and she says goodbye again
     if PUZZLE_RAN_OUT
         puzzleEmpty()
         hintShow(0)
-        PUZZLE_ALONE_MS = game ms() + PUZZLE_BACK_MS
+        guideSay(lockey$("angler.ava.free.f"))
         return
     endif
 
     gosub puzzle_deal
-    if PUZZLE_AFTER
-        avaAfterLine(PUZZLE_NOW)
-    else
-        puzzleOpening(PUZZLE_NOW)
-    endif
+    puzzleOpening(PUZZLE_NOW)
 return
 
 
@@ -174,49 +169,53 @@ puzzle_advance:
         if paReady = 0 then return
         if game ms() < PUZZLE_CLEARED_MS then return
         PUZZLE_CLEARED_MS = 0
-        if PUZZLE_AFTER = 0
-            if PUZZLE_NOW = PUZZLE_COUNT - 1
-                PUZZLE_ALONE_MS = game ms() + PUZZLE_STAY_MS
-                PUZZLE_RAN_OUT = 1
-                set pref PUZZLE_PREF + 1, 1
-                hintShow(0)
-                return
-            endif
+        ` and her goodbye has been said, so she goes. see THE END OF THE BOARDS in fish_headers_puzzle.
+        if PUZZLE_NOW = PUZZLE_COUNT - 1
+            PUZZLE_RAN_OUT = 1
+            set pref PUZZLE_PREF + 1, 1
+            achieveUnlock("END_AVA")
+            hintShow(0)
+            return
+        endif
 
-            ` a board that has a talk after it
-            paTalk = puzzleTalkAfter(PUZZLE_NOW)
-            if paTalk > 0
-                PUZZLE_TALK_NOW = paTalk
-                PUZZLE_RUSH_TALK = paTalk
-                PUZZLE_CLEARED_MS = 0
-                return
-            endif
+        ` a board that has a talk after it
+        paTalk = puzzleTalkAfter(PUZZLE_NOW)
+        if paTalk > 0
+            PUZZLE_TALK_NOW = paTalk
+            PUZZLE_RUSH_TALK = paTalk
+            PUZZLE_CLEARED_MS = 0
+            return
         endif
         gosub puzzle_next
         return
     endif
 
-    ` there is nothing left, and the player has not gone. see WHY THERE ARE PUZZLES in fish_headers_puzzle.
-    if PUZZLE_ALONE_MS > 0
-        if game ms() < PUZZLE_ALONE_MS then return
-        PUZZLE_ALONE_MS = 0
-        PUZZLE_ASKED = 1
-        guideSay(lockey$("angler.shop.still"))
-        return
-    endif
-
-    if PUZZLE_ASKED
-        paReady = guideReady()
-        if paReady = 0 then return
-        PUZZLE_ASKED = 0
-        PUZZLE_AFTER = 1
-        PUZZLE_RAN_OUT = 0
-        PUZZLE_NOW = 0
-        set pref PUZZLE_PREF, 0
-        set pref PUZZLE_PREF + 1, 2
-        hintShow(1)
-        gosub puzzle_deal
-        guideSay(lockey$("angler.puzzle.another"))
+    ` the boards are done, and she is going. there is no board to put back in the empty sea. see THE END OF THE
+    ` BOARDS in fish_headers_puzzle.
+    if PUZZLE_RAN_OUT
+        PUZZLE_AGAIN = 0
+        PUZZLE_UNDO_WANT = 0
+        PUZZLE_HINT_WANT = 0
+        paNow = game ms()
+        if PUZZLE_GOING = 0
+            paReady = guideReady()
+            if paReady
+                PUZZLE_GOING = 1
+                PUZZLE_GOING_MS = paNow
+            endif
+            return
+        endif
+        ` she is out of sight, or has been swimming long enough, and the water stays empty for a moment
+        if PUZZLE_GONE_AT_MS = 0
+            paOut = 0
+            if PUZZLE_SWIM_X# > WORLD_WIDTH then paOut = 1
+            if paNow - PUZZLE_GOING_MS > PUZZLE_GOING_MAX_MS then paOut = 1
+            if paOut then PUZZLE_GONE_AT_MS = paNow
+            return
+        endif
+        if paNow - PUZZLE_GONE_AT_MS < PUZZLE_GOING_HOLD_MS then return
+        avaFreed()
+        AVA_TO_TITLE = 1
         return
     endif
 
@@ -239,11 +238,14 @@ puzzle_advance:
             puzzleUndo()
         endwhile
         PUZZLE_FISH_WAS = puzzleFishLeft()
+        PUZZLE_LOOKED_AT = PUZZLE_UNDO_NEXT
         puzzleLostLook()
         gosub update_selection_position
         PUZZLE_CURSOR_MOVED = 0
         return
     endif
+
+    puzzleSmileLook()
 
     ` see HINTS in fish_headers_puzzle
     if PUZZLE_HINT_WANT
@@ -260,16 +262,19 @@ puzzle_advance:
         endif
     endif
 
+    ` the board is looked at again after every swap, and not only when fish pop: the free swaps of a bubble
+    ` change it without popping anything
     paFish = puzzleFishLeft()
-    if paFish = PUZZLE_FISH_WAS then return
+    if paFish = PUZZLE_FISH_WAS and PUZZLE_UNDO_NEXT = PUZZLE_LOOKED_AT then return
+    PUZZLE_LOOKED_AT = PUZZLE_UNDO_NEXT
+    paPopped = 0
+    if paFish <> PUZZLE_FISH_WAS then paPopped = 1
     PUZZLE_FISH_WAS = paFish
 
-    if paFish = 0
+    if paFish = 0 and paPopped = 1
         PUZZLE_CLEARED_MS = game ms() + PUZZLE_CLEAR_HOLD_MS
         hide sprite SELECTION_SPRITE
-        if PUZZLE_AFTER = 0
-            puzzleCleared(PUZZLE_NOW)
-        endif
+        puzzleCleared(PUZZLE_NOW)
         return
     endif
 
@@ -332,12 +337,7 @@ puzzle_next:
     set pref PUZZLE_PREF, PUZZLE_NOW
     hintShow(1)
     gosub puzzle_deal
-    ` she said that she made another one when the thirty ran out, so she does not say it again
-    if PUZZLE_AFTER
-        avaAfterLine(PUZZLE_NOW)
-    else
-        puzzleOpening(PUZZLE_NOW)
-    endif
+    puzzleOpening(PUZZLE_NOW)
 return
 
 
@@ -382,9 +382,19 @@ puzzle_ask:
     puzzleSay(lockey$("angler.puzzle.leave.b"))
     gosub angler_wait
 
-    set text loc ANGLER_LINE_TEXTS(0), "angler.puzzle.reply.stay"
-    set text loc ANGLER_LINE_TEXTS(1), "angler.puzzle.reply.go"
-    gosub puzzle_scene_pick
+    ` she makes sure of a goodbye. see ava_sure.
+    paDone = 0
+    while paDone = 0
+        set text loc ANGLER_LINE_TEXTS(0), "angler.puzzle.reply.stay"
+        set text loc ANGLER_LINE_TEXTS(1), "angler.puzzle.reply.go"
+        gosub puzzle_scene_pick
+        paDone = 1
+        if angChosen = 1
+            gosub ava_sure
+            paDone = AVA_SURE
+            angChosen = 1
+        endif
+    endwhile
 
     if angChosen = 0
         puzzleSay(lockey$("angler.puzzle.stay.a"))
@@ -474,7 +484,8 @@ return
 puzzle_end:
     PUZZLE_ON = 0
     PUZZLE_CLEARED_MS = 0
-    PUZZLE_ALONE_MS = 0
+    PUZZLE_GOING = 0
+    PUZZLE_GONE_AT_MS = 0
     PUZZLE_RUSH_TALK = 0
     puzzleSwimOff()
     set text loc HINT_PART_TEXTS(2), "intro.hint.info"
@@ -569,12 +580,61 @@ frame_puzzle_swim:
         endif
     endif
 
+    ` she keeps behind the fish, and only comes in front of them to talk. see HER SMILE.
+    PUZZLE_WANT_FRONT = 0
+    if fsMore then PUZZLE_WANT_FRONT = 1
+    if ANGLER_SPEAKING then PUZZLE_WANT_FRONT = 1
+
     if PUZZLE_RUSH_TALK > 0
         fsSpeed# = PUZZLE_RUSH_SPEED#
         PUZZLE_GO_X# = 12 + ANGLER_SHIFT_X
         PUZZLE_GO_Y# = 218
         PUZZLE_WANT_FRONT = 1
     endif
+
+    ` SHE GOES. once she has said it all, she swims off the side of the sea, in front of the fish, and does not come
+    ` back. see THE END OF THE BOARDS in fish_headers_puzzle.
+    if PUZZLE_GOING
+        PUZZLE_GO_X# = WORLD_WIDTH + PUZZLE_GOING_PAST
+        PUZZLE_GO_Y# = PUZZLE_SWIM_Y#
+        PUZZLE_WANT_FRONT = 1
+    endif
+
+    ` HER SMILE. she turns around, back the way she came, to put it on or take it off
+    if fsMore = 0 and PUZZLE_RUSH_TALK = 0 and PUZZLE_GOING = 0
+        fsWant = puzzleSmiling()
+        ` stepping off the fish only takes the smile away, right where she is
+        if fsWant = 0 and PUZZLE_SMILE_SHOWN = 1 then PUZZLE_SMILE_SHOWN = 0
+        if PUZZLE_SMILE_TURNING = 0 and fsWant <> PUZZLE_SMILE_SHOWN
+            PUZZLE_SMILE_TURNING = 1
+            PUZZLE_SMILE_TURN_MS = fsNow
+            PUZZLE_SMILE_SIDE = 0
+            if ANGLER_YAW# > 1.5708 then PUZZLE_SMILE_SIDE = 1
+            fsGoing# = PUZZLE_GO_X# - PUZZLE_SWIM_X#
+            if abs(fsGoing#) > 2
+                PUZZLE_GO_X# = PUZZLE_SWIM_X# - fsGoing#
+                fsEdge# = WORLD_WIDTH - ANGLER_ART_W * ANGLER_SCALE
+                if PUZZLE_GO_X# < 0 then PUZZLE_GO_X# = 0
+                if PUZZLE_GO_X# > fsEdge# then PUZZLE_GO_X# = fsEdge#
+            else
+                shopFace(1 - SHOP_FACE_LEFT)
+            endif
+        endif
+    endif
+    ` the picture changes once she is edge on
+    if PUZZLE_SMILE_TURNING
+        fsSide = 0
+        if ANGLER_YAW# > 1.5708 then fsSide = 1
+        fsTurned = 0
+        if fsSide <> PUZZLE_SMILE_SIDE then fsTurned = 1
+        if ANGLER_OWN_BULB = 0 then fsTurned = 1 `the old picture flips all at once
+        if fsNow - PUZZLE_SMILE_TURN_MS > PUZZLE_SMILE_TURN_MAX_MS then fsTurned = 1
+        if fsTurned
+            PUZZLE_SMILE_TURNING = 0
+            PUZZLE_SMILE_SHOWN = puzzleSmiling()
+        endif
+    endif
+
     fsDx# = PUZZLE_GO_X# - PUZZLE_SWIM_X#
     fsDy# = PUZZLE_GO_Y# - PUZZLE_SWIM_Y#
     fsAway# = sqrt(fsDx# * fsDx# + fsDy# * fsDy#)
@@ -583,7 +643,7 @@ frame_puzzle_swim:
         PUZZLE_SWIM_X# = PUZZLE_GO_X#
         PUZZLE_SWIM_Y# = PUZZLE_GO_Y#
         if fsMore = 0
-            if PUZZLE_RUSH_TALK = 0
+            if PUZZLE_RUSH_TALK + PUZZLE_GOING = 0
                 puzzleSwimNext()
             endif
         endif
@@ -632,6 +692,7 @@ frame_puzzle_swim:
     if TEX_ANGLER_HAPPY > 0
         fsFace = TEX_ANGLER
         if ANGLER_SPEAKING - PUZZLE_SAY_HOLD > 0 then fsFace = TEX_ANGLER_HAPPY
+        if PUZZLE_SMILE_SHOWN then fsFace = TEX_ANGLER_HAPPY
         set sprite texture ANGLER_SPRITE, fsFace
     endif
 
@@ -801,12 +862,16 @@ frame_debug_puzzle:
     if PUZZLE_ON
         begin debug window("Puzzle lab")
         debug text "board " + str$(PUZZLE_NOW + 1) + " of " + str$(PUZZLE_COUNT)
-        if debug button("the board before") = 1
-            PUZZLE_NOW = (PUZZLE_NOW + PUZZLE_COUNT - 1) mod PUZZLE_COUNT
-            PUZZLE_AGAIN = 1
-        endif
-        if debug button("the next board") = 1
-            PUZZLE_NOW = (PUZZLE_NOW + 1) mod PUZZLE_COUNT
+        dbgPzBoard = -1
+        if debug button("the board before") = 1 then dbgPzBoard = (PUZZLE_NOW + PUZZLE_COUNT - 1) mod PUZZLE_COUNT
+        if debug button("the next board") = 1 then dbgPzBoard = (PUZZLE_NOW + 1) mod PUZZLE_COUNT
+        ` a board comes in even when the sea is empty for good, but only for this game: the saved stage stays
+        if dbgPzBoard >= 0
+            PUZZLE_NOW = dbgPzBoard
+            PUZZLE_RAN_OUT = 0
+            PUZZLE_GOING = 0
+            PUZZLE_GONE_AT_MS = 0
+            hintShow(1)
             PUZZLE_AGAIN = 1
         endif
         if debug button("hint") = 1
@@ -879,8 +944,8 @@ frame_debug_ava:
     if debug button("a usual player, who has not stayed") = 1 then dbgAvaPicked = 1
     dbgPzMoved = debug int slider("board", PUZZLE_DBG_BOARD, 1, PUZZLE_COUNT)
     if debug button("staying, on that board") = 1 then dbgAvaPicked = 2
-    if debug button("staying, out of boards") = 1 then dbgAvaPicked = 3
-    if debug button("staying, after she asked") = 1 then dbgAvaPicked = 4
+    if debug button("staying, out of boards (she is going)") = 1 then dbgAvaPicked = 3
+    if debug button("she went, to stay herself (the happy ending)") = 1 then dbgAvaPicked = 4
     if debug button("she has gone") = 1 then dbgAvaPicked = 5
     end debug window
 
@@ -1214,6 +1279,8 @@ function puzzleSwimOn()
     PUZZLE_NEAR# = 0
     PUZZLE_IN_FRONT = 0
     PUZZLE_WANT_FRONT = 0
+    PUZZLE_SMILE_SHOWN = 0
+    PUZZLE_SMILE_TURNING = 0
     PUZZLE_LANE = -1 `she is in neither lane yet
     puzzleSwimOrder()
     puzzleSwimNext()
@@ -1249,7 +1316,6 @@ endfunction
 ` somewhere new to swim to. she goes across the board along the top of the fish, or under them, and she only
 ` changes from one to the other out past the side of the board. see WHERE SHE IS in fish_headers_puzzle.
 function puzzleSwimNext()
-    PUZZLE_WANT_FRONT = rnd(2)
     psnOff = puzzleOffBoard()
     psnSide = 0
     if PUZZLE_SWIM_X# >= WORLD_WIDTH / 2
@@ -1438,6 +1504,9 @@ endfunction
 function puzzleBoard()
     puzzleGrid()
     PUZZLE_UNDO_COUNT = 0
+    PUZZLE_LOOKED_AT = PUZZLE_UNDO_NEXT `every board can be won from the start, so it has been looked at
+    PUZZLE_SMILE_AT = -1 `but the move that she smiles at is this board's
+    PUZZLE_SMILE_MOVE = -1
     bubbledReset()
     pbLast = CELL_COUNT - 1
     for pbI = 0 to pbLast
@@ -1581,18 +1650,20 @@ endfunction pglHold
 function puzzleDebugState(pdtState)
     PUZZLE_ENV_SPENT = 1
     pdtStaying = 0
-    if pdtState >= 2 and pdtState <= 4 then pdtStaying = 1
+    if pdtState >= 2 and pdtState <= 3 then pdtStaying = 1
     pdtGone = 0
     if pdtState = 5 then pdtGone = 1
     pdtStage = 0
     if pdtState = 3 then pdtStage = 1
-    if pdtState = 4 then pdtStage = 2
     pdtBoard = 0
     if pdtState = 2 then pdtBoard = PUZZLE_DBG_BOARD - 1
     set pref PUZZLE_PREF, pdtBoard
     set pref PUZZLE_PREF + 1, pdtStage
     set pref PUZZLE_PREF + 2, pdtStaying
     set pref PUZZLE_GONE_PREF, pdtGone
+    set pref AVA_PREF_FREED, 0
+    if pdtState = 4 then avaFreed() `she went, to stay herself, and the game is the usual one again
+    anglerBankLoad()
     pdtSeen = INTRO_VERSION
     if pdtState = 0
         pdtSeen = 0
@@ -1666,8 +1737,7 @@ function puzzleResume(prAt, prStage)
     PUZZLE_NOW = prAt
     if PUZZLE_NOW < 0 then PUZZLE_NOW = 0
     if PUZZLE_NOW >= PUZZLE_COUNT then PUZZLE_NOW = 0
-    if prStage = 1 then PUZZLE_RAN_OUT = 1
-    if prStage = 2 then PUZZLE_AFTER = 1
+    if prStage > 0 then PUZZLE_RAN_OUT = 1 `2 was the old ending, where they sat together forever. it goes the same way.
 endfunction
 
 
@@ -1686,7 +1756,7 @@ function puzzleTalkPicks()
     PUZZLE_TALK_PICK(1) = 1
     PUZZLE_TALK_PICK(2) = 2
     PUZZLE_TALK_PICK(3) = 6
-    PUZZLE_TALK_PICK(4) = 7
+    PUZZLE_TALK_PICK(4) = 9 `she has started arranging things around the player
     PUZZLE_TALK_PICK(5) = 10
     PUZZLE_TALK_PICK(6) = 12
     PUZZLE_TALK_PICK(7) = 15
@@ -1899,9 +1969,41 @@ function puzzleSayLost()
 endfunction
 
 
+` the move that she smiles at, found again only when the board or the cursor has changed. puzzle_advance
+` calls this once the fish have stopped. see HER SMILE in fish_headers_puzzle.
+function puzzleSmileLook()
+    pslCursor = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+    if PUZZLE_SMILE_AT = PUZZLE_UNDO_NEXT and PUZZLE_SMILE_CURSOR = pslCursor then exitfunction
+    PUZZLE_SMILE_AT = PUZZLE_UNDO_NEXT
+    PUZZLE_SMILE_CURSOR = pslCursor
+    PUZZLE_SMILE_MOVE = -1
+    pslFish = puzzleFishLeft()
+    if pslFish > 0 then PUZZLE_SMILE_MOVE = puzzleHintHere()
+endfunction
+
+
+` 1 while she smiles because the cursor is on a fish of the move. see HER SMILE in fish_headers_puzzle.
+function puzzleSmiling()
+    if PUZZLE_ON = 0 then exitfunction 0
+    if PUZZLE_SMILE_MOVE < 0 then exitfunction 0
+    if PUZZLE_SMILE_AT <> PUZZLE_UNDO_NEXT then exitfunction 0 `a swap is going on, and the move is old
+    psgCursor = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+    psgA = PUZZLE_SMILE_MOVE / 10000
+    psgB = PUZZLE_SMILE_MOVE mod 10000
+    if psgB >= PUZZLE_HINT_MOVE_FLAG
+        psgA = psgB - PUZZLE_HINT_MOVE_FLAG
+        psgB = psgA
+    endif
+    if psgCursor = psgA then exitfunction 1
+    if psgCursor = psgB then exitfunction 1
+endfunction 0
+
+
 ` what to do from here. see HINTS in fish_headers_puzzle.
 function puzzleHint()
     puzzleHintOff()
+    puzzleLostLook() `so that the snow never says something else than the hint does
+
     PUZZLE_HINT_AT = PUZZLE_UNDO_NEXT
     PUZZLE_HINT_NEXT_MS = 0
 
@@ -2121,7 +2223,7 @@ function puzzleOpening(poBoard)
             guideThen(lockey$("angler.puzzle.d3.b"))
         endcase
         case 1
-            guideSay(lockey$("angler.puzzle.d2.a2"))
+            guideSay(lockey$("angler.puzzle.d2.a3"))
             guideThen(lockey$("angler.puzzle.d2.b2"))
         endcase
         case 2
@@ -2133,7 +2235,7 @@ function puzzleOpening(poBoard)
             guideThen(lockey$("angler.puzzle.d4.b"))
         endcase
         case 4
-            guideSay(lockey$("angler.puzzle.d5.a"))
+            guideSay(lockey$("angler.puzzle.d5.a3"))
             guideThen(lockey$("angler.puzzle.d5.b"))
         endcase
         case 5
@@ -2158,8 +2260,14 @@ endfunction
 
 ` and the one thing that she says when it is clear
 function puzzleCleared(pcBoard)
+    ` she sees that she is the one holding on now, and goes. see THE END OF THE BOARDS in fish_headers_puzzle.
     if pcBoard = PUZZLE_COUNT - 1
-        guideSay(lockey$("angler.puzzle.d10.done2"))
+        guideSay(lockey$("angler.ava.free.a"))
+        guideThen(lockey$("angler.ava.free.b"))
+        guideThen(lockey$("angler.ava.free.c"))
+        guideThen(lockey$("angler.ava.free.d"))
+        guideThen(lockey$("angler.ava.free.e"))
+        guideThen(lockey$("angler.ava.free.f"))
         exitfunction
     endif
     select pcBoard

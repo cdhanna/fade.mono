@@ -529,3 +529,60 @@ test diver_is_not_replaced_by_anything_that_a_quest_puts_down from fishBoard
     assert DIVER_ON = 1, "and the diver is still down"
     end
 endtest
+
+
+test boat_has_a_picture_for_every_place_the_man_can_be from fishBoard
+    assert BOAT_PLACES >= 1, "the boat has a place for the man"
+    for tBpI = 0 to BOAT_PLACES - 1
+        assert TEX_BOAT_PLACES(tBpI) > 0, "and a picture of the boat for every place"
+        tBpIn = 1
+        if BOAT_MAN_X(tBpI) < 0 or BOAT_MAN_X(tBpI) >= BOAT_ART_W then tBpIn = 0
+        if BOAT_MAN_Y(tBpI) < 0 or BOAT_MAN_Y(tBpI) >= BOAT_ART_H then tBpIn = 0
+        assert tBpIn = 1, "and the man is on the picture there"
+    next
+    end
+endtest
+
+test boat_man_only_moves_when_the_main_menu_comes_up from fishBoard
+    showSurface(0)
+    showSurface(1)
+    tBmAt = SURFACE_BOAT_PLACE
+    for tBmI = 1 to 20
+        showSurface(1)
+        assert SURFACE_BOAT_PLACE = tBmAt, "the man stays where he is while the menu is up"
+    next
+    tBmMoved = 0
+    for tBmI = 1 to 30
+        showSurface(0)
+        showSurface(1)
+        if SURFACE_BOAT_PLACE <> tBmAt then tBmMoved = 1
+        assert TEX_DIVE_BOAT = TEX_BOAT_PLACES(SURFACE_BOAT_PLACE), "and the boat is the picture of where he is"
+    next
+    assert tBmMoved = 1, "he is somewhere else on the boat when it comes up again"
+    showSurface(0)
+    end
+endtest
+
+test boat_hearts_come_up_from_the_man_after_the_diver_ending from fishBoard
+    DIVER_SURFACE = 1
+    OPTION_MENU_PHOTOS = 1
+    DIVER_SCENE = 0
+    SURFACE_SINK# = 0
+    for tBhI = 0 to BOAT_PLACES - 1
+        surfaceBoatPlace(tBhI)
+        DIVER_HEART_MS = 0
+        tBhAt = FLOAT_BUBBLE_NEXT
+        diverSurfaceStep(300, 150)
+        assert FLOAT_BUBBLES(tBhAt).heart = 1, "a heart comes up"
+        tBhX = 300 + BOAT_MAN_X(tBhI) - BOAT_ART_W / 2
+        tBhY = 150 + BOAT_MAN_Y(tBhI)
+        tBhY = tBhY - BOAT_ART_H / 2
+        tBhY = tBhY - DIVER_HEART_UP
+        tBhNear = 1
+        if abs(FLOAT_BUBBLES(tBhAt).x# - tBhX) > 3 then tBhNear = 0
+        if abs(FLOAT_BUBBLES(tBhAt).y# - tBhY) > 0 then tBhNear = 0
+        assert tBhNear = 1, "from the man, wherever he is on the boat"
+    next
+    diverSurfaceHide()
+    end
+endtest

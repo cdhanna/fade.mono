@@ -239,12 +239,6 @@ menu_run_splash:
         set text position SPLASH_TEXT_ID, WORLD_WIDTH / 2, 190 - splashRise#
         morseStarsShow(splashRise#)
 
-        ` the main menu fades in as the camera settles
-        splashChrome# = (splashT# - .7) * 4
-        if splashChrome# < 0 then splashChrome# = 0
-        if splashChrome# > 1 then splashChrome# = 1
-        setMenuChromeAlpha(splashChrome#)
-
         ` the logos may have been skipped before the black had gone
         gosub splash_cover
 
@@ -262,6 +256,46 @@ menu_run_splash:
     position sprite SPLASH_FADE_SPRITE, WORLD_WIDTH / 2 - 60, 130
     position sprite SPLASH_MONOGAME_SPRITE, WORLD_WIDTH / 2 + 60, 130
     set text position SPLASH_TEXT_ID, WORLD_WIDTH / 2, 190
+
+    ` the camera is down, with the menu still hidden. the words of the logo come up out of the sea, and then
+    ` the menu fades in under them, rising a little into its place. none of it has to be sat through either.
+    ` see THE LOGO in fish_headers_logo.
+    LOGO_INTRO = 1
+    LOGO_START_MS = game ms()
+    splashLogoLong = LOGO_POP_MS + LOGO_MENU_WAIT_MS
+    do
+        splashAge = game ms() - LOGO_START_MS
+        if splashAge >= splashLogoLong then exit
+        ` the menu's frame only moves the logo on once the menu is open, which it is not yet
+        logoFrame(game ms())
+        gosub frame_menu_render
+        sync
+        splashSkip = new action down(ACT_CONFIRM)
+        splashClicked = mouseClickAnywhere()
+        if splashClicked then splashSkip = 1
+        if splashSkip
+            ` skipped: the words are all there, with no more sounds
+            LOGO_PLAYED = 3
+            LOGO_START_MS = game ms() - splashLogoLong - LOGO_SPLASH_MS
+            exit
+        endif
+    loop
+    splashFadeStart = game ms()
+    do
+        splashT# = game ms() - splashFadeStart
+        splashT# = splashT# / LOGO_MENU_FADE_MS
+        if splashT# >= 1 then exit
+        splashEase# = 1 - (1 - splashT#) * (1 - splashT#) * (1 - splashT#)
+        setMenuChromeAlpha(splashEase#)
+        ` in whole pixels, so that the sea can stay exactly where it is (see frame_surface)
+        splashRisePx = LOGO_MENU_RISE_PX * (1 - splashEase#) + .5
+        LOGO_MENU_RISE# = splashRisePx
+        logoFrame(game ms())
+        gosub frame_menu_render
+        sync
+    loop
+    LOGO_MENU_RISE# = 0
+    LOGO_INTRO = 0
 
     ` and the main menu is all the way there. selecting the line again puts the colors of the lines back.
     setMenuChromeAlpha(1)
@@ -459,6 +493,7 @@ endfunction
 ` hide or show the parts of the menu that are always there: the title, the panel, the cursor and the description.
 ` hiding them hides the lines of the menu too. setMenuPage is what shows those again.
 function showMenuChrome(isVisible)
+    LOGO_CHROME = isVisible
     showInfoBorder(MENU_PANEL_BORDER, isVisible)
     showInfoBorder(MENU_CURSOR, isVisible)
 

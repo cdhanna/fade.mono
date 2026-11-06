@@ -149,14 +149,19 @@ function updateSeabed()
 
     ` the clock that the specks move by
     stepPuzzleStill(seabedElapsed#)
-    snowRate# = (1 + SEABED_SNOW_RUSH# * SEABED_MOOD#) * (1 - PUZZLE_STILL#)
+    ` it loses most of its speed early, so that it is plainly stopping, and not drifting slower and slower
+    snowGoing# = 1 - PUZZLE_STILL#
+    snowRate# = (1 + SEABED_SNOW_RUSH# * SEABED_MOOD#) * snowGoing# * snowGoing#
     snowTick# = seabedElapsed# * .001 * snowRate#
     SEABED_SNOW_CLOCK# = SEABED_SNOW_CLOCK# + snowTick#
+    driftTick# = seabedElapsed# * .001 * snowGoing# * snowGoing#
+    SEABED_DRIFT_CLOCK# = SEABED_DRIFT_CLOCK# + driftTick#
 
     seabedTime# = seabedNow * .001
 
     ` the effects lose their parameters when they are reloaded, so they are all set on every frame
     set effect param float SEABED_FX_ID, "Time", seabedTime#
+    set effect param float SEABED_FX_ID, "Drift", SEABED_DRIFT_CLOCK#
     set effect param float2 SEABED_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT
     set effect param float SEABED_FX_ID, "Mood", SEABED_MOOD#
     set effect param float SEABED_FX_ID, "Void", SEABED_VOID# `the stars, for when the ancient one comes. see THE TWO ENDINGS in fish_headers.

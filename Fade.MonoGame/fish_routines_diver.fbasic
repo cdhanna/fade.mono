@@ -1212,8 +1212,6 @@ endfunction
 
 ` the things that are drawn into the main menu are put there the first time that they are needed.
 ` setup_diver cannot do it, because it runs before the menu has made the place that it is drawn into.
-` the picture of the boat with the diver hunched over is loaded here too, because which boat it is, the
-` one of the day or the one of the evening, is not known until the surface has been set up.
 function diverSurfaceReady()
     if DIVER_SURFACE_READY then exitfunction
     DIVER_SURFACE_READY = 1
@@ -1226,16 +1224,10 @@ function diverSurfaceReady()
     next
     set text render target DIVER_CARD_TEXT_ID, TARGET_MENU
     set text render target DIVER_CARD_SUB_TEXT_ID, TARGET_MENU
-
-    if SURFACE_DAY
-        texture reserve texture id(TEX_DIVER_BOAT), "Fish/Textures/Menu/dive_boat_day_hunched"
-    else
-        texture reserve texture id(TEX_DIVER_BOAT), "Fish/Textures/Menu/dive_boat_hunched"
-    endif
 endfunction
 
 
-` put away the line of photos on the boat, and the diver is sat up again. showSurface, in
+` put away the line of photos on the boat. showSurface, in
 ` fish_routines_surface, calls this when the surface goes, and diverSurfaceStep does when the photos
 ` are not wanted. diverSurfaceStep brings them back.
 function diverSurfaceHide()
@@ -1246,10 +1238,6 @@ function diverSurfaceHide()
         hide sprite DIVER_LINE_PAPERS(dvHideI)
         hide sprite DIVER_LINE_FISH(dvHideI)
     next
-    if DIVER_BOAT_SWAPPED
-        DIVER_BOAT_SWAPPED = 0
-        set sprite texture SURFACE_BOAT_SPRITE, TEX_DIVE_BOAT
-    endif
 endfunction
 
 
@@ -1273,19 +1261,13 @@ function diverSurfaceStep(dvBoatX, dvBoatY#)
     dvLineOn = DIVER_SURFACE * OPTION_MENU_PHOTOS
     if DIVER_SCENE then dvLineOn = 1
     if dvLineOn = 0
-        if DIVER_BOAT_SWAPPED
+        if DIVER_SURFACE_READY
             diverSurfaceHide()
         endif
         exitfunction
     endif
     diverSurfaceReady()
     dvSurfNow = game ms()
-
-    ` the diver on the back of the boat is hunched over, looking through the photos
-    if DIVER_BOAT_SWAPPED = 0
-        DIVER_BOAT_SWAPPED = 1
-        set sprite texture SURFACE_BOAT_SPRITE, TEX_DIVER_BOAT
-    endif
 
     ` the line runs along the side of the boat, under the railing, and hangs a little in the middle
     dvLineX0# = dvBoatX + DIVER_LINE_LEFT
@@ -1316,7 +1298,7 @@ function diverSurfaceStep(dvBoatX, dvBoatY#)
         show sprite DIVER_LINE_FISH(dvPaperI)
     next
 
-    ` a heart comes up from the diver every now and then: often during the scene, and once in a while
+    ` a heart comes up from the man on the boat every now and then: often during the scene, and once in a while
     ` after that. not while the camera is going under, because a heart does not go with it.
     dvHeartOk = 1
     if SURFACE_SINK# > 0 then dvHeartOk = 0
@@ -1327,7 +1309,9 @@ function diverSurfaceStep(dvBoatX, dvBoatY#)
         else
             DIVER_HEART_MS = dvSurfNow + 3200 + rnd(3800)
         endif
-        diverMenuHeart(dvBoatX + DIVER_HEART_X + rnd(7) - 3, dvBoatY# + DIVER_HEART_Y)
+        dvManX = BOAT_MAN_X(SURFACE_BOAT_PLACE) - BOAT_ART_W / 2
+        dvManY = BOAT_MAN_Y(SURFACE_BOAT_PLACE) - (BOAT_ART_H / 2 + DIVER_HEART_UP)
+        diverMenuHeart(dvBoatX + dvManX + rnd(7) - 3, dvBoatY# + dvManY)
     endif
 
     if DIVER_SCENE = 0 then exitfunction

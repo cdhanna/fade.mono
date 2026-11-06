@@ -262,9 +262,11 @@ float4 reef(float2 screen, float3 water, float2 where, float scale, float flip, 
 	float toWater = (from.y - water0) / tilt;
 	float out0 = step(gone, toWater);
 
-	// the rock that is just out of the water is wet, and darker, and there is foam around it
-	color *= 1.0 - 0.28 * out0 * step(at.y - water0, 0.10);
-	float foam = out0 * step(at.y - water0, 0.035) * step(0.2, sin(px.x * 0.9 + Time * 1.7));
+	// the rock that is just out of the water is wet, and darker, and there is foam around it. the water laps
+	// up the rock and back, a little at a time, along the reef, and the foam goes with it, broken up.
+	float lap = 0.5 + 0.5 * sin(Time * 2.1 + at.x * 6.0 + at.z * 4.0);
+	color *= 1.0 - 0.28 * out0 * step(at.y - water0, 0.10 + 0.05 * lap);
+	float foam = out0 * step(at.y - water0, 0.02 + 0.06 * lap) * step(0.2 - 0.5 * lap, sin(px.x * 0.9 + at.z * 9.0 + Time * 1.7));
 	color = lerp(color, FoamColor, foam * 0.85);
 
 	// what is under the water is seen through the water: the more water there is in the way, the more
@@ -317,6 +319,37 @@ float4 reef(float2 screen, float3 water, float2 where, float scale, float flip, 
 	return seen;
 }
 
+// THE WASH. the water around a reef is broken up by it: right where it meets the rock there is white water, and
+// rings of it wash out from the reef across the sea, and are gone. this is how much of it there is on this pixel
+// of the open water, from 0 to 1. it is worked out where the line of sight from the pixel meets the water: how far
+// that is from the rock, in the units of the reef.
+//   REEF_WASH_OUT    how far out from the rock the rings go
+//   REEF_WASH_RINGS  how close together they are
+#define REEF_WASH_OUT 0.55
+#define REEF_WASH_RINGS 26.0
+float reefWash(float2 screen, float2 where, float scale, float flip, float seed)
+{
+	float2 px = float2(where.x + (screen.x - where.x) * flip, screen.y);
+	float2 s = float2(px.x - where.x, ((Horizon - Bob) + where.y) - px.y) / scale;
+	float tilt = sin(REEF_PITCH);
+	float level = cos(REEF_PITCH);
+	float3 way = float3(0.0, -tilt, level);
+	float3 from = float3(s.x, s.y * level, s.y * tilt) - way * 4.5;
+	float water0 = reefWater(scale);
+	float3 on = from + way * ((from.y - water0) / tilt);
+	float d = max(reefRock(on, seed), 0.0);
+
+	// the white water at the rock, which laps out and back
+	float lap = 0.5 + 0.5 * sin(Time * 2.1 + on.x * 6.0 + on.z * 4.0);
+	float edge = step(d, 0.02 + 0.05 * lap) * step(0.0 - 0.6 * lap, sin(px.x * 0.8 + on.z * 11.0 + Time * 1.3));
+
+	// and the rings that wash out from it, in flecks, fewer the further out they get
+	float out1 = saturate(1.0 - d / REEF_WASH_OUT);
+	float ring = step(0.72, sin(d * REEF_WASH_RINGS - Time * 2.0));
+	float fleck = step(1.0 - out1 * 0.9, hash(floor(px / float2(2.0, 1.0)) + floor(Time * 6.0) * 3.0));
+	return max(edge * 0.85, ring * fleck * out1 * 0.6);
+}
+
 float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 {
 	// whole pixels, so that everything is as blocky as the rest of the game
@@ -354,7 +387,12 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 	float crest = Swell + sin(px.x * 0.018 + Time * 0.9) * 6.0 + sin(px.x * 0.047 - Time * 1.3) * 2.5;
 	float behind = step(px.y, crest);
 
-	return float4(color, step(0.5, rocks.a) * behind * step(Horizon, px.y) * saturate(Fade));
+	// the open water around the reef has its wash on it, over the sea that SurfaceEffect.fx has drawn
+	float rock = step(0.5, rocks.a);
+	float wash = reefWash(px, Where.xy, Where.z, Where.w, Seed) * (1.0 - rock);
+	color = lerp(color, FoamColor, 1.0 - rock);
+
+	return float4(color, max(rock, wash) * behind * step(Horizon, px.y) * saturate(Fade));
 }
 
 technique SpriteDrawing

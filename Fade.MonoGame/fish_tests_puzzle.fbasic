@@ -83,26 +83,38 @@ test puzzle_she_swims_on_both_sides_of_the_fish from fishBoard
     puzzleSwimOn()
     assert PUZZLE_IN_FRONT = 0, "she starts behind the fish"
 
-    ` nothing changes while she is over the board
-    PUZZLE_SWIM_X# = getCellX(4)
-    PUZZLE_GO_X# = getCellX(4) + 1
+    ` with nothing to say she stays behind, even out past the edge. see HER SMILE in fish_headers_puzzle.
+    PUZZLE_SWIM_X# = 2
+    PUZZLE_GO_X# = -200
     PUZZLE_SWIM_Y# = 100
     PUZZLE_GO_Y# = 100
-    PUZZLE_WANT_FRONT = 1
     runto _loop
     runto _loop
+    assert PUZZLE_IN_FRONT = 0, "she keeps behind the fish while she has nothing to say"
+
+    ` she has something to say over the board, and it is held there, half said. nothing changes while she is there.
+    PUZZLE_SWIM_X# = getCellX(4)
+    PUZZLE_GO_X# = getCellX(4) + 1
+    guideSay(lockey$("angler.remark.g2"))
+    runto _loop
+    PUZZLE_SAY_HOLD = 1
+    PUZZLE_SWIM_X# = getCellX(4)
+    runto _loop
+    runto _loop
+    assert PUZZLE_WANT_FRONT = 1, "she wants to be in front to talk"
     assert PUZZLE_IN_FRONT = 0, "she does not change sides in the middle of the fish"
 
     ` and it does once she is out past the edge
     PUZZLE_SWIM_X# = 2
-    PUZZLE_GO_X# = -200
-    PUZZLE_GO_Y# = 100
-    PUZZLE_WANT_FRONT = 1
     runto _loop
     runto _loop
     assert PUZZLE_IN_FRONT = 1, "she comes around the edge of the board"
 
     ` she keeps going by herself, wherever she gets to
+    PUZZLE_SAY_HOLD = 0
+    anglerSpeakAll()
+    PUZZLE_SAY_COUNT = 0
+    PUZZLE_SAY_OUT = 0
     PUZZLE_SWIM_SPEED# = 100000
     tpWasX = PUZZLE_GO_X#
     tpTick = 0
@@ -417,9 +429,11 @@ test puzzle_the_snow_stops_on_a_lost_board_and_she_says_nothing from fishBoard
     assert PUZZLE_STILL# = 1, "the snow stops"
     runto _loop
     tpClockWas# = SEABED_SNOW_CLOCK#
+    tpDriftWas# = SEABED_DRIFT_CLOCK#
     runto _loop
     runto _loop
     assert SEABED_SNOW_CLOCK# = tpClockWas#, "and it hangs still"
+    assert SEABED_DRIFT_CLOCK# = tpDriftWas#, "and so does the plankton of the night"
     assert PUZZLE_STUCK_SAID = 0, "and she says nothing while there are moves left"
 
     PUZZLE_UNDO_WANT = 1
@@ -433,9 +447,11 @@ test puzzle_the_snow_stops_on_a_lost_board_and_she_says_nothing from fishBoard
     endwhile
     assert PUZZLE_STILL# = 0, "and the snow gets going again"
     tpClockWas# = SEABED_SNOW_CLOCK#
+    tpDriftWas# = SEABED_DRIFT_CLOCK#
     runto _loop
     runto _loop
     assert SEABED_SNOW_CLOCK# > tpClockWas#, "and it moves"
+    assert SEABED_DRIFT_CLOCK# > tpDriftWas#, "and so does the plankton"
     end
 endtest
 
@@ -453,6 +469,66 @@ test puzzle_she_only_speaks_when_the_snow_has_stopped_and_no_move_is_left from f
     runto _loop
     runto _loop
     assert PUZZLE_STUCK_SAID = 1, "and now there is nothing else to do"
+    end
+endtest
+
+
+test puzzle_she_smiles_while_the_cursor_is_on_the_move from fishBoard
+    tpPuzzleUp(0)
+    guideShow()
+    runto _loop
+    runto _loop
+    assert PUZZLE_SMILE_MOVE >= 0, "she knows the move from the start"
+    tpA = PUZZLE_SMILE_MOVE / 10000
+    tpB = PUZZLE_SMILE_MOVE mod 10000
+    if tpB >= PUZZLE_HINT_MOVE_FLAG
+        tpA = tpB - PUZZLE_HINT_MOVE_FLAG
+        tpB = tpA
+    endif
+
+    ` a cell that is neither fish of the move
+    tpOff = 0
+    while tpOff = tpA or tpOff = tpB
+        tpOff = tpOff + 1
+    endwhile
+    SELECTION_POS.x = tpOff mod PUZZLE_SIDE
+    SELECTION_POS.y = tpOff / PUZZLE_SIDE
+    runto _loop
+    runto _loop
+    tpSmile = puzzleSmiling()
+    assert tpSmile = 0, "she does not smile with the cursor somewhere else"
+
+    SELECTION_POS.x = tpA mod PUZZLE_SIDE
+    SELECTION_POS.y = tpA / PUZZLE_SIDE
+    runto _loop
+    runto _loop
+    tpSmile = puzzleSmiling()
+    assert tpSmile = 1, "she smiles with the cursor on the move"
+
+    SELECTION_POS.x = tpOff mod PUZZLE_SIDE
+    SELECTION_POS.y = tpOff / PUZZLE_SIDE
+    runto _loop
+    runto _loop
+    tpSmile = puzzleSmiling()
+    assert tpSmile = 0, "and stops when it moves off"
+
+    PUZZLE_ON = 0
+    tpSmile = puzzleSmiling()
+    assert tpSmile = 0, "and never outside of a puzzle"
+    end
+endtest
+
+
+test puzzle_tunes_are_not_danced_to from fishBoard
+    tpPuzzleUp(0)
+    MENU_MODE = 0
+    startBeatDance(0)
+    assert BEAT_ON = 0, "a puzzle has no multiplier, so it has no dance"
+    PUZZLE_ON = 0
+    startBeatDance(0)
+    tpDance = 0
+    if beatPulseSteps(MELODY_PLAYING) > 0 then tpDance = 1
+    assert BEAT_ON = tpDance, "and a game still dances to a tune that can be"
     end
 endtest
 
@@ -1385,12 +1461,19 @@ test puzzle_lines_fit_the_box from fishBoard
     puzzleSwimOn()
     set text wrap ANGLER_SAY_TEXT_ID, PUZZLE_SAY_WRAP
     tpRoom = 150
-    for tpLang = 0 to 4
+    for tpLang = 0 to 10
         if tpLang = 0 then set language "en"
         if tpLang = 1 then set language "pt-BR"
         if tpLang = 2 then set language "fr"
         if tpLang = 3 then set language "de"
         if tpLang = 4 then set language "pl"
+        if tpLang = 5 then set language "es"
+        if tpLang = 6 then set language "ru"
+        if tpLang = 7 then set language "tr"
+        if tpLang = 8 then set language "ja"
+        if tpLang = 9 then set language "zh-CN"
+        if tpLang = 10 then set language "ko"
+        applyLanguageFont()
         tpTall = tpTallest()
         print "[puzzle fit] language " + str$(tpLang) + " tallest " + str$(tpTall) + " room " + str$(tpRoom) + " board " + str$(TP_TALL_BOARD)
         assert tpTall <= tpRoom, "what she says over a board is not a wall of words"
@@ -1398,16 +1481,27 @@ test puzzle_lines_fit_the_box from fishBoard
         assert TP_TALK_TALL <= 48, "and a talk fits the usual box"
     next
     set language "en"
+    applyLanguageFont()
     end
 endtest
 
 
-test puzzle_runs_out_and_the_player_stays from fishBoard
+test puzzle_at_the_end_she_goes_and_the_game_is_the_usual_one from fishBoard
+    mock get pref(taPrefIndex, taPrefElse)
+    endmock taPrefAt(taPrefIndex)
+    mock set pref(taSetIndex, taSetValue)
+        taPrefSet(taSetIndex, taSetValue)
+    endmock
+    taPrefsClear()
+    set pref PUZZLE_PREF + 2, 1
+    set pref AVA_PREF_OFFER, AVA_OFFER_TAKEN
     tpPuzzleUp(PUZZLE_COUNT - 1)
     guideShow()
-    PUZZLE_STAY_MS = 0
+    puzzleSwimOn()
     PUZZLE_CLEAR_HOLD_MS = 0
     GUIDE_HOLD_MS = 1
+    PUZZLE_GOING_MAX_MS = 1
+    PUZZLE_GOING_HOLD_MS = 600000 `the test does what the title would, below
 
     ` the last board has just been cleared
     tpLast = CELL_COUNT - 1
@@ -1416,22 +1510,41 @@ test puzzle_runs_out_and_the_player_stays from fishBoard
     next
     runto _loop
     assert PUZZLE_CLEARED_MS > 0, "the last board is clear"
+    assert GUIDE_QUEUED >= 4, "and she has all of her goodbye to say"
 
     tpTick = 0
-    tpSawAlone = 0
-    tpSawAsked = 0
-    while PUZZLE_AFTER = 0 and tpTick < 4000
+    tpSawGoing = 0
+    while PUZZLE_GONE_AT_MS = 0 and tpTick < 6000
         runto _loop
         anglerSpeakAll()
-        if PUZZLE_ALONE_MS > 0 then tpSawAlone = 1
-        if PUZZLE_ASKED then tpSawAsked = 1
+        if PUZZLE_GOING then tpSawGoing = 1
         tpTick = tpTick + 1
     endwhile
-    assert tpSawAlone = 1, "first there is nothing left"
-    assert tpSawAsked = 1, "then she asks if the player is still here"
-    assert PUZZLE_AFTER = 1, "and then she makes another one"
+    assert PUZZLE_RAN_OUT = 1, "the boards are done"
+    assert tpSawGoing = 1, "she swims off once it is said"
+    assert PUZZLE_GONE_AT_MS > 0, "and goes"
+    assert ANGLER_LAST$ = loc$("angler.ava.free.f"), "and the last thing she said is that she will see the player around"
+
+    ` and nothing comes back while the water is empty, whatever the player presses
+    PUZZLE_AGAIN = 1
+    PUZZLE_UNDO_WANT = 1
+    runto _loop
+    runto _loop
     tpFish = puzzleFishLeft()
-    assert tpFish > 0, "and it is on the board"
+    assert tpFish = 0, "no board comes in"
+    assert PUZZLE_AGAIN = 0, "and the info key puts nothing back"
+
+    ` the game is the usual one again
+    avaFreed()
+    tpStaying = puzzleStaying()
+    assert tpStaying = 0, "the player is not staying any more"
+    tpGone = puzzleGone()
+    assert tpGone = 0, "and she is not gone: she keeps the shop"
+    tpOffer = avaOfferDue()
+    assert tpOffer = 0, "and a new game asks nothing"
+    tpWarm = avaWarmWanted()
+    assert tpWarm = 0, "and the menu water is not warm"
+    assert get pref(AVA_PREF_FREED, 0) = 1, "and she has something to say the next time she is asked"
     end
 endtest
 
@@ -1487,11 +1600,11 @@ test puzzle_picks_up_where_the_player_got_to from fishBoard
     assert PUZZLE_RAN_OUT = 0, "with boards left"
     PUZZLE_RAN_OUT = 0
     puzzleResume(99, 1)
-    assert PUZZLE_RAN_OUT = 1, "a player who ran out comes back to nothing"
+    assert PUZZLE_RAN_OUT = 1, "a player who ran out comes back to her going"
     PUZZLE_RAN_OUT = 0
     puzzleResume(3, 2)
-    assert PUZZLE_AFTER = 1, "and one who stayed goes on"
-    PUZZLE_AFTER = 0
+    assert PUZZLE_RAN_OUT = 1, "and so does one from the old ending, where they sat together"
+    PUZZLE_RAN_OUT = 0
     puzzleResume(5000, 0)
     assert PUZZLE_NOW = 0, "and a number that makes no sense is the first board"
     end
@@ -2041,19 +2154,23 @@ function tpTallest()
     guideSay(lockey$("angler.puzzle.stuck2"))
     tpHigh = get text size y(ANGLER_SAY_TEXT_ID)
     if tpHigh > tpMost then tpMost = tpHigh
-    guideSay(lockey$("angler.puzzle.another"))
-    tpHigh = get text size y(ANGLER_SAY_TEXT_ID)
-    if tpHigh > tpMost then tpMost = tpHigh
-    for tpAfter = 0 to 2
-        avaAfterLine(tpAfter)
+    ` every line of her goodbye at the end of the boards
+    puzzleCleared(PUZZLE_COUNT - 1)
+    tpQueued = GUIDE_QUEUED - 1
+    for tpQ = 0 to tpQueued
+        set text ANGLER_SAY_TEXT_ID, GUIDE_QUEUE$(tpQ)
         tpHigh = get text size y(ANGLER_SAY_TEXT_ID)
-        if tpHigh > tpMost then tpMost = tpHigh
+        if tpHigh > tpMost
+            tpMost = tpHigh
+            TP_TALL_BOARD = PUZZLE_COUNT
+        endif
     next
+    GUIDE_QUEUED = 0
     set text wrap ANGLER_SAY_TEXT_ID, ANGLER_BOX_W - 20
     TP_TALK_TALL = 0
     for tpTalk = 1 to PUZZLE_TALK_LAST
         for tpPart = 1 to 5
-            puzzleTalkSay(tpTalk, tpPart)
+            puzzleTalkSay(PUZZLE_TALK_PICK(tpTalk), tpPart)
             tpHigh = get text size y(ANGLER_SAY_TEXT_ID)
             if tpHigh > TP_TALK_TALL then TP_TALK_TALL = tpHigh
         next

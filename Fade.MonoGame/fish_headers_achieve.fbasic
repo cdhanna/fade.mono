@@ -1,0 +1,25 @@
+remstart
+    THE ACHIEVEMENTS
+    the achievements of the game, on Steam. they are set up in Steamworks, where each has an API name, like
+    END_REEF, and that name is all that the game knows of it: the titles, the words, the icons, and every
+    language of them, are in Steamworks, and not in the strings of the game. fish_routines_achieve has the rest.
+
+    THE ENDINGS. one for each of the six. END_HOME, END_REEF, END_ANCIENT, END_DIVER, END_NEPTUNE, and END_AVA,
+    which is for getting through the last of her boards, when she is out of ideas.
+    THE CARDS OF THE FAST. CARD_ROTATE and CARD_OATH, when the card is taken. see THE FAST in fish_headers_fast.
+    ALL_QUESTS. every quest has been finished, in one game or another. QUEST_EVER_DONE keeps which have.
+    THE RADIO. one for what every word does, so SING and SONG share one, and so do HELP and INFO. TUNA has
+    none, because it turns debug mode on. FRIEND has its own, when it brings her back after she has gone.
+    THE STATS. two numbers that Steam keeps, and that Steamworks unlocks the achievements of on its own when
+    they get far enough: fish_popped (POP_1K, POP_10K, POP_100K) and games_finished (GAMES_10, GAMES_50,
+    GAMES_100). a game is finished when it gets to the end of a game, whichever way, and not when it is left.
+    the stats only reach Steam when they are stored, which is done at every upgrade screen and the end of a game.
+
+    WHAT DOES NOT COUNT. a demo, a game that has had debug mode on, and a game started with one of the environment
+    variables that are only for working on the game (isDebugEnvSet). the tests have no Steam at all.
+    without Steam every one of the commands does nothing, so none of this needs to check for it.
+remend
+
+global ACHIEVE_ENV_DEBUG = 0 `1 when the game was started with an environment variable that is only for working on it. setup_achieve looks, once.
+global ACHIEVE_POPPED = 0 `fish that have popped since the last were added to fish_popped. handle_combos counts them.
+global dim ACHIEVE_MORSE$(24) `the achievement of every word of the radio, by the number of the word, or "" for none

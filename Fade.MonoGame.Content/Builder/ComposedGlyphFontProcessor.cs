@@ -17,6 +17,13 @@ namespace Fade.MonoGame.Content;
 ///   acute (ć ń ś ź)      é minus e, for small letters; É minus E for capitals (higher up)
 ///   dot above (ż Ż)      i minus ı, moved up for capitals the same way the acute is
 ///   ogonek (ą ę Ą Ę)     the font's spacing ogonek ˛, hung off the bottom right of the letter
+///   breve (ğ Ğ)          the font's spacing breve ˘, placed as the acute is
+///   cedilla (ş Ş)        ç minus c, under the letter where the font puts it under c
+///
+/// A .spritefont with <c>fade:caps</c> in a comment draws its small letters as capitals (the
+/// capital's own glyph, so nothing is scaled), the way an all-caps display font like SuperCorn does:
+/// the fish game's Cyrillic and CJK fonts say so, to look like it. One with <c>fade:turkish</c> draws
+/// small i as İ, since Turkish keeps the dot on its capital (and ı is the one without).
 ///
 /// Every other character is built exactly as MonoGame's FontDescriptionProcessor builds it. A letter
 /// the font has is never redrawn. A letter that needs a piece the font lacks is left out, as before,
@@ -28,6 +35,8 @@ public class ComposedGlyphFontProcessor : FontDescriptionProcessor
     private const char Acute = '́';
     private const char DotAbove = '̇';
     private const char Ogonek = '̨';
+    private const char Breve = '̆';
+    private const char Cedilla = '̧';
 
     // One alpha bitmap of a glyph, placed in line coordinates: x from the pen position, y from the top
     // of the line.
@@ -44,6 +53,25 @@ public class ComposedGlyphFontProcessor : FontDescriptionProcessor
         // a mark we know how to place.
         var fontFile = FindFontFile(input);
         var have = fontFile == null ? null : TrueTypeCmap.Read(fontFile);
+
+        // Small letters drawn as their capitals: left out of the atlas, and pointed at the capital's glyph.
+        var capsOf = new List<(char c, char upper)>();
+        if (Marked(input, "fade:caps"))
+        {
+            foreach (var c in input.Characters.ToList())
+            {
+                var upper = char.ToUpperInvariant(c);
+                if (upper == c || !input.Characters.Contains(upper) || (have != null && !have.Contains(upper))) continue;
+                capsOf.Add((c, upper));
+                input.Characters.Remove(c);
+            }
+        }
+        if (Marked(input, "fade:turkish") && input.Characters.Contains('i') && input.Characters.Contains('İ'))
+        {
+            capsOf.Add(('i', 'İ'));
+            input.Characters.Remove('i');
+        }
+
         var composed = new List<(char c, char baseChar, char mark)>();
         if (have != null)
         {
@@ -51,7 +79,7 @@ public class ComposedGlyphFontProcessor : FontDescriptionProcessor
             {
                 if (have.Contains(c)) continue;
                 var d = c.ToString().Normalize(NormalizationForm.FormD);
-                if (d.Length != 2 || !have.Contains(d[0]) || (d[1] != Acute && d[1] != DotAbove && d[1] != Ogonek)) continue;
+                if (d.Length != 2 || !have.Contains(d[0]) || (d[1] != Acute && d[1] != DotAbove && d[1] != Ogonek && d[1] != Breve && d[1] != Cedilla)) continue;
                 composed.Add((c, d[0], d[1]));
                 input.Characters.Remove(c); // a missing glyph would otherwise come out blank
             }
@@ -65,6 +93,8 @@ public class ComposedGlyphFontProcessor : FontDescriptionProcessor
 
         if (composed.Count > 0)
             Compose(output, composed, have!, context);
+        if (capsOf.Count > 0)
+            AddCaps(output, capsOf, context);
 
         TextureProfile.ForPlatform(context.TargetPlatform).ConvertTexture(context, output.Texture, wantedFormat, true);
         return output;
@@ -107,6 +137,22 @@ public class ComposedGlyphFontProcessor : FontDescriptionProcessor
         // An all-caps font's i has no dot, so the spacing dot ˙ stands in for one.
         var dotSmall = MarkAbove('i', 'ı') ?? (have.Contains('˙') ? Glyph('˙') : null);
         var ogonek = have.Contains('˛') ? Glyph('˛') : null;
+        var breve = have.Contains('˘') ? Glyph('˘') : null;
+
+        // The rows of ç under the bottom of c: the cedilla, where the font hangs it.
+        Ink? cedilla = null;
+        var c0 = Glyph('c');
+        var cc = Glyph('ç');
+        if (c0 != null && cc != null && cc.y + cc.h > c0.y + c0.h)
+        {
+            var top = c0.y + c0.h;
+            cedilla = new Ink { x = cc.x, y = top, w = cc.w, h = cc.y + cc.h - top };
+            cedilla.a = new byte[cedilla.w * cedilla.h];
+            for (var py = 0; py < cedilla.h; py++)
+                for (var px = 0; px < cedilla.w; px++)
+                    cedilla.a[py * cedilla.w + px] = cc.At(cc.x + px, top + py);
+            cedilla = Trim(cedilla);
+        }
 
         var made = new List<(char c, Ink ink, int baseIndex)>();
         foreach (var (c, baseChar, markChar) in composed)
@@ -121,11 +167,14 @@ public class ComposedGlyphFontProcessor : FontDescriptionProcessor
                 Acute => capital ? acuteCap : acuteSmall,
                 DotAbove => dotSmall,
                 Ogonek => ogonek,
+                Breve => breve,
+                Cedilla => cedilla,
                 _ => null,
             };
             if (mark == null)
             {
-                context.Logger.LogWarning(null, null, "no way to draw '{0}': the font has no {1} to borrow", c, markChar == Ogonek ? "ogonek (˛)" : markChar == DotAbove ? "dot (i and ı, or ˙)" : "acute (é and É)");
+                context.Logger.LogWarning(null, null, "no way to draw '{0}': the font has no {1} to borrow", c,
+                    markChar switch { Ogonek => "ogonek (˛)", DotAbove => "dot (i and ı, or ˙)", Breve => "breve (˘)", Cedilla => "cedilla (ç and c)", _ => "acute (é and É)" });
                 continue;
             }
 
@@ -134,6 +183,12 @@ public class ComposedGlyphFontProcessor : FontDescriptionProcessor
             {
                 // Hung off the bottom of the letter, flush with its right side, overlapping by a pixel.
                 placed = Shift(mark, baseInk.x + baseInk.w - mark.w - mark.x, baseInk.y + baseInk.h - 1 - mark.y);
+            }
+            else if (markChar == Cedilla)
+            {
+                // Centered under the letter, as far below its bottom as it is below c's.
+                var drop = mark.y - (c0!.y + c0.h);
+                placed = Shift(mark, baseInk.x + (baseInk.w - mark.w) / 2 - mark.x, baseInk.y + baseInk.h + drop - mark.y);
             }
             else
             {
@@ -200,6 +255,37 @@ public class ComposedGlyphFontProcessor : FontDescriptionProcessor
         font.Texture.Faces[0].Clear();
         font.Texture.Faces[0].Add(bigger);
         context.Logger.LogMessage("Drew {0} letter(s) the font does not have: {1}", made.Count, new string(made.Select(m => m.c).ToArray()));
+    }
+
+    // Each small letter takes its capital's glyph: the same place in the atlas, the same metrics.
+    private static void AddCaps(SpriteFontContent font, List<(char c, char upper)> capsOf, ContentProcessorContext context)
+    {
+        var map = font.CharacterMap;
+        var added = 0;
+        foreach (var (c, upper) in capsOf)
+        {
+            var u = map.IndexOf(upper);
+            if (u < 0 || map.Contains(c)) continue;
+            // the capital's glyph is read before anything is inserted ahead of it
+            var glyph = font.Glyphs[u];
+            var crop = font.Cropping[u];
+            var kern = font.Kerning[u];
+            var at = 0;
+            while (at < map.Count && map[at] < c) at++;
+            map.Insert(at, c);
+            font.Glyphs.Insert(at, glyph);
+            font.Cropping.Insert(at, crop);
+            font.Kerning.Insert(at, kern);
+            added++;
+        }
+        context.Logger.LogMessage("Drew {0} small letter(s) as capitals", added);
+    }
+
+    // A word in the .spritefont's comments that asks for one of the above.
+    private static bool Marked(FontDescription input, string mark)
+    {
+        var source = input.Identity?.SourceFilename;
+        return source != null && File.Exists(source) && File.ReadAllText(source).Contains(mark);
     }
 
     private static Ink Shift(Ink ink, int dx, int dy) => new() { x = ink.x + dx, y = ink.y + dy, w = ink.w, h = ink.h, a = ink.a };

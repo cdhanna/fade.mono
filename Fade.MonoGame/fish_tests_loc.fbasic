@@ -103,3 +103,25 @@ test loc_pseudo_language from fishBoard
     assert loc$("t.hint") = "[Höld {swap} tö swáp~~~~~~~]", "accented, longer, icons kept"
     end
 endtest
+
+
+` THE FONTS OF THE LANGUAGES. see applyLanguageFont in fish_routines_menu and Tools/make-fonts.py.
+
+` chinese has no spaces, so a wrapped line breaks between its characters
+test loc_chinese_wraps_between_characters from fishBoard
+    set language "zh-CN"
+    applyLanguageFont()
+    tZhT = 0
+    reserve text id(tZhT)
+    text tZhT, 10, 10, SCORE_FONT, "水母一次消除所有翻肚的鱼和鱼骨得分两倍"
+    tZhOneLine# = get text size y(tZhT)
+    set text wrap tZhT, get text size x(tZhT) / 3
+    tZhLines = 0
+    if get text size y(tZhT) > tZhOneLine# * 2.5
+        tZhLines = 1
+    endif
+    assert tZhLines = 1, "a third as wide makes three lines or more"
+    set language "en"
+    applyLanguageFont()
+    end
+endtest

@@ -55,6 +55,10 @@ float2 Cells;    // how many columns and rows the board has
 // to the other, and a lot less toward where it was. these are the same numbers that SpecksEffect.fx gets.
 float4 Glow;
 float2 GlowPower; // x is how strong it is, from 0 to 1, or more with the "listen" card, and y is how far from it the coral lights up, in pixels
+// how far the rock is bent away from the cells of the board, in cells. the game never sets it, so it is 0 there,
+// and the rock sits on its cells. the art for the Steam page sets it, so a reef along the bottom of the
+// picture looks less like it was laid on a grid. see capDraftReef in fish_tests_capsule.
+float Warp;
 
 // how much the coral lights up, from 0 (not at all) to 1, and the light that it takes on
 #define CORAL_GLOW 0.6
@@ -475,6 +479,12 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 {
 	// whole pixels, so that everything is as blocky as the rest of the game
 	float2 px = floor(uv * Size);
+
+	// bent by Warp: two slow waves, a few cells long, that cross each other, push every pixel around, and
+	// the rock and its shade are worked out from where it was pushed to. it is cheap, because the effect has
+	// no room left for more.
+	float2 cellsAt = px / max(Board.z, 1.0);
+	px = floor(px + sin(cellsAt.yx * float2(1.7, 2.3) + cellsAt * float2(0.9, -0.6)) * Warp * Board.z);
 
 	// where this pixel is on the board, in cells, and which cell that is
 	float2 spot = (px + 0.5 - Board.xy) / max(Board.z, 1.0);

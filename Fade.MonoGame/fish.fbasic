@@ -91,6 +91,7 @@ load strings "Fish/Lang"
 OPTION_LANGUAGE = get pref(PREF_LANGUAGE, 0)
 applyLanguage()
 
+gosub setup_steam_demo `the free demo on Steam, before anything asks whether this is it. see THE STEAM DEMO in fish_headers_steamdemo.
 gosub setup_abilities
 gosub load_textures
 gosub load_custom_art
@@ -127,6 +128,7 @@ gosub setup_zaps
 gosub setup_tuna
 gosub setup_morse
 gosub setup_cameo `the words that these swim through for are set in setup_morse
+gosub setup_achieve `the achievements on Steam, which know the words of the radio. see fish_headers_achieve.
 gosub setup_beat `these use the bubble effect too
 gosub setup_angler `on top of the dark of info mode, and after the hints that it puts its lights in
 gosub setup_guide `the angler, as the guide of the first dive. see fish_headers_guide.
@@ -259,11 +261,23 @@ do
                 gosub menu_resume_game
             endif
 
+            ` she went at the end of the boards, and the game is the usual one again. see THE END OF THE BOARDS in
+            ` fish_headers_puzzle.
+            if AVA_TO_TITLE
+                AVA_TO_TITLE = 0
+                tunaHide()
+                gosub menu_open_pause
+                gosub menu_quit_to_title
+            endif
+
             ` when the last round has been won, the game is over
             ` the hidden game has two endings of its own, and each of them ends the game. see THE TWO ENDINGS in fish_headers.
             gosub handle_coral_ending
 
             gosub handle_game_end
+
+            ` and when the last round of the Steam demo has been won, the demo is over. see THE STEAM DEMO in fish_headers_steamdemo.
+            gosub handle_steam_demo_over
             perf lap 4
 
         endif

@@ -26,6 +26,7 @@ public class Program
 #pragma warning restore CS1998
     {
         SetVersionForGame();
+        SetDemoForGame();
 
 #if FADE_CONTENT_HOTRELOAD
         // Debug desktop: compile the .fbasic from source at runtime and watch it, so the
@@ -227,6 +228,19 @@ public class Program
         var version = "local";
         if (commit.Length > 0) version = commit.Length > 8 ? commit.Substring(commit.Length - 8) : commit;
         Environment.SetEnvironmentVariable("FISH_VERSION", version);
+    }
+
+    // A build made with -p:FishSteamDemo=true (Fade.MonoGame.csproj) is the free demo on Steam, and
+    // the game reads FISH_STEAM_DEMO to know it. See THE STEAM DEMO in fish_headers_steamdemo.fbasic.
+    // A Debug run can set the variable by hand instead.
+    static void SetDemoForGame()
+    {
+        foreach (var attribute in System.Reflection.CustomAttributeExtensions
+                     .GetCustomAttributes<System.Reflection.AssemblyMetadataAttribute>(typeof(Program).Assembly))
+        {
+            if (attribute.Key == "SteamDemo" && attribute.Value == "1")
+                Environment.SetEnvironmentVariable("FISH_STEAM_DEMO", "1");
+        }
     }
 
     // Steam, with the two things that the build decided for the leaderboards. Both are baked

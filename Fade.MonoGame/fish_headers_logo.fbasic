@@ -1,0 +1,123 @@
+remstart
+    THE LOGO. the name of the game, dressed up, in place of the plain title of the main menu: two "Fish" over
+    a big "Pop", jumbled, the first a little up and leaning back, the second a little down and leaning forward.
+    each word is built up out of copies of itself: a deep edge going down and to the right, a dark outline all
+    around, a pale rim up and to the left, and the face over all of it. "Pop" has a splash behind it, puffs of
+    the smokes of a pop. the Steam art was drawn first, with the same look (capDraftWord, in fish_tests_capsule).
+
+    THE WAY IT COMES IN. when the game starts, the camera comes down from the stars with the menu hidden. then
+    the words come up out of the sea one at a time, "Fish", "Fish", and then "Pop", bigger than it is, springing
+    back to its size in its splash, each with spray thrown up off the water, rings going out across it, and a
+    splash. only then does the menu fade in under it, rising a little as it comes (menu_run_splash does this).
+    after that it bobs, the way the plain title did. the last shot of the trailer plays it the same way, on the
+    sea with the menu hidden (trailer_finale, in fish_tests_trailer). LOGO_FROM_WATER = 0 has the words drop in
+    from over their places instead, with no splash: nothing uses that now.
+
+    WHERE IT IS. it is drawn to the menu's render target, so the camera that slides the menu up as the game goes
+    under takes it along, and it fades with the rest of the menu (MENU_CHROME_ALPHA#). it is only there when the
+    page of the menu would have said "Fish Fish Pop": the title of every other page is the plain title, as it was.
+remend
+
+global LOGO_READY = 0 `1 once setup_logo has made it. the menu draws frames before that.
+global LOGO_ON = 0 `1 while the page of the menu wants the logo in place of its title
+global LOGO_CHROME = 1 `0 while the menu's title and panel are hidden, which hides the logo too
+global LOGO_SHOWING = 0 `1 while its texts are shown, so that they are only hidden and shown when that changes
+global LOGO_TRAILER = 0 `1 when a trailer shot plays it with logoAt, so that logoFrame leaves it alone
+global LOGO_START_MS = 0 `when it started to come in, and 0 before it has
+global LOGO_FRAME_MS = -1 `the frame it was last drawn on, so that it is only moved on once a frame
+global LOGO_INTRO = 0 `1 while it comes in at the start of the game, before the menu is there. it shows then anyway.
+global LOGO_FROM_WATER = 1 `1 when the words come up out of the sea, and 0 when they drop in
+global LOGO_MENU_WAIT_MS = 650 `how long after "Pop" the menu waits before it fades in
+global LOGO_MENU_FADE_MS = 500 `and how long it takes to
+global LOGO_MENU_RISE_PX = 10 `and how far it rises as it does
+global LOGO_MENU_RISE# = 0 `how far under its place the menu is right now, in whole pixels. frame_surface moves the menu's camera by it, and the sea back.
+
+` where it is: the middle of it, how big (1 is a "Pop" 104 pixels tall), and how much it leans
+global LOGO_X# = 285
+global LOGO_Y# = 68
+global LOGO_SCALE# = .6
+global LOGO_ANGLE# = -.05
+global LOGO_TARGET = 0 `the render target that it is drawn to
+
+` every text of the logo: which word it is part of, where it sits from the middle of that word before it is
+` scaled, and how big it is before it is scaled
+global LOGO_TXT_N = 0
+global dim LOGO_TXT(96)
+global dim LOGO_TXT_W(96)
+global dim LOGO_TXT_DX#(96)
+global dim LOGO_TXT_DY#(96)
+global dim LOGO_TXT_SZ#(96)
+global LOGO_W_N = 0
+global dim LOGO_W_X#(3) `the middle of each word, before it is scaled, from the middle of the logo
+global dim LOGO_W_Y#(3)
+global dim LOGO_W_ANGLE#(3)
+global dim LOGO_SHIFT#(3) `how far each word is pushed down the screen past the others, for a parallax. 0 on the menu.
+global LOGO_AT_X# = 0 `where logoWordAt says the middle of a word is
+global LOGO_AT_Y# = 0
+
+` THE SPLASH behind "Pop"
+global LOGO_PUFF_N = 10
+global dim LOGO_PUFF(10)
+global dim LOGO_PUFF_X#(10) `where it goes out to, from the middle of "Pop", before it is scaled
+global dim LOGO_PUFF_Y#(10)
+global dim LOGO_PUFF_S#(10)
+global dim LOGO_PUFF_TEX(10)
+global dim LOGO_PUFF_F0(10)
+global dim LOGO_PUFF_FN(10)
+global dim LOGO_PUFF_LATE#(10) `how far into the splash it waits before it starts, from 0 to 1
+global dim LOGO_PUFF_R(10) `its blue
+global dim LOGO_PUFF_G(10)
+global dim LOGO_PUFF_B(10)
+
+` THE WAY IT COMES IN, in milliseconds from its start
+global LOGO_FISH_A_MS = 0
+global LOGO_FISH_B_MS = 330
+global LOGO_POP_MS = 660
+global LOGO_SPLASH_MS = 1300 `how long the splash takes to play through
+global LOGO_PLAYED = 0 `how far its sounds have got: 1, 2 and 3 once each word has made its sound
+
+global LOGO_SFX_FISH_A = 0
+global LOGO_SFX_FISH_B = 0
+global LOGO_SFX_SPLASH = 0
+global LOGO_SFX_POP = 0
+global LOGO_SFX_BOOM = 0
+global LOGO_SFX_SPLASH_A = 0 `a small splash for each "Fish", as it comes out of the water
+global LOGO_SFX_SPLASH_B = 0
+
+` THE WATER. the spray that each word throws up as it comes out of the sea, and the rings that go out across the
+` water from it and from every drop that falls back in. see SurfaceRingEffect.fx for the rings.
+global LOGO_RING_FX = 0
+global LOGO_RING_N = 16
+global dim LOGO_RING(16)
+global dim LOGO_RING_AGE(16) `frames since it started, less than 0 while it waits
+global dim LOGO_RING_LIFE(16)
+global dim LOGO_RING_X#(16)
+global dim LOGO_RING_Y#(16)
+global dim LOGO_RING_R#(16) `how wide it gets, in pixels
+global dim LOGO_RING_A(16)
+global LOGO_RING_NEXT = 0
+global LOGO_DROP_N = 96
+global dim LOGO_DROP(96)
+global dim LOGO_DROP_ON(96)
+global dim LOGO_DROP_X#(96)
+global dim LOGO_DROP_Y#(96)
+global dim LOGO_DROP_VX#(96)
+global dim LOGO_DROP_VY#(96)
+global dim LOGO_DROP_LAND#(96) `the line of the water that it falls back into
+global LOGO_DROP_NEXT = 0
+` and the sea itself is thrown about where each word broke it: its ripples go out in rings, and the water is white
+` there for a moment. the surface's effect draws that (THE SPLASH, in SurfaceEffect.fx), from these, one for each word.
+global dim LOGO_BREAK_X#(3) `where it broke the water
+global dim LOGO_BREAK_MS(3) `when, and 0 for never
+global dim LOGO_BREAK_HARD#(3) `how hard, from 0 to 1
+global dim LOGO_BREAK_Y#(3) `the line of the water there, down the screen
+` how far under the horizon each word breaks the water, in pixels: well in front of it, where the rings and the
+` spray are bigger (see logoNear), and the words fly up from there to their places. the trailer has its own.
+global dim LOGO_WATER_DY#(3)
+global LOGO_MENU_WATER_A# = 30 `the menu's: under the first "Fish", the second, and "Pop"
+global LOGO_MENU_WATER_B# = 38
+global LOGO_MENU_WATER_POP# = 76
+global LOGO_BREAK_NEXT = 0
+global LOGO_GRAVITY# = .12 `pixels per frame, per frame
+global LOGO_RING_SEEN_Y# = 0 `where logoRingOnWater says a ring is seen, and how tall
+global LOGO_RING_SEEN_H# = 0

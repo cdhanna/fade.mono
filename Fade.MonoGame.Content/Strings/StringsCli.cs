@@ -84,6 +84,9 @@ public static class StringsCli
             using var doc = JsonDocument.Parse(File.ReadAllText(config));
             if (doc.RootElement.TryGetProperty("languages", out var langs) && langs.ValueKind == JsonValueKind.Array)
                 options.shippedLanguages = langs.EnumerateArray().Select(l => l.GetString() ?? "").Where(l => l.Length > 0).ToList();
+            if (doc.RootElement.TryGetProperty("fonts", out var families) && families.ValueKind == JsonValueKind.Object)
+                foreach (var f in families.EnumerateObject())
+                    options.fontFamilies[f.Name] = f.Value.GetString() ?? "";
         }
 
         if (fontsDir != null && Directory.Exists(fontsDir))

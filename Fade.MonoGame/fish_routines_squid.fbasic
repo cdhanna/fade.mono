@@ -2041,10 +2041,10 @@ endfunction
 
 
 ` WHERE A HINT IS, on the screen: its top left light, which drifts up with the plankton. SeabedEffect.fx
-` moves the plankton up by the time, and sways each row of it a little from side to side, which this
+` moves the plankton up by SEABED_DRIFT_CLOCK#, and sways each row of it a little from side to side, which this
 ` leaves out. the answer is in STAR_AT_X and STAR_AT_Y.
 function starSnowAt(atS)
-    atRise# = (game ms() * .001) * STAR_SNOW_RISE#
+    atRise# = SEABED_DRIFT_CLOCK# * STAR_SNOW_RISE#
     STAR_AT_X = STAR_SNOW_CX(atS) * STAR_SNOW_GRAIN
     STAR_AT_Y = STAR_SNOW_CY(atS) * STAR_SNOW_GRAIN - atRise#
 endfunction
@@ -2325,7 +2325,7 @@ function starSnowPut(putI, putAnywhere)
     putPitch = STAR_SNOW_PITCH
     putWide# = ((STAR_SHAPE_WIDE(putShape) - 1) * putPitch + 1) * STAR_SNOW_GRAIN
     putTall# = ((STAR_SHAPE_TALL(putShape) - 1) * putPitch + 1) * STAR_SNOW_GRAIN
-    putRise# = (game ms() * .001) * STAR_SNOW_RISE#
+    putRise# = SEABED_DRIFT_CLOCK# * STAR_SNOW_RISE#
     starSnowBand(STAR_SNOW_SIDE(putI))
 
     ` the plankton sways from side to side, so it keeps that far in from the sides of the water
@@ -2394,8 +2394,8 @@ function starSnowParams()
             next
         endif
     next
-    paramTime# = game ms() * .001
-    set effect param float HINT_FX_ID, "Time", paramTime#
+    ` its time is only what the plankton moves by, so it hangs still with it. see SEABED_DRIFT_CLOCK#.
+    set effect param float HINT_FX_ID, "Time", SEABED_DRIFT_CLOCK#
     set effect param float2 HINT_FX_ID, "Size", WORLD_WIDTH, WORLD_HEIGHT
     set effect param float4 HINT_FX_ID, "HintAt0", STAR_SNOW_CX(0), STAR_SNOW_CY(0), STAR_SNOW_WIDE(0), STAR_SNOW_TALL(0)
     set effect param float4 HINT_FX_ID, "HintAt1", STAR_SNOW_CX(1), STAR_SNOW_CY(1), STAR_SNOW_WIDE(1), STAR_SNOW_TALL(1)

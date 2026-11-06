@@ -346,6 +346,11 @@ public static class RichTextSystem
                     // typo shows up on screen instead of vanishing.
                 }
 
+                // Chinese and Japanese put no spaces between words, so every character of theirs is
+                // a word of its own as far as wrapping goes.
+                if (_word.Length > 0 && CanBreakBetween(_word[_word.Length - 1], c))
+                    PlaceWord();
+
                 _word.Append(c);
             }
 
@@ -427,6 +432,21 @@ public static class RichTextSystem
             if (includeWord) _scratch.Append(_word);
             return MeasureWidth(_scratch);
         }
+
+        // Kana, the CJK ideographs and their punctuation. Not Hangul: Korean puts spaces between words.
+        private static bool IsCjk(char c) =>
+            (c >= '　' && c <= 'ヿ') || (c >= '㐀' && c <= '䶿') || (c >= '一' && c <= '鿿')
+            || (c >= '豈' && c <= '﫿') || (c >= '＀' && c <= '￯');
+
+        // What may not start a line (closing marks, small kana, the long vowel), and what may not end one
+        // (opening marks): the usual line breaking rules of Japanese and Chinese.
+        private const string NoLineStart = "、。，．・：；？！ー」』）】〕〉》｝〗〙〟’”ゝゞヽヾぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ…‥!?,.:;)]}%";
+        private const string NoLineEnd = "「『（【〔〈《｛〖〘〝‘“([{";
+
+        // A number stays with the counter after it (3手, 5步).
+        private static bool CanBreakBetween(char before, char after) =>
+            (IsCjk(before) || (IsCjk(after) && !char.IsLetterOrDigit(before)))
+            && NoLineStart.IndexOf(after) < 0 && NoLineEnd.IndexOf(before) < 0;
 
         private bool ShouldWrap(float right)
         {

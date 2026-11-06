@@ -103,6 +103,8 @@ remstart
     bottom of the game is three texts side by side: one for moving, one for swapping, and one for
     info mode. each one gives a little shake when the player does the thing that it is about, and
     the other two stay still. frame_hints lays them out and shakes them, and update_frame comes to it.
+    a puzzle has a fourth on the end, for undo: info mode is start over there, and each one shakes
+    on its own key.
 
     every other screen writes its own hints on the one text that was always there, INFO_HINT_TEXT_ID.
     so the three are only shown while the game is what is being played. the screens say so with
@@ -157,8 +159,9 @@ setup_intro:
     TUTORIAL_KINDS(6) = TEX_BASS `the seahorse. see fish_routines_customart.
     TUTORIAL_KINDS(7) = TEX_WORM `the starfish
 
-    ` the three key hints of the game. they look the same as the text that the other screens write theirs on.
-    for hintI = 0 to 2
+    ` the three key hints of the game, and the undo of a puzzle. they look the same as the text that the
+    ` other screens write theirs on.
+    for hintI = 0 to 3
         reserve text id(HINT_PART_TEXTS(hintI))
         text HINT_PART_TEXTS(hintI), 0, WORLD_HEIGHT - 2, SCORE_FONT, " "
         order text HINT_PART_TEXTS(hintI), ORDER_HUD_TEXT
@@ -175,6 +178,8 @@ setup_intro:
     set text loc HINT_PART_TEXTS(0), "intro.hint.move"
     set text loc HINT_PART_TEXTS(1), "intro.hint.swap"
     set text loc HINT_PART_TEXTS(2), "intro.hint.info"
+    set text loc HINT_PART_TEXTS(3), "angler.puzzle.hint.undo"
+    HINT_PART_ALPHA#(3) = 0
 
     ` the jumps of the pictures of keys in the words of the tutorial. see ICON_PUNCH_TWEENS in fish_headers.
     ` the ids are the ones that frame_input_icons gives them, whatever is being played with.
@@ -570,7 +575,9 @@ tutorial_visit:
         guideSay(lockey$("intro.ang.reset"))
     endif
     if tvWhich = 4
-        anglerSay(loc$("intro.ang.rounds2", "rounds", GAME_ROUND_CAP))
+        ` as many as there are, or as the Steam demo has. see THE STEAM DEMO in fish_headers_steamdemo.
+        tvRounds = steamDemoRoundsLeft(GAME_ROUND_CAP)
+        anglerSay(loc$("intro.ang.rounds2", "rounds", tvRounds))
     endif
 
     tvReady = 0
@@ -936,6 +943,9 @@ frame_hints:
     if new action down(ACT_INFO)
         create basic tween HINT_SHAKE_TWEENS(2), 1, 0, HINT_SHAKE_MS, 0
     endif
+    if PUZZLE_ON
+        if new action down(ACT_ABILITY(0)) then create basic tween HINT_SHAKE_TWEENS(3), 1, 0, HINT_SHAKE_MS, 0
+    endif
 
     ` the pictures of keys in the words of the tutorial jump when their key is pressed, the swap
     ` button on its own, and the direction whether or not the swap button is held
@@ -962,6 +972,13 @@ frame_hints:
     hintWidth1# = get text size x(HINT_PART_TEXTS(1))
     hintWidth2# = get text size x(HINT_PART_TEXTS(2))
     hintRow# = hintWidth0# + hintWidth1# + hintWidth2# + HINT_PART_GAP * 2
+
+    ` the undo of a puzzle is in the row while it is there at all, so the row does not jump as it fades
+    hintWidth3# = 0
+    if HINT_PART_ALPHA#(3) > 0
+        hintWidth3# = get text size x(HINT_PART_TEXTS(3))
+        hintRow# = hintRow# + hintWidth3# + HINT_PART_GAP
+    endif
     hintHalf# = hintRow# / 2
     hintX# = WORLD_WIDTH / 2 - hintHalf#
 
@@ -987,6 +1004,8 @@ frame_hints:
 
     ` a - b + c comes out as a - (b + c), so the subtraction goes last
     set text position HINT_PART_TEXTS(2), hintX# + hintWave# * tweenVal(HINT_SHAKE_TWEENS(2)), WORLD_HEIGHT + hintKeyBob - 2
+    hintX# = hintX# + hintWidth2# + HINT_PART_GAP
+    set text position HINT_PART_TEXTS(3), hintX# + hintWave# * tweenVal(HINT_SHAKE_TWEENS(3)), WORLD_HEIGHT - 2
 
     ` in the very first game, info mode opened by itself, and the only hint is the one to close it.
     ` if it has been left open for a while, that hint bobs the same way, to ask for the key.
@@ -1042,7 +1061,7 @@ endfunction
 ` the three key hints of the game are only there while the hints are showing, and the game is what
 ` they are for. this only decides where each one is headed. stepHintFade() takes it there.
 function applyHints()
-    for hintI = 0 to 2
+    for hintI = 0 to 3
         show text HINT_PART_TEXTS(hintI) `one that has faded all the way out is hidden again by stepHintFade()
     next
 endfunction
@@ -1067,6 +1086,11 @@ function hintPartWant(part)
     if HINT_NO_INFO
         if part = 2 then want = 0
     endif
+
+    ` the undo is only a key in a puzzle
+    if part = 3
+        if PUZZLE_ON = 0 then want = 0
+    endif
 endfunction want
 
 
@@ -1085,7 +1109,7 @@ function stepHintFade()
 
     fadeStep# = (fadeElapsed# * 255) / HINT_FADE_MS#
 
-    for hintI = 0 to 2
+    for hintI = 0 to 3
         want# = hintPartWant(hintI)
         alpha# = HINT_PART_ALPHA#(hintI)
         if alpha# < want#

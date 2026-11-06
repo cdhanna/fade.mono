@@ -310,7 +310,7 @@ setup_ability_selection:
     reserve tween id(ABILITY_SELECT_LABEL_FADE_TWEEN_ID)
 
     text loc ABILITY_SELECT_LABEL_TEXT_ID, WORLD_WIDTH / 2, 64, SCORE_FONT, "ability.title.select"
-    size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
+    sizeShopTitle(ABILITY_SELECT_LABEL_TEXT_ID)
     enable text drop shadow ABILITY_SELECT_LABEL_TEXT_ID, 2, -2, rgb(64, 128, 255)
     set text alpha ABILITY_SELECT_LABEL_TEXT_ID, 0
     order text ABILITY_SELECT_LABEL_TEXT_ID, ORDER_ABILITY_TEXT
@@ -694,7 +694,7 @@ handle_ability_instant_effect:
         endcase
         case ABILITY_INDEX_ANGLER
             ` it comes once the upgrade screen is out of the way. see handle_angler, in fish_routines_angler.
-            ANGLER_PENDING = 1
+            anglerCardTaken()
         endcase
     endselect
 return
@@ -734,7 +734,14 @@ bind_ability_choices:
         cardTakesLeft = CARDS(a.abilityIndex).maxUses - CARDS(a.abilityIndex).uses
         cardHasPips = 0
         if CARDS(a.abilityIndex).maxUses > 0 then cardHasPips = 1
-        fitCardDesc(a.descTextId, CARDS(a.abilityIndex).desc$, cardHasPips)
+        cardDesc$ = CARDS(a.abilityIndex).desc$
+        ` the card is still dealt once Ava has gone, so that the seed deals the same, and it says that it does nothing.
+        ` see SHE HAS GONE in fish_headers_ava.
+        if a.abilityIndex = ABILITY_INDEX_ANGLER
+            cardGone = puzzleGone()
+            if cardGone then cardDesc$ = loc$("ability.angler.gone")
+        endif
+        fitCardDesc(a.descTextId, cardDesc$, cardHasPips)
         layCardPips(i, 0, CARDS(a.abilityIndex).maxUses, cardTakesLeft, CARD_HEIGHT - 8, CARD_PIP_LIT, CARD_PIP_DIM)
         set transform position a.transformId, startX + i * (CARD_WIDTH + cardPadding), CARD_TOP
 
@@ -782,6 +789,8 @@ bind_ability_choices:
     if fastBookOn()
         set text UPGRADE_REROLL_TEXT_ID, loc$("ability.reroll.book")
     endif
+    ` sized again for its new words, which in some languages are long. see fish_routines_upgrade.
+    size text max UPGRADE_REROLL_TEXT_ID, 160, 20
 return
 
 
@@ -841,6 +850,9 @@ handle_ability_selection:
     STEAM_TIMELINE_MODE = 2
     set steam timeline mode 2
 
+    ` and what the round has added to the stats goes to Steam. see THE STATS in fish_headers_achieve.
+    achieveStore()
+
 
     remstart
         need to do several animations
@@ -859,7 +871,7 @@ handle_ability_selection:
 
     ` the screen where a move gets put in a slot changes the title
     set text loc ABILITY_SELECT_LABEL_TEXT_ID, "ability.title.select"
-    size text x ABILITY_SELECT_LABEL_TEXT_ID, 400
+    sizeShopTitle(ABILITY_SELECT_LABEL_TEXT_ID)
 
     ` set the ability choices. there is one more of them with the "deep pockets" card. choiceCount is
     ` the number of the last one, counting from 0. see DEEP POCKETS in fish_headers.

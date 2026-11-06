@@ -204,6 +204,7 @@ return
 finale_goodbye:
     ` the codec has an entry for this ending from now on. see CODEC_ENTRY_GOODBYE in fish_headers.
     codecSeeCard(CODEC_ENTRY_GOODBYE)
+    achieveUnlock("END_HOME")
 
     set text loc CORAL_END_TEXT_ID, "coral.end.goodbye"
     color text CORAL_END_TEXT_ID, rgb(200, 228, 255)
@@ -2695,6 +2696,20 @@ endfunction
 ` an ending has been reached. the main menu is different from now on, and the codec has the ending in it.
 ` see THE MAIN MENU REMEMBERS in fish_headers, and CODEC_ENTRY_REEF.
 function coralEndingRemember(ending)
+    ` and Steam has an achievement for each. see THE ACHIEVEMENTS in fish_headers_achieve.
+    if ending = CORAL_ENDING_REEF
+        achieveUnlock("END_REEF")
+    endif
+    if ending = CORAL_ENDING_ANCIENT
+        achieveUnlock("END_ANCIENT")
+    endif
+    if ending = CORAL_ENDING_DIVER
+        achieveUnlock("END_DIVER")
+    endif
+    if ending = CORAL_ENDING_NEPTUNE
+        achieveUnlock("END_NEPTUNE")
+    endif
+
     ` the ending of the diver has its own. see THE ENDING in fish_headers_diver.
     if ending = CORAL_ENDING_DIVER
         diverEndingRemember()

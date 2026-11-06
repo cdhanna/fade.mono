@@ -356,8 +356,18 @@ public class TextureSystem
         var fadeFont = SpriteFont.FromXnaFont(xnaFont);
         
         GetSpriteFontIndex(fontId, out var index, out var runtimeFont);
+        var replaced = runtimeFont.font != null;
         runtimeFont.font = fadeFont;
         fonts[index] = runtimeFont;
+
+        // A font loaded over another (a language that needs other letters) measures differently, so the
+        // texts in it that were sized (`size text...`) are sized again, as they are when their string changes.
+        if (replaced)
+        {
+            for (var i = 0; i < TextSystem.textSpriteCount; i++)
+                if (TextSystem.textSprites[i].sprite.imageId == fontId)
+                    TextSizing.Apply(i);
+        }
     }
     
     

@@ -71,10 +71,14 @@ $beforeSteam = $env:FISH_TRAILER_STEAM_ICON
 $env:FISH_TRAILER_STEAM_ICON = if (Test-Path (Join-Path $project 'Assets\Fish\Textures\Logos\steam.png')) { '1' } else { '0' }
 Push-Location (Split-Path $Exe)
 try {
+    # the game writes warnings (strings, content) to stderr; when the output is redirected, Windows
+    # PowerShell makes each one a stopping error under 'Stop', so the run is judged by its exit code alone
+    $ErrorActionPreference = 'Continue'
     & $Exe @filters
     $code = $LASTEXITCODE
 }
 finally {
+    $ErrorActionPreference = 'Stop'
     Pop-Location
     $env:FISH_TRAILER = $before
     $env:FISH_TRAILER_OUT = $beforeOut

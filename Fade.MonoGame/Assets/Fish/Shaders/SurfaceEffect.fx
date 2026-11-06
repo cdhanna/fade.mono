@@ -20,12 +20,53 @@ float Swell;     // how far down the screen the top of the water right in front 
 float3 Boat;     // the middle of the boat's hull, its waterline, and half of how wide it is
 
 float Day;       // which colors to use. 0 is the sun going down, and 1 is the middle of the day.
+float Sink;      // how far under the camera is, from 0 at the surface to 1 all the way under
+
+// the water in front of the camera turns the colors of the deep as the camera goes under, so that the wave of
+// bubbles uncovers the same water that is already there: lighter up toward the surface, and darker down low
+#define DeepHigh    float3(0.047, 0.114, 0.212)
+#define DeepLow     float3(0.016, 0.027, 0.075)
 
 // what the main menu remembers of the hidden game. see THE MAIN MENU REMEMBERS in fish_headers.
 // x is not used any more. the reefs of the main menu are drawn by ReefEffect.fx, on sprites of their own.
 // y is 1 once the ancient one has been summoned, and then it is out on the horizon, coming toward the boat.
 float2 Endings;
 float Coming;    // how far it has come, from 0 (where it sets out from) to 1 (which it never gets to)
+
+// THE WARM WATER. while the player is staying down with Ava, the sea is lit from underneath, warm, as if her
+// light were down there. it comes and goes slowly, like breathing. 0 is not at all, and 1 is all of it.
+// see THE WARM WATER in fish_headers_ava.
+float Warm;
+#define WarmLight   float3(1.000, 0.560, 0.240)
+// the blue of the water is taken down, or the warm light on top of it comes out grey
+#define WarmTint    float3(1.300, 0.900, 0.500)
+#define WARM_GLOW 0.40   // how bright the light from underneath is, at the bottom of the screen
+#define WARM_BREATH 0.55 // how fast it comes and goes, in breaths a second times 2 pi
+
+// THE SPLASH. each word of the logo that comes up out of the sea breaks the water, and the ripples around that
+// place are thrown about, in rings that go out from it, with white water right where it broke. one for each of
+// the three words: x is where it broke the water, y is how long ago that was, in seconds, z is how hard it
+// was, 0 for not at all, and w is how far down the screen the water is there. nearer the camera than the horizon,
+// the rings are bigger, and rounder, since the water there is seen more from above. see THE WATER in fish_headers_logo.
+float4 SplashA;
+float4 SplashB;
+float4 SplashC;
+
+// AVA'S BOTTLE, floating in the water (see THE BOTTLE in fish_headers_ava): x is where it is across, y is the line
+// of the water at it, z is half as wide as it is, and w is how much it is there, from 0 to 1. the water is
+// lapping at it, so rings go out from it all the time, slowly, lying on the water the way the splash's do, and
+// under it are its reflection, broken up by the ripples, and the dark of the water in its shade.
+float4 Bottle;
+// and the boat's hull, which the water laps along all of: x to y is how far across it goes, z is the line of the
+// water at it, and w is how much it is there
+float4 BoatLap;
+#define BottleGlass PICK(float3(1.000, 0.800, 0.680), float3(0.820, 0.930, 1.000))
+#define SPLASH_SPEED 90.0 // how fast the edge of the rings goes out, in pixels a second
+#define SPLASH_LAST 3.0   // how long the rings last, in seconds
+#define SPLASH_FLAT 4.0   // the sea is seen from the side, so a ring on it is this many times as wide as it is tall
+#define CHURN_LAST 2.0    // how long the white water lasts, in seconds
+// the white water catches the light of the sky: the sun going down in the evening
+#define SplashFoam  PICK(float3(1.000, 0.780, 0.640), float3(0.880, 0.960, 1.000))
 
 // every color has two versions, one for each time of day. the first is for the evening.
 #define PICK(evening, day) lerp(evening, day, Day)
@@ -310,6 +351,59 @@ float3 sky(float2 px)
 	return color;
 }
 
+// THE WATER'S OWN FLOOR. where a pixel of the sea is, on the water itself, in the units that its ripples are made
+// in: across, the ripples are stretched by rowScale, and toward the camera they are rows, LOG_ROWS of them for
+// every so far down the screen (see sea, further down). a ripple is about as long one way as the other in these.
+#define LOG_ROWS 300.0
+float rowScaleAt(float dy) { return 0.25 + saturate(dy / 170.0) * 2.2; }
+float2 waterAt(float2 px)
+{
+	float dy = max(px.y - Horizon, 0.0);
+	return float2((px.x - Size.x * 0.5) / rowScaleAt(dy), LOG_ROWS * log(1.0 + dy * 0.16));
+}
+
+// how far a pixel is from where a splash broke the water. a splash right at the horizon is measured in pixels
+// across, with its rings SPLASH_FLAT times as wide as they are tall. one nearer the camera is measured on the
+// water itself (waterAt), so that its rings lie on it the way its ripples do: squashed and small going away
+// toward the horizon, big coming toward the camera. see THE SPLASH.
+#define SPLASH_ON_WATER 1.5 // and there, how many of its units go to one of the distance
+float splashDistance(float4 s, float2 px)
+{
+	float sideOn = length(float2(px.x - s.x, (px.y - s.w) * SPLASH_FLAT));
+	float onWater = length(waterAt(px) - waterAt(s.xw)) / SPLASH_ON_WATER;
+	return lerp(sideOn, onWater, saturate((s.w - Horizon - 2.0) / 20.0));
+}
+
+// how much a splash throws the ripples about at this pixel, from -1 to 1, times how hard it was
+float splashAt(float4 s, float2 px, float dy)
+{
+	float d = splashDistance(s, px);
+	float reached = saturate((s.y * SPLASH_SPEED - d) / 30.0);
+	float fade = saturate(1.0 - s.y / SPLASH_LAST);
+	return s.z * sin(d * 0.13 - s.y * 8.0) * reached * fade / (1.0 + d / 220.0) * step(0.0, s.y);
+}
+
+// the white water right where a splash broke the water, which spreads a little and is soon gone
+float churnAt(float4 s, float2 px, float dy)
+{
+	float d = splashDistance(s, px);
+	return s.z * saturate(1.0 - d / (22.0 + s.y * 50.0)) * saturate(1.0 - s.y / CHURN_LAST) * step(0.0, s.y);
+}
+
+// the rings that go out over the water from something it laps at, which lies from x to y across the screen,
+// where the line of the water is z down it, w of them, from -1 to 1: measured on the water itself, so they
+// lie on it the way its ripples do
+float lapRings(float4 at, float2 px)
+{
+	float2 p = waterAt(px);
+	float2 a = waterAt(at.xz);
+	float2 b = waterAt(at.yz);
+	float2 along = b - a;
+	float t = saturate(dot(p - a, along) / max(dot(along, along), 0.001));
+	float d = length(p - (a + along * t));
+	return sin(d * 0.55 - Time * 2.4) * exp(-d / 34.0) * step(2.0, d) * at.w;
+}
+
 float3 sea(float2 px)
 {
 	float dy = px.y - Horizon;
@@ -324,17 +418,35 @@ float3 sea(float2 px)
 	// under a sick sky, the sea is green. see THE DARK BEHIND IT, further up.
 	color *= lerp(float3(1.0, 1.0, 1.0), float3(0.42, 0.80, 0.44), Endings.y * Day * SICK_SKY);
 
+	// the warm light from underneath, more of it the nearer the water is. see THE WARM WATER, further up.
+	// the horizon is far from it, so it stays the color of the sky.
+	float breath = 0.8 + 0.2 * sin(Time * WARM_BREATH);
+	float lit = smoothstep(0.1, 1.0, depth);
+	float warmth = bands(lit * breath, 6.0, px);
+	color = lerp(color, color * WarmTint, Warm * lit) + WarmLight * warmth * WARM_GLOW * Warm;
 
 	// the ripples are rows of short dashes. they are small and close together at the horizon,
 	// and get longer and further apart toward the camera.
 	float rowScale = 0.25 + depth * 2.2;
 	float wx = (px.x - Size.x * 0.5) / rowScale;
 	float row = 13.0 * log(1.0 + dy * 0.16);
-	float ripple = sin(wx * 0.10 + 2.4 * sin(row * 1.3 + Time * 0.7)) * sin(row * 2.3 - Time * 1.0);
 
-	// the sun lays a path of light across the water, which gets wider toward the camera
-	float path = saturate(1.0 - abs(px.x - SunX) / (10.0 + dy * 0.55));
-	float glint = step(0.82 - path * 0.75, ripple);
+	// a splash throws the rows about, and the ripples get bigger. see THE SPLASH, further up.
+	float splash = splashAt(SplashA, px, dy) + splashAt(SplashB, px, dy) + splashAt(SplashC, px, dy);
+	row += splash * 2.0;
+	float ripple = sin(wx * 0.10 + 2.4 * sin(row * 1.3 + Time * 0.7)) * sin(row * 2.3 - Time * 1.0);
+	ripple += splash * 2.2;
+
+	// the rings that the water lapping at the bottle and at the boat sends out, on the water, fading as they go
+	float bottleRings = lapRings(float4(Bottle.x, Bottle.x, Bottle.y, Bottle.w), px) + 0.8 * lapRings(BoatLap, px);
+	ripple += bottleRings * 2.2;
+	row += bottleRings * 0.8;
+
+	// the sun lays a path of light across the water, as wide as the sun where it meets the horizon, and wider
+	// toward the camera. in it, the light lies on longer pieces of the ripples, so it is broken up into big flakes.
+	float path = saturate(1.0 - abs(px.x - SunX) / (SunRadius * 1.1 + dy * 0.8));
+	float flakes = sin(wx * 0.045 + 2.4 * sin(row * 1.3 + Time * 0.7)) * sin(row * 2.3 - Time * 1.0) + splash * 2.2;
+	float glint = lerp(step(0.82, ripple), step(0.62 - path * 0.7, flakes), step(0.001, path));
 
 	// once the thing is there, the sun is gone into the hole, so there is no sunlight to lay on the water.
 	// what is on the water is the hole: the dim colors of that other sky, with the lit edge of it here and there.
@@ -347,6 +459,15 @@ float3 sea(float2 px)
 	// and the troughs between the ripples are a little darker
 	color *= 1.0 - 0.14 * step(ripple, -0.8);
 
+	// the crests of the rings of a splash catch the light, and the water is white where it broke
+	color = lerp(color, SplashFoam, step(0.4, splash) * 0.55);
+	color *= 1.0 - 0.3 * step(splash, -0.4);
+	color += 0.05 * step(0.4, bottleRings);
+	float churn = churnAt(SplashA, px, dy) + churnAt(SplashB, px, dy) + churnAt(SplashC, px, dy);
+	// in flecks, thick in the middle and thinner out to the edge, that boil about
+	float churnSpot = hash(float2(floor(px.x * 0.5), px.y) + floor(Time * 10.0) * 7.0);
+	color = lerp(color, SplashFoam, step(1.0 - churn * 0.75, churnSpot) * 0.9);
+
 	// the reflection of the boat. it wobbles, and breaks up further down.
 	float by = px.y - Boat.y;
 	float reach = by / 38.0;
@@ -355,6 +476,17 @@ float3 sea(float2 px)
 	float broken = step(reach * 2.0 - 1.0, sin(by * 1.9 - Time * 1.6));
 	float reflection = inside * broken * step(0.0, by) * step(reach, 1.0);
 	color = lerp(color, HullColor, reflection * 0.8);
+
+	// the bottle: the shade of it on the water right under it, and its reflection, wobbling, and broken up
+	float bdy = px.y - Bottle.y;
+	float bShade = step(length(float2(px.x - Bottle.x, bdy * 2.6)), Bottle.z * 1.25) * step(-1.0, bdy);
+	color *= 1.0 - 0.32 * bShade * Bottle.w;
+	float bReach = bdy / 16.0;
+	float bWobble = sin(bdy * 1.1 + Time * 2.6) * 1.2 + sin(bdy * 0.5 - Time * 1.4) * 0.8;
+	float bInside = step(abs(px.x - Bottle.x + bWobble * saturate(bReach * 2.0)), Bottle.z * 0.6 * (1.0 - bReach * 0.5));
+	float bBroken = step(bReach * 1.6 - 0.8, sin(bdy * 1.7 - Time * 2.0));
+	float bReflection = bInside * bBroken * step(1.0, bdy) * step(bReach, 1.0) * Bottle.w;
+	color = lerp(color, BottleGlass, bReflection * 0.35 * (1.0 - bReach * 0.6));
 
 	return color;
 }
@@ -381,6 +513,13 @@ float4 MainPS(float2 uv : TEXCOORD0) : COLOR0
 
 	// under a sick sky, this water is green too. see THE DARK BEHIND IT, further up.
 	swell *= lerp(float3(1.0, 1.0, 1.0), float3(0.42, 0.80, 0.44), Endings.y * Day * SICK_SKY);
+
+	// and it is the nearest to the light underneath. see THE WARM WATER, further up.
+	float swellWarm = bands(saturate(0.55 + under / 60.0) * (0.8 + 0.2 * sin(Time * WARM_BREATH)), 4.0, px);
+	swell = lerp(swell, swell * WarmTint, Warm) + WarmLight * swellWarm * WARM_GLOW * Warm;
+
+	// and it is the deep, as the camera goes under. see DeepHigh, further up.
+	swell = lerp(swell, lerp(DeepHigh, DeepLow, saturate(px.y / Size.y)), Sink);
 
 	swell = lerp(swell, FoamColor, step(under, 1.5) * 0.9);
 	float fleck = step(0.8, sin(px.x * 0.21 + Time * 1.7 + under * 0.9)) * step(3.0, under) * step(under, 8.0);

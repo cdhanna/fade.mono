@@ -48,10 +48,7 @@ $notes = @{
     'Textures/ending_reef'                 = 'Ending picture: reef (a heart)'
     'Textures/ending_ancient'              = 'Ending picture: ancient (an eye)'
     'Textures/ending_album'                = 'Ending picture: album'
-    'Textures/Menu/dive_boat'              = 'Surface screen dive boat (night)'
-    'Textures/Menu/dive_boat_day'          = 'Surface screen dive boat (day)'
-    'Textures/Menu/dive_boat_hunched'      = 'Dive boat with the diver hunched over (night)'
-    'Textures/Menu/dive_boat_day_hunched'  = 'Dive boat with the diver hunched over (day)'
+    # the dive boat of the main menu is not here: its art is art/dive_boat.fink (see build/fink_export.py)
     'Textures/Logos/fade_ghost'            = 'Credits logo: Fade'
     'Textures/Logos/monogame'              = 'Credits logo: MonoGame'
     'Textures/Logos/chris_credit'          = 'Credits portrait of Chris (96x96 downscale of chris_placeholder)'

@@ -1,0 +1,145 @@
+` THE STEAM DEMO. see fish_headers_steamdemo.
+
+` the preferences that these tests look at: whether there is a saved game, which of the two made it, and
+` the round that it was saved on
+function tsdPrefSlot(tsdSlotIndex)
+    tsdSlotAt = -1
+    if tsdSlotIndex = SAVE_PREF + 1 then tsdSlotAt = 0
+    if tsdSlotIndex = PREF_SAVE_DEMO then tsdSlotAt = 1
+    if tsdSlotIndex = SAVE_PREF + 5 then tsdSlotAt = 2
+endfunction tsdSlotAt
+
+function tsdPrefAt(tsdAtIndex)
+    tsdAtValue = 0
+    tsdAtSlot = tsdPrefSlot(tsdAtIndex)
+    if tsdAtSlot >= 0 then tsdAtValue = STEAM_DEMO_TEST_PREFS(tsdAtSlot)
+endfunction tsdAtValue
+
+function tsdPrefSet(tsdPutIndex, tsdPutValue)
+    tsdPutSlot = tsdPrefSlot(tsdPutIndex)
+    if tsdPutSlot >= 0 then STEAM_DEMO_TEST_PREFS(tsdPutSlot) = tsdPutValue
+endfunction
+
+function tsdPrefsClear()
+    for tsdClear = 0 to 2
+        STEAM_DEMO_TEST_PREFS(tsdClear) = 0
+    next
+endfunction
+
+
+` the demo stops when its last round has been won, and not a round before
+test steam_demo_stops_after_its_last_round from fishBoard
+    STEAM_DEMO = 1
+    GAME_ROUND_CAP = 30
+    CURRENT_ROUND = STEAM_DEMO_ROUNDS - 1
+    tsdStops = steamDemoStops()
+    assert tsdStops = 0, "the round before the last of the demo has its upgrade screen"
+    CURRENT_ROUND = STEAM_DEMO_ROUNDS
+    tsdStops = steamDemoStops()
+    assert tsdStops = 1, "the last round of the demo is the end of it"
+    CURRENT_ROUND = STEAM_DEMO_ROUNDS + 3
+    tsdStops = steamDemoStops()
+    assert tsdStops = 1, "and so is a round past it, in a game that was carried on with"
+
+    DEMO_MODE = 1
+    tsdStops = steamDemoStops()
+    assert tsdStops = 0, "the game playing itself on the menu never stops for it"
+    DEMO_MODE = 0
+
+    STEAM_DEMO = 0
+    tsdStops = steamDemoStops()
+    assert tsdStops = 0, "and the full game never does"
+    end
+endtest
+
+
+` the last round of the demo has no upgrade screen. the page of the end of the demo comes up over the
+` game instead, and the game is saved, with the round won and the demo's mark on it.
+test steam_demo_ends_on_its_page_and_saves from fishBoard
+    mock get pref(tsdPrefIndex, tsdPrefElse)
+    endmock tsdPrefAt(tsdPrefIndex)
+    mock set pref(tsdSetIndex, tsdSetValue)
+        tsdPrefSet(tsdSetIndex, tsdSetValue)
+    endmock
+    tsdPrefsClear()
+
+    SCORE_BAR.endVal = 100000000
+    STEAM_DEMO = 1
+    GAME_ROUND_CAP = 30
+    CURRENT_ROUND = STEAM_DEMO_ROUNDS
+    SCORE_BAR_HOLD = 1
+    REQUEST_COMBO_CHECK = 0
+    runto _loop
+    assert REQUEST_ABILITY_SELECTION = 0, "no upgrade screen is asked for"
+    tsdUntil = wall ms() + 4000
+    while STEAM_DEMO_OVER <> 2
+        runto _loop
+        if wall ms() > tsdUntil then STEAM_DEMO_OVER = 2
+    endwhile
+    assert MENU_PAGE = MENU_PAGE_DEMO_OVER, "the page of the end of the demo is up"
+    assert MENU_MODE = MENU_MODE_PAUSE, "over the game"
+    assert SCORE_BAR_HOLD = 2, "and the bar is held full"
+    tsdSaved = tsdPrefAt(SAVE_PREF + 1)
+    tsdSavedRound = tsdPrefAt(SAVE_PREF + 5)
+    tsdSavedMark = tsdPrefAt(PREF_SAVE_DEMO)
+    assert tsdSaved = 1, "the game was saved"
+    assert tsdSavedRound = STEAM_DEMO_ROUNDS, "on the round that it got to"
+    assert tsdSavedMark = 1, "with the mark of the demo on it"
+    STEAM_DEMO = 0
+    end
+endtest
+
+
+` a game that the full game saved is left alone by the demo. one that the demo saved is its own.
+test steam_demo_leaves_the_full_games_save_alone from fishBoard
+    mock get pref(tsdPrefIndex, tsdPrefElse)
+    endmock tsdPrefAt(tsdPrefIndex)
+    tsdPrefsClear()
+    STEAM_DEMO = 1
+
+    tsdOff = steamDemoHandsOff()
+    assert tsdOff = 0, "with no saved game, there is nothing to leave alone"
+
+    tsdPrefSet(SAVE_PREF + 1, 1)
+    tsdOff = steamDemoHandsOff()
+    assert tsdOff = 1, "a saved game with no mark was made by the full game"
+
+    tsdPrefSet(PREF_SAVE_DEMO, 1)
+    tsdOff = steamDemoHandsOff()
+    assert tsdOff = 0, "and one with the demo's mark is the demo's"
+
+    tsdPrefSet(PREF_SAVE_DEMO, 0)
+    STEAM_DEMO = 0
+    tsdOff = steamDemoHandsOff()
+    assert tsdOff = 0, "the full game carries on with any of them"
+    end
+endtest
+
+
+` the Rounds Left counts down to the end of the demo, unless the game ends first
+test steam_demo_counts_down_its_rounds from fishBoard
+    STEAM_DEMO = 1
+    CURRENT_ROUND = 3
+    tsdLeft = steamDemoRoundsLeft(27)
+    assert tsdLeft = STEAM_DEMO_ROUNDS - 3, "a long game shows the rounds left of the demo"
+    tsdLeft = steamDemoRoundsLeft(2)
+    assert tsdLeft = 2, "a short game ends before the demo does"
+    CURRENT_ROUND = STEAM_DEMO_ROUNDS + 2
+    tsdLeft = steamDemoRoundsLeft(18)
+    assert tsdLeft = 0, "past the end of the demo, it never goes under nothing"
+    STEAM_DEMO = 0
+    CURRENT_ROUND = 3
+    tsdLeft = steamDemoRoundsLeft(27)
+    assert tsdLeft = 27, "the full game shows them all"
+    end
+endtest
+
+
+` nothing in the demo goes to Steam's achievements
+test steam_demo_has_no_achievements from fishBoard
+    STEAM_DEMO = 1
+    tsdAch = achieveOk()
+    assert tsdAch = 0, "the demo has no achievements"
+    STEAM_DEMO = 0
+    end
+endtest

@@ -12,6 +12,9 @@ namespace Fade.MonoGame.Localization;
 /// <item>Portuguese and French: <c>one</c> for 0 and 1 (and anything below 2), <c>other</c> for the rest.</item>
 /// <item>Polish: <c>one</c> for 1; <c>few</c> for 2–4, 22–24, 32–34... but not 12–14; <c>many</c> for
 /// the other whole numbers (0, 5–21, 25–31...); <c>other</c> for fractions.</item>
+/// <item>Russian: <c>one</c> for 1, 21, 31... but not 11; <c>few</c> as Polish's; <c>many</c> for the
+/// rest of the whole numbers (0, 5–20, 11–14...); <c>other</c> for fractions.</item>
+/// <item>Japanese, Chinese and Korean: only <c>other</c>.</item>
 /// </list>
 /// </summary>
 public static class PluralRules
@@ -23,13 +26,15 @@ public static class PluralRules
 
     private static readonly string[] OneOther = { ONE, OTHER };
     private static readonly string[] Slavic = { ONE, FEW, MANY, OTHER };
+    private static readonly string[] OtherOnly = { OTHER };
 
     private static string Primary(string language) => language.Split('-', '_')[0].ToLowerInvariant();
 
     /// <summary>The forms a language uses, so a check can tell a missing row from one it never needs.</summary>
     public static IReadOnlyList<string> Forms(string language) => Primary(language) switch
     {
-        "pl" => Slavic,
+        "pl" or "ru" => Slavic,
+        "ja" or "zh" or "ko" => OtherOnly,
         _ => OneOther,
     };
 
@@ -60,6 +65,15 @@ public static class PluralRules
                 var lastTwo = i % 100;
                 if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return FEW;
                 return MANY;
+            case "ru":
+                if (!whole) return OTHER;
+                if (i % 10 == 1 && i % 100 != 11) return ONE;
+                if (i % 10 >= 2 && i % 10 <= 4 && (i % 100 < 12 || i % 100 > 14)) return FEW;
+                return MANY;
+            case "ja":
+            case "zh":
+            case "ko":
+                return OTHER;
             default:
                 return whole && i == 1 ? ONE : OTHER;
         }

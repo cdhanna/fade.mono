@@ -44,6 +44,7 @@ public static class SheetSync
         public string? language;
         public bool dryRun;
         public bool reformat;
+        public bool replace;
     }
 
     private sealed class Tab
@@ -77,6 +78,7 @@ public static class SheetSync
                 case "--language" when i + 1 < args.Length: o.language = args[++i]; break;
                 case "--dry-run": o.dryRun = true; break;
                 case "--reformat": o.reformat = true; break;
+                case "--replace": o.replace = true; break;
                 default:
                     Console.Error.WriteLine($"[E] unknown or incomplete argument: {args[i]}");
                     return 2;
@@ -445,6 +447,8 @@ public static class SheetSync
     /// row in the tab of its key. Keys the sheet does not have at all are listed and left out.
     /// The language needs its column first: add it to <c>languages</c> in strings.sheet.json and run
     /// `strings init`.
+    /// With <c>--replace</c>, cells that already have text are written too. That is how a note is
+    /// corrected (<c>--language notes</c>): a sync never changes a row that the sheet already has.
     /// </summary>
     private static async Task<int> Import(SheetsClient client, Options o)
     {
@@ -499,7 +503,8 @@ public static class SheetSync
 
             if (where.TryGetValue(key, out var at))
             {
-                if (at.tab.Cell(at.tab.rows[at.row], o.language).Length > 0) { kept++; continue; }
+                var had = at.tab.Cell(at.tab.rows[at.row], o.language);
+                if (had == text || (had.Length > 0 && !o.replace)) { kept++; continue; }
                 var letter = ColumnLetter(at.tab.Col(o.language));
                 writes.Add((SheetsClient.Range(at.tab.title, $"{letter}{at.row + 2}"), new() { new() { text } }));
                 written++;
@@ -691,6 +696,9 @@ public static class SheetSync
             table.AddCsv(tab.title + ".csv", StringCsv.Write(rows), tableProblems);
         }
         var options = new StringCheckOptions { shippedLanguages = languages };
+        if (config["fonts"] is JsonObject families)
+            foreach (var (language, family) in families)
+                options.fontFamilies[language] = family?.GetValue<string>() ?? "";
         var assets = FindAssetsDir(o.stringsDir);
         if (assets != null)
             foreach (var font in Directory.GetFiles(assets, "*.spritefont", SearchOption.AllDirectories))

@@ -10,6 +10,9 @@ name: Steam (Fish Fish Pop)
 #   STEAM_APP_ID          the app id
 #   STEAM_DEPOT_WINDOWS   the Windows depot id
 #   STEAM_DEPOT_MAC       the macOS depot id
+#   STEAM_DEMO_APP_ID, STEAM_DEMO_DEPOT_WINDOWS, STEAM_DEMO_DEPOT_MAC
+#                         the demo's app and depots (steam/SETUP.md, "The demo"); needed while
+#                         the demo input is ticked
 #
 # Repository SECRETS:
 #   STEAM_USERNAME          login name of the Steam builder account
@@ -37,6 +40,11 @@ on:
         type: boolean
         required: false
         default: true
+      demo:
+        description: 'Also build the free demo (-p:FishSteamDemo=true, fish_headers_steamdemo) and upload it to the demo app, set live on the same branch. Needs the STEAM_DEMO_* variables to deploy.'
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: steam-${{ github.ref }}
@@ -74,7 +82,8 @@ jobs:
     # executable bit on the macOS binary, which a Windows runner would lose.
     name: build and deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # the demo adds two more publishes
+    timeout-minutes: 75
 
     steps:
       - name: Checkout
@@ -87,9 +96,13 @@ jobs:
           STEAM_APP_ID: ${{ vars.STEAM_APP_ID || secrets.STEAM_APP_ID }}
           STEAM_DEPOT_WINDOWS: ${{ vars.STEAM_DEPOT_WINDOWS || secrets.STEAM_DEPOT_WINDOWS }}
           STEAM_DEPOT_MAC: ${{ vars.STEAM_DEPOT_MAC || secrets.STEAM_DEPOT_MAC }}
+          STEAM_DEMO_APP_ID: ${{ vars.STEAM_DEMO_APP_ID || secrets.STEAM_DEMO_APP_ID }}
+          STEAM_DEMO_DEPOT_WINDOWS: ${{ vars.STEAM_DEMO_DEPOT_WINDOWS || secrets.STEAM_DEMO_DEPOT_WINDOWS }}
+          STEAM_DEMO_DEPOT_MAC: ${{ vars.STEAM_DEMO_DEPOT_MAC || secrets.STEAM_DEMO_DEPOT_MAC }}
           STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
           STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
           FISH_SCORE_KEY: ${{ secrets.FISH_SCORE_KEY }}
+          DEMO: ${{ inputs.demo }}
         run: |
           fail=0
           # Without the key the build would use the dev leaderboards, with a key that is in
@@ -98,7 +111,11 @@ jobs:
             echo "::error::FISH_SCORE_KEY must be set as a repository secret: 16 or more letters and digits. See steam/SETUP.md."
             fail=1
           fi
-          for name in STEAM_APP_ID STEAM_DEPOT_WINDOWS STEAM_DEPOT_MAC; do
+          names="STEAM_APP_ID STEAM_DEPOT_WINDOWS STEAM_DEPOT_MAC"
+          if [ "$DEMO" = "true" ]; then
+            names="$names STEAM_DEMO_APP_ID STEAM_DEMO_DEPOT_WINDOWS STEAM_DEMO_DEPOT_MAC"
+          fi
+          for name in $names; do
             if ! [[ "${!name}" =~ ^[0-9]+$ ]]; then
               echo "::error::Repository variable $name is not set to a number. See steam/SETUP.md."
               fail=1
@@ -189,9 +206,44 @@ jobs:
             --self-contained true \
             -o publish/osx-arm64
 
+      # The demo is the same program, built with FishSteamDemo (Fade.MonoGame.csproj, THE STEAM DEMO in
+      # fish_headers_steamdemo). It sends no scores, so the score key only goes in for the build to be
+      # the same as the game's.
+      - name: Publish demo win-x64
+        if: inputs.demo
+        env:
+          FISH_SCORE_KEY: ${{ secrets.FISH_SCORE_KEY }}
+          FISH_DEPLOY_BRANCH: ${{ inputs.set_live || 'test' }}
+        run: |
+          dotnet publish "$GAME_PROJECT" \
+            -c Release \
+            -p:FadeEngineShaderVariants=Desktop \
+            -p:FishSteamDemo=true \
+            $SIZE_FLAGS \
+            -r win-x64 \
+            --self-contained true \
+            -o publish/demo-win-x64
+
+      - name: Publish demo osx-arm64
+        if: inputs.demo
+        env:
+          FISH_SCORE_KEY: ${{ secrets.FISH_SCORE_KEY }}
+          FISH_DEPLOY_BRANCH: ${{ inputs.set_live || 'test' }}
+        run: |
+          dotnet publish "$GAME_PROJECT" \
+            -c Release \
+            -p:FadeEngineShaderVariants=Desktop \
+            -p:FishSteamDemo=true \
+            $SIZE_FLAGS \
+            -r osx-arm64 \
+            --self-contained true \
+            -o publish/demo-osx-arm64
+
       # A publish that leaves these out still succeeds, and produces a game that dies at
       # launch. The payload itself is the evidence.
       - name: Verify the payloads
+        env:
+          DEMO: ${{ inputs.demo }}
         run: |
           fail=0
           need() {
@@ -200,26 +252,50 @@ jobs:
               fail=1
             fi
           }
-          need publish/win-x64   "$EXE_NAME.exe"
-          need publish/win-x64   'MonoGame.Framework.dll'
-          need publish/win-x64   'SDL2.dll'
-          need publish/osx-arm64 "$EXE_NAME"
-          need publish/osx-arm64 'MonoGame.Framework.dll'
-          need publish/osx-arm64 'libSDL2*.dylib'
-          # Steam. Each platform needs its own interop assembly AND its own native library:
-          # the Windows pair in a macOS build, or the other way round, fails on the first
-          # Steam call and not before.
-          need publish/win-x64   'Facepunch.Steamworks.Win64.dll'
-          need publish/win-x64   'steam_api64.dll'
-          need publish/osx-arm64 'Facepunch.Steamworks.Posix.dll'
-          need publish/osx-arm64 'libsteam_api.dylib'
+          # the full game's builds, and the demo's ("demo-" before each)
+          prefixes=""
+          rids="win-x64 osx-arm64"
+          if [ "$DEMO" = "true" ]; then
+            prefixes="demo-"
+            rids="$rids demo-win-x64 demo-osx-arm64"
+          fi
+          for p in "" $prefixes; do
+            need "publish/${p}win-x64"   "$EXE_NAME.exe"
+            need "publish/${p}win-x64"   'MonoGame.Framework.dll'
+            need "publish/${p}win-x64"   'SDL2.dll'
+            need "publish/${p}osx-arm64" "$EXE_NAME"
+            need "publish/${p}osx-arm64" 'MonoGame.Framework.dll'
+            need "publish/${p}osx-arm64" 'libSDL2*.dylib'
+            # Steam. Each platform needs its own interop assembly AND its own native library:
+            # the Windows pair in a macOS build, or the other way round, fails on the first
+            # Steam call and not before.
+            need "publish/${p}win-x64"   'Facepunch.Steamworks.Win64.dll'
+            need "publish/${p}win-x64"   'steam_api64.dll'
+            need "publish/${p}osx-arm64" 'Facepunch.Steamworks.Posix.dll'
+            need "publish/${p}osx-arm64" 'libsteam_api.dylib'
+          done
+          # The demo knows it is the demo by the "SteamDemo" metadata that Fade.MonoGame.csproj bakes into
+          # the game's assembly. A full game with it would be a demo on the store, and a demo without it
+          # the whole game for free.
+          for rid in $rids; do
+            marked=0
+            grep -q -a 'SteamDemo' "publish/$rid/$EXE_NAME.dll" && marked=1
+            case "$rid" in
+              demo-*) want=1 ;;
+              *) want=0 ;;
+            esac
+            if [ "$marked" != "$want" ]; then
+              echo "::error::publish/$rid/$EXE_NAME.dll has the demo's mark: $marked, and should have: $want"
+              fail=1
+            fi
+          done
           # steam_appid.txt lets the game start without a license. It is not in git, so it
           # should never be here, and this is what makes sure.
           if [ -n "$(find publish -name steam_appid.txt -print -quit)" ]; then
             echo "::error::steam_appid.txt is in the publish output. It must not reach a depot."
             fail=1
           fi
-          for rid in win-x64 osx-arm64; do
+          for rid in $rids; do
             # .xnb.br: SIZE_FLAGS ships every XNB compressed.
             count=$(find "publish/$rid/Content" -name '*.xnb.br' 2>/dev/null | wc -l)
             echo "$rid: $count content files"
@@ -241,38 +317,52 @@ jobs:
       # arm64 macOS SIGKILLs an unsigned binary. `codesign` does not exist here, hence the
       # Mach-O parser.
       - name: Verify the macOS apphost is signed
-        run: python3 build/check-macho-signed.py "publish/osx-arm64/$EXE_NAME"
+        run: |
+          python3 build/check-macho-signed.py "publish/osx-arm64/$EXE_NAME"
+          if [ -d publish/demo-osx-arm64 ]; then
+            python3 build/check-macho-signed.py "publish/demo-osx-arm64/$EXE_NAME"
+          fi
 
+      # The full game's into content/windows, the demo's into content/demo-windows
+      # (steam/depot_demo_windows.vdf).
       - name: Stage Windows payload
         run: |
-          mkdir -p steam/content/windows
-          cp -R publish/win-x64/. steam/content/windows/
-          find steam/content/windows -maxdepth 1 \( -name '*.pdb' -o -name '_lastRun.log' \) -delete
+          for p in "" ${{ inputs.demo && 'demo-' || '' }}; do
+            mkdir -p "steam/content/${p}windows"
+            cp -R "publish/${p}win-x64/." "steam/content/${p}windows/"
+            find "steam/content/${p}windows" -maxdepth 1 \( -name '*.pdb' -o -name '_lastRun.log' \) -delete
+          done
 
-      # Steam's macOS launch option needs a .app.
+      # Steam's macOS launch option needs a .app. The demo's goes into content/demo-mac.
       - name: Package macOS app bundle
         env:
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
-          mkdir -p steam/content/mac
-          bash build/make-macos-app.sh publish/osx-arm64 steam/content/mac
-          APP="steam/content/mac/$APP_NAME.app"
-          test -x "$APP/Contents/MacOS/$EXE_NAME" \
-            || { echo "::error::macOS executable lost its +x bit"; exit 1; }
-          # A bundled game only sees content in Contents/Resources.
-          test -f "$APP/Contents/Resources/Content/Fish/Textures/Goldfish.xnb.br" \
-            || { echo "::error::macOS bundle has no content in Contents/Resources/Content"; exit 1; }
-          test ! -d "$APP/Contents/MacOS/Content" \
-            || { echo "::error::Content staged in Contents/MacOS -- a bundled app cannot see it"; exit 1; }
+          for p in "" ${{ inputs.demo && 'demo-' || '' }}; do
+            mkdir -p "steam/content/${p}mac"
+            bash build/make-macos-app.sh "publish/${p}osx-arm64" "steam/content/${p}mac"
+            APP="steam/content/${p}mac/$APP_NAME.app"
+            test -x "$APP/Contents/MacOS/$EXE_NAME" \
+              || { echo "::error::$APP: macOS executable lost its +x bit"; exit 1; }
+            # A bundled game only sees content in Contents/Resources.
+            test -f "$APP/Contents/Resources/Content/Fish/Textures/Goldfish.xnb.br" \
+              || { echo "::error::$APP has no content in Contents/Resources/Content"; exit 1; }
+            test ! -d "$APP/Contents/MacOS/Content" \
+              || { echo "::error::$APP: Content staged in Contents/MacOS -- a bundled app cannot see it"; exit 1; }
+          done
 
-      # Build-only runs: hand the two builds over as artifacts instead. Tarred, because the
+      # Build-only runs: hand the builds over as artifacts instead. Tarred, because the
       # artifact zip would strip the executable bit from the macOS bundle.
       - name: Pack builds for download
         if: ${{ !inputs.deploy }}
         run: |
           mkdir -p artifacts-out
-          ( cd steam/content/windows && zip -qr "$GITHUB_WORKSPACE/artifacts-out/$APP_NAME-windows-x64.zip" . )
-          tar -czf "artifacts-out/$APP_NAME-macos-arm64.tar.gz" -C steam/content/mac "$APP_NAME.app"
+          for p in "" ${{ inputs.demo && 'demo-' || '' }}; do
+            n="$APP_NAME"
+            if [ -n "$p" ]; then n="$APP_NAME-Demo"; fi
+            ( cd "steam/content/${p}windows" && zip -qr "$GITHUB_WORKSPACE/artifacts-out/$n-windows-x64.zip" . )
+            tar -czf "artifacts-out/$n-macos-arm64.tar.gz" -C "steam/content/${p}mac" "$APP_NAME.app"
+          done
 
       - name: Upload builds as artifacts
         if: ${{ !inputs.deploy }}
@@ -319,6 +409,10 @@ jobs:
           STEAM_APP_ID: ${{ vars.STEAM_APP_ID || secrets.STEAM_APP_ID }}
           STEAM_DEPOT_WINDOWS: ${{ vars.STEAM_DEPOT_WINDOWS || secrets.STEAM_DEPOT_WINDOWS }}
           STEAM_DEPOT_MAC: ${{ vars.STEAM_DEPOT_MAC || secrets.STEAM_DEPOT_MAC }}
+          STEAM_DEMO_APP_ID: ${{ vars.STEAM_DEMO_APP_ID || secrets.STEAM_DEMO_APP_ID }}
+          STEAM_DEMO_DEPOT_WINDOWS: ${{ vars.STEAM_DEMO_DEPOT_WINDOWS || secrets.STEAM_DEMO_DEPOT_WINDOWS }}
+          STEAM_DEMO_DEPOT_MAC: ${{ vars.STEAM_DEMO_DEPOT_MAC || secrets.STEAM_DEMO_DEPOT_MAC }}
+          DEMO: ${{ inputs.demo }}
           # Passed through env rather than inlined into the script, to keep the input out
           # of the shell it would otherwise be interpolated into.
           SET_LIVE: ${{ inputs.set_live || 'test' }}
@@ -354,84 +448,115 @@ jobs:
           set -o pipefail
 
           DESC="${GITHUB_REF_NAME//[^A-Za-z0-9_.\/-]/_} ${GITHUB_SHA:0:7} (run ${GITHUB_RUN_NUMBER})"
-          sed -i \
-            -e "s|__APP_ID__|${STEAM_APP_ID}|g" \
-            -e "s|__DEPOT_WINDOWS__|${STEAM_DEPOT_WINDOWS}|g" \
-            -e "s|__DEPOT_MAC__|${STEAM_DEPOT_MAC}|g" \
-            -e "s|__DESC__|${DESC}|g" \
-            -e "s|__SETLIVE__|${SET_LIVE}|g" \
-            steam/app_build.vdf steam/depot_windows.vdf steam/depot_mac.vdf
 
-          "$HOME/steamcmd/steamcmd.sh" \
-            +login "$STEAM_USERNAME" \
-            +run_app_build "$GITHUB_WORKSPACE/steam/app_build.vdf" \
-            +quit | tee "$RUNNER_TEMP/steamcmd.log"
+          # One app's build: its build script and depot scripts filled in, uploaded, and set live.
+          # deploy_app <label> <app id> <windows depot> <mac depot> <app build vdf> <depot vdfs...>
+          deploy_app() {
+            local label="$1" app="$2" dwin="$3" dmac="$4" vdf="$5"
+            shift 5
+            local log="$RUNNER_TEMP/steamcmd-${label// /_}.log"
+            local files=("steam/$vdf")
+            for f in "$@"; do files+=("steam/$f"); done
+            echo "::group::$label: app $app"
+            sed -i \
+              -e "s|__APP_ID__|${app}|g" \
+              -e "s|__DEPOT_WINDOWS__|${dwin}|g" \
+              -e "s|__DEPOT_MAC__|${dmac}|g" \
+              -e "s|__DESC__|${DESC}|g" \
+              -e "s|__SETLIVE__|${SET_LIVE}|g" \
+              "${files[@]}"
 
-          # Say where the build ended up on every run, so that a run that went to "test" cannot
-          # be mistaken for a release. The default branch has its own messages below.
-          if [ "$PROMOTE_DEFAULT" != "1" ]; then
-            if [ -n "$SET_LIVE" ]; then
-              echo "::notice::Build \"${DESC}\" is live on the \"${SET_LIVE}\" branch only. Players on the default branch did NOT get it: for that, run again with set_live = default."
-            else
-              echo "::notice::Build \"${DESC}\" is uploaded and not live on any branch."
+            if ! "$HOME/steamcmd/steamcmd.sh" \
+                +login "$STEAM_USERNAME" \
+                +run_app_build "$GITHUB_WORKSPACE/steam/$vdf" \
+                +quit | tee "$log"; then
+              echo "::endgroup::"
+              echo "::error::$label: steamcmd failed. See its log above."
+              return 1
             fi
-          fi
+            echo "::endgroup::"
 
-          if [ "$PROMOTE_DEFAULT" = "1" ]; then
-            BUILDS_PAGE="https://partner.steamgames.com/apps/builds/${STEAM_APP_ID}"
+            # Say where the build ended up on every run, so that a run that went to "test" cannot
+            # be mistaken for a release. The default branch has its own messages below.
+            if [ "$PROMOTE_DEFAULT" != "1" ]; then
+              if [ -n "$SET_LIVE" ]; then
+                echo "::notice::$label build \"${DESC}\" is live on the \"${SET_LIVE}\" branch only. Players on the default branch did NOT get it: for that, run again with set_live = default."
+              else
+                echo "::notice::$label build \"${DESC}\" is uploaded and not live on any branch."
+              fi
+              return 0
+            fi
+
+            local builds_page="https://partner.steamgames.com/apps/builds/${app}"
             # steamcmd ends a good upload with "... build (BuildID 1234567)".
-            BUILD_ID=$(grep -oE 'BuildID [0-9]+' "$RUNNER_TEMP/steamcmd.log" | tail -1 | grep -oE '[0-9]+' || true)
+            local build_id
+            build_id=$(grep -oE 'BuildID [0-9]+' "$log" | tail -1 | grep -oE '[0-9]+' || true)
             if [ -z "$STEAM_PUBLISHER_KEY" ]; then
-              echo "::notice::Build \"${DESC}\" is uploaded but NOT live. Set it live on default at ${BUILDS_PAGE}, or add the STEAM_PUBLISHER_KEY secret to have this done for you (see steam/SETUP.md)."
-            elif [ -z "$BUILD_ID" ]; then
-              echo "::error::Uploaded, but could not read the BuildID from the steamcmd output, so nothing was set live. Set the build live on default at ${BUILDS_PAGE}."
-              exit 1
-            else
-              # A secret that was pasted with a newline on the end is a different key to Steam.
-              KEY=$(printf '%s' "$STEAM_PUBLISHER_KEY" | tr -d '[:space:]')
-              # A publisher key is 32 letters and digits. Anything else is some other number
-              # from Steamworks. This says so without printing any of it.
-              if ! [[ "$KEY" =~ ^[0-9A-Fa-f]{32}$ ]]; then
-                echo "::warning::STEAM_PUBLISHER_KEY is ${#KEY} characters and a publisher Web API key is 32 (0-9, A-F). It may not be one. See steam/SETUP.md."
-              fi
-
-              # A RELEASED app wants a person to approve a change to default, in the Steam
-              # mobile app. STEAM_APPROVER_ID names that person: their 17 digit SteamID.
-              APPROVER=()
-              if [ -n "$STEAM_APPROVER_ID" ]; then
-                APPROVER=(--data-urlencode "steamid=${STEAM_APPROVER_ID}")
-              fi
-
-              # "public" is what the Web API calls the default branch.
-              HTTP=$(curl -sS -o "$RUNNER_TEMP/setlive.json" -w '%{http_code}' -X POST \
-                "https://partner.steam-api.com/ISteamApps/SetAppBuildLive/v2/" \
-                --data-urlencode "key=${KEY}" \
-                --data-urlencode "appid=${STEAM_APP_ID}" \
-                --data-urlencode "buildid=${BUILD_ID}" \
-                --data-urlencode "betakey=public" \
-                "${APPROVER[@]}" \
-                --data-urlencode "description=${DESC}")
-              echo "SetAppBuildLive: HTTP ${HTTP}"; cat "$RUNNER_TEMP/setlive.json" || true; echo
-              if [ "$HTTP" != "200" ]; then
-                # Steam answers 403 the same way for a key that is wrong and for a key that is
-                # right but may not do this. Reading the branches with the same key tells the
-                # two apart: it needs the key to be good for this app, and nothing more.
-                PROBE=$(curl -sS -o /dev/null -w '%{http_code}' -G \
-                  "https://partner.steam-api.com/ISteamApps/GetAppBetas/v1/" \
-                  --data-urlencode "key=${KEY}" \
-                  --data-urlencode "appid=${STEAM_APP_ID}" || true)
-                echo "GetAppBetas with the same key: HTTP ${PROBE}"
-                if [ "$PROBE" = "200" ]; then
-                  WHY="The key is good for this app, so the refusal is about this call: the app is released and needs STEAM_APPROVER_ID, or the key's group may not publish."
-                else
-                  WHY="The key itself was refused (reading the branches gave HTTP ${PROBE}): it is not a publisher key, or its group does not have this app."
-                fi
-                echo "::error::The build is uploaded (BuildID ${BUILD_ID}) but Steam refused to set it live on default (HTTP ${HTTP}). ${WHY} Set it live by hand at ${BUILDS_PAGE}. See steam/SETUP.md."
-                exit 1
-              fi
-              echo "::notice::Build ${BUILD_ID} \"${DESC}\" is live on the default branch."
+              echo "::notice::$label build \"${DESC}\" is uploaded but NOT live. Set it live on default at ${builds_page}, or add the STEAM_PUBLISHER_KEY secret to have this done for you (see steam/SETUP.md)."
+              return 0
             fi
+            if [ -z "$build_id" ]; then
+              echo "::error::$label uploaded, but could not read the BuildID from the steamcmd output, so nothing was set live. Set the build live on default at ${builds_page}."
+              return 1
+            fi
+            # A secret that was pasted with a newline on the end is a different key to Steam.
+            local key
+            key=$(printf '%s' "$STEAM_PUBLISHER_KEY" | tr -d '[:space:]')
+            # A publisher key is 32 letters and digits. Anything else is some other number
+            # from Steamworks. This says so without printing any of it.
+            if ! [[ "$key" =~ ^[0-9A-Fa-f]{32}$ ]]; then
+              echo "::warning::STEAM_PUBLISHER_KEY is ${#key} characters and a publisher Web API key is 32 (0-9, A-F). It may not be one. See steam/SETUP.md."
+            fi
+
+            # A RELEASED app wants a person to approve a change to default, in the Steam
+            # mobile app. STEAM_APPROVER_ID names that person: their 17 digit SteamID.
+            local approver=()
+            if [ -n "$STEAM_APPROVER_ID" ]; then
+              approver=(--data-urlencode "steamid=${STEAM_APPROVER_ID}")
+            fi
+
+            # "public" is what the Web API calls the default branch.
+            local http
+            http=$(curl -sS -o "$RUNNER_TEMP/setlive.json" -w '%{http_code}' -X POST \
+              "https://partner.steam-api.com/ISteamApps/SetAppBuildLive/v2/" \
+              --data-urlencode "key=${key}" \
+              --data-urlencode "appid=${app}" \
+              --data-urlencode "buildid=${build_id}" \
+              --data-urlencode "betakey=public" \
+              "${approver[@]}" \
+              --data-urlencode "description=${DESC}")
+            echo "SetAppBuildLive ($label): HTTP ${http}"; cat "$RUNNER_TEMP/setlive.json" || true; echo
+            if [ "$http" != "200" ]; then
+              # Steam answers 403 the same way for a key that is wrong and for a key that is
+              # right but may not do this. Reading the branches with the same key tells the
+              # two apart: it needs the key to be good for this app, and nothing more.
+              local probe why
+              probe=$(curl -sS -o /dev/null -w '%{http_code}' -G \
+                "https://partner.steam-api.com/ISteamApps/GetAppBetas/v1/" \
+                --data-urlencode "key=${key}" \
+                --data-urlencode "appid=${app}" || true)
+              echo "GetAppBetas with the same key: HTTP ${probe}"
+              if [ "$probe" = "200" ]; then
+                why="The key is good for this app, so the refusal is about this call: the app is released and needs STEAM_APPROVER_ID, or the key's group may not publish."
+              else
+                why="The key itself was refused (reading the branches gave HTTP ${probe}): it is not a publisher key, or its group does not have this app."
+              fi
+              echo "::error::$label is uploaded (BuildID ${build_id}) but Steam refused to set it live on default (HTTP ${http}). ${why} Set it live by hand at ${builds_page}. See steam/SETUP.md."
+              return 1
+            fi
+            echo "::notice::$label build ${build_id} \"${DESC}\" is live on the default branch."
+          }
+
+          fail=0
+          deploy_app "Fish Fish Pop" "$STEAM_APP_ID" "$STEAM_DEPOT_WINDOWS" "$STEAM_DEPOT_MAC" \
+            app_build.vdf depot_windows.vdf depot_mac.vdf || fail=1
+          # the demo, its own app (steam/SETUP.md, "The demo"): tried whatever came of the full
+          # game's, as the two are each their own
+          if [ "$DEMO" = "true" ]; then
+            deploy_app "Demo" "$STEAM_DEMO_APP_ID" "$STEAM_DEMO_DEPOT_WINDOWS" "$STEAM_DEMO_DEPOT_MAC" \
+              app_build_demo.vdf depot_demo_windows.vdf depot_demo_mac.vdf || fail=1
           fi
+          exit $fail
 
       - name: Dump SteamPipe logs on failure
         if: failure() && steps.steam_upload.outcome == 'failure'

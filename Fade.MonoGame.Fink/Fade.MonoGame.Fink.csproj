@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+        Fink atlases for Fade.MonoGame games: FadeFinkCommands, and the FinkSystem that plays
+        animations exported by Fink (the cel-animation editor in C:/proj/fink).
+
+        Fink exports, per atlas:
+          <atlas>.png            palette indices (red channel), packed and trimmed
+          <atlas>.palette.png    256 colors per row, one row per palette variant
+          <atlas>_palette.fx     the shader that turns indices into colors (built by the game's
+                                 content build, so it is compiled for the game's backend)
+          <atlas>.atlas.json     cells, assets and clips (tags) with their frame times
+          fink_<atlas>.fbasic    #constants for every clip and palette row, and a load function
+
+        A game opts in with four edits:
+          1. a ProjectReference to this project
+          2. <FadeCommand Include="Fade.MonoGame.Fink" FullName="Fade.MonoGame.Fink.FadeFinkCommands" />
+          3. in Program.cs, a FinkSystem registered as an IFadeHostSystem (an IFadeHostSystem[]
+             when there are others, e.g. Steam)
+          4. the atlas.json copied next to the built content, which the content build skips:
+             <None Include="Assets\**\*.atlas.json" Link="Content\%(RecursiveDir)%(Filename)%(Extension)"
+                   CopyToOutputDirectory="PreserveNewest" />
+        and lists fink_<atlas>.fbasic FIRST among its FadeSource items.
+    -->
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+
+        <!-- The command source generator reads /// trivia for command metadata. -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <IsPackable>false</IsPackable>
+
+        <!-- The Fade build tasks LOAD this assembly to read its commands. -->
+        <PlatformTarget>AnyCPU</PlatformTarget>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="FadeBasic.Lang.Core" Version="$(FadeVersion)" />
+        <PackageReference Include="FadeBasic.Lang.CommandSourceGenerator" Version="$(FadeVersion)" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- For IFadeHostSystem. -->
+        <ProjectReference Include="..\Fade.MonoGame.Contracts\Fade.MonoGame.Contracts.csproj" />
+        <!-- TextureSystem, SpriteSystem, RenderSystem, GameReloader. -->
+        <ProjectReference Include="..\Fade.MonoGame.Game\Fade.MonoGame.Game.csproj" />
+        <!-- The engine's own commands (load an effect, set texture frames), called directly so
+             this behaves exactly as the program doing it itself would. -->
+        <ProjectReference Include="..\Fade.MonoGame.Lib\Fade.MonoGame.Lib.csproj" />
+    </ItemGroup>
+
+    <!-- COMPILE-ONLY: the game owns the MonoGame that ships, and which backend it is. -->
+    <ItemGroup>
+        <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonogameVersion)"
+                          PrivateAssets="all" IncludeAssets="compile" />
+    </ItemGroup>
+
+</Project>

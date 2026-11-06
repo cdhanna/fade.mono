@@ -424,6 +424,8 @@ setup_menu:
     gosub setup_codec
 
     ` the game opens on the splash screen, and then the main menu
+    ` the name of the game, dressed up, which the splash screen brings in. see fish_headers_logo.
+    gosub setup_logo
     gosub menu_startup
 
 return
@@ -518,6 +520,7 @@ frame_menu:
 
             ` there is no game to go back to once it is over
             if MENU_PAGE = MENU_PAGE_GAME_OVER then menuPicked = -1
+            if MENU_PAGE = MENU_PAGE_DEMO_OVER then menuPicked = -1
         endif
     endif
 
@@ -674,6 +677,15 @@ menu_pick:
                 REQUEST_ABILITY_SELECTION = 1
                 SCORE_BAR_HOLD = 2
             endif
+        endcase
+
+        ` the page of the end of the Steam demo. the game was saved as it came up, with the round won, for
+        ` the full game to carry on with. see THE STEAM DEMO in fish_headers_steamdemo.
+        case MENU_ITEM_DEMO_STORE
+            steamDemoStore()
+        endcase
+        case MENU_ITEM_DEMO_DONE
+            gosub menu_quit_to_title
         endcase
 
         case MENU_ITEM_QUIT
@@ -877,6 +889,9 @@ handle_game_end:
     ` let a swap that is playing out finish first
     if LIVE_MOVE_ACTIVE then return
     REQUEST_GAME_END = 0
+
+    ` one more on games_finished, on Steam. see THE STATS in fish_headers_achieve.
+    achieveGameFinished()
 
     ` a game that was won the usual way ends with the fish going home. see THE FISH GO HOME in fish_headers.
     ` one of the two endings of the hidden game has had an ending of its own already.
@@ -1400,6 +1415,8 @@ frame_menu_render:
 
     ` the title bobs up and down
     set text position MENU_TITLE_TEXT_ID, WORLD_WIDTH / 2, MENU_TITLE_Y + .5 + sin(menuMs * .002) * 3
+    ` and on the main menu, the logo is there in its place. see THE LOGO in fish_headers_logo.
+    logoFrame(menuMs)
 
     ` the version is only on the main menu, and it is half see-through. it fades in with the rest.
     menuVersionAlpha# = 0
@@ -1416,6 +1433,7 @@ return
 
 ` put the game back to how it is at the very start, so that a new one can be played.
 reset_game:
+    STEAM_DEMO_OVER = 0 `see THE STEAM DEMO in fish_headers_steamdemo
 
     ` the seed of the new game comes first, because everything that is picked from here on is
     ` picked from it. see THE SEED OF A GAME in fish_headers_seed.
@@ -1618,6 +1636,17 @@ function setMenuPage(page)
         last = MENU_ITEM_OVER_DONE
     endif
 
+    ` the page that comes up over the game when the last round of the Steam demo has been won. see THE STEAM
+    ` DEMO in fish_headers_steamdemo.
+    if page = MENU_PAGE_DEMO_OVER
+        title$ = loc$("menu.title.demo")
+        titleSize = 28
+        hint$ = loc$("menu.hint.main")
+        first = MENU_ITEM_DEMO_STORE
+        last = MENU_ITEM_DEMO_DONE
+        MENU_WIDTH = 220
+    endif
+
     if page = MENU_PAGE_PAUSE
         title$ = loc$("menu.title.paused")
         titleSize = 36
@@ -1792,6 +1821,12 @@ function setMenuPage(page)
     size sprite MENU_PANEL_SPRITE, MENU_WIDTH, panelH
     layoutInfoBorder(MENU_PANEL_BORDER, panelX, panelY, MENU_WIDTH, panelH)
 
+    ` the name of the game is the logo, and the title is left empty under it. see THE LOGO in fish_headers_logo.
+    LOGO_ON = 0
+    if title$ = "Fish Fish Pop"
+        LOGO_ON = 1
+        title$ = ""
+    endif
     set text MENU_TITLE_TEXT_ID, title$
     size text y MENU_TITLE_TEXT_ID, titleSize
     if page <> MENU_PAGE_MAIN then titleShadow = 2
@@ -2006,6 +2041,40 @@ function applyLanguage()
         langPicked$ = best language$(steam language$())
     endif
     set language langPicked$
+    applyLanguageFont()
+endfunction
+
+
+` the score font that can draw a language: "" for SuperCorn's (ZeroCool), which draws the Latin ones, or the
+` end of the name of a family of its own (Tools/make-fonts.py writes them). the build check reads the same
+` list from `fonts` in Assets/Fish/Lang/strings.sheet.json: keep the two in step.
+function scoreFontFamily(code$)
+    if code$ = "ru" then exitfunction "-cy"
+    if code$ = "tr" then exitfunction "-tr"
+    if code$ = "ja" then exitfunction "-ja"
+    if code$ = "zh-CN" then exitfunction "-zh"
+    if code$ = "ko" then exitfunction "-ko"
+endfunction ""
+
+
+` the big title over the cards (the upgrade screen, the book, the drop and equip pages): 400 wide. a title in
+` a font of its own is no taller than its line would be in a long english title, or a few chinese
+` characters would be stretched to fill the 400 and stand over the whole screen.
+function sizeShopTitle(titleTextId)
+    if scoreFontFamily(language$()) = "" or scoreFontFamily(language$()) = "-tr"
+        size text x titleTextId, 400
+    else
+        size text max titleTextId, 400, 64
+    endif
+endfunction
+
+
+` load the score font for the language of the game, over the one there was. its icons stay, being the
+` font id's. before load_fonts has given it an id there is nothing to load over: load_fonts loads it.
+function applyLanguageFont()
+    if SCORE_FONT > 0
+        font SCORE_FONT, "Fish/Fonts/ZeroCool" + scoreFontFamily(language$())
+    endif
 endfunction
 
 
@@ -2090,6 +2159,11 @@ function loadMenuStrings()
     MENU_ITEMS(MENU_ITEM_OVER_CONTINUE).desc$ = loc$("menu.over.continue.desc")
     MENU_ITEMS(MENU_ITEM_MOVES).name$ = loc$("menu.moves")
     MENU_ITEMS(MENU_ITEM_MOVES).desc$ = loc$("menu.moves.desc")
+
+    MENU_ITEMS(MENU_ITEM_DEMO_STORE).name$ = loc$("menu.demo.store")
+    MENU_ITEMS(MENU_ITEM_DEMO_STORE).desc$ = loc$("menu.demo.store.desc")
+    MENU_ITEMS(MENU_ITEM_DEMO_DONE).name$ = loc$("menu.over.done")
+    MENU_ITEMS(MENU_ITEM_DEMO_DONE).desc$ = loc$("menu.demo.done.desc")
 endfunction
 
 
@@ -2158,6 +2232,7 @@ function changeMenuOption(item, change)
             if langNext < 0 then langNext = language count() - 1
             OPTION_LANGUAGE = langNext + 1
             set language language code$(langNext)
+            applyLanguageFont()
             reloadMenuStrings()
         endcase
 

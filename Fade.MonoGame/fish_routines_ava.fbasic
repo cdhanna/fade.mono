@@ -21,7 +21,7 @@ ava_answer:
         if aaSea > 0
             avaSeaSay(aaSea)
             gosub angler_wait
-            anglerSay(loc$("angler.ava.sea.more"))
+            anglerSay(loc$("angler.ava.sea.more2"))
             gosub angler_wait
             set pref AVA_PREF_HINT + aaSea, 1
         endif
@@ -36,10 +36,19 @@ return
 ava_leave_talk:
     anglerSay(loc$("angler.ava.leave.a"))
     gosub angler_wait
-    set text loc ANGLER_LINE_TEXTS(0), "angler.ava.reply.stay"
-    set text loc ANGLER_LINE_TEXTS(1), "angler.ava.reply.go"
-    set text loc ANGLER_LINE_TEXTS(2), "angler.ava.reply.wait"
-    gosub ava_pick_three
+    altDone = 0
+    while altDone = 0
+        set text loc ANGLER_LINE_TEXTS(0), "angler.ava.reply.stay"
+        set text loc ANGLER_LINE_TEXTS(1), "angler.ava.reply.go"
+        set text loc ANGLER_LINE_TEXTS(2), "angler.ava.reply.wait"
+        gosub ava_pick_three
+        altDone = 1
+        if angChosen = 1
+            gosub ava_sure
+            altDone = AVA_SURE
+            angChosen = 1
+        endif
+    endwhile
     if angChosen = 0
         anglerSay(loc$("angler.ava.leave.stay"))
         gosub angler_wait
@@ -69,6 +78,27 @@ ava_pick_three:
 return
 
 
+` the player said that they are leaving, and she makes sure, because she will not come back up. AVA_SURE is 1 when
+` they are, and 0 when they took it back, and then the question that it came from is asked again. see SHE HAS GONE
+` in fish_headers_ava.
+ava_sure:
+    anglerSay(loc$("angler.ava.sure.a"))
+    gosub angler_wait
+    anglerSay(loc$("angler.ava.sure.b"))
+    gosub angler_wait
+    set text loc ANGLER_LINE_TEXTS(0), "angler.ava.reply.sure"
+    set text loc ANGLER_LINE_TEXTS(1), "angler.ava.reply.notsure"
+    gosub puzzle_scene_pick
+    AVA_SURE = 0
+    if angChosen = 0
+        AVA_SURE = 1
+    else
+        anglerSay(loc$("angler.ava.sure.no"))
+        gosub angler_wait
+    endif
+return
+
+
 ` she says goodbye. the answer that this is for is what makes her gone. see SHE HAS GONE in fish_headers_ava.
 ava_goodbye:
     anglerSay(loc$("angler.puzzle.go.a"))
@@ -92,10 +122,19 @@ puzzle_offer:
     anglerSay(loc$("angler.ava.offer.b"))
     gosub angler_wait
 
-    set text loc ANGLER_LINE_TEXTS(0), "angler.ava.reply.stay"
-    set text loc ANGLER_LINE_TEXTS(1), "angler.ava.reply.go"
-    set text loc ANGLER_LINE_TEXTS(2), "angler.ava.reply.dive"
-    gosub ava_pick_three
+    poDone = 0
+    while poDone = 0
+        set text loc ANGLER_LINE_TEXTS(0), "angler.ava.reply.stay"
+        set text loc ANGLER_LINE_TEXTS(1), "angler.ava.reply.go"
+        set text loc ANGLER_LINE_TEXTS(2), "angler.ava.reply.dive"
+        gosub ava_pick_three
+        poDone = 1
+        if angChosen = 1
+            gosub ava_sure
+            poDone = AVA_SURE
+            angChosen = 1
+        endif
+    endwhile
 
     if angChosen = 0
         anglerSay(loc$("angler.ava.offer.stay"))
@@ -288,7 +327,16 @@ frame_debug_ava_way:
             avaHeard(MORSE_WORD_FRIEND)
         endif
     endif
-    dbgPzMoved = debug int slider("ms of nothing after the last board", PUZZLE_STAY_MS, 0, 60000)
+    dbgPzMoved = debug int slider("ms the water stays empty after she goes", PUZZLE_GOING_HOLD_MS, 0, 10000)
+    if debug button("forget that she said how she is doing") = 1
+        if get pref(AVA_PREF_FREED, 0) > 0 then set pref AVA_PREF_FREED, 1
+    endif
+
+    debug separator
+    dbgAvWarm = AVA_WARM# * 100
+    debug text "warm water " + str$(dbgAvWarm) + "% (0 by the game, 1 always, 2 never)"
+    dbgPzMoved = debug int slider("warm water", AVA_DBG_WARM, 0, 2)
+    dbgPzMoved = debug float slider("seconds it takes to come or go", AVA_WARM_SECS#, 0.1, 10.0)
     end debug window
 return
 
@@ -533,12 +581,26 @@ function avaBackAnswered(abaChosen)
 endfunction
 
 
+` she went at the end of the boards, to stay herself, and the game is the usual one again. the player is not staying,
+` so the next new game is a usual one, and she keeps the shop. see THE END OF THE BOARDS in fish_headers_puzzle.
+function avaFreed()
+    set pref PUZZLE_PREF, 0
+    set pref PUZZLE_PREF + 1, 0
+    set pref PUZZLE_PREF + 2, 0
+    set pref AVA_PREF_OFFER, AVA_OFFER_FREED
+    set pref AVA_PREF_FREED, 1
+    PUZZLE_ENV_SPENT = 1 `FISH_PUZZLE does not take the player straight back down
+    anglerBankLoad()
+endfunction
+
+
 ` she is gone. see SHE HAS GONE in fish_headers_ava.
 function avaLeaves()
     set pref PUZZLE_PREF + 2, 0
     set pref PUZZLE_GONE_PREF, 1
     set pref AVA_PREF_GONE_GAMES, 0
     set pref AVA_PREF_BOTTLE, 0
+    anglerBankLoad()
 endfunction
 
 
@@ -549,6 +611,7 @@ function avaComesBack()
     set pref AVA_PREF_OFFER, AVA_OFFER_TAKEN
     set pref AVA_PREF_GONE_GAMES, 0
     set pref AVA_PREF_BOTTLE, 0
+    anglerBankLoad()
 endfunction
 
 
@@ -584,7 +647,10 @@ function avaHeard(ahWord)
     if ahCall = 0 then exitfunction
     ahGone = puzzleGone()
     if ahGone
-        if ahCall = 2 then AVA_CALL_PENDING = 1
+        if ahCall = 2
+            AVA_CALL_PENDING = 1
+            achieveUnlock("MORSE_FRIEND")
+        endif
     else
         ANGLER_CALL_PENDING = 1
     endif
@@ -610,12 +676,46 @@ function avaCallReady()
 endfunction acrGo
 
 
+` 1 when the water of the main menu should be warm. see THE WARM WATER in fish_headers_ava.
+function avaWarmWanted()
+    awwWarm = puzzleStaying()
+    awwGone = puzzleGone()
+    if awwGone then awwWarm = 0
+    if is env set("FISH_MENU_WARM") then awwWarm = 1
+    if AVA_DBG_WARM = 1 then awwWarm = 1
+    if AVA_DBG_WARM = 2 then awwWarm = 0
+endfunction awwWarm
+
+
+` the water gets warmer, or cooler, toward what it should be. frame_surface comes here, on every frame of the main menu.
+` the first frame after a long time away starts where it should be, so the main menu does not warm up every time it comes back.
+function avaWarmStep()
+    awsNow = game ms()
+    awsStep# = (awsNow - AVA_WARM_MS) * .001
+    AVA_WARM_MS = awsNow
+    awsWant# = avaWarmWanted()
+    if awsStep# > 1
+        AVA_WARM# = awsWant#
+        exitfunction
+    endif
+    awsBy# = awsStep# / AVA_WARM_SECS#
+    if AVA_WARM# < awsWant#
+        AVA_WARM# = AVA_WARM# + awsBy#
+        if AVA_WARM# > awsWant# then AVA_WARM# = awsWant#
+    else
+        AVA_WARM# = AVA_WARM# - awsBy#
+        if AVA_WARM# < awsWant# then AVA_WARM# = awsWant#
+    endif
+endfunction
+
+
 ` the bottle on the water. frame_surface comes here, on every frame of the main menu, with where the horizon is, how far
 ` the camera has moved everything, and how far it has gone under. see THE BOTTLE in fish_headers_ava.
 function avaBottleStep(abHorizon#, abShift, abSink#)
     abThere = avaBottleThere()
     if abThere = 0
         avaBottleHide()
+        set effect param float4 SURFACE_FX_ID, "Bottle", 0, 0, 0, 0
         exitfunction
     endif
 
@@ -628,17 +728,26 @@ function avaBottleStep(abHorizon#, abShift, abSink#)
         color sprite AVA_BOTTLE_SPRITE, rgb(225, 235, 255)
         order sprite AVA_BOTTLE_SPRITE, ORDER_MENU_SURFACE + 3
         set sprite render target AVA_BOTTLE_SPRITE, TARGET_MENU
+        ` it sits in the water, and not on it: see WaterlineEffect.fx
+        set sprite effect AVA_BOTTLE_SPRITE, SURFACE_WATERLINE_FX
     endif
 
-    ` it drifts a little, and rocks on the swell
+    ` it drifts a little, and rocks on the swell, riding up and down with the water a little less than the water
+    ` does, so that it dips in and out of it
     abTime# = game ms() * .001
     abX# = AVA_BOTTLE_X# + sin(abTime# * .23) * 6
-    abY# = abHorizon# + AVA_BOTTLE_DOWN + sin(abTime# * 1.1) * 2.5
+    abBob# = sin(abTime# * 1.1) * 2.5
+    abY# = abHorizon# + AVA_BOTTLE_DOWN + abBob#
+    abWater# = abHorizon# + AVA_BOTTLE_DOWN + abBob# * .4 + AVA_BOTTLE_SUNK
     position sprite AVA_BOTTLE_SPRITE, abX#, abY# + abShift
-    rotate sprite AVA_BOTTLE_SPRITE, sin(abTime# * .8) * .35
+    rotate sprite AVA_BOTTLE_SPRITE, sin(abTime# * .8) * .22
     abSeen# = 1 - abSink# * 2
     if abSeen# < 0 then abSeen# = 0
     set sprite alpha AVA_BOTTLE_SPRITE, 255 * abSeen#
+    set sprite all texcoord1 AVA_BOTTLE_SPRITE, abWater# + abShift, abTime#, .5, 0
+    surfaceWaterline(AVA_BOTTLE_SPRITE)
+    ` and the sea around it: the rings it sends out, its reflection and its shade
+    set effect param float4 SURFACE_FX_ID, "Bottle", abX#, abWater#, AVA_BOTTLE_SIZE * .3, abSeen#
     show sprite AVA_BOTTLE_SPRITE
     AVA_BOTTLE_AT_X# = abX#
     AVA_BOTTLE_AT_Y# = abY#
@@ -690,22 +799,6 @@ function avaLetterLine(allLine)
         endcase
         case 6
             set text loc AVA_LETTER_TEXT_ID, "angler.ava.bottle.l6"
-        endcase
-    endselect
-endfunction
-
-
-` what she says as a board comes in, once the thirty have run out and she is making more
-function avaAfterLine(aalBoard)
-    select aalBoard mod 3
-        case 0
-            guideSay(lockey$("angler.ava.after.1"))
-        endcase
-        case 1
-            guideSay(lockey$("angler.ava.after.2"))
-        endcase
-        case 2
-            guideSay(lockey$("angler.ava.after.3"))
         endcase
     endselect
 endfunction

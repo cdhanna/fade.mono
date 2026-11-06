@@ -1,0 +1,55 @@
+remstart
+    THE STEAM DEMO
+    the free demo on Steam is this same game, built with -p:FishSteamDemo=true (Fade.MonoGame.csproj). the
+    Steam workflow makes one beside the full game, and uploads it to the demo's own app (steam/SETUP.md,
+    "The demo"). Program.cs reads the build back and sets FISH_STEAM_DEMO, and setup_steam_demo sees it. a
+    Debug run with FISH_STEAM_DEMO=1 is the demo too.
+
+    it is not THE DEMO of fish_headers_demo, which is the game playing itself on the main menu. that one
+    is in the demo too, and in the full game.
+
+    the demo is the whole game, for STEAM_DEMO_ROUNDS rounds. every kind of game can be started, and a short
+    one is over before the demo is, so it can be won. any other game stops when that many rounds have been
+    won: the bar fills, and in place of the upgrade screen the page of THE END OF THE DEMO comes up over the
+    game, with the store page of the full game, in the Steam overlay, and "Done". the Rounds Left on the
+    screen counts down to the end of the demo, and so does what the angler says about them.
+
+    THE SAVE IS SHARED. the demo keeps its prefs.json where the full game does (Program.cs, the save
+    directory), and Steam Cloud carries it from the one app to the other (steam/SETUP.md). so a player who
+    buys the game has the tutorial seen, their options, the codec and everything else that was found, and the
+    game of the demo is there to carry on with: it was saved with the round won, so the full game carries on
+    with the upgrade screen of that round. the demo carries it on too, but only as far as the end page.
+    every save says which of the two made it (PREF_SAVE_DEMO). a player who has the full game and opens the
+    demo has a saved game that the full game made, and the demo leaves it alone: there is no Resume for it,
+    and the demo never saves over it, nor forgets it. see steamDemoHandsOff.
+
+    the demo has no achievements (achieveOk) and sends no scores to the leaderboards, which are the full
+    game's. its high scores are kept on the machine, as they always are.
+
+    what the rest of the game does for it:
+    - fish.fbasic does `gosub setup_steam_demo` before anything is set up
+    - frame_score asks steamDemoStops() when a round is won, and the main loop does
+      `gosub handle_steam_demo_over`, beside handle_game_end
+    - save_game, forget_saved_game and hasSavedGame ask steamDemoHandsOff()
+    - showRoundsLeft and the angler's line about the rounds use steamDemoRoundsLeft()
+    - logoFrame calls steamDemoTag(), which makes the tag the first time, and logoHide hides it
+remend
+
+global STEAM_DEMO = 0 `1 in the demo
+` how many rounds a game of the demo has. (no comment on the line of a #constant: it becomes part of the number.)
+#constant STEAM_DEMO_ROUNDS 10
+global STEAM_DEMO_OVER = 0 `1 when the last round of the demo has been won, and 2 while its page is up
+` the store page of the full game. the demo is an app of its own, so this is not its own page.
+global STEAM_DEMO_STORE_URL$ = "https://store.steampowered.com/app/5416340/"
+
+` which of the two made the saved game: 1 the demo, 0 (or never set) the full game
+#constant PREF_SAVE_DEMO 23
+global dim STEAM_DEMO_TEST_PREFS(3) `what fish_tests_steamdemo makes the preferences say. a global dim in a test file is never made.
+
+` the tag beside "Pop", on the main menu
+global STEAM_DEMO_TAG_ID = 0
+global STEAM_DEMO_TAG_X# = 132 `from the middle of the logo, before it is scaled: beside "Pop", to the right
+global STEAM_DEMO_TAG_Y# = 30
+global STEAM_DEMO_TAG_ANGLE# = -.32
+` how long after "Pop" it comes in
+#constant STEAM_DEMO_TAG_WAIT 420

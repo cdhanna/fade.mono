@@ -44,6 +44,12 @@ abstract test trailerShot
     global dim TR_PATH_Y(16)
     global TR_PATH_N = 0
     global TR_Q_CLOSE = 0 `the frame of the video that the quest talk box bubbles away on
+    global TR_AVA_X# = 175 `where Ava is in the deep of the finale, already there when the bubbles uncover her
+    global TR_AVA_Y# = 96
+    global TR_AVA_SPEED# = 14 `and how fast she swims along there, in pixels every second, slowly, so she stays in the middle
+    global TR_AVA_WORDS_UP = 16 `how far over her head her words are, so that they are clear of her
+    global TR_ANY_CELL = -1 `the swap that pops on Ava's board, from trailerAvaPopSetup
+    global TR_ANY_DOWN = 0
     mock new action down
     endmock TR_PRESS
 
@@ -153,6 +159,144 @@ abstract test trailerShot
         if tTrBlack# < 0 then tTrBlack# = 0
         if tTrBlack# > 1 then tTrBlack# = 1
         set sprite alpha TR_CURTAIN, 255 * tTrBlack#
+    endfunction
+
+    ` the saved game of the trailer's deep: a player who stayed with Ava, and has not cleared a board of hers yet
+    function trailerPuzzlePref(tTrPrefIndex)
+        tTrPrefValue = 0
+        if tTrPrefIndex = PUZZLE_PREF + 2 then tTrPrefValue = 1
+    endfunction tTrPrefValue
+
+    ` the prefs of a player who left Ava a few games ago, so that her bottle floats on the water of the menu
+    function trailerBottlePref(tTrBpIndex, tTrBpElse)
+        tTrBpValue = tTrBpElse
+        if tTrBpIndex = PUZZLE_GONE_PREF then tTrBpValue = 1
+        if tTrBpIndex = AVA_PREF_BOTTLE then tTrBpValue = 1
+    endfunction tTrBpValue
+
+    ` the menu hidden, and the reefs on the sea, whatever the options say
+    function trailerMenuSea()
+        trailerNoMenu()
+        SURFACE_REEF = 1
+        OPTION_MENU_REEF = 1
+    endfunction
+
+    ` only the key that picks a line, while TR_PRESS is 1, so that the cursor of the menu stays where it is
+    function trailerPressing(tTrPressAct)
+        tTrPressed = 0
+        if tTrPressAct = ACT_CONFIRM then tTrPressed = TR_PRESS
+    endfunction tTrPressed
+
+    ` the surface in the middle of the day (1), or in the evening (0), whatever the clock says. the boat keeps
+    ` the pictures of the evening, which the game was started in (build/render-trailer.ps1 sets FISH_SKY): the
+    ` trailer does not show it (see SURFACE_BOAT_X in trailer_finale), and loading a picture a second time
+    ` comes out as a black box.
+    function trailerSky(tTrDay)
+        SURFACE_DAY = tTrDay
+    endfunction
+
+    ` Ava, out in the water at x, TR_AVA_Y#, while the dive is still going and the game is not there to
+    ` move her: the bubbles uncover her already there. this is a little of what frame_puzzle_swim does, in
+    ` fish_routines_puzzle, for her far from the board.
+    function trailerAvaAt(tTrAvaX#, tTrAvaMs)
+        tTrAvaK# = PUZZLE_SIZE_NEAR#
+        tTrAvaY# = TR_AVA_Y# + sin(tTrAvaMs * .002) * 2
+        anglerPlace(tTrAvaX#, tTrAvaY#, tTrAvaK#)
+        size sprite ANGLER_SPRITE, ANGLER_ART_W * ANGLER_SCALE * tTrAvaK#, ANGLER_ART_H * ANGLER_SCALE * tTrAvaK#
+        color sprite ANGLER_SPRITE, rgb(255, 255, 255, 255)
+        tTrAvaTipX# = tTrAvaX# + ANGLER_TIP_X * ANGLER_SCALE * tTrAvaK#
+        tTrAvaTipY# = tTrAvaY# + ANGLER_TIP_Y * ANGLER_SCALE * tTrAvaK#
+        tTrAvaGlow# = (84 + sin(tTrAvaMs * .004) * 6) * tTrAvaK#
+        position sprite ANGLER_GLOW_SPRITE, tTrAvaTipX#, tTrAvaTipY# + ANGLER_GLOW_DROP
+        size sprite ANGLER_GLOW_SPRITE, tTrAvaGlow#, tTrAvaGlow#
+        color sprite ANGLER_GLOW_SPRITE, rgb(ANGLER_GLOW_R, ANGLER_GLOW_G, ANGLER_GLOW_B, 150)
+    endfunction
+
+    ` Ava, once the game has her: she is put where the trailer has her on every frame, so the game's own wander
+    ` (puzzleSwimNext), and the turn she makes to put her smile on or off, never take her anywhere. the game still
+    ` draws her, and her words come out of her as she goes. her own speeds are 0 while this goes on.
+    function trailerAvaHold(tTrHoldX#)
+        PUZZLE_SWIM_X# = tTrHoldX#
+        PUZZLE_SWIM_Y# = TR_AVA_Y#
+        PUZZLE_GO_X# = tTrHoldX#
+        PUZZLE_GO_Y# = TR_AVA_Y#
+        PUZZLE_LANE = 0
+        PUZZLE_LANE_Y# = TR_AVA_Y#
+        PUZZLE_NEAR# = 1
+        if PUZZLE_IN_FRONT = 0
+            PUZZLE_IN_FRONT = 1
+            puzzleSwimOrder()
+        endif
+        PUZZLE_SMILE_TURNING = 0
+        PUZZLE_SMILE_SHOWN = puzzleSmiling()
+        shopFace(0)
+    endfunction
+
+    ` where she is, this many frames after the dive put her in the water: she swims along at the speed she swims
+    ` with a line to say. it goes by frames, and not the game's clock, so that every take is the same.
+    function trailerAvaX(tTrAvaN)
+        tTrAvaGoX# = tTrAvaN
+    endfunction TR_AVA_X# + tTrAvaGoX# * TR_AVA_SPEED# / 60.0
+
+    ` one swap on Ava's board that pops three, in the middle of its lowest row: two of a kind there with one
+    ` between them, and a third of that kind over the one between. the fish around them are of other kinds, so
+    ` that nothing pops before the swap. the swap is the one over the gap, down. see trailer_finale.
+    function trailerAvaPopSetup()
+        tTrLow = -1
+        for tTrN = 0 to CELL_COUNT - 1
+            if CELLS(tTrN).value > 0
+                if CELLS(tTrN).coord.y > tTrLow then tTrLow = CELLS(tTrN).coord.y
+            endif
+        next
+        tTrMid = CELL_COLUMN_COUNT / 2
+        tTrK = CELLS(trailerIndex(tTrMid - 1, tTrLow)).value
+        ` two other kinds, from the fish on the board
+        tTrJ = 0
+        tTrL = 0
+        for tTrN = 0 to CELL_COUNT - 1
+            tTrV = CELLS(tTrN).value
+            if tTrV > 0 and tTrV <> tTrK
+                if tTrJ = 0
+                    tTrJ = tTrV
+                else
+                    if tTrL = 0 and tTrV <> tTrJ then tTrL = tTrV
+                endif
+            endif
+        next
+        puzzlePut(trailerIndex(tTrMid - 2, tTrLow), tTrL)
+        puzzlePut(trailerIndex(tTrMid - 1, tTrLow), tTrK)
+        puzzlePut(trailerIndex(tTrMid, tTrLow), tTrJ)
+        puzzlePut(trailerIndex(tTrMid + 1, tTrLow), tTrK)
+        puzzlePut(trailerIndex(tTrMid + 2, tTrLow), tTrL)
+        puzzlePut(trailerIndex(tTrMid - 1, tTrLow - 1), tTrL)
+        puzzlePut(trailerIndex(tTrMid, tTrLow - 1), tTrK)
+        puzzlePut(trailerIndex(tTrMid + 1, tTrLow - 1), tTrJ)
+        TR_ANY_CELL = trailerIndex(tTrMid, tTrLow - 1)
+        TR_ANY_DOWN = 1
+    endfunction
+
+    ` Ava's first board, with only its lowest two rows of fish: the deep shows a puzzle, and not a crowd
+    function trailerFewerFish()
+        tTrLow = -1
+        for tTrN = 0 to CELL_COUNT - 1
+            if CELLS(tTrN).value > 0
+                if CELLS(tTrN).coord.y > tTrLow then tTrLow = CELLS(tTrN).coord.y
+            endif
+        next
+        for tTrN = 0 to CELL_COUNT - 1
+            if CELLS(tTrN).value > 0
+                if CELLS(tTrN).coord.y < tTrLow - 1
+                    puzzlePut(tTrN, 0)
+                endif
+            endif
+        next
+    endfunction
+
+    ` the menu, the pause menu and its dim, all out of sight, while the finale goes down to Ava and back up
+    function trailerNoMenu()
+        setMenuChromeAlpha(0)
+        hide text MENU_HINT_TEXT_ID
+        hide sprite MENU_DIM_SPRITE
     endfunction
 
     ` THE HUD COMES IN. the trailer starts with nothing around the board, and has all of it by the end:
@@ -1314,14 +1458,14 @@ test trailer_first_pop from trailerShot
     set record view tS1BoxX#, tS1BoxY#, tS1W#, tS1H#
 
     trailerRecord("trailer_first_pop")
-    ` the three rise and fade in, one after another
-    for tS1F = 0 to 80
+    ` the three rise and fade in, one after another, unhurried
+    for tS1F = 0 to 110
         hintShow(0)
         trailerHideBut(tS1L, tS1M, tS1R, -1)
         for tS1C = 0 to 2
             tS1Cell = tS1L + tS1C
-            tS1T# = tS1F - 10 - tS1C * 8
-            tS1T# = tS1T# / 20.0
+            tS1T# = tS1F - 10 - tS1C * 16
+            tS1T# = tS1T# / 30.0
             if tS1T# < 0 then tS1T# = 0
             if tS1T# > 1 then tS1T# = 1
             tS1Ease# = 1 - (1 - tS1T#) * (1 - tS1T#)
@@ -1344,20 +1488,52 @@ test trailer_first_pop from trailerShot
         set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, tS1T#
         runto update_frame
     next
+    ` a breath on the crab before the swap
+    for tS1F = 1 to 40
+        hintShow(0)
+        trailerHideBut(tS1L, tS1M, tS1R, tS1A)
+        runto update_frame
+    next
 
     ` the swap, from the middle. the crab goes up, and the row of three seahorses pops. once the fish start
     ` to fall, every fish is hidden, so the sea stays empty.
+    ` THE PUNCH. the moment the three pop, the close up jumps in on them and springs back out
     trailerMove(0, -1, 1)
     tS1Gone = 0
-    for tS1F = 0 to 100
+    tS1Punch = -1
+    tS1Phase = -1
+    for tS1F = 0 to 130
         hintShow(0)
+        ` the pop itself: the fish go into their pops as the look starts, and the first of them bursts half a
+        ` second after
+        if tS1Phase < 0 and COMBO_PHASE >= 1 then tS1Phase = tS1F
+        if tS1Punch < 0 and tS1Phase >= 0 and tS1F = tS1Phase + 34
+            tS1Punch = 0
+            record mark "punch"
+        endif
+        if tS1Punch >= 0
+            tS1Z# = 1 - .16 * logoSpring(tS1Punch, .55)
+            set record view tS1BoxX# + tS1W# * (1 - tS1Z#) / 2, tS1BoxY# + tS1H# * (1 - tS1Z#) / 2, tS1W# * tS1Z#, tS1H# * tS1Z#
+            tS1Punch = tS1Punch + 1
+        endif
         if COMBO_PHASE >= 2 then tS1Gone = 1
         if tS1Gone
             trailerHideBut(-1, -1, -1, -1)
-            set sprite alpha SELECTION_SPRITE, 0
-            set sprite all texcoord1 SELECTION_SPRITE, 0, 0, 0, 0
         else
             trailerHideBut(tS1L, tS1M, tS1R, tS1A)
+        endif
+        ` the crab, and the cursor on it, fade away from the burst on, instead of going all at once with the
+        ` fall. the crab is found by its kind, since the fall moves it down into the row.
+        if tS1Punch >= 0
+            tS1CrabA# = tS1Punch
+            tS1CrabA# = tS1CrabA# / 70.0
+            if tS1CrabA# > 1 then tS1CrabA# = 1
+            tS1CrabA# = 1 - tS1CrabA# * tS1CrabA# * (3 - 2 * tS1CrabA#)
+            for tS1C = 0 to CELL_COUNT - 1
+                if CELLS(tS1C).value = TEX_CRAB then set sprite alpha CELLS(tS1C).spriteId, 255 * tS1CrabA#
+            next
+            set sprite alpha SELECTION_SPRITE, 90 * tS1CrabA#
+            set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, tS1CrabA#
         endif
         runto update_frame
     next
@@ -1441,14 +1617,7 @@ test trailer_first_pop from trailerShot
     tS1SwapRow = TR_BEST_CELL / CELL_COLUMN_COUNT
     tS1SwapDown = TR_BEST_DOWN
 
-    ` a fish in a bubble and a rainbow fish are just there on the board, on the far side from the swap.
-    ` they are set by hand, so that nothing announces them.
-    tS1FarX = CELL_COLUMN_COUNT - 2
-    if tS1SwapCol > CELL_COLUMN_COUNT / 2 then tS1FarX = 1
-    tS1BubbleCell = trailerIndex(tS1FarX, CELL_ROW_COUNT - 3)
-    BUBBLED_AT(tS1BubbleCell) = 1
-    BUBBLED_BORN_AT(tS1BubbleCell) = game ms()
-    BUBBLED_COUNT = BUBBLED_COUNT + 1
+    ` a rainbow fish is just there on the board. it is set by hand, so that nothing announces it.
     RAINBOW_FISH(trailerIndex(CELL_COLUMN_COUNT / 2, CELL_ROW_COUNT - 2)) = 1
 
     ` the combo fills the bar, on screen
@@ -1784,9 +1953,9 @@ test trailer_night_held from trailerShot
 endtest
 
 
-` SHOT 9. coral grows over the left of the board. a swap makes a group that is all on coral, and it
-` does not pop: the fish sing, and hearts come up. then a group that is half on coral: the fish on
-` the coral sing, and the rest pop. see THE CORAL in fish_headers.
+` SHOT 9. coral over the left of the board. out in the open water on the right, a swap finishes a T of
+` stingrays, and they go off. then back on the reef, a swap makes a group that is all on coral, and it
+` does not pop: the fish sing, and hearts come up. see THE CORAL in fish_headers.
 test trailer_coral_sings from trailerShot
     trailerHudLevel(3)
     trailerTech(4)
@@ -1804,6 +1973,23 @@ test trailer_coral_sings from trailerShot
         trailerPut(3, 6, tS9B)
         trailerPut(5, 6, tS9B)
         trailerPut(4, 7, tS9B)
+        ` and out in the open water on the right, off of the reef, a T of stingrays that one swap finishes, with
+        ` belly up stingrays up in its columns, to shoot back down
+        trailerPut(4, 5, TEX_RAY)
+        trailerPut(5, 5, TEX_RAY)
+        trailerPut(7, 5, TEX_RAY)
+        trailerPut(8, 5, TEX_RAY)
+        trailerPut(6, 3, TEX_RAY)
+        trailerPut(6, 4, TEX_RAY)
+        trailerPut(6, 6, TEX_RAY)
+        trailerPut(4, 1, TEX_RAY)
+        trailerBelly(4, 1)
+        trailerPut(5, 1, TEX_RAY)
+        trailerBelly(5, 1)
+        trailerPut(7, 2, TEX_RAY)
+        trailerBelly(7, 2)
+        trailerPut(8, 1, TEX_RAY)
+        trailerBelly(8, 1)
         if trailerFirstMatch() = -1 then tS9Ok = 1
         tS9Seed = tS9Seed + 1
         if tS9Seed > 60 then tS9Ok = 1
@@ -1862,22 +2048,14 @@ test trailer_coral_sings from trailerShot
         runto update_frame
     next
     trailerCursor(2, 2)
-    trailerWalkTo(2, 4)
-    ` the shot opens on the reef, and the cursor walks out into the open water on the right, and along a
-    ` shape there, the way a player who has heard a song walks it. then the reef grows along the shape.
+    ` the shot opens on the reef, and the cursor walks out into the open water on the right, to the stingrays,
+    ` and finishes the T: every one of them shoots up its column, and the belly up ones shoot back down.
     trailerRecord("trailer_coral_sings")
     ` the cut bubbles in over the first second and a half or so
     for tS9F = 1 to 70
         runto update_frame
     next
-    TR_PATH_N = 0
-    trailerPathAdd(5, 3)
-    trailerPathAdd(6, 3)
-    trailerPathAdd(6, 4)
-    trailerPathAdd(7, 4)
-    trailerPathAdd(7, 5)
-    tS9Last = TR_PATH_N - 1
-    trailerWalkTo(TR_PATH_X(0), TR_PATH_Y(0))
+    trailerWalkTo(6, 6)
     tS9Guard = 0
     while trailerWalked() = 0
         trailerWalkStep()
@@ -1887,33 +2065,11 @@ test trailer_coral_sings from trailerShot
             trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
         endif
     endwhile
-
-    ` and walks the shape, a cell at a time
-    record mark "walk"
-    for tS9N = 1 to tS9Last
-        trailerWalkTo(TR_PATH_X(tS9N), TR_PATH_Y(tS9N))
-        tS9Guard = 0
-        while trailerWalked() = 0
-            trailerWalkStep()
-            runto update_frame
-            tS9Guard = tS9Guard + 1
-            if tS9Guard > 100
-                trailerCursor(TR_WALK_TO_X, TR_WALK_TO_Y)
-            endif
-        endwhile
-    next
-
-    ` so the reef grows along it: a song of coral, cell by cell, in a puff of bubbles, with a ripple at the end
-    for tS9F = 1 to 8
+    for tS9F = 1 to 6
         runto update_frame
     next
-    record mark "grow"
-    trailerSongStart(TR_PATH_X(0), TR_PATH_Y(0), 0)
-    for tS9N = 1 to tS9Last
-        trailerSongGo(TR_PATH_X(tS9N) - TR_PATH_X(tS9N - 1), TR_PATH_Y(tS9N) - TR_PATH_Y(tS9N - 1))
-    next
-    trailerSongEnd()
-    for tS9F = 1 to 70
+    trailerMove(0, -1, 1)
+    for tS9F = 1 to 170
         runto update_frame
     next
 
@@ -2272,13 +2428,24 @@ endfunction
 ` SHOTS 14, 15 AND 16, one after the other, the way the game plays them: three videos from one run.
 ` 14. the game goes back up to the title, the way an endless game does, and the table of high scores is
 `     already open there.
-` 15. the table and the menu fade away, and the boat is alone on the sea. "Fish Live Here".
-` 16. the view rises up into the stars, the way the splash screen comes down, run backwards.
-`     "Fish Fish Pop", and when it comes out.
+` 15. the table and the menu fade away, and the boat is alone on the sea, in the middle of the day. "30
+`     Rounds. Relax, you cannot lose." and then the game goes down to Ava's first board, the way it does for a
+`     player who stayed with her. she is already there, and says that there is a lot to discover. then the
+`     water drains away, back up to the sea, and it is the evening.
+` 16. the title comes up out of the sea, the way it does when the game starts, bigger, with when it comes out
+`     under it. it hangs there, and then the view rises up into the stars, the way the splash screen
+`     comes down, run backwards. the shooting star spells CQ in the empty sky, and it all goes black.
 ` the menu does not run update_frame. frame_menu_render runs once on every frame of it.
 test trailer_finale from trailerShot
     trailerHudLevel(4)
     trailerTech(6)
+    ` the middle of the day up on the surface, until the title. and the water is not warm, though the trailer
+    ` plays a player who stayed with Ava: that is for the players who did. see THE WARM WATER in fish_headers_ava.
+    trailerSky(1)
+    AVA_DBG_WARM = 2
+    ` and the sea is empty: no boat, and no diver on it. the boat, its reflection and the diver's photos all
+    ` go where SURFACE_BOAT_X says, so off past the side of the screen.
+    SURFACE_BOAT_X = -2000
     ` the board of the angler's shot: the same horror coral, and the cursor where it was left
     trailerHorrorCoral()
     trailerCursor(7, 4)
@@ -2344,58 +2511,228 @@ test trailer_finale from trailerShot
     for tTrFrame = 1 to 20
         runto frame_menu_render
     next
-    ` "The ocean is", then smaller, "waiting for", and after a pause, big again, "you."
-    trailerWordOn("The", 0)
-    trailerWordOn("ocean", 0)
-    trailerWordOn("is", 0)
-    trailerWordSub("waiting", 1, 28)
-    trailerWordSub("for", 1, 28)
-    trailerWordSized("you.", 2, 84)
+    ` "30 Rounds.", then smaller, "Relax, you cannot lose.", on the sky over the sea
+    trailerWordOn("30", 0)
+    trailerWordOn("Rounds.", 0)
+    trailerWordSub("Relax,", 1, 32)
+    trailerWordSub("you", 1, 32)
+    trailerWordSub("cannot", 1, 32)
+    trailerWordSub("lose.", 1, 32)
     trailerTitleLayout(84)
-    ` the first two lines sit on the sky, over the line of the horizon, and "you." under it, in the sea
-    trailerLineAt(0, SURFACE_HORIZON - 62)
-    trailerLineAt(1, SURFACE_HORIZON - 26)
-    trailerLineAt(2, SURFACE_HORIZON + 52)
+    trailerLineAt(0, SURFACE_HORIZON - 100)
+    trailerLineAt(1, SURFACE_HORIZON - 62)
+    ` the sky of the day is pale, palest down by the horizon, so the words are up in the deeper blue of it, and
+    ` white, with a heavier shadow than the words over the deep have
+    for tTrN = 0 to TR_WORD_COUNT - 1
+        color text TR_WORD(tTrN), rgb(255, 255, 255)
+        enable text drop shadow TR_WORD(tTrN), 3, -5, rgb(0, 0, 40)
+    next
     trailerLineWait(1, 20)
-    trailerLineWait(2, 45)
     ` the words rise in the same way as the title at the start, with the stars of the menu around them
     TR_RISE_STARS = 1
-    for tTrFrame = 0 to 265
+    for tTrFrame = 0 to 210
         trailerRiseTitle(tTrFrame, 10, 1)
         runto frame_menu_render
     next
-    ` then they fade away, and the boat is alone on the sea for a moment
-    for tTrFrame = 0 to 30
+    for tTrFrame = 0 to 24
         tTrGone# = tTrFrame
-        tTrGone# = 1 - tTrGone# / 30.0
+        tTrGone# = 1 - tTrGone# / 24.0
         trailerRiseTitle(200, 10, tTrGone#)
         runto frame_menu_render
     next
     for tTrN = 0 to TR_WORD_COUNT - 1
         hide text TR_WORD(tTrN)
     next
-    for tTrFrame = 1 to 75
+    TR_WORD_COUNT = 0
+    for tTrFrame = 1 to 10
         runto frame_menu_render
     next
 
-    ` SHOT 16. the view goes on up into the stars. it is the same video as shot 15, so that nothing cuts
-    ` on the way up.
-    record mark "rise"
-    for tTrFrame = 0 to 191
-        tTrT# = tTrFrame
-        tTrT# = tTrT# / 191.0
-        tTrEase# = tTrT# * tTrT# * tTrT# * (tTrT# * (tTrT# * 6 - 15) + 10)
-        SURFACE_PAN# = SPLASH_PAN * tTrEase#
+    ` THE DEEP. or so it says. the game goes down the way it does for a player who stayed with Ava: "Resume"
+    ` on the main menu, which takes them down to her first board (see THE THIRTY BOARDS in
+    ` fish_headers_puzzle). the menu is still hidden, and only the key that picks a line is pressed.
+    record mark "dive"
+    mock get pref(tTrPrefAt, tTrPrefElse)
+    endmock trailerPuzzlePref(tTrPrefAt)
+    mock new action down(tTrActAt)
+    endmock trailerPressing(tTrActAt)
+    setMenuPage(MENU_PAGE_MAIN)
+    MENU_SELECTED = 0
+    trailerNoMenu()
+    TR_PRESS = 1
+    runto frame_menu_render
+    TR_PRESS = 0
+    ` she is already out in the water when the bubbles uncover it, swimming slowly along, and so is the board,
+    ` still. the game does not run while the bubbles go by, so both are put there by hand, from when the dive has
+    ` put the game ready for her (puzzle_prepare) until the camera is all the way under. she swims at the speed
+    ` that she swims with a line to say, so that she goes on the same when the game takes her over.
+    tTrAvaUp = 0
+    tTrUnder = 0
+    tTrAvaX# = TR_AVA_X#
+    tTrAvaN = 0
+    while tTrUnder = 0
+        runto frame_menu_render
+        trailerNoMenu()
+        hintShow(0)
+        if tTrAvaUp = 0 and PUZZLE_ON = 1
+            guideShow()
+            puzzleSwimOn()
+            PUZZLE_NEAR# = 1
+            PUZZLE_IN_FRONT = 1
+            puzzleSwimOrder()
+            puzzleBoard()
+            trailerFewerFish()
+            trailerAvaPopSetup()
+            tTrAvaN = 0
+            tTrAvaUp = 1
+        endif
+        if tTrAvaUp = 1
+            trailerAvaAt(trailerAvaX(tTrAvaN), game ms())
+            tTrAvaN = tTrAvaN + 1
+            hide sprite SELECTION_SPRITE
+        endif
+        if SURFACE_SINK# >= .999 then tTrUnder = 1
+    endwhile
+    ` the game deals the board again, to grow it in. it is put back as it was, with nothing growing, and the
+    ` wait for it to grow is over at once.
+    runto tutorial_wait
+    puzzleBoard()
+    trailerFewerFish()
+    trailerAvaPopSetup()
+    clearBubbles()
+    TUTORIAL_WAIT_UNTIL = 0
+    hide sprite SELECTION_SPRITE
+    ` the game takes her over where she is, in the lane over the fish, with her light on. she is in front of the
+    ` fish, the way she is when she talks.
+    tTrSaySpeed# = PUZZLE_SAY_SPEED#
+    tTrSayCatch# = PUZZLE_SAY_CATCH#
+    tTrSwimSpeed# = PUZZLE_SWIM_SPEED#
+    PUZZLE_SAY_SPEED# = 0
+    PUZZLE_SAY_CATCH# = 0
+    PUZZLE_SWIM_SPEED# = 0
+    PUZZLE_IN_FRONT = 0
+    trailerAvaHold(trailerAvaX(tTrAvaN))
+    create basic tween GUIDE_GLOW_TWEEN_ID, 1, 1, 1, 0
+    hintShow(0)
+    ` she says one thing, and not what she says to a player who stayed: the board's own first words are said
+    ` as soon as the wait is over, and are swapped for it before any of them come out of her
+    tTrSays = ANGLER_SAYS
+    tTrGuard = 0
+    while ANGLER_SAYS = tTrSays and GUIDE_QUEUED = 0 and tTrGuard < 60
+        trailerAvaHold(trailerAvaX(tTrAvaN))
+        tTrAvaN = tTrAvaN + 1
+        PUZZLE_STUCK_SAID = 1
+        PUZZLE_STILL# = 0
+        runto update_frame
+        hintShow(0)
+        hide sprite SELECTION_SPRITE
+        tTrGuard = tTrGuard + 1
+    endwhile
+    GUIDE_QUEUED = 0
+    anglerSay("There is a lot to discover, friend.")
+    ` she stays big, in front, the whole time: the game would only bring her in slowly as she starts to talk.
+    ` her words go up over her head, clear of her: the line is laid out over the fish, and its first word comes
+    ` out on the same frame, so once it has, the row and the words that are out are moved up together, the way
+    ` puzzleWordsRest moves them.
+    ` and while she says it, the player makes one swap, and three pop: the cursor comes up on it, swaps, and
+    ` goes again.
+    tTrSaid = ANGLER_SAYS
+    tTrWordsUp = 0
+    assert trailerFirstMatch() = -1, "nothing pops on Ava's board before the swap"
+    tTrAnyCol = TR_ANY_CELL mod CELL_COLUMN_COUNT
+    tTrAnyRow = TR_ANY_CELL / CELL_COLUMN_COUNT
+    for tTrFrame = 0 to 220
+        hintShow(0)
+        tTrCursor# = 0
+        if TR_ANY_CELL >= 0
+            if tTrFrame = 70
+                trailerCursor(tTrAnyCol, tTrAnyRow)
+            endif
+            if tTrFrame >= 70 and tTrFrame <= 170
+                tTrCursor# = tTrFrame - 70
+                tTrCursor# = tTrCursor# / 20.0
+                if tTrFrame > 150
+                    tTrCursor# = 170 - tTrFrame
+                    tTrCursor# = tTrCursor# / 20.0
+                endif
+                if tTrCursor# > 1 then tTrCursor# = 1
+            endif
+            if tTrFrame = 110
+                if TR_ANY_DOWN
+                    trailerMove(0, 1, 1)
+                else
+                    trailerMove(1, 0, 1)
+                endif
+            endif
+        endif
+        if tTrCursor# > 0
+            show sprite SELECTION_SPRITE
+            set sprite alpha SELECTION_SPRITE, 90 * tTrCursor#
+            set sprite all texcoord1 SELECTION_SPRITE, 112 / 255.0, 140 / 255.0, 224 / 255.0, tTrCursor#
+        else
+            hide sprite SELECTION_SPRITE
+        endif
+        trailerAvaHold(trailerAvaX(tTrAvaN))
+        tTrAvaN = tTrAvaN + 1
+        ` the board has fewer fish than it can be cleared with. she does not say so, and the snow does not stop.
+        PUZZLE_STUCK_SAID = 1
+        PUZZLE_STILL# = 0
+        if tTrWordsUp = 0 and PUZZLE_SAY_OUT >= 1
+            tTrWordsUp = 1
+            tTrWordsBy# = TR_AVA_Y# - (TR_AVA_WORDS_UP + PUZZLE_SAY_ROW / 2)
+            tTrWordsBy# = tTrWordsBy# - PUZZLE_SAY_Y#
+            PUZZLE_SAY_Y# = PUZZLE_SAY_Y# + tTrWordsBy#
+            for tTrN = 0 to PUZZLE_SAY_OUT - 1
+                tTrSlot = (PUZZLE_SAY_FIRST + tTrN) mod PUZZLE_WORD_SLOTS
+                PUZZLE_WORD_FROM_Y#(tTrSlot) = PUZZLE_WORD_FROM_Y#(tTrSlot) + tTrWordsBy#
+            next
+        endif
+        runto update_frame
+        if ANGLER_SAYS <> tTrSaid
+            print "trailer: Ava said something else on frame " + str$(tTrFrame)
+            tTrSaid = ANGLER_SAYS
+        endif
+    next
+    set sprite all texcoord1 SELECTION_SPRITE, 0, 0, 0, 0
+    PUZZLE_SAY_SPEED# = tTrSaySpeed#
+    PUZZLE_SAY_CATCH# = tTrSayCatch#
+    PUZZLE_SWIM_SPEED# = tTrSwimSpeed#
+
+    ` and back up to the surface, the way the game goes up when she has gone, with the water draining away
+    ` down the screen. it is the evening up there now, for the title. the pause menu that the game opens on
+    ` the way, and the main menu, are kept out of sight.
+    trailerSky(0)
+    LOGO_TRAILER = 1
+    record mark "surface"
+    AVA_TO_TITLE = 1
+    tTrUp = 0
+    tTrAtMain = 0
+    while tTrUp = 0
+        runto frame_menu_render
+        trailerNoMenu()
+        hintShow(0)
+        if MENU_MODE = MENU_MODE_MAIN then tTrAtMain = tTrAtMain + 1
+        if tTrAtMain > 3 and SURFACE_SINK# <= .001 then tTrUp = 1
+    endwhile
+    for tTrFrame = 1 to 20
+        trailerNoMenu()
         runto frame_menu_render
     next
-    for tTrN = 0 to TR_WORD_COUNT - 1
-        hide text TR_WORD(tTrN)
-    next
-    TR_WORD_COUNT = 0
-    trailerWord("Fish")
-    trailerWord("Fish")
-    trailerWord("Pop")
-    trailerTitleLayout(WORLD_HEIGHT / 2 - 24)
+
+    ` SHOT 16. the title comes up out of the sea, the way it does when the game starts (see THE LOGO in
+    ` fish_headers_logo), with the line about Steam and the date under it. it is the same video as shot 15.
+    ` the shot plays the logo, and not the menu: LOGO_TRAILER keeps logoFrame out of it.
+    ` and bigger than it is on the menu, with the menu out of the way, and nearer: the words come up out of the
+    ` sea well in front of the horizon, "Pop" nearest of all, so the water they throw about is big and close
+    LOGO_SCALE# = 1.05
+    LOGO_Y# = 175
+    LOGO_WATER_DY#(0) = 30
+    LOGO_WATER_DY#(1) = 38
+    LOGO_WATER_DY#(2) = 86
+    LOGO_FROM_WATER = 1
+    LOGO_PLAYED = 0
+    logoShow()
+    logoAt(-1, 0, 0)
 
     ` "Available on Steam", with the Steam logo as an icon in the line when the logo is there: the
     ` official white mark, put at Assets/Fish/Textures/Logos/steam.png. build/render-trailer.ps1 says
@@ -2408,9 +2745,10 @@ test trailer_finale from trailerShot
         set font icon scale SCORE_FONT, 15, .9, .9
         tTrSteamWords$ = "Available on {steam} Steam"
     endif
+    tTrSubY = WORLD_HEIGHT / 2 + 90
     tTrSub = 0
     reserve text id(tTrSub)
-    text tTrSub, WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + 26, SCORE_FONT, tTrSteamWords$
+    text tTrSub, WORLD_WIDTH / 2, tTrSubY, SCORE_FONT, tTrSteamWords$
     enable rich text tTrSub
     size text y tTrSub, 20
     set text offset tTrSub, .5, .5
@@ -2419,9 +2757,10 @@ test trailer_finale from trailerShot
     order text tTrSub, 300
     set text alpha tTrSub, 0
 
+    tTrDateY = WORLD_HEIGHT / 2 + 111
     tTrDate = 0
     reserve text id(tTrDate)
-    text tTrDate, WORLD_WIDTH / 2, WORLD_HEIGHT / 2 + 50, SCORE_FONT, "December 2nd, 2026"
+    text tTrDate, WORLD_WIDTH / 2, tTrDateY, SCORE_FONT, "December 2nd, 2026"
     size text y tTrDate, 18
     set text offset tTrDate, .5, .5
     color text tTrDate, rgb(150, 190, 255)
@@ -2429,9 +2768,58 @@ test trailer_finale from trailerShot
     order text tTrDate, 300
     set text alpha tTrDate, 0
 
-    ` the shooting star crosses the sky and spells CQ, the way it does over the splash screen. the
-    ` first crossing is set up by hand, so the dice never say whether it comes: it always comes, and
-    ` always here. a long rest after it, so that it only comes once. see THE SHOOTING STAR in fish_headers.
+    ` the title card, and it hangs there for a moment
+    record mark "title"
+    for tTrFrame = 0 to 450
+        tTrLogoMs = tTrFrame - 20
+        tTrLogoMs = tTrLogoMs * 16.667
+        logoAt(tTrLogoMs, 1, sin(tTrFrame * 16.667 * .002) * 3)
+        tTrSubA# = tTrFrame - 120
+        tTrSubA# = tTrSubA# / 25.0
+        if tTrSubA# < 0 then tTrSubA# = 0
+        if tTrSubA# > 1 then tTrSubA# = 1
+        set text alpha tTrSub, 255 * tTrSubA#
+        tTrDateA# = tTrFrame - 140
+        tTrDateA# = tTrDateA# / 25.0
+        if tTrDateA# < 0 then tTrDateA# = 0
+        if tTrDateA# > 1 then tTrDateA# = 1
+        set text alpha tTrDate, 255 * tTrDateA#
+        runto frame_menu_render
+    next
+
+    ` then the view goes up into the stars, the way the splash screen comes down, run backwards. the title
+    ` and the lines under it stay on the sea, and go down out of the picture with the horizon, the nearer the
+    ` faster: the two "Fish" a little faster than the horizon, "Pop" faster again, and the lines under it most.
+    record mark "rise"
+    for tTrFrame = 0 to 191
+        tTrT# = tTrFrame
+        tTrT# = tTrT# / 191.0
+        tTrEase# = tTrT# * tTrT# * tTrT# * (tTrT# * (tTrT# * 6 - 15) + 10)
+        SURFACE_PAN# = SPLASH_PAN * tTrEase#
+        tTrLogoMs = tTrFrame + 431
+        tTrLogoMs = tTrLogoMs * 16.667
+        LOGO_SHIFT#(0) = SURFACE_PAN# * .08
+        LOGO_SHIFT#(1) = SURFACE_PAN# * .12
+        LOGO_SHIFT#(2) = SURFACE_PAN# * .24
+        logoAt(tTrLogoMs, 1, sin((tTrFrame + 451) * 16.667 * .002) * 3 + SURFACE_PAN#)
+        set text position tTrSub, WORLD_WIDTH / 2, tTrSubY + SURFACE_PAN# * 1.36
+        set text position tTrDate, WORLD_WIDTH / 2, tTrDateY + SURFACE_PAN# * 1.4
+        runto frame_menu_render
+    next
+    logoHide()
+    for tTrN = 0 to 2
+        LOGO_SHIFT#(tTrN) = 0
+    next
+    LOGO_WATER_DY#(0) = LOGO_MENU_WATER_A#
+    LOGO_WATER_DY#(1) = LOGO_MENU_WATER_B#
+    LOGO_WATER_DY#(2) = LOGO_MENU_WATER_POP#
+    hide text tTrSub
+    hide text tTrDate
+
+    ` THE STINGER. out in the empty sky, the shooting star crosses and spells CQ, the way it does over the
+    ` splash screen, and no words with it. the first crossing is set up by hand, so the dice never say
+    ` whether it comes: it always comes, and always here. a long rest after it, so that it only comes once.
+    ` see THE SHOOTING STAR in fish_headers.
     MORSE_STAR_GOING = 1
     MORSE_STAR_SEEN = 1
     MORSE_STAR_CROSSING = 0
@@ -2449,30 +2837,9 @@ test trailer_finale from trailerShot
         size sprite MORSE_STARS(tTrN), 5, 2
     next
     size sprite MORSE_STAR_HEAD, 3, 2
-
-    ` the title stays, with the line about Steam and the date under it, until it all fades to black. (the
-    ` words used to turn into three seahorses that popped: Chris wanted the title to stay, 2026-10-23.)
+    record mark "stinger"
     for tTrFrame = 0 to 280
         SURFACE_PAN# = SPLASH_PAN
-        trailerPopTitle(tTrFrame - 10, 12)
-        ` stars come out around each word as it pops in, the way that they do as the menu moves
-        for tTrN = 0 to TR_WORD_COUNT - 1
-            tTrWordAt = tTrFrame - 10
-            tTrWordAt = tTrWordAt - tTrN * 12
-            if tTrWordAt = 0
-                trailerTwinkleWord(tTrN, 18)
-            endif
-        next
-        tTrSubA# = tTrFrame - 50
-        tTrSubA# = tTrSubA# / 25.0
-        if tTrSubA# < 0 then tTrSubA# = 0
-        if tTrSubA# > 1 then tTrSubA# = 1
-        set text alpha tTrSub, 255 * tTrSubA#
-        tTrDateA# = tTrFrame - 70
-        tTrDateA# = tTrDateA# / 25.0
-        if tTrDateA# < 0 then tTrDateA# = 0
-        if tTrDateA# > 1 then tTrDateA# = 1
-        set text alpha tTrDate, 255 * tTrDateA#
         morseStarsShow(0)
         runto frame_menu_render
     next
@@ -3732,10 +4099,10 @@ test trailer_captions from trailerShot
     ` "30 Rounds. Relax, you cannot lose."
     trailerWordOn("30", 0)
     trailerWordOn("Rounds.", 0)
-    trailerWordSub("Relax,", 1, 28)
-    trailerWordSub("you", 1, 28)
-    trailerWordSub("cannot", 1, 28)
-    trailerWordSub("lose.", 1, 28)
+    trailerWordSub("Relax,", 1, 32)
+    trailerWordSub("you", 1, 32)
+    trailerWordSub("cannot", 1, 32)
+    trailerWordSub("lose.", 1, 32)
     trailerTitleLayout(WORLD_HEIGHT / 2)
     trailerLineWait(1, 30)
     trailerRecord("trailer_cap_relax")
