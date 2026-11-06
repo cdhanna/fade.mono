@@ -1218,6 +1218,12 @@ global SURFACE_DAY = 0 `1 for the middle of the day, 0 for the evening
 global SURFACE_EVENING_HOUR = 17 `the evening starts at this hour of the day, out of 24
 global SURFACE_MORNING_HOUR = 6 `and it lasts all night, until this hour
 global SURFACE_SPRITE `the sky and the sea
+` the effect of the sky and the sea, and of each reef, is drawn the way the coral is (see TARGET_CORAL_LOW): on
+` a sprite of its own, to a render target with one pixel for each of the game's, which SURFACE_SPRITE and the
+` reef's sprite show. the boat is drawn between the sea and the reefs, so each has a render target of its own.
+` the sprites that draw them are shown and hidden with the ones that show them, or they would go on drawing.
+global TARGET_SURFACE_LOW
+global SURFACE_DRAW_SPRITE
 global MENU_CAMERA_ID `slides everything in the menu's render target up the screen as the game goes under
 global SURFACE_BOAT_SPRITE
 global SURFACE_WATERLINE_FX = 0 `the effect that sits the boat, and Ava's bottle, in the water. see WaterlineEffect.fx.
@@ -1249,6 +1255,13 @@ global ORDER_SNOW = 27 `on top of the fish and the bubbles, and underneath the s
 global SPECKS_FX_ID
 global SPECKS_SPRITE `the specks that drift behind the fish, and in front of the coral
 global ORDER_SPECKS = 7 `on top of the sea floor and the coral, and underneath the cursor and the fish
+` the sea floor and the specks are drawn the way the coral is (see TARGET_CORAL_LOW): each effect is on a sprite
+` of its own that draws to a render target with one pixel for each of the game's, and SEABED_SPRITE and
+` SPECKS_SPRITE show those render targets on the screen
+global TARGET_SEABED_LOW
+global SEABED_DRAW_SPRITE
+global TARGET_SPECKS_LOW
+global SPECKS_DRAW_SPRITE
 
 ` THE MOOD. one swap can set off a run of pops: fish pop, the board fills back in, and that pops more.
 ` the water gets brighter, the shafts of light get stronger, and the words around the board light up,
@@ -2247,6 +2260,8 @@ global SURFACE_REEF_DOWN = 78 `and how far down from the horizon the fish are, w
 ` number of its own, which is what makes its lumps different from the other one's.
 global dim SURFACE_REEF_FX(2)
 global dim SURFACE_REEF_SPRITES(2)
+global dim SURFACE_REEF_DRAW_SPRITES(2) `see TARGET_SURFACE_LOW
+global dim TARGET_REEF_LOW(2)
 global dim SURFACE_REEF_AT_X(2)
 global dim SURFACE_REEF_AT_DOWN(2)
 global dim SURFACE_REEF_AT_SCALE(2)
@@ -2337,6 +2352,13 @@ global CORAL_SPRITE_COUNT = 0
 global TARGET_CORAL
 global CORAL_FX_ID
 global CORAL_VIEW_SPRITE
+` the effect works out the coral a whole pixel of the game at a time, and it is the most costly thing that is
+` drawn, so it is not drawn at the render scale. another sprite with the effect on it draws the coral to a
+` render target of its own, with one pixel for each of the game's, and CORAL_VIEW_SPRITE shows that, which
+` looks just the same, for a quarter of the work: the graphics card could not keep up with it on a Mac.
+` that render target is drawn before the screen is, so that the coral is drawn on the same frame as the fish.
+global TARGET_CORAL_LOW
+global CORAL_DRAW_SPRITE
 
 ` the fish cast shadows on the coral. every fish on the board is drawn a second time, as a plain picture of
 ` itself right where the fish is, to another render target. the coral effect looks in that for the fish,

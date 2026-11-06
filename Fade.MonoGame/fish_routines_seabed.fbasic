@@ -31,23 +31,50 @@ setup_seabed:
     reserve effect id(SEABED_FX_ID)
     effect SEABED_FX_ID, "Fish/Shaders/SeabedEffect"
 
+    ` drawn with one pixel for each of the game's. see TARGET_SEABED_LOW in fish_headers.
+    reserve render target id(TARGET_SEABED_LOW)
+    render target TARGET_SEABED_LOW
+    set render target scale TARGET_SEABED_LOW, 1
+    set render target blend TARGET_SEABED_LOW, 2
+    set render target order TARGET_SEABED_LOW, -1
+    set render target background color TARGET_SEABED_LOW, rgb(0, 0, 0, 0)
+
+    reserve sprite id(SEABED_DRAW_SPRITE)
+    sprite SEABED_DRAW_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset SEABED_DRAW_SPRITE, 0, 0
+    size sprite SEABED_DRAW_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    set sprite effect SEABED_DRAW_SPRITE, SEABED_FX_ID
+    set sprite render target SEABED_DRAW_SPRITE, TARGET_SEABED_LOW
+
     reserve sprite id(SEABED_SPRITE)
-    sprite SEABED_SPRITE, 0, 0, TEX_PIXEL
+    sprite SEABED_SPRITE, 0, 0, render target texture(TARGET_SEABED_LOW)
     set sprite offset SEABED_SPRITE, 0, 0
     size sprite SEABED_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
     order sprite SEABED_SPRITE, ORDER_SEABED
-    set sprite effect SEABED_SPRITE, SEABED_FX_ID
 
     ` the specks that drift down behind the fish. they are in front of the coral, which is behind the fish too.
     reserve effect id(SPECKS_FX_ID)
     effect SPECKS_FX_ID, "Fish/Shaders/SpecksEffect"
 
+    reserve render target id(TARGET_SPECKS_LOW)
+    render target TARGET_SPECKS_LOW
+    set render target scale TARGET_SPECKS_LOW, 1
+    set render target blend TARGET_SPECKS_LOW, 2
+    set render target order TARGET_SPECKS_LOW, -1
+    set render target background color TARGET_SPECKS_LOW, rgb(0, 0, 0, 0)
+
+    reserve sprite id(SPECKS_DRAW_SPRITE)
+    sprite SPECKS_DRAW_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset SPECKS_DRAW_SPRITE, 0, 0
+    size sprite SPECKS_DRAW_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    set sprite effect SPECKS_DRAW_SPRITE, SPECKS_FX_ID
+    set sprite render target SPECKS_DRAW_SPRITE, TARGET_SPECKS_LOW
+
     reserve sprite id(SPECKS_SPRITE)
-    sprite SPECKS_SPRITE, 0, 0, TEX_PIXEL
+    sprite SPECKS_SPRITE, 0, 0, render target texture(TARGET_SPECKS_LOW)
     set sprite offset SPECKS_SPRITE, 0, 0
     size sprite SPECKS_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
     order sprite SPECKS_SPRITE, ORDER_SPECKS
-    set sprite effect SPECKS_SPRITE, SPECKS_FX_ID
 
     reserve effect id(SNOW_FX_ID)
     effect SNOW_FX_ID, "Fish/Shaders/SnowEffect"

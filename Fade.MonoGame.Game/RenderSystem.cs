@@ -14,7 +14,19 @@ namespace Fade.MonoGame.Core;
 public class RenderOutput
 {
     public int id;
+
+    /// <summary>
+    /// When this output is drawn, against the others: lower first, and outputs with the same
+    /// order in the order they were made. Set by <c>set render target order</c>; 0 until then.
+    /// </summary>
     public int order;
+
+    /// <summary>
+    /// How many pixels of its targets one pixel of the game is drawn with, or 0 for
+    /// <see cref="RenderSystem.renderScale"/>, like every other output. Set by
+    /// <c>set render target scale</c>, which also makes the targets at that size.
+    /// </summary>
+    public int scale;
 
     /// <summary>
     /// The camera this output views the world through, or 0 for none. The association lives on
@@ -706,13 +718,19 @@ public static class RenderSystem
     /// <summary>
     /// What a sprite's position becomes in an output: the camera's view, then the stretch from
     /// game pixels to buffer pixels. The camera works out its middle from the target's size in
-    /// GAME pixels, so that a camera looks at the same spot whatever the scale is.
+    /// GAME pixels, so that a camera looks at the same spot whatever the scale is. The scale is
+    /// the output's own (<see cref="RenderOutput.scale"/>), or the render scale when it has none.
     /// </summary>
-    public static Matrix GetOutputMatrix(int cameraId, int targetWidth, int targetHeight)
+    public static Matrix GetOutputMatrix(int cameraId, int targetWidth, int targetHeight, int scale)
     {
-        var view = CameraSystem.GetMatrix(cameraId, targetWidth / renderScale, targetHeight / renderScale);
-        return renderScale == 1 ? view : view * Matrix.CreateScale(renderScale, renderScale, 1f);
+        var view = CameraSystem.GetMatrix(cameraId, targetWidth / scale, targetHeight / scale);
+        return scale == 1 ? view : view * Matrix.CreateScale(scale, scale, 1f);
     }
+
+    /// <summary>
+    /// The scale an output is drawn at: its own, or the render scale when it has none.
+    /// </summary>
+    public static int OutputScale(RenderOutput output) => output.scale > 0 ? output.scale : renderScale;
 
     public static void ResetRenderPositioning()
     {
@@ -914,7 +932,7 @@ public static class RenderSystem
             // differently-sized target still describes the same world view.
             var cameraTargetWidth = output.targets == null ? mainBuffer.Width : output.targets[0].Width;
             var cameraTargetHeight = output.targets == null ? mainBuffer.Height : output.targets[0].Height;
-            var outputMatrix = GetOutputMatrix(output.cameraId, cameraTargetWidth, cameraTargetHeight);
+            var outputMatrix = GetOutputMatrix(output.cameraId, cameraTargetWidth, cameraTargetHeight, OutputScale(output));
 
             // Resolved once here for the same reason as the matrix above: the item loop
             // re-Begins on every effect change, and each of those batches needs the same

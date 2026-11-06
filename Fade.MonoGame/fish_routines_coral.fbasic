@@ -25,12 +25,27 @@ setup_coral:
     reserve effect id(CORAL_FX_ID)
     effect CORAL_FX_ID, "Fish/Shaders/CoralEffect"
 
+    ` the coral, drawn with one pixel for each of the game's. see TARGET_CORAL_LOW in fish_headers. the effect
+    ` writes what it works out as it is, and CORAL_VIEW_SPRITE blends it onto the screen.
+    reserve render target id(TARGET_CORAL_LOW)
+    render target TARGET_CORAL_LOW
+    set render target scale TARGET_CORAL_LOW, 1
+    set render target blend TARGET_CORAL_LOW, 2
+    set render target order TARGET_CORAL_LOW, -1
+    set render target background color TARGET_CORAL_LOW, rgb(0, 0, 0, 0)
+
+    reserve sprite id(CORAL_DRAW_SPRITE)
+    sprite CORAL_DRAW_SPRITE, 0, 0, render target texture(TARGET_CORAL)
+    set sprite offset CORAL_DRAW_SPRITE, 0, 0
+    size sprite CORAL_DRAW_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    set sprite effect CORAL_DRAW_SPRITE, CORAL_FX_ID
+    set sprite render target CORAL_DRAW_SPRITE, TARGET_CORAL_LOW
+
     reserve sprite id(CORAL_VIEW_SPRITE)
-    sprite CORAL_VIEW_SPRITE, 0, 0, render target texture(TARGET_CORAL)
+    sprite CORAL_VIEW_SPRITE, 0, 0, render target texture(TARGET_CORAL_LOW)
     set sprite offset CORAL_VIEW_SPRITE, 0, 0
     size sprite CORAL_VIEW_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
     order sprite CORAL_VIEW_SPRITE, ORDER_CORAL
-    set sprite effect CORAL_VIEW_SPRITE, CORAL_FX_ID
 
     ` the shadows of the fish. see HOW THE CORAL IS DRAWN in fish_headers.
     reserve render target id(TARGET_CORAL_SHADOW)

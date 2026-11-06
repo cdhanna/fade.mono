@@ -67,12 +67,26 @@ setup_surface:
         SURFACE_ANCIENT = 1
     endif
 
+    ` drawn with one pixel for each of the game's. see TARGET_SURFACE_LOW in fish_headers.
+    reserve render target id(TARGET_SURFACE_LOW)
+    render target TARGET_SURFACE_LOW
+    set render target scale TARGET_SURFACE_LOW, 1
+    set render target blend TARGET_SURFACE_LOW, 2
+    set render target order TARGET_SURFACE_LOW, -1
+    set render target background color TARGET_SURFACE_LOW, rgb(0, 0, 0, 0)
+
+    reserve sprite id(SURFACE_DRAW_SPRITE)
+    sprite SURFACE_DRAW_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset SURFACE_DRAW_SPRITE, 0, 0
+    size sprite SURFACE_DRAW_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
+    set sprite effect SURFACE_DRAW_SPRITE, SURFACE_FX_ID
+    set sprite render target SURFACE_DRAW_SPRITE, TARGET_SURFACE_LOW
+
     reserve sprite id(SURFACE_SPRITE)
-    sprite SURFACE_SPRITE, 0, 0, TEX_PIXEL
+    sprite SURFACE_SPRITE, 0, 0, render target texture(TARGET_SURFACE_LOW)
     set sprite offset SURFACE_SPRITE, 0, 0
     size sprite SURFACE_SPRITE, WORLD_WIDTH, WORLD_HEIGHT
     order sprite SURFACE_SPRITE, ORDER_MENU_SURFACE
-    set sprite effect SURFACE_SPRITE, SURFACE_FX_ID
     set sprite render target SURFACE_SPRITE, TARGET_MENU
 
     ` the picture of the boat is 168 by 80, and the bottom of it is the waterline. it sits in the water, the
@@ -105,12 +119,29 @@ setup_surface:
         endif
         SURFACE_REEF_FX(surfaceReefI) = surfaceReefFx
 
+        ` drawn with one pixel for each of the game's. see TARGET_SURFACE_LOW in fish_headers.
+        reserve render target id(surfaceReefTarget)
+        render target surfaceReefTarget
+        set render target scale surfaceReefTarget, 1
+        set render target blend surfaceReefTarget, 2
+        set render target order surfaceReefTarget, -1
+        set render target background color surfaceReefTarget, rgb(0, 0, 0, 0)
+        TARGET_REEF_LOW(surfaceReefI) = surfaceReefTarget
+
+        reserve sprite id(surfaceReefDraw)
+        sprite surfaceReefDraw, 0, 0, TEX_PIXEL
+        set sprite offset surfaceReefDraw, 0, 0
+        size sprite surfaceReefDraw, WORLD_WIDTH, WORLD_HEIGHT
+        set sprite effect surfaceReefDraw, surfaceReefFx
+        set sprite render target surfaceReefDraw, surfaceReefTarget
+        hide sprite surfaceReefDraw
+        SURFACE_REEF_DRAW_SPRITES(surfaceReefI) = surfaceReefDraw
+
         reserve sprite id(surfaceReefId)
-        sprite surfaceReefId, 0, 0, TEX_PIXEL
+        sprite surfaceReefId, 0, 0, render target texture(surfaceReefTarget)
         set sprite offset surfaceReefId, 0, 0
         size sprite surfaceReefId, WORLD_WIDTH, WORLD_HEIGHT
         order sprite surfaceReefId, ORDER_MENU_SURFACE + 2
-        set sprite effect surfaceReefId, surfaceReefFx
         set sprite render target surfaceReefId, TARGET_MENU
         hide sprite surfaceReefId
         SURFACE_REEF_SPRITES(surfaceReefI) = surfaceReefId
@@ -215,8 +246,10 @@ frame_surface:
     for surfaceReefI = 0 to 1
         if surfaceReef# > 0
             show sprite SURFACE_REEF_SPRITES(surfaceReefI)
+            show sprite SURFACE_REEF_DRAW_SPRITES(surfaceReefI)
         else
             hide sprite SURFACE_REEF_SPRITES(surfaceReefI)
+            hide sprite SURFACE_REEF_DRAW_SPRITES(surfaceReefI)
         endif
         position sprite SURFACE_REEF_SPRITES(surfaceReefI), 0, surfaceShift
 
@@ -345,9 +378,11 @@ function showSurface(isVisible)
     SURFACE_SHOWN = isVisible
     if isVisible
         show sprite SURFACE_SPRITE
+        show sprite SURFACE_DRAW_SPRITE
         show sprite SURFACE_BOAT_SPRITE
     else
         hide sprite SURFACE_SPRITE
+        hide sprite SURFACE_DRAW_SPRITE
         hide sprite SURFACE_BOAT_SPRITE
     endif
 
@@ -358,6 +393,8 @@ function showSurface(isVisible)
         avaBottleHide()
         hide sprite SURFACE_REEF_SPRITES(0)
         hide sprite SURFACE_REEF_SPRITES(1)
+        hide sprite SURFACE_REEF_DRAW_SPRITES(0)
+        hide sprite SURFACE_REEF_DRAW_SPRITES(1)
         for i = 0 to SURFACE_FISH_COUNT - 1
             hide sprite SURFACE_FISH_SPRITES(i)
         next

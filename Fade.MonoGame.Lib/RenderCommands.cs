@@ -1409,6 +1409,93 @@ public partial class FadeMonoGameCommands
     }
 
     /// <summary>
+    /// <para>Draws a render output with its own number of pixels to each pixel of the game, instead of
+    /// the <see cref="SetRenderScale">render scale</see> that every other output has, and makes its
+    /// textures again at that size: the render size times <paramref name="scale"/>.</para>
+    /// <para>For an expensive effect that works out its picture a whole game pixel at a time. With a
+    /// render scale of 2 it runs on four pixels of the target for every pixel of the game, and all four
+    /// come out the same. Drawn to an output of scale 1 instead, and that output's texture shown on a
+    /// sprite the size of the screen, it looks the same and costs a quarter.</para>
+    /// </summary>
+    /// <remarks>
+    /// The textures are made again at once, empty, so this belongs after
+    /// <see cref="SetRenderTargetTexture">render target</see>. Anything holding one of the old textures
+    /// as an effect parameter has to be given the new one; a sprite drawing
+    /// <see cref="GetRenderTargetTexture">render target texture</see> by its id picks it up by itself.
+    ///
+    /// A sprite that shows the output's texture should be drawn with point sampling, which every
+    /// output does, so that each of its pixels becomes a square of the bigger target's.
+    ///
+    /// The default output, 1, is the main buffer, and is always at the render scale: it is ignored.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// set render scale 2
+    /// reserve render target id(lowId)
+    /// render target lowId
+    /// set render target scale lowId, 1
+    /// ` the effect writes what it works out, and the sprite that shows it blends it
+    /// set render target blend lowId, 2
+    /// set render target order lowId, -1
+    /// set sprite render target heavySprite, lowId
+    /// sprite viewSprite, 0, 0, render target texture(lowId)
+    /// size sprite viewSprite, 320, 180
+    /// </code>
+    /// </example>
+    /// <param name="outputId">The render output to change. Not 1.</param>
+    /// <param name="scale">Pixels of its targets for each pixel of the game, from 1. 0 is the render scale again.</param>
+    /// <seealso cref="SetRenderScale">set render scale</seealso>
+    /// <seealso cref="SetRenderTargetOrder">set render target order</seealso>
+    [FadeBasicCommand("set render target scale")]
+    public static void SetRenderTargetScale(int outputId, int scale)
+    {
+        RenderSystem.GetOutputIndex(outputId, out _, out var output);
+        if (output.targets == null) return;
+        output.scale = Math.Max(0, scale);
+
+        var pixels = RenderSystem.OutputScale(output);
+        var width = RenderSystem.renderWidth * pixels;
+        var height = RenderSystem.renderHeight * pixels;
+        for (var i = 0; i < output.targets.Length; i++)
+        {
+            var old = output.targets[i];
+            if (old != null && !old.IsDisposed && old.Width == width && old.Height == height) continue;
+
+            // the old one is not disposed, for the reason in RebindOutputsToTarget
+            var target = TextureSystem.Own(new RenderTarget2D(GameSystem.graphicsDeviceManager.GraphicsDevice,
+                width: width,
+                height: height,
+                mipMap: false,
+                preferredFormat: old?.Format ?? SurfaceFormat.Color,
+                preferredDepthFormat: old?.DepthStencilFormat ?? DepthFormat.None));
+
+            var textureId = output.bindingTextureIds[i];
+            TextureSystem.GetTextureIndex(textureId, out var textureIndex, out var runtimeTexture);
+            runtimeTexture.SetComputedTexture(target);
+            TextureSystem.textures[textureIndex] = runtimeTexture;
+            RenderSystem.RebindOutputsToTarget(textureId, target);
+        }
+    }
+
+    /// <summary>
+    /// <para>Sets when a render output is drawn, against the others: lower first. Outputs with the same
+    /// order are drawn in the order they were made, which is what every output did before this. All of
+    /// them start at 0.</para>
+    /// <para>A sprite that shows another output's texture shows what that output drew the last time
+    /// it was drawn. If that output is drawn after the one the sprite is in, that is the frame before.
+    /// Giving it a lower order puts it on the same frame.</para>
+    /// </summary>
+    /// <param name="outputId">The render output to change. 1 is the default output.</param>
+    /// <param name="order">Lower is drawn first. Can be below 0.</param>
+    /// <seealso cref="SetRenderTargetScale">set render target scale</seealso>
+    [FadeBasicCommand("set render target order")]
+    public static void SetRenderTargetOrder(int outputId, int order)
+    {
+        RenderSystem.GetOutputIndex(outputId, out _, out var output);
+        output.order = order;
+    }
+
+    /// <summary>
     /// <para>Sets the blend mode of ONE attachment of a multiple-render-target output,
     /// leaving the others on whatever <see cref="SetRenderTargetBlend">set render target
     /// blend</see> gave the output as a whole.</para>
