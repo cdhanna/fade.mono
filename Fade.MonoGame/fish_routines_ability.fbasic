@@ -504,16 +504,17 @@ setup_moves:
         reserve tween id(moveAbility.useShakeTweenId)
         create basic tween moveAbility.useShakeTweenId, 0, 0, 1, 0
 
-        text moveAbility.titleTextId, 16, ABILITY_ROWS_Y - i*18, SCORE_FONT, "!!!"
+        text moveAbility.titleTextId, MOVE_LIST_NAME_X, ABILITY_ROWS_Y - i*18, SCORE_FONT, "!!!"
         order text moveAbility.titleTextId, ORDER_HUD_TEXT
         set text offset moveAbility.titleTextId, 0, 0
-        size text x moveAbility.titleTextId, HUD_LIST_WIDTH, .1, HUD_LIST_SCALE#
+        size text x moveAbility.titleTextId, MOVE_LIST_NAME_WIDTH, .1, HUD_LIST_SCALE#
         color text moveAbility.titleTextId, rgb(64, 128, 255, 200)
         enable text drop shadow moveAbility.titleTextId, 2, -2, rgb(0,0,0)
         set text alpha moveAbility.titleTextId, 0
 
-        ` a picture of the key that uses the move. it scales from its middle when it punches.
-        text moveAbility.keyTextId, 16 + 100 + 10, ABILITY_ROWS_Y + 10 - i*18, SCORE_FONT, "{move1}"
+        ` a picture of the key that uses the move, in front of its name, the way that the hint strip at the
+        ` bottom has them. it scales from its middle when it punches.
+        text moveAbility.keyTextId, MOVE_LIST_KEY_X, ABILITY_ROWS_Y + 10 - i*18, SCORE_FONT, "{move1}"
         order text moveAbility.keyTextId, ORDER_HUD_TEXT
         enable rich text moveAbility.keyTextId
         set text offset moveAbility.keyTextId, .5, .5
@@ -521,10 +522,10 @@ setup_moves:
         enable text drop shadow moveAbility.keyTextId, 2, -2, rgb(0,0,0) `the same shadow as the name next to it
         set text alpha moveAbility.keyTextId, 0
 
-        ` how many more moves until it can be used again
-        text moveAbility.timerTextId, 16 + 100 + 22, ABILITY_ROWS_Y - i*18, SCORE_FONT, "1"
-        order text moveAbility.timerTextId, ORDER_HUD_TEXT
-        set text offset moveAbility.timerTextId, 0, 0
+        ` how many more moves until it can be used again, on top of the key, which is dim while it waits
+        text moveAbility.timerTextId, MOVE_LIST_KEY_X, ABILITY_ROWS_Y + 10 - i*18, SCORE_FONT, "1"
+        order text moveAbility.timerTextId, ORDER_HUD_TEXT + 1
+        set text offset moveAbility.timerTextId, .5, .5
         size text x moveAbility.timerTextId, 100, .1, .3
         color text moveAbility.timerTextId, rgb(64, 128, 255, 200)
         enable text drop shadow moveAbility.timerTextId, 2, -2, rgb(0,0,0)
@@ -563,7 +564,7 @@ setup_moves:
 
     ` until there is a move to explain, explain the empty space. 
     global INFO_INDEX_MOVES
-    INFO_INDEX_MOVES = allocateInfoBlob(12, ABILITY_ROWS_Y + 2, 140, 18, loc$("ability.info.moves.title"), loc$("ability.info.moves.desc"))
+    INFO_INDEX_MOVES = allocateInfoBlob(12, ABILITY_ROWS_Y + 2, MOVE_LIST_INFO_WIDTH, 18, loc$("ability.info.moves.title"), loc$("ability.info.moves.desc"))
     setInfoBlobEnabled(INFO_INDEX_MOVES, 0) `the same goes for the moves
     
 return
@@ -1556,7 +1557,7 @@ frame_move_ability_render:
             ` the name is fitted to the column, so it is fitted again to a bigger one. only when it changes.
             moveSizeDiff# = moveScale# - MOVE_HOLD_DRAWN#(n)
             if moveSizeDiff# > .002 or moveSizeDiff# < -.002
-                size text x moveAbility.titleTextId, HUD_LIST_WIDTH * moveScale#, .1, HUD_LIST_SCALE# * moveScale#
+                size text x moveAbility.titleTextId, MOVE_LIST_NAME_WIDTH * moveScale#, .1, HUD_LIST_SCALE# * moveScale#
                 MOVE_HOLD_DRAWN#(n) = moveScale#
             endif
             ` it swells from the middle of its line, not from the top
@@ -1565,10 +1566,10 @@ frame_move_ability_render:
 
             set text alpha moveAbility.titleTextId, moveFade# * 255
 
-            ` the key is always there. while the move recharges, the key is dim, and the number
-            ` of moves left to wait shows up next to it.
+            ` the key is always there. while the move recharges, the key is faint, and the number
+            ` of moves left to wait shows up on top of it.
             if moveAbility.movesLeft > 0
-                set text alpha moveAbility.keyTextId, moveFade# * 70
+                set text alpha moveAbility.keyTextId, moveFade# * 40
                 set text alpha moveAbility.timerTextId, moveFade# * 240
             else
                 set text alpha moveAbility.keyTextId, moveFade# * 255
@@ -1582,17 +1583,18 @@ frame_move_ability_render:
 
             ` the whole row shakes from side to side when the move gets used
             rowShake# = sin(game ms() * .045) * 4 * tweenVal(moveAbility.useShakeTweenId)
-            set text position moveAbility.titleTextId, 16.5 + rowShake#, ABILITY_ROWS_Y - (moveRow*18 + moveTitleLift#)
-            set text position moveAbility.keyTextId, 126.5 + rowShake#, ABILITY_ROWS_Y + 10 - moveRow*18
+            set text position moveAbility.titleTextId, MOVE_LIST_NAME_X + .5 + rowShake#, ABILITY_ROWS_Y - (moveRow*18 + moveTitleLift#)
+            set text position moveAbility.keyTextId, MOVE_LIST_KEY_X + .5 + rowShake#, ABILITY_ROWS_Y + 10 - moveRow*18
 
             ` and only the number shakes when the move gets used before it is ready
             moveShake# = sin(game ms() * .045) * 4 * tweenVal(moveAbility.shakeTweenId)
-            set text position moveAbility.timerTextId, 138.5 + rowShake# + moveShake#, ABILITY_ROWS_Y - moveRow*18
+            set text position moveAbility.timerTextId, MOVE_LIST_KEY_X + .5 + rowShake# + moveShake#, ABILITY_ROWS_Y + 10 - moveRow*18
         next
 
-        ` the clock sits over the top row of moves, in line with the numbers. it shakes with them.
+        ` the clock sits over the top row of moves, in line with the keys and their numbers. it shakes with
+        ` them. a sprite is placed by its middle, the same as the key.
         clockShake# = sin(game ms() * .045) * 4 * tweenVal(COOLDOWN_CLOCK_SHAKE_TWEEN_ID)
-        position sprite COOLDOWN_CLOCK_SPRITE, 16 + 100 + 26 + clockShake#, ABILITY_ROWS_Y - 6 - moveRow * 18
+        position sprite COOLDOWN_CLOCK_SPRITE, MOVE_LIST_KEY_X + .5 + clockShake#, ABILITY_ROWS_Y - 6 - moveRow * 18
     endif
 
     ` fade the clock in when the first move starts to recharge, and out when the last one is ready

@@ -1,0 +1,2293 @@
+goto routines_qboard_exit
+
+remstart
+    QUESTS 2.0: THE QUEST BOARD. the rules are written in fish_headers_qboard.
+    - qbEnter() turns the board over to the quest. questPickUp comes here, instead of setting the quest up on the game's board.
+    - qbLeave() turns it back. questDrop comes here.
+    - stepQboard() plays the turn, every frame, after stepExtinct.
+remend
+
+setup_qboard:
+    ` the quests of the game are these (Chris, 2026-11-11: "move this quest system in place of the existing one").
+    ` FISH_QUEST1 brings the old ones of fish_headers_quests back, for a look at them.
+    QUEST2_ON = 1
+    if is env set("FISH_QUEST1") then QUEST2_ON = 0
+
+    ` the two keys of the puzzle, where the list of moves is, the same as a move's key and name. see THE BUTTONS OF THE PUZZLE.
+    for qbSetI = 0 to 1
+        reserve text id(QB_BTN_KEY_TEXT(qbSetI))
+        if qbSetI = 0
+            text QB_BTN_KEY_TEXT(qbSetI), MOVE_LIST_KEY_X, ABILITY_ROWS_Y + 10, SCORE_FONT, "{move1}"
+        else
+            text QB_BTN_KEY_TEXT(qbSetI), MOVE_LIST_KEY_X, ABILITY_ROWS_Y - 8, SCORE_FONT, "{move2}"
+        endif
+        order text QB_BTN_KEY_TEXT(qbSetI), ORDER_HUD_TEXT
+        enable rich text QB_BTN_KEY_TEXT(qbSetI)
+        set text offset QB_BTN_KEY_TEXT(qbSetI), .5, .5
+        size text y QB_BTN_KEY_TEXT(qbSetI), 16
+        enable text drop shadow QB_BTN_KEY_TEXT(qbSetI), 2, -2, rgb(0, 0, 0)
+        hide text QB_BTN_KEY_TEXT(qbSetI)
+
+        reserve text id(QB_BTN_NAME_TEXT(qbSetI))
+        if qbSetI = 0
+            text loc QB_BTN_NAME_TEXT(qbSetI), MOVE_LIST_NAME_X, ABILITY_ROWS_Y + 9, SCORE_FONT, "quest.q2.undo"
+        else
+            text loc QB_BTN_NAME_TEXT(qbSetI), MOVE_LIST_NAME_X, ABILITY_ROWS_Y - 9, SCORE_FONT, "quest.q2.restart"
+        endif
+        order text QB_BTN_NAME_TEXT(qbSetI), ORDER_HUD_TEXT
+        set text offset QB_BTN_NAME_TEXT(qbSetI), 0, .5
+        size text x QB_BTN_NAME_TEXT(qbSetI), MOVE_LIST_NAME_WIDTH, .1, HUD_LIST_SCALE#
+        color text QB_BTN_NAME_TEXT(qbSetI), rgb(140, 210, 255)
+        enable text drop shadow QB_BTN_NAME_TEXT(qbSetI), 2, -2, rgb(0, 0, 0)
+        hide text QB_BTN_NAME_TEXT(qbSetI)
+        QB_BTN_PUNCH_MS(qbSetI) = -1
+    next
+
+    ` the stack: for each place in it, its box, its pickup, and what it gives in a box beside it. see THE STACK.
+    for qbSetI = 0 to QS_MAX - 1
+        reserve sprite id(QS_ZONE_SPRITE(qbSetI))
+        sprite QS_ZONE_SPRITE(qbSetI), 0, 0, TEX_PIXEL
+        set sprite offset QS_ZONE_SPRITE(qbSetI), 0, 0
+        set sprite effect QS_ZONE_SPRITE(qbSetI), QUEST_ZONE_FX_ID
+        order sprite QS_ZONE_SPRITE(qbSetI), ORDER_QUEST_GLOW
+        hide sprite QS_ZONE_SPRITE(qbSetI)
+
+        reserve sprite id(QS_ICON_SPRITE(qbSetI))
+        sprite QS_ICON_SPRITE(qbSetI), 0, 0, 1
+        order sprite QS_ICON_SPRITE(qbSetI), ORDER_QUEST_ICON
+        hide sprite QS_ICON_SPRITE(qbSetI)
+
+        reserve sprite id(QS_BOX_SPRITE(qbSetI))
+        sprite QS_BOX_SPRITE(qbSetI), 0, 0, TEX_PIXEL
+        set sprite offset QS_BOX_SPRITE(qbSetI), 0, 0
+        set sprite effect QS_BOX_SPRITE(qbSetI), QUEST_ZONE_FX_ID
+        order sprite QS_BOX_SPRITE(qbSetI), ORDER_QUEST_GLOW
+        hide sprite QS_BOX_SPRITE(qbSetI)
+
+        reserve text id(QS_LABEL_TEXT(qbSetI))
+        text loc QS_LABEL_TEXT(qbSetI), 0, 0, SCORE_FONT, "quest.q2.reward.moves"
+        set text wrap QS_LABEL_TEXT(qbSetI), 24 `two lines, the way that the ladder's box has them
+        set text align QS_LABEL_TEXT(qbSetI), .5
+        order text QS_LABEL_TEXT(qbSetI), ORDER_HUD_TEXT
+        set text offset QS_LABEL_TEXT(qbSetI), .5, .5
+        size text max QS_LABEL_TEXT(qbSetI), 24, 22
+        color text QS_LABEL_TEXT(qbSetI), rgb(255, 225, 130, 255)
+        enable text drop shadow QS_LABEL_TEXT(qbSetI), 1, -1, rgb(0, 0, 0)
+        set text alpha QS_LABEL_TEXT(qbSetI), 0
+        QS_LABEL_KIND(qbSetI) = QB_REWARD_MOVES
+    next
+
+    ` the talk: the lines of its list, what the quest gives, and the bar behind the line that is picked. the box,
+    ` the picture, the name and the line are the quest talk's. see THE QUEST TALKS.
+    for qbSetI = 0 to QD_CHOICE_MAX - 1
+        reserve text id(QD_CHOICE_TEXT(qbSetI))
+        text QD_CHOICE_TEXT(qbSetI), 0, 0, SCORE_FONT, " "
+        size text y QD_CHOICE_TEXT(qbSetI), 13
+        set text offset QD_CHOICE_TEXT(qbSetI), 0, 0
+        order text QD_CHOICE_TEXT(qbSetI), ORDER_QTALK + 6
+        hide text QD_CHOICE_TEXT(qbSetI)
+    next
+    reserve text id(QD_REWARD_TEXT)
+    text QD_REWARD_TEXT, 0, 0, SCORE_FONT, " "
+    size text y QD_REWARD_TEXT, 12
+    set text offset QD_REWARD_TEXT, 1, 0
+    color text QD_REWARD_TEXT, rgb(255, 225, 130)
+    order text QD_REWARD_TEXT, ORDER_QTALK + 6
+    hide text QD_REWARD_TEXT
+    reserve sprite id(QD_PICK_SPRITE)
+    sprite QD_PICK_SPRITE, 0, 0, TEX_PIXEL
+    set sprite offset QD_PICK_SPRITE, 0, 0
+    order sprite QD_PICK_SPRITE, ORDER_QTALK + 2
+    hide sprite QD_PICK_SPRITE
+    reserve tween id(QD_FADE_TWEEN_ID)
+    create basic tween QD_FADE_TWEEN_ID, 0, 0, 1, 0
+    QS_SPRITES_MADE = 1
+return
+
+
+routines_qboard_exit:
+
+
+` the quest has been taken: keep the game, and start turning the board over
+function qbEnter(qbEnterId)
+    if QB_PHASE > 0 then exitfunction
+    QB_QUEST = qbEnterId
+    qbKeep()
+    QB_PHASE = 1
+    QB_SPIN_MS = game ms()
+    QB_SPIN_SWAPPED = 0
+    tidePlaySound(EXTINCT_SFX_FLIP, .9, 0)
+endfunction
+
+
+` the player is leaving the quest board: turn it back
+function qbLeave()
+    if QB_PHASE <> 2 then exitfunction
+    QB_PHASE = 3
+    qbBtnOut()
+    QB_SPIN_MS = game ms()
+    QB_SPIN_SWAPPED = 0
+    tidePlaySound(EXTINCT_SFX_FLIP, .9, 0)
+endfunction
+
+
+` everything about the game's board that the quest board could change
+function qbKeep()
+    qbkLast = CELL_COUNT - 1
+    for qbkI = 0 to qbkLast
+        QB_KEEP_VALUE(qbkI) = CELLS(qbkI).value
+        QB_KEEP_STACK(qbkI) = CELLS(qbkI).stack
+        QB_KEEP_BELLY(qbkI) = CELLS(qbkI).bellyUp
+        QB_KEEP_CORAL(qbkI) = CORAL_CELLS(qbkI)
+        QB_KEEP_SICK(qbkI) = CORAL_SICK(qbkI)
+        QB_KEEP_INK(qbkI) = INK(qbkI)
+        QB_KEEP_RAINBOW(qbkI) = RAINBOW_FISH(qbkI)
+        QB_KEEP_BUBBLED(qbkI) = BUBBLED_AT(qbkI)
+        QB_KEEP_BUBBLED_PAID(qbkI) = BUBBLED_PAID(qbkI)
+        QB_KEEP_FACE(qbkI) = SCHOOL_FACE(qbkI)
+        QB_KEEP_SHOWN#(qbkI) = SCHOOL_SHOWN#(qbkI)
+        QB_KEEP_GLOW#(qbkI) = GLOW_TURN#(qbkI)
+        QB_KEEP_MARK(qbkI) = QUEST_MARK(qbkI)
+        QB_KEEP_SPOT(qbkI) = QUEST_SPOT(qbkI)
+    next
+    for qbkI = 0 to CARD_LENGTH - 1
+        QB_KEEP_USES(qbkI) = CARDS(qbkI).uses
+        QB_KEEP_OBTAINED(qbkI) = CARDS(qbkI).obtained
+    next
+    for qbkI = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
+        QB_KEEP_MOVE_ON(qbkI) = MOVE_ABILITY_BINDINGS(qbkI).assigned
+    next
+    for qbkI = 0 to 2
+        QB_KEEP_RNG(qbkI * 2) = random stream state(qbkI, 0)
+        QB_KEEP_RNG(qbkI * 2 + 1) = random stream state(qbkI, 1)
+    next
+    QB_KEEP_SCORE = CURRENT_SCORE
+    QB_KEEP_MOVES = CURRENT_MOVE_COUNT
+    QB_KEEP_MULT = SCORE_MULTIPLIER
+    QB_KEEP_MULT_PROGRESS = MULT_PROGRESS
+    QB_KEEP_BEST_MULT = BEST_MULTIPLIER
+    QB_KEEP_FREE_MOVES = PENDING_FREE_MOVES
+    QB_KEEP_BAR_START = SCORE_BAR.startVal
+    QB_KEEP_BAR_END = SCORE_BAR.endVal
+    QB_KEEP_CURSOR = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+    QB_KEEP_BELLY_ROLL = BELLY_UP_ROLL_DUE
+    QB_KEEP_SCHOOL_SPAWNS = SCHOOL_SPAWNS
+    QB_KEEP_COLS = CELL_COLUMN_COUNT
+    QB_KEEP_ROWS = CELL_ROW_COUNT
+    QB_KEEP_PICK = QUEST_PICK_CELL
+
+    ` the night, the squid and its ink
+    QB_KEEP_NIGHT = TIDE_NIGHT
+    QB_KEEP_NIGHT_LEFT = TIDE_NIGHT_LEFT
+    QB_KEEP_TIDE_LEVEL = TIDE_LEVEL
+    QB_KEEP_TIDE_EBBED = TIDE_EBBED
+    QB_KEEP_TIDE_FLOW = TIDE_FLOW
+    QB_KEEP_TIDE_CYCLES = TIDE_CYCLES
+    QB_KEEP_DAWN_UNTIL = TIDE_DAWN_UNTIL
+    QB_KEEP_SQUID = SQUID_CELL
+    QB_KEEP_INK_COUNT = INK_COUNT
+    for qbkI = 0 to qbkLast
+        QB_KEEP_BANKED(qbkI) = TIDE_BANKED(qbkI)
+    next
+endfunction
+
+
+` halfway through the turn to the quest, while the board is edge on: the quest's fish are there now
+function qbSwapIn()
+    QB_ON = 1
+    TUTORIAL_BOARD = 1
+
+    ` no card has been taken, here. see ONLY WHAT THE PUZZLE GIVES.
+    for qbsI = 0 to CARD_LENGTH - 1
+        CARDS(qbsI).uses = 0
+        CARDS(qbsI).obtained = 0
+    next
+    for qbsI = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
+        MOVE_ABILITY_BINDINGS(qbsI).assigned = 0
+    next
+
+    ` nothing on the quest board can end the round, and the things around the board belong to the game
+    SCORE_BAR.endVal = CURRENT_SCORE + 100000000
+    PROGRESS_BARS(0) = SCORE_BAR
+    qbHud(0)
+
+    ` the game's board is cleared of everything that is not a fish, all of it, whatever its size
+    qbsLast = CELL_COUNT - 1
+    for qbsI = 0 to qbsLast
+        CORAL_CELLS(qbsI) = 0
+        CORAL_SICK(qbsI) = 0
+        INK(qbsI) = 0
+        QUEST_MARK(qbsI) = 0
+        QUEST_SPOT(qbsI) = 0
+        TIDE_BANKED(qbsI) = 0
+        puzzlePut(qbsI, 0)
+    next
+
+    ` the quest's own day or night. the squid and the moon wait with the game's board.
+    SQUID_CELL = -1
+    INK_COUNT = 0
+    TIDE_NIGHT = QB_NIGHT_WANT
+    TIDE_DAWN_UNTIL = 0
+
+    ` the puzzle, on a board of its own size
+    if QB_LEVEL_OF(QB_QUEST) < 1 then QB_LEVEL_OF(QB_QUEST) = 1
+    QB_LEVEL = QB_LEVEL_OF(QB_QUEST)
+    qbMakePuzzle(QB_QUEST, QB_LEVEL)
+    resizeGrid(QB_W, QB_H)
+    scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+    qbLay()
+    coralRecount()
+    inkRowsUpdate()
+
+    ` the pickup is beside the quest board, half way up, with its X over it
+    QUEST_PICK_CELL = (QB_H / 2) * QB_W + QB_W - 1
+endfunction
+
+
+` put the puzzle, as it starts, on the quest board: its fish, its eggs and their counts, Finn, and no glow
+function qbLay()
+    qblLast = CELL_COUNT - 1
+    for qblI = 0 to qblLast
+        TIDE_BANKED(qblI) = 0
+        puzzlePut(qblI, QB_START_G(qblI))
+        QUEST_MARK(qblI) = QB_START_GE(qblI)
+        QUEST_SPOT(qblI) = 0
+    next
+    for qblE = 1 to QB_EGGS
+        QB_EGG_LEFT(qblE) = QB_EGG_N(qblE)
+        QB_EGG_DONE(qblE) = 0
+    next
+    QB_SHARK_AT = QB_SHARK_START
+    QB_SHARK_DONE = 0
+    QB_SHARK_SWAPS = 0
+    QB_SHARK_GX# = getCellX(QB_SHARK_AT mod CELL_COLUMN_COUNT)
+    QB_SHARK_GY# = getCellY(QB_SHARK_AT / CELL_COLUMN_COUNT)
+    QB_WAKE_JOINED = 0
+    QB_STUCK_DUE = 0
+    QB_LOST = 0
+    QB_WON = 0
+    QB_UNDO_N = 0
+    qbShowProgress()
+
+    ` the cursor was out on the pickup, and comes in on the quest board, on the floor in the middle
+    QUEST_CURSOR_OUT = 0
+    SELECTION_POS.x = QB_W / 2
+    SELECTION_POS.y = QB_H - 1
+endfunction
+
+
+` the count on the badge: eggs hatched, swaps made past Finn, or how far across the glow reaches
+function qbShowProgress()
+    if QB_MODE = QB_KIND_HATCH
+        qbspDone = 0
+        for qbspE = 1 to QB_EGGS
+            if QB_EGG_DONE(qbspE) = 1 then qbspDone = qbspDone + 1
+        next
+        questProgress(qbspDone, QB_EGGS)
+    endif
+    if QB_MODE = QB_KIND_SHARK
+        questProgress(QB_SHARK_DONE, QB_SHARK_NEED)
+    endif
+    if QB_MODE = QB_KIND_WAKE
+        qbspReach = qbWakeReach()
+        questProgress(qbspReach, CELL_COLUMN_COUNT)
+    endif
+endfunction
+
+
+` how many columns the glow reaches across, from the left edge, the way that questWakeReach does
+function qbWakeReach()
+    qbwrLast = CELL_COUNT - 1
+    for qbwrI = 0 to qbwrLast
+        QUEST_TEMP(qbwrI) = 0
+    next
+    qbwrN = 0
+    qbwrBest = 0
+    for qbwrRow = 0 to CELL_ROW_COUNT - 1
+        qbwrAt = qbwrRow * CELL_COLUMN_COUNT
+        if QUEST_SPOT(qbwrAt) > 0
+            QUEST_TEMP(qbwrAt) = 1
+            QUEST_STACK(qbwrN) = qbwrAt
+            qbwrN = qbwrN + 1
+        endif
+    next
+    while qbwrN > 0
+        qbwrN = qbwrN - 1
+        qbwrAt = QUEST_STACK(qbwrN)
+        qbwrX = (qbwrAt mod CELL_COLUMN_COUNT) + 1
+        if qbwrX > qbwrBest then qbwrBest = qbwrX
+        for qbwrSide = 0 to 3
+            qbwrNext = questSide(qbwrAt, qbwrSide)
+            if qbwrNext >= 0
+                if QUEST_TEMP(qbwrNext) = 0 and QUEST_SPOT(qbwrNext) > 0
+                    QUEST_TEMP(qbwrNext) = 1
+                    QUEST_STACK(qbwrN) = qbwrNext
+                    qbwrN = qbwrN + 1
+                endif
+            endif
+        next
+    endwhile
+endfunction qbwrBest
+
+
+` 1 when a swap that pops is still there to be made
+function qbAnyMoveLeft()
+    qbamLast = CELL_COUNT - 1
+    for qbamI = 0 to qbamLast
+        if CELLS(qbamI).value > 0
+            qbamX = qbamI mod CELL_COLUMN_COUNT
+            if qbamX < CELL_COLUMN_COUNT - 1
+                if CELLS(qbamI + 1).value > 0
+                    qbamPops = puzzleSwapPops(qbamI, qbamI + 1)
+                    if qbamPops then exitfunction 1
+                endif
+            endif
+            if qbamI + CELL_COLUMN_COUNT <= qbamLast
+                if CELLS(qbamI + CELL_COLUMN_COUNT).value > 0
+                    qbamPops = puzzleSwapPops(qbamI, qbamI + CELL_COLUMN_COUNT)
+                    if qbamPops then exitfunction 1
+                endif
+            endif
+        endif
+    next
+endfunction 0
+
+
+
+` halfway through the turn back: the game's board is there again, exactly as it was kept
+function qbGiveBack()
+    QB_ON = 0
+    TUTORIAL_BOARD = 0
+
+    ` the quest board's fish go, and the game's board is its own size again
+    qbgQuestLast = CELL_COUNT - 1
+    for qbgI = 0 to qbgQuestLast
+        QUEST_MARK(qbgI) = 0
+        puzzlePut(qbgI, 0)
+    next
+    resizeGrid(QB_KEEP_COLS, QB_KEEP_ROWS)
+    scale sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+    QUEST_PICK_CELL = QB_KEEP_PICK
+
+    ` and its night
+    TIDE_NIGHT = QB_KEEP_NIGHT
+    TIDE_NIGHT_LEFT = QB_KEEP_NIGHT_LEFT
+    TIDE_LEVEL = QB_KEEP_TIDE_LEVEL
+    TIDE_EBBED = QB_KEEP_TIDE_EBBED
+    TIDE_FLOW = QB_KEEP_TIDE_FLOW
+    TIDE_CYCLES = QB_KEEP_TIDE_CYCLES
+    TIDE_DAWN_UNTIL = QB_KEEP_DAWN_UNTIL
+    SQUID_CELL = QB_KEEP_SQUID
+    INK_COUNT = QB_KEEP_INK_COUNT
+
+    qbgLast = CELL_COUNT - 1
+    for qbgI = 0 to qbgLast
+        hide sprite CELLS(qbgI).fxSpriteId
+        CELLS(qbgI).value = QB_KEEP_VALUE(qbgI)
+        CELLS(qbgI).stack = QB_KEEP_STACK(qbgI)
+        CELLS(qbgI).stackShown# = QB_KEEP_STACK(qbgI)
+        CELLS(qbgI).bellyUp = QB_KEEP_BELLY(qbgI)
+        CELLS(qbgI).bellyShown# = QB_KEEP_BELLY(qbgI) * 3.14159
+        CELLS(qbgI).comboForce = 0
+        CELLS(qbgI).comboBlownUp = 0
+        CELLS(qbgI).comboDownShift = 0
+        CORAL_CELLS(qbgI) = QB_KEEP_CORAL(qbgI)
+        CORAL_SICK(qbgI) = QB_KEEP_SICK(qbgI)
+        INK(qbgI) = QB_KEEP_INK(qbgI)
+        RAINBOW_FISH(qbgI) = QB_KEEP_RAINBOW(qbgI)
+        BUBBLED_AT(qbgI) = QB_KEEP_BUBBLED(qbgI)
+        BUBBLED_PAID(qbgI) = QB_KEEP_BUBBLED_PAID(qbgI)
+        SCHOOL_FACE(qbgI) = QB_KEEP_FACE(qbgI)
+        SCHOOL_SHOWN#(qbgI) = QB_KEEP_SHOWN#(qbgI)
+        GLOW_TURN#(qbgI) = QB_KEEP_GLOW#(qbgI)
+        QUEST_MARK(qbgI) = QB_KEEP_MARK(qbgI)
+        QUEST_SPOT(qbgI) = QB_KEEP_SPOT(qbgI)
+        TIDE_BANKED(qbgI) = QB_KEEP_BANKED(qbgI)
+        create basic tween CELLS(qbgI).scaleWaveTweenId, 1, 1, 1, 0
+        updateCell(CELLS(qbgI))
+        if CELLS(qbgI).value > 0
+            set sprite alpha CELLS(qbgI).spriteId, 255
+            show sprite CELLS(qbgI).spriteId
+        else
+            hide sprite CELLS(qbgI).spriteId
+        endif
+    next
+    coralRecount()
+    inkRowsUpdate()
+
+    for qbgI = 0 to CARD_LENGTH - 1
+        CARDS(qbgI).uses = QB_KEEP_USES(qbgI)
+        CARDS(qbgI).obtained = QB_KEEP_OBTAINED(qbgI)
+    next
+    for qbgI = 0 to MOVE_ABILITY_BINDINGS_LENGTH - 1
+        MOVE_ABILITY_BINDINGS(qbgI).assigned = QB_KEEP_MOVE_ON(qbgI)
+    next
+    for qbgI = 0 to 2
+        set random stream state qbgI, QB_KEEP_RNG(qbgI * 2), QB_KEEP_RNG(qbgI * 2 + 1)
+    next
+
+    CURRENT_SCORE = QB_KEEP_SCORE
+    CURRENT_MOVE_COUNT = QB_KEEP_MOVES
+    SCORE_MULTIPLIER = QB_KEEP_MULT
+    MULT_PROGRESS = QB_KEEP_MULT_PROGRESS
+    BEST_MULTIPLIER = QB_KEEP_BEST_MULT
+    PENDING_FREE_MOVES = QB_KEEP_FREE_MOVES
+    SCORE_BAR.startVal = QB_KEEP_BAR_START
+    SCORE_BAR.endVal = QB_KEEP_BAR_END
+    PROGRESS_BARS(0) = SCORE_BAR
+    BELLY_UP_ROLL_DUE = QB_KEEP_BELLY_ROLL
+    SCHOOL_SPAWNS = QB_KEEP_SCHOOL_SPAWNS
+    syncScoreShown()
+    setProgressTween(SCORE_BAR, CURRENT_SCORE)
+    refreshMultiplier(1)
+    registerMove(0)
+    qbHud(1)
+
+    QUEST_CURSOR_OUT = 0
+    SELECTION_POS.x = QB_KEEP_CURSOR mod CELL_COLUMN_COUNT
+    SELECTION_POS.y = QB_KEEP_CURSOR / CELL_COLUMN_COUNT
+
+    ` a puzzle that was done is a quest that is finished, on the game's board, and it gives what it said that
+    ` it would. see THE STACK.
+    qsBack()
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` PLAYING THE PUZZLE. questEvent passes everything that happens on the quest board to qbEvent.
+` ---------------------------------------------------------------------------------------------
+
+function qbEvent(qbeEv, qbeA, qbeB)
+    if QB_ON = 0 then exitfunction
+
+    if qbeEv = QEV_SWAP
+        if QB_LOST = 0 and QB_WON = 0
+            if QB_MODE = QB_KIND_HATCH
+                for qbeE = 1 to QB_EGGS
+                    if QB_EGG_DONE(qbeE) = 0 then QB_EGG_LEFT(qbeE) = QB_EGG_LEFT(qbeE) - 1
+                next
+            endif
+            if QB_MODE = QB_KIND_SHARK
+                QB_SHARK_SWAPS = QB_SHARK_SWAPS + 1
+            endif
+            ` the glow of every cell is a swap shorter
+            if QB_MODE = QB_KIND_WAKE
+                qbeLast = CELL_COUNT - 1
+                for qbeI = 0 to qbeLast
+                    if QUEST_SPOT(qbeI) > 0 then QUEST_SPOT(qbeI) = QUEST_SPOT(qbeI) - 1
+                next
+            endif
+        endif
+    endif
+
+    if qbeEv = QEV_JUDGE
+        if QB_MODE = QB_KIND_HATCH
+            for qbeE = 1 to QB_EGGS
+                if QB_EGG_DONE(qbeE) = 0
+                    qbeAt = questFindMarkPopping(qbeE)
+                    if qbeAt >= 0
+                        if QB_EGG_LEFT(qbeE) = 0 and QB_LOST = 0
+                            QB_EGG_DONE(qbeE) = 1
+                            questSayAt(qbeAt, loc$("quest.say.hatched"), rgb(255, 240, 150))
+                        else
+                            QB_EGG_DONE(qbeE) = 2
+                            qbLose(qbeAt, loc$("quest.say.broken"), 1)
+                        endif
+                    endif
+                endif
+            next
+        endif
+        ` a pop next to Finn is his
+        if QB_MODE = QB_KIND_SHARK and QB_LOST = 0
+            qbeLast = CELL_COUNT - 1
+            qbeBit = -1
+            for qbeI = 0 to qbeLast
+                if CELLS(qbeI).comboBlownUp
+                    qbeNear = questChebyshev(qbeI, QB_SHARK_AT)
+                    if qbeNear <= QB_SHARK_REACH then qbeBit = qbeI
+                endif
+            next
+            if qbeBit >= 0
+                qbLose(QB_SHARK_AT, loc$("quest.say.chomp"), 3)
+            endif
+        endif
+        if QB_MODE = QB_KIND_WAKE and QB_LOST = 0
+            qbeLast = CELL_COUNT - 1
+            for qbeI = 0 to qbeLast
+                if CELLS(qbeI).comboBlownUp then QUEST_SPOT(qbeI) = QB_GLOW_FOR
+            next
+            qbeReach = qbWakeReach()
+            if qbeReach >= CELL_COLUMN_COUNT then QB_WAKE_JOINED = 1
+        endif
+    endif
+
+    if qbeEv = QEV_SETTLE
+        if QB_LOST = 0 and QB_WON = 0
+            qbeWin = 0
+            if QB_MODE = QB_KIND_HATCH
+                qbeWin = 1
+                for qbeE = 1 to QB_EGGS
+                    if QB_EGG_DONE(qbeE) = 0
+                        qbeWin = 0
+                        ` its count ran out, and it is still there: it hatched, and nobody was there
+                        if QB_EGG_LEFT(qbeE) <= 0
+                            qbeAt = questFindMark(qbeE)
+                            qbLose(qbeAt, loc$("quest.say.slipped"), 2)
+                        endif
+                    endif
+                next
+            endif
+            ` Finn swims after the cursor, a cell for every swap that he did not eat from
+            if QB_MODE = QB_KIND_SHARK
+                while QB_SHARK_SWAPS > 0
+                    QB_SHARK_SWAPS = QB_SHARK_SWAPS - 1
+                    QB_SHARK_DONE = QB_SHARK_DONE + 1
+                    QB_SHARK_AT = qbSharkStep(QB_SHARK_AT, SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT, CELL_COLUMN_COUNT)
+                endwhile
+                if QB_SHARK_DONE >= QB_SHARK_NEED then qbeWin = 1
+            endif
+            if QB_MODE = QB_KIND_WAKE
+                qbeWin = QB_WAKE_JOINED
+            endif
+            if qbeWin and QB_LOST = 0
+                QB_WON = 1
+                QB_WON_MS = game ms()
+                qbSayWon()
+            endif
+            ` is it stuck? that is looked at once everything has stopped moving. see qbPlayStep.
+            if QB_WON = 0 and QB_LOST = 0 then QB_STUCK_DUE = 1
+        endif
+        qbShowProgress()
+    endif
+
+    if qbeEv = QEV_DRAW
+        if QB_MODE = QB_KIND_HATCH
+            qbeLast = CELL_COUNT - 1
+            for qbeI = 0 to qbeLast
+                qbeMark = QUEST_MARK(qbeI)
+                if qbeMark > 0
+                    if QB_EGG_DONE(qbeMark) = 0
+                        qbeColor = rgb(255, 255, 255)
+                        if QB_EGG_LEFT(qbeMark) <= 1 then qbeColor = rgb(255, 220, 64)
+                        questNumberOnFish(qbeI, QB_EGG_LEFT(qbeMark), qbeColor)
+                    endif
+                endif
+            next
+        endif
+        if QB_MODE = QB_KIND_SHARK
+            qbDrawShark()
+        endif
+        if QB_MODE = QB_KIND_WAKE
+            qbeLast = CELL_COUNT - 1
+            for qbeI = 0 to qbeLast
+                if QUEST_SPOT(qbeI) > 0
+                    questGlowCell(qbeI, rgb(120, 220, 255, 40 + QUEST_SPOT(qbeI) * 30))
+                endif
+            next
+        endif
+    endif
+endfunction
+
+
+` the cell that Finn swims to from a cell, toward the cursor: along whichever way is further, the way that the
+` shark of the game's board does. the width is passed, because the generator has a board of its own.
+function qbSharkStep(qbssAt, qbssTo, qbssW)
+    qbssX = qbssAt mod qbssW
+    qbssY = qbssAt / qbssW
+    qbssDX = (qbssTo mod qbssW) - qbssX
+    qbssDY = (qbssTo / qbssW) - qbssY
+    if abs(qbssDX) >= abs(qbssDY)
+        qbssX = qbssX + questSign(qbssDX)
+    else
+        qbssY = qbssY + questSign(qbssDY)
+    endif
+    qbssNext = qbssX + qbssY * qbssW
+endfunction qbssNext
+
+
+` Finn: the water as far as he bites is red, and he glides to his cell
+function qbDrawShark()
+    qbdsX = QB_SHARK_AT mod CELL_COLUMN_COUNT
+    qbdsY = QB_SHARK_AT / CELL_COLUMN_COUNT
+    qbdsLeft = qbdsX - QB_SHARK_REACH
+    qbdsTop = qbdsY - QB_SHARK_REACH
+    qbdsRight = qbdsX + QB_SHARK_REACH
+    qbdsBottom = qbdsY + QB_SHARK_REACH
+    if qbdsLeft < 0 then qbdsLeft = 0
+    if qbdsTop < 0 then qbdsTop = 0
+    if qbdsRight > CELL_COLUMN_COUNT - 1 then qbdsRight = CELL_COLUMN_COUNT - 1
+    if qbdsBottom > CELL_ROW_COUNT - 1 then qbdsBottom = CELL_ROW_COUNT - 1
+    questGlowSpan(qbdsLeft, qbdsTop, qbdsRight + 1 - qbdsLeft, qbdsBottom + 1 - qbdsTop, rgb(255, 70, 70, 60))
+    qbdsToX# = getCellX(qbdsX)
+    qbdsToY# = getCellY(qbdsY)
+    QB_SHARK_GX# = QB_SHARK_GX# + (qbdsToX# - QB_SHARK_GX#) * .12
+    QB_SHARK_GY# = QB_SHARK_GY# + (qbdsToY# - QB_SHARK_GY#) * .12
+    questIconAt(TEX_Q_SHARK, QB_SHARK_GX#, QB_SHARK_GY# + sin(game ms() * .004) * 2, CELL_ART_SIZE + 8, rgb(255, 255, 255, 235))
+endfunction
+
+
+` the puzzle is lost. the swaps can be taken back, or it can be started over. the one whose quest it is says
+` what happened, and what can be done: 1 an egg popped too soon, 2 one was left too long, 3 Finn ate, 4 nothing
+` that pops is left.
+function qbLose(qblsAt, qblsWords$, qblsWhy)
+    if QB_LOST then exitfunction
+    QB_LOST = 1
+    qbSayLost(qblsWhy)
+    if qblsWords$ = "" then exitfunction
+    if qblsAt >= 0
+        questSayAt(qblsAt, qblsWords$, rgb(255, 150, 140))
+    else
+        questSay(qblsWords$, rgb(255, 150, 140))
+    endif
+endfunction
+
+function qbSayLost(qbslWhy)
+    qbslWho = qdSpeaker(QB_QUEST)
+    if qbslWhy = 1
+        questTalkSay(qbslWho, lockey$("questtalk.hatch.q2.broken"))
+    endif
+    if qbslWhy = 2
+        questTalkSay(qbslWho, lockey$("questtalk.hatch.q2.slipped"))
+    endif
+    if qbslWhy = 3
+        questTalkSay(qbslWho, lockey$("questtalk.shark.q2.eaten"))
+    endif
+    if qbslWhy = 4
+        if qbslWho = QUEST_SHARK
+            questTalkSay(qbslWho, lockey$("questtalk.shark.q2.stuck"))
+        endif
+        if qbslWho = QUEST_WAKE
+            questTalkSay(qbslWho, lockey$("questtalk.wake.q2.stuck"))
+        endif
+        if qbslWho = QUEST_HATCH
+            questTalkSay(qbslWho, lockey$("questtalk.hatch.q2.stuck"))
+        endif
+    endif
+endfunction
+
+function qbSayWon()
+    qbswWho = qdSpeaker(QB_QUEST)
+    if qbswWho = QUEST_SHARK
+        questTalkSay(qbswWho, lockey$("questtalk.shark.q2.won"))
+    endif
+    if qbswWho = QUEST_WAKE
+        questTalkSay(qbswWho, lockey$("questtalk.wake.q2.won"))
+    endif
+    if qbswWho = QUEST_HATCH
+        questTalkSay(qbswWho, lockey$("questtalk.hatch.q2.won"))
+    endif
+endfunction
+
+
+` a swap is starting on the quest board. keep the board as it is, to take the swap back.
+function qbUndoPush()
+    if QB_UNDO_N >= QB_UNDO_MAX then exitfunction
+    qbuBase = QB_UNDO_N * 100
+    qbuLast = CELL_COUNT - 1
+    for qbuI = 0 to qbuLast
+        QB_UNDO_CELLS(qbuBase + qbuI) = CELLS(qbuI).value + QUEST_MARK(qbuI) * 100 + QUEST_SPOT(qbuI) * 10000
+    next
+    for qbuE = 1 to QB_EGGS
+        QB_UNDO_EGGS(QB_UNDO_N * 8 + qbuE) = QB_EGG_LEFT(qbuE) + QB_EGG_DONE(qbuE) * 1000
+    next
+    QB_UNDO_SHARK(QB_UNDO_N) = QB_SHARK_AT
+    QB_UNDO_DONE(QB_UNDO_N) = QB_SHARK_DONE
+    QB_UNDO_CURSOR(QB_UNDO_N) = SELECTION_POS.x + SELECTION_POS.y * CELL_COLUMN_COUNT
+    QB_UNDO_LOST(QB_UNDO_N) = QB_LOST
+    QB_UNDO_N = QB_UNDO_N + 1
+endfunction
+
+
+` the last swap never happened
+function qbUndo()
+    if QB_UNDO_N = 0 then exitfunction
+    QB_UNDO_N = QB_UNDO_N - 1
+    qbunBase = QB_UNDO_N * 100
+    qbunLast = CELL_COUNT - 1
+    for qbunI = 0 to qbunLast
+        qbunV = QB_UNDO_CELLS(qbunBase + qbunI)
+        if CELLS(qbunI).value <> qbunV mod 100
+            puzzlePut(qbunI, qbunV mod 100)
+            create basic tween CELLS(qbunI).scaleWaveTweenId, 0, 1, 220, 0
+        endif
+        QUEST_MARK(qbunI) = (qbunV / 100) mod 100
+        QUEST_SPOT(qbunI) = qbunV / 10000
+    next
+    for qbunE = 1 to QB_EGGS
+        qbunEgg = QB_UNDO_EGGS(QB_UNDO_N * 8 + qbunE)
+        QB_EGG_LEFT(qbunE) = qbunEgg mod 1000
+        QB_EGG_DONE(qbunE) = qbunEgg / 1000
+    next
+    QB_SHARK_AT = QB_UNDO_SHARK(QB_UNDO_N)
+    QB_SHARK_DONE = QB_UNDO_DONE(QB_UNDO_N)
+    QB_SHARK_SWAPS = 0
+    QB_WAKE_JOINED = 0
+    QB_STUCK_DUE = 0
+    qbunCursor = QB_UNDO_CURSOR(QB_UNDO_N)
+    SELECTION_POS.x = qbunCursor mod CELL_COLUMN_COUNT
+    SELECTION_POS.y = qbunCursor / CELL_COLUMN_COUNT
+    QB_LOST = QB_UNDO_LOST(QB_UNDO_N)
+    QB_WON = 0
+    qbShowProgress()
+endfunction
+
+
+` every frame that the quest board is up: the keys that take a swap back and start over, and the way out
+` once the puzzle is done
+function qbPlayStep()
+    if QB_PHASE <> 2 then exitfunction
+    if new action down(ACT_ABILITY(0))
+        QB_UNDO_WANT = QB_UNDO_WANT + 1
+        QB_BTN_PUNCH_MS(0) = game ms()
+    endif
+    if new action down(ACT_ABILITY(1))
+        QB_AGAIN_WANT = 1
+        QB_BTN_PUNCH_MS(1) = game ms()
+    endif
+    qbpBusy = REQUEST_COMBO_CHECK + LIVE_MOVE_ACTIVE + COMBO_PHASE + QUEUED_MOVE_NUM
+    if qbpBusy > 0
+        QB_CALM_FRAMES = 0
+        exitfunction
+    endif
+    QB_CALM_FRAMES = QB_CALM_FRAMES + 1
+
+    ` stuck: nothing left that pops, and it is not done
+    if QB_STUCK_DUE and QB_CALM_FRAMES >= 3
+        QB_STUCK_DUE = 0
+        if QB_WON = 0 and QB_LOST = 0
+            qbpLeft = qbAnyMoveLeft()
+            if qbpLeft = 0
+                qbLose(-1, "", 4)
+            endif
+        endif
+    endif
+    if QB_AGAIN_WANT
+        QB_AGAIN_WANT = 0
+        QB_UNDO_WANT = 0
+        qbLay()
+        for qbpI = 0 to CELL_COUNT - 1
+            create basic tween CELLS(qbpI).scaleWaveTweenId, 0, 1, 260, qbpI * 6
+        next
+        questProgress(0, QB_EGGS)
+    endif
+    if QB_UNDO_WANT > 0
+        QB_UNDO_WANT = QB_UNDO_WANT - 1
+        qbUndo()
+    endif
+    if QB_WON
+        if game ms() > QB_WON_MS + 1400 then qbLeave()
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` MAKING A PUZZLE. see THE PUZZLES ARE MADE AS THE GAME GOES in fish_headers_qboard. QB_G is the board
+` being made, QB_W across and QB_H down, from the top left. a column's fish sit on the floor.
+` ---------------------------------------------------------------------------------------------
+
+` the cell of a column at a height, counted from 0 on the floor
+function qgCell(qgcX, qgcP)
+endfunction (QB_H - 1 - qgcP) * QB_W + qgcX
+
+` how many fish a column has
+function qgHeight(qghX)
+    qghP = 0
+    qghGoing = 1
+    while qghGoing
+        if qghP >= QB_H
+            qghGoing = 0
+        else
+            if QB_G((QB_H - 1 - qghP) * QB_W + qghX) > 0
+                qghP = qghP + 1
+            else
+                qghGoing = 0
+            endif
+        endif
+    endwhile
+endfunction qghP
+
+` put a fish into a column at a height, and push the fish over it up. 0 if the column is full.
+function qgInsert(qgiX, qgiP, qgiKind, qgiEgg)
+    qgiH = qgHeight(qgiX)
+    if qgiH >= QB_H then exitfunction 0
+    if qgiP > qgiH then exitfunction 0
+    qgiQ = qgiH - 1
+    while qgiQ >= qgiP
+        qgiFrom = qgCell(qgiX, qgiQ)
+        qgiTo = qgCell(qgiX, qgiQ + 1)
+        QB_G(qgiTo) = QB_G(qgiFrom)
+        QB_GE(qgiTo) = QB_GE(qgiFrom)
+        qgiQ = qgiQ - 1
+    endwhile
+    qgiAt = qgCell(qgiX, qgiP)
+    QB_G(qgiAt) = qgiKind
+    QB_GE(qgiAt) = qgiEgg
+endfunction 1
+
+` how many fish the group of a cell has. QB_GSEEN is QB_GSTAMP for its cells afterwards.
+function qgGroup(qggAt)
+    QB_GSTAMP = QB_GSTAMP + 1
+    qggKind = QB_G(qggAt)
+    if qggKind = 0 then exitfunction 0
+    QB_GSEEN(qggAt) = QB_GSTAMP
+    QB_GSTACK(0) = qggAt
+    qggTop = 1
+    qggCount = 0
+    while qggTop > 0
+        qggTop = qggTop - 1
+        qggCur = QB_GSTACK(qggTop)
+        qggCount = qggCount + 1
+        qggX = qggCur mod QB_W
+        qggY = qggCur / QB_W
+        for qggS = 0 to 3
+            qggN = -1
+            if qggS = 0 and qggX < QB_W - 1 then qggN = qggCur + 1
+            if qggS = 1 and qggX > 0 then qggN = qggCur - 1
+            if qggS = 2 and qggY < QB_H - 1 then qggN = qggCur + QB_W
+            if qggS = 3 and qggY > 0 then qggN = qggCur - QB_W
+            if qggN >= 0
+                if QB_GSEEN(qggN) <> QB_GSTAMP
+                    if QB_G(qggN) = qggKind
+                        QB_GSEEN(qggN) = QB_GSTAMP
+                        QB_GSTACK(qggTop) = qggN
+                        qggTop = qggTop + 1
+                    endif
+                endif
+            endif
+        next
+    endwhile
+endfunction qggCount
+
+` 1 when any group on the board is big enough to pop
+function qgAnyGroup()
+    qgaLast = QB_W * QB_H - 1
+    for qgaI = 0 to qgaLast
+        if QB_G(qgaI) > 0
+            if qgGroup(qgaI) >= 3 then exitfunction 1
+        endif
+    next
+endfunction 0
+
+` everything that pops, pops, the fish fall, and what that makes pops too. an egg that pops is checked
+` against the swap that it has to pop on. what the first look popped, or -1 when an egg popped on the wrong swap.
+function qgResolve(qgrStep)
+    qgrFirst = -1
+    qgrLast = QB_W * QB_H - 1
+    qgrGoing = 1
+    while qgrGoing
+        qgrAny = 0
+        for qgrI = 0 to qgrLast
+            QB_GKILL(qgrI) = 0
+        next
+        for qgrI = 0 to qgrLast
+            if QB_G(qgrI) > 0
+                if qgGroup(qgrI) >= 3
+                    for qgrJ = 0 to qgrLast
+                        if QB_GSEEN(qgrJ) = QB_GSTAMP then QB_GKILL(qgrJ) = 1
+                    next
+                endif
+            endif
+        next
+        qgrPopped = 0
+        for qgrI = 0 to qgrLast
+            if QB_GKILL(qgrI)
+                qgrPopped = qgrPopped + 1
+                if QB_MODE = QB_KIND_SHARK
+                    qgrSX = QB_GSHARK mod QB_W
+                    qgrSY = QB_GSHARK / QB_W
+                    qgrFar = abs((qgrI mod QB_W) - qgrSX)
+                    if abs((qgrI / QB_W) - qgrSY) > qgrFar then qgrFar = abs((qgrI / QB_W) - qgrSY)
+                    if qgrFar <= QB_SHARK_REACH then exitfunction -1
+                endif
+                if QB_MODE = QB_KIND_WAKE then QB_GGLOW(qgrI) = QB_GLOW_FOR
+                qgrEgg = QB_GE(qgrI)
+                if qgrEgg > 0
+                    if QB_EGG_N(qgrEgg) <> qgrStep then exitfunction -1
+                    QB_EGG_HIT(qgrEgg) = 1
+                endif
+                QB_G(qgrI) = 0
+                QB_GE(qgrI) = 0
+            endif
+        next
+        if qgrFirst < 0 then qgrFirst = qgrPopped
+        if qgrPopped = 0
+            qgrGoing = 0
+        else
+            ` the fish fall, and nothing comes in
+            for qgrX = 0 to QB_W - 1
+                qgrPut = 0
+                for qgrP = 0 to QB_H - 1
+                    qgrAt = qgCell(qgrX, qgrP)
+                    if QB_G(qgrAt) > 0
+                        if qgrPut <> qgrP
+                            qgrTo = qgCell(qgrX, qgrPut)
+                            QB_G(qgrTo) = QB_G(qgrAt)
+                            QB_GE(qgrTo) = QB_GE(qgrAt)
+                            QB_G(qgrAt) = 0
+                            QB_GE(qgrAt) = 0
+                        endif
+                        qgrPut = qgrPut + 1
+                    endif
+                next
+            next
+        endif
+    endwhile
+endfunction qgrFirst
+
+function qgRandom(qgrnMax)
+endfunction random stream(QB_RNG, qgrnMax)
+
+` keep the board that is being made, to go back to it when a step does not work out
+function qgKeep()
+    qgkLast = QB_W * QB_H - 1
+    for qgkI = 0 to qgkLast
+        QB_START_G(qgkI) = QB_G(qgkI)
+        QB_START_GE(qgkI) = QB_GE(qgkI)
+    next
+endfunction
+
+function qgBack()
+    qgbLast = QB_W * QB_H - 1
+    for qgbI = 0 to qgbLast
+        QB_G(qgbI) = QB_START_G(qgbI)
+        QB_GE(qgbI) = QB_START_GE(qgbI)
+    next
+endfunction
+
+` one swap of the answer, made backwards: its group goes onto the board, and is broken up. 1 if it worked.
+function qgUnswap(qguStep, qguEgg, qguForceX)
+    qgKeep()
+    qguKind = QB_KIND(qgRandom(QB_KIND_N))
+    qguA = -1
+    qguB = -1
+    qguC = -1
+    qguAcross = 0
+    if qgRandom(2) = 0 then qguAcross = 1
+    if qguForceX >= 0 then qguAcross = 1
+    if qguAcross
+        ` across: one fish into each of three columns, at the same height. one that is forced is on the floor.
+        qguX = qgRandom(QB_W - 2)
+        if qguForceX >= 0 then qguX = qguForceX
+        qguTop = QB_H
+        for qguK = 0 to 2
+            qguHk = qgHeight(qguX + qguK)
+            if qguHk < qguTop then qguTop = qguHk
+            if qguHk >= QB_H then qguTop = -1
+        next
+        if qguTop < 0 then exitfunction 0
+        qguP = qgRandom(qguTop + 1)
+        if qguForceX >= 0 then qguP = 0
+        for qguK = 0 to 2
+            qguOk = qgInsert(qguX + qguK, qguP, qguKind, 0)
+            if qguOk = 0
+                qgBack()
+                exitfunction 0
+            endif
+        next
+        qguA = qgCell(qguX, qguP)
+        qguB = qgCell(qguX + 1, qguP)
+        qguC = qgCell(qguX + 2, qguP)
+    else
+        ` up and down: three fish into one column
+        qguX = qgRandom(QB_W)
+        qguH = qgHeight(qguX)
+        if qguH + 3 > QB_H then exitfunction 0
+        qguP = qgRandom(qguH + 1)
+        for qguK = 0 to 2
+            qguOk = qgInsert(qguX, qguP, qguKind, 0)
+        next
+        qguA = qgCell(qguX, qguP)
+        qguB = qgCell(qguX, qguP + 1)
+        qguC = qgCell(qguX, qguP + 2)
+    endif
+    if qguEgg > 0
+        qguWhich = qgRandom(3)
+        if qguWhich = 0 then QB_GE(qguA) = qguEgg
+        if qguWhich = 1 then QB_GE(qguB) = qguEgg
+        if qguWhich = 2 then QB_GE(qguC) = qguEgg
+    endif
+
+    ` break it up: one of its fish swaps with a fish next to it
+    for qguTry = 1 to 12
+        qguPick = qgRandom(3)
+        qguG = qguA
+        if qguPick = 1 then qguG = qguB
+        if qguPick = 2 then qguG = qguC
+        qguDir = qgRandom(4)
+        qguGx = qguG mod QB_W
+        qguGy = qguG / QB_W
+        qguN = -1
+        if qguDir = 0 and qguGx < QB_W - 1 then qguN = qguG + 1
+        if qguDir = 1 and qguGx > 0 then qguN = qguG - 1
+        if qguDir = 2 and qguGy < QB_H - 1 then qguN = qguG + QB_W
+        if qguDir = 3 and qguGy > 0 then qguN = qguG - QB_W
+        qguFine = 0
+        if qguN >= 0
+            if QB_G(qguN) > 0 and QB_G(qguN) <> qguKind
+                if qguN <> qguA and qguN <> qguB and qguN <> qguC then qguFine = 1
+            endif
+        endif
+        if qguFine
+            qguKeepK = QB_G(qguN)
+            qguKeepE = QB_GE(qguN)
+            QB_G(qguN) = QB_G(qguG)
+            QB_GE(qguN) = QB_GE(qguG)
+            QB_G(qguG) = qguKeepK
+            QB_GE(qguG) = qguKeepE
+            qguAny = qgAnyGroup()
+            if qguAny = 0
+                QB_PLAN_A(qguStep) = qguN
+                QB_PLAN_B(qguStep) = qguG
+                exitfunction 1
+            endif
+            QB_G(qguG) = QB_G(qguN)
+            QB_GE(qguG) = QB_GE(qguN)
+            QB_G(qguN) = qguKeepK
+            QB_GE(qguN) = qguKeepE
+        endif
+    next
+    qgBack()
+endfunction 0
+
+` 1 when the answer, played forwards from the board as it is, pops every egg on its swap. the board is left as it ends.
+function qgCheck()
+    ` a loop of Fade goes round once even when it is from 1 to 0, so the loops over eggs are only for puzzles with eggs
+    if QB_EGGS > 0
+        for qgcE = 1 to QB_EGGS
+            QB_EGG_HIT(qgcE) = 0
+        next
+    endif
+    qgcLast = QB_W * QB_H - 1
+    for qgcI = 0 to qgcLast
+        QB_GGLOW(qgcI) = 0
+    next
+    QB_GSHARK = QB_SHARK_START
+    qgcJoined = 0
+    for qgcStep = 1 to QB_STEPS
+        qgcA = QB_PLAN_A(qgcStep)
+        qgcB = QB_PLAN_B(qgcStep)
+        for qgcI = 0 to qgcLast
+            if QB_GGLOW(qgcI) > 0 then QB_GGLOW(qgcI) = QB_GGLOW(qgcI) - 1
+        next
+        if QB_G(qgcA) = 0 or QB_G(qgcB) = 0 then exitfunction 0
+        if QB_G(qgcA) = QB_G(qgcB) then exitfunction 0
+        qgcK = QB_G(qgcA)
+        qgcE2 = QB_GE(qgcA)
+        QB_G(qgcA) = QB_G(qgcB)
+        QB_GE(qgcA) = QB_GE(qgcB)
+        QB_G(qgcB) = qgcK
+        QB_GE(qgcB) = qgcE2
+        qgcPopped = qgResolve(qgcStep)
+        if qgcPopped < 1 then exitfunction 0
+        ` Finn swims after the cursor, which ends the swap on the second cell of it
+        if QB_MODE = QB_KIND_SHARK
+            QB_GSHARK = qbSharkStep(QB_GSHARK, qgcB, QB_W)
+        endif
+        if QB_MODE = QB_KIND_WAKE
+            qgcReach = qgWakeReach()
+            if qgcReach >= QB_W then qgcJoined = 1
+        endif
+    next
+    if QB_EGGS > 0
+        for qgcE = 1 to QB_EGGS
+            if QB_EGG_HIT(qgcE) = 0 then exitfunction 0
+        next
+    endif
+    if QB_MODE = QB_KIND_WAKE and qgcJoined = 0 then exitfunction 0
+endfunction 1
+
+
+` how many columns the glow of the board that is being checked reaches across, from the left edge
+function qgWakeReach()
+    qgwrLast = QB_W * QB_H - 1
+    for qgwrI = 0 to qgwrLast
+        QUEST_TEMP(qgwrI) = 0
+    next
+    qgwrN = 0
+    qgwrBest = 0
+    for qgwrRow = 0 to QB_H - 1
+        qgwrAt = qgwrRow * QB_W
+        if QB_GGLOW(qgwrAt) > 0
+            QUEST_TEMP(qgwrAt) = 1
+            QUEST_STACK(qgwrN) = qgwrAt
+            qgwrN = qgwrN + 1
+        endif
+    next
+    while qgwrN > 0
+        qgwrN = qgwrN - 1
+        qgwrAt = QUEST_STACK(qgwrN)
+        qgwrX = qgwrAt mod QB_W
+        if qgwrX + 1 > qgwrBest then qgwrBest = qgwrX + 1
+        qgwrY = qgwrAt / QB_W
+        for qgwrS = 0 to 3
+            qgwrNext = -1
+            if qgwrS = 0 and qgwrX > 0 then qgwrNext = qgwrAt - 1
+            if qgwrS = 1 and qgwrX < QB_W - 1 then qgwrNext = qgwrAt + 1
+            if qgwrS = 2 and qgwrY > 0 then qgwrNext = qgwrAt - QB_W
+            if qgwrS = 3 and qgwrY < QB_H - 1 then qgwrNext = qgwrAt + QB_W
+            if qgwrNext >= 0
+                if QUEST_TEMP(qgwrNext) = 0 and QB_GGLOW(qgwrNext) > 0
+                    QUEST_TEMP(qgwrNext) = 1
+                    QUEST_STACK(qgwrN) = qgwrNext
+                    qgwrN = qgwrN + 1
+                endif
+            endif
+        next
+    endwhile
+endfunction qgwrBest
+
+` which kind of puzzle a quest has. one that has none of its own yet plays Hatch's. see THE KINDS OF PUZZLE.
+function qbPuzzleKind(qbpkQuest)
+    qbpk = QB_KIND_HATCH
+    if qbpkQuest = QUEST_SHARK then qbpk = QB_KIND_SHARK
+    if qbpkQuest = QUEST_WAKE then qbpk = QB_KIND_WAKE
+endfunction qbpk
+
+` how many swaps Finn has to be kept from at a level, and how long a glow lasts. the talks say them too.
+function qbSharkNeedFor(qbsnLevel)
+    qbsn = 4
+    if qbsnLevel >= 2 then qbsn = 6
+endfunction qbsn
+
+function qbGlowFor(qbgfLevel)
+    qbgf = 4
+    if qbgfLevel >= 2 then qbgf = 3
+endfunction qbgf
+
+` make the puzzle of a quest at a level, from the seed of the game. it ends up in QB_START_G and QB_START_GE, with
+` where Finn starts in QB_SHARK_START.
+function qbMakePuzzle(qbmQuest, qbmLevel)
+    seed random stream QB_RNG, GAME_SEED * 41 + qbmQuest * 1009 + qbmLevel * 7919 + 17
+    QB_MODE = qbPuzzleKind(qbmQuest)
+    QB_W = 9
+    QB_H = 6
+    QB_EGGS = 2
+    QB_DECOYS = 5
+    if qbmLevel >= 2
+        QB_H = 7
+        QB_EGGS = 3
+        QB_DECOYS = 8
+    endif
+    if QB_MODE = QB_KIND_SHARK
+        QB_EGGS = 0
+        QB_SHARK_NEED = qbSharkNeedFor(qbmLevel)
+        QB_DECOYS = 5
+        if qbmLevel >= 2 then QB_DECOYS = 7
+    endif
+    if QB_MODE = QB_KIND_WAKE
+        QB_EGGS = 0
+        QB_GLOW_FOR = qbGlowFor(qbmLevel)
+        QB_WAKE_SETUP = 1
+        QB_DECOYS = 4
+        if qbmLevel >= 2
+            QB_WAKE_SETUP = 2
+            QB_DECOYS = 6
+        endif
+    endif
+    QB_SHARK_START = 0
+
+    ` four kinds of the seven, a different four every time
+    QB_KIND_N = 4
+    for qbmK = 0 to 6
+        QB_KIND(qbmK) = qbmK + 1
+    next
+    for qbmK = 0 to 6
+        qbmJ = qbmK + qgRandom(7 - qbmK)
+        qbmSwap = QB_KIND(qbmK)
+        QB_KIND(qbmK) = QB_KIND(qbmJ)
+        QB_KIND(qbmJ) = qbmSwap
+    next
+
+    QB_MADE_TRIES = 0
+    qbmDone = 0
+    while qbmDone = 0
+        QB_MADE_TRIES = QB_MADE_TRIES + 1
+
+        ` how many swaps the answer has. for Hatch, the counts of the eggs: the first on swap 2 or 3, and each
+        ` after it one or two swaps later.
+        if QB_MODE = QB_KIND_HATCH
+            qbmAt = 2 + qgRandom(2)
+            for qbmE = 1 to QB_EGGS
+                QB_EGG_N(qbmE) = qbmAt
+                qbmAt = qbmAt + 1 + qgRandom(2)
+            next
+            QB_STEPS = QB_EGG_N(QB_EGGS)
+        endif
+        if QB_MODE = QB_KIND_SHARK then QB_STEPS = QB_SHARK_NEED
+        ` for Wake, the three that light the path, from the left, the middle and the right, in any order
+        qbmSeg1 = 0
+        qbmSeg2 = 3
+        qbmSeg3 = 6
+        if QB_MODE = QB_KIND_WAKE
+            QB_STEPS = QB_WAKE_SETUP + 3
+            qbmRoll = qgRandom(6)
+            if qbmRoll = 1
+                qbmSeg2 = 6
+                qbmSeg3 = 3
+            endif
+            if qbmRoll = 2
+                qbmSeg1 = 3
+                qbmSeg2 = 0
+            endif
+            if qbmRoll = 3
+                qbmSeg1 = 3
+                qbmSeg2 = 6
+                qbmSeg3 = 0
+            endif
+            if qbmRoll = 4
+                qbmSeg1 = 6
+                qbmSeg2 = 0
+                qbmSeg3 = 3
+            endif
+            if qbmRoll = 5
+                qbmSeg1 = 6
+                qbmSeg2 = 3
+                qbmSeg3 = 0
+            endif
+        endif
+
+        ` the board that is left at the end: a few fish, in no group
+        qbmLast = QB_W * QB_H - 1
+        for qbmI = 0 to qbmLast
+            QB_G(qbmI) = 0
+            QB_GE(qbmI) = 0
+        next
+        for qbmD = 1 to QB_DECOYS
+            qbmX = qgRandom(QB_W)
+            qbmH = qgHeight(qbmX)
+            if qbmH < QB_H - 3
+                qbmOk = qgInsert(qbmX, qbmH, QB_KIND(qgRandom(QB_KIND_N)), 0)
+                qbmAny = qgAnyGroup()
+                if qbmAny
+                    QB_G(qgCell(qbmX, qbmH)) = 0
+                endif
+            endif
+        next
+
+        ` the swaps of the answer, from the last back to the first
+        qbmGood = 1
+        qbmStep = QB_STEPS
+        while qbmStep >= 1 and qbmGood
+            qbmEgg = 0
+            if QB_EGGS > 0
+                for qbmE = 1 to QB_EGGS
+                    if QB_EGG_N(qbmE) = qbmStep then qbmEgg = qbmE
+                next
+            endif
+            qbmForce = -1
+            if QB_MODE = QB_KIND_WAKE
+                if qbmStep = QB_WAKE_SETUP + 1 then qbmForce = qbmSeg1
+                if qbmStep = QB_WAKE_SETUP + 2 then qbmForce = qbmSeg2
+                if qbmStep = QB_WAKE_SETUP + 3 then qbmForce = qbmSeg3
+            endif
+            qbmStepOk = 0
+            qbmTry = 0
+            while qbmStepOk = 0 and qbmTry < 30
+                qbmStepOk = qgUnswap(qbmStep, qbmEgg, qbmForce)
+                qbmTry = qbmTry + 1
+            endwhile
+            if qbmStepOk = 0 then qbmGood = 0
+            qbmStep = qbmStep - 1
+        endwhile
+
+        ` and then played forwards, on a copy, to be sure. Finn starts in a top corner, the one further from
+        ` the first swap first.
+        if qbmGood
+            if QB_MODE = QB_KIND_SHARK
+                QB_SHARK_START = 0
+                if (QB_PLAN_A(1) mod QB_W) < QB_W / 2 then QB_SHARK_START = QB_W - 1
+                qgKeep()
+                qbmGood = qgCheck()
+                qgBack()
+                if qbmGood = 0
+                    qbmOther = QB_W - 1
+                    QB_SHARK_START = qbmOther - QB_SHARK_START
+                    qgKeep()
+                    qbmGood = qgCheck()
+                    qgBack()
+                endif
+            else
+                qgKeep()
+                qbmGood = qgCheck()
+                qgBack()
+            endif
+        endif
+        if qbmGood then qbmDone = 1
+        if QB_MADE_TRIES >= 400 then qbmDone = 1
+    endwhile
+    qgKeep()
+endfunction
+
+
+` every frame: the board turns over. halfway, while it is edge on, it changes sides.
+function stepQboard()
+    qbPlayStep()
+    qsStep()
+    qdStep(game ms())
+    qbBtnStep()
+    if QB_SPIN_MS < 0 then exitfunction
+
+    qbtAge# = game ms() - QB_SPIN_MS
+    qbtTime# = QB_SPIN_TIME
+    qbtP# = qbtAge# / qbtTime#
+    if qbtP# < 0 then qbtP# = 0
+
+    if qbtP# >= 1
+        QB_SPIN_MS = -1
+        if QB_SPIN_SWAPPED = 0
+            QB_SPIN_SWAPPED = 1
+            qbChangeSides()
+        endif
+        qbtLast = CELL_COUNT - 1
+        for qbtI = 0 to qbtLast
+            position sprite CELLS(qbtI).spriteId, getCellX(CELLS(qbtI).coord.x), getCellY(CELLS(qbtI).coord.y)
+        next
+        position sprite SELECTION_SPRITE, getCellX(SELECTION_POS.x), getCellY(SELECTION_POS.y)
+        size sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+        if QB_PHASE = 1
+            QB_PHASE = 2
+            qbBtnIn()
+        endif
+        if QB_PHASE = 3 then QB_PHASE = 0
+        REQUEST_COMBO_CHECK = 1
+        exitfunction
+    endif
+
+    qbtEase# = qbtP# * qbtP# * (3 - 2 * qbtP#)
+    qbtTurn# = qbtEase# * 3.14159
+    if qbtTurn# >= 1.5708
+        if QB_SPIN_SWAPPED = 0
+            QB_SPIN_SWAPPED = 1
+            qbChangeSides()
+            spawnBubbles(GRID_CENTER.x, GRID_CENTER.y, CELL_ROW_COUNT * CELL_SIZE / 2 + CELL_SIZE, 30, 0, rgb(200, 230, 255))
+        endif
+        qbtTurn# = qbtTurn# - 3.14159
+    endif
+    qbtCos# = cos(qbtTurn#)
+    qbtSin# = sin(qbtTurn#)
+    qbtThin# = abs(qbtCos#)
+    if qbtThin# < .04 then qbtThin# = .04
+
+    qbtMidX# = getCellX(0) + (getCellX(CELL_COLUMN_COUNT - 1) - getCellX(0)) * .5
+    qbtMidY# = getCellY(0) + (getCellY(CELL_ROW_COUNT - 1) - getCellY(0)) * .5
+    qbtDepth# = EXTINCT_SPIN_DEPTH#
+    qbtLast = CELL_COUNT - 1
+    for qbtI = 0 to qbtLast
+        qbtDX# = getCellX(CELLS(qbtI).coord.x) - qbtMidX#
+        qbtDY# = getCellY(CELLS(qbtI).coord.y) - qbtMidY#
+        qbtNear# = qbtDepth# / (qbtDepth# + qbtDX# * qbtSin#)
+        qbtSize# = tweenVal(CELLS(qbtI).scaleWaveTweenId) * CELL_ART_SIZE * CORAL_SIT#(qbtI) * qbtNear#
+        position sprite CELLS(qbtI).spriteId, qbtMidX# + qbtDX# * qbtCos# * qbtNear#, qbtMidY# + qbtDY# * qbtNear#
+        size sprite CELLS(qbtI).spriteId, qbtSize# * qbtThin#, qbtSize#
+    next
+    qbtDX# = getCellX(SELECTION_POS.x) - qbtMidX#
+    qbtDY# = getCellY(SELECTION_POS.y) - qbtMidY#
+    qbtNear# = qbtDepth# / (qbtDepth# + qbtDX# * qbtSin#)
+    position sprite SELECTION_SPRITE, qbtMidX# + qbtDX# * qbtCos# * qbtNear#, qbtMidY# + qbtDY# * qbtNear#
+    size sprite SELECTION_SPRITE, CELL_SIZE * qbtNear# * qbtThin#, CELL_SIZE * qbtNear#
+endfunction
+
+
+function qbChangeSides()
+    if QB_PHASE = 1
+        qbSwapIn()
+    else
+        qbGiveBack()
+    endif
+endfunction
+
+
+` the things around the board belong to the game, so they go while the quest board is up. this is what
+` tutorial_hide_moves, tutorial_hide_score and their shows do, which a function cannot gosub.
+function qbHud(qbhShow)
+    if qbhShow
+        show text MOVES_LABEL_TEXT_ID
+        show text MOVE_COUNT_TEXT_ID
+        show text MULT_LABEL_TEXT_ID
+        show text MULT_TEXT_ID
+        show text MULT_NUM_TEXT_ID
+        show sprite MULT_BAR_BACK_SPRITE
+        show sprite MULT_BAR_FILL_SPRITE
+        show sprite MULT_BAR_CHARGE_SPRITE
+        show sprite MULT_BAR_GLINT_SPRITE
+        show sprite SCORE_BAR.backgroundSpriteId
+        show sprite SCORE_BAR.foregroundSpriteId
+        for qbhI = 0 to CHARGE_SLICE_COUNT - 1
+            show sprite CHARGE_OVER_SPRITES(qbhI)
+            show sprite CHARGE_SPRITES(qbhI)
+        next
+        show text CHARGE_TEXT_ID
+        show text SCORE_BAR.textNumId
+        show text SCORE_BAR.textTitleId
+        show text ROUNDS_LABEL_TEXT_ID
+        show text ROUND_COUNT_TEXT_ID
+    else
+        hide text MOVES_LABEL_TEXT_ID
+        hide text MOVE_COUNT_TEXT_ID
+        hide text MULT_LABEL_TEXT_ID
+        hide text MULT_TEXT_ID
+        hide text MULT_NUM_TEXT_ID
+        hide sprite MULT_BAR_BACK_SPRITE
+        hide sprite MULT_BAR_FILL_SPRITE
+        hide sprite MULT_BAR_CHARGE_SPRITE
+        hide sprite MULT_BAR_GLINT_SPRITE
+        hide sprite SCORE_BAR.backgroundSpriteId
+        hide sprite SCORE_BAR.foregroundSpriteId
+        for qbhI = 0 to CHARGE_SLICE_COUNT - 1
+            hide sprite CHARGE_OVER_SPRITES(qbhI)
+            hide sprite CHARGE_SPRITES(qbhI)
+        next
+        hide text CHARGE_TEXT_ID
+        hide text SCORE_BAR.textNumId
+        hide text SCORE_BAR.textTitleId
+        hide text ROUNDS_LABEL_TEXT_ID
+        hide text ROUND_COUNT_TEXT_ID
+    endif
+    setInfoBlobEnabled(INFO_INDEX_MOVE_COUNT, qbhShow)
+    setInfoBlobEnabled(INFO_INDEX_MULTIPLIER, qbhShow)
+    setInfoBlobEnabled(INFO_INDEX_SCORE_BAR, qbhShow)
+    setInfoBlobEnabled(INFO_INDEX_ROUNDS, qbhShow)
+    ` and the cards. the quest's own things stay: they fade with HUD_KEEP#, so that is left alone.
+    HUD_KEEP_CARDS# = qbhShow
+    applyHudFade()
+endfunction
+
+
+` nothing moves while the board turns over
+function qbCursorLocked()
+    qbcl = 0
+    if QB_SPIN_MS >= 0 then qbcl = 1
+endfunction qbcl
+
+
+
+` ---------------------------------------------------------------------------------------------
+` THE BUTTONS OF THE PUZZLE. see fish_headers_qboard.
+` ---------------------------------------------------------------------------------------------
+
+function qbBtnIn()
+    QB_BTN_IN_MS = game ms()
+    QB_BTN_OUT_MS = -1
+    QB_BTN_SHOWN = 1
+    for qbbiI = 0 to 1
+        show text QB_BTN_KEY_TEXT(qbbiI)
+        show text QB_BTN_NAME_TEXT(qbbiI)
+    next
+endfunction
+
+function qbBtnOut()
+    if QB_BTN_SHOWN = 0 then exitfunction
+    QB_BTN_OUT_MS = game ms()
+endfunction
+
+` a bounce, from 0 to a little over 1 and back down to 1, as t goes from 0 to 1
+function qbBounce(qbbT#)
+    if qbbT# < 0 then qbbT# = 0
+    if qbbT# > 1 then qbbT# = 1
+    qbbU# = qbbT# - 1
+    qbbV# = 1 + 2.7 * qbbU# * qbbU# * qbbU# + 1.7 * qbbU# * qbbU#
+endfunction qbbV#
+
+function qbBtnStep()
+    if QB_BTN_SHOWN = 0 then exitfunction
+    qbbsNow = game ms()
+    qbbsTime# = QB_BTN_TIME
+    qbbsGone = 1
+    for qbbsI = 0 to 1
+        ` the first one comes in first, and goes out last
+        qbbsScale# = 0
+        if QB_BTN_OUT_MS >= 0
+            qbbsAge = qbbsNow - QB_BTN_OUT_MS
+            qbbsAge = qbbsAge - (1 - qbbsI) * QB_BTN_GAP
+            qbbsAge# = qbbsAge
+            qbbsScale# = qbBounce(1 - qbbsAge# / qbbsTime#)
+            if qbbsAge < QB_BTN_TIME then qbbsGone = 0
+        else
+            qbbsGone = 0
+            qbbsAge = qbbsNow - QB_BTN_IN_MS
+            qbbsAge = qbbsAge - qbbsI * QB_BTN_GAP
+            qbbsAge# = qbbsAge
+            qbbsScale# = qbBounce(qbbsAge# / qbbsTime#)
+        endif
+
+        ` it punches when its key is pressed
+        if QB_BTN_PUNCH_MS(qbbsI) >= 0
+            qbbsPunch# = qbbsNow - QB_BTN_PUNCH_MS(qbbsI)
+            if qbbsPunch# < 300
+                qbbsScale# = qbbsScale# * (1 + .35 * sin(qbbsPunch# / 300 * 3.14159))
+            endif
+        endif
+
+        ` the undo is faint while there is nothing to take back, and calls out once the puzzle is lost
+        qbbsAlpha# = qbbsScale#
+        if qbbsAlpha# > 1 then qbbsAlpha# = 1
+        qbbsName = rgb(140, 210, 255)
+        if qbbsI = 0
+            if QB_UNDO_N = 0 then qbbsAlpha# = qbbsAlpha# * .4
+            if QB_LOST
+                qbbsGlow# = .5 + .5 * sin(qbbsNow * .008)
+                qbbsName = rgb(140 + 115 * qbbsGlow#, 210 + 30 * qbbsGlow#, 255)
+            endif
+        endif
+        if qbbsScale# < .05 then qbbsScale# = .05
+        size text y QB_BTN_KEY_TEXT(qbbsI), 16 * qbbsScale#
+        set text alpha QB_BTN_KEY_TEXT(qbbsI), 255 * qbbsAlpha#
+        size text x QB_BTN_NAME_TEXT(qbbsI), MOVE_LIST_NAME_WIDTH * qbbsScale#, HUD_LIST_SCALE# * qbbsScale# * .4, HUD_LIST_SCALE# * qbbsScale#
+        color text QB_BTN_NAME_TEXT(qbbsI), qbbsName
+        set text alpha QB_BTN_NAME_TEXT(qbbsI), 255 * qbbsAlpha#
+    next
+
+    if qbbsGone
+        QB_BTN_SHOWN = 0
+        QB_BTN_OUT_MS = -1
+        for qbbsI = 0 to 1
+            hide text QB_BTN_KEY_TEXT(qbbsI)
+            hide text QB_BTN_NAME_TEXT(qbbsI)
+        next
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` THE STACK. see fish_headers_qboard.
+` ---------------------------------------------------------------------------------------------
+
+` a new game: no quest is waiting, and they are all at their first level
+function qsReset()
+    qdClose()
+    QS_N = 0
+    QS_FOCUS = -1
+    for qsrI = 0 to 39
+        QB_LEVEL_OF(qsrI) = 0
+        QD_MET(qsrI) = 0
+    next
+endfunction
+
+` the row of the board that a place in the stack is beside. the row under it has its check mark.
+function qsRow(qsrwSlot)
+    qsrwRow = CELL_ROW_COUNT - 2
+    qsrwRow = qsrwRow - qsrwSlot * 2
+endfunction qsrwRow
+
+` the place in the stack that is beside a row, or -1
+function qsSlotAtRow(qssRow)
+    qssAt = -1
+    if QS_N = 0 then exitfunction -1 `a loop goes round once even from 0 to -1
+    for qssI = 0 to QS_N - 1
+        if qsRow(qssI) = qssRow then qssAt = qssI
+    next
+endfunction qssAt
+
+` what a quest gives, from the seed of the game, the quest and its level
+function qsRewardRoll(qsrrId, qsrrLevel)
+    seed random stream QB_RNG, GAME_SEED * 53 + qsrrId * 331 + qsrrLevel * 97 + 5
+    qsrrKind = random stream(QB_RNG, QB_REWARD_KINDS)
+endfunction qsrrKind
+
+` what it gives, in a word or two, for its box and the corner of the talk
+function qsRewardTag(qsrtKind)
+    qsrt$ = loc$("quest.q2.reward.moves")
+    if qsrtKind = QB_REWARD_MULT then qsrt$ = loc$("quest.q2.reward.mult")
+    if qsrtKind = QB_REWARD_ROUND then qsrt$ = loc$("quest.q2.reward.round")
+endfunction qsrt$
+
+` and the way that the one whose quest it is says it: "and I'll ..."
+function qsRewardSay(qsrsKind)
+    qsrs$ = loc$("quest.q2.give.moves")
+    if qsrsKind = QB_REWARD_MULT then qsrs$ = loc$("quest.q2.give.mult")
+    if qsrsKind = QB_REWARD_ROUND then qsrs$ = loc$("quest.q2.give.round")
+endfunction qsrs$
+
+` a quest turns up, on the top of the stack. 0 if there is no room, or it is there already.
+function qsAdd(qsaId)
+    if QS_N >= QS_MAX then exitfunction 0
+    qsaThere = 0
+    if QS_N > 0
+        for qsaI = 0 to QS_N - 1
+            if QS_ID(qsaI) = qsaId then qsaThere = 1
+        next
+    endif
+    if qsaThere then exitfunction 0
+    if QB_LEVEL_OF(qsaId) < 1 then QB_LEVEL_OF(qsaId) = 1
+    QS_ID(QS_N) = qsaId
+    QS_REWARD(QS_N) = qsRewardRoll(qsaId, QB_LEVEL_OF(qsaId))
+    QS_BORN_MS(QS_N) = game ms()
+    QS_DRAWN_Y#(QS_N) = getCellY(qsRow(QS_N))
+    QUEST_USED(qsaId) = 1
+    qsaX = getCellX(CELL_COLUMN_COUNT)
+    qsaY = getCellY(qsRow(QS_N))
+    spawnBubbles(qsaX, qsaY, CELL_SIZE / 2, 14, 0, rgb(255, 220, 64))
+    playBubblePop(qsaX, 10, .8)
+    QS_N = QS_N + 1
+endfunction 1
+
+` a quest leaves the stack, and the ones over it slide down
+function qsRemove(qsrmSlot)
+    if qsrmSlot < 0 then exitfunction
+    if qsrmSlot >= QS_N then exitfunction
+    if qsrmSlot >= QS_N - 1
+        QS_N = QS_N - 1
+        exitfunction
+    endif
+    for qsrmI = qsrmSlot to QS_N - 2
+        QS_ID(qsrmI) = QS_ID(qsrmI + 1)
+        QS_REWARD(qsrmI) = QS_REWARD(qsrmI + 1)
+        QS_BORN_MS(qsrmI) = QS_BORN_MS(qsrmI + 1)
+        QS_DRAWN_Y#(qsrmI) = QS_DRAWN_Y#(qsrmI + 1)
+    next
+    QS_N = QS_N - 1
+endfunction
+
+` THE SAVED GAME. questSave and questLoad call these. see QS_PREF.
+function qsSave()
+    set pref QS_PREF, 1
+    set pref QS_PREF + 1, QS_N
+    for qsvI = 0 to QS_MAX - 1
+        qsvIs = 0
+        if qsvI < QS_N then qsvIs = QS_ID(qsvI) + QS_REWARD(qsvI) * 100
+        set pref QS_PREF + 2 + qsvI, qsvIs
+    next
+    for qsvN = 1 to 3
+        set pref QS_PREF + 4 + qsvN, QB_LEVEL_OF(qsReady(qsvN))
+        set pref QS_PREF + 7 + qsvN, QD_MET(qsReady(qsvN))
+    next
+endfunction
+
+function qsLoad()
+    qsReset()
+    if get pref(QS_PREF, 0) <> 1 then exitfunction
+    for qslN = 1 to 3
+        QB_LEVEL_OF(qsReady(qslN)) = get pref(QS_PREF + 4 + qslN, 0)
+        QD_MET(qsReady(qslN)) = get pref(QS_PREF + 7 + qslN, 0)
+    next
+    qslCount = get pref(QS_PREF + 1, 0)
+    if qslCount > QS_MAX then qslCount = QS_MAX
+    if qslCount <= 0 then exitfunction
+    for qslI = 0 to qslCount - 1
+        qslIs = get pref(QS_PREF + 2 + qslI, 0)
+        qslId = qslIs mod 100
+        qslReward = qslIs / 100
+        qslOk = 1
+        if qslId < 1 then qslOk = 0
+        if qslId > 39 then qslOk = 0
+        if qslReward >= QB_REWARD_KINDS then qslOk = 0
+        if qslOk
+            QS_ID(QS_N) = qslId
+            QS_REWARD(QS_N) = qslReward
+            QS_BORN_MS(QS_N) = game ms()
+            QS_DRAWN_Y#(QS_N) = getCellY(qsRow(QS_N))
+            QUEST_USED(qslId) = 1
+            QS_N = QS_N + 1
+        endif
+    next
+endfunction
+
+` for saveSignature, so that the game is saved when the stack changes
+function qsSignature()
+    qsgIs = QS_N * 149
+    if QS_N > 0
+        for qsgI = 0 to QS_N - 1
+            qsgIs = qsgIs + (QS_ID(qsgI) + QS_REWARD(qsgI) * 100) * (151 + qsgI * 10)
+        next
+    endif
+    for qsgN = 1 to 3
+        qsgIs = qsgIs + QB_LEVEL_OF(qsReady(qsgN)) * (157 + qsgN * 10)
+    next
+endfunction qsgIs
+
+` a round is starting, and a quest turns up, if there is room for it. only Hatch has a puzzle so far.
+function qsRoundStarted()
+    ` one of the quests that have puzzles, that is not waiting already, picked from the seed of the game
+    qsrsLeft = 0
+    for qsrsI = 1 to 3
+        qsrsId = qsReady(qsrsI)
+        qsrsThere = 0
+        if QS_N > 0
+            for qsrsJ = 0 to QS_N - 1
+                if QS_ID(qsrsJ) = qsrsId then qsrsThere = 1
+            next
+        endif
+        if qsrsThere = 0 then qsrsLeft = qsrsLeft + 1
+    next
+    if qsrsLeft = 0 then exitfunction
+    qsrsSkip = random stream(RNG_QUESTS, qsrsLeft)
+    for qsrsI = 1 to 3
+        qsrsId = qsReady(qsrsI)
+        qsrsThere = 0
+        if QS_N > 0
+            for qsrsJ = 0 to QS_N - 1
+                if QS_ID(qsrsJ) = qsrsId then qsrsThere = 1
+            next
+        endif
+        if qsrsThere = 0
+            if qsrsSkip = 0
+                qsrsOk = qsAdd(qsrsId)
+            endif
+            qsrsSkip = qsrsSkip - 1
+        endif
+    next
+endfunction
+
+` the quests that have puzzles of their own
+function qsReady(qsrdN)
+    qsrd = QUEST_HATCH
+    if qsrdN = 2 then qsrd = QUEST_SHARK
+    if qsrdN = 3 then qsrd = QUEST_WAKE
+endfunction qsrd
+
+` the cursor is out on a place in the stack. that quest is the quest of the round, waiting to be taken, so its
+` look, its badge and the swap onto its check mark are the ones that every quest has.
+function qsFocus(qsfSlot)
+    QS_FOCUS = qsfSlot
+    QUEST_ID = QS_ID(qsfSlot)
+    QUEST_STATE = QSTATE_OFFERED
+    QUEST_PICK_CELL = qsRow(qsfSlot) * CELL_COLUMN_COUNT + CELL_COLUMN_COUNT - 1
+    QUEST_CURSOR_OUT = 1
+    SELECTION_POS.x = CELL_COLUMN_COUNT - 1
+    SELECTION_POS.y = qsRow(qsfSlot)
+    questNote(loc$("quest.q2.reward", "reward", qsRewardTag(QS_REWARD(qsfSlot))))
+endfunction
+
+function qsUnfocus()
+    QS_FOCUS = -1
+    QUEST_ID = 0
+    QUEST_STATE = QSTATE_NONE
+    QUEST_PICK_CELL = -1
+endfunction
+
+` the cursor has been pushed, on the game's board. 1 when the stack has dealt with it. questCursorBumped asks.
+function qsCursorBumped(qscX, qscY, qscSwap)
+    if QD_ON then exitfunction 1
+    if QUEST_CURSOR_OUT
+        if QS_FOCUS < 0 then exitfunction 0
+        if QUEST_ACCEPT_MS >= 0 then exitfunction 1
+        ` up and down, out there, go from one quest to the next. up is the one over it.
+        if qscSwap = 0 and qscX = 0
+            qscTo = QS_FOCUS - qscY
+            if qscTo >= 0 and qscTo < QS_N
+                qsFocus(qscTo)
+            endif
+            exitfunction 1
+        endif
+        exitfunction 0 `a step back, or the swap onto the check mark, the way that every quest has them
+    endif
+    if qscX = 1 and qscY = 0
+        if SELECTION_POS.x = CELL_COLUMN_COUNT - 1
+            qscSlot = qsSlotAtRow(SELECTION_POS.y)
+            if qscSlot >= 0
+                qsFocus(qscSlot)
+                exitfunction 1
+            endif
+        endif
+    endif
+endfunction 0
+
+` the quest board has turned back to the game's board. the quest that was played is the quest of the round no
+` longer, and if its puzzle was done, it is finished.
+function qsBack()
+    qsbSlot = QS_FOCUS
+    qsbId = QB_QUEST
+    QS_FOCUS = -1
+    questProgress(0, 0)
+    if QB_WON
+        QB_WON = 0
+        qsWon(qsbSlot, qsbId)
+    endif
+    QUEST_ID = 0
+    QUEST_STATE = QSTATE_NONE
+    QUEST_PICK_CELL = -1
+endfunction
+
+` a quest is finished: it leaves the stack, comes back a level harder, and gives what it said that it would.
+` one that was not in the stack, from the debug window or a test, gives what it would have.
+function qsWon(qswSlot, qswId)
+    qswX = getCellX(CELL_COLUMN_COUNT)
+    qswY = getCellY(CELL_ROW_COUNT / 2)
+    qswKind = 0
+    if qswSlot >= 0
+        qswKind = QS_REWARD(qswSlot)
+        qswY = getCellY(qsRow(qswSlot))
+        qsRemove(qswSlot)
+    else
+        qswKind = qsRewardRoll(qswId, QB_LEVEL_OF(qswId))
+    endif
+    if QB_REWARD_FORCE >= 0 then qswKind = QB_REWARD_FORCE
+    QB_LEVEL_OF(qswId) = QB_LEVEL_OF(qswId) + 1
+    QUESTS_DONE = QUESTS_DONE + 1
+    QUEST_LOG_PENDING = qswId
+    if QUEST_EVER_DONE(qswId) = 0
+        QUEST_EVER_DONE(qswId) = 1
+        set pref QUEST_PREF_DONE + qswId, 1
+    endif
+    achieveQuests()
+    play sfx SFX_QUEST_DONE
+    spawnBubbles(qswX, qswY, CELL_SIZE, 20, 0, rgb(255, 220, 64))
+    qsGiveReward(qswKind, qswX, qswY)
+endfunction
+
+function qsGiveReward(qsgKind, qsgX, qsgY)
+    if qsgKind = QB_REWARD_MOVES
+        extinctHalveMoves()
+    endif
+    if qsgKind = QB_REWARD_MULT
+        addMultiplier(SCORE_MULTIPLIER)
+    endif
+    if qsgKind = QB_REWARD_ROUND
+        queueScore(questPayout(), 300)
+    endif
+    qsgPos as vec = {
+        x = qsgX,
+        y = qsgY
+    }
+    qsgText = spawnScoreTextScaled(qsgPos, qsRewardTag(qsgKind), 0, 2200, 1.2)
+endfunction
+
+` every frame: the quest that the cursor was out on stops being the quest of the round once it comes back in,
+` and the stack is drawn
+function qsStep()
+    if QUEST2_ON = 0 then exitfunction
+    if QB_PHASE = 0 and QD_ON = 0 and QS_FOCUS >= 0
+        if QUEST_CURSOR_OUT = 0 and QUEST_ACCEPT_MS < 0
+            qsUnfocus()
+        else
+            ` the board may have grown under it
+            QUEST_PICK_CELL = qsRow(QS_FOCUS) * CELL_COLUMN_COUNT + CELL_COLUMN_COUNT - 1
+        endif
+    endif
+    qsDraw()
+endfunction
+
+function qsHideSlot(qshI)
+    hide sprite QS_ZONE_SPRITE(qshI)
+    hide sprite QS_ICON_SPRITE(qshI)
+    hide sprite QS_BOX_SPRITE(qshI)
+    set text alpha QS_LABEL_TEXT(qshI), 0
+endfunction
+
+` the box beside a pickup, with what it gives in it
+function qsDrawBox(qsdbI, qsdbKind, qsdbX#, qsdbY#, qsdbBright)
+    qsdbHalf = CELL_SIZE / 2
+    qsdbKeep# = HUD_KEEP#
+    if QS_LABEL_KIND(qsdbI) <> qsdbKind
+        QS_LABEL_KIND(qsdbI) = qsdbKind
+        if qsdbKind = QB_REWARD_MOVES
+            set text loc QS_LABEL_TEXT(qsdbI), "quest.q2.reward.moves"
+        endif
+        if qsdbKind = QB_REWARD_MULT
+            set text loc QS_LABEL_TEXT(qsdbI), "quest.q2.reward.mult"
+        endif
+        if qsdbKind = QB_REWARD_ROUND
+            set text loc QS_LABEL_TEXT(qsdbI), "quest.q2.reward.round"
+        endif
+    endif
+    qsdbBoxAlpha = 30
+    qsdbLabelAlpha = 160
+    qsdbEdge# = QUEST_ZONE_EDGE#
+    if qsdbBright
+        qsdbBoxAlpha = 60
+        qsdbLabelAlpha = 255
+        qsdbEdge# = QUEST_ZONE_EDGE_ON#
+    endif
+    position sprite QS_BOX_SPRITE(qsdbI), qsdbX# - qsdbHalf, qsdbY# - qsdbHalf
+    size sprite QS_BOX_SPRITE(qsdbI), CELL_SIZE, CELL_SIZE
+    color sprite QS_BOX_SPRITE(qsdbI), rgb(255, 225, 130, qsdbBoxAlpha * qsdbKeep#)
+    set sprite all texcoord1 QS_BOX_SPRITE(qsdbI), QUEST_ZONE_FILL#, qsdbEdge#, qsdbI * 1.3 + 23, QUEST_ZONE_WAVE#
+    show sprite QS_BOX_SPRITE(qsdbI)
+    set text position QS_LABEL_TEXT(qsdbI), qsdbX#, qsdbY#
+    set text alpha QS_LABEL_TEXT(qsdbI), qsdbLabelAlpha * qsdbKeep#
+endfunction
+
+function qsDraw()
+    if QS_SPRITES_MADE = 0 then exitfunction
+    qsdNow# = game ms()
+    qsdShow = 1
+    if QB_PHASE > 0 then qsdShow = 0
+    if TUNA_EASED# > 0 then qsdShow = 0
+    if TUTORIAL_STAGE > 0 then qsdShow = 0
+    qsdKeep# = HUD_KEEP#
+    qsdHalf = CELL_SIZE / 2
+    qsdColX = getCellX(CELL_COLUMN_COUNT)
+    qsdWave# = sin(qsdNow# * .005)
+
+    for qsdI = 0 to QS_MAX - 1
+        qsdOn = qsdShow
+        if qsdI >= QS_N then qsdOn = 0
+        if qsdOn
+            ` it slides down to its row, when one under it has gone
+            qsdRowY = getCellY(qsRow(qsdI))
+            qsdY# = QS_DRAWN_Y#(qsdI)
+            qsdY# = qsdY# + (qsdRowY - qsdY#) * .25
+            if abs(qsdRowY - qsdY#) < .5 then qsdY# = qsdRowY
+            QS_DRAWN_Y#(qsdI) = qsdY#
+
+            qsdFocused = 0
+            if qsdI = QS_FOCUS then qsdFocused = 1
+            qsdEdge# = QUEST_ZONE_EDGE#
+            if qsdFocused then qsdEdge# = QUEST_ZONE_EDGE_ON#
+            position sprite QS_ZONE_SPRITE(qsdI), qsdColX - qsdHalf, qsdY# - qsdHalf
+            size sprite QS_ZONE_SPRITE(qsdI), CELL_SIZE, CELL_SIZE
+            color sprite QS_ZONE_SPRITE(qsdI), rgb(255, 220, 64, (40 + 18 * qsdWave#) * qsdKeep#)
+            set sprite all texcoord1 QS_ZONE_SPRITE(qsdI), QUEST_ZONE_FILL#, qsdEdge#, qsdI * 1.3 + 17, QUEST_ZONE_WAVE#
+            show sprite QS_ZONE_SPRITE(qsdI)
+
+            ` the one that the cursor is out on is drawn by questDrawPickup, with its check mark
+            if qsdFocused
+                hide sprite QS_ICON_SPRITE(qsdI)
+            else
+                ` it pops in when it turns up
+                qsdSize# = CELL_ART_SIZE
+                qsdBornAge# = qsdNow# - QS_BORN_MS(qsdI)
+                if qsdBornAge# < 500
+                    qsdBornP# = qsdBornAge# / 500
+                    qsdSize# = CELL_ART_SIZE * qbBounce(qsdBornP#)
+                endif
+                set sprite texture QS_ICON_SPRITE(qsdI), QUEST_DEFS(QS_ID(qsdI)).pickTex
+                position sprite QS_ICON_SPRITE(qsdI), qsdColX, qsdY# - (1 + 2 * qsdWave#)
+                size sprite QS_ICON_SPRITE(qsdI), qsdSize#, qsdSize#
+                color sprite QS_ICON_SPRITE(qsdI), rgb(255, 255, 255, 255 * qsdKeep#)
+                show sprite QS_ICON_SPRITE(qsdI)
+            endif
+            qsDrawBox(qsdI, QS_REWARD(qsdI), qsdColX + CELL_SIZE, qsdY# - (1 + 2 * qsdWave#), qsdFocused)
+        else
+            qsHideSlot(qsdI)
+        endif
+    next
+
+    ` on the quest board, what the quest gives is beside its pickup the whole time
+    if QB_PHASE = 2 and QUEST_PICK_CELL >= 0 and QS_FOCUS >= 0
+        qsdPickY# = getCellY(QUEST_PICK_CELL / CELL_COLUMN_COUNT)
+        qsDrawBox(0, QS_REWARD(QS_FOCUS), qsdColX + CELL_SIZE, qsdPickY# - (1 + 2 * qsdWave#), 1)
+    endif
+endfunction
+
+
+` ---------------------------------------------------------------------------------------------
+` THE QUEST TALKS. see fish_headers_qboard.
+` ---------------------------------------------------------------------------------------------
+
+` who talks for a quest. only Hatch has a puzzle so far, and a quest that stands in for another plays Hatch's,
+` so Mama Pearl talks for all of them until the others have puzzles of their own.
+function qdSpeaker(qdsQuest)
+    qdsWho = QUEST_HATCH
+    if qdsQuest = QUEST_SHARK then qdsWho = QUEST_SHARK
+    if qdsQuest = QUEST_WAKE then qdsWho = QUEST_WAKE
+endfunction qdsWho
+
+` what can be asked: the question, and its answer. the keys are written out, one quest at a time.
+function qdScript(qdscQuest)
+    QD_ASK_N = 4
+    qdscWho = qdSpeaker(qdscQuest)
+    if qdscWho = QUEST_HATCH
+        QD_ASK$(1) = loc$("questtalk.hatch.q2.ask.game")
+        QD_ANS$(1) = loc$("questtalk.hatch.q2.ans.game")
+        QD_ASK$(2) = loc$("questtalk.hatch.q2.ask.miss")
+        QD_ANS$(2) = loc$("questtalk.hatch.q2.ans.miss")
+        QD_ASK$(3) = loc$("questtalk.hatch.q2.ask.swap")
+        QD_ANS$(3) = loc$("questtalk.hatch.q2.ans.swap")
+        QD_ASK$(4) = loc$("questtalk.hatch.q2.ask.leave")
+        QD_ANS$(4) = loc$("questtalk.hatch.q2.ans.leave")
+    endif
+    if qdscWho = QUEST_SHARK
+        QD_ASK$(1) = loc$("questtalk.shark.q2.ask.game")
+        QD_ANS$(1) = loc$("questtalk.shark.q2.ans.game")
+        QD_ASK$(2) = loc$("questtalk.shark.q2.ask.how")
+        QD_ANS$(2) = loc$("questtalk.shark.q2.ans.how")
+        QD_ASK$(3) = loc$("questtalk.shark.q2.ask.miss")
+        QD_ANS$(3) = loc$("questtalk.shark.q2.ans.miss")
+        QD_ASK$(4) = loc$("questtalk.shark.q2.ask.leave")
+        QD_ANS$(4) = loc$("questtalk.shark.q2.ans.leave")
+    endif
+    if qdscWho = QUEST_WAKE
+        QD_ASK$(1) = loc$("questtalk.wake.q2.ask.game")
+        QD_ANS$(1) = loc$("questtalk.wake.q2.ans.game")
+        QD_ASK$(2) = loc$("questtalk.wake.q2.ask.how")
+        QD_ANS$(2) = loc$("questtalk.wake.q2.ans.how")
+        QD_ASK$(3) = loc$("questtalk.wake.q2.ask.miss")
+        QD_ANS$(3) = loc$("questtalk.wake.q2.ans.miss")
+        QD_ASK$(4) = loc$("questtalk.wake.q2.ask.leave")
+        QD_ANS$(4) = loc$("questtalk.wake.q2.ans.leave")
+    endif
+endfunction
+
+
+` what it says when the talk opens: who it is and the rules the first time, hello again after that, and what it
+` gives, either way
+function qdIntro(qdiQuest, qdiMet, qdiReward$)
+    qdiWho = qdSpeaker(qdiQuest)
+    qdiLevel = QB_LEVEL_OF(qdiQuest)
+    if qdiLevel < 1 then qdiLevel = 1
+    if qdiWho = QUEST_HATCH
+        if qdiMet = 0
+            qdQueue(loc$("questtalk.hatch.q2.hello"))
+            qdQueue(loc$("questtalk.hatch.q2.rule"))
+            qdQueue(loc$("questtalk.hatch.q2.rule2"))
+        else
+            qdQueue(loc$("questtalk.hatch.q2.again"))
+        endif
+        qdQueue(loc$("questtalk.hatch.q2.offer", "reward", qdiReward$))
+    endif
+    if qdiWho = QUEST_SHARK
+        if qdiMet = 0
+            qdQueue(loc$("questtalk.shark.q2.hello"))
+            qdQueue(loc$("questtalk.shark.q2.rule"))
+            qdQueue(loc$("questtalk.shark.q2.rule2"))
+        else
+            qdQueue(loc$("questtalk.shark.q2.again"))
+        endif
+        qdQueue(loc$("questtalk.shark.q2.offer", "count", qbSharkNeedFor(qdiLevel), "reward", qdiReward$))
+    endif
+    if qdiWho = QUEST_WAKE
+        if qdiMet = 0
+            qdQueue(loc$("questtalk.wake.q2.hello"))
+            qdQueue(loc$("questtalk.wake.q2.rule", "glow", qbGlowFor(qdiLevel)))
+            qdQueue(loc$("questtalk.wake.q2.rule2"))
+        else
+            qdQueue(loc$("questtalk.wake.q2.again"))
+        endif
+        qdQueue(loc$("questtalk.wake.q2.offer", "reward", qdiReward$))
+    endif
+endfunction
+
+
+function qdQueue(qdqLine$)
+    if QD_LINE_N >= 8 then exitfunction
+    QD_LINES$(QD_LINE_N) = qdqLine$
+    QD_LINE_N = QD_LINE_N + 1
+endfunction
+
+` the talk of the quest in a place of the stack opens. questPickToggle comes here, at the end of the swap onto
+` the check mark.
+function qdOpen(qdoSlot)
+    if QD_ON then exitfunction
+    if qdoSlot < 0 then exitfunction
+    if qdoSlot >= QS_N then exitfunction
+    questTalkStop()
+    QD_ON = 1
+    QD_SLOT = qdoSlot
+    QD_QUEST = QS_ID(qdoSlot)
+    QD_OPEN_MS = game ms()
+    qdoWho = qdSpeaker(QD_QUEST)
+    QTALK_ID = qdoWho `the voice of the letters
+    qdScript(QD_QUEST)
+    for qdoI = 0 to 7
+        QD_ASKED(qdoI) = 0
+    next
+
+    ` the first time, it says who it is and what the puzzle is. after that, hello again. what it gives, either way.
+    QD_LINE_N = 0
+    qdIntro(QD_QUEST, QD_MET(QD_QUEST), qsRewardSay(QS_REWARD(qdoSlot)))
+    QD_MET(QD_QUEST) = 1
+
+    set text QTALK_NAME_TEXT_ID, loc$(QTALK_WHO$(qdoWho))
+    set sprite texture QTALK_FACE_SPRITE, QTALK_TEX(qdoWho)
+    size sprite QTALK_FACE_SPRITE, 42, 42
+    set text QD_REWARD_TEXT, loc$("quest.q2.reward", "reward", qsRewardTag(QS_REWARD(qdoSlot)))
+    show sprite QTALK_BOX_SPRITE
+    show sprite QTALK_FACE_SPRITE
+    showInfoBorder(QTALK_BOX_BORDER, 1)
+    show text QTALK_NAME_TEXT_ID
+    show text QTALK_TEXT_ID
+    show text QD_REWARD_TEXT
+    QD_PICK = 0
+    QD_LINE_AT = 0
+    qdSayLine()
+    create basic tween QD_FADE_TWEEN_ID, 0, 1, 200, 0
+endfunction
+
+` say the line that is due
+function qdSayLine()
+    QD_STAGE = 0
+    set text QTALK_TEXT_ID, QD_LINES$(QD_LINE_AT)
+    set text reveal QTALK_TEXT_ID, 0
+    QTALK_DONE_MS = 0
+    QTALK_SAID_LETTERS = 0
+    QTALK_WORD_BUBBLES = 0
+    QTALK_SAY_NEXT_MS = game ms() + 150
+endfunction
+
+function qdNextLine()
+    QD_LINE_AT = QD_LINE_AT + 1
+    if QD_LINE_AT < QD_LINE_N
+        qdSayLine()
+    else
+        qdMenu()
+    endif
+endfunction
+
+` the list: take it, the questions, not now
+function qdMenu()
+    QD_STAGE = 1
+    QD_CHOICE_N = 0
+    QD_CHOICE$(QD_CHOICE_N) = loc$("quest.q2.take")
+    QD_CHOICE_DO(QD_CHOICE_N) = QD_DO_TAKE
+    QD_CHOICE_N = QD_CHOICE_N + 1
+    for qdmI = 1 to QD_ASK_N
+        if QD_CHOICE_N < QD_CHOICE_MAX - 1
+            QD_CHOICE$(QD_CHOICE_N) = QD_ASK$(qdmI)
+            QD_CHOICE_DO(QD_CHOICE_N) = qdmI
+            QD_CHOICE_N = QD_CHOICE_N + 1
+        endif
+    next
+    QD_CHOICE$(QD_CHOICE_N) = loc$("quest.q2.later")
+    QD_CHOICE_DO(QD_CHOICE_N) = QD_DO_LATER
+    QD_CHOICE_N = QD_CHOICE_N + 1
+    for qdmI = 0 to QD_CHOICE_MAX - 1
+        if qdmI < QD_CHOICE_N
+            set text QD_CHOICE_TEXT(qdmI), QD_CHOICE$(qdmI)
+            show text QD_CHOICE_TEXT(qdmI)
+        else
+            hide text QD_CHOICE_TEXT(qdmI)
+        endif
+    next
+    if QD_PICK >= QD_CHOICE_N then QD_PICK = 0
+    show sprite QD_PICK_SPRITE
+endfunction
+
+function qdHideMenu()
+    for qdhI = 0 to QD_CHOICE_MAX - 1
+        hide text QD_CHOICE_TEXT(qdhI)
+    next
+    hide sprite QD_PICK_SPRITE
+endfunction
+
+function qdChoose()
+    qdcDo = QD_CHOICE_DO(QD_PICK)
+    if qdcDo = QD_DO_TAKE
+        qdTake()
+        exitfunction
+    endif
+    if qdcDo = QD_DO_LATER
+        qdBubbleClose()
+        exitfunction
+    endif
+    ` a question: its answer, and then the list again
+    QD_ASKED(qdcDo) = 1
+    qdHideMenu()
+    QD_LINE_N = 0
+    qdQueue(QD_ANS$(qdcDo))
+    QD_LINE_AT = 0
+    qdSayLine()
+endfunction
+
+` the quest is taken: the talk goes, what it gives floats up off its box, and the board turns over
+function qdTake()
+    qdtSlot = QD_SLOT
+    qdBubbleClose()
+    if qdtSlot <> QS_FOCUS then exitfunction
+    qdtPos as vec = {
+        x = getCellX(CELL_COLUMN_COUNT) + CELL_SIZE,
+        y = getCellY(qsRow(qdtSlot)) - 6
+    }
+    qdtText = spawnScoreTextScaled(qdtPos, qsRewardTag(QS_REWARD(qdtSlot)), 0, 1400, 1)
+    color text qdtText, rgb(255, 225, 130)
+    questPickUp()
+endfunction
+
+` the talk goes, at once. resetQuests comes here from setup, before the board has a size, so nothing in here
+` may touch the board.
+function qdClose()
+    if QS_SPRITES_MADE = 0 then exitfunction
+    if QD_ON = 0 then exitfunction
+    QD_ON = 0
+    questTalkStop()
+    qdHideMenu()
+    hide text QD_REWARD_TEXT
+endfunction
+
+` the talk goes, bubbling away, when the player is done with it
+function qdBubbleClose()
+    if QD_ON = 0 then exitfunction
+    qdClose()
+    for qdclN = 1 to 18
+        spawnBubblesOnLayer(QTALK_BOX_X + rnd(QTALK_BOX_W + 1), QD_BOX_Y + rnd(QD_BOX_H + 1), 0, 1, rnd(200), rgb(255, 210, 120), ORDER_QTALK + 1, FLOAT_BUBBLE_LOUD_ODDS, 255, getBoardBubbleScale())
+    next
+endfunction
+
+` every frame, while the talk is open: the letters, the keys, and where everything is
+function qdStep(qdNow)
+    if QD_ON = 0 then exitfunction
+    if INFO_MODE
+        qdClose()
+        exitfunction
+    endif
+
+    if QD_STAGE = 0
+        ` the letters that are due, the same as questTalkStep
+        if QTALK_DONE_MS = 0
+            qdLate = qdNow - QTALK_SAY_NEXT_MS
+            if qdLate > 200 then QTALK_SAY_NEXT_MS = qdNow
+            qdGo = 1
+            while qdGo
+                qdGo = 0
+                if QTALK_DONE_MS = 0
+                    if QTALK_SAY_NEXT_MS <= qdNow then qdGo = 1
+                endif
+                if qdGo
+                    qtSpeakLetter(qdNow)
+                endif
+            endwhile
+        endif
+        ` the key says the rest of the line at once, and then goes on to the next
+        if new action down(ACT_CONFIRM)
+            if QTALK_DONE_MS = 0
+                set text reveal QTALK_TEXT_ID, -1
+                QTALK_DONE_MS = qdNow
+            else
+                qdNextLine()
+            endif
+        endif
+    else
+        if new action down(ACT_UP)
+            QD_PICK = QD_PICK - 1
+            if QD_PICK < 0 then QD_PICK = QD_CHOICE_N - 1
+        endif
+        if new action down(ACT_DOWN)
+            QD_PICK = QD_PICK + 1
+            if QD_PICK >= QD_CHOICE_N then QD_PICK = 0
+        endif
+        if new action down(ACT_CONFIRM)
+            qdChoose()
+        endif
+    endif
+    if QD_ON = 0 then exitfunction
+
+    ` the box, the picture, the name, the line, what it gives, and the list
+    qdFade# = tweenVal(QD_FADE_TWEEN_ID)
+    qdX = QTALK_BOX_X
+    qdY = QD_BOX_Y
+    position sprite QTALK_BOX_SPRITE, qdX, qdY
+    size sprite QTALK_BOX_SPRITE, QTALK_BOX_W, QD_BOX_H
+    color sprite QTALK_BOX_SPRITE, rgb(10, 14, 30, 240 * qdFade#)
+    layoutInfoBorder(QTALK_BOX_BORDER, qdX, qdY, QTALK_BOX_W, QD_BOX_H)
+    colorInfoBorder(QTALK_BOX_BORDER, rgb(255, 210, 120, 160 * qdFade#))
+    qdBob# = sin(qdNow * .004) * 2
+    position sprite QTALK_FACE_SPRITE, qdX + 32, qdY + 30 + qdBob#
+    set sprite alpha QTALK_FACE_SPRITE, 255 * qdFade#
+    set text position QTALK_NAME_TEXT_ID, qdX + 64, qdY + 6
+    set text alpha QTALK_NAME_TEXT_ID, 255 * qdFade#
+    set text position QTALK_TEXT_ID, qdX + 64, qdY + 22
+    set text alpha QTALK_TEXT_ID, 255 * qdFade#
+    set text position QD_REWARD_TEXT, qdX + QTALK_BOX_W - 8, qdY + 7
+    set text alpha QD_REWARD_TEXT, 255 * qdFade#
+
+    if QD_STAGE = 1
+        qdPickY = qdY + 58 + QD_PICK * 12
+        position sprite QD_PICK_SPRITE, qdX + 62, qdPickY - 1
+        size sprite QD_PICK_SPRITE, QTALK_BOX_W - 70, 13
+        color sprite QD_PICK_SPRITE, rgb(255, 210, 120, (40 + 16 * sin(qdNow * .008)) * qdFade#)
+        for qdI = 0 to QD_CHOICE_N - 1
+            qdColor = rgb(200, 210, 230)
+            qdDo = QD_CHOICE_DO(qdI)
+            if qdDo > 0
+                if QD_ASKED(qdDo) then qdColor = rgb(130, 140, 160) `asked already
+            endif
+            if qdDo = QD_DO_TAKE then qdColor = rgb(150, 235, 160)
+            if qdI = QD_PICK then qdColor = rgb(255, 236, 190)
+            qdShift = 0
+            if qdI = QD_PICK then qdShift = 3
+            set text position QD_CHOICE_TEXT(qdI), qdX + 68 + qdShift, qdY + 58 + qdI * 12
+            color text QD_CHOICE_TEXT(qdI), qdColor
+            set text alpha QD_CHOICE_TEXT(qdI), 255 * qdFade#
+        next
+    endif
+endfunction

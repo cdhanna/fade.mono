@@ -98,7 +98,9 @@ function getImpossibleRandomValueForCell(cellId)
                 if tries < 30
                     picked = getRandomValue()
                 else
-                    picked = (tries mod 7) + 1
+                    ` in order, leaving out the kinds that are extinct. see fish_headers_extinct.
+                    extinctNth(tries, 7)
+                    picked = EXTINCT_PICKED
                     if tries > 44 then isSafe = 1
                 endif
             endif
@@ -1406,23 +1408,32 @@ endfunction target
 
 function getRandomValue()
     ` the kinds that only show up with their cards. see THE NEW KINDS OF FISH in fish_headers.
-    ` one roll decides between the two of them, so that neither gets in ahead of the other
+    ` one roll decides between the two of them, so that neither gets in ahead of the other. a kind that is
+    ` extinct does not drop in, though the roll is still made. see fish_headers_extinct.
     newJellyChance = getJellyChance()
     newRayChance = getRayChance()
     if newJellyChance + newRayChance > 0
         newKindRoll = random stream(RNG_BOARD, 100)
         if newKindRoll < newJellyChance
-            exitfunction TEX_JELLY
-        endif
-        if newKindRoll < newJellyChance + newRayChance
-            exitfunction TEX_RAY
+            if EXTINCT_OUT(TEX_JELLY) = 0
+                exitfunction TEX_JELLY
+            endif
+        else
+            if newKindRoll < newJellyChance + newRayChance
+                if EXTINCT_OUT(TEX_RAY) = 0
+                    exitfunction TEX_RAY
+                endif
+            endif
         endif
     endif
 
+    ` a kind that is extinct does not drop in, not even as a crab of the crab card. see NEW FISH in fish_headers_extinct.
     if (isAbility_Crabs())
         if random stream(RNG_BOARD, 10) > 7 `a 20 % chance to spawn a crab.
-            showPassiveUsed(ABILITY_INDEX_CRABS)
-            exitfunction TEX_CRAB
+            if EXTINCT_OUT(TEX_CRAB) = 0
+                showPassiveUsed(ABILITY_INDEX_CRABS)
+                exitfunction TEX_CRAB
+            endif
         endif
     endif
 
@@ -1430,11 +1441,13 @@ function getRandomValue()
         ` worm is the last texture, so ignoring it is simple.
         if (random stream(RNG_BOARD, 10) > 7) ` a 20% chance to not pick worm.
             showPassiveUsed(ABILITY_INDEX_BIRD_FEAST)
-            exitfunction random stream(RNG_BOARD, 6) + 1
+            extinctPick(6)
+            exitfunction EXTINCT_PICKED
         endif
     endif
 
-endfunction random stream(RNG_BOARD, 7)+1
+    extinctPick(7)
+endfunction EXTINCT_PICKED
 
 ` THE BOMB. see fish_headers.
 
@@ -1841,6 +1854,11 @@ function startLiveMove(dirX, dirY, wantSwap)
 
     ` the pickup of a quest is beside the board, and the cursor can step out onto it, and back. this
     ` is for a move that is made while fish are popping. see questCursorBumped in fish_routines_quests.
+    ` and so can the ladder of the kinds that are extinct, on the left. see THE LADDER in fish_headers_extinct.
+    extinctTook = extinctCursorBumped(dirX, dirY, wantSwap)
+    if extinctTook
+        exitfunction 0
+    endif
     questTook = questCursorBumped(dirX, dirY, wantSwap)
     if questTook
         exitfunction 0
@@ -1878,7 +1896,7 @@ function startLiveMove(dirX, dirY, wantSwap)
         ` nothing goes into a gap of a little board of the tutorial. see THE LITTLE BOARDS in fish_routines_intro.
         ` the cursor can go over the gaps of a puzzle, but no fish can. see THE RULES in fish_headers_puzzle.
         tutorialGapThere = tutorialIsGap(bIndex)
-        if PUZZLE_ON
+        if PUZZLE_ON or QB_ON
             if wantSwap = 0 then tutorialGapThere = 0
             if wantSwap
                 puzzleGapHere = tutorialIsGap(aIndex)
@@ -1913,6 +1931,10 @@ function startLiveMove(dirX, dirY, wantSwap)
             if puzzleTakesBack
                 puzzleUndoPush()
             endif
+        endif
+        ` and so can a swap of a quest board. see fish_headers_qboard.
+        if QB_ON and wantSwap
+            qbUndoPush()
         endif
 
         ` the cursor leaves a few bubbles behind
@@ -2498,6 +2520,7 @@ function tutorialMovesOff()
     isOff = 0
     if TUTORIAL_STAGE > 0 and TUTORIAL_STAGE < 3 then isOff = 1
     if PUZZLE_ON then isOff = 1
+    if QB_ON then isOff = 1
 endfunction isOff
 
 ` 1 while the bar of the round is not on the screen yet, or the fish that brought it in are still popping
@@ -2505,6 +2528,7 @@ function tutorialScoreOff()
     isOff = 0
     if TUTORIAL_STAGE > 0 then isOff = 1
     if PUZZLE_ON then isOff = 1
+    if QB_ON then isOff = 1
     if TUTORIAL_SCORE_HOLD then isOff = 1
 endfunction isOff
 

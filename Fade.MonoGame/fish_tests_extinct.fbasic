@@ -1,0 +1,443 @@
+remstart
+    THE TESTS OF EXTINCT. see fish_headers_extinct.
+    the board of fishBoard only has the kinds 1 to 5 on it, so three 6s are all the 6s there are.
+remend
+
+test extinct_last_of_a_kind_goes_up_the_ladder from fishBoard
+    EXTINCT_ON = 1
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    REQUEST_COMBO_CHECK = 1
+    runto _loop
+    assert EXTINCT_RUNG(0) = 6, "the 6s all popped, so their kind is on the bottom rung"
+    assert EXTINCT_OUT(6) = 1, "and it is out"
+    assert EXTINCT_OUT(7) = 0, "a kind that was not on the board, and did not pop, is not"
+    assert EXTINCT_OUT_COUNT = 1, "one kind is out"
+    tExSixes = 0
+    for tExI = 0 to CELL_COUNT - 1
+        if CELLS(tExI).value = 6 then tExSixes = tExSixes + 1
+    next
+    assert tExSixes = 0, "and no 6 dropped in, in their place"
+    end
+endtest
+
+test extinct_not_while_one_is_left from fishBoard
+    EXTINCT_ON = 1
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    testPut(6, 6, 6)
+    REQUEST_COMBO_CHECK = 1
+    runto _loop
+    assert EXTINCT_OUT(6) = 0, "a 6 is still on the board, so the kind is not extinct"
+    assert EXTINCT_RUNG(0) = 0, "and the ladder is empty"
+    end
+endtest
+
+test extinct_is_off_in_the_tests_unless_asked_for from fishBoard
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    REQUEST_COMBO_CHECK = 1
+    runto _loop
+    assert EXTINCT_RUNG(0) = 0, "fishBoard turns it off, so the other tests are not changed by it"
+    end
+endtest
+
+test extinct_no_fourth_kind_while_the_ladder_is_full from fishBoard
+    EXTINCT_ON = 1
+    EXTINCT_RUNG(0) = 1
+    EXTINCT_RUNG(1) = 2
+    EXTINCT_RUNG(2) = 3
+    extinctRecount()
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    REQUEST_COMBO_CHECK = 1
+    runto _loop
+    assert EXTINCT_OUT(6) = 0, "there is no rung for it, so the 6s keep coming"
+    assert EXTINCT_RUNG(2) = 3, "and the ladder is as it was"
+    end
+endtest
+
+test extinct_new_fish_leave_out_the_kinds_that_are_out from fishBoard
+    EXTINCT_RUNG(0) = 3
+    EXTINCT_RUNG(1) = 5
+    extinctRecount()
+    tExBad = 0
+    for tExN = 1 to 300
+        tExKind = getRandomValue()
+        if tExKind = 3 then tExBad = tExBad + 1
+        if tExKind = 5 then tExBad = tExBad + 1
+        if tExKind < 1 then tExBad = tExBad + 1
+        if tExKind > 7 then tExBad = tExBad + 1
+    next
+    assert tExBad = 0, "no new fish is a kind on the ladder"
+    end
+endtest
+
+test extinct_nth_counts_the_kinds_that_are_left from fishBoard
+    extinctNth(9, 7)
+    assert EXTINCT_PICKED = 3, "with nothing out, it is the same as counting around the seven"
+    EXTINCT_RUNG(0) = 2
+    extinctRecount()
+    extinctNth(1, 7)
+    assert EXTINCT_PICKED = 3, "with 2 out, the second kind left is 3"
+    extinctNth(6, 7)
+    assert EXTINCT_PICKED = 1, "and it counts around again past the last one"
+    end
+endtest
+
+test extinct_rungs_above_slide_down from fishBoard
+    EXTINCT_RUNG(0) = 6
+    EXTINCT_RUNG(1) = 7
+    EXTINCT_RUNG(2) = 1
+    extinctRecount()
+    extinctTake(0)
+    assert EXTINCT_RUNG(0) = 7, "the middle rung slid down to the bottom"
+    assert EXTINCT_RUNG(1) = 1, "and the top one to the middle"
+    assert EXTINCT_RUNG(2) = 0, "and the top is empty"
+    assert EXTINCT_OUT(6) = 0, "the kind that was used drops in again"
+    assert EXTINCT_OUT(1) = 1, "the others are still out"
+    end
+endtest
+
+test extinct_rung_rows_have_a_row_between_them from fishBoard
+    assert extinctRungRow(0) = 8, "the bottom rung is beside the bottom row"
+    assert extinctRungRow(1) = 6, "the next one two rows up"
+    assert extinctRungRow(2) = 4, "and the top one two more rows up"
+    end
+endtest
+
+test extinct_bottom_rung_flip_turns_its_row from fishBoard
+    EXTINCT_ON = 1
+    EXTINCT_RUNG(0) = 6
+    extinctRecount()
+    testCursor(0, 8)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(1, 0, 1, -1)
+
+    ` the board spins over first. halfway through, the right side of it is squeezed in toward the middle.
+    tExSpun = 0
+    tExSqueezed = 0
+    tExTicks = 0
+    while tExTicks < 400 and tExSpun = 0
+        runto _loop
+        tExTicks = tExTicks + 1
+        if EXTINCT_SPIN_MS >= 0
+            tExSpinAge# = game ms() - EXTINCT_SPIN_MS
+            if tExSpinAge# > 250
+                tExRightX# = sprite x(CELLS(testIndex(8, 8)).spriteId)
+                tExCellX# = getCellX(8) - 4
+                if tExRightX# < tExCellX#
+                    tExSqueezed = 1
+                endif
+                tExSpun = 1
+            endif
+        endif
+    endwhile
+    assert tExSpun = 1, "the board spins"
+    assert tExSqueezed = 1, "and the fish on the right of it are drawn in toward the middle as it turns"
+    assert CELLS(testIndex(5, 8)).value <> 6, "the fish have not turned yet, before the board is edge on"
+
+    runto _combos_judged
+    assert EXTINCT_SPIN_MS < 0, "the spin is over before anything pops"
+    assert sprite x(CELLS(testIndex(8, 8)).spriteId) = getCellX(8), "and every fish is back in its place"
+    assert EXTINCT_RUNG(0) = 0, "the kind came off of the ladder"
+    assert EXTINCT_OUT(6) = 0, "and drops in again"
+    assert EXTINCT_CURSOR_OUT = 0, "the cursor came back onto the board with it"
+    assert CELLS(testIndex(5, 8)).value = 6, "every fish in the row of the bottom rung turned into a 6"
+    assert CELLS(testIndex(5, 7)).value <> 6, "and the row above it did not"
+    assert testPopCount() = CELL_COLUMN_COUNT, "the row pops, and nothing else"
+    runto _loop
+    assert EXTINCT_RUNG(0) = 0, "the flip's own pops do not send the 6s back up the ladder"
+    end
+endtest
+
+test extinct_stepping_out_and_back_in from fishBoard
+    EXTINCT_ON = 1
+    EXTINCT_RUNG(0) = 6
+    extinctRecount()
+    testCursor(0, 7)
+    testQueueMove(-1, 0, 0, -1)
+    runto _loop
+    runto _loop
+    assert EXTINCT_CURSOR_OUT = 0, "row 7 has no rung beside it"
+    testCursor(0, 8)
+    testQueueMove(-1, 0, 0, -1)
+    runto _loop
+    runto _loop
+    assert EXTINCT_CURSOR_OUT = 1, "row 8 has the bottom rung beside it, and the cursor steps out onto it"
+    assert SELECTION_POS.x = 0, "as far as the board knows, the cursor is still on the first column"
+    testQueueMove(0, -1, 0, -1)
+    runto _loop
+    runto _loop
+    assert EXTINCT_CURSOR_OUT = 1, "a step up does nothing out there: the rungs do not slide"
+    assert SELECTION_POS.y = 8, "and the cursor is still beside the same rung"
+    testQueueMove(1, 0, 0, -1)
+    runto _loop
+    runto _loop
+    assert EXTINCT_CURSOR_OUT = 0, "a step right brings it back in"
+    end
+endtest
+
+test extinct_bottom_rung_has_nothing_to_the_left from fishBoard
+    EXTINCT_ON = 1
+    EXTINCT_RUNG(0) = 6
+    extinctRecount()
+    testCursor(0, 8)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(-1, 0, 1, -1)
+    tExUntil = game ms() + 600
+    while game ms() < tExUntil
+        runto _loop
+    endwhile
+    assert EXTINCT_RUNG(0) = 6, "the bottom rung is still there"
+    assert EXTINCT_CURSOR_OUT = 1, "and so is the cursor"
+    end
+endtest
+
+test extinct_second_rung_left_doubles_the_multiplier from fishBoard
+    EXTINCT_ON = 1
+    EXTINCT_RUNG(0) = 6
+    EXTINCT_RUNG(1) = 7
+    extinctRecount()
+    SCORE_MULTIPLIER = 3
+    testCursor(0, 6)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(-1, 0, 1, -1)
+    tExUntil = game ms() + 600
+    while game ms() < tExUntil
+        runto _loop
+    endwhile
+    assert SCORE_MULTIPLIER = 6, "the multiplier doubled"
+    assert EXTINCT_RUNG(1) = 0, "the second rung is gone"
+    assert EXTINCT_OUT(7) = 0, "and its kind drops in again"
+    assert EXTINCT_RUNG(0) = 6, "the bottom one is still there"
+    end
+endtest
+
+test extinct_top_rung_left_halves_the_moves from fishBoard
+    EXTINCT_ON = 1
+    EXTINCT_RUNG(0) = 6
+    EXTINCT_RUNG(1) = 7
+    EXTINCT_RUNG(2) = 1
+    extinctRecount()
+    CURRENT_MOVE_COUNT = 41
+    testCursor(0, 4)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(-1, 0, 1, -1)
+    tExUntil = game ms() + 600
+    while game ms() < tExUntil
+        runto _loop
+    endwhile
+    assert EXTINCT_RUNG(2) = 0, "the top rung is used"
+    assert EXTINCT_RUNG(0) = 6, "the bottom one stays"
+    assert EXTINCT_RUNG(1) = 7, "and so does the middle one"
+    assert EXTINCT_OUT(1) = 0, "the 1s drop in again"
+    assert CURRENT_MOVE_COUNT > 20, "the moves come off one at a time"
+    tExUntil = game ms() + 5000
+    while game ms() < tExUntil and PENDING_FREE_MOVES > 0
+        runto _loop
+    endwhile
+    assert CURRENT_MOVE_COUNT = 20, "until they are halved, the odd one too"
+    tExUntil = game ms() + 5000
+    while game ms() < tExUntil and EXTINCT_SEED_MS >= 0
+        runto _loop
+    endwhile
+    tExOnes = 0
+    for tExI = 0 to CELL_COUNT - 1
+        if CELLS(tExI).value = 1 then tExOnes = tExOnes + 1
+    next
+    assert tExOnes >= CELL_COUNT / 8, "and the 1s are spread back across the board"
+    end
+endtest
+
+test extinct_ladder_stays_through_a_new_round from fishBoard
+    EXTINCT_RUNG(0) = 6
+    EXTINCT_RUNG(1) = 7
+    extinctRecount()
+    SCORE_BAR_HOLD = 1
+    advanceScoreBar()
+    assert EXTINCT_RUNG(0) = 6, "the bottom rung is still there in the next round"
+    assert EXTINCT_RUNG(1) = 7, "and the middle one"
+    assert EXTINCT_OUT_COUNT = 2, "and neither kind drops in"
+    end
+endtest
+
+test extinct_second_rung_flip_turns_three_rows from fishBoard
+    EXTINCT_ON = 1
+    EXTINCT_RUNG(0) = 6
+    EXTINCT_RUNG(1) = 7
+    extinctRecount()
+    testCursor(0, 6)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+    assert CELLS(testIndex(3, 6)).value = 7, "the row of the second rung turned"
+    assert CELLS(testIndex(3, 8)).value = 7, "and every row under it"
+    assert CELLS(testIndex(3, 5)).value <> 7, "and not the row above it"
+    assert testPopCount() = CELL_COLUMN_COUNT * 3, "three rows pop"
+    assert EXTINCT_RUNG(0) = 6, "the bottom rung is still there"
+    end
+endtest
+
+test extinct_top_rung_flip_turns_the_whole_board from fishBoard
+    EXTINCT_ON = 1
+    EXTINCT_RUNG(0) = 6
+    EXTINCT_RUNG(1) = 7
+    EXTINCT_RUNG(2) = 1
+    extinctRecount()
+    testCursor(0, 4)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+    assert testPopCount() = CELL_COUNT, "every fish pops"
+    end
+endtest
+
+test extinct_a_swap_off_the_ladder_spreads_the_kind_back from fishBoard
+    EXTINCT_ON = 1
+    EXTINCT_RUNG(0) = 6
+    EXTINCT_RUNG(1) = 7
+    extinctRecount()
+    SCORE_MULTIPLIER = 3
+    testCursor(0, 6)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(-1, 0, 1, -1)
+    tExUntil = game ms() + 600
+    while game ms() < tExUntil
+        runto _loop
+    endwhile
+    assert EXTINCT_SEED_MS >= 0, "the fish turn over, one after another"
+    tExMoveX = SELECTION_POS.x
+    testQueueMove(1, 0, 0, -1)
+    runto _loop
+    runto _loop
+    assert SELECTION_POS.x = tExMoveX, "and nothing moves while they do"
+    tExUntil = game ms() + 3000
+    while game ms() < tExUntil and EXTINCT_SEED_MS >= 0
+        runto _loop
+    endwhile
+    assert EXTINCT_SEED_MS < 0, "until they have all turned"
+    assert SCORE_MULTIPLIER = 6, "the swap to the left doubled the multiplier"
+    tExSevens = 0
+    tExTouching = 0
+    for tExI = 0 to CELL_COUNT - 1
+        if CELLS(tExI).value = 7
+            tExSevens = tExSevens + 1
+            if CELLS(tExI).coord.x < CELL_COLUMN_COUNT - 1
+                if CELLS(tExI + 1).value = 7 then tExTouching = 1
+            endif
+            if CELLS(tExI).coord.y < CELL_ROW_COUNT - 1
+                if CELLS(tExI + CELL_COLUMN_COUNT).value = 7 then tExTouching = 1
+            endif
+        endif
+    next
+    assert tExSevens >= CELL_COUNT / 6, "the 7s are back across the board, about one cell in five"
+    assert tExTouching = 0, "and no two of them touch"
+    assert testPopCount() = 0, "so nothing pops"
+    end
+endtest
+
+test extinct_a_flip_spreads_the_kind_back_after_its_pops from fishBoard
+    EXTINCT_ON = 1
+    EXTINCT_RUNG(0) = 6
+    extinctRecount()
+    testCursor(0, 8)
+    testQueueMove(-1, 0, 0, -1)
+    testQueueMove(1, 0, 1, -1)
+    runto _combos_judged
+    assert EXTINCT_SEED_KIND(6) = 1, "the 6s wait while the row pops"
+    tExUntil = game ms() + 3000
+    while game ms() < tExUntil and EXTINCT_SEED_KIND(6) = 1
+        runto _loop
+    endwhile
+    assert EXTINCT_SEED_KIND(6) = 0, "once the board is still, they are spread"
+    tExUntil = game ms() + 3000
+    while game ms() < tExUntil and EXTINCT_SEED_MS >= 0
+        runto _loop
+    endwhile
+    tExSixes = 0
+    for tExI = 0 to CELL_COUNT - 1
+        if CELLS(tExI).value = 6 then tExSixes = tExSixes + 1
+    next
+    assert tExSixes >= CELL_COUNT / 6, "across the board"
+    end
+endtest
+
+test extinct_two_kinds_are_always_left from fishBoard
+    ` three rungs never get down to the floor, so five kinds are put out by hand
+    EXTINCT_ON = 1
+    for tExK = 1 to 5
+        EXTINCT_OUT(tExK) = 1
+    next
+    testPut(0, 0, 6)
+    testPut(1, 0, 6)
+    testPut(2, 0, 6)
+    REQUEST_COMBO_CHECK = 1
+    runto _loop
+    assert EXTINCT_OUT(6) = 0, "only the 6s and the 7s drop in, so the 6s do not go"
+    end
+endtest
+
+test extinct_halving_leaves_room_on_top from fishBoard
+    EXTINCT_ON = 1
+    EXTINCT_RUNG(0) = 6
+    EXTINCT_RUNG(1) = 7
+    EXTINCT_RUNG(2) = 1
+    extinctRecount()
+    extinctLeftSwap(2)
+    assert EXTINCT_RUNG(2) = 0, "the top rung is empty"
+    testPut(0, 4, TEX_JELLY)
+    testPut(1, 4, TEX_JELLY)
+    testPut(2, 4, TEX_JELLY)
+    REQUEST_COMBO_CHECK = 1
+    runto _loop
+    assert EXTINCT_RUNG(2) = TEX_JELLY, "and the next kind to go goes up onto it"
+    end
+endtest
+
+test extinct_jellyfish_can_go from fishBoard
+    EXTINCT_ON = 1
+    testPut(0, 0, TEX_JELLY)
+    testPut(1, 0, TEX_JELLY)
+    testPut(2, 0, TEX_JELLY)
+    REQUEST_COMBO_CHECK = 1
+    runto _loop
+    assert EXTINCT_RUNG(0) = TEX_JELLY, "the last jellyfish popped, so they are on the ladder"
+    end
+endtest
+
+test extinct_a_swap_that_pops_nothing_sends_them_back from fishBoard
+    EXTINCT_ON = 1
+    EXTINCT_RUNG(0) = 6
+    EXTINCT_RUNG(1) = 7
+    extinctRecount()
+    testCursor(2, 2)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+    assert EXTINCT_RUNG(0) = 0, "the swap popped nothing, so the bottom rung is empty"
+    assert EXTINCT_RUNG(1) = 0, "and so is the middle one"
+    assert EXTINCT_OUT(6) = 0, "the 6s drop in again"
+    assert EXTINCT_OUT(7) = 0, "and the 7s"
+    assert EXTINCT_SEED_KIND(6) = 0, "for nothing: they are not spread back across the board"
+    end
+endtest
+
+test extinct_a_swap_that_pops_keeps_them from fishBoard
+    EXTINCT_ON = 1
+    EXTINCT_RUNG(0) = 6
+    extinctRecount()
+    testPut(0, 0, 1)
+    testPut(1, 0, 1)
+    testPut(2, 0, 2)
+    testPut(2, 1, 1)
+    testCursor(2, 0)
+    testQueueMove(0, 1, 1, -1)
+    runto _combos_judged
+    assert testPopCount() > 0, "the swap made a group"
+    assert EXTINCT_RUNG(0) = 6, "so the ladder keeps its kind"
+    end
+endtest

@@ -1341,6 +1341,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
                 // += : MonoGame can run several updates before it draws, and the frame is all of them.
                 if (_perfLog) _perfFrameVm += PerfMs(_perfVmStart, System.Diagnostics.Stopwatch.GetTimestamp());
 
+                // and host work that drains or follows what the program just did this frame
+                HostSystemRegistry.AfterVmTick(gameTime);
+
                 // Frame safepoint — runs after EITHER the debug or non-debug tick.
                 // Module reload swaps bytecode under the VM, so it only applies when the VM runs.
                 // (The fish game runs with _options.debug = true, so the module

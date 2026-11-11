@@ -74,9 +74,53 @@ public partial class FadeFinkCommands
     [FadeBasicCommand("release fink sprite")]
     public static void ReleaseSprite(int spriteId)
     {
-        if (FinkSystem.Anims.TryGetValue(spriteId, out var playing)) FinkSystem.HideHelpers(playing);
+        if (FinkSystem.Anims.TryGetValue(spriteId, out var playing))
+        {
+            FinkSystem.HideHelpers(playing);
+            FinkSystem.HidePieces(playing);
+        }
         FinkSystem.Anims.Remove(spriteId);
         FinkSystem.Pending.Remove(spriteId);
+    }
+
+    /// <summary>
+    /// <para>Shows a part (a PART_ constant) of the sprite's drawing. When the part is one of a
+    /// slot's variants (faces, helmets), it's shown instead of the others in that slot. Parts are
+    /// layer groups in Fink, drawn on top of each other in layer order; the choice stays when
+    /// the sprite plays another clip, so equipment stays on through walk, run and jump.</para>
+    /// <para>Each part is an extra sprite that copies this one's position, rotation, scale,
+    /// flip, color, order and visibility. Two layered sprites that overlap should have different
+    /// orders, or their parts can mix.</para>
+    /// </summary>
+    /// <param name="spriteId">Any sprite (settings made before a clip plays are kept).</param>
+    /// <param name="partId">A PART_ constant.</param>
+    [FadeBasicCommand("set fink part")]
+    public static void SetPart(int spriteId, int partId)
+    {
+        var a = FinkSystem.StateOf(spriteId);
+        a.HiddenParts.Remove(partId);
+        if (FinkSystem.FindPart(partId) is { } part && !string.IsNullOrEmpty(part.Slot)) a.SlotChoice[part.Slot] = partId;
+    }
+
+    /// <summary>
+    /// Shows (1) or hides (0) one part of the sprite's drawing: a cape, or a slot's variant
+    /// (hiding it leaves that slot empty). Picking a part with set fink part shows it again.
+    /// </summary>
+    [FadeBasicCommand("set fink part visible")]
+    public static void SetPartVisible(int spriteId, int partId, int visible)
+    {
+        var a = FinkSystem.StateOf(spriteId);
+        if (visible != 0) a.HiddenParts.Remove(partId);
+        else a.HiddenParts.Add(partId);
+    }
+
+    /// <summary>1 when the part (a PART_ constant) is drawn on the sprite now: not hidden, and the chosen variant of its slot.</summary>
+    [FadeBasicCommand("fink part visible")]
+    public static int PartVisible(int spriteId, int partId)
+    {
+        if (!FinkSystem.Anims.TryGetValue(spriteId, out var a) || !a.Atlas.Assets.TryGetValue(a.Clip.Asset, out var asset) || asset.Parts == null) return 0;
+        int i = asset.Parts.FindIndex(p => p.Id == partId);
+        return i >= 0 && FinkSystem.PartShown(a, asset, i) ? 1 : 0;
     }
 
     /// <summary>Draws the sprite with another palette row (a PAL_ constant).</summary>

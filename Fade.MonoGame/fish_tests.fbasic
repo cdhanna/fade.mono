@@ -61,6 +61,8 @@ abstract test fishBoard
     endmock TEST_MOUSE_Y
     mock new left click
     endmock TEST_MOUSE_CLICK
+    mock left click
+    endmock TEST_MOUSE_CLICK
     mock new right click
     endmock 0
     mock window active
@@ -71,6 +73,10 @@ abstract test fishBoard
     endmock TEST_OVERLAY
 
     runto _loop
+
+    ` the tests of the quests are of the old ones, of fish_headers_quests. the tests of quests 2.0 turn it back on
+    ` (fish_tests_qboard).
+    QUEST2_ON = 0
 
     ` the creatures that talk when a quest is taken stay quiet in the tests. see fish_headers_questtalk.
     QTALK_ENABLED = 0
@@ -86,6 +92,8 @@ abstract test fishBoard
     RAINBOW_FISH_ON = 0
     rainbowFishReset()
     BUBBLED_ON = 0 `and no bubbles, unless a test makes some. see fish_headers_bubbled.
+    EXTINCT_ON = 0 `and no kind goes extinct, unless a test is about that. see fish_headers_extinct.
+    extinctReset()
     bubbledReset()
 
     ` mute the sounds and the music, whatever the options said
@@ -2998,6 +3006,82 @@ test options_page_only_has_what_the_menu_remembers from fishBoard
     SURFACE_ANCIENT = tWasAncient
     DIVER_SURFACE = tWasPhotos
     SURFACE_NEPTUNE = tWasTemple
+    end
+endtest
+
+` ACCESSIBILITY: the water motion, the pop speed and the demo mode are on a page of their own, under the options
+test options_page_has_a_page_of_accessibility from fishBoard
+    setMenuPage(MENU_PAGE_OPTIONS)
+    tAcRow = -1
+    tAcOthers = 0
+    for tI = 0 to MENU_PAGE_LENGTH - 1
+        if MENU_PAGE_ITEMS(tI) = MENU_ITEM_SET_ACCESS then tAcRow = tI
+        if MENU_PAGE_ITEMS(tI) = MENU_ITEM_SET_MOTION then tAcOthers = tAcOthers + 1
+        if MENU_PAGE_ITEMS(tI) = MENU_ITEM_SET_POP_SPEED then tAcOthers = tAcOthers + 1
+        if MENU_PAGE_ITEMS(tI) = MENU_ITEM_SET_DEMO then tAcOthers = tAcOthers + 1
+    next
+    assert tAcRow > 0, "the options page has a line for accessibility"
+    tAcAbove = tAcRow - 1
+    assert MENU_PAGE_ITEMS(tAcAbove) = MENU_ITEM_SET_LANGUAGE, "right under the language"
+    assert tAcOthers = 0, "and the water motion, the pop speed and the demo mode are not on it"
+
+    setMenuPage(MENU_PAGE_ACCESS)
+    assert MENU_PAGE_LENGTH = 4, "the page of accessibility has the three settings, and Back"
+    assert MENU_PAGE_ITEMS(0) = MENU_ITEM_SET_MOTION, "the water motion first"
+    assert MENU_PAGE_ITEMS(1) = MENU_ITEM_SET_POP_SPEED, "then the pop speed"
+    assert MENU_PAGE_ITEMS(2) = MENU_ITEM_SET_DEMO, "then the demo mode"
+    assert MENU_PAGE_ITEMS(3) = MENU_ITEM_ACCESS_BACK, "and Back last"
+    end
+endtest
+
+` THE VOLUME SLIDERS: a pip stands for the volume up to it, and a click on one sets the volume there
+test options_slider_takes_a_click_on_a_pip from fishBoard
+    setMenuPage(MENU_PAGE_OPTIONS)
+    tSlLeft = menuSliderLeft()
+    tSlX = tSlLeft - 3
+    tSlAt = menuSliderAt(tSlX)
+    assert tSlAt = 0, "a little left of the first pip is no volume"
+    tSlX = tSlLeft + 2
+    tSlAt = menuSliderAt(tSlX)
+    assert tSlAt = 1, "the first pip is one"
+    tSlX = tSlLeft + 4 * MENU_SLIDER_STEP
+    tSlX = tSlX + 2
+    tSlAt = menuSliderAt(tSlX)
+    assert tSlAt = 5, "the fifth pip is five"
+    tSlX = tSlLeft + 30 * MENU_SLIDER_STEP
+    tSlAt = menuSliderAt(tSlX)
+    assert tSlAt = MENU_SLIDER_PIPS, "and past the last pip is all the way up"
+
+    ` the music stays silent while its option changes
+    tSlLoudest# = MUSIC_VOLUME#
+    MUSIC_VOLUME# = 0
+    TEST_OVERLAY = 1
+    runto frame_menu_render
+    TEST_OVERLAY = 0
+    for tSlI = 1 to 3
+        runto frame_menu_render
+    next
+    refreshOptionLines()
+    setMenuPage(MENU_PAGE_OPTIONS)
+    refreshOptionLines()
+    selectMenuItem(0, 0)
+
+    tSlRow = getMenuRow(MENU_ITEM_SET_MUSIC)
+    tSlX = menuSliderLeft() + 3 * MENU_SLIDER_STEP
+    TEST_MOUSE_X = tSlX + 2
+    TEST_MOUSE_Y = MENU_LIST_TOP + tSlRow * MENU_ROW_HEIGHT + 10
+    runto frame_menu_render
+    assert MENU_PAGE_ITEMS(MENU_SELECTED) = MENU_ITEM_SET_MUSIC, "the mouse highlights the music"
+    TEST_MOUSE_CLICK = 1
+    runto frame_menu_render
+    TEST_MOUSE_CLICK = 0
+    assert OPTION_MUSIC = 4, "a click on the fourth pip sets the music to four"
+    runto frame_menu_render
+    assert MENU_SLIDER_DRAG = -1, "and letting go of the button lets go of the slider"
+
+    OPTION_MUSIC = 0
+    MUSIC_VOLUME# = tSlLoudest#
+    applyMusicVolume()
     end
 endtest
 

@@ -629,6 +629,8 @@ update_frame:
     updateMusic()
     perf lap 24
     stepQuest()
+    stepExtinct() `the ladder of the kinds that are extinct. after the quest, so that it has the last say on where the cursor is drawn. see fish_headers_extinct.
+    stepQboard() `the board turning over to a quest and back. see fish_headers_qboard.
     questTalkStep(game ms()) `the creature that talks about the quest that was taken. see fish_headers_questtalk.
     teachStep() `the words of a big moment, and the dark corners. see fish_headers_teach.
     codecNewStep() `the "new info!" badges. see NEW IN THE CODEC in fish_headers_teach.
@@ -1458,8 +1460,12 @@ frame_free_moves:
             set screen shake bounce .5
             FREE_MOVES_SHAKING = 1
 
-            ` and then wait a moment before the next one
-            create basic tween FREE_MOVES_TICK_TWEEN_ID, 0, 1, 140, 0
+            ` and then wait a moment before the next one. a lot of them, as when the ladder halves
+            ` the moves, go faster, so that they all come off in about two seconds.
+            freeTickMs = 140
+            if PENDING_FREE_MOVES > 14 then freeTickMs = 2000 / PENDING_FREE_MOVES
+            if freeTickMs < 25 then freeTickMs = 25
+            create basic tween FREE_MOVES_TICK_TWEEN_ID, 0, 1, freeTickMs, 0
         endif
     endif
 
@@ -2283,6 +2289,7 @@ handle_combos:
 
         ` and the quest of the round gets its turn to change the board
         questSettled()
+        extinctSettled() `the pops of a flip are over. see fish_headers_extinct.
 
         ` and a diver that is done, or out of air, swims up to the top and goes
         diverSettled()
@@ -2439,6 +2446,7 @@ handle_combos:
                 ` tutorial, which has gaps in it: the new fish comes in where the old one was.
                 if TUTORIAL_BOARD = 0 then emptyCount = emptyCount + 1
                 if PUZZLE_ON then emptyCount = emptyCount + 1 `the fish of a puzzle do fall
+                if QB_ON then emptyCount = emptyCount + 1 `and so do the fish of a quest board. see fish_headers_qboard.
             else
                 ` save that the cell needs to move so many units DOWN 
                 CELLS(index).comboDownShift = emptyCount
@@ -2462,6 +2470,7 @@ handle_combos:
 
         fallMs = 500
         if PUZZLE_ON then fallMs = PUZZLE_FALL_MS
+        if QB_ON then fallMs = PUZZLE_FALL_MS
         create basic tween cell.comboDownShiftTweenId, getCellY(cell.coord.y), getCellY(cell.coord.y + cell.comboDownShift), fallMs, 0
         set tween easing cell.comboDownShiftTweenId, EASING_BOUNCE
     next
@@ -2538,6 +2547,11 @@ handle_combos:
         tutorialHideGaps()
     endif
 
+    ` a kind that every last fish of has just popped goes up the ladder, before the new fish are picked,
+    ` so that none of them is of that kind. the fish that popped are still in their cells, at the top.
+    ` see WHEN A KIND GOES in fish_headers_extinct.
+    extinctJudgePops()
+
     ` the cells that popped are empty until a new fish has been picked for them. a new fish is picked
     ` so that it does not pop when it lands, and a cell that is still empty must not look like a
     ` fish while that is being worked out. see NEW FISH in fish_headers.
@@ -2597,6 +2611,7 @@ handle_combos:
 
         delay = cell.coord.x * 20 + (CELL_ROW_COUNT - cell.coord.y)*20
         if PUZZLE_ON then delay = 0 `nothing is coming in, so nothing is waited for
+        if QB_ON then delay = 0
 
         ` a new fish that drops in may come down to the bottom row
         if cell.comboBlownUp > 0
@@ -2740,6 +2755,10 @@ handle_board_expansion:
 
     ` and the quest of the round comes along, with everything that it knows by the cell
     questBoardMoved(oldColumns, rowShift)
+
+    ` the rungs of the ladder stay beside the same rows, which the cursor may not be beside any more,
+    ` so a cursor that is out on one comes in. see fish_headers_extinct.
+    EXTINCT_CURSOR_OUT = 0
 
     ` the cells to the left and above already have their fish by the time a new cell gets its turn
     for i = 0 to CELL_COUNT - 1

@@ -136,11 +136,27 @@ function questTalkStart(qtStartId)
     if qtStartId > 32 then exitfunction
     if QTALK_SAID(qtStartId) then exitfunction
     QTALK_SAID(qtStartId) = 1
+    questTalkShow(qtStartId, loc$(QTALK_SAY$(qtStartId)))
+endfunction
+
+
+` the creature of a quest says something else, whenever it is asked to, with the key of the line. the quest
+` board of quests 2.0 has it say so when an egg is lost. see THE QUEST TALKS in fish_headers_qboard.
+function questTalkSay(qtSayId, qtSayKey$)
+    if QTALK_ENABLED = 0 then exitfunction
+    if qtSayId < 1 then exitfunction
+    if qtSayId > 32 then exitfunction
+    questTalkShow(qtSayId, loc$(qtSayKey$))
+endfunction
+
+
+` the box comes up, and the line starts to be said
+function questTalkShow(qtStartId, qtStartLine$)
     QTALK_ID = qtStartId
     ` the line is resolved once, here, and drawn as it is, so that the letters said one at a time
     ` are the letters of the line in the language of the moment
     set text QTALK_NAME_TEXT_ID, loc$(QTALK_WHO$(qtStartId))
-    set text QTALK_TEXT_ID, loc$(QTALK_SAY$(qtStartId))
+    set text QTALK_TEXT_ID, qtStartLine$
     set text reveal QTALK_TEXT_ID, 0
     set sprite texture QTALK_FACE_SPRITE, QTALK_TEX(qtStartId)
     qtFaceW = 42
@@ -164,6 +180,10 @@ endfunction
 
 ` the box goes, at once
 function questTalkStop()
+    ` and so does the talk of quests 2.0, which is in the same box. see THE QUEST TALKS in fish_headers_qboard.
+    if QD_ON
+        qdClose()
+    endif
     QTALK_ON = 0
     QTALK_CLOSING = 0
     hide sprite QTALK_BOX_SPRITE
@@ -249,6 +269,8 @@ function questTalkStep(qtNow)
     qtFade# = tweenVal(QTALK_FADE_TWEEN_ID) * HUD_KEEP#
     qtX = QTALK_BOX_X
     qtY = QTALK_BOX_Y
+    ` the eggs of a quest board are on its floor, so there the box is up in the water over it. see fish_headers_qboard.
+    if QB_ON then qtY = QTALK_BOX_TOP_Y
     position sprite QTALK_BOX_SPRITE, qtX, qtY
     size sprite QTALK_BOX_SPRITE, QTALK_BOX_W, QTALK_BOX_H
     color sprite QTALK_BOX_SPRITE, rgb(10, 14, 30, 235 * qtFade#)

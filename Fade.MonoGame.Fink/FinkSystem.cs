@@ -65,6 +65,15 @@ public sealed class FinkSystem : FadeHostSystem
         public float SizeW, SizeH;
         /// <summary>The 8 extra sprites a stretched 9-slice is drawn with (the sprite itself is the top-left corner).</summary>
         public int[]? Helpers;
+        /// <summary>
+        /// For an asset with parts: the extra sprites its pieces are drawn with, bottom first (the
+        /// sprite itself is the top piece). Ids rise with the stack, so they draw in order.
+        /// </summary>
+        public int[]? PieceHelpers;
+        /// <summary>Which variant (part id) each slot shows; a slot not in here shows its first.</summary>
+        public readonly Dictionary<string, int> SlotChoice = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Parts hidden with set fink part visible.</summary>
+        public readonly HashSet<int> HiddenParts = new();
 
         public FinkFrame? Frame => Clip == null || Clip.Frames.Count == 0 ? null : Clip.Frames[Math.Clamp(Index, 0, Clip.Frames.Count - 1)];
 
@@ -271,6 +280,15 @@ public sealed class FinkSystem : FadeHostSystem
         return true;
     }
 
+    /// <summary>A part (by its PART_ id) in any loaded atlas.</summary>
+    internal static FinkPart? FindPart(int partId)
+    {
+        foreach (var atlas in Atlases)
+            foreach (var asset in atlas.Manifest.Assets)
+                if (asset.Parts?.FirstOrDefault(p => p.Id == partId) is { } part) return part;
+        return null;
+    }
+
     /// <summary>The sprite's animation state, made if needed (settings before the first play are kept).</summary>
     internal static Anim StateOf(int sprite) =>
         Anims.TryGetValue(sprite, out var a) ? a : Pending.TryGetValue(sprite, out var p) ? p : Pending[sprite] = new Anim { Sprite = sprite };
@@ -296,14 +314,13 @@ public sealed class FinkSystem : FadeHostSystem
     }
 
     /// <summary>
-    /// After the program's frame: stretched 9-slices again, so their helper sprites follow a
-    /// sprite the program just moved. (The engine doesn't call this yet; until it does, the
-    /// helpers of a moving panel trail by a frame.)
+    /// After the program's frame: every playing sprite again (the same frame, not advanced), so
+    /// helper sprites (9-slice pieces, parts) follow a sprite the program just moved, and a flip
+    /// it just set turns about the pivot.
     /// </summary>
     public override void AfterVmTick(double elapsedSeconds, double totalSeconds)
     {
-        foreach (var anim in Anims.Values)
-            if (anim.Helpers != null && anim.SizeW > 0) Apply(anim);
+        foreach (var anim in Anims.Values) Apply(anim);
     }
 
     /// <summary>Effects lose their parameters when they hot-reload, so these are set every frame.</summary>
@@ -353,12 +370,20 @@ public sealed class FinkSystem : FadeHostSystem
     {
         var frames = anim.Clip.Frames;
         if (frames.Count == 0) return;
-        if (anim.SizeW > 0 && anim.SizeH > 0 && anim.Atlas.Assets.TryGetValue(anim.Clip.Asset, out var sliced) && sliced.Insets != null)
+        anim.Atlas.Assets.TryGetValue(anim.Clip.Asset, out var asset);
+        if (anim.SizeW > 0 && anim.SizeH > 0 && asset?.Insets != null)
         {
-            ApplySliced(anim, sliced);
+            HidePieces(anim);
+            ApplySliced(anim, asset);
             return;
         }
         HideHelpers(anim);
+        if (asset is { HasPieces: true })
+        {
+            ApplyPieces(anim, asset);
+            return;
+        }
+        HidePieces(anim);
         var f = frames[Math.Clamp(anim.Index, 0, frames.Count - 1)];
         var cells = anim.Atlas.Manifest.Cells;
         SpriteSystem.GetSpriteIndex(anim.Sprite, out var index, out var sprite);
@@ -370,7 +395,7 @@ public sealed class FinkSystem : FadeHostSystem
             sprite.currentFrame = f.Cell;
             // the pivot (or the anchor) stays put while trimmed pictures change size and place
             var (ax, ay) = anim.Pivot();
-            sprite.origin = new Vector2((ax - f.X) / Math.Max(1, cell.W), (ay - f.Y) / Math.Max(1, cell.H));
+            sprite.origin = Origin(ax - f.X, ay - f.Y, cell, sprite.effects);
         }
         else
         {
@@ -379,6 +404,83 @@ public sealed class FinkSystem : FadeHostSystem
         var t = sprite.texCoord1.tl;
         sprite.texCoord1 = new SpriteTexCoord1(new Vector4(anim.PaletteRow, t.Y, t.Z, t.W));
         SpriteSystem.sprites[index] = sprite;
+    }
+
+    /// <summary>
+    /// Where a picture turns and is placed from: the pivot, at (dx, dy) in the picture, as a ratio
+    /// of its size. The engine flips a picture inside its own rectangle, so on a flipped axis the
+    /// pivot is measured from the other edge: then it's the pivot the picture mirrors about.
+    /// </summary>
+    private static Vector2 Origin(float dx, float dy, FinkCell cell, SpriteEffects effects)
+    {
+        float ox = dx / Math.Max(1, cell.W), oy = dy / Math.Max(1, cell.H);
+        if ((effects & SpriteEffects.FlipHorizontally) != 0) ox = 1 - ox;
+        if ((effects & SpriteEffects.FlipVertically) != 0) oy = 1 - oy;
+        return new Vector2(ox, oy);
+    }
+
+    /// <summary>
+    /// Whether a piece shows: the base always; a part unless hidden, and for a slot's variants
+    /// only the chosen one (the slot's first part until the program picks).
+    /// </summary>
+    internal static bool PartShown(Anim anim, FinkAsset asset, int partIndex)
+    {
+        if (partIndex < 0 || asset.Parts == null || partIndex >= asset.Parts.Count) return partIndex < 0;
+        var part = asset.Parts[partIndex];
+        if (anim.HiddenParts.Contains(part.Id)) return false;
+        if (string.IsNullOrEmpty(part.Slot)) return true;
+        var slot = asset.Parts.Where(p => string.Equals(p.Slot, part.Slot, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (anim.SlotChoice.TryGetValue(part.Slot, out var chosen) && slot.Any(p => p.Id == chosen)) return chosen == part.Id;
+        return slot[0] == part;
+    }
+
+    /// <summary>
+    /// An asset with parts: one sprite per piece, stacked in the drawing's layer order, all placed
+    /// from the same pivot so they line up as drawn. The program's sprite is the top piece; the
+    /// helpers below it copy its place, turn, scale, flip, color, order and outputs each frame.
+    /// A piece that's hidden (or empty on this frame) shows nothing.
+    /// </summary>
+    private static void ApplyPieces(Anim anim, FinkAsset asset)
+    {
+        var f = anim.Frame!;
+        var pieces = asset.Pieces!;
+        int n = pieces.Length;
+        var cells = anim.Atlas.Manifest.Cells;
+        if (anim.PieceHelpers == null || anim.PieceHelpers.Length != n - 1)
+        {
+            HidePieces(anim);
+            anim.PieceHelpers = NewHelpers(n - 1);
+        }
+        var (ax, ay) = anim.Pivot();
+
+        SpriteSystem.GetSpriteIndex(anim.Sprite, out var mainIndex, out var main);
+        main.imageId = anim.Atlas.IndexTexture;
+        main.effectId = anim.Atlas.Effect;
+        var t1 = main.texCoord1.tl;
+        main.texCoord1 = new SpriteTexCoord1(new Vector4(anim.PaletteRow, t1.Y, t1.Z, t1.W));
+
+        for (int k = 0; k < n; k++)
+        {
+            int cell = -1, x = 0, y = 0;
+            if (f.Pcs != null && f.Pcs.Length >= k * 3 + 3) (cell, x, y) = (f.Pcs[k * 3], f.Pcs[k * 3 + 1], f.Pcs[k * 3 + 2]);
+            else if (k == 0) (cell, x, y) = (f.Cell, f.X, f.Y);
+            bool show = cell >= 0 && cell < cells.Count && PartShown(anim, asset, pieces[k]);
+            int frame = show ? cell : cells.Count; // the empty frame
+            var origin = show ? Origin(ax - x, ay - y, cells[cell], main.effects) : Vector2.Zero;
+            if (k == n - 1)
+            {
+                main.currentFrame = frame;
+                main.origin = origin;
+                continue;
+            }
+            int id = anim.PieceHelpers[k];
+            SpriteSystem.GetSpriteIndex(id, out var hi, out var hs);
+            CopyLook(main, ref hs, hi, flipAndScale: true);
+            hs.currentFrame = frame;
+            hs.origin = origin;
+            SpriteSystem.sprites[hi] = hs;
+        }
+        SpriteSystem.sprites[mainIndex] = main;
     }
 
     /// <summary>
@@ -408,7 +510,7 @@ public sealed class FinkSystem : FadeHostSystem
         main.effectId = anim.Atlas.Effect;
         var t1 = main.texCoord1.tl;
         main.texCoord1 = new SpriteTexCoord1(new Vector4(anim.PaletteRow, t1.Y, t1.Z, t1.W));
-        anim.Helpers ??= NewHelpers();
+        anim.Helpers ??= NewHelpers(8);
 
         for (int k = 0; k < 9; k++)
         {
@@ -429,7 +531,7 @@ public sealed class FinkSystem : FadeHostSystem
             }
             int id = anim.Helpers[k - 1];
             SpriteSystem.GetSpriteIndex(id, out var hi, out var hs);
-            CopyLook(main, ref hs, hi);
+            CopyLook(main, ref hs, hi, flipAndScale: false);
             hs.currentFrame = frame;
             hs.origin = origin;
             hs.scale = main.scale * new Vector2(sx, sy);
@@ -447,15 +549,22 @@ public sealed class FinkSystem : FadeHostSystem
     /// </summary>
     private static int _nextHelper = -1;
 
-    private static int[] NewHelpers()
+    /// <summary>
+    /// <paramref name="count"/> new helper ids, rising: the last is the highest (nearest 0), so
+    /// it draws over the ones before it, and all of them under the program's own (positive) sprite.
+    /// </summary>
+    private static int[] NewHelpers(int count)
     {
-        var ids = new int[8];
-        for (int i = 0; i < 8; i++) ids[i] = _nextHelper--;
+        var ids = new int[Math.Max(0, count)];
+        for (int i = ids.Length - 1; i >= 0; i--) ids[i] = _nextHelper--;
         return ids;
     }
 
-    /// <summary>A helper looks like the sprite it helps: place, turn, color, order, outputs, shader, palette row.</summary>
-    private static void CopyLook(Sprite main, ref Sprite h, int helperIndex)
+    /// <summary>
+    /// A helper looks like the sprite it helps: place, turn, color, order, outputs, shader, palette
+    /// row, and with <paramref name="flipAndScale"/> its flip and scale too.
+    /// </summary>
+    private static void CopyLook(Sprite main, ref Sprite h, int helperIndex, bool flipAndScale)
     {
         h.hidden = main.hidden;
         h.imageId = main.imageId;
@@ -467,7 +576,8 @@ public sealed class FinkSystem : FadeHostSystem
         h.texCoord2 = main.texCoord2;
         h.stageIdFlags = main.stageIdFlags;
         h.anchorTransformId = main.anchorTransformId;
-        h.effects = SpriteEffects.None;
+        h.effects = flipAndScale ? main.effects : SpriteEffects.None;
+        if (flipAndScale) h.scale = main.scale;
         if (h.outputIdFlags != main.outputIdFlags)
         {
             bool first = true;
@@ -486,6 +596,19 @@ public sealed class FinkSystem : FadeHostSystem
         {
             h.zOrder = main.zOrder;
             RenderSystem.MarkOutputsDirtyForFlags(h.outputIdFlags);
+        }
+    }
+
+    /// <summary>The part helpers hide (the asset has no parts, or the sprite is let go).</summary>
+    internal static void HidePieces(Anim anim)
+    {
+        if (anim.PieceHelpers == null) return;
+        foreach (var id in anim.PieceHelpers)
+        {
+            SpriteSystem.GetSpriteIndex(id, out var hi, out var hs);
+            if (hs.hidden) continue;
+            hs.hidden = true;
+            SpriteSystem.sprites[hi] = hs;
         }
     }
 

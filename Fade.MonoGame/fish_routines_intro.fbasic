@@ -289,6 +289,7 @@ return
 ` the next board waits for the board to settle. see tutorial_advance.
 tutorial_pop:
     if PUZZLE_ON then return
+    if QB_ON then return `a quest board is a little board, but not the tutorial's. see fish_headers_qboard.
     if TUTORIAL_STEP_DONE then return
     TUTORIAL_STEP_DONE = 1
     ` what the angler says depends on how it went
@@ -336,6 +337,7 @@ return
 ` has settled, the next one comes in, or the whole board does. and once info mode has been closed at
 ` the end of the tutorial, the game is the player's.
 tutorial_advance:
+    if QB_ON then return `see fish_headers_qboard
     if PUZZLE_ON
         gosub puzzle_advance
         return
@@ -1272,6 +1274,7 @@ endfunction
 ` not pop will do there. this does not roll the streams of the seed.
 function tutorialNewFish(tnfCell)
     if PUZZLE_ON then exitfunction 0 `nothing comes back. see fish_headers_puzzle.
+    if QB_ON then exitfunction 0 `nor on a quest board. see fish_headers_qboard.
     tnfNext = TUTORIAL_STAGE `one more than the little board that is being played
     if TUTORIAL_RETRY then tnfNext = 4
     tnfNextSize = tutorialLayoutSize(tnfNext)

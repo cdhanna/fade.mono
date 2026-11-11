@@ -42,6 +42,13 @@ setup_quests:
     texture reserve texture id(TEX_Q_WHALE), "Fish/Textures/Quests/Whale"
     texture reserve texture id(TEX_Q_CHECK), "Fish/Textures/Quests/Check"
     texture reserve texture id(TEX_Q_CROSS), "Fish/Textures/Quests/Cross"
+    ` the new art's clams and the float with its hook, with their black line, like the starfish above.
+    ` the pearl is the clam that is open, with the pearl in it, and the shell is the clam that is shut.
+    if NEW_ART
+        texture TEX_Q_PEARL, "Fish/Textures/Art32/Pearl_b"
+        texture TEX_Q_SHELL, "Fish/Textures/Art32/Shell_b"
+        texture TEX_Q_BUOY, "Fish/Textures/Art32/Buoy_b"
+    endif
 
     ` the three piles of things that a quest draws with. see HOW A QUEST IS DRAWN in fish_headers_quests.
     ` the squares of light have an effect that gives them a wavy outline. see THE ZONES.
@@ -219,6 +226,48 @@ frame_debug_quests:
         questForce(0)
     endif
 
+    ` QUESTS 2.0 (see fish_headers_qboard): the quest is offered at its pickup, the way that it is in a game, so
+    ` that taking it can be tried. this turns the experiment on, without FISH_QUEST2.
+    debug separator
+    debugQuestLine$ = "quests 2.0: " + str$(QUEST2_ON) + "   levels: hatch " + str$(QB_LEVEL_OF(QUEST_HATCH)) + " shark " + str$(QB_LEVEL_OF(QUEST_SHARK)) + " wake " + str$(QB_LEVEL_OF(QUEST_WAKE))
+    debug text debugQuestLine$
+    debugQuestLine$ = "stack: " + str$(QS_N) + "   talk open: " + str$(QD_ON)
+    debug text debugQuestLine$
+    if debug button("2.0: offer Hatch") = 1
+        if QB_PHASE = 0
+            QUEST2_ON = 1
+            debugQuestOk = qsAdd(QUEST_HATCH)
+        endif
+    endif
+    if debug button("2.0: offer Shark") = 1
+        if QB_PHASE = 0
+            QUEST2_ON = 1
+            debugQuestOk = qsAdd(QUEST_SHARK)
+        endif
+    endif
+    if debug button("2.0: offer Wake") = 1
+        if QB_PHASE = 0
+            QUEST2_ON = 1
+            debugQuestOk = qsAdd(QUEST_WAKE)
+        endif
+    endif
+    ` the level that the next one taken is at, of all three
+    if debug button("2.0: all level 1") = 1
+        QB_LEVEL_OF(QUEST_HATCH) = 1
+        QB_LEVEL_OF(QUEST_SHARK) = 1
+        QB_LEVEL_OF(QUEST_WAKE) = 1
+    endif
+    if debug button("2.0: all level 2") = 1
+        QB_LEVEL_OF(QUEST_HATCH) = 2
+        QB_LEVEL_OF(QUEST_SHARK) = 2
+        QB_LEVEL_OF(QUEST_WAKE) = 2
+    endif
+    if debug button("2.0: off") = 1
+        if QB_PHASE = 0
+            QUEST2_ON = 0
+        endif
+    endif
+
     debug separator
     debug text "start a quest"
     for debugQuestI = 1 to QUEST_COUNT
@@ -242,6 +291,7 @@ routines_quests_exit:
 ` a new game has no quest, none finished, and none that have had their turn
 function resetQuests()
     questTalkReset() `a new game: nothing has been said. see fish_headers_questtalk.
+    qsReset() `and no quest of quests 2.0 is waiting. see fish_headers_qboard.
     QUEST_ID = 0
     QUEST_STATE = QSTATE_NONE
     QUESTS_DONE = 0
@@ -536,6 +586,12 @@ function questRoundStarted()
     if GAME_ZEN then exitfunction
     if CURRENT_ROUND < QUEST_FIRST_ROUND then exitfunction
 
+    ` with quests 2.0, a quest turns up in the stack, right away. see THE STACK in fish_headers_qboard.
+    if QUEST2_ON
+        qsRoundStarted()
+        exitfunction
+    endif
+
     ` how many groups it takes to bring a quest goes by the round
     QUEST_DOT_COUNT = questDotCount()
 
@@ -630,6 +686,10 @@ endfunction
 
 ` the player has put the quest down. it starts over, and waits to be picked up again.
 function questDrop()
+    ` leaving the board of a quest of quests 2.0 turns it back. see fish_headers_qboard.
+    if QB_PHASE = 2
+        qbLeave()
+    endif
     questRestart()
     QUEST_REARM = 0
 endfunction
@@ -824,6 +884,12 @@ endfunction
 function questCursorBumped(qBumpX, qBumpY, qBumpSwap)
     qBumpTook = 0
 
+    ` with quests 2.0, the quests that are waiting are in a stack. see THE STACK in fish_headers_qboard.
+    if QUEST2_ON and QB_PHASE = 0
+        qBumpStack = qsCursorBumped(qBumpX, qBumpY, qBumpSwap)
+        if qBumpStack then exitfunction 1
+    endif
+
     if QUEST_CURSOR_OUT
         ` while the pickup has popped, and the next one has not come, there is nothing to swap
         if QUEST_PICK_CELL < 0
@@ -892,7 +958,10 @@ function questStepCursorOut()
 
             ` the cursor went along with the pickup, and it stays out on it, in its new cell. so the
             ` cell of the board that the cursor is beside is one row along, the way that the swap went.
-            SELECTION_POS.y = SELECTION_POS.y + QUEST_ACCEPT_DIR
+            ` with quests 2.0 the pickup stays where it is, in its stack, while its talk is open.
+            if QUEST2_ON = 0
+                SELECTION_POS.y = SELECTION_POS.y + QUEST_ACCEPT_DIR
+            endif
             if SELECTION_POS.y < 0 then SELECTION_POS.y = 0
             if SELECTION_POS.y > CELL_ROW_COUNT - 1 then SELECTION_POS.y = CELL_ROW_COUNT - 1
             QUEST_CURSOR_DOWN# = 0
@@ -950,6 +1019,19 @@ endfunction qAcceptAlong
 ` pick the quest up, if it is waiting to be, or drop it, if it is being played
 function questPickToggle()
     if QUEST_PICK_CELL < 0 then exitfunction
+    ` with quests 2.0, the swap onto the check mark opens the talk of the quest, and the swap onto the X, on the
+    ` quest board, turns the board back. see fish_headers_qboard.
+    if QUEST2_ON
+        if QUEST_STATE = QSTATE_OFFERED and QS_FOCUS >= 0
+            qdOpen(QS_FOCUS)
+            exitfunction
+        endif
+        if QUEST_STATE = QSTATE_ACTIVE and QB_PHASE = 2
+            questSay(loc$("quest.say.dropped"), rgb(170, 180, 200))
+            qbLeave()
+            exitfunction
+        endif
+    endif
     if QUEST_STATE = QSTATE_OFFERED
         questPickUp()
         ` the one who the quest is about says something about it. see THE QUEST TALK in fish_headers_questtalk.
@@ -972,6 +1054,10 @@ function questPickUp()
     QUEST_STATE = QSTATE_ACTIVE
     QUEST_NOTE_ON = 0
     questProgress(0, 0)
+    ` a quest of quests 2.0 turns the board over to its own. see fish_headers_qboard.
+    if QUEST2_ON
+        qbEnter(QUEST_ID)
+    endif
     questEvent(QEV_INIT, 0, 0)
     if QUEST_STATE = QSTATE_ACTIVE
         questEvent(QEV_START, -1, QUEST_PICK_CELL)
@@ -1410,6 +1496,12 @@ function questSave()
         set pref SAVE_PREF + 28 + qSaveHalf, qSaveBits
     next
 
+    ` quests 2.0 keeps its stack instead. the quest of the round there is only the one that the cursor is out on.
+    if QUEST2_ON
+        qsSave()
+        exitfunction
+    endif
+
     ` and the quest itself, as it is. see THE QUEST IN THE SAVED GAME in fish_headers_quests.
     questPack()
     for qSaveN = 0 to 399
@@ -1545,6 +1637,11 @@ function questLoad()
             qLoadBits = qLoadBits / 2
         next
     next
+    ` quests 2.0 puts its stack back, and no quest is the quest of the round until the cursor steps out to one
+    if QUEST2_ON
+        QUEST_ID = 0
+        qsLoad()
+    endif
     if QUEST_ID > 0
         qLoadDone = get pref(SAVE_PREF + 27, 0)
         if qLoadDone = 1
@@ -2489,6 +2586,8 @@ function questSay(qSayWords$, qSayColor)
         x = getCellX(SELECTION_POS.x),
         y = getCellY(SELECTION_POS.y) - 6
     }
+    QUEST_PREV_SAY$ = QUEST_LAST_SAY$
+    QUEST_LAST_SAY$ = qSayWords$
     qSayText = spawnBoardScoreText(questSayPos, qSayWords$, 0, 900)
     color text qSayText, qSayColor
 endfunction
@@ -2499,6 +2598,8 @@ function questSayAt(qSayCell, qSayAtWords$, qSayAtColor)
         x = getCellX(qSayCell mod CELL_COLUMN_COUNT),
         y = getCellY(qSayCell / CELL_COLUMN_COUNT) - 6
     }
+    QUEST_PREV_SAY$ = QUEST_LAST_SAY$
+    QUEST_LAST_SAY$ = qSayAtWords$
     qSayAtText = spawnBoardScoreText(questSayAtPos, qSayAtWords$, 0, 900)
     color text qSayAtText, qSayAtColor
 endfunction

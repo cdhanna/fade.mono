@@ -1,0 +1,145 @@
+remstart
+    EXTINCT. (Chris, 2026-11-07.) the routines are in fish_routines_extinct, and the tests in fish_tests_extinct.
+
+    WHEN A KIND GOES. when a look at the board pops the last fish of one of the seven kinds that a game
+    starts with, or of the jellyfish or the stingrays, so that not one of that kind is left on the
+    board, that kind is extinct. it goes up onto THE LADDER, beside the board, and from then on no new
+    fish of that kind drops in. the bottles, the quest kinds and the diver never go (extinctCanGo). a
+    kind that is on the ladder already does not go again. the jellyfish and the
+    stingrays are there so that a game with their cards has more kinds to get rid of.
+
+    BACK ACROSS THE BOARD. a kind that comes off of the ladder by a swap, to the right or to the left,
+    is put back onto the board spread out (Chris, 2026-11-07), so that it is hard to get rid of again:
+    about one fish in five, in the cells that a knight's move apart from one another (x + 2y, every
+    EXTINCT_SEED_EVERY), so that none of them touch, and none of them pop. a fish of the kind is not put
+    next to one that is there already. only plain fish are turned: not a quest's kind, the diver or a
+    bottle. it waits for the board to be still, and after a flip, for its pops to be over
+    (EXTINCT_SEED_KIND, extinctSeedStep). the kinds that a missed swap sends back are not spread.
+    every fish that is turned turns over like a card, one after another across the board: it goes
+    thin, is the new kind when it is edge on, and comes back around (Chris, 2026-11-07). nothing can be
+    moved while they turn (extinctSeedTurnStep).
+
+    THE FLOOR. a kind does not go if that would leave fewer than EXTINCT_FLOOR kinds dropping in
+    (extinctDropping). with three rungs it is never reached; it is there for a ladder with more. extinctJudgePops, from
+    handle_combos, sees it, once the fish have fallen and before the new ones are picked. it is off on
+    the little boards of the tutorial, in a puzzle and in a demo, and while the board flips (THE FLIP).
+
+    THE LADDER. three rungs, up the left side of the board, from the bottom row up, one row in two (rows
+    8, 6 and 4 of the first board), so that there is an empty row between one rung and the next, and
+    nothing can be slid from one to another (Chris, 2026-11-07). the first kind to go is on the bottom
+    rung, and the next one on the rung above. a fourth kind cannot go while three are up: it pops off of
+    the board like any other, and keeps coming.
+
+    A MISS SENDS THEM BACK. a swap that pops nothing, and is held against the player (the same swaps that
+    cost the multiplier, in judgeMultiplierSwaps), sends every kind on the ladder back, for nothing: they
+    come off of it and drop in again (extinctSwapMissed). they are not used, so they can go up again.
+    so a full ladder takes three kinds wiped out without one
+    wasted swap, which most likely takes cards (Chris, 2026-11-07).
+    the ladder is drawn in stepExtinct, the same way as the pickup of a quest, and the cursor steps out
+    onto a rung from the cell beside it, the same way too (THE CURSOR STEPS OFF OF THE BOARD, in
+    fish_headers_quests): SELECTION_POS stays on the cell beside the rung, and EXTINCT_CURSOR_OUT says
+    which rung the cursor is drawn out on. out there, a step right comes back in, a swap right is THE
+    FLIP, and a swap left is THE LEFT SWAP. nothing else does anything.
+
+    THE FLIP. swapping a rung right, onto the board, spins part of the board over (THE SPIN), and it
+    comes back around with every fish on it turned into that kind. they all pop, with the multiplier as
+    it is. how much of the board goes with the rung (Chris, 2026-11-07, so that the bottom rung is not a
+    jackpot): the row that the rung is beside, and every row under it, so the bottom rung turns one row
+    and the middle one three. the top one turns the whole board, which is most likely the end of the
+    round, though it does not end it on its own (extinctFlipRows). the kind comes off of the ladder, and new
+    fish of it drop in again. every fish, the kinds of the cards and bottles too, is turned; quest kinds
+    and the diver are not, and a fish that is belly up, or a skeleton, is a plain fish again. it waits
+    for the board to be still, and it does nothing at night, when nothing pops (the cursor shakes).
+
+    THE LEFT SWAP. swapping a rung left, off of the board, lets its kind go in place of a flip, and gets
+    something else for it, which is more the higher the rung is. what it gets is written in the box to
+    the left of the rung, so that it looks like what the swap is for (Chris, 2026-11-08):
+    - the bottom rung has none, and no box. the cursor shakes.
+    - the middle rung doubles the multiplier (EXTINCT_LEFT_TIMES, which can triple it too, for a ladder
+      with more rungs). its kind comes back, the same as after a flip.
+    - the top rung halves the moves of the game so far (Chris, 2026-11-08: big, but nothing that stays
+      changed). they come off of the counter one at a time with the dings of the negative moves card
+      (PENDING_FREE_MOVES, frame_free_moves). only its own kind comes back; the rungs under it stay
+      (Chris, 2026-11-09).
+
+    WHEN A RUNG IS USED, the rungs above it slide down one, so there is never a gap in the ladder.
+
+    WHEN THE ROUND ENDS, nothing happens to the ladder (Chris, 2026-11-07). what is on it stays on it, round
+    after round, until it is used.
+
+    NEW FISH. getRandomValue, in fish_funcs, picks a new fish from the kinds that are not out
+    (extinctPick). while none are out, it rolls the stream just as it did before there was a ladder, so
+    a seed plays the same up to the first kind that goes. the fish from the schools are left out too.
+
+    THE SAVED GAME keeps the rungs, from EXTINCT_PREF.
+
+    STILL TO DO. no codex entry, angler line or achievement yet. the fish of a quest's own idea of what
+    drops in (questNewFish) can still be a kind that is out.
+remend
+
+global EXTINCT_ON = 1 `0 turns it off, for the tests
+global EXTINCT_RUNGS = 3 `how many rungs the ladder has
+global EXTINCT_TOP_KIND = 15 `the highest kind that the arrays below have room for. extinctCanGo says which of them can go.
+global dim EXTINCT_RUNG(6) `the kind on every rung, from the bottom one up, or 0 for none
+global dim EXTINCT_BORN_MS(6) `when the kind on every rung went up onto it
+global dim EXTINCT_DRAWN_Y#(6) `where every rung is drawn, which slides down to its row when a rung under it is used
+global dim EXTINCT_OUT(16) `1 for every kind that does not drop in: one that is on the ladder
+global EXTINCT_OUT_COUNT = 0 `how many kinds are out
+global EXTINCT_PICKED = 1 `the kind that extinctPick picked
+global EXTINCT_KINDS = 7 `the first seven kinds, which every game starts with
+global dim EXTINCT_SEED_KIND(16) `1 for every kind that is waiting to be put back across the board. see BACK ACROSS THE BOARD.
+global EXTINCT_SEED_EVERY = 5 `one cell in this many gets the kind back
+global EXTINCT_SEED_MS = -1 `when the fish of a spread started to turn over, or -1 when none are
+global EXTINCT_SEED_TURN_TIME = 300 `how long one fish takes to turn over, in milliseconds
+global EXTINCT_SEED_STAGGER = 30 `and how long after the one before it each one starts
+global EXTINCT_SEED_COUNT = 0 `how many fish are turning over
+global EXTINCT_SEED_KIND_TO = 0 `the kind that they turn into
+global dim EXTINCT_SEED_CELL(160) `the cells that are turning, in the order that they turn
+global dim EXTINCT_SEED_TURNED(160) `1 once the fish in it is the new kind
+global EXTINCT_FLOOR = 2 `the fewest kinds that are left dropping in. see THE FLOOR.
+global EXTINCT_DROPPING = 0 `how many kinds drop in, from extinctDropping
+global dim EXTINCT_LEFT_TIMES(6) `what a swap to the left multiplies the multiplier by, for every rung: 0 for nothing. setup_extinct fills it. see THE LEFT SWAP.
+global dim EXTINCT_POPPED(16) `for extinctJudgePops: 1 for every kind that popped in this look
+global dim EXTINCT_LEFT(16) `and 1 for every kind that is still on the board
+
+global EXTINCT_CURSOR_OUT = 0 `the rung that the cursor is out on, counted from 1, or 0 when it is on the board
+global EXTINCT_CURSOR_EASED# = 0 `how far out the cursor is drawn, from 0 to 1. it chases EXTINCT_CURSOR_OUT.
+global EXTINCT_SHAKE_MS = -1 `when the cursor out on the ladder was last shaken, for a swap that does nothing
+global EXTINCT_SHAKE_X = 0 `and the way that it was pushed
+global EXTINCT_SHAKE_Y = 0
+
+` the swap of a rung, which plays like a swap of two fish before anything happens
+global EXTINCT_ACT_MS = -1 `when it started, or -1 when there is none
+global EXTINCT_ACT_TIME = 190 `how long the rung takes to slide over, in milliseconds
+global EXTINCT_ACT_RUNG = 0 `the rung that is being swapped
+global EXTINCT_ACT_WAY = 1 `1 for right, onto the board, and -1 for left
+
+global EXTINCT_POP_AT = -1 `when the board that a flip turned pops, or -1 when there is no flip
+global EXTINCT_FLIP_HOLD = 260 `how long the turned board is seen, once it has spun back around, before it pops, in milliseconds
+
+` THE SPIN. a flip turns its rows of the board over like a card, about the line down its middle, with fake
+` perspective, and the fish change kind halfway, while the board is edge on (extinctSpinStep). nothing
+` can be moved while it spins. only the fish and the cursor spin: coral, ink and the things of a quest
+` stay where they are for the moment that it takes.
+global EXTINCT_SPIN_MS = -1 `when the spin started, or -1 when there is none
+global EXTINCT_SPIN_TIME = 820 `how long the half turn takes, in milliseconds
+global EXTINCT_SPIN_DEPTH# = 620 `how far away the eye is, in pixels. smaller is a stronger perspective.
+global EXTINCT_SPIN_KIND = 0 `the kind that the board turns into
+global EXTINCT_SPIN_TURNED = 0 `1 once the fish have turned into it
+global EXTINCT_SPIN_ROW_LO = 0 `the rows that the flip turns, from this one
+global EXTINCT_SPIN_ROW_HI = 0 `down to this one
+global EXTINCT_QUIET = 0 `1 from a flip until the board has settled, so that the flip's own pops send nothing up the ladder
+global EXTINCT_BORN_TIME = 380 `how long a kind takes to slide up onto its rung
+
+global EXTINCT_PREF = 5250 `where the saved game keeps the ladder: a 5, and the three rungs
+
+global EXTINCT_SPRITES_MADE = 0
+global dim EXTINCT_FISH_SPRITE(6) `the fish on every rung
+global dim EXTINCT_SLOT_SPRITE(6) `the faint box of every rung
+global dim EXTINCT_LABEL_TEXT(6) `what a swap to the left gets, in the box to the left of the rungs that have one
+global dim EXTINCT_LEFT_SPRITE(6) `the faint box to the left of every rung that a swap that way does something for
+global dim EXTINCT_INFO_RUNG(6) `the spot that info mode has for every rung: what a swap to the right does
+global dim EXTINCT_INFO_LEFT(6) `and for the box to the left of it: what a swap to the left gets
+global EXTINCT_SFX_GONE = 0 `the ping when a kind goes up the ladder
+global EXTINCT_SFX_FLIP = 0 `the swell when the board flips
+global EXTINCT_SFX_HALVE = 0 `and the low sound when the moves are halved

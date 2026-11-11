@@ -54,6 +54,13 @@ setup_input:
     bind action key ACT_PAUSE, scancode("Escape")
     bind action button ACT_PAUSE, padCode("Start")
 
+    ` backing out of a menu or a page is the pause key too, and B, the button that backs out on a
+    ` controller. B is a move in the game, so it only backs out where the moves are not being used.
+    reserve action id(ACT_BACK)
+    bind action key ACT_BACK, scancode("Escape")
+    bind action button ACT_BACK, padCode("Start")
+    bind action button ACT_BACK, padCode("B")
+
     ` the move abilities, in the order that they get handed out. each one has a key for the left
     ` hand, beside the arrow keys' hand, and a key for the right hand, beside wasd.
     dim abilityKeys$(MOVE_SLOT_COUNT)
@@ -140,7 +147,8 @@ frame_input_icons:
         font icon SCORE_FONT, 5, "info", TEX_PAD, 78 `the button with two squares, where back used to be
         font icon SCORE_FONT, 6, "swap", TEX_PAD, 82 `a
         font icon SCORE_FONT, 7, "dir", TEX_PAD, 64 `the d-pad
-        font icon SCORE_FONT, 11, "pause", TEX_PAD, 70 `the button with three lines, where start used to be
+        ` {pause} is only ever shown for backing out (see ACT_BACK), so on a controller it is B
+        font icon SCORE_FONT, 11, "pause", TEX_PAD, 84 `b
         font icon SCORE_FONT, 12, "confirm", TEX_PAD, 82 `a
 
         ` the sheet is of an xbox controller, so it is the one to show for an xbox controller (2 and 3,
@@ -161,7 +169,7 @@ frame_input_icons:
             steamIcon(5, "info", 5, "Back")
             steamIcon(6, "swap", 6, "A")
             steamIcon(7, "dir", 7, "DPad")
-            steamIcon(11, "pause", 8, "Start")
+            steamIcon(11, "pause", 8, "B")
             steamIcon(12, "confirm", 6, "A")
         endif
     else
@@ -231,6 +239,9 @@ process_input:
 
         ` the pickup of a quest is beside the board, and the cursor can step out onto it, and back.
         ` see THE CURSOR STEPS OFF OF THE BOARD in fish_headers_quests.
+        ` and so can the ladder of the kinds that are extinct, on the left. see THE LADDER in fish_headers_extinct.
+        extinctStepped = extinctCursorBumped(swapDir.x, swapDir.y, isSwap)
+        if extinctStepped then return
         questStepped = questCursorBumped(swapDir.x, swapDir.y, isSwap)
         if questStepped then return
 

@@ -250,6 +250,7 @@ global ACT_SWAP `held with a direction to swap fish
 global ACT_CONFIRM `picks the highlighted thing on a menu
 global ACT_INFO
 global ACT_PAUSE
+global ACT_BACK `backs out of a menu or a page: the pause key, or B on a controller
 
 ` a move ability is held with a direction, the same way that the swap is. on a controller they are
 ` on b, x, y, and the two bumpers, and on a keyboard they are on z, x, c, v and b, so 5 is as many move
@@ -818,6 +819,10 @@ global PASSIVE_BINDINGS_LENGTH = 16
 ` the names in the two lists at the sides of the board, the special moves and the passives, are
 ` fitted to this many pixels, and are never bigger than this many times the size of the font.
 global HUD_LIST_WIDTH = 86
+global MOVE_LIST_KEY_X = 26 `the middle of the key of a move, in the list of moves at the bottom left, with its cooldown number on top of it
+global MOVE_LIST_NAME_X = 40 `and the left edge of its name, after the key
+global MOVE_LIST_NAME_WIDTH = 62 `how wide a name can be, so that it ends before the boxes of the ladder of fish_headers_extinct
+global MOVE_LIST_INFO_WIDTH = 92 `and the spot that info mode has for a move, from x 12, which ends there too
 global HUD_LIST_SCALE# = .25
 global PASSIVE_COUNT = 0
 global passive as passiveDisplay
@@ -995,6 +1000,9 @@ global STEAM_TIMELINE_ROUND = 0
 #constant MENU_PAGE_ENDINGS 6
 ` the page that comes up over the game when the last round of the Steam demo has been won. see THE STEAM DEMO in fish_headers_steamdemo.
 #constant MENU_PAGE_DEMO_OVER 7
+` ACCESSIBILITY. a page of its own, under the options page, for the settings that make the game easier to
+` look at and to follow: the water motion, the pop speed and the demo mode. the options page has one line for it.
+#constant MENU_PAGE_ACCESS 8
 global MENU_PAGE = 0
 
 ` every line that any page of the menu can show. a page shows a run of these that are next to each other.
@@ -1042,12 +1050,15 @@ global MENU_PAGE = 0
 ` the line of the options page that opens the page of mementos, and the line of that page that goes back. see MEMENTOS.
 #constant MENU_ITEM_SET_ENDINGS 29
 #constant MENU_ITEM_ENDINGS_BACK 30
-` whether a demo plays when the main menu is left alone, under the pop speed. see OPTION_DEMO in fish_headers_demo.
+` whether a demo plays when the main menu is left alone, on the page of accessibility under the pop speed. see OPTION_DEMO in fish_headers_demo.
 #constant MENU_ITEM_SET_DEMO 31
 ` the two lines of the page at the end of the Steam demo: the store page of the full game, and "Done". see THE STEAM DEMO in fish_headers_steamdemo.
 #constant MENU_ITEM_DEMO_STORE 32
 #constant MENU_ITEM_DEMO_DONE 33
-global MENU_ITEM_COUNT = 34
+` the line of the options page that opens the page of accessibility, and the line of that page that goes back. see ACCESSIBILITY.
+#constant MENU_ITEM_SET_ACCESS 34
+#constant MENU_ITEM_ACCESS_BACK 35
+global MENU_ITEM_COUNT = 36
 global dim MENU_ITEMS(MENU_ITEM_COUNT) as menuItem
 
 global MENU_PAGE_FIRST = 0 `the first item on the page
@@ -1097,6 +1108,20 @@ global MENU_CURTAIN_TWEEN_ID
 global MENU_INVERT = 0 `1 while the bubbles are taking the menu away, instead of bringing it in
 global MENU_PANEL_BORDER as infoBorder
 global MENU_CURSOR as infoBorder
+
+` THE VOLUME SLIDERS. the sound and the music are each a row of pips on the right of their line, lit up
+` as far as the volume goes. left and right move it a pip at a time, and the mouse can click a pip, or
+` drag along the row. the first ten sprites are the sound's, and the next ten the music's.
+#constant MENU_SLIDER_PIPS 10
+global MENU_SLIDER_STEP = 10 `pixels from one pip to the next
+global MENU_SLIDER_PIP_W = 7
+global dim MENU_SLIDER_SPRITES(20)
+global MENU_SLIDER_DRAG = -1 `the line whose slider the mouse is dragging, or -1
+
+` THE PAGE BUTTONS. a line that opens a page of its own is drawn as a button, a box around its name, so
+` that it does not look like a setting. the first is accessibility's, and the second the mementos'.
+global dim MENU_BUTTON_SPRITES(2)
+global dim MENU_BUTTON_BORDERS(2) as infoBorder
 
 ` THE OPTIONS. these are what the options page of the menu changes.
 

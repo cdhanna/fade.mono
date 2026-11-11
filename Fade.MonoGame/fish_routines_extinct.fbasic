@@ -1,0 +1,934 @@
+goto routines_extinct_exit
+
+remstart
+    the routines of EXTINCT. see fish_headers_extinct for the rules.
+    - setup_extinct makes the sprites of the ladder, and its spot in info mode.
+    - extinctReset() starts it over, for a new game. reset_game calls it before the board is dealt.
+    - extinctJudgePops() is called by handle_combos once the fish have fallen, before the new ones are picked.
+    - extinctSettled() is called by handle_combos when the board has settled.
+    - extinctPick(top) picks the kind of a new fish, for getRandomValue.
+    - extinctSeedStep() puts a kind that came off of the ladder back across the board. see BACK ACROSS THE BOARD.
+    - extinctCursorBumped() hears of every push of the cursor, before the quest does.
+    - stepExtinct() runs on every frame of the game, from update_frame.
+remend
+
+setup_extinct:
+    ` what a swap to the left gets, from the bottom rung up: nothing, then x2. the top rung is THE LEFT SWAP's own.
+    EXTINCT_LEFT_TIMES(0) = 0
+    EXTINCT_LEFT_TIMES(1) = 2
+
+    for exSetI = 0 to EXTINCT_RUNGS - 1
+        ` the faint box of the rung, which waves like the zones of a quest
+        reserve sprite id(EXTINCT_SLOT_SPRITE(exSetI))
+        sprite EXTINCT_SLOT_SPRITE(exSetI), 0, 0, TEX_PIXEL
+        set sprite offset EXTINCT_SLOT_SPRITE(exSetI), 0, 0
+        set sprite effect EXTINCT_SLOT_SPRITE(exSetI), QUEST_ZONE_FX_ID
+        order sprite EXTINCT_SLOT_SPRITE(exSetI), ORDER_QUEST_GLOW
+        hide sprite EXTINCT_SLOT_SPRITE(exSetI)
+
+        ` the fish on it
+        reserve sprite id(EXTINCT_FISH_SPRITE(exSetI))
+        sprite EXTINCT_FISH_SPRITE(exSetI), 0, 0, 1
+        order sprite EXTINCT_FISH_SPRITE(exSetI), ORDER_QUEST_ICON
+        hide sprite EXTINCT_FISH_SPRITE(exSetI)
+
+        ` the box to the left of it, and what a swap that way gets, in the box. the bottom rung has
+        ` none, so they are never shown for it.
+        reserve sprite id(EXTINCT_LEFT_SPRITE(exSetI))
+        sprite EXTINCT_LEFT_SPRITE(exSetI), 0, 0, TEX_PIXEL
+        set sprite offset EXTINCT_LEFT_SPRITE(exSetI), 0, 0
+        set sprite effect EXTINCT_LEFT_SPRITE(exSetI), QUEST_ZONE_FX_ID
+        order sprite EXTINCT_LEFT_SPRITE(exSetI), ORDER_QUEST_GLOW
+        hide sprite EXTINCT_LEFT_SPRITE(exSetI)
+
+        reserve text id(EXTINCT_LABEL_TEXT(exSetI))
+        if exSetI < EXTINCT_RUNGS - 1
+            if EXTINCT_LEFT_TIMES(exSetI) = 3
+                text loc EXTINCT_LABEL_TEXT(exSetI), 0, 0, SCORE_FONT, "hud.extinct.triple"
+            else
+                text loc EXTINCT_LABEL_TEXT(exSetI), 0, 0, SCORE_FONT, "hud.extinct.double"
+            endif
+        else
+            text loc EXTINCT_LABEL_TEXT(exSetI), 0, 0, SCORE_FONT, "hud.extinct.halfmoves"
+            set text wrap EXTINCT_LABEL_TEXT(exSetI), 24 `two lines: the word, and the /2 under it
+            set text align EXTINCT_LABEL_TEXT(exSetI), .5
+        endif
+        order text EXTINCT_LABEL_TEXT(exSetI), ORDER_HUD_TEXT
+        set text offset EXTINCT_LABEL_TEXT(exSetI), .5, .5
+        size text max EXTINCT_LABEL_TEXT(exSetI), 24, 22
+        color text EXTINCT_LABEL_TEXT(exSetI), rgb(255, 190, 150, 255)
+        enable text drop shadow EXTINCT_LABEL_TEXT(exSetI), 1, -1, rgb(0, 0, 0)
+        set text alpha EXTINCT_LABEL_TEXT(exSetI), 0
+    next
+
+    EXTINCT_SFX_GONE = tideLoadSound("Fish/Audio/cue-sonar-1", SFX_GROUP_SFX, 0)
+    EXTINCT_SFX_FLIP = tideLoadSound("Fish/Audio/dawn-swell", SFX_GROUP_SFX, 0)
+    EXTINCT_SFX_HALVE = tideLoadSound("Fish/Audio/night-fall", SFX_GROUP_SFX, 0)
+
+    ` info mode explains every rung that has a kind on it, and every box to the left of one, each on
+    ` its own. extinctDraw moves the spots along with the board.
+    for exSetI = 0 to EXTINCT_RUNGS - 1
+        exFlip$ = loc$("info.extinct.flip.down")
+        if exSetI = 0 then exFlip$ = loc$("info.extinct.flip.row")
+        if exSetI = EXTINCT_RUNGS - 1 then exFlip$ = loc$("info.extinct.flip.board")
+        EXTINCT_INFO_RUNG(exSetI) = allocateInfoBlob(0, 0, CELL_SIZE, CELL_SIZE, loc$("info.extinct.title"), exFlip$)
+        setInfoBlobEnabled(EXTINCT_INFO_RUNG(exSetI), 0)
+        exLeft$ = loc$("info.extinct.left.double")
+        if exSetI = EXTINCT_RUNGS - 1 then exLeft$ = loc$("info.extinct.left.halve")
+        EXTINCT_INFO_LEFT(exSetI) = allocateInfoBlob(0, 0, CELL_SIZE, CELL_SIZE, loc$("info.extinct.left.title"), exLeft$)
+        setInfoBlobEnabled(EXTINCT_INFO_LEFT(exSetI), 0)
+    next
+
+    EXTINCT_SPRITES_MADE = 1
+return
+
+routines_extinct_exit:
+
+
+` a new game has nothing on the ladder, and every kind drops in
+function extinctReset()
+    for exResetK = 0 to EXTINCT_TOP_KIND
+        EXTINCT_OUT(exResetK) = 0
+        EXTINCT_SEED_KIND(exResetK) = 0
+    next
+    for exResetR = 0 to EXTINCT_RUNGS - 1
+        EXTINCT_RUNG(exResetR) = 0
+        EXTINCT_BORN_MS(exResetR) = 0
+    next
+    EXTINCT_OUT_COUNT = 0
+    EXTINCT_CURSOR_OUT = 0
+    EXTINCT_CURSOR_EASED# = 0
+    EXTINCT_ACT_MS = -1
+    EXTINCT_POP_AT = -1
+    EXTINCT_SPIN_MS = -1
+    EXTINCT_SEED_MS = -1
+    EXTINCT_SEED_COUNT = 0
+    EXTINCT_QUIET = 0
+    EXTINCT_SHAKE_MS = -1
+endfunction
+
+
+` the row of the board that a rung is beside: the bottom row, and one row in two from there up
+function extinctRungRow(exRowRung)
+    ` a - b - c comes out as a - (b - c), so the two are added up first
+    exRowIs = CELL_ROW_COUNT - (1 + exRowRung * 2)
+endfunction exRowIs
+
+
+` the rung that is beside a row of the board and has a kind on it, or -1
+function extinctRungAtRow(exAtRow)
+    exAtFound = -1
+    for exAtR = 0 to EXTINCT_RUNGS - 1
+        if EXTINCT_RUNG(exAtR) > 0
+            exAtRowOf = extinctRungRow(exAtR)
+            if exAtRowOf = exAtRow then exAtFound = exAtR
+        endif
+    next
+endfunction exAtFound
+
+
+` which kinds are out, from what is on the ladder
+function extinctRecount()
+    for exCountK = 0 to EXTINCT_TOP_KIND
+        EXTINCT_OUT(exCountK) = 0
+    next
+    for exCountR = 0 to EXTINCT_RUNGS - 1
+        if EXTINCT_RUNG(exCountR) > 0 then EXTINCT_OUT(EXTINCT_RUNG(exCountR)) = 1
+    next
+    EXTINCT_OUT_COUNT = 0
+    for exCountK = 1 to EXTINCT_TOP_KIND
+        EXTINCT_OUT_COUNT = EXTINCT_OUT_COUNT + EXTINCT_OUT(exCountK)
+    next
+endfunction
+
+
+` the kind of a new fish, from 1 to `pickTop`, leaving out the kinds that are out. it is left in
+` EXTINCT_PICKED, and not returned, because getRandomValue is called from the middle of handle_combos.
+` while no kind is out, the stream is rolled just as it always was, so a seed plays the same.
+function extinctPick(pickTop)
+    if EXTINCT_OUT_COUNT = 0
+        EXTINCT_PICKED = random stream(RNG_BOARD, pickTop) + 1
+        exitfunction
+    endif
+    pickAlive = 0
+    for pickK = 1 to pickTop
+        if EXTINCT_OUT(pickK) = 0 then pickAlive = pickAlive + 1
+    next
+    if pickAlive < 1
+        EXTINCT_PICKED = random stream(RNG_BOARD, pickTop) + 1
+        exitfunction
+    endif
+    pickNth = random stream(RNG_BOARD, pickAlive)
+    extinctNth(pickNth, pickTop)
+endfunction
+
+
+` the `nthN`th kind that is not out, from 1 to `nthTop`, counting around again past the last one, into EXTINCT_PICKED
+function extinctNth(nthN, nthTop)
+    nthAlive = 0
+    for nthK = 1 to nthTop
+        if EXTINCT_OUT(nthK) = 0 then nthAlive = nthAlive + 1
+    next
+    EXTINCT_PICKED = 1
+    if nthAlive < 1 then exitfunction
+    nthLeft = nthN mod nthAlive
+    for nthK = 1 to nthTop
+        if EXTINCT_OUT(nthK) = 0
+            if nthLeft = 0 then EXTINCT_PICKED = nthK
+            nthLeft = nthLeft - 1
+        endif
+    next
+endfunction
+
+
+` handle_combos has popped what it popped, and the fish have fallen. the cells that popped still have
+` their fish in them, at the top, and the new fish have not been picked yet. a kind that popped, and
+` has not one fish left on the board, goes up the ladder. see WHEN A KIND GOES in fish_headers_extinct.
+function extinctJudgePops()
+    if EXTINCT_ON = 0 then exitfunction
+    if EXTINCT_QUIET then exitfunction
+    if TUTORIAL_BOARD then exitfunction
+    if TUTORIAL_STAGE > 0 then exitfunction
+    if PUZZLE_ON then exitfunction
+    if DEMO_MODE then exitfunction
+
+    for exJudgeK = 0 to EXTINCT_TOP_KIND
+        EXTINCT_POPPED(exJudgeK) = 0
+        EXTINCT_LEFT(exJudgeK) = 0
+    next
+    for exJudgeI = 0 to CELL_COUNT - 1
+        exJudgeKind = CELLS(exJudgeI).value
+        if exJudgeKind >= 1 and exJudgeKind <= EXTINCT_TOP_KIND
+            if CELLS(exJudgeI).comboBlownUp
+                EXTINCT_POPPED(exJudgeKind) = 1
+            else
+                EXTINCT_LEFT(exJudgeKind) = 1
+            endif
+        endif
+    next
+
+    for exJudgeK = 1 to EXTINCT_TOP_KIND
+        if EXTINCT_POPPED(exJudgeK) = 0 then skip
+        if EXTINCT_LEFT(exJudgeK) then skip
+        if EXTINCT_OUT(exJudgeK) then skip
+        if exJudgeK = KNOWN_FILL_VALUE then skip `it is the kind that is about to drop in everywhere
+
+        ` the first seven kinds, the jellyfish and the stingrays can go. see WHEN A KIND GOES.
+        exJudgeCan = 0
+        if exJudgeK <= EXTINCT_KINDS then exJudgeCan = 1
+        if exJudgeK = TEX_JELLY then exJudgeCan = 1
+        if exJudgeK = TEX_RAY then exJudgeCan = 1
+        if exJudgeCan = 0 then skip
+
+        ` and the board keeps a few kinds. see THE FLOOR.
+        extinctDropping()
+        if EXTINCT_DROPPING <= EXTINCT_FLOOR then skip
+
+        exJudgeSlot = -1
+        for exJudgeR = 0 to EXTINCT_RUNGS - 1
+            if exJudgeSlot < 0
+                if EXTINCT_RUNG(exJudgeR) = 0 then exJudgeSlot = exJudgeR
+            endif
+        next
+        if exJudgeSlot >= 0
+            extinctGoesUp(exJudgeK, exJudgeSlot)
+        endif
+    next
+endfunction
+
+
+` how many kinds still drop in, into EXTINCT_DROPPING: the first seven that are not out, and the
+` jellyfish and the stingrays while their cards are owned and they are not out. see THE FLOOR.
+function extinctDropping()
+    EXTINCT_DROPPING = 0
+    for dropK = 1 to EXTINCT_KINDS
+        if EXTINCT_OUT(dropK) = 0 then EXTINCT_DROPPING = EXTINCT_DROPPING + 1
+    next
+    if EXTINCT_OUT(TEX_JELLY) = 0
+        dropJelly = getJellyChance()
+        if dropJelly > 0 then EXTINCT_DROPPING = EXTINCT_DROPPING + 1
+    endif
+    if EXTINCT_OUT(TEX_RAY) = 0
+        dropRay = getRayChance()
+        if dropRay > 0 then EXTINCT_DROPPING = EXTINCT_DROPPING + 1
+    endif
+endfunction
+
+
+` a kind goes up onto a rung of the ladder
+function extinctGoesUp(upKind, upSlot)
+    EXTINCT_RUNG(upSlot) = upKind
+    EXTINCT_BORN_MS(upSlot) = game ms()
+    EXTINCT_DRAWN_Y#(upSlot) = getCellY(extinctRungRow(upSlot))
+    extinctRecount()
+
+    upX = getCellX(-1)
+    upY = getCellY(extinctRungRow(upSlot))
+    spawnBubbles(upX, upY, CELL_SIZE / 2, 14, 0, FISH_COLORS(getFishColorIndex(upKind)))
+    upPos as vec = {
+        x = upX + CELL_SIZE,
+        y = upY - CELL_SIZE / 2
+    }
+    upText = spawnScoreTextScaled(upPos, loc$("hud.extinct.gone"), 0, 1500, 1)
+    color text upText, FISH_COLORS(getFishColorIndex(upKind))
+    tidePlaySound(EXTINCT_SFX_GONE, .8, 0)
+endfunction
+
+
+` A MISS SENDS THEM BACK: a swap popped nothing, and every kind on the ladder comes off of it, for
+` nothing. judgeMultiplierSwaps calls this, for a swap that it holds against the player.
+function extinctSwapMissed()
+    missAny = 0
+    for missR = 0 to EXTINCT_RUNGS - 1
+        missKind = EXTINCT_RUNG(missR)
+        if missKind > 0
+            missAny = 1
+            spawnBubbles(getCellX(-1) + CELL_SIZE / 2, getCellY(extinctRungRow(missR)), CELL_SIZE / 2, 10, missR * 90, FISH_COLORS(getFishColorIndex(missKind)))
+            EXTINCT_RUNG(missR) = 0
+        endif
+    next
+    if missAny = 0 then exitfunction
+    extinctRecount()
+    EXTINCT_CURSOR_OUT = 0
+    tidePlaySound(EXTINCT_SFX_GONE, .5, 0)
+endfunction
+
+
+` a rung is used: its kind comes off of the ladder, and the rungs above it slide down one
+function extinctTake(takeRung)
+    ` it goes back across the board. see BACK ACROSS THE BOARD in fish_headers_extinct.
+    EXTINCT_SEED_KIND(EXTINCT_RUNG(takeRung)) = 1
+    takeJ = takeRung
+    while takeJ < EXTINCT_RUNGS - 1
+        EXTINCT_RUNG(takeJ) = EXTINCT_RUNG(takeJ + 1)
+        EXTINCT_BORN_MS(takeJ) = EXTINCT_BORN_MS(takeJ + 1)
+        EXTINCT_DRAWN_Y#(takeJ) = EXTINCT_DRAWN_Y#(takeJ + 1)
+        takeJ = takeJ + 1
+    endwhile
+    EXTINCT_RUNG(EXTINCT_RUNGS - 1) = 0
+    extinctRecount()
+endfunction
+
+
+` the board has settled. the pops of a flip are over, so kinds can go again.
+function extinctSettled()
+    if EXTINCT_POP_AT < 0
+        if EXTINCT_SPIN_MS < 0 then EXTINCT_QUIET = 0
+    endif
+endfunction
+
+
+` the cursor has been pushed one cell across or down, as a swap or not. this says 1 when the push was
+` for the ladder, so that nothing else hears of it. see THE LADDER in fish_headers_extinct.
+function extinctCursorBumped(bumpX, bumpY, bumpSwap)
+    bumpTook = 0
+
+    ` nothing moves while the board spins over, or while a spread turns over. see THE SPIN and BACK
+    ` ACROSS THE BOARD in fish_headers_extinct.
+    if EXTINCT_SPIN_MS >= 0
+        exitfunction 1
+    endif
+    if QB_SPIN_MS >= 0
+        exitfunction 1 `nor while it turns over to a quest. see fish_headers_qboard.
+    endif
+    if QD_ON
+        exitfunction 1 `nor while a quest is talking. see THE QUEST TALKS in fish_headers_qboard.
+    endif
+    if EXTINCT_SEED_MS >= 0
+        exitfunction 1
+    endif
+
+    if EXTINCT_CURSOR_OUT > 0
+        bumpTook = 1
+        bumpRung = EXTINCT_CURSOR_OUT - 1
+
+        ` nothing can be done while a swap of a rung is playing
+        if EXTINCT_ACT_MS < 0
+            bumpDone = 0
+            if bumpX = 1 and bumpY = 0
+                bumpDone = 1
+                if bumpSwap
+                    extinctAsk(bumpRung, 1)
+                else
+                    EXTINCT_CURSOR_OUT = 0
+                endif
+            endif
+            if bumpX = -1 and bumpY = 0
+                if bumpSwap
+                    bumpDone = 1
+                    extinctAsk(bumpRung, -1)
+                endif
+            endif
+            if bumpDone = 0
+                extinctShake(bumpX, bumpY)
+            endif
+        endif
+    else
+        ` a step to the left, off of the first column, beside a rung, goes out onto it
+        if bumpX = -1 and bumpY = 0
+            if SELECTION_POS.x = 0
+                bumpAt = extinctRungAtRow(SELECTION_POS.y)
+                if bumpAt >= 0
+                    EXTINCT_CURSOR_OUT = bumpAt + 1
+                    bumpTook = 1
+                endif
+            endif
+        endif
+    endif
+endfunction bumpTook
+
+
+` a swap of a rung. it slides over, like a swap of two fish, and then stepExtinct does what it does.
+` one that does nothing shakes the cursor instead.
+function extinctAsk(askRung, askWay)
+    askOk = 1
+    if askWay < 0
+        if askRung = 0 then askOk = 0 `the bottom rung has nothing to the left
+    else
+        if TIDE_NIGHT then askOk = 0 `nothing pops at night
+    endif
+    if askOk = 0
+        extinctShake(askWay, 0)
+        exitfunction
+    endif
+    EXTINCT_ACT_MS = game ms()
+    EXTINCT_ACT_RUNG = askRung
+    EXTINCT_ACT_WAY = askWay
+
+    ` the same swell of sound that a swap of two fish makes
+    create basic tween SWAP_TWEEN_SFX, 0, 1, EXTINCT_ACT_TIME + 1, 0
+    set tween type SWAP_TWEEN_SFX, 1
+endfunction
+
+
+function extinctShake(shakeX, shakeY)
+    EXTINCT_SHAKE_MS = game ms()
+    EXTINCT_SHAKE_X = shakeX
+    EXTINCT_SHAKE_Y = shakeY
+endfunction
+
+
+` THE LEFT SWAP: the middle rung doubles the multiplier, and the top one halves the moves
+function extinctLeftSwap(leftRung)
+    leftKind = EXTINCT_RUNG(leftRung)
+    if leftKind = 0 then exitfunction
+    leftX = getCellX(-1)
+    leftY = getCellY(extinctRungRow(leftRung))
+    leftPos as vec = {
+        x = leftX,
+        y = leftY - CELL_SIZE / 2
+    }
+
+    if leftRung < EXTINCT_RUNGS - 1
+        leftTimes = EXTINCT_LEFT_TIMES(leftRung)
+        extinctTake(leftRung)
+        addMultiplier(SCORE_MULTIPLIER * (leftTimes - 1))
+        spawnBubbles(leftX - CELL_SIZE, leftY, CELL_SIZE / 2, 12, 0, FISH_COLORS(getFishColorIndex(leftKind)))
+        if leftTimes = 3
+            leftText = spawnScoreTextScaled(leftPos, loc$("hud.extinct.triple"), 0, 1200, 1.4)
+        else
+            leftText = spawnScoreTextScaled(leftPos, loc$("hud.extinct.double"), 0, 1200, 1.4)
+        endif
+        exitfunction
+    endif
+
+    ` the top rung: its kind comes back, the rungs under it stay, and the moves are halved
+    extinctTake(leftRung)
+    EXTINCT_CURSOR_OUT = 0 `there is nothing on the rung any more
+    spawnBubbles(leftX - CELL_SIZE, leftY, CELL_SIZE / 2, 16, 0, FISH_COLORS(getFishColorIndex(leftKind)))
+    extinctHalveMoves()
+    leftText = spawnScoreTextScaled(leftPos, loc$("hud.extinct.halved"), 0, 2200, 1.2)
+    tidePlaySound(EXTINCT_SFX_HALVE, .9, 0)
+endfunction
+
+
+` half of the moves of the game so far come off of the counter, the odd one too, one at a time with
+` the dings of the negative moves card. the ones that are coming off already are not counted twice.
+function extinctHalveMoves()
+    halveHas = CURRENT_MOVE_COUNT - PENDING_FREE_MOVES
+    if halveHas <= 0 then exitfunction
+    PENDING_FREE_MOVES = PENDING_FREE_MOVES + (halveHas - halveHas / 2)
+endfunction
+
+
+` THE FLIP: the rows of the rung spin over, like a card, and come back around with every fish turned
+` into the kind of the rung. a moment later they all pop. see THE SPIN in fish_headers_extinct.
+function extinctFlip(flipRung)
+    flipKind = EXTINCT_RUNG(flipRung)
+    if flipKind = 0 then exitfunction
+    extinctFlipRows(flipRung)
+    extinctTake(flipRung)
+
+    ` the cursor rode in with the fish, and is on the board again
+    EXTINCT_CURSOR_OUT = 0
+    EXTINCT_CURSOR_EASED# = 0
+    EXTINCT_QUIET = 1
+
+    EXTINCT_SPIN_MS = game ms()
+    EXTINCT_SPIN_KIND = flipKind
+    EXTINCT_SPIN_TURNED = 0
+    tidePlaySound(EXTINCT_SFX_FLIP, .9, 0)
+endfunction
+
+
+` the rows that a flip of a rung turns, into EXTINCT_SPIN_ROW_LO and EXTINCT_SPIN_ROW_HI: the row of the
+` rung, and every row under it. the top rung turns the whole board, even one that has grown.
+function extinctFlipRows(rowsRung)
+    EXTINCT_SPIN_ROW_LO = extinctRungRow(rowsRung)
+    if rowsRung >= EXTINCT_RUNGS - 1 then EXTINCT_SPIN_ROW_LO = 0
+    if EXTINCT_SPIN_ROW_LO < 0 then EXTINCT_SPIN_ROW_LO = 0
+    EXTINCT_SPIN_ROW_HI = CELL_ROW_COUNT - 1
+endfunction
+
+
+` halfway through the spin, while its rows are edge on, every fish in them turns into the kind of the flip
+function extinctTurnBoard(turnKind)
+    for turnI = 0 to CELL_COUNT - 1
+        turnWas = CELLS(turnI).value
+        turnIt = 0
+        if turnWas >= 1 and turnWas < TEX_KRILL then turnIt = 1
+        if CELLS(turnI).coord.y < EXTINCT_SPIN_ROW_LO then turnIt = 0
+        if CELLS(turnI).coord.y > EXTINCT_SPIN_ROW_HI then turnIt = 0
+        if turnIt
+            extinctTurnCell(turnI, turnKind)
+        endif
+    next
+endfunction
+
+
+` a fish turns into a kind, as a plain fish of it
+function extinctTurnCell(cellI, cellKind)
+    CELLS(cellI).value = cellKind
+    CELLS(cellI).bellyUp = 0
+    CELLS(cellI).bellyShown# = 0
+    setFishTexture(CELLS(cellI).spriteId, cellKind)
+
+    ` the new picture may face the other way from the fish, which the fish effect turns around
+    ` slowly. it is not worth seeing, so it is already turned. see FACING in fish_headers_school.
+    cellFaces# = 0
+    cellArt = SCHOOL_ART_FACE(cellKind)
+    if cellArt <> 0
+        if SCHOOL_FACE(cellI) <> cellArt then cellFaces# = 1
+    endif
+    SCHOOL_SHOWN#(cellI) = cellFaces#
+endfunction
+
+
+` BACK ACROSS THE BOARD: a kind that came off of the ladder goes back onto the board, spread out, once
+` the board is still. see fish_headers_extinct.
+` one kind at a time: the next one waits for this one's fish to have turned over
+function extinctSeedStep()
+    for seedK = 1 to EXTINCT_TOP_KIND
+        if EXTINCT_SEED_KIND(seedK)
+            EXTINCT_SEED_KIND(seedK) = 0
+            extinctSeed(seedK)
+            exitfunction
+        endif
+    next
+endfunction
+
+function extinctSeed(seedKind)
+    EXTINCT_SEED_COUNT = 0
+    EXTINCT_SEED_KIND_TO = seedKind
+    for seedI = 0 to CELL_COUNT - 1
+        seedX = CELLS(seedI).coord.x
+        seedY = CELLS(seedI).coord.y
+        ` a knight's move apart: none of them touch, side to side or corner to corner. the pattern is
+        ` moved along by the kind, so that every kind does not land in the same cells.
+        seedOk = 0
+        if (seedX + seedY * 2 + seedKind) mod EXTINCT_SEED_EVERY = 0 then seedOk = 1
+        seedWas = CELLS(seedI).value
+        if seedWas < 1 or seedWas >= TEX_KRILL then seedOk = 0
+        if seedWas = TEX_BOTTLE then seedOk = 0
+        if seedWas = seedKind then seedOk = 0
+        if seedOk
+            ` and not next to a fish of the kind that is there already, so that nothing pops
+            if seedX > 0
+                if CELLS(seedI - 1).value = seedKind then seedOk = 0
+            endif
+            if seedX < CELL_COLUMN_COUNT - 1
+                if CELLS(seedI + 1).value = seedKind then seedOk = 0
+            endif
+            if seedY > 0
+                if CELLS(seedI - CELL_COLUMN_COUNT).value = seedKind then seedOk = 0
+            endif
+            if seedY < CELL_ROW_COUNT - 1
+                if CELLS(seedI + CELL_COLUMN_COUNT).value = seedKind then seedOk = 0
+            endif
+        endif
+        if seedOk
+            if EXTINCT_SEED_COUNT < 160
+                EXTINCT_SEED_CELL(EXTINCT_SEED_COUNT) = seedI
+                EXTINCT_SEED_TURNED(EXTINCT_SEED_COUNT) = 0
+                EXTINCT_SEED_COUNT = EXTINCT_SEED_COUNT + 1
+            endif
+        endif
+    next
+    if EXTINCT_SEED_COUNT > 0 then EXTINCT_SEED_MS = game ms()
+endfunction
+
+
+` the fish of a spread turn over, one after another, on this frame. each one gets thin, as a card does
+` that is turned edge on, is the new kind once it is, and comes back around. the scale wave sizes the
+` fish again on the next frame, so a fish that is not turning is left alone.
+function extinctSeedTurnStep()
+    seedNow# = game ms()
+    seedAllDone = 1
+    seedTime# = EXTINCT_SEED_TURN_TIME
+    for seedJ = 0 to EXTINCT_SEED_COUNT - 1
+        seedCell = EXTINCT_SEED_CELL(seedJ)
+        seedAge# = seedNow# - (EXTINCT_SEED_MS + seedJ * EXTINCT_SEED_STAGGER)
+        seedP# = seedAge# / seedTime#
+        if seedP# < 1 then seedAllDone = 0
+        if seedP# >= .5
+            if EXTINCT_SEED_TURNED(seedJ) = 0
+                EXTINCT_SEED_TURNED(seedJ) = 1
+                extinctTurnCell(seedCell, EXTINCT_SEED_KIND_TO)
+                spawnBubbles(getCellX(CELLS(seedCell).coord.x), getCellY(CELLS(seedCell).coord.y), CELL_SIZE / 3, 5, 0, FISH_COLORS(getFishColorIndex(EXTINCT_SEED_KIND_TO)))
+            endif
+        endif
+        if seedP# > 0 and seedP# < 1
+            seedThin# = abs(cos(seedP# * 3.14159))
+            if seedThin# < .04 then seedThin# = .04
+            seedSize# = tweenVal(CELLS(seedCell).scaleWaveTweenId) * CELL_ART_SIZE * CORAL_SIT#(seedCell)
+            size sprite CELLS(seedCell).spriteId, seedSize# * seedThin#, seedSize#
+        endif
+    next
+    if seedAllDone then EXTINCT_SEED_MS = -1
+endfunction
+
+
+` THE SPIN, on this frame. the board turns about the line down its middle, the way that a card is
+` turned over: a half turn, eased in and out. there is no 3D: every fish is put where it would be seen,
+` and sized, so that the side that is going away is smaller and closer to the middle, and the side
+` that is coming nearer is bigger. a fish is a flat card on the board, so it gets thinner as the board
+` turns edge on. halfway, the board is edge on, and every fish turns into the kind of the flip. the
+` second half is the board coming around from the other side, so that it is not back to front.
+function extinctSpinStep()
+    spinAge# = game ms() - EXTINCT_SPIN_MS
+    spinTime# = EXTINCT_SPIN_TIME
+    spinP# = spinAge# / spinTime#
+    if spinP# < 0 then spinP# = 0
+
+    if spinP# >= 1
+        ` it is over. every fish goes back to where it belongs, and the scale wave sizes them again from the next frame.
+        EXTINCT_SPIN_MS = -1
+        if EXTINCT_SPIN_TURNED = 0
+            EXTINCT_SPIN_TURNED = 1
+            extinctTurnBoard(EXTINCT_SPIN_KIND)
+        endif
+        for spinI = 0 to CELL_COUNT - 1
+            position sprite CELLS(spinI).spriteId, getCellX(CELLS(spinI).coord.x), getCellY(CELLS(spinI).coord.y)
+        next
+        position sprite SELECTION_SPRITE, getCellX(SELECTION_POS.x), getCellY(SELECTION_POS.y)
+        size sprite SELECTION_SPRITE, CELL_SIZE, CELL_SIZE
+        EXTINCT_POP_AT = game ms() + EXTINCT_FLIP_HOLD
+        exitfunction
+    endif
+
+    spinEase# = spinP# * spinP# * (3 - 2 * spinP#)
+    spinTurn# = spinEase# * 3.14159
+    if spinTurn# >= 1.5708
+        if EXTINCT_SPIN_TURNED = 0
+            EXTINCT_SPIN_TURNED = 1
+            extinctTurnBoard(EXTINCT_SPIN_KIND)
+            spinBubbleY = getCellY(EXTINCT_SPIN_ROW_LO) + (getCellY(EXTINCT_SPIN_ROW_HI) - getCellY(EXTINCT_SPIN_ROW_LO)) / 2
+            spinBubbleR = (getCellY(EXTINCT_SPIN_ROW_HI) - getCellY(EXTINCT_SPIN_ROW_LO)) / 2 + CELL_SIZE
+            spinBubbleN = 10 + (20 * (EXTINCT_SPIN_ROW_HI - EXTINCT_SPIN_ROW_LO)) / CELL_ROW_COUNT
+            spawnBubbles(GRID_CENTER.x, spinBubbleY, spinBubbleR, spinBubbleN, 0, FISH_COLORS(getFishColorIndex(EXTINCT_SPIN_KIND)))
+        endif
+        spinTurn# = spinTurn# - 3.14159
+    endif
+    spinCos# = cos(spinTurn#)
+    spinSin# = sin(spinTurn#)
+    spinThin# = abs(spinCos#)
+    if spinThin# < .04 then spinThin# = .04
+
+    ` the middle of the rows that turn, which stays put
+    spinMidX# = getCellX(0) + (getCellX(CELL_COLUMN_COUNT - 1) - getCellX(0)) * .5
+    spinMidY# = getCellY(EXTINCT_SPIN_ROW_LO) + (getCellY(EXTINCT_SPIN_ROW_HI) - getCellY(EXTINCT_SPIN_ROW_LO)) * .5
+    spinDepth# = EXTINCT_SPIN_DEPTH#
+
+    for spinI = 0 to CELL_COUNT - 1
+        if CELLS(spinI).coord.y < EXTINCT_SPIN_ROW_LO then skip
+        if CELLS(spinI).coord.y > EXTINCT_SPIN_ROW_HI then skip
+        spinDX# = getCellX(CELLS(spinI).coord.x) - spinMidX#
+        spinDY# = getCellY(CELLS(spinI).coord.y) - spinMidY#
+        spinAway# = spinDX# * spinSin#
+        spinNear# = spinDepth# / (spinDepth# + spinAway#)
+        spinSize# = tweenVal(CELLS(spinI).scaleWaveTweenId) * CELL_ART_SIZE * CORAL_SIT#(spinI) * spinNear#
+        position sprite CELLS(spinI).spriteId, spinMidX# + spinDX# * spinCos# * spinNear#, spinMidY# + spinDY# * spinNear#
+        size sprite CELLS(spinI).spriteId, spinSize# * spinThin#, spinSize#
+    next
+
+    ` and the cursor turns along with the cell that it is on, when that is in the rows
+    if SELECTION_POS.y < EXTINCT_SPIN_ROW_LO then exitfunction
+    if SELECTION_POS.y > EXTINCT_SPIN_ROW_HI then exitfunction
+    spinDX# = getCellX(SELECTION_POS.x) - spinMidX#
+    spinDY# = getCellY(SELECTION_POS.y) - spinMidY#
+    spinNear# = spinDepth# / (spinDepth# + spinDX# * spinSin#)
+    position sprite SELECTION_SPRITE, spinMidX# + spinDX# * spinCos# * spinNear#, spinMidY# + spinDY# * spinNear#
+    size sprite SELECTION_SPRITE, CELL_SIZE * spinNear# * spinThin#, CELL_SIZE * spinNear#
+endfunction
+
+
+` every frame: the swap of a rung plays out, a flip pops when it is time, and the ladder is drawn
+function stepExtinct()
+    if EXTINCT_SPRITES_MADE = 0 then exitfunction
+
+    if EXTINCT_ACT_MS >= 0
+        stepActAge# = game ms() - EXTINCT_ACT_MS
+        if stepActAge# >= EXTINCT_ACT_TIME
+            if EXTINCT_ACT_WAY < 0
+                EXTINCT_ACT_MS = -1
+                extinctLeftSwap(EXTINCT_ACT_RUNG)
+            else
+                ` a flip waits for the board to be still
+                stepStill = 1
+                if REQUEST_COMBO_CHECK then stepStill = 0
+                if COMBO_PHASE > 0 then stepStill = 0
+                if LIVE_MOVE_ACTIVE then stepStill = 0
+                if EXTINCT_POP_AT >= 0 then stepStill = 0
+                if EXTINCT_SPIN_MS >= 0 then stepStill = 0
+                if stepStill
+                    EXTINCT_ACT_MS = -1
+                    extinctFlip(EXTINCT_ACT_RUNG)
+                endif
+            endif
+        endif
+    endif
+
+    if EXTINCT_SPIN_MS >= 0
+        extinctSpinStep()
+    endif
+
+    if EXTINCT_POP_AT >= 0
+        if game ms() >= EXTINCT_POP_AT
+            EXTINCT_POP_AT = -1
+            REQUEST_COMBO_CHECK = 1
+        endif
+    endif
+
+    ` a kind that came off of the ladder goes back across the board, once the board is still, and the
+    ` pops of a flip are over. see BACK ACROSS THE BOARD in fish_headers_extinct.
+    seedStill = 1
+    if REQUEST_COMBO_CHECK then seedStill = 0
+    if COMBO_PHASE > 0 then seedStill = 0
+    if LIVE_MOVE_ACTIVE then seedStill = 0
+    if EXTINCT_POP_AT >= 0 then seedStill = 0
+    if EXTINCT_SPIN_MS >= 0 then seedStill = 0
+    if EXTINCT_QUIET then seedStill = 0
+    if EXTINCT_SEED_MS >= 0 then seedStill = 0
+    if seedStill
+        extinctSeedStep()
+    endif
+    if EXTINCT_SEED_MS >= 0
+        extinctSeedTurnStep()
+    endif
+
+    ` a rung that has lost its kind has nobody out on it
+    if EXTINCT_CURSOR_OUT > 0
+        if EXTINCT_RUNG(EXTINCT_CURSOR_OUT - 1) = 0 then EXTINCT_CURSOR_OUT = 0
+    endif
+
+    extinctDraw()
+endfunction
+
+
+` how far along the swap of a rung is, from 0 to 1000, eased so that it starts and stops softly
+function extinctActAlong()
+    alongIs = 0
+    if EXTINCT_ACT_MS >= 0
+        alongAge# = game ms() - EXTINCT_ACT_MS
+        alongTime# = EXTINCT_ACT_TIME
+        alongPart# = alongAge# / alongTime#
+        if alongPart# > 1 then alongPart# = 1
+        if alongPart# < 0 then alongPart# = 0
+        alongIs = alongPart# * alongPart# * (3 - 2 * alongPart#) * 1000
+    endif
+endfunction alongIs
+
+
+function extinctDraw()
+    drawAny = 0
+    for drawR = 0 to EXTINCT_RUNGS - 1
+        if EXTINCT_RUNG(drawR) > 0 then drawAny = 1
+    next
+    if EXTINCT_ON = 0 then drawAny = 0
+    if TUTORIAL_STAGE > 0 then drawAny = 0
+    if PUZZLE_ON then drawAny = 0
+    if QB_ON then drawAny = 0
+
+    if drawAny = 0
+        for drawR = 0 to EXTINCT_RUNGS - 1
+            hide sprite EXTINCT_SLOT_SPRITE(drawR)
+            hide sprite EXTINCT_FISH_SPRITE(drawR)
+            hide sprite EXTINCT_LEFT_SPRITE(drawR)
+            set text alpha EXTINCT_LABEL_TEXT(drawR), 0
+            setInfoBlobEnabled(EXTINCT_INFO_RUNG(drawR), 0)
+            setInfoBlobEnabled(EXTINCT_INFO_LEFT(drawR), 0)
+        next
+        EXTINCT_CURSOR_OUT = 0
+        EXTINCT_CURSOR_EASED# = 0
+        exitfunction
+    endif
+
+    drawNow# = game ms()
+    drawHalf = CELL_SIZE / 2
+    drawColX = getCellX(-1)
+    drawKeep# = HUD_KEEP#
+    drawWave# = sin(drawNow# * .005)
+    drawAct# = extinctActAlong() * .001
+    drawOutRung = EXTINCT_CURSOR_OUT - 1
+
+    for drawR = 0 to EXTINCT_RUNGS - 1
+        drawRowY = getCellY(extinctRungRow(drawR))
+        drawKind = EXTINCT_RUNG(drawR)
+
+        ` the box. the rungs that have nothing on them yet are fainter.
+        drawSlotAlpha = 40 + 18 * drawWave#
+        if drawKind = 0 then drawSlotAlpha = 16
+        drawSlotEdge# = QUEST_ZONE_EDGE#
+        if drawR = drawOutRung then drawSlotEdge# = QUEST_ZONE_EDGE_ON#
+        position sprite EXTINCT_SLOT_SPRITE(drawR), drawColX - drawHalf, drawRowY - drawHalf
+        size sprite EXTINCT_SLOT_SPRITE(drawR), CELL_SIZE, CELL_SIZE
+        color sprite EXTINCT_SLOT_SPRITE(drawR), rgb(255, 150, 110, drawSlotAlpha * drawKeep#)
+        set sprite all texcoord1 EXTINCT_SLOT_SPRITE(drawR), QUEST_ZONE_FILL#, drawSlotEdge#, drawR * 1.3 + 7, QUEST_ZONE_WAVE#
+        show sprite EXTINCT_SLOT_SPRITE(drawR)
+
+        if drawKind > 0
+            ` it slides down to its row, when a rung under it has been used
+            drawY# = EXTINCT_DRAWN_Y#(drawR)
+            drawY# = drawY# + (drawRowY - drawY#) * .25
+            if abs(drawRowY - drawY#) < .5 then drawY# = drawRowY
+            EXTINCT_DRAWN_Y#(drawR) = drawY#
+
+            ` it slides up onto the rung from the board, swelling as it goes
+            drawFishX# = drawColX
+            drawFishSize# = CELL_ART_SIZE
+            drawBornAge# = drawNow# - EXTINCT_BORN_MS(drawR)
+            drawBornTime# = EXTINCT_BORN_TIME
+            if drawBornAge# < drawBornTime#
+                drawBornP# = drawBornAge# / drawBornTime#
+                if drawBornP# < 0 then drawBornP# = 0
+                drawFishX# = drawColX + CELL_SIZE * (1 - drawBornP#) * (1 - drawBornP#)
+                drawFishSize# = CELL_ART_SIZE * (1 + .6 * sin(drawBornP# * 3.14159))
+            endif
+
+            ` and a swap of it slides it over
+            if EXTINCT_ACT_MS >= 0
+                if EXTINCT_ACT_RUNG = drawR
+                    drawFishX# = drawFishX# + CELL_SIZE * drawAct# * EXTINCT_ACT_WAY
+                endif
+            endif
+
+            set sprite texture EXTINCT_FISH_SPRITE(drawR), drawKind
+            position sprite EXTINCT_FISH_SPRITE(drawR), drawFishX#, drawY# - (1 + 2 * drawWave#)
+            size sprite EXTINCT_FISH_SPRITE(drawR), drawFishSize#, drawFishSize#
+            color sprite EXTINCT_FISH_SPRITE(drawR), rgb(255, 255, 255, 255 * drawKeep#)
+            show sprite EXTINCT_FISH_SPRITE(drawR)
+
+            ` what a swap to the left gets, in a box to the left of the rung, so that it looks like
+            ` what the swap is for. both are bright while the cursor is out on the rung.
+            if drawR > 0
+                drawLabelAlpha = 150
+                drawLeftAlpha = 30
+                drawLeftEdge# = QUEST_ZONE_EDGE#
+                if drawR = drawOutRung
+                    drawLabelAlpha = 255
+                    drawLeftAlpha = 60
+                    drawLeftEdge# = QUEST_ZONE_EDGE_ON#
+                endif
+                position sprite EXTINCT_LEFT_SPRITE(drawR), drawColX - (drawHalf + CELL_SIZE), drawY# - drawHalf
+                size sprite EXTINCT_LEFT_SPRITE(drawR), CELL_SIZE, CELL_SIZE
+                color sprite EXTINCT_LEFT_SPRITE(drawR), rgb(255, 190, 150, drawLeftAlpha * drawKeep#)
+                set sprite all texcoord1 EXTINCT_LEFT_SPRITE(drawR), QUEST_ZONE_FILL#, drawLeftEdge#, drawR * 1.3 + 11, QUEST_ZONE_WAVE#
+                show sprite EXTINCT_LEFT_SPRITE(drawR)
+                set text position EXTINCT_LABEL_TEXT(drawR), drawColX - CELL_SIZE, drawY# - (1 + 2 * drawWave#)
+                set text alpha EXTINCT_LABEL_TEXT(drawR), drawLabelAlpha * drawKeep#
+                extinctPlaceInfo(EXTINCT_INFO_LEFT(drawR), drawColX - CELL_SIZE, drawRowY)
+            else
+                hide sprite EXTINCT_LEFT_SPRITE(drawR)
+                set text alpha EXTINCT_LABEL_TEXT(drawR), 0
+                setInfoBlobEnabled(EXTINCT_INFO_LEFT(drawR), 0)
+            endif
+            extinctPlaceInfo(EXTINCT_INFO_RUNG(drawR), drawColX, drawRowY)
+        else
+            hide sprite EXTINCT_FISH_SPRITE(drawR)
+            hide sprite EXTINCT_LEFT_SPRITE(drawR)
+            set text alpha EXTINCT_LABEL_TEXT(drawR), 0
+            setInfoBlobEnabled(EXTINCT_INFO_RUNG(drawR), 0)
+            setInfoBlobEnabled(EXTINCT_INFO_LEFT(drawR), 0)
+        endif
+    next
+
+    ` the cursor, out on its rung, and on its way out and back. a swap to the right takes it along.
+    drawOutWant# = 0
+    if EXTINCT_CURSOR_OUT > 0 then drawOutWant# = 1
+    EXTINCT_CURSOR_EASED# = EXTINCT_CURSOR_EASED# + (drawOutWant# - EXTINCT_CURSOR_EASED#) * .35
+    if abs(drawOutWant# - EXTINCT_CURSOR_EASED#) < .02 then EXTINCT_CURSOR_EASED# = drawOutWant#
+    drawCursorOn = 0
+    if EXTINCT_CURSOR_EASED# <> 0 then drawCursorOn = 1
+    drawShakeAge# = drawNow# - EXTINCT_SHAKE_MS
+    drawShakeTime# = 260
+    drawShaking = 0
+    if EXTINCT_SHAKE_MS >= 0
+        if drawShakeAge# < drawShakeTime# then drawShaking = 1
+    endif
+    if LIVE_MOVE_ACTIVE then drawCursorOn = 0 `a move that is playing puts the cursor where it wants it
+    if drawCursorOn
+        drawCursorX# = getCellX(SELECTION_POS.x) - CELL_SIZE * EXTINCT_CURSOR_EASED#
+        drawCursorY# = getCellY(SELECTION_POS.y)
+        if EXTINCT_ACT_MS >= 0
+            if EXTINCT_ACT_WAY > 0
+                drawCursorX# = drawCursorX# + CELL_SIZE * drawAct#
+            endif
+        endif
+        if drawShaking
+            drawShakeBy# = sin(drawShakeAge# * .07) * 3 * (1 - drawShakeAge# / drawShakeTime#)
+            drawCursorX# = drawCursorX# + drawShakeBy# * EXTINCT_SHAKE_X
+            drawCursorY# = drawCursorY# + drawShakeBy# * EXTINCT_SHAKE_Y
+        endif
+        position sprite SELECTION_SPRITE, drawCursorX#, drawCursorY#
+    endif
+endfunction
+
+
+` the spot of info mode for one box of the ladder, on the cell whose middle is at x, y
+function extinctPlaceInfo(placeIndex, placeX, placeY)
+    placeBlob = INFOS(placeIndex)
+    placeBlob.topLeft.x = placeX - CELL_SIZE / 2
+    placeBlob.topLeft.y = placeY - CELL_SIZE / 2
+    placeBlob.size.x = CELL_SIZE
+    placeBlob.size.y = CELL_SIZE
+    placeBlob.enabled = 1
+    INFOS(placeIndex) = placeBlob
+endfunction
+
+
+` THE SAVED GAME: the rungs
+function extinctSave()
+    set pref EXTINCT_PREF, 5
+    for saveR = 0 to EXTINCT_RUNGS - 1
+        set pref EXTINCT_PREF + 1 + saveR, EXTINCT_RUNG(saveR)
+    next
+endfunction
+
+` reset_game has already emptied the ladder. a game that was saved before there was one has nothing on it.
+function extinctLoad()
+    if get pref(EXTINCT_PREF, 0) <> 5 then exitfunction `1 to 4 were ladders that never shipped
+    for loadR = 0 to EXTINCT_RUNGS - 1
+        EXTINCT_RUNG(loadR) = get pref(EXTINCT_PREF + 1 + loadR, 0)
+        EXTINCT_BORN_MS(loadR) = 0
+        EXTINCT_DRAWN_Y#(loadR) = getCellY(extinctRungRow(loadR))
+    next
+    extinctRecount()
+endfunction
+
+` a number that changes whenever the ladder does, for saveSignature
+function extinctSignature()
+    sigIs = 0
+    for sigR = 0 to EXTINCT_RUNGS - 1
+        sigIs = sigIs + EXTINCT_RUNG(sigR) * (139 + sigR * 10)
+    next
+endfunction sigIs

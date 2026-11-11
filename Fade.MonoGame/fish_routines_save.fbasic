@@ -116,6 +116,7 @@ save_game:
     tideSave()
     schoolSave() `see THE SAVED GAME in fish_headers_school
     rainbowSave() `see THE SAVED GAME in fish_headers_rainbow
+    extinctSave() `see THE SAVED GAME in fish_headers_extinct
 
     ` how long the fast has been, and the modifiers of the game. see fish_headers_fast.
     fastSave()
@@ -261,6 +262,9 @@ load_game:
     ` and which of them are rainbow fish
     rainbowLoad()
 
+    ` and the ladder of the kinds that are extinct
+    extinctLoad()
+
     ` and the fast, and the modifiers of the game
     fastLoad()
 
@@ -281,6 +285,7 @@ frame_autosave:
     ` not during the tutorial, which plays on little boards of its own. see THE LITTLE BOARDS in fish_routines_intro.
     if TUTORIAL_STAGE > 0 then return
     if PUZZLE_ON then return
+    if QB_PHASE > 0 then return `the game is saved as it was before the quest board came up. see fish_headers_qboard.
 
     ` not while fish are still popping and falling. the board is saved once it has settled.
     if REQUEST_COMBO_CHECK then return
@@ -361,6 +366,10 @@ function saveSignature()
     signature = signature + QUEST_PROG_NOW * 103 + QUEST_PICK_CELL * 107 + QUEST_LIST_N * 109
     signature = signature + FAST_STREAK * 113 + GAME_MODS * 127
     signature = signature + RAINBOW_BURST_COUNT * 131 + RAINBOW_BREED_COUNT * 137 `see fish_headers_rainbow
+    sigExtinct = extinctSignature() `see fish_headers_extinct
+    signature = signature + sigExtinct
+    sigStack = qsSignature() `see THE STACK in fish_headers_qboard
+    signature = signature + sigStack
     for i = 0 to CARD_LENGTH - 1
         signature = signature + CARDS(i).uses * (37 + i)
     next
@@ -447,7 +456,7 @@ function grantMoveToSlot(abilityIndex, slot)
     moveBinding.icon$ = "move" + str$(slot + 1)
 
     set text moveBinding.titleTextId, CARDS(abilityIndex).name$
-    size text x moveBinding.titleTextId, HUD_LIST_WIDTH, .1, HUD_LIST_SCALE# `fit the name to the column, so that a long one does not run into the key
+    size text x moveBinding.titleTextId, MOVE_LIST_NAME_WIDTH, .1, HUD_LIST_SCALE# `fit the name to the column, so that a long one does not run into the key
     set text moveBinding.keyTextId, "{" + moveBinding.icon$ + "}"
 
     ` the move explains itself in info mode. a slot only ever gets one info blob, and whichever move
@@ -461,7 +470,7 @@ function grantMoveToSlot(abilityIndex, slot)
         INFOS(moveBinding.infoIndex).title$ = CARDS(abilityIndex).name$
         INFOS(moveBinding.infoIndex).desc$ = moveInfo$
     else
-        moveBinding.infoIndex = allocateInfoBlob(12, ABILITY_ROWS_Y + 2 - slot * 18, 140, 18, CARDS(abilityIndex).name$, moveInfo$)
+        moveBinding.infoIndex = allocateInfoBlob(12, ABILITY_ROWS_Y + 2 - slot * 18, MOVE_LIST_INFO_WIDTH, 18, CARDS(abilityIndex).name$, moveInfo$)
         moveBinding.hasInfo = 1
     endif
 

@@ -530,6 +530,7 @@ endfunction
 ` the group. see fish_headers_school.
 function schoolJudge(schoolGroup, schoolBase, schoolSwapped)
     if SCHOOL_ON = 0 then exitfunction
+    if QB_ON then exitfunction `every group on a quest board pops. see fish_headers_qboard.
 
     ` the first three little boards of the tutorial are about plain pops. the last is about this.
     if TUTORIAL_BOARD
@@ -978,6 +979,13 @@ function schoolDrawTake(schoolTakeCell)
         schoolTakeWas = CELLS(schoolTakeCell).value
         if schoolTakeWas <= 0 then schoolTakeOk = 0
         if schoolTakeWas >= TEX_JELLY then schoolTakeOk = 0
+        ` a kind that is extinct does not drop in from a school either. see fish_headers_extinct.
+        if schoolTakeOk
+            schoolTakeOut = FLOCK_KIND(schoolTakeFish)
+            if schoolTakeOut >= 1 and schoolTakeOut <= EXTINCT_KINDS
+                if EXTINCT_OUT(schoolTakeOut) then schoolTakeOk = 0
+            endif
+        endif
         if schoolTakeOk
             schoolTakeKind = FLOCK_KIND(schoolTakeFish)
             schoolTakeNeed = getRequiredComboCount()

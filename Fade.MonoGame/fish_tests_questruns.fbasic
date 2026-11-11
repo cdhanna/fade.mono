@@ -41,6 +41,9 @@ abstract test questRun from fishBoard
     global tqMoveDir = -1
     global tqLastO1 = -1
     global tqLastO2 = -1
+    ` 1 when the scripts may not rig anything: a swap is only made when the fish are already right
+    ` for it. the quest bots (fish_tests_questbots) play the scripts this way.
+    global tqHonest = 0
 
     function tqClearKeep()
         for tqCk = 0 to 399
@@ -165,6 +168,7 @@ abstract test questRun from fishBoard
     ` can this cell be one of the three of a line of kind tqUseK? it is already that kind, or it can be made that kind.
     function tqCanBe(tqCanAt, tqUseK)
         tqCan = tqFree(tqCanAt)
+        if tqHonest then tqCan = 0
         if tqCanAt >= 0
             if CELLS(tqCanAt).value = tqUseK
                 if QUEST_MARK(tqCanAt) = 0 and tqKeep(tqCanAt) = 0 then tqCan = 1
@@ -453,7 +457,14 @@ abstract test questRun from fishBoard
         tqBrDone = 0
         for tqBrDir = 0 to 3
             tqBrFrom = tqSide(tqBrAt, tqBrDir)
-            if tqBrDone = 0
+            tqBrRight = 1
+            if tqHonest
+                tqBrRight = 0
+                if tqBrFrom >= 0
+                    if CELLS(tqBrFrom).value = tqBrK then tqBrRight = 1
+                endif
+            endif
+            if tqBrDone = 0 and tqBrRight
                 if tqFree(tqBrFrom)
                     if questLocksCell(tqBrAt) = 0
                         tqBrOld = CELLS(tqBrFrom).value
@@ -949,6 +960,7 @@ abstract test questRun from fishBoard
         for tqPuS = 0 to 3
             if CELLS(tqSide(tqPuAt, tqPuS)).value = tqPuKind then tqPuHas = 1
         next
+        if tqHonest then tqPuHas = 1
         if tqPuHas = 0
             for tqPuS = 0 to 3
                 if tqPuHas = 0
@@ -1146,7 +1158,14 @@ abstract test questRun from fishBoard
                 tqFcKind = QUEST_FORE(tqFcX * 16)
                 tqFcOne = tqFcX + CELL_COLUMN_COUNT
                 tqFcTwo = tqFcOne + CELL_COLUMN_COUNT
-                if tqFree(tqFcOne) and tqFree(tqFcTwo) and tqFree(tqFcX)
+                tqFcRight = 1
+                if tqHonest
+                    tqFcRight = 0
+                    if CELLS(tqFcOne).value = tqFcKind and CELLS(tqFcTwo).value = tqFcKind
+                        if CELLS(tqFcX).value <> tqFcKind then tqFcRight = 1
+                    endif
+                endif
+                if tqFree(tqFcOne) and tqFree(tqFcTwo) and tqFree(tqFcX) and tqFcRight
                     tqFcOldOne = CELLS(tqFcOne).value
                     tqFcOldTwo = CELLS(tqFcTwo).value
                     tqFcOldTop = CELLS(tqFcX).value

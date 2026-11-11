@@ -1,0 +1,424 @@
+remstart
+    THE QUEST BOTS
+    a long test (see THE LONG TESTS in fish_tests_seed) that measures how hard the quests are. every
+    quest is played many times, each time on a random board of a seed of its own, with no cards, by
+    two bots:
+        0  OBLIVIOUS. it picks the quest up, and then plays as if there were none: every swap is the
+           one that pops the most fish. it shows how much a quest fights the way the game is played.
+        1  AWARE. it plays the script of the quest (THE QUESTS, PLAYED, in fish_tests_questruns),
+           but honestly: tqHonest is on, so the script rigs nothing, and only makes a swap when the
+           fish are already right for it. when the script has nothing to do, it makes the swap that
+           pops the most, leaving the fish of the quest alone.
+    nothing is rigged: the board is the one that the seed deals, and every swap is a real one.
+
+    an attempt ends when the quest is finished, or after FISH_QB_CAP swaps (120). the score bar is
+    out of reach, so no round ends, and no upgrade screen comes up. "protected" counts half of the
+    third round, the way that it would in a game.
+
+        FISH_TESTS_LONG=1 Fade.MonoGame.exe --filter-uid fade::long_quest_bots
+    or build/run-long-tests.ps1 -Name long_quest_bots. it prints a line that starts with "qb: RESULT"
+    for every attempt, and "qb: reset" for every time that a quest starts over, with what the
+    quest said. it asserts nothing.
+        FISH_QB_BOT        0 or 1 for one bot. both, when it is not set.
+        FISH_QB_FROM/TO    the quests to play, by number (1 to 32)
+        FISH_QB_SEEDS      how many seeds each (20)
+        FISH_QB_SEED_BASE  the first seed (5000). quest q, try n is seed base + q * 1000 + n.
+        FISH_QB_CAP        the most swaps an attempt gets (120)
+        FISH_QB_TRACE=1    a line for every swap
+remend
+
+test long_quest_bots from questRun
+    if val(env$("FISH_TESTS_LONG")) = 0 then end
+
+    ` the upgrade screen waits for a key. it should never come up, but if it does, it is held down.
+    global qzPress = 0
+    mock new action down
+    endmock qzPress
+
+    ` a swap that was refused, or that popped nothing, is not tried again until the score moves
+    global dim qzBanCell(64)
+    global dim qzBanDown(64)
+    global qzBans = 0
+    global qzPickCell = -1
+    global qzPickDown = 0
+
+    ` is a swap of these two cells one that the bot can make at all?
+    function qzCanSwap(qzCsA, qzCsB)
+        qzCsOk = 1
+        if qzCsA < 0 or qzCsB < 0 then qzCsOk = 0
+        if qzCsOk
+            if CELLS(qzCsA).value < 1 or CELLS(qzCsB).value < 1 then qzCsOk = 0
+            if CELLS(qzCsA).value = CELLS(qzCsB).value then qzCsOk = 0
+            if questLocksCell(qzCsA) then qzCsOk = 0
+            if questLocksCell(qzCsB) then qzCsOk = 0
+        endif
+    endfunction qzCsOk
+
+    ` does the group that tqGroup just walked have a fish of the quest in it, or the kind to avoid?
+    function qzGroupTouchy(qzGtKind)
+        qzGt = 0
+        if tqAvoidK > 0
+            if qzGtKind = tqAvoidK then qzGt = 1
+        endif
+        qzGtLast = CELL_COUNT - 1
+        for qzGtI = 0 to qzGtLast
+            if tqSeen(qzGtI)
+                if QUEST_MARK(qzGtI) > 0 then qzGt = 1
+            endif
+        next
+    endfunction qzGt
+
+    ` how many fish a swap pops: the groups big enough to pop that the two fish are in after it.
+    ` -1 when a careful bot would not make it, because it moves or pops a fish of the quest.
+    function qzWorth(qzWA, qzWB, qzWCareful)
+        qzW = 0
+        qzWNeed = getRequiredComboCount()
+        if qzWCareful
+            if QUEST_MARK(qzWA) > 0 or QUEST_MARK(qzWB) > 0 then qzW = -1
+        endif
+        if qzW = 0
+            qzWKa = CELLS(qzWA).value
+            qzWKb = CELLS(qzWB).value
+            CELLS(qzWA).value = qzWKb
+            CELLS(qzWB).value = qzWKa
+            qzWSize = tqGroup(qzWA)
+            if qzWSize >= qzWNeed
+                qzW = qzW + qzWSize
+                if qzWCareful
+                    if qzGroupTouchy(qzWKb) then qzW = -1000
+                endif
+            endif
+            qzWSize = tqGroup(qzWB)
+            if qzWSize >= qzWNeed
+                qzW = qzW + qzWSize
+                if qzWCareful
+                    if qzGroupTouchy(qzWKa) then qzW = -1000
+                endif
+            endif
+            CELLS(qzWA).value = qzWKa
+            CELLS(qzWB).value = qzWKb
+            if qzW < 0 then qzW = -1
+        endif
+    endfunction qzW
+
+    ` the swap that pops the most, into qzPickCell and qzPickDown. what it pops, or 0 when the best
+    ` there is pops nothing, or -1 when there is no swap at all.
+    function qzBest(qzBCareful)
+        qzBBest = -1
+        qzPickCell = -1
+        qzBLast = CELL_COUNT - 1
+        for qzBCell = 0 to qzBLast
+            qzBCol = qzBCell mod CELL_COLUMN_COUNT
+            qzBRow = qzBCell / CELL_COLUMN_COUNT
+            qzBNoRight = 0
+            qzBNoBelow = 0
+            if qzBans > 0
+                for qzBB = 0 to qzBans - 1
+                    if qzBanCell(qzBB) = qzBCell
+                        if qzBanDown(qzBB) then qzBNoBelow = 1
+                        if qzBanDown(qzBB) = 0 then qzBNoRight = 1
+                    endif
+                next
+            endif
+            if qzBCol < CELL_COLUMN_COUNT - 1 and qzBNoRight = 0
+                if qzCanSwap(qzBCell, qzBCell + 1)
+                    qzBW = qzWorth(qzBCell, qzBCell + 1, qzBCareful)
+                    if qzBW > qzBBest
+                        qzBBest = qzBW
+                        qzPickCell = qzBCell
+                        qzPickDown = 0
+                    endif
+                endif
+            endif
+            if qzBRow < CELL_ROW_COUNT - 1 and qzBNoBelow = 0
+                if qzCanSwap(qzBCell, qzBCell + CELL_COLUMN_COUNT)
+                    qzBW = qzWorth(qzBCell, qzBCell + CELL_COLUMN_COUNT, qzBCareful)
+                    if qzBW > qzBBest
+                        qzBBest = qzBW
+                        qzPickCell = qzBCell
+                        qzPickDown = 1
+                    endif
+                endif
+            endif
+        next
+    endfunction qzBBest
+
+    qzOnlyBot = val(env$("FISH_QB_BOT"))
+    qzBotText$ = env$("FISH_QB_BOT")
+    if qzBotText$ = "" then qzOnlyBot = -1
+    qzFrom = val(env$("FISH_QB_FROM"))
+    if qzFrom < 1 then qzFrom = 1
+    qzTo = val(env$("FISH_QB_TO"))
+    if qzTo < 1 or qzTo > QUEST_COUNT then qzTo = QUEST_COUNT
+    qzSeeds = val(env$("FISH_QB_SEEDS"))
+    if qzSeeds < 1 then qzSeeds = 20
+    qzSeedBase = val(env$("FISH_QB_SEED_BASE"))
+    if qzSeedBase < 1 then qzSeedBase = 5000
+    qzCap = val(env$("FISH_QB_CAP"))
+    if qzCap < 1 then qzCap = 120
+    qzTrace = val(env$("FISH_QB_TRACE"))
+    qzHalf = getRoundSpan(QUEST_FIRST_ROUND) / 2
+    print "qb: SPANS " + str$(getRoundSpan(QUEST_FIRST_ROUND)) + " " + str$(getRoundSpan(QUEST_FIRST_ROUND + 1)) + " " + str$(getRoundSpan(QUEST_FIRST_ROUND + 2))
+    print "qb: START from " + str$(qzFrom) + " to " + str$(qzTo) + " seeds " + str$(qzSeeds) + " base " + str$(qzSeedBase) + " cap " + str$(qzCap) + " bot " + str$(qzOnlyBot) + " half-round " + str$(qzHalf)
+
+    for qzBot = 0 to 1
+        qzBotOn = 1
+        if qzOnlyBot >= 0
+            if qzOnlyBot <> qzBot then qzBotOn = 0
+        endif
+        for qzQuest = qzFrom to qzTo
+            for qzTry = 1 to qzSeeds
+                if qzBotOn
+                    ` a new game on a seed of its own: the board is the one that it deals, and no cards
+                    qzSeed = qzSeedBase + qzQuest * 1000 + qzTry
+                    OPTION_GAME_SEED = qzSeed
+                    OPTION_GAME_LENGTH = GAME_LENGTH_REGULAR
+                    OPTION_GAME_ZEN = 0
+                    REQUEST_SEED_RESTART = 1
+                    runto _loop
+                    runto _loop
+                    QTALK_ENABLED = 0
+                    TEACH_ENABLED = 0
+                    OPTION_SOUND = 0
+                    OPTION_MUSIC = 0
+                    SCORE_BAR.startVal = CURRENT_SCORE
+                    SCORE_BAR.endVal = CURRENT_SCORE + 1000000
+                    PROGRESS_BARS(0) = SCORE_BAR
+                    testCursor(CELL_COLUMN_COUNT / 2, CELL_ROW_COUNT / 2)
+                    questForce(qzQuest)
+                    QUEST_REARM = 0 `it waits to be picked up, the way that it does in a game
+                    set sfx group volume SFX_GROUP_SFX, 0
+                    set sfx group volume SFX_GROUP_MUSIC, 0
+                    tqHonest = qzBot
+                    QUEST_LAST_SAY$ = ""
+                    QUEST_PREV_SAY$ = ""
+                    qzBans = 0
+
+                    qzDoneBefore = QUESTS_DONE
+                    qzScoreStart = CURRENT_SCORE
+                    qzSwaps = 0
+                    qzActions = 0
+                    qzResets = 0
+                    qzLostSum = 0
+                    qzBestProg = 0
+                    qzSetbacks = 0
+                    qzStepRun = 0
+                    qzSetLost = 0
+                    qzProgPrev = 0
+                    qzScoreBefore = CURRENT_SCORE
+                    qzProgNow = 0
+                    qzWasActive = 0
+                    qzNight = 0
+                    qzScripted = 0
+                    qzStuck = 0
+                    qzEnd = 0
+                    qzWhy$ = "cap"
+                    while qzEnd = 0
+                        qzCode = 1
+                        qzGreedy = 0
+                        tqClearKeep()
+                        if QUEST_STATE = QSTATE_OFFERED
+                            qzCode = tqPlan()
+                        endif
+                        if QUEST_STATE = QSTATE_ACTIVE
+                            if QUEST_CURSOR_OUT
+                                qzCode = tqPlan()
+                            else
+                                qzCode = 0
+                                if qzBot = 1
+                                    qzCode = tqPlanQuest()
+                                    ` only a swap or a step of the script is taken. the free move is a card.
+                                    if qzCode >= 30 then qzCode = 0
+                                    if qzCode = 1 then qzCode = 0
+                                    ` a script that only walks, with no swap for a dozen steps, gives way to a swap
+                                    if qzCode >= 10 and qzCode < 20
+                                        qzStepRun = qzStepRun + 1
+                                        if qzStepRun > 12 then qzCode = 0
+                                    endif
+                                    if qzCode >= 20
+                                        qzScripted = qzScripted + 1
+                                        qzStepRun = 0
+                                    endif
+                                endif
+                                if qzCode = 0
+                                    qzGreedy = 1
+                                    qzBW = qzBest(qzBot)
+                                    if qzBW < 0
+                                        ` nothing careful is left: anything at all
+                                        qzBW = qzBest(0)
+                                    endif
+                                    if qzPickCell >= 0
+                                        ` the cursor walks there, a step at a time, the way that a player's does
+                                        qzWalkDir = tqToward(qzPickCell)
+                                        if qzWalkDir >= 0
+                                            qzCode = 10 + qzWalkDir
+                                            qzGreedy = 0
+                                        else
+                                            qzCode = 20
+                                            if qzPickDown then qzCode = 22
+                                            qzStepRun = 0
+                                        endif
+                                    else
+                                        qzCode = 1
+                                        qzBans = 0
+                                    endif
+                                endif
+                            endif
+                        endif
+
+                        qzActions = qzActions + 1
+                        qzMovesBefore = CURRENT_MOVE_COUNT
+                        qzScoreBefore = CURRENT_SCORE
+                        qzDx = 0
+                        qzDy = 0
+                        qzDir = qzCode mod 10
+                        if qzDir = 0 then qzDx = 1
+                        if qzDir = 1 then qzDx = -1
+                        if qzDir = 2 then qzDy = 1
+                        if qzDir = 3 then qzDy = -1
+                        if qzCode = 1 then REQUEST_COMBO_CHECK = 1
+                        if qzCode >= 10 and qzCode < 20
+                            testQueueMove(qzDx, qzDy, 0, -1)
+                        endif
+                        if qzCode >= 20 and qzCode < 30
+                            testQueueMove(qzDx, qzDy, 1, -1)
+                            if QUEST_STATE = QSTATE_ACTIVE and QUEST_CURSOR_OUT = 0
+                                qzSwaps = qzSwaps + 1
+                                if TIDE_NIGHT then qzNight = qzNight + 1
+                            endif
+                        endif
+
+                        ` the board settles
+                        qzFrames = 0
+                        qzBusy = 1
+                        qzCalm = 0
+                        while qzBusy
+                            runto _loop
+                            qzFrames = qzFrames + 1
+                            ` protected counts half of the third round, not half of a million
+                            if QUEST_ID = QUEST_PROTECTED
+                                if QUEST_V(1) > qzHalf then QUEST_V(1) = qzHalf
+                            endif
+                            if QUEST_STATE = QSTATE_ACTIVE
+                                qzWasActive = 1
+                                qzProgNow = 0
+                                if QUEST_PROG_NEED > 0 then qzProgNow = QUEST_PROG_NOW * 1000 / QUEST_PROG_NEED
+                                if qzProgNow > qzBestProg then qzBestProg = qzProgNow
+                                ` the count went down without the quest starting over: a setback
+                                if qzProgNow < qzProgPrev
+                                    qzSetbacks = qzSetbacks + 1
+                                    qzSetDrop = qzProgPrev - qzProgNow
+                                    qzSetLost = qzSetLost + qzSetDrop
+                                    print "qb: setback quest " + str$(qzQuest) + " bot " + str$(qzBot) + " seed " + str$(qzSeed) + " swap " + str$(qzSwaps) + " from " + str$(qzProgPrev) + " to " + str$(qzProgNow) + " said [" + QUEST_LAST_SAY$ + "]"
+                                endif
+                                qzProgPrev = qzProgNow
+                            endif
+                            if qzWasActive
+                                if QUEST_STATE = QSTATE_NONE and QUESTS_DONE = qzDoneBefore
+                                    qzResets = qzResets + 1
+                                    qzLostSum = qzLostSum + qzProgNow
+                                    print "qb: reset quest " + str$(qzQuest) + " bot " + str$(qzBot) + " seed " + str$(qzSeed) + " swap " + str$(qzSwaps) + " lost " + str$(qzProgNow) + " said [" + QUEST_LAST_SAY$ + "] before [" + QUEST_PREV_SAY$ + "]"
+                                    QUEST_LAST_SAY$ = ""
+                                    QUEST_PREV_SAY$ = ""
+                                    qzWasActive = 0
+                                    qzProgNow = 0
+                                    qzProgPrev = 0
+                                endif
+                            endif
+                            if REQUEST_ABILITY_SELECTION and LIVE_MOVE_ACTIVE = 0
+                                print "qb: the upgrade screen came up, quest " + str$(qzQuest) + " seed " + str$(qzSeed)
+                                qzPress = 1
+                                qzShut = 0
+                                qzScreenFrames = 0
+                                while qzShut = 0
+                                    runto frame_ability_selection
+                                    qzScreenFrames = qzScreenFrames + 1
+                                    qzFade# = tweenVal(INFO_FADE_TWEEN_ID)
+                                    if qzFade# < 1
+                                        qzShut = 1
+                                    else
+                                        UPGRADE_SKIP_SELECTED = 1
+                                        UPGRADE_ROW_PICK = 0
+                                    endif
+                                    if qzScreenFrames > 2000 then qzShut = 1
+                                endwhile
+                                qzPress = 0
+                                runto _loop
+                                SCORE_BAR.endVal = CURRENT_SCORE + 1000000
+                                PROGRESS_BARS(0) = SCORE_BAR
+                            endif
+                            qzBusy = 0
+                            if REQUEST_COMBO_CHECK then qzBusy = 1
+                            if LIVE_MOVE_ACTIVE then qzBusy = 1
+                            if QUEUED_MOVE_NUM > 0 then qzBusy = 1
+                            if SCORE_TICK_COUNT > 0 then qzBusy = 1
+                            if SCORE_BAR_HOLD = 1 then qzBusy = 1
+                            if REQUEST_ABILITY_SELECTION then qzBusy = 1
+                            if PENDING_BOARD_EXPANSIONS > 0 then qzBusy = 1
+                            if QUEST_ACCEPT_MS >= 0 then qzBusy = 1
+                            if QUEST_INIT_DUE and QUEST_ARRIVING = 0 then qzBusy = 1
+                            if COMBO_PHASE > 0 then qzBusy = 1
+                            if qzBusy = 0
+                                qzCalm = qzCalm + 1
+                                if qzCalm < 3 then qzBusy = 1
+                            else
+                                qzCalm = 0
+                            endif
+                            if qzFrames > 1500
+                                qzBusy = 0
+                                qzStuck = qzStuck + 1
+                                print "qb: stuck quest " + str$(qzQuest) + " seed " + str$(qzSeed) + ": combo " + str$(REQUEST_COMBO_CHECK) + " live " + str$(LIVE_MOVE_ACTIVE) + " queued " + str$(QUEUED_MOVE_NUM) + " init " + str$(QUEST_INIT_DUE) + " phase " + str$(COMBO_PHASE)
+                            endif
+                        endwhile
+
+                        ` a greedy swap that popped nothing, or was refused, is not tried again until the score moves
+                        if qzGreedy
+                            if CURRENT_SCORE = qzScoreBefore
+                                if qzBans < 64
+                                    qzBanCell(qzBans) = qzPickCell
+                                    qzBanDown(qzBans) = qzPickDown
+                                    qzBans = qzBans + 1
+                                endif
+                            else
+                                qzBans = 0
+                            endif
+                        endif
+                        if qzTrace = 1
+                            print "qb: swap " + str$(qzSwaps) + " action " + str$(qzActions) + " code " + str$(qzCode) + " greedy " + str$(qzGreedy) + " state " + str$(QUEST_STATE) + " " + str$(QUEST_PROG_NOW) + "/" + str$(QUEST_PROG_NEED) + " score " + str$(CURRENT_SCORE) + " night " + str$(TIDE_NIGHT)
+                        endif
+
+                        if QUESTS_DONE > qzDoneBefore
+                            qzEnd = 1
+                            qzWhy$ = "done"
+                        endif
+                        if qzEnd = 0
+                            if qzSwaps >= qzCap then qzEnd = 2
+                            if qzActions >= qzCap * 20
+                                qzEnd = 2
+                                qzWhy$ = "actions"
+                            endif
+                            if qzStuck >= 3
+                                qzEnd = 2
+                                qzWhy$ = "stuck"
+                            endif
+                            if QUEST_ID <> qzQuest
+                                qzEnd = 2
+                                qzWhy$ = "gone"
+                            endif
+                        endif
+                    endwhile
+
+                    qzDone = 0
+                    if qzEnd = 1 then qzDone = 1
+                    ` what the swaps scored, before a finished quest paid out the rest of the round
+                    qzPoints = qzScoreBefore - qzScoreStart
+                    print "qb: RESULT quest " + str$(qzQuest) + " bot " + str$(qzBot) + " seed " + str$(qzSeed) + " done " + str$(qzDone) + " swaps " + str$(qzSwaps) + " resets " + str$(qzResets) + " setbacks " + str$(qzSetbacks) + " setlost " + str$(qzSetLost) + " lostsum " + str$(qzLostSum) + " best " + str$(qzBestProg) + " night " + str$(qzNight) + " scripted " + str$(qzScripted) + " points " + str$(qzPoints) + " actions " + str$(qzActions) + " board " + str$(CELL_COLUMN_COUNT) + "x" + str$(CELL_ROW_COUNT) + " why " + qzWhy$
+                endif
+            next
+        next
+    next
+    tqHonest = 0
+    OPTION_GAME_SEED = 0
+    print "qb: END"
+    end
+endtest

@@ -152,10 +152,18 @@ public static class AudioInstanceSystem
                 if (currentTime > sfx.playingDelayedUntil)
                 {
                     var perfStart = System.Diagnostics.Stopwatch.GetTimestamp();
-                    sfx.instance.Play();
+                    try
+                    {
+                        // too many voices at once (InstancePlayLimitException) drops this one, as `play sfx` does
+                        sfx.instance.Play();
+                        RecordSystem.LogSound(sfx.id);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        System.Console.Error.WriteLine($"[fade] delayed play sfx: instance.Play() threw for {sfx.id}: {ex.Message}");
+                    }
                     perfTicks += System.Diagnostics.Stopwatch.GetTimestamp() - perfStart;
                     perfPlays++;
-                    RecordSystem.LogSound(sfx.id);
                     sfx.playingDelayedUntil = 0;
                     audioEffects[i] = sfx;
                 }

@@ -424,6 +424,7 @@ endfunction
 ` the water comes in by one level, or goes out by one. when it gets back to high water, having been
 ` all the way out, that is a cycle. see A CYCLE in fish_headers_tide.
 function tideMove(tideBy)
+    if QB_PHASE > 0 then exitfunction `the water waits for the game's board too
     TIDE_LEVEL = TIDE_LEVEL + tideBy
     if TIDE_LEVEL <= 0
         TIDE_LEVEL = 0
@@ -500,6 +501,7 @@ endfunction
 ` registerMove, in fish_funcs, calls this. a move that is given back does not make the night longer.
 function tideMoveMade(tideMoves)
     if PUZZLE_ON then exitfunction
+    if QB_PHASE > 0 then exitfunction `the night waits for the game's board. see fish_headers_qboard.
     if TIDE_NIGHT
         ` the night is over already, and holding on while the ink pops. see THE END OF THE NIGHT in fish_headers_squid.
         if SQUID_ENDING > 0 then exitfunction
@@ -552,6 +554,7 @@ endfunction
 ` THE FISH SLEEP. every so often in the night, a little Z floats up from a fish that is picked at
 ` random. update_frame, in fish_routines, calls this on every frame of the game.
 function stepTideSleep()
+    if QB_PHASE > 0 then exitfunction `the squid and the night wait for the game's board. see fish_headers_qboard.
     ` the squid, its ink and the constellations. see fish_headers_squid.
     squidStep()
 

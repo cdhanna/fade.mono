@@ -1,0 +1,295 @@
+remstart
+    QUESTS 2.0: THE QUEST BOARD
+    an experiment (Chris, 2026-11-09), and since 2026-11-11 the quests of the game, in place of the ones of
+    fish_headers_quests. those come back only while the FISH_QUEST1 environment variable is set, and then nothing in
+    here does anything. the tests of the old quests turn this off (fishBoard).
+
+    a quest is a puzzle of its own, on a board of its own. taking it turns the board over, the way that a flip
+    of the ladder does (THE SPIN in fish_headers_extinct), but all of it, and the quest's board is on the other
+    side. leaving turns it back, and the game's board is there again, exactly as it was.
+
+    THE GAME WAITS. nothing on the game's board changes while the quest is played: its fish, its coral, its ink,
+    the moon, the score, the count of moves, the multiplier, the cards. the quest board does not count moves or
+    score points for the game. so everything that the quest board could change is kept when it turns over
+    (qbKeep), and put back when it turns back (qbGiveBack).
+
+    ONLY WHAT THE PUZZLE GIVES. the cards stay with the game's board. while the quest board is up, no card has
+    been taken: their uses are kept and set to 0, and the moves come out of their slots. so a bomb on the
+    game's board is not on the quest board.
+
+    THE QUEST BOARD is a little board, the way that the boards of the tutorial and of Ava's puzzles are
+    (TUTORIAL_BOARD): a gap is a cell with no fish, nothing comes in to fill a column, and the fish fall
+    (QB_ON goes with PUZZLE_ON wherever that makes the fish of a puzzle fall and keeps the game's other
+    systems out of it). it is the same size as the game's board, so that it can turn over in its place.
+
+    TAKING AND LEAVING. the pickup of the quest is in the stack, off the right of the board (THE STACK). swapping it
+    down onto the check mark opens its talk, and taking it there turns the board over to the quest. on the quest
+    board, it is still out there, and
+    swapping it up onto the X turns the board back. the quest is waiting at its pickup again, to be taken, and its
+    puzzle starts from the beginning when it is.
+remend
+
+global QUEST2_ON = 0 `1 unless FISH_QUEST1 is set. see setup_qboard.
+
+` where the turning over has got to: 0 the game's board is up, 1 it is turning to the quest, 2 the quest board is up,
+` 3 it is turning back
+global QB_PHASE = 0
+global QB_ON = 0 `1 while the fish on the board are the quest's. it changes halfway through a turn, while the board is edge on.
+global QB_QUEST = 0 `the quest whose board it is
+global QB_SPIN_MS = -1 `when the turn started, or -1
+global QB_SPIN_TIME = 900 `how long a turn takes, in milliseconds
+global QB_SPIN_SWAPPED = 0 `1 once the board has changed sides, halfway through
+global QB_START_CELL = -1 `where the cursor goes on the quest board
+
+` WHAT IS KEPT. the board, cell by cell
+global dim QB_KEEP_VALUE(400)
+global dim QB_KEEP_STACK(400)
+global dim QB_KEEP_BELLY(400)
+global dim QB_KEEP_CORAL(400)
+global dim QB_KEEP_SICK(400)
+global dim QB_KEEP_INK(400)
+global dim QB_KEEP_RAINBOW(400)
+global dim QB_KEEP_BUBBLED(400)
+global dim QB_KEEP_BUBBLED_PAID(400)
+global dim QB_KEEP_FACE(400)
+global dim QB_KEEP_SHOWN#(400)
+global dim QB_KEEP_GLOW#(400)
+global dim QB_KEEP_MARK(400)
+global dim QB_KEEP_SPOT(400)
+
+` and the cards
+global dim QB_KEEP_USES(64)
+global dim QB_KEEP_OBTAINED(64)
+global dim QB_KEEP_MOVE_ON(16)
+global dim QB_KEEP_RNG(6) `where the three streams of the seed were. see fish_headers_seed.
+
+` and the numbers of the game
+global QB_KEEP_SCORE = 0
+global QB_KEEP_MOVES = 0
+global QB_KEEP_MULT = 1
+global QB_KEEP_MULT_PROGRESS = 0
+global QB_KEEP_BEST_MULT = 1
+global QB_KEEP_FREE_MOVES = 0
+global QB_KEEP_BAR_START = 0
+global QB_KEEP_BAR_END = 0
+global QB_KEEP_CURSOR = 0
+global QB_KEEP_BELLY_ROLL = 0
+global QB_KEEP_SCHOOL_SPAWNS = 0
+global QB_KEEP_COLS = 9 `the size of the game's board
+global QB_KEEP_ROWS = 9
+global QB_KEEP_PICK = -1 `where the pickup of the quest was, beside the game's board
+
+` and the night. the quest board has a day or a night of its own (QB_NIGHT_WANT), and the game's tide,
+` squid and ink wait, the way that everything else does.
+global QB_KEEP_NIGHT = 0
+global QB_KEEP_NIGHT_LEFT = 0
+global QB_KEEP_TIDE_LEVEL = 0
+global QB_KEEP_TIDE_EBBED = 0
+global QB_KEEP_TIDE_FLOW = 0
+global QB_KEEP_TIDE_CYCLES = 0
+global QB_KEEP_DAWN_UNTIL = 0
+global QB_KEEP_SQUID = -1
+global QB_KEEP_INK_COUNT = 0
+global dim QB_KEEP_BANKED(400)
+global QB_NIGHT_WANT = 0 `1 when the quest's puzzle is played at night
+
+remstart
+    THE PUZZLES ARE MADE AS THE GAME GOES (Chris, 2026-11-09: a quest at a level must not be the same in every game).
+    a puzzle is made from the seed of the game, the quest and its level, on a random stream of its own (QB_RNG), so
+    the same game always gets the same puzzle and the game's own streams are never touched. it is made backwards
+    from its answer, and then played forwards to check it, the way that build/make_puzzle_boards.py makes Ava's:
+
+    - it starts from the board that is left at the end, a few fish that make no group.
+    - for every swap of the answer, from the last back to the first, it puts the group that the swap pops back on
+      the board (a line of three, across or up and down, pushing the fish over it up), and then swaps one of its
+      fish with a fish next to it, so that the group is broken up until the swap puts it together again.
+    - nothing on the board may make a group before a swap, because it would pop on its own.
+    - then the answer is played forwards on a copy, with every pop, fall and pop after a fall, and the puzzle is
+      only taken when every swap pops something and every egg pops on the swap that it has to. otherwise it is
+      thrown away, and the next one is tried.
+
+    so every puzzle can be done, and the player may well find another way.
+
+    EVERY SWAP POPS. on the quest board, as on Ava's, a swap that would pop nothing is not made (puzzleBlocksSwap).
+    otherwise the count of an egg could be run down with swaps that do nothing.
+
+    HATCH. some of the fish are eggs, with a count on them. every swap takes one off of every egg's count. an egg
+    has to pop on the swap that takes its count to 0: before that it breaks, and if it is still there after that,
+    it has hatched without the player. either way the puzzle is lost, and the move keys take swaps back (the first
+    one) or start the puzzle over (the second one). every egg hatched finishes the quest.
+remend
+global QB_RNG = 8 `the random stream that the puzzles are made from. see RandomCommands.cs: there are 16.
+global QB_W = 9 `the size of the quest board
+global QB_H = 6
+global QB_LEVEL = 1
+global dim QB_LEVEL_OF(40) `the level that every quest is at, in this game. a quest goes up a level when it is done.
+
+` the puzzle as it is made: kinds, and eggs, cell by cell, from the top left, QB_W across
+global dim QB_G(400)
+global dim QB_GE(400)
+global dim QB_GSEEN(400)
+global dim QB_GSTACK(400)
+global dim QB_GKILL(400)
+global QB_GSTAMP = 0
+global dim QB_START_G(400) `the puzzle that the player is given
+global dim QB_START_GE(400)
+global dim QB_PLAN_A(40) `its answer: the two cells of every swap, from the first
+global dim QB_PLAN_B(40)
+global QB_STEPS = 0
+global dim QB_KIND(8) `the kinds of fish that it uses
+global QB_KIND_N = 4
+global QB_EGGS = 0
+global dim QB_EGG_N(8) `the count that every egg starts with, which is the swap that it has to pop on
+global dim QB_EGG_HIT(8) `scratch, for checking
+global QB_DECOYS = 6
+global QB_MADE_TRIES = 0 `how many tries the last puzzle took, for the tests
+
+` the puzzle as it is played
+global dim QB_EGG_LEFT(8)
+global dim QB_EGG_DONE(8)
+global QB_LOST = 0 `1 once an egg has broken or hatched alone
+global QB_WON = 0 `1 once every egg has hatched. the reward comes once the game's board is back.
+global QB_WON_MS = 0
+
+` taking swaps back
+global QB_UNDO_MAX = 40
+global dim QB_UNDO_CELLS(4000) `QB_UNDO_MAX boards of up to 100 cells: the kind, and its egg times 100
+global dim QB_UNDO_EGGS(400) `the count of every egg, and 1000 more for one that is done
+global dim QB_UNDO_CURSOR(40)
+global dim QB_UNDO_LOST(40)
+global QB_UNDO_N = 0
+global QB_UNDO_WANT = 0 `how many swaps the player has asked to take back
+global QB_AGAIN_WANT = 0 `1 when the player has asked to start the puzzle over
+
+remstart
+    THE BUTTONS OF THE PUZZLE (Chris, 2026-11-09). the moves of the game go with the game's board, and the list of
+    moves at the bottom left has the puzzle's two keys instead: the first takes a swap back, the second starts the
+    puzzle over. they bounce in, one after the other, once the board has turned over, and bounce out when it turns
+    back. a key punches when it is used.
+remend
+global dim QB_BTN_KEY_TEXT(2)
+global dim QB_BTN_NAME_TEXT(2)
+global dim QB_BTN_PUNCH_MS(2)
+global QB_BTN_IN_MS = -1 `when they started to bounce in, or -1
+global QB_BTN_OUT_MS = -1 `when they started to bounce out, or -1
+global QB_BTN_TIME = 420 `how long the bounce of one takes
+global QB_BTN_GAP = 110 `and how far after the first the second starts
+global QB_BTN_SHOWN = 0 `1 from when they start to come in, until they are all the way out
+
+remstart
+    THE STACK (Chris, 2026-11-09: "when we unlock new quests, they should appear in a stack kinda like extinct fish do;
+    so we can have multiple at once"). the quests that are waiting sit off the right of the board, one over the
+    other, from the bottom up, every other row, the way that the ladder of fish_headers_extinct is on the left. the
+    row under each one is where its check mark shows. a new one goes on the top. beside each one, further out, is
+    what it gives, in a box, the way that the ladder has what a swap to the left gets.
+
+    the cursor steps out onto one of them from the last cell of its row, and up and down out there goes from one to
+    the next. while it is out on one, that one is the quest of the round, as far as the rest of the quests are
+    concerned (QUEST_ID, QUEST_STATE offered, QUEST_PICK_CELL), so the look at it, its badge and the swap onto its
+    check mark are the ones that every quest has. the swap onto the check mark opens its talk (THE QUEST TALKS).
+remend
+global QS_MAX = 3
+global QS_N = 0 `how many quests are waiting
+global dim QS_ID(4) `the quests that are waiting, from the bottom
+global dim QS_REWARD(4) `and what each gives. see QB_REWARD_*.
+global dim QS_BORN_MS(4) `when it turned up, for its pop in
+global dim QS_DRAWN_Y#(4) `where it is drawn, so that it slides down when one under it goes
+global QS_FOCUS = -1 `the one that the cursor is out on, or that is being played, or -1
+global dim QS_ZONE_SPRITE(4)
+global dim QS_ICON_SPRITE(4)
+global dim QS_BOX_SPRITE(4)
+global dim QS_LABEL_TEXT(4)
+global dim QS_LABEL_KIND(4) `what its label says, so that it is only written again when that changes
+global QS_SPRITES_MADE = 0
+` where the saved game keeps the stack: a 1, how many wait, each one's quest and what it gives, then the level of
+` Hatch, Shark and Wake and whether each has been met. it must not move. see qsSave.
+global QS_PREF = 5400
+global dim QS_TEST_PREFS(12) `what fish_tests_qboard makes those preferences say. a global dim in a test file is never made.
+
+` WHAT A QUEST GIVES. it is picked from the seed of the game, the quest and its level, when the quest turns up.
+` nothing is for good: like the ladder, it is all for the game that is being played.
+global QB_REWARD_MOVES = 0 `the moves of the game so far are halved
+global QB_REWARD_MULT = 1 `the multiplier is doubled
+global QB_REWARD_ROUND = 2 `every point that the round still needs
+global QB_REWARD_KINDS = 3
+remstart
+    THE KINDS OF PUZZLE (Chris, 2026-11-09: "lets adapt some of the other quests to this new structure. Lets do
+    shark and wake"). a quest that has no puzzle of its own yet plays Hatch's.
+
+    SHARK. Finn is on the quest board, a cell of it, not a fish. after every swap he swims a cell toward the cursor,
+    the way that the shark of the game's board does, and a pop next to him, corners too (QB_SHARK_REACH), is a pop
+    that he eats, and the puzzle is lost. it is done after QB_SHARK_NEED swaps that he did not eat from. the cursor
+    ends a swap on the cell that it swapped into, so which side a swap is made from is where he goes. the puzzle is
+    made like Hatch's, and played forwards with him swimming after the cursor of the answer, so he never eats it.
+
+    WAKE. Ripple. every cell that a fish pops in glows for QB_GLOW_FOR swaps, the swap that popped it with them. it
+    is done when glowing cells join the left edge of the board to the right. the answer ends with three swaps that
+    pop three across, on the floor, together the whole way across, one after another. the swaps before them push
+    them up, so the order of things matters. glow is kept in QUEST_SPOT.
+
+    ANY PUZZLE is lost when no swap that pops is left, and it is not done.
+remend
+global QB_KIND_HATCH = 1
+global QB_KIND_SHARK = 2
+global QB_KIND_WAKE = 3
+global QB_MODE = 1 `the kind of puzzle that is being made, or played
+global QB_SHARK_REACH = 1
+global QB_SHARK_NEED = 4
+global QB_SHARK_START = 0 `the cell that Finn starts on
+global QB_SHARK_AT = 0 `and the cell that he is on
+global QB_SHARK_DONE = 0 `swaps that he did not eat from
+global QB_SHARK_SWAPS = 0 `swaps since the board was last still, that he has not swum for yet
+global QB_SHARK_GX# = 0 `where he is drawn, gliding to his cell
+global QB_SHARK_GY# = 0
+global QB_GSHARK = 0 `where he is, while a puzzle is checked
+global QB_GLOW_FOR = 4
+global QB_STUCK_DUE = 0 `1 when the board has settled, and whether it is stuck has to be looked at
+global QB_CALM_FRAMES = 0 `frames in a row that nothing has moved, on the quest board
+global QB_WAKE_JOINED = 0 `1 once the glow has joined the edges
+global QB_WAKE_SETUP = 1 `swaps of the answer before the three that light the path
+global dim QB_GGLOW(400) `the glow, while a puzzle is checked
+global dim QB_UNDO_SHARK(40)
+global dim QB_UNDO_DONE(40)
+global QB_REWARD_FORCE = -1 `a test sets a reward here, so that a finished quest does not end the round on it
+
+remstart
+    THE QUEST TALKS (Chris, 2026-11-09: "I want quests to have more intro from their speakers, and offer us dialog
+    points to ask questions"). the swap onto the check mark opens a talk with the one whose quest it is, in the
+    box of the quest talk (fish_headers_questtalk), made taller. the first time, it says a few lines about itself
+    and the puzzle, and what it gives. then there is a list: take it, a few questions, and not now. a question is
+    answered, and the list comes back. up and down pick, and the confirm key says it. it waits for the player: the
+    board does nothing while it is open. it shuts if info mode or the pause menu opens.
+    walking back to the quest and swapping onto the check mark again opens it again, with a short hello and the list.
+
+    while the puzzle is being played, the same one talks again, the way that the quest talk does, without stopping
+    anything: when an egg is lost, and when the puzzle is done.
+remend
+global QD_ON = 0 `1 while the talk is open
+global QD_QUEST = 0 `whose talk it is
+global QD_SLOT = -1 `and the place in the stack that it is in
+global QD_STAGE = 0 `0 while lines are being said, 1 while the list is up
+global dim QD_LINES$(8) `the lines that are being said, as keys
+global QD_LINE_N = 0
+global QD_LINE_AT = 0
+global QD_ANSWER = 0 `1 while the lines are the answer to a question, so that the list comes back after them
+global QD_CHOICE_MAX = 6
+global dim QD_CHOICE_TEXT(6)
+global dim QD_CHOICE$(6) `what every line of the list says, as a key
+global dim QD_CHOICE_DO(6) `and what it does: QD_DO_*, or a question, from 1
+global QD_CHOICE_N = 0
+global QD_PICK = 0 `the line of the list that is picked
+global dim QD_ASKED(8) `1 for a question that has been asked, this time
+global dim QD_MET(40) `1 for every quest whose talk has been had, this game
+global QD_DO_TAKE = -1
+global QD_DO_LATER = -2
+global QD_REWARD_TEXT = 0 `what the quest gives, in the corner of the box
+global QD_PICK_SPRITE = 0 `the bar behind the line of the list that is picked
+global QD_BOX_Y = 162
+global QD_BOX_H = 134
+global QD_OPEN_MS = 0
+global QD_FADE_TWEEN_ID = 0
+
+` the questions of a quest: the key of the question, and of its answer
+global dim QD_ASK$(8)
+global dim QD_ANS$(8)
+global QD_ASK_N = 0

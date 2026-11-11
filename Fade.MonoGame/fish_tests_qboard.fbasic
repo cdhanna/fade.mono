@@ -1,0 +1,557 @@
+` QUESTS 2.0: THE QUEST BOARD. see fish_headers_qboard.
+
+` a number that changes when anything that the quest board keeps changes, cell by cell
+function qbtCells()
+    qbtSum = 0
+    qbtLast = CELL_COUNT - 1
+    for qbtI = 0 to qbtLast
+        qbtOne = CELLS(qbtI).value + CELLS(qbtI).stack * 31 + CELLS(qbtI).bellyUp * 37 + CORAL_CELLS(qbtI) * 41 + INK(qbtI) * 43
+        qbtOne = qbtOne + RAINBOW_FISH(qbtI) * 47 + BUBBLED_AT(qbtI) * 53 + SCHOOL_FACE(qbtI) * 59 + QUEST_MARK(qbtI) * 61
+        qbtSum = qbtSum + qbtOne * (qbtI + 1)
+    next
+endfunction qbtSum
+
+
+test qboard_round_trip_keeps_the_game from fishBoard
+    QUEST2_ON = 1
+
+    ` a game with something of everything on its board, and in its numbers
+    testPut(2, 3, 6)
+    CORAL_CELLS(10) = 1
+    coralRecount()
+    INK(20) = 1
+    RAINBOW_FISH(30) = 1
+    CELLS(40).bellyUp = 1
+    CURRENT_SCORE = 4321
+    CURRENT_MOVE_COUNT = 17
+    SCORE_MULTIPLIER = 3
+    CARDS(ABILITY_INDEX_MIND_EXPANSION).uses = 1
+    testCursor(1, 2)
+    qbtCellsBefore = qbtCells()
+    qbtSigBefore = saveSignature()
+
+    qbEnter(QUEST_LOST_PAIR)
+    qbtFrames = 0
+    while QB_PHASE <> 2 and qbtFrames < 600
+        runto _loop
+        qbtFrames = qbtFrames + 1
+    endwhile
+    assert QB_PHASE = 2, "the board turns over to the quest"
+    assert QB_ON = 1, "and the fish on it are the quest's"
+    assert TUTORIAL_BOARD = 1, "it is a little board, with gaps"
+    assert CARDS(ABILITY_INDEX_MIND_EXPANSION).uses = 0, "no card is taken on the quest board"
+    assert CORAL_CELLS(10) = 0, "the game's coral is not on the quest board"
+    assert INK(20) = 0, "nor its ink"
+    assert CELL_COLUMN_COUNT = QB_W and CELL_ROW_COUNT = QB_H, "the quest board is the puzzle's own size"
+
+    qbLeave()
+    qbtFrames = 0
+    while QB_PHASE <> 0 and qbtFrames < 600
+        runto _loop
+        qbtFrames = qbtFrames + 1
+    endwhile
+    assert QB_PHASE = 0, "the board turns back"
+    assert QB_ON = 0, "to the game's fish"
+    assert TUTORIAL_BOARD = 0, "on the game's board"
+    qbtCellsAfter = qbtCells()
+    assert qbtCellsAfter = qbtCellsBefore, "every cell is the way that it was"
+    qbtSigAfter = saveSignature()
+    assert qbtSigAfter = qbtSigBefore, "and so is every number of the game"
+    assert CURRENT_SCORE = 4321, "the score is the same"
+    assert CURRENT_MOVE_COUNT = 17, "and the count of moves"
+    assert SCORE_MULTIPLIER = 3, "and the multiplier"
+    assert SELECTION_POS.x = 1 and SELECTION_POS.y = 2, "and the cursor is where it was"
+    QUEST2_ON = 0
+    end
+endtest
+
+
+` a number for the puzzle that was just made
+function qbtPuzzleSum()
+    qbtPs = QB_W * 1000 + QB_H * 100 + QB_EGGS
+    qbtPsLast = QB_W * QB_H - 1
+    for qbtPi = 0 to qbtPsLast
+        qbtPs = (qbtPs * 31 + QB_START_G(qbtPi) + QB_START_GE(qbtPi) * 10) mod 1000003
+    next
+endfunction qbtPs
+
+
+test qboard_puzzles_are_made_from_the_seed from fishBoard
+    qbtFails = 0
+    qbtWorst = 0
+    qbtSame = 0
+    qbtWall = wall ms()
+    for qbtRun = 1 to 6
+        qbtLevel = 1 + (qbtRun mod 2)
+        qbtQuest = QUEST_HATCH
+        if qbtRun >= 3 then qbtQuest = QUEST_SHARK
+        if qbtRun >= 5 then qbtQuest = QUEST_WAKE
+        qbtLastSum = -1
+        for qbtSeed = 1 to 12
+            GAME_SEED = qbtSeed * 7
+            qbMakePuzzle(qbtQuest, qbtLevel)
+            if QB_MADE_TRIES > qbtWorst then qbtWorst = QB_MADE_TRIES
+            ` the puzzle that was kept plays out the way that its answer says
+            qbgOk = qgCheck()
+            if qbgOk = 0 then qbtFails = qbtFails + 1
+            qgBack()
+            qbtSum = qbtPuzzleSum()
+            if qbtSum = qbtLastSum
+                qbtSame = qbtSame + 1
+                print "qboard: the same puzzle twice, quest " + str$(qbtQuest) + " level " + str$(qbtLevel) + " seed " + str$(GAME_SEED) + " tries " + str$(QB_MADE_TRIES)
+            endif
+            qbtLastSum = qbtSum
+            if qbgOk = 0
+                print "qboard: no puzzle for quest " + str$(qbtQuest) + " level " + str$(qbtLevel) + " seed " + str$(GAME_SEED) + " after " + str$(QB_MADE_TRIES)
+            endif
+        next
+    next
+    print "qboard: 72 puzzles made, the most tries " + str$(qbtWorst) + ", " + str$(wall ms() - qbtWall) + " ms in all"
+    assert qbtFails = 0, "every puzzle that is made can be done with its answer"
+    assert qbtSame = 0, "and the puzzle is different from one game to the next"
+
+    ` the same game always gets the same puzzle
+    GAME_SEED = 77
+    qbMakePuzzle(QUEST_HATCH, 1)
+    qbtOnce = qbtPuzzleSum()
+    qbMakePuzzle(QUEST_HATCH, 2)
+    qbMakePuzzle(QUEST_HATCH, 1)
+    qbtTwice = qbtPuzzleSum()
+    assert qbtOnce = qbtTwice, "the same game and quest and level get the same puzzle"
+    GAME_SEED = 0
+    end
+endtest
+
+
+` the answer that the puzzle was made with, played with real swaps in the game: every egg hatches on its swap,
+` the quest is finished, and the game's board comes back
+test qboard_hatch_answer_plays_in_the_game from fishBoard
+    QUEST2_ON = 1
+    QTALK_ENABLED = 0
+    QB_REWARD_FORCE = QB_REWARD_MULT `a reward of the round would end it, and the upgrade screen would wait for a key
+    qbtSeedsWon = 0
+    for qbtRun = 1 to 3
+        GAME_SEED = 300 + qbtRun * 11
+        QB_LEVEL_OF(QUEST_HATCH) = 1 + (qbtRun = 3)
+        qbtDoneBefore = QUESTS_DONE
+        SCORE_BAR.endVal = CURRENT_SCORE + 1000000
+        PROGRESS_BARS(0) = SCORE_BAR
+        questForce(QUEST_HATCH)
+        qbtF = 0
+        while QB_PHASE <> 2 and qbtF < 900
+            runto _loop
+            qbtF = qbtF + 1
+        endwhile
+        assert QB_PHASE = 2, "taking the quest turns the board over to its puzzle"
+
+        for qbtStep = 1 to QB_STEPS
+            qbtA = QB_PLAN_A(qbtStep)
+            qbtB = QB_PLAN_B(qbtStep)
+            testCursor(qbtA mod CELL_COLUMN_COUNT, qbtA / CELL_COLUMN_COUNT)
+            qbtDx = (qbtB mod CELL_COLUMN_COUNT) - (qbtA mod CELL_COLUMN_COUNT)
+            qbtDy = (qbtB / CELL_COLUMN_COUNT) - (qbtA / CELL_COLUMN_COUNT)
+            testQueueMove(qbtDx, qbtDy, 1, -1)
+            qbtF = 0
+            qbtBusy = 1
+            qbtCalm = 0
+            while qbtBusy and qbtF < 1500
+                runto _loop
+                qbtF = qbtF + 1
+                qbtBusy = REQUEST_COMBO_CHECK + LIVE_MOVE_ACTIVE + QUEUED_MOVE_NUM + COMBO_PHASE
+                if qbtBusy = 0
+                    qbtCalm = qbtCalm + 1
+                    if qbtCalm < 3 then qbtBusy = 1
+                else
+                    qbtCalm = 0
+                endif
+            endwhile
+            print "qboard: run " + str$(qbtRun) + " swap " + str$(qbtStep) + " lost " + str$(QB_LOST) + " won " + str$(QB_WON) + " eggs " + str$(QB_EGG_LEFT(1)) + "/" + str$(QB_EGG_DONE(1)) + " " + str$(QB_EGG_LEFT(2)) + "/" + str$(QB_EGG_DONE(2))
+        next
+        assert QB_LOST = 0, "the answer loses nothing"
+
+        qbtF = 0
+        while QB_PHASE <> 0 and qbtF < 900
+            runto _loop
+            qbtF = qbtF + 1
+        endwhile
+        assert QB_PHASE = 0, "a puzzle that is done turns the board back"
+        assert QUESTS_DONE = qbtDoneBefore + 1, "and the quest is finished"
+        if QUESTS_DONE = qbtDoneBefore + 1 then qbtSeedsWon = qbtSeedsWon + 1
+        qbtF = 0
+        while qbtF < 120
+            runto _loop
+            qbtF = qbtF + 1
+        endwhile
+    next
+    assert qbtSeedsWon = 3, "every puzzle can be done in the game, the way that it was made"
+    QUEST2_ON = 0
+    GAME_SEED = 0
+    end
+endtest
+
+
+` QUESTS 2.0, the whole way through, with the keys: two quests in the stack, the cursor out onto them and up and
+` down between them, the swap onto the check mark opening the talk, a question, taking it, an egg lost and the swap
+` taken back, leaving and coming back, the puzzle done, and what it gives
+test qboard_stack_talk_take_and_finish from fishBoard
+    global tqdKey = -1
+    function tqdPressed(tqdAct)
+        tqdIs = 0
+        if tqdAct = tqdKey then tqdIs = 1
+    endfunction tqdIs
+    mock new action down(tqdAct)
+    endmock tqdPressed(tqdAct)
+
+    QUEST2_ON = 1
+    QTALK_ENABLED = 1
+    GAME_SEED = 77
+    qsReset()
+    CURRENT_MOVE_COUNT = 20
+    SCORE_MULTIPLIER = 3
+    tqdDoneBefore = QUESTS_DONE
+
+    tqdOk = qsAdd(QUEST_HATCH)
+    assert tqdOk = 1, "a quest turns up in the stack"
+    tqdOk = qsAdd(QUEST_SHARK)
+    tqdOk = qsAdd(QUEST_HATCH)
+    assert tqdOk = 0, "but not twice"
+    assert QS_N = 2, "two quests are waiting"
+    tqdReward = QS_REWARD(0)
+
+    ` out onto the bottom one, up to the one over it, and back down
+    testCursor(CELL_COLUMN_COUNT - 1, qsRow(0))
+    testQueueMove(1, 0, 0, -1)
+    for tqdF = 1 to 20
+        runto _loop
+    next
+    assert QUEST_CURSOR_OUT = 1 and QS_FOCUS = 0, "the cursor steps out onto the quest beside its row"
+    assert QUEST_ID = QUEST_HATCH and QUEST_STATE = QSTATE_OFFERED, "and that is the quest that is being looked at"
+    testQueueMove(0, -1, 0, -1)
+    for tqdF = 1 to 20
+        runto _loop
+    next
+    assert QS_FOCUS = 1 and QUEST_ID = QUEST_SHARK, "up goes to the quest over it"
+    assert SELECTION_POS.y = qsRow(1), "and the cursor goes with it"
+    testQueueMove(0, 1, 0, -1)
+    for tqdF = 1 to 20
+        runto _loop
+    next
+    assert QS_FOCUS = 0, "and down comes back"
+
+    ` the swap onto the check mark opens the talk, the long one the first time
+    testQueueMove(0, 1, 1, -1)
+    tqdF = 0
+    while QD_ON = 0 and tqdF < 200
+        runto _loop
+        tqdF = tqdF + 1
+    endwhile
+    assert QD_ON = 1, "the swap onto the check mark opens the talk"
+    assert QD_LINE_N = 4, "the first time, it says who it is, the rules, and what it gives"
+    assert QB_PHASE = 0, "and nothing has been taken yet"
+    testQueueMove(-1, 0, 0, -1)
+    for tqdF = 1 to 20
+        runto _loop
+    next
+    assert QUEST_CURSOR_OUT = 1, "the cursor stays where it is while the talk is open"
+
+    ` the key says a line at once, and goes on to the next, and then the list is up
+    tqdN = 0
+    while QD_STAGE = 0 and tqdN < 20
+        tqdKey = ACT_CONFIRM
+        runto _loop
+        tqdKey = -1
+        runto _loop
+        tqdN = tqdN + 1
+    endwhile
+    assert QD_STAGE = 1, "after the lines, the list"
+    assert QD_CHOICE_N = 6, "take it, four questions, and not now"
+
+    ` a question is answered, and then the list is back
+    QD_PICK = 2
+    tqdKey = ACT_CONFIRM
+    runto _loop
+    tqdKey = -1
+    runto _loop
+    assert QD_STAGE = 0 and QD_ASKED(2) = 1, "a question is answered"
+    tqdN = 0
+    while QD_STAGE = 0 and tqdN < 10
+        tqdKey = ACT_CONFIRM
+        runto _loop
+        tqdKey = -1
+        runto _loop
+        tqdN = tqdN + 1
+    endwhile
+    assert QD_STAGE = 1 and QD_ON = 1, "and the list comes back"
+
+    ` taking it turns the board over, and the puzzle's keys bounce in
+    QD_PICK = 0
+    tqdKey = ACT_CONFIRM
+    runto _loop
+    tqdKey = -1
+    assert QD_ON = 0, "taking it closes the talk"
+    tqdF = 0
+    while QB_PHASE <> 2 and tqdF < 600
+        runto _loop
+        tqdF = tqdF + 1
+    endwhile
+    assert QB_PHASE = 2, "and turns the board over"
+    assert QUEST_ID = QUEST_HATCH and QUEST_STATE = QSTATE_ACTIVE, "the quest is being played"
+    assert QB_BTN_SHOWN = 1, "the keys of the puzzle are in the list of moves"
+
+    ` the first swap of the answer, an egg lost, and the swap taken back
+    testCursor(QB_PLAN_A(1) mod CELL_COLUMN_COUNT, QB_PLAN_A(1) / CELL_COLUMN_COUNT)
+    testQueueMove((QB_PLAN_B(1) mod CELL_COLUMN_COUNT) - (QB_PLAN_A(1) mod CELL_COLUMN_COUNT), (QB_PLAN_B(1) / CELL_COLUMN_COUNT) - (QB_PLAN_A(1) / CELL_COLUMN_COUNT), 1, -1)
+    for tqdF = 1 to 300
+        runto _loop
+    next
+    assert QB_UNDO_N = 1, "the swap was made"
+    qbLose(-1, loc$("quest.say.broken"), 1)
+    assert QB_LOST = 1, "an egg is lost"
+    assert QTALK_ON = 1 and QTALK_ID = QUEST_HATCH, "and Mama Pearl says so"
+    QB_UNDO_WANT = 1
+    for tqdF = 1 to 30
+        runto _loop
+    next
+    assert QB_LOST = 0 and QB_UNDO_N = 0, "taking the swap back takes the loss back too"
+
+    ` out through the X: the game's board comes back, and the quest is still waiting
+    testCursor(CELL_COLUMN_COUNT - 1, QUEST_PICK_CELL / CELL_COLUMN_COUNT)
+    testQueueMove(1, 0, 0, -1)
+    for tqdF = 1 to 20
+        runto _loop
+    next
+    testQueueMove(0, -1, 1, -1)
+    tqdF = 0
+    while QB_PHASE <> 0 and tqdF < 600
+        runto _loop
+        tqdF = tqdF + 1
+    endwhile
+    assert QB_PHASE = 0, "the swap onto the X turns the board back"
+    assert QS_N = 2 and QUEST_ID = 0, "and the quest waits in the stack"
+
+    ` back to it: a short hello this time
+    testCursor(CELL_COLUMN_COUNT - 1, qsRow(0))
+    testQueueMove(1, 0, 0, -1)
+    for tqdF = 1 to 20
+        runto _loop
+    next
+    testQueueMove(0, 1, 1, -1)
+    tqdF = 0
+    while QD_ON = 0 and tqdF < 200
+        runto _loop
+        tqdF = tqdF + 1
+    endwhile
+    assert QD_ON = 1 and QD_LINE_N = 2, "the second time, hello again and what it gives"
+    tqdN = 0
+    while QD_STAGE = 0 and tqdN < 20
+        tqdKey = ACT_CONFIRM
+        runto _loop
+        tqdKey = -1
+        runto _loop
+        tqdN = tqdN + 1
+    endwhile
+    QD_PICK = 0
+    tqdKey = ACT_CONFIRM
+    runto _loop
+    tqdKey = -1
+    tqdF = 0
+    while QB_PHASE <> 2 and tqdF < 600
+        runto _loop
+        tqdF = tqdF + 1
+    endwhile
+    assert QB_PHASE = 2, "taken again"
+
+    ` the whole answer, and the quest is finished
+    tqdScore = CURRENT_SCORE
+    for tqdStep = 1 to QB_STEPS
+        tqdA = QB_PLAN_A(tqdStep)
+        tqdB = QB_PLAN_B(tqdStep)
+        testCursor(tqdA mod CELL_COLUMN_COUNT, tqdA / CELL_COLUMN_COUNT)
+        testQueueMove((tqdB mod CELL_COLUMN_COUNT) - (tqdA mod CELL_COLUMN_COUNT), (tqdB / CELL_COLUMN_COUNT) - (tqdA / CELL_COLUMN_COUNT), 1, -1)
+        tqdF = 0
+        tqdBusy = 1
+        tqdCalm = 0
+        while tqdBusy and tqdF < 1500
+            runto _loop
+            tqdF = tqdF + 1
+            tqdBusy = REQUEST_COMBO_CHECK + LIVE_MOVE_ACTIVE + QUEUED_MOVE_NUM + COMBO_PHASE
+            if tqdBusy = 0
+                tqdCalm = tqdCalm + 1
+                if tqdCalm < 3 then tqdBusy = 1
+            else
+                tqdCalm = 0
+            endif
+        endwhile
+    next
+    assert QB_WON = 1 or QB_PHASE <> 2, "every egg hatched"
+    tqdF = 0
+    while QB_PHASE <> 0 and tqdF < 900
+        runto _loop
+        tqdF = tqdF + 1
+    endwhile
+    assert QB_PHASE = 0, "the board turns back"
+    assert QUESTS_DONE = tqdDoneBefore + 1, "the quest is finished"
+    assert QS_N = 1 and QS_ID(0) = QUEST_SHARK, "it leaves the stack, and the one over it comes down"
+    assert QB_LEVEL_OF(QUEST_HATCH) = 2, "and Hatch is a level harder next time"
+    for tqdF = 1 to 120
+        runto _loop
+    next
+    assert QB_BTN_SHOWN = 0, "the keys of the puzzle have bounced out"
+    if tqdReward = QB_REWARD_MOVES
+        assert PENDING_FREE_MOVES + (20 - CURRENT_MOVE_COUNT) = 10, "it halved the moves"
+    endif
+    if tqdReward = QB_REWARD_MULT
+        assert SCORE_MULTIPLIER = 6, "it doubled the multiplier"
+    endif
+    if tqdReward = QB_REWARD_ROUND
+        assert CURRENT_SCORE > tqdScore, "it paid the round"
+    endif
+    print "qboard: stack test reward kind " + str$(tqdReward)
+    QUEST2_ON = 0
+    GAME_SEED = 0
+    end
+endtest
+
+
+` the answers that Finn's and Ripple's puzzles were made with, played with real swaps in the game: Finn never
+` eats, the glow joins the edges, and the quest is finished
+test qboard_shark_and_wake_answers_play_in_the_game from fishBoard
+    QUEST2_ON = 1
+    QTALK_ENABLED = 0
+    QB_REWARD_FORCE = QB_REWARD_MULT
+    qbtWon = 0
+    for qbtRun = 1 to 4
+        qbtQuest = QUEST_SHARK
+        if qbtRun >= 3 then qbtQuest = QUEST_WAKE
+        GAME_SEED = 500 + qbtRun * 13
+        QB_LEVEL_OF(qbtQuest) = 1 + (qbtRun mod 2)
+        qbtDoneBefore = QUESTS_DONE
+        questForce(qbtQuest)
+        qbtF = 0
+        while QB_PHASE <> 2 and qbtF < 900
+            runto _loop
+            qbtF = qbtF + 1
+        endwhile
+        assert QB_PHASE = 2, "taking the quest turns the board over to its puzzle"
+        assert QB_MODE = qbPuzzleKind(qbtQuest), "and it is the quest's own kind of puzzle"
+        qgBack()
+        QB_GSHARK = QB_SHARK_START
+
+        for qbtStep = 1 to QB_STEPS
+            qbtA = QB_PLAN_A(qbtStep)
+            qbtB = QB_PLAN_B(qbtStep)
+            testCursor(qbtA mod CELL_COLUMN_COUNT, qbtA / CELL_COLUMN_COUNT)
+            qbtDx = (qbtB mod CELL_COLUMN_COUNT) - (qbtA mod CELL_COLUMN_COUNT)
+            qbtDy = (qbtB / CELL_COLUMN_COUNT) - (qbtA / CELL_COLUMN_COUNT)
+            testQueueMove(qbtDx, qbtDy, 1, -1)
+            qbtF = 0
+            qbtBusy = 1
+            qbtCalm = 0
+            while qbtBusy and qbtF < 1500
+                runto _loop
+                qbtF = qbtF + 1
+                qbtBusy = REQUEST_COMBO_CHECK + LIVE_MOVE_ACTIVE + QUEUED_MOVE_NUM + COMBO_PHASE
+                if qbtBusy = 0
+                    qbtCalm = qbtCalm + 1
+                    if qbtCalm < 3 then qbtBusy = 1
+                else
+                    qbtCalm = 0
+                endif
+            endwhile
+            qbtK = QB_G(qbtA)
+            QB_G(qbtA) = QB_G(qbtB)
+            QB_G(qbtB) = qbtK
+            qbtR = qgResolve(qbtStep)
+            if QB_MODE = QB_KIND_SHARK
+                QB_GSHARK = qbSharkStep(QB_GSHARK, qbtB, QB_W)
+            endif
+            qbtDiff$ = ""
+            for qbtI = 0 to QB_W * QB_H - 1
+                if QB_G(qbtI) <> CELLS(qbtI).value then qbtDiff$ = qbtDiff$ + " " + str$(qbtI) + ":" + str$(QB_G(qbtI)) + "/" + str$(CELLS(qbtI).value)
+            next
+            if qbtDiff$ <> ""
+                print "qboard: the game's board is not the one that the puzzle was made with, at" + qbtDiff$
+            endif
+            assert qbtDiff$ = "", "every swap leaves the board the way that the puzzle was made to"
+            print "qboard: quest " + str$(qbtQuest) + " swap " + str$(qbtStep) + " lost " + str$(QB_LOST) + " won " + str$(QB_WON) + " shark " + str$(QB_SHARK_AT) + " done " + str$(QB_SHARK_DONE) + " reach " + str$(qbWakeReach())
+        next
+        assert QB_LOST = 0, "the answer loses nothing"
+
+        qbtF = 0
+        while QB_PHASE <> 0 and qbtF < 900
+            runto _loop
+            qbtF = qbtF + 1
+        endwhile
+        assert QB_PHASE = 0, "a puzzle that is done turns the board back"
+        if QUESTS_DONE = qbtDoneBefore + 1 then qbtWon = qbtWon + 1
+        qbtF = 0
+        while qbtF < 120
+            runto _loop
+            qbtF = qbtF + 1
+        endwhile
+    next
+    assert qbtWon = 4, "every puzzle can be done in the game, the way that it was made"
+    QUEST2_ON = 0
+    GAME_SEED = 0
+    end
+endtest
+
+
+` the preferences of the stack, mocked into QS_TEST_PREFS. any other one reads 0.
+function qbtPrefAt(qbtpIndex)
+    qbtpValue = 0
+    qbtpSlot = qbtpIndex - QS_PREF
+    if qbtpSlot >= 0 and qbtpSlot < 12 then qbtpValue = QS_TEST_PREFS(qbtpSlot)
+endfunction qbtpValue
+
+function qbtPrefSet(qbtsIndex, qbtsValue)
+    qbtsSlot = qbtsIndex - QS_PREF
+    if qbtsSlot >= 0 and qbtsSlot < 12 then QS_TEST_PREFS(qbtsSlot) = qbtsValue
+endfunction
+
+
+test qboard_stack_is_kept_in_the_saved_game from fishBoard
+    mock get pref(qbtgIndex, qbtgElse)
+    endmock qbtPrefAt(qbtgIndex)
+    mock set pref(qbtgSetIndex, qbtgSetValue)
+        qbtPrefSet(qbtgSetIndex, qbtgSetValue)
+    endmock
+    for qbtgI = 0 to 11
+        QS_TEST_PREFS(qbtgI) = 0
+    next
+    QUEST2_ON = 1
+
+    ` nothing saved yet: the stack is empty
+    qsLoad()
+    assert QS_N = 0, "no stack before one is saved"
+
+    ` two waiting, one of them a level up, and one met
+    qbtgOk = qsAdd(QUEST_SHARK)
+    qbtgOk = qsAdd(QUEST_WAKE)
+    QS_REWARD(0) = QB_REWARD_ROUND
+    QS_REWARD(1) = QB_REWARD_MULT
+    QB_LEVEL_OF(QUEST_HATCH) = 2
+    QD_MET(QUEST_SHARK) = 1
+    qbtgSig = qsSignature()
+    qsSave()
+
+    qsReset()
+    assert QS_N = 0, "the reset empties the stack"
+    qbtgSigGone = qsSignature()
+    assert qbtgSigGone <> qbtgSig, "the signature sees the stack change"
+
+    qsLoad()
+    assert QS_N = 2, "both come back"
+    assert QS_ID(0) = QUEST_SHARK, "shark at the bottom"
+    assert QS_ID(1) = QUEST_WAKE, "wake over it"
+    assert QS_REWARD(0) = QB_REWARD_ROUND, "shark's reward"
+    assert QS_REWARD(1) = QB_REWARD_MULT, "wake's reward"
+    assert QB_LEVEL_OF(QUEST_HATCH) = 2, "hatch's level"
+    assert QB_LEVEL_OF(QUEST_SHARK) = 1, "shark's level"
+    assert QD_MET(QUEST_SHARK) = 1, "finn has been met"
+    assert QD_MET(QUEST_WAKE) = 0, "ripple has not"
+    qbtgSigBack = qsSignature()
+    assert qbtgSigBack = qbtgSig, "the same stack again"
+    QUEST2_ON = 0
+    end
+endtest

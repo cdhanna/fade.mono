@@ -234,6 +234,12 @@ setup_menu:
     MENU_ITEMS(MENU_ITEM_SET_POP_SPEED) = {
         ready = 1
     }
+    MENU_ITEMS(MENU_ITEM_SET_ACCESS) = {
+        ready = 1
+    }
+    MENU_ITEMS(MENU_ITEM_ACCESS_BACK) = {
+        ready = 1
+    }
 
     ` the strings of the game, in the language the player picked, or else in Steam's or the computer's.
     ` the names and descriptions of the lines come from them. see loadMenuStrings.
@@ -337,6 +343,29 @@ setup_menu:
         order text menuTextId, ORDER_MENU_TEXT
         set text render target menuTextId, TARGET_MENU
         hide text menuTextId
+    next
+
+    ` the pips of the volume sliders. see THE VOLUME SLIDERS in fish_headers.
+    for menuI = 0 to MENU_SLIDER_PIPS * 2 - 1
+        reserve sprite id(MENU_SLIDER_SPRITES(menuI))
+        sprite MENU_SLIDER_SPRITES(menuI), 0, 0, TEX_PIXEL
+        set sprite offset MENU_SLIDER_SPRITES(menuI), 0, .5
+        order sprite MENU_SLIDER_SPRITES(menuI), ORDER_MENU_TEXT
+        set sprite render target MENU_SLIDER_SPRITES(menuI), TARGET_MENU
+        hide sprite MENU_SLIDER_SPRITES(menuI)
+    next
+
+    ` the boxes of the lines that open pages, under the cursor. see THE PAGE BUTTONS in fish_headers.
+    for menuI = 0 to 1
+        reserve sprite id(MENU_BUTTON_SPRITES(menuI))
+        sprite MENU_BUTTON_SPRITES(menuI), 0, 0, TEX_PIXEL
+        set sprite offset MENU_BUTTON_SPRITES(menuI), 0, 0
+        color sprite MENU_BUTTON_SPRITES(menuI), rgb(24, 44, 96, 235)
+        order sprite MENU_BUTTON_SPRITES(menuI), ORDER_MENU_PANEL + 2
+        set sprite render target MENU_BUTTON_SPRITES(menuI), TARGET_MENU
+        hide sprite MENU_BUTTON_SPRITES(menuI)
+        MENU_BUTTON_BORDERS(menuI) = createMenuBorder(ORDER_MENU_PANEL + 3)
+        showInfoBorder(MENU_BUTTON_BORDERS(menuI), 0)
     next
 
     ` the description says what the highlighted line does
@@ -445,6 +474,7 @@ frame_menu:
     menuSettingsPage = 0
     if MENU_PAGE = MENU_PAGE_OPTIONS or MENU_PAGE = MENU_PAGE_NEW_GAME then menuSettingsPage = 1
     if MENU_PAGE = MENU_PAGE_ENDINGS then menuSettingsPage = 1
+    if MENU_PAGE = MENU_PAGE_ACCESS then menuSettingsPage = 1
     if menuSettingsPage
         menuStep = 0
         if new action down(ACT_DOWN) then menuStep = 1
@@ -463,7 +493,9 @@ frame_menu:
 
     ` the mouse. the highlight follows it, and a click is the same as the confirm key. a line with a
     ` setting on it goes down when its left half is clicked, and up when its right half is, the same as
-    ` the left and right keys. see THE MOUSE in fish_headers_mouse.
+    ` the left and right keys. a volume slider is set to the pip that is clicked, and follows the mouse
+    ` for as long as the button is held, and the highlight stays on it meanwhile. see THE MOUSE in
+    ` fish_headers_mouse, and THE VOLUME SLIDERS in fish_headers.
     menuMsPick = -1
     menuMsMoved = 0
     menuMsX = (WORLD_WIDTH - MENU_WIDTH) / 2
@@ -471,6 +503,7 @@ frame_menu:
     for menuMsRow = 0 to menuMsLast
         menuMsY = MENU_LIST_TOP + menuMsRow * MENU_ROW_HEIGHT
         menuMsOn = mouseHover(menuMsX, menuMsY, MENU_WIDTH, MENU_ROW_HEIGHT)
+        if MENU_SLIDER_DRAG >= 0 then menuMsOn = 0
         if menuMsOn
             if menuMsRow <> MENU_SELECTED
                 selectMenuItem(menuMsRow, 120)
@@ -490,11 +523,33 @@ frame_menu:
                         menuMsPick = -1
                         menuChange = 1
                         if MOUSE_X < WORLD_WIDTH / 2 then menuChange = -1
+
+                        menuMsSlider = menuIsSlider(menuMsItem)
+                        if menuMsSlider
+                            menuMsPipsX = menuSliderLeft() - MENU_SLIDER_STEP
+                            if MOUSE_X >= menuMsPipsX
+                                menuMsVolume = menuSliderAt(MOUSE_X)
+                                menuChange = menuMsVolume - menuSliderValue(menuMsItem)
+                                MENU_SLIDER_DRAG = menuMsItem
+                            endif
+                        endif
                     endif
                 endif
             endif
         endif
     next
+
+    ` the slider that was clicked follows the mouse until the button is let go
+    if MENU_SLIDER_DRAG >= 0
+        menuDragHeld = left click()
+        if MENU_PAGE_ITEMS(MENU_SELECTED) <> MENU_SLIDER_DRAG then menuDragHeld = 0
+        if menuDragHeld = 0 or MOUSE_ON = 0
+            MENU_SLIDER_DRAG = -1
+        else
+            menuDragVolume = menuSliderAt(MOUSE_X)
+            menuChange = menuDragVolume - menuSliderValue(MENU_SLIDER_DRAG)
+        endif
+    endif
 
     if menuChange <> 0
         changeMenuOption(MENU_PAGE_ITEMS(MENU_SELECTED), menuChange)
@@ -512,9 +567,10 @@ frame_menu:
     if new action down(ACT_CONFIRM) then menuPicked = MENU_PAGE_ITEMS(MENU_SELECTED)
     if menuMsPick >= 0 then menuPicked = menuMsPick
 
-    ` the pause key backs out of the pause menu, the same as picking "Resume". it backs out of the question, too.
+    ` the pause key (or B, on a controller: see ACT_BACK) backs out of the pause menu, the same as picking
+    ` "Resume". it backs out of the question, too.
     if MENU_MODE = MENU_MODE_PAUSE
-        if new action down(ACT_PAUSE)
+        if new action down(ACT_BACK)
             menuPicked = MENU_ITEM_RESUME
             if MENU_PAGE = MENU_PAGE_CONFIRM then menuPicked = MENU_ITEM_CONFIRM_NO
 
@@ -526,18 +582,24 @@ frame_menu:
 
     ` and it backs out of the options page, whichever menu the options were opened from
     if MENU_PAGE = MENU_PAGE_OPTIONS
-        if new action down(ACT_PAUSE)
+        if new action down(ACT_BACK)
             menuPicked = MENU_ITEM_SET_BACK
         endif
     endif
     ` and out of the page of mementos, to the options page. see MEMENTOS in fish_headers.
     if MENU_PAGE = MENU_PAGE_ENDINGS
-        if new action down(ACT_PAUSE)
+        if new action down(ACT_BACK)
             menuPicked = MENU_ITEM_ENDINGS_BACK
         endif
     endif
+    ` and out of the page of accessibility, to the options page. see ACCESSIBILITY in fish_headers.
+    if MENU_PAGE = MENU_PAGE_ACCESS
+        if new action down(ACT_BACK)
+            menuPicked = MENU_ITEM_ACCESS_BACK
+        endif
+    endif
     if MENU_PAGE = MENU_PAGE_NEW_GAME
-        if new action down(ACT_PAUSE)
+        if new action down(ACT_BACK)
             menuPicked = MENU_ITEM_GAME_BACK
         endif
     endif
@@ -786,6 +848,19 @@ menu_pick:
             setMenuPage(MENU_PAGE_OPTIONS)
             refreshOptionLines()
             selectMenuItem(getMenuRow(MENU_ITEM_SET_ENDINGS), 0)
+        endcase
+
+        ` the page of accessibility, and back out of it to the options, with "Accessibility" highlighted. see ACCESSIBILITY in fish_headers.
+        case MENU_ITEM_SET_ACCESS
+            refreshOptionLines()
+            setMenuPage(MENU_PAGE_ACCESS)
+            refreshOptionLines()
+            selectMenuItem(0, 0)
+        endcase
+        case MENU_ITEM_ACCESS_BACK
+            setMenuPage(MENU_PAGE_OPTIONS)
+            refreshOptionLines()
+            selectMenuItem(getMenuRow(MENU_ITEM_SET_ACCESS), 0)
         endcase
 
         case MENU_ITEM_SET_BACK
@@ -1489,6 +1564,7 @@ reset_game:
     ` a new board of fish. see seedDealBoard in fish_routines_seed. the game before may have ended on a
     ` round that was won, and the new fish of that are dealt by other rules. this one has won nothing.
     NEW_FISH_ROUND_WON = 0
+    extinctReset() `every kind drops in again. see fish_headers_extinct.
     seedDealBoard()
     for resetI = 0 to CELL_COUNT - 1
         CELLS(resetI).comboForce = 0
@@ -1617,6 +1693,16 @@ function setMenuPage(page)
         MENU_WIDTH = 260
     endif
 
+    ` the page of accessibility, under the options. it is built a line at a time too. see ACCESSIBILITY in fish_headers.
+    if page = MENU_PAGE_ACCESS
+        title$ = loc$("menu.title.access")
+        titleSize = 36
+        hint$ = loc$("menu.hint.options")
+        first = MENU_ITEM_COUNT
+        last = -1
+        MENU_WIDTH = 260
+    endif
+
     ` the page that "New Game" opens, to ask what kind of game it should be. it works like the options page.
     if page = MENU_PAGE_NEW_GAME
         title$ = loc$("menu.title.newgame")
@@ -1710,20 +1796,15 @@ function setMenuPage(page)
             endif
         endif
 
-        ` and the options page has the language right under "Fullscreen", always, and the water motion under that
+        ` and the options page has the language right under "Fullscreen", always, and the line for the page of
+        ` accessibility under that. the water motion, the pop speed and the demo mode are on that page. see ACCESSIBILITY.
         if i = MENU_ITEM_SET_LANGUAGE
             if page = MENU_PAGE_OPTIONS then skip
         endif
-        if i = MENU_ITEM_SET_MOTION
-            if page = MENU_PAGE_OPTIONS then skip
-        endif
-        if i = MENU_ITEM_SET_POP_SPEED
+        if i = MENU_ITEM_SET_ACCESS
             if page = MENU_PAGE_OPTIONS then skip
         endif
         if i = MENU_ITEM_SET_ENDINGS
-            if page = MENU_PAGE_OPTIONS then skip
-        endif
-        if i = MENU_ITEM_SET_DEMO
             if page = MENU_PAGE_OPTIONS then skip
         endif
 
@@ -1762,15 +1843,9 @@ function setMenuPage(page)
                     MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_LANGUAGE
                     MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
                     showMenuItemText(MENU_ITEM_SET_LANGUAGE)
-                    MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_MOTION
+                    MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_ACCESS
                     MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
-                    showMenuItemText(MENU_ITEM_SET_MOTION)
-                    MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_POP_SPEED
-                    MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
-                    showMenuItemText(MENU_ITEM_SET_POP_SPEED)
-                    MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_DEMO
-                    MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
-                    showMenuItemText(MENU_ITEM_SET_DEMO)
+                    showMenuItemText(MENU_ITEM_SET_ACCESS)
                     menuMementos = menuHasMementos()
                     if menuMementos
                         MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_ENDINGS
@@ -1810,6 +1885,25 @@ function setMenuPage(page)
         MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
         showMenuItemText(MENU_ITEM_ENDINGS_BACK)
     endif
+
+    ` the page of accessibility: the water motion, the pop speed, the demo mode, and "Back"
+    if page = MENU_PAGE_ACCESS
+        MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_MOTION
+        MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+        showMenuItemText(MENU_ITEM_SET_MOTION)
+        MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_POP_SPEED
+        MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+        showMenuItemText(MENU_ITEM_SET_POP_SPEED)
+        MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_SET_DEMO
+        MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+        showMenuItemText(MENU_ITEM_SET_DEMO)
+        MENU_PAGE_ITEMS(MENU_PAGE_LENGTH) = MENU_ITEM_ACCESS_BACK
+        MENU_PAGE_LENGTH = MENU_PAGE_LENGTH + 1
+        showMenuItemText(MENU_ITEM_ACCESS_BACK)
+    endif
+
+    ` a slider that the mouse was dragging is let go of, with the page it was on
+    MENU_SLIDER_DRAG = -1
 
     ` the list is centered on the same spot no matter how long it is
     MENU_LIST_TOP = 184 - MENU_PAGE_LENGTH * MENU_ROW_HEIGHT / 2
@@ -1914,6 +2008,11 @@ function positionMenuItemText(item, shift#, y)
     else
         set text position MENU_ITEMS(item).textId, WORLD_WIDTH / 2 + shift#, y
     endif
+    menuSliderOn = menuIsSlider(item)
+    if menuSliderOn
+        positionMenuSlider(item, shift#, y)
+    endif
+    positionMenuButton(item, shift#, y)
 endfunction
 
 
@@ -1922,19 +2021,140 @@ function showMenuItemText(item)
     if MENU_ITEMS(item).hasValue
         show text MENU_ITEMS(item).valueTextId
     endif
+    showMenuSlider(item, 1)
+    showMenuButton(item, 1)
 endfunction
 
 
 function hideMenuItemText(item)
     hide text MENU_ITEMS(item).textId
     hide text MENU_ITEMS(item).valueTextId
+    showMenuSlider(item, 0)
+    showMenuButton(item, 0)
+endfunction
+
+
+` THE PAGE BUTTONS. see fish_headers. which button a line has, or -1 for a line that is not one.
+function menuButtonIndex(item)
+    btnIndex = -1
+    if item = MENU_ITEM_SET_ACCESS then btnIndex = 0
+    if item = MENU_ITEM_SET_ENDINGS then btnIndex = 1
+endfunction btnIndex
+
+
+function showMenuButton(item, isVisible)
+    btnIndex = menuButtonIndex(item)
+    if btnIndex < 0 then exitfunction
+    if isVisible
+        show sprite MENU_BUTTON_SPRITES(btnIndex)
+    else
+        hide sprite MENU_BUTTON_SPRITES(btnIndex)
+    endif
+    showInfoBorder(MENU_BUTTON_BORDERS(btnIndex), isVisible)
+endfunction
+
+
+` a box around the name of the line, at the height y of the line. its edge lights up while it is highlighted.
+` shift moves it from side to side, for the shake.
+function positionMenuButton(item, shift#, y)
+    btnIndex = menuButtonIndex(item)
+    if btnIndex < 0 then exitfunction
+    btnW = get text size x(MENU_ITEMS(item).textId)
+    btnW = btnW + 28
+    btnX# = WORLD_WIDTH / 2 + shift#
+    btnX# = btnX# - btnW / 2
+    btnY = y + 1
+    btnH = MENU_ROW_HEIGHT - 2
+    position sprite MENU_BUTTON_SPRITES(btnIndex), btnX#, btnY
+    size sprite MENU_BUTTON_SPRITES(btnIndex), btnW, btnH
+    layoutInfoBorder(MENU_BUTTON_BORDERS(btnIndex), btnX#, btnY, btnW, btnH)
+
+    btnEdge = rgb(64, 128, 255, 200)
+    if MENU_PAGE_ITEMS(MENU_SELECTED) = item then btnEdge = rgb(160, 200, 255)
+    colorInfoBorder(MENU_BUTTON_BORDERS(btnIndex), btnEdge)
+endfunction
+
+
+` THE VOLUME SLIDERS. see fish_headers.
+
+function menuIsSlider(item)
+    if item = MENU_ITEM_SET_SOUND then exitfunction 1
+    if item = MENU_ITEM_SET_MUSIC then exitfunction 1
+endfunction 0
+
+
+` how far up a slider's volume is, from 0 to MENU_SLIDER_PIPS
+function menuSliderValue(item)
+    if item = MENU_ITEM_SET_MUSIC then exitfunction OPTION_MUSIC
+endfunction OPTION_SOUND
+
+
+` the left edge of the first pip. the row of pips ends where the setting of a line would.
+function menuSliderLeft()
+    sliderRight = (WORLD_WIDTH + MENU_WIDTH) / 2
+    sliderRight = sliderRight - 18
+    sliderSpan = (MENU_SLIDER_PIPS - 1) * MENU_SLIDER_STEP
+    sliderSpan = sliderSpan + MENU_SLIDER_PIP_W
+endfunction sliderRight - sliderSpan
+
+
+` the volume for the mouse at x: the pip under it, and every pip to the left of that one. a little left
+` of the first pip is no volume at all.
+function menuSliderAt(x)
+    sliderX = x - menuSliderLeft()
+    if sliderX < 0 then exitfunction 0
+    sliderAt = sliderX / MENU_SLIDER_STEP
+    sliderAt = sliderAt + 1
+    if sliderAt > MENU_SLIDER_PIPS then sliderAt = MENU_SLIDER_PIPS
+endfunction sliderAt
+
+
+function showMenuSlider(item, isVisible)
+    sliderIs = menuIsSlider(item)
+    if sliderIs = 0 then exitfunction
+    sliderFirst = 0
+    if item = MENU_ITEM_SET_MUSIC then sliderFirst = MENU_SLIDER_PIPS
+    for sliderK = 0 to MENU_SLIDER_PIPS - 1
+        if isVisible
+            show sprite MENU_SLIDER_SPRITES(sliderFirst + sliderK)
+        else
+            hide sprite MENU_SLIDER_SPRITES(sliderFirst + sliderK)
+        endif
+    next
+endfunction
+
+
+` put the pips of a slider on its line, at the height y of the line, lit up as far as the volume goes.
+` the lit pips are tall, and the rest are low and dim, like the lines that are not built yet. shift moves
+` them from side to side, for the shake.
+function positionMenuSlider(item, shift#, y)
+    sliderFirst = 0
+    if item = MENU_ITEM_SET_MUSIC then sliderFirst = MENU_SLIDER_PIPS
+    sliderVolume = menuSliderValue(item)
+    sliderLeft = menuSliderLeft()
+
+    sliderLit = rgb(150, 190, 255)
+    if MENU_PAGE_ITEMS(MENU_SELECTED) = item then sliderLit = rgb(255, 255, 255)
+
+    for sliderK = 0 to MENU_SLIDER_PIPS - 1
+        sliderId = MENU_SLIDER_SPRITES(sliderFirst + sliderK)
+        position sprite sliderId, sliderLeft + sliderK * MENU_SLIDER_STEP + shift#, y + 10
+        if sliderK < sliderVolume
+            size sprite sliderId, MENU_SLIDER_PIP_W, 10
+            color sprite sliderId, sliderLit
+        else
+            size sprite sliderId, MENU_SLIDER_PIP_W, 4
+            color sprite sliderId, rgb(64, 128, 255, 150)
+        endif
+    next
 endfunction
 
 
 ` write the settings onto the lines of the options page.
 function refreshOptionLines()
-    setMenuItemValue(MENU_ITEM_SET_SOUND, loc$("menu.sound"), str$(OPTION_SOUND * 10) + "%")
-    setMenuItemValue(MENU_ITEM_SET_MUSIC, loc$("menu.music"), str$(OPTION_MUSIC * 10) + "%")
+    ` the sound and the music show their volumes as sliders, so they have no words for a setting. see THE VOLUME SLIDERS in fish_headers.
+    setMenuItemValue(MENU_ITEM_SET_SOUND, loc$("menu.sound"), "")
+    setMenuItemValue(MENU_ITEM_SET_MUSIC, loc$("menu.music"), "")
 
     on$ = loc$("menu.value.on")
     off$ = loc$("menu.value.off")
@@ -2139,6 +2359,10 @@ function loadMenuStrings()
     MENU_ITEMS(MENU_ITEM_SET_ENDINGS).desc$ = loc$("menu.endings.desc")
     MENU_ITEMS(MENU_ITEM_ENDINGS_BACK).name$ = loc$("menu.back")
     MENU_ITEMS(MENU_ITEM_ENDINGS_BACK).desc$ = loc$("menu.endings.back.desc")
+    MENU_ITEMS(MENU_ITEM_SET_ACCESS).name$ = loc$("menu.access")
+    MENU_ITEMS(MENU_ITEM_SET_ACCESS).desc$ = loc$("menu.access.about")
+    MENU_ITEMS(MENU_ITEM_ACCESS_BACK).name$ = loc$("menu.back")
+    MENU_ITEMS(MENU_ITEM_ACCESS_BACK).desc$ = loc$("menu.endings.back.desc")
 
     MENU_ITEMS(MENU_ITEM_GAME_LENGTH).name$ = loc$("menu.length")
     MENU_ITEMS(MENU_ITEM_GAME_LENGTH).desc$ = loc$("menu.length.desc")
